@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, type Options as Options2, type RequestResult, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { ChangePasswordApiV1AuthChangePasswordPostData, ChangePasswordApiV1AuthChangePasswordPostErrors, ChangePasswordApiV1AuthChangePasswordPostResponses, IssueTokenApiV1AuthTokenPostData, IssueTokenApiV1AuthTokenPostErrors, IssueTokenApiV1AuthTokenPostResponses, LogoutApiV1AuthLogoutPostData, LogoutApiV1AuthLogoutPostErrors, LogoutApiV1AuthLogoutPostResponses, ReadCurrentUserApiV1UsersMeGetData, ReadCurrentUserApiV1UsersMeGetErrors, ReadCurrentUserApiV1UsersMeGetResponses, ReadHealthApiV1HealthGetData, ReadHealthApiV1HealthGetErrors, ReadHealthApiV1HealthGetResponses, ReadSystemStatusApiV1SystemStatusGetData, ReadSystemStatusApiV1SystemStatusGetErrors, ReadSystemStatusApiV1SystemStatusGetResponses, RefreshAccessTokenApiV1AuthRefreshPostData, RefreshAccessTokenApiV1AuthRefreshPostErrors, RefreshAccessTokenApiV1AuthRefreshPostResponses } from './types.gen';
+import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, IssueTokenData, IssueTokenErrors, IssueTokenResponses, LogoutData, LogoutErrors, LogoutResponses, ReadCurrentUserData, ReadCurrentUserErrors, ReadCurrentUserResponses, ReadHealthData, ReadHealthErrors, ReadHealthResponses, ReadSystemStatusData, ReadSystemStatusErrors, ReadSystemStatusResponses, RefreshAccessTokenData, RefreshAccessTokenErrors, RefreshAccessTokenResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -23,7 +23,7 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
  *
  * Expose the final authenticated password-change signature.
  */
-export const changePasswordApiV1AuthChangePasswordPost = <ThrowOnError extends boolean = false>(options: Options<ChangePasswordApiV1AuthChangePasswordPostData, ThrowOnError>): RequestResult<ChangePasswordApiV1AuthChangePasswordPostResponses, ChangePasswordApiV1AuthChangePasswordPostErrors, ThrowOnError> => (options.client ?? client).post<ChangePasswordApiV1AuthChangePasswordPostResponses, ChangePasswordApiV1AuthChangePasswordPostErrors, ThrowOnError>({
+export const changePassword = <ThrowOnError extends boolean = false>(options: Options<ChangePasswordData, ThrowOnError>): RequestResult<ChangePasswordResponses, ChangePasswordErrors, ThrowOnError> => (options.client ?? client).post<ChangePasswordResponses, ChangePasswordErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/auth/change-password',
     ...options,
@@ -38,21 +38,21 @@ export const changePasswordApiV1AuthChangePasswordPost = <ThrowOnError extends b
  *
  * Expose the final idempotent logout signature.
  */
-export const logoutApiV1AuthLogoutPost = <ThrowOnError extends boolean = false>(options?: Options<LogoutApiV1AuthLogoutPostData, ThrowOnError>): RequestResult<LogoutApiV1AuthLogoutPostResponses, LogoutApiV1AuthLogoutPostErrors, ThrowOnError> => (options?.client ?? client).post<LogoutApiV1AuthLogoutPostResponses, LogoutApiV1AuthLogoutPostErrors, ThrowOnError>({ url: '/api/v1/auth/logout', ...options });
+export const logout = <ThrowOnError extends boolean = false>(options?: Options<LogoutData, ThrowOnError>): RequestResult<LogoutResponses, LogoutErrors, ThrowOnError> => (options?.client ?? client).post<LogoutResponses, LogoutErrors, ThrowOnError>({ url: '/api/v1/auth/logout', ...options });
 
 /**
  * Refresh Access Token
  *
  * Expose the final cookie-rotation request and response signature.
  */
-export const refreshAccessTokenApiV1AuthRefreshPost = <ThrowOnError extends boolean = false>(options?: Options<RefreshAccessTokenApiV1AuthRefreshPostData, ThrowOnError>): RequestResult<RefreshAccessTokenApiV1AuthRefreshPostResponses, RefreshAccessTokenApiV1AuthRefreshPostErrors, ThrowOnError> => (options?.client ?? client).post<RefreshAccessTokenApiV1AuthRefreshPostResponses, RefreshAccessTokenApiV1AuthRefreshPostErrors, ThrowOnError>({ url: '/api/v1/auth/refresh', ...options });
+export const refreshAccessToken = <ThrowOnError extends boolean = false>(options?: Options<RefreshAccessTokenData, ThrowOnError>): RequestResult<RefreshAccessTokenResponses, RefreshAccessTokenErrors, ThrowOnError> => (options?.client ?? client).post<RefreshAccessTokenResponses, RefreshAccessTokenErrors, ThrowOnError>({ url: '/api/v1/auth/refresh', ...options });
 
 /**
  * Issue Token
  *
  * Expose the final login request and response signature.
  */
-export const issueTokenApiV1AuthTokenPost = <ThrowOnError extends boolean = false>(options: Options<IssueTokenApiV1AuthTokenPostData, ThrowOnError>): RequestResult<IssueTokenApiV1AuthTokenPostResponses, IssueTokenApiV1AuthTokenPostErrors, ThrowOnError> => (options.client ?? client).post<IssueTokenApiV1AuthTokenPostResponses, IssueTokenApiV1AuthTokenPostErrors, ThrowOnError>({
+export const issueToken = <ThrowOnError extends boolean = false>(options: Options<IssueTokenData, ThrowOnError>): RequestResult<IssueTokenResponses, IssueTokenErrors, ThrowOnError> => (options.client ?? client).post<IssueTokenResponses, IssueTokenErrors, ThrowOnError>({
     ...urlSearchParamsBodySerializer,
     url: '/api/v1/auth/token',
     ...options,
@@ -67,14 +67,14 @@ export const issueTokenApiV1AuthTokenPost = <ThrowOnError extends boolean = fals
  *
  * Return the constant public liveness payload.
  */
-export const readHealthApiV1HealthGet = <ThrowOnError extends boolean = false>(options?: Options<ReadHealthApiV1HealthGetData, ThrowOnError>): RequestResult<ReadHealthApiV1HealthGetResponses, ReadHealthApiV1HealthGetErrors, ThrowOnError> => (options?.client ?? client).get<ReadHealthApiV1HealthGetResponses, ReadHealthApiV1HealthGetErrors, ThrowOnError>({ url: '/api/v1/health', ...options });
+export const readHealth = <ThrowOnError extends boolean = false>(options?: Options<ReadHealthData, ThrowOnError>): RequestResult<ReadHealthResponses, ReadHealthErrors, ThrowOnError> => (options?.client ?? client).get<ReadHealthResponses, ReadHealthErrors, ThrowOnError>({ url: '/api/v1/health', ...options });
 
 /**
  * Read System Status
  *
  * Expose the final bounded service-status signature.
  */
-export const readSystemStatusApiV1SystemStatusGet = <ThrowOnError extends boolean = false>(options?: Options<ReadSystemStatusApiV1SystemStatusGetData, ThrowOnError>): RequestResult<ReadSystemStatusApiV1SystemStatusGetResponses, ReadSystemStatusApiV1SystemStatusGetErrors, ThrowOnError> => (options?.client ?? client).get<ReadSystemStatusApiV1SystemStatusGetResponses, ReadSystemStatusApiV1SystemStatusGetErrors, ThrowOnError>({
+export const readSystemStatus = <ThrowOnError extends boolean = false>(options?: Options<ReadSystemStatusData, ThrowOnError>): RequestResult<ReadSystemStatusResponses, ReadSystemStatusErrors, ThrowOnError> => (options?.client ?? client).get<ReadSystemStatusResponses, ReadSystemStatusErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/system/status',
     ...options
@@ -85,7 +85,7 @@ export const readSystemStatusApiV1SystemStatusGet = <ThrowOnError extends boolea
  *
  * Expose the final current-identity signature.
  */
-export const readCurrentUserApiV1UsersMeGet = <ThrowOnError extends boolean = false>(options?: Options<ReadCurrentUserApiV1UsersMeGetData, ThrowOnError>): RequestResult<ReadCurrentUserApiV1UsersMeGetResponses, ReadCurrentUserApiV1UsersMeGetErrors, ThrowOnError> => (options?.client ?? client).get<ReadCurrentUserApiV1UsersMeGetResponses, ReadCurrentUserApiV1UsersMeGetErrors, ThrowOnError>({
+export const readCurrentUser = <ThrowOnError extends boolean = false>(options?: Options<ReadCurrentUserData, ThrowOnError>): RequestResult<ReadCurrentUserResponses, ReadCurrentUserErrors, ThrowOnError> => (options?.client ?? client).get<ReadCurrentUserResponses, ReadCurrentUserErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/users/me',
     ...options

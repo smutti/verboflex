@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { readHealthApiV1HealthGet } from "./api/client";
+import { readHealth } from "./api/client";
 
 type ConnectionState = "error" | "loading" | "online";
 
@@ -18,7 +18,7 @@ export function App() {
     setConnectionState("loading");
 
     try {
-      const result = await readHealthApiV1HealthGet();
+      const result = await readHealth();
 
       if (requestVersion.current === version) {
         setConnectionState(

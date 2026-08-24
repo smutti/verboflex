@@ -4,13 +4,13 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
-import { readHealthApiV1HealthGet } from "./api/client";
+import { readHealth } from "./api/client";
 
 vi.mock("./api/client", () => ({
-  readHealthApiV1HealthGet: vi.fn(),
+  readHealth: vi.fn(),
 }));
 
-const readHealth = vi.mocked(readHealthApiV1HealthGet);
+const readHealthMock = vi.mocked(readHealth);
 
 describe("API health tracer", () => {
   afterEach(() => {
@@ -18,22 +18,22 @@ describe("API health tracer", () => {
   });
 
   beforeEach(() => {
-    readHealth.mockReset();
+    readHealthMock.mockReset();
   });
 
   it("renders loading while the generated health call is pending", () => {
-    readHealth.mockReturnValue(new Promise<never>(() => undefined));
+    readHealthMock.mockReturnValue(new Promise<never>(() => undefined));
 
     render(<App />);
 
     expect(screen.getByRole("status")).toHaveTextContent(
       "Checking API connection",
     );
-    expect(readHealth).toHaveBeenCalledOnce();
+    expect(readHealthMock).toHaveBeenCalledOnce();
   });
 
   it("renders API online for the exact healthy response", async () => {
-    readHealth.mockResolvedValue({
+    readHealthMock.mockResolvedValue({
       data: { status: "ok" },
       error: undefined,
     });
@@ -44,11 +44,11 @@ describe("API health tracer", () => {
       "role",
       "status",
     );
-    expect(readHealth).toHaveBeenCalledOnce();
+    expect(readHealthMock).toHaveBeenCalledOnce();
   });
 
   it("renders sanitized API error copy and retries without raw diagnostics", async () => {
-    readHealth.mockResolvedValueOnce({
+    readHealthMock.mockResolvedValueOnce({
       data: undefined,
       error: { detail: "postgresql://db.internal:5432/verboflex" },
     });
@@ -61,17 +61,17 @@ describe("API health tracer", () => {
     );
     expect(alert).not.toHaveTextContent("db.internal");
 
-    readHealth.mockReturnValueOnce(new Promise<never>(() => undefined));
+    readHealthMock.mockReturnValueOnce(new Promise<never>(() => undefined));
     fireEvent.click(screen.getByRole("button", { name: "Retry connection" }));
 
-    expect(readHealth).toHaveBeenCalledTimes(2);
+    expect(readHealthMock).toHaveBeenCalledTimes(2);
     expect(screen.getByRole("status")).toHaveTextContent(
       "Checking API connection",
     );
   });
 
   it("sanitizes rejected network diagnostics", async () => {
-    readHealth.mockRejectedValueOnce(
+    readHealthMock.mockRejectedValueOnce(
       new Error("Failed to fetch postgresql://db.internal:5432/verboflex"),
     );
 

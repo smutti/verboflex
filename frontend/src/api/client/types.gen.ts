@@ -29,9 +29,9 @@ export type AccessTokenResponse = {
 };
 
 /**
- * Body_issue_token_api_v1_auth_token_post
+ * Body_issue_token
  */
-export type BodyIssueTokenApiV1AuthTokenPost = {
+export type BodyIssueToken = {
     /**
      * Client Id
      */
@@ -199,14 +199,14 @@ export type ValidationError = {
     type: string;
 };
 
-export type ChangePasswordApiV1AuthChangePasswordPostData = {
+export type ChangePasswordData = {
     body: ChangePasswordRequest;
     path?: never;
     query?: never;
     url: '/api/v1/auth/change-password';
 };
 
-export type ChangePasswordApiV1AuthChangePasswordPostErrors = {
+export type ChangePasswordErrors = {
     /**
      * Bad Request
      */
@@ -229,18 +229,18 @@ export type ChangePasswordApiV1AuthChangePasswordPostErrors = {
     503: ErrorResponse;
 };
 
-export type ChangePasswordApiV1AuthChangePasswordPostError = ChangePasswordApiV1AuthChangePasswordPostErrors[keyof ChangePasswordApiV1AuthChangePasswordPostErrors];
+export type ChangePasswordError = ChangePasswordErrors[keyof ChangePasswordErrors];
 
-export type ChangePasswordApiV1AuthChangePasswordPostResponses = {
+export type ChangePasswordResponses = {
     /**
      * Successful Response
      */
     204: void;
 };
 
-export type ChangePasswordApiV1AuthChangePasswordPostResponse = ChangePasswordApiV1AuthChangePasswordPostResponses[keyof ChangePasswordApiV1AuthChangePasswordPostResponses];
+export type ChangePasswordResponse = ChangePasswordResponses[keyof ChangePasswordResponses];
 
-export type LogoutApiV1AuthLogoutPostData = {
+export type LogoutData = {
     body?: never;
     headers?: {
         /**
@@ -253,7 +253,7 @@ export type LogoutApiV1AuthLogoutPostData = {
     url: '/api/v1/auth/logout';
 };
 
-export type LogoutApiV1AuthLogoutPostErrors = {
+export type LogoutErrors = {
     /**
      * Forbidden
      */
@@ -268,18 +268,18 @@ export type LogoutApiV1AuthLogoutPostErrors = {
     429: ErrorResponse;
 };
 
-export type LogoutApiV1AuthLogoutPostError = LogoutApiV1AuthLogoutPostErrors[keyof LogoutApiV1AuthLogoutPostErrors];
+export type LogoutError = LogoutErrors[keyof LogoutErrors];
 
-export type LogoutApiV1AuthLogoutPostResponses = {
+export type LogoutResponses = {
     /**
      * Successful Response
      */
     204: void;
 };
 
-export type LogoutApiV1AuthLogoutPostResponse = LogoutApiV1AuthLogoutPostResponses[keyof LogoutApiV1AuthLogoutPostResponses];
+export type LogoutResponse = LogoutResponses[keyof LogoutResponses];
 
-export type RefreshAccessTokenApiV1AuthRefreshPostData = {
+export type RefreshAccessTokenData = {
     body?: never;
     headers?: {
         /**
@@ -292,7 +292,7 @@ export type RefreshAccessTokenApiV1AuthRefreshPostData = {
     url: '/api/v1/auth/refresh';
 };
 
-export type RefreshAccessTokenApiV1AuthRefreshPostErrors = {
+export type RefreshAccessTokenErrors = {
     /**
      * Unauthorized
      */
@@ -315,25 +315,25 @@ export type RefreshAccessTokenApiV1AuthRefreshPostErrors = {
     503: ErrorResponse;
 };
 
-export type RefreshAccessTokenApiV1AuthRefreshPostError = RefreshAccessTokenApiV1AuthRefreshPostErrors[keyof RefreshAccessTokenApiV1AuthRefreshPostErrors];
+export type RefreshAccessTokenError = RefreshAccessTokenErrors[keyof RefreshAccessTokenErrors];
 
-export type RefreshAccessTokenApiV1AuthRefreshPostResponses = {
+export type RefreshAccessTokenResponses = {
     /**
      * Successful Response
      */
     200: AccessTokenResponse;
 };
 
-export type RefreshAccessTokenApiV1AuthRefreshPostResponse = RefreshAccessTokenApiV1AuthRefreshPostResponses[keyof RefreshAccessTokenApiV1AuthRefreshPostResponses];
+export type RefreshAccessTokenResponse = RefreshAccessTokenResponses[keyof RefreshAccessTokenResponses];
 
-export type IssueTokenApiV1AuthTokenPostData = {
-    body: BodyIssueTokenApiV1AuthTokenPost;
+export type IssueTokenData = {
+    body: BodyIssueToken;
     path?: never;
     query?: never;
     url: '/api/v1/auth/token';
 };
 
-export type IssueTokenApiV1AuthTokenPostErrors = {
+export type IssueTokenErrors = {
     /**
      * Unauthorized
      */
@@ -352,50 +352,50 @@ export type IssueTokenApiV1AuthTokenPostErrors = {
     503: ErrorResponse;
 };
 
-export type IssueTokenApiV1AuthTokenPostError = IssueTokenApiV1AuthTokenPostErrors[keyof IssueTokenApiV1AuthTokenPostErrors];
+export type IssueTokenError = IssueTokenErrors[keyof IssueTokenErrors];
 
-export type IssueTokenApiV1AuthTokenPostResponses = {
+export type IssueTokenResponses = {
     /**
      * Successful Response
      */
     200: AccessTokenResponse;
 };
 
-export type IssueTokenApiV1AuthTokenPostResponse = IssueTokenApiV1AuthTokenPostResponses[keyof IssueTokenApiV1AuthTokenPostResponses];
+export type IssueTokenResponse = IssueTokenResponses[keyof IssueTokenResponses];
 
-export type ReadHealthApiV1HealthGetData = {
+export type ReadHealthData = {
     body?: never;
     path?: never;
     query?: never;
     url: '/api/v1/health';
 };
 
-export type ReadHealthApiV1HealthGetErrors = {
+export type ReadHealthErrors = {
     /**
      * Too Many Requests
      */
     429: ErrorResponse;
 };
 
-export type ReadHealthApiV1HealthGetError = ReadHealthApiV1HealthGetErrors[keyof ReadHealthApiV1HealthGetErrors];
+export type ReadHealthError = ReadHealthErrors[keyof ReadHealthErrors];
 
-export type ReadHealthApiV1HealthGetResponses = {
+export type ReadHealthResponses = {
     /**
      * Successful Response
      */
     200: HealthResponse;
 };
 
-export type ReadHealthApiV1HealthGetResponse = ReadHealthApiV1HealthGetResponses[keyof ReadHealthApiV1HealthGetResponses];
+export type ReadHealthResponse = ReadHealthResponses[keyof ReadHealthResponses];
 
-export type ReadSystemStatusApiV1SystemStatusGetData = {
+export type ReadSystemStatusData = {
     body?: never;
     path?: never;
     query?: never;
     url: '/api/v1/system/status';
 };
 
-export type ReadSystemStatusApiV1SystemStatusGetErrors = {
+export type ReadSystemStatusErrors = {
     /**
      * Unauthorized
      */
@@ -410,25 +410,25 @@ export type ReadSystemStatusApiV1SystemStatusGetErrors = {
     429: ErrorResponse;
 };
 
-export type ReadSystemStatusApiV1SystemStatusGetError = ReadSystemStatusApiV1SystemStatusGetErrors[keyof ReadSystemStatusApiV1SystemStatusGetErrors];
+export type ReadSystemStatusError = ReadSystemStatusErrors[keyof ReadSystemStatusErrors];
 
-export type ReadSystemStatusApiV1SystemStatusGetResponses = {
+export type ReadSystemStatusResponses = {
     /**
      * Successful Response
      */
     200: SystemStatusResponse;
 };
 
-export type ReadSystemStatusApiV1SystemStatusGetResponse = ReadSystemStatusApiV1SystemStatusGetResponses[keyof ReadSystemStatusApiV1SystemStatusGetResponses];
+export type ReadSystemStatusResponse = ReadSystemStatusResponses[keyof ReadSystemStatusResponses];
 
-export type ReadCurrentUserApiV1UsersMeGetData = {
+export type ReadCurrentUserData = {
     body?: never;
     path?: never;
     query?: never;
     url: '/api/v1/users/me';
 };
 
-export type ReadCurrentUserApiV1UsersMeGetErrors = {
+export type ReadCurrentUserErrors = {
     /**
      * Unauthorized
      */
@@ -443,13 +443,13 @@ export type ReadCurrentUserApiV1UsersMeGetErrors = {
     429: ErrorResponse;
 };
 
-export type ReadCurrentUserApiV1UsersMeGetError = ReadCurrentUserApiV1UsersMeGetErrors[keyof ReadCurrentUserApiV1UsersMeGetErrors];
+export type ReadCurrentUserError = ReadCurrentUserErrors[keyof ReadCurrentUserErrors];
 
-export type ReadCurrentUserApiV1UsersMeGetResponses = {
+export type ReadCurrentUserResponses = {
     /**
      * Successful Response
      */
     200: CurrentUserResponse;
 };
 
-export type ReadCurrentUserApiV1UsersMeGetResponse = ReadCurrentUserApiV1UsersMeGetResponses[keyof ReadCurrentUserApiV1UsersMeGetResponses];
+export type ReadCurrentUserResponse = ReadCurrentUserResponses[keyof ReadCurrentUserResponses];

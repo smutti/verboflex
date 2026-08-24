@@ -21,6 +21,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.get(
     "/me",
+    operation_id="read_current_user",
     response_model=CurrentUserResponse,
     responses={
         status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},

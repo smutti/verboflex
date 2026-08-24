@@ -69,6 +69,7 @@ def _clear_refresh_cookie(response: Response, settings: Settings) -> None:
 
 @router.post(
     "/token",
+    operation_id="issue_token",
     response_model=AccessTokenResponse,
     responses={
         status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
@@ -127,6 +128,7 @@ async def issue_token(
 
 @router.post(
     "/refresh",
+    operation_id="refresh_access_token",
     response_model=AccessTokenResponse,
     responses={
         status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
@@ -195,6 +197,7 @@ async def refresh_access_token(
 
 @router.post(
     "/logout",
+    operation_id="logout",
     status_code=status.HTTP_204_NO_CONTENT,
     responses={
         status.HTTP_403_FORBIDDEN: {"model": ErrorResponse},
@@ -245,6 +248,7 @@ async def logout(
 
 @router.post(
     "/change-password",
+    operation_id="change_password",
     status_code=status.HTTP_204_NO_CONTENT,
     responses={
         status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},

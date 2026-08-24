@@ -49,6 +49,7 @@ def get_system_status_service(
 
 @router.get(
     "/status",
+    operation_id="read_system_status",
     response_model=SystemStatusResponse,
     responses={
         status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},

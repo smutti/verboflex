@@ -12,6 +12,7 @@ router = APIRouter(tags=["health"])
 
 @router.get(
     "/health",
+    operation_id="read_health",
     response_model=HealthResponse,
     responses={status.HTTP_429_TOO_MANY_REQUESTS: {"model": ErrorResponse}},
 )
