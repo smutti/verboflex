@@ -12,7 +12,9 @@ import httpx
 import pytest
 from pydantic import SecretStr
 from redis import Redis
+from sqlalchemy.orm import Session
 
+from verboflex.api.v1.routes import system as system_routes
 from verboflex.api.v1.routes.system import get_system_status_service
 from verboflex.auth.access_tokens import issue_access_token
 from verboflex.auth.principal import Principal, get_current_principal
@@ -33,6 +35,20 @@ class AvailableRedis:
     def eval(self, script: str, numkeys: int, *keys_and_args: object) -> object:
         self.calls.append((script, numkeys, keys_and_args))
         return [len(self.calls), 60]
+
+    def ping(self) -> bool:
+        return True
+
+
+class AvailableSession:
+    """Expose the minimum successful SQLAlchemy session surface to a probe."""
+
+    class Result:
+        def scalar_one(self) -> int:
+            return 1
+
+    def execute(self, _statement: object) -> Result:
+        return self.Result()
 
 
 @pytest.fixture(autouse=True)
@@ -142,6 +158,44 @@ def test_online_probes_remain_online_in_the_exact_projection() -> None:
     assert response.json()["database"] == "online"
     assert response.json()["redis"] == "online"
     assert response.json()["worker"] == "online"
+
+
+def test_default_status_service_obtains_worker_state_through_bounded_probe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Replace the static pending seam with the real bounded Celery probe."""
+    worker_application = object()
+    captured: dict[str, object] = {}
+
+    def capture_worker_probe(application: object, *, timeout_seconds: float) -> ServiceState:
+        captured["application"] = application
+        captured["timeout_seconds"] = timeout_seconds
+        return "online"
+
+    monkeypatch.setattr(system_routes, "celery_app", worker_application, raising=False)
+    monkeypatch.setattr(
+        system_routes,
+        "probe_worker_state",
+        capture_worker_probe,
+        raising=False,
+    )
+    settings = Settings(
+        service_probe_timeout_seconds=0.25,
+        refresh_cookie_secure=False,
+    )
+    service = get_system_status_service(
+        cast(Session, AvailableSession()),
+        cast(Redis, AvailableRedis()),
+        settings,
+    )
+
+    snapshot = asyncio.run(service.collect())
+
+    assert snapshot.worker == "online"
+    assert captured == {
+        "application": worker_application,
+        "timeout_seconds": 0.25,
+    }
 
 
 def test_every_slow_probe_is_independently_timeout_bounded() -> None:
