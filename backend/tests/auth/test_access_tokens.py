@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import jwt
 
-from verboflex.auth.access_tokens import issue_access_token
+from verboflex.auth.access_tokens import decode_access_token, issue_access_token
 from verboflex.core.config import Settings
 
 SIGNING_SECRET = "0123456789abcdef" * 2
@@ -66,3 +66,27 @@ def test_password_change_token_omits_session_and_expires_after_five_minutes() ->
         "purpose": "password_change",
         "token_version": 3,
     }
+
+
+def test_ordinary_access_token_round_trips_through_strict_verification() -> None:
+    """Verify the signature, required claims, UUIDs, purpose, and timestamps."""
+    user_id = uuid4()
+    session_id = uuid4()
+    issued_at = datetime.now(UTC).replace(microsecond=0)
+    token = issue_access_token(
+        user_id=user_id,
+        session_id=session_id,
+        token_version=11,
+        purpose="access",
+        settings=token_settings(),
+        now=issued_at,
+    )
+
+    claims = decode_access_token(token, settings=token_settings())
+
+    assert claims.user_id == user_id
+    assert claims.session_id == session_id
+    assert claims.issued_at == issued_at
+    assert claims.expires_at.timestamp() - claims.issued_at.timestamp() == 900
+    assert claims.purpose == "access"
+    assert claims.token_version == 11
