@@ -9,8 +9,16 @@ from sqlalchemy.orm import Session
 
 from verboflex.auth.login import InvalidCredentials, LoginRateLimited, authenticate_login
 from verboflex.auth.origin import OriginNotAllowed, enforce_cookie_origin
+from verboflex.auth.password_change import (
+    IncorrectCurrentPassword,
+    InvalidPasswordChangePrincipal,
+    PasswordChangePolicyError,
+    decode_password_change_candidate,
+    replace_current_password,
+)
 from verboflex.auth.rate_limits import (
     LOGOUT_LIMIT,
+    PASSWORD_CHANGE_LIMIT,
     REFRESH_LIMIT,
     RateLimitUnavailable,
     enforce_auth_action_rate_limit,
@@ -244,13 +252,75 @@ async def logout(
     },
 )
 async def change_password(
-    _request: Request,
-    _payload: ChangePasswordRequest,
-    _response: Response,
-    _access_token: OptionalBearerToken,
-    _session: Annotated[Session, Depends(get_db_session)],
-    _redis_client: Annotated[Redis, Depends(get_redis_client)],
-    _settings: Annotated[Settings, Depends(get_settings)],
+    request: Request,
+    payload: ChangePasswordRequest,
+    response: Response,
+    access_token: OptionalBearerToken,
+    session: Annotated[Session, Depends(get_db_session)],
+    redis_client: Annotated[Redis, Depends(get_redis_client)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> None:
     """Expose the final authenticated password-change signature."""
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented")
+    try:
+        candidate = decode_password_change_candidate(access_token, settings=settings)
+    except InvalidPasswordChangePrincipal as error:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid access token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from error
+
+    try:
+        limit = enforce_auth_action_rate_limit(
+            redis_client,
+            action="password-change",
+            identity=candidate.rate_limit_identity,
+            client_ip=request.client.host if request.client is not None else "unknown",
+            limit=PASSWORD_CHANGE_LIMIT,
+        )
+    except RateLimitUnavailable as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable",
+        ) from error
+    if not limit.allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded",
+            headers={
+                "Retry-After": str(limit.retry_after),
+                "X-RateLimit-Remaining": "0",
+            },
+        )
+
+    try:
+        replace_current_password(
+            session,
+            candidate,
+            current_password=payload.current_password,
+            new_password=payload.new_password,
+        )
+    except InvalidPasswordChangePrincipal as error:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid access token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from error
+    except IncorrectCurrentPassword as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        ) from error
+    except PasswordChangePolicyError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
+        ) from error
+
+    response.delete_cookie(
+        key="verboflex_refresh",
+        path="/api/v1/auth",
+        secure=settings.refresh_cookie_secure,
+        httponly=True,
+        samesite="lax",
+    )
