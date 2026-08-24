@@ -14,6 +14,14 @@ CLOCK_SKEW_TOLERANCE_SECONDS = 5
 COMMON_REQUIRED_CLAIMS = ("sub", "iat", "exp", "purpose", "token_version")
 
 
+class InvalidAccessToken(ValueError):
+    """Raised when bearer authority is malformed, untrusted, or expired."""
+
+
+class PasswordChangeRequired(PermissionError):
+    """Raised when restricted authority reaches an ordinary resource."""
+
+
 @dataclass(frozen=True, slots=True)
 class AccessTokenClaims:
     """Validated provider-independent authority carried by a bearer token."""
