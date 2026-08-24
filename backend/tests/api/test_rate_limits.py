@@ -3,18 +3,24 @@
 import asyncio
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from types import SimpleNamespace
+from typing import cast
 from uuid import UUID
 
 import httpx
 import pytest
 from redis.exceptions import ConnectionError as RedisConnectionError
+from sqlalchemy.orm import Session
 
+from verboflex.api.v1.routes import auth as auth_routes
 from verboflex.auth.principal import Principal, get_current_principal
 from verboflex.auth.rate_limits import (
     BoundedLocalRateLimiter,
     get_local_rate_limiter,
     get_redis_client,
 )
+from verboflex.core.config import Settings, get_settings
+from verboflex.db.session import get_db_session
 from verboflex.main import app
 from verboflex.schemas.users import RoleName
 
@@ -127,6 +133,17 @@ async def _status_requests(count: int) -> list[httpx.Response]:
         return [await client.get("/api/v1/system/status") for _ in range(count)]
 
 
+async def _login_from_unvalidated_peer() -> httpx.Response:
+    """Submit login from a malformed peer plus a caller-controlled proxy header."""
+    transport = httpx.ASGITransport(app=app, client=("not-an-ip", 44000))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        return await client.post(
+            "/api/v1/auth/token",
+            data={"username": "PERSON@EXAMPLE.COM", "password": "long password phrase"},
+            headers={"X-Forwarded-For": "203.0.113.99"},
+        )
+
+
 def test_current_user_read_allows_one_hundred_twenty_then_blocks() -> None:
     """Derive the ordinary-read key from authenticated server authority."""
     principal = Principal(
@@ -214,3 +231,38 @@ def test_system_status_keeps_a_bounded_local_limit_during_redis_outage() -> None
     assert [response.status_code for response in responses[:120]] == [501] * 120
     assert responses[120].status_code == 429
     assert responses[120].headers["x-ratelimit-remaining"] == "0"
+
+
+def test_login_uses_only_a_validated_server_observed_client_ip(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Normalize an invalid peer to one bounded key and ignore forwarded headers."""
+    observed_ips: list[str] = []
+
+    def observe_authentication(
+        _session: Session,
+        _redis_client: object,
+        *,
+        email: str,
+        password: str,
+        client_ip: str,
+        settings: Settings,
+    ) -> object:
+        del email, password, settings
+        observed_ips.append(client_ip)
+        return SimpleNamespace(
+            access_token="signed-access-token",
+            refresh_token=None,
+            expires_in=300,
+            must_change_password=True,
+        )
+
+    monkeypatch.setattr(auth_routes, "authenticate_login", observe_authentication)
+    app.dependency_overrides[get_db_session] = lambda: cast(Session, object())
+    app.dependency_overrides[get_redis_client] = lambda: CountingRedis()
+    app.dependency_overrides[get_settings] = lambda: Settings(refresh_cookie_secure=False)
+
+    response = asyncio.run(_login_from_unvalidated_peer())
+
+    assert response.status_code == 200
+    assert observed_ips == ["unknown"]
