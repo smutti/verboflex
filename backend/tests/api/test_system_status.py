@@ -11,6 +11,7 @@ from uuid import UUID
 import httpx
 import pytest
 from pydantic import SecretStr
+from redis import Redis
 
 from verboflex.api.v1.routes.system import get_system_status_service
 from verboflex.auth.access_tokens import issue_access_token
@@ -197,3 +198,29 @@ def test_password_change_authority_is_rejected_before_any_service_probe() -> Non
 
     assert response.status_code == 403
     assert response.json() == {"detail": "Password change required"}
+
+
+def test_redis_client_enforces_configured_connect_and_command_timeouts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bound Redis connection and command waits independently of coroutine timeout."""
+    captured: dict[str, object] = {}
+    sentinel = cast(Redis, object())
+
+    def capture_client(url: str, **kwargs: object) -> Redis:
+        captured["url"] = url
+        captured.update(kwargs)
+        return sentinel
+
+    monkeypatch.setattr(Redis, "from_url", staticmethod(capture_client))
+    settings = Settings(
+        service_probe_timeout_seconds=0.25,
+        refresh_cookie_secure=False,
+    )
+
+    client = get_redis_client(settings)
+
+    assert client is sentinel
+    assert captured["socket_connect_timeout"] == 0.25
+    assert captured["socket_timeout"] == 0.25
+    assert captured["decode_responses"] is True
