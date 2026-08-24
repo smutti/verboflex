@@ -15,15 +15,16 @@ import httpx
 import pytest
 from alembic.config import Config
 from psycopg import connect, sql
+from pydantic import RedisDsn, SecretStr
 from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
-from verboflex.api.v1.routes.auth import get_redis_client
 from verboflex.auth import login as login_service
 from verboflex.auth.access_tokens import decode_access_token
 from verboflex.auth.passwords import hash_password
+from verboflex.auth.rate_limits import get_redis_client
 from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
 from verboflex.main import app
@@ -89,7 +90,7 @@ def login_session_factory() -> Iterator[sessionmaker[Session]]:
 def login_settings() -> Settings:
     """Return explicit local auth settings independent from ambient env."""
     return Settings(
-        jwt_secret_key=SIGNING_SECRET,
+        jwt_secret_key=SecretStr(SIGNING_SECRET),
         refresh_cookie_secure=False,
     )
 
@@ -217,6 +218,7 @@ def test_temporary_login_creates_only_password_change_authority(
     [
         ("wrong password", "person@example.com", "wrong password phrase!", True),
         ("unknown email", "unknown@example.com", VALID_PASSWORD, True),
+        ("malformed email", " \tNOT AN EMAIL\r ", VALID_PASSWORD, True),
         ("inactive account", "person@example.com", VALID_PASSWORD, False),
     ],
 )
@@ -315,3 +317,32 @@ def test_redis_outage_fails_closed_before_verification_or_mutation(
     assert "set-cookie" not in response.headers
     with login_session_factory() as session:
         assert session.execute(select(AuthSession)).scalars().all() == []
+
+
+@pytest.mark.parametrize("invalid_state", [[], [1], ["not-an-integer", 60]])
+def test_invalid_redis_limiter_state_fails_closed(
+    login_session_factory: sessionmaker[Session],
+    invalid_state: object,
+) -> None:
+    """Treat malformed Redis results as an unavailable authentication service."""
+    configure_dependencies(login_session_factory, FakeRedis(result=invalid_state))
+
+    response = asyncio.run(post_token("person@example.com", VALID_PASSWORD))
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Authentication service unavailable"}
+
+
+def test_redis_dependency_uses_the_configured_database_url() -> None:
+    """Build the request-scoped limiter client from the explicit Redis setting."""
+    settings = Settings(
+        jwt_secret_key=SecretStr(SIGNING_SECRET),
+        redis_url=RedisDsn("redis://127.0.0.1:6380/4"),
+        refresh_cookie_secure=False,
+    )
+
+    client = get_redis_client(settings)
+
+    assert client.connection_pool.connection_kwargs["host"] == "127.0.0.1"
+    assert client.connection_pool.connection_kwargs["port"] == 6380
+    assert client.connection_pool.connection_kwargs["db"] == 4

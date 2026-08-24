@@ -33,3 +33,9 @@ def test_role_dependency_allows_exact_database_role_and_denies_viewer() -> None:
         dependency(viewer)
     assert denial.value.status_code == 403
     assert denial.value.detail == "Insufficient permissions"
+
+
+def test_role_dependency_requires_an_explicit_allowlist() -> None:
+    """Fail configuration closed instead of creating a dependency that denies opaquely."""
+    with pytest.raises(ValueError, match="at least one allowed role is required"):
+        require_roles()

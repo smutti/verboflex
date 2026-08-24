@@ -12,6 +12,7 @@ import jwt
 import pytest
 from alembic.config import Config
 from psycopg import connect, sql
+from pydantic import SecretStr
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -64,7 +65,10 @@ def principal_session_factory() -> Iterator[sessionmaker[Session]]:
 
 def principal_settings() -> Settings:
     """Return explicit signing settings independent from ambient env."""
-    return Settings(jwt_secret_key=SIGNING_SECRET, refresh_cookie_secure=False)
+    return Settings(
+        jwt_secret_key=SecretStr(SIGNING_SECRET),
+        refresh_cookie_secure=False,
+    )
 
 
 def configure_principal_dependencies(factory: sessionmaker[Session]) -> None:
@@ -207,6 +211,37 @@ def test_password_change_authority_returns_exact_403_without_identity_body(
 
     assert response.status_code == 403
     assert response.json() == {"detail": "Password change required"}
+
+
+def test_durable_password_change_flag_restricts_an_existing_session(
+    principal_session_factory: sessionmaker[Session],
+) -> None:
+    """Current database policy overrides an otherwise ordinary signed session."""
+    access_token = create_principal_authority(principal_session_factory)
+    with principal_session_factory.begin() as session:
+        session.get_one(User, USER_ID).must_change_password = True
+    configure_principal_dependencies(principal_session_factory)
+
+    response = asyncio.run(get_me(access_token))
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Password change required"}
+
+
+def test_unknown_durable_role_fails_closed(
+    principal_session_factory: sessionmaker[Session],
+) -> None:
+    """Never project an authority role outside the stable public role vocabulary."""
+    access_token = create_principal_authority(principal_session_factory)
+    with principal_session_factory.begin() as session:
+        session.execute(select(Role).where(Role.name == "translator")).scalar_one().name = "owner"
+    configure_principal_dependencies(principal_session_factory)
+
+    response = asyncio.run(get_me(access_token))
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid access token"}
+    assert response.headers["www-authenticate"] == "Bearer"
 
 
 def test_forged_role_claim_never_overrides_database_roles(

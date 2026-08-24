@@ -1,16 +1,18 @@
 """Contracts for short-lived signed access authority."""
 
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import jwt
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+from pydantic import SecretStr
 
 from verboflex.auth.access_tokens import (
     InvalidAccessToken,
     PasswordChangeRequired,
+    TokenPurpose,
     decode_access_token,
     issue_access_token,
 )
@@ -22,7 +24,7 @@ SIGNING_SECRET = "0123456789abcdef" * 2
 def token_settings() -> Settings:
     """Return explicit local signing settings without consulting ambient env."""
     return Settings(
-        jwt_secret_key=SIGNING_SECRET,
+        jwt_secret_key=SecretStr(SIGNING_SECRET),
         refresh_cookie_secure=False,
     )
 
@@ -98,6 +100,41 @@ def test_ordinary_access_token_round_trips_through_strict_verification() -> None
     assert claims.expires_at.timestamp() - claims.issued_at.timestamp() == 900
     assert claims.purpose == "access"
     assert claims.token_version == 11
+
+
+@pytest.mark.parametrize(
+    ("purpose", "session_id"),
+    [("access", None), ("password_change", uuid4())],
+)
+def test_issuer_rejects_purpose_session_mismatches(
+    purpose: TokenPurpose,
+    session_id: UUID | None,
+) -> None:
+    """Refuse to mint authority whose session shape contradicts its purpose."""
+    with pytest.raises(ValueError):
+        issue_access_token(
+            user_id=uuid4(),
+            session_id=session_id,
+            token_version=0,
+            purpose=purpose,
+            settings=token_settings(),
+        )
+
+
+def test_issuer_and_decoder_fail_closed_without_a_signing_secret() -> None:
+    """Never mint or trust bearer authority when signing material is absent."""
+    unsigned_settings = Settings(jwt_secret_key=None, refresh_cookie_secure=False)
+
+    with pytest.raises(RuntimeError, match="JWT signing secret is not configured"):
+        issue_access_token(
+            user_id=uuid4(),
+            session_id=uuid4(),
+            token_version=0,
+            purpose="access",
+            settings=unsigned_settings,
+        )
+    with pytest.raises(RuntimeError, match="JWT signing secret is not configured"):
+        decode_access_token("irrelevant", settings=unsigned_settings)
 
 
 def test_signature_tampering_is_rejected_as_invalid_authority() -> None:
@@ -180,6 +217,53 @@ def test_ordinary_authority_is_invalid_for_password_change_only_access() -> None
             ordinary,
             settings=token_settings(),
             expected_purpose="password_change",
+        )
+
+
+@pytest.mark.parametrize(
+    "malformation",
+    [
+        "unknown-purpose",
+        "boolean-version",
+        "negative-version",
+        "ordinary-without-session",
+        "password-change-with-session",
+        "invalid-user-id",
+    ],
+)
+def test_signed_but_malformed_authority_fails_closed(malformation: str) -> None:
+    """A valid signature cannot redeem contradictory or ill-typed authority."""
+    issued_at = datetime.now(UTC).replace(microsecond=0)
+    payload: dict[str, str | int | bool] = {
+        "sub": str(uuid4()),
+        "sid": str(uuid4()),
+        "iat": int(issued_at.timestamp()),
+        "exp": int(issued_at.timestamp()) + 900,
+        "purpose": "access",
+        "token_version": 0,
+    }
+    expected_purpose: TokenPurpose = "access"
+    if malformation == "unknown-purpose":
+        payload["purpose"] = "unapproved"
+    elif malformation == "boolean-version":
+        payload["token_version"] = True
+    elif malformation == "negative-version":
+        payload["token_version"] = -1
+    elif malformation == "ordinary-without-session":
+        del payload["sid"]
+    elif malformation == "password-change-with-session":
+        payload["purpose"] = "password_change"
+        payload["exp"] = int(issued_at.timestamp()) + 300
+        expected_purpose = "password_change"
+    else:
+        payload["sub"] = "not-a-uuid"
+    token = jwt.encode(payload, SIGNING_SECRET, algorithm="HS256")
+
+    with pytest.raises(InvalidAccessToken):
+        decode_access_token(
+            token,
+            settings=token_settings(),
+            expected_purpose=expected_purpose,
         )
 
 
