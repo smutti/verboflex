@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 01
 current_phase_name: Platform Foundation
 status: executing
-stopped_at: Completed 01-11-PLAN.md
-last_updated: "2026-08-24T19:32:35.859Z"
+stopped_at: Completed 01-12-PLAN.md
+last_updated: "2026-08-24T20:03:28.758Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 01 execution started
-state_head: 7cb92f738b31062bee0a6ee361491d6ce2c87dc3
+state_head: 23363bcaa5f0d33495a6bd9efc19d727606a1621
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 15
-  completed_plans: 11
+  completed_plans: 12
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 01 (Platform Foundation) — EXECUTING
-Plan: 12 of 15
+Plan: 13 of 15
 Status: Ready to execute
 Last activity: 2026-08-24 — Phase 01 execution started
 
@@ -69,6 +69,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P09 | 19min | 2 tasks | 17 files |
 | Phase 01 P10 | 31min | 2 tasks | 26 files |
 | Phase 01 P11 | 8min | 2 tasks | 3 files |
+| Phase 01 P12 | 24min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -122,6 +123,9 @@ Recent decisions affecting current work:
 - [Phase 01]: Use ESLint and @eslint/js 9.39.5 for the approved lint graph. — It is the newest exact version compatible with eslint-plugin-jsx-a11y 6.10.2 without forcing peer resolution.
 - [Phase 01]: Keep official shadcn sources unchanged and enforce the approved visual contract through the global theme boundary.
 - [Phase 01]: Defer next-themes provider integration until a selectable or dark theme is approved; the official Sonner fallback works without it.
+- [Phase 01]: Route authority is a pure projection of SessionState; URLs, roles, and client-controlled values never grant access. — Keeps the backend-derived state machine authoritative for every direct navigation.
+- [Phase 01]: Generated-client failures become sanitized rejected session actions so pages can announce one generic response without backend diagnostics. — Preserves non-enumerating UI feedback and retains the existing signed-out or restricted authority.
+- [Phase 01]: Successful forced password replacement clears browser authority and returns to signed-out login. — Matches the backend contract that revokes old authority and requires fresh login.
 
 ### Pending Todos
 
@@ -147,6 +151,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-24T19:32:35.851Z
-Stopped at: Completed 01-11-PLAN.md
+Last session: 2026-08-24T20:03:28.745Z
+Stopped at: Completed 01-12-PLAN.md
 Resume file: None
