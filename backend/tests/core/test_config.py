@@ -41,3 +41,9 @@ def test_cors_rejects_urls_that_are_not_exact_origins() -> None:
     """Paths, queries, fragments, and embedded credentials are not origins."""
     with pytest.raises(ValidationError, match="must contain exact HTTP origins"):
         Settings(cors_origins=(AnyHttpUrl("https://app.verboflex.example/path"),))
+
+
+def test_database_url_requires_a_named_postgresql_database() -> None:
+    """A syntactically valid server-only DSN is not an operational database target."""
+    with pytest.raises(ValidationError, match="must name a PostgreSQL database"):
+        Settings(database_url=PostgresDsn("postgresql+psycopg://verboflex@postgres"))
