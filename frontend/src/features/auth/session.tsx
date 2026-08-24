@@ -45,10 +45,6 @@ export interface SessionValue {
   logout: () => Promise<void>;
 }
 
-const notImplemented = async (): Promise<void> => {
-  throw new Error("Session transition not implemented");
-};
-
 const SessionContext = createContext<SessionValue | null>(null);
 
 export interface SessionProviderProps extends PropsWithChildren {
