@@ -6,6 +6,14 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 
+class ErrorResponse(BaseModel):
+    """Stable JSON error envelope."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    detail: str
+
+
 class HealthResponse(BaseModel):
     """Constant public liveness response."""
 
