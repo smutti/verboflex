@@ -5,17 +5,25 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { readSystemStatus, type CurrentUserResponse } from "../../api/client";
+import { App } from "../../App";
+import { useSession } from "../../features/auth/session";
 import { AppShell } from "./AppShell";
 
 vi.mock("../../api/client", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../api/client")>();
   return {
     ...original,
+    readHealth: vi.fn(),
     readSystemStatus: vi.fn(),
   };
 });
 
+vi.mock("../../features/auth/session", () => ({
+  useSession: vi.fn(),
+}));
+
 const readSystemStatusMock = vi.mocked(readSystemStatus);
+const useSessionMock = vi.mocked(useSession);
 
 const principal: CurrentUserResponse = {
   id: "73f123f7-ebad-4dad-8b5d-dcc3214b3b06",
@@ -32,6 +40,7 @@ afterEach(() => {
 beforeEach(() => {
   readSystemStatusMock.mockReset();
   readSystemStatusMock.mockReturnValue(new Promise<never>(() => undefined));
+  useSessionMock.mockReset();
 });
 
 describe("authenticated application shell", () => {
@@ -175,5 +184,30 @@ describe("authenticated application shell", () => {
     );
 
     expect(onLogout).toHaveBeenCalledOnce();
+  });
+
+  it("wires the production ordinary route only from authenticated session data", () => {
+    const logout = vi.fn().mockResolvedValue(undefined);
+    useSessionMock.mockReturnValue({
+      state: {
+        status: "authenticated",
+        accessToken: "ordinary-server-token",
+        principal,
+      },
+      login: vi.fn(),
+      changePassword: vi.fn(),
+      restoreSession: vi.fn(),
+      logout,
+    });
+
+    render(<App />);
+
+    expect(
+      screen.getByRole("heading", { name: "Workspace overview" }),
+    ).toBeVisible();
+    expect(screen.getByText("Person Example")).toBeVisible();
+    expect(readSystemStatusMock).toHaveBeenCalledWith({
+      auth: "ordinary-server-token",
+    });
   });
 });
