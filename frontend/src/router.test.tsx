@@ -1,10 +1,19 @@
 import "@testing-library/jest-dom/vitest";
 
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { SessionRoutes } from "./router";
+
+afterEach(() => {
+  cleanup();
+});
+
+function LocationMarker() {
+  const location = useLocation();
+  return <div data-testid="current-route">{location.pathname}</div>;
+}
 
 function renderRoutes(
   state: Parameters<typeof SessionRoutes>[0]["state"],
@@ -18,6 +27,7 @@ function renderRoutes(
         changePasswordElement={<h1>Password change route</h1>}
         ordinaryElement={<h1>Ordinary route</h1>}
       />
+      <LocationMarker />
     </MemoryRouter>,
   );
 }
@@ -28,5 +38,12 @@ describe("session routes", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("Checking session");
     expect(screen.queryByRole("heading")).not.toBeInTheDocument();
+  });
+
+  it("renders the login route for signed-out authority", () => {
+    renderRoutes({ status: "signed_out" }, "/login");
+
+    expect(screen.getByRole("heading", { name: "Login route" })).toBeVisible();
+    expect(screen.getByTestId("current-route")).toHaveTextContent("/login");
   });
 });
