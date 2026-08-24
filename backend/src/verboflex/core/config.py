@@ -91,6 +91,8 @@ class Settings(BaseSettings):
             raise ValueError("JWT signing secret must not use a placeholder value")
         if len(secret.encode("utf-8")) < 32:
             raise ValueError("JWT signing secret must contain at least 32 bytes")
+        if not self.refresh_cookie_secure:
+            raise ValueError("refresh cookie must be Secure in staging and production")
         return self
 
 
