@@ -38,10 +38,31 @@ export type SessionEvent =
     };
 
 export function transitionSession(
-  state: SessionState,
-  _event: SessionEvent,
+  _state: SessionState,
+  event: SessionEvent,
 ): SessionState {
-  return state;
+  switch (event.type) {
+    case "check_session":
+      return { status: "checking_session" };
+    case "sign_out":
+      return { status: "signed_out" };
+    case "restrict":
+      return event.accessToken.length > 0
+        ? {
+            status: "password_change_required",
+            accessToken: event.accessToken,
+          }
+        : { status: "signed_out" };
+    case "authenticate":
+      return event.accessToken.length > 0 &&
+        !event.principal.must_change_password
+        ? {
+            status: "authenticated",
+            accessToken: event.accessToken,
+            principal: event.principal,
+          }
+        : { status: "signed_out" };
+  }
 }
 
 export interface LoginCredentials {
@@ -85,14 +106,18 @@ export function SessionProvider({
     });
     const authority = tokenResult.data;
     if (authority === undefined) {
-      setState({ status: "signed_out" });
+      setState((current) =>
+        transitionSession(current, { type: "sign_out" }),
+      );
       return;
     }
     if (authority.must_change_password) {
-      setState({
-        status: "password_change_required",
-        accessToken: authority.access_token,
-      });
+      setState((current) =>
+        transitionSession(current, {
+          type: "restrict",
+          accessToken: authority.access_token,
+        }),
+      );
       return;
     }
 
@@ -100,14 +125,18 @@ export function SessionProvider({
       auth: authority.access_token,
     });
     if (identityResult.data === undefined) {
-      setState({ status: "signed_out" });
+      setState((current) =>
+        transitionSession(current, { type: "sign_out" }),
+      );
       return;
     }
-    setState({
-      status: "authenticated",
-      accessToken: authority.access_token,
-      principal: identityResult.data,
-    });
+    setState((current) =>
+      transitionSession(current, {
+        type: "authenticate",
+        accessToken: authority.access_token,
+        principal: identityResult.data,
+      }),
+    );
   }, []);
 
   const changePassword = useCallback(
@@ -123,38 +152,50 @@ export function SessionProvider({
         },
       });
       if (result.error === undefined) {
-        setState({ status: "signed_out" });
+        setState((current) =>
+          transitionSession(current, { type: "sign_out" }),
+        );
       }
     },
     [state],
   );
 
   const restoreSession = useCallback(async () => {
-    setState({ status: "checking_session" });
+    setState((current) =>
+      transitionSession(current, { type: "check_session" }),
+    );
     let refreshResult: Awaited<ReturnType<typeof refreshAccessToken>>;
     try {
       refreshResult = await refreshAccessToken();
     } catch {
-      setState({ status: "signed_out" });
+      setState((current) =>
+        transitionSession(current, { type: "sign_out" }),
+      );
       return;
     }
     const authority = refreshResult.data;
     if (authority === undefined || authority.must_change_password) {
-      setState({ status: "signed_out" });
+      setState((current) =>
+        transitionSession(current, { type: "sign_out" }),
+      );
       return;
     }
     const identityResult = await readCurrentUser({
       auth: authority.access_token,
     });
     if (identityResult.data === undefined) {
-      setState({ status: "signed_out" });
+      setState((current) =>
+        transitionSession(current, { type: "sign_out" }),
+      );
       return;
     }
-    setState({
-      status: "authenticated",
-      accessToken: authority.access_token,
-      principal: identityResult.data,
-    });
+    setState((current) =>
+      transitionSession(current, {
+        type: "authenticate",
+        accessToken: authority.access_token,
+        principal: identityResult.data,
+      }),
+    );
   }, []);
 
   useEffect(() => {
@@ -167,7 +208,9 @@ export function SessionProvider({
     try {
       await generatedLogout();
     } finally {
-      setState({ status: "signed_out" });
+      setState((current) =>
+        transitionSession(current, { type: "sign_out" }),
+      );
     }
   }, []);
 
