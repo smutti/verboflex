@@ -157,4 +157,23 @@ describe("authenticated application shell", () => {
     expect(await screen.findByText("API online")).toBeVisible();
     expect(readSystemStatusMock).toHaveBeenCalledTimes(2);
   });
+
+  it("offers the exact reversible logout action through session authority", async () => {
+    const onLogout = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+
+    render(
+      <AppShell
+        accessToken="ordinary-server-token"
+        onLogout={onLogout}
+        principal={principal}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Sign out of VerboFlex" }),
+    );
+
+    expect(onLogout).toHaveBeenCalledOnce();
+  });
 });
