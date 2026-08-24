@@ -10,8 +10,9 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from psycopg import Connection, connect, sql
+from psycopg import connect, sql
 from sqlalchemy import Engine, create_engine, inspect, text
+from sqlalchemy.exc import IntegrityError
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 ADMIN_DATABASE_URL = os.environ.get(
@@ -149,7 +150,7 @@ def test_migration_constraints_reject_duplicates_and_roll_back_atomically(
     config, engine = migrated_database
     command.upgrade(config, "head")
 
-    with pytest.raises(Exception):  # SQLAlchemy wraps the PostgreSQL constraint class.
+    with pytest.raises(IntegrityError):
         with engine.begin() as connection:
             connection.execute(
                 text(
