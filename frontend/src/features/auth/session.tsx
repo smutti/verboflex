@@ -116,7 +116,7 @@ export function SessionProvider({
       setState((current) =>
         transitionSession(current, { type: "sign_out" }),
       );
-      return;
+      throw new Error("Session action failed");
     }
     if (authority.must_change_password) {
       setState((current) =>
