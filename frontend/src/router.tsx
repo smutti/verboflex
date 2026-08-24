@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 
 import type { SessionState } from "./features/auth/session";
 import { Skeleton } from "./components/ui/skeleton";
@@ -32,6 +32,7 @@ export function SessionRoutes({ state, loginElement }: SessionRoutesProps) {
     return (
       <Routes>
         <Route path="/login" element={loginElement} />
+        <Route path="*" element={<Navigate replace to="/login" />} />
       </Routes>
     );
   }
