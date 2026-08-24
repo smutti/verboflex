@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
-import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import { readHealthApiV1HealthGet } from "./api/client";
@@ -13,6 +13,10 @@ vi.mock("./api/client", () => ({
 const readHealth = vi.mocked(readHealthApiV1HealthGet);
 
 describe("API health tracer", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     readHealth.mockReset();
   });
@@ -24,6 +28,21 @@ describe("API health tracer", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent(
       "Checking API connection",
+    );
+    expect(readHealth).toHaveBeenCalledOnce();
+  });
+
+  it("renders API online for the exact healthy response", async () => {
+    readHealth.mockResolvedValue({
+      data: { status: "ok" },
+      error: undefined,
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("API online")).toHaveAttribute(
+      "role",
+      "status",
     );
     expect(readHealth).toHaveBeenCalledOnce();
   });
