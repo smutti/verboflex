@@ -11,7 +11,11 @@ export interface SessionRoutesProps {
   ordinaryElement: ReactNode;
 }
 
-export function SessionRoutes({ state, loginElement }: SessionRoutesProps) {
+export function SessionRoutes({
+  state,
+  loginElement,
+  changePasswordElement,
+}: SessionRoutesProps) {
   if (state.status === "checking_session") {
     return (
       <main className="flex min-h-screen items-center justify-center px-6">
@@ -33,6 +37,14 @@ export function SessionRoutes({ state, loginElement }: SessionRoutesProps) {
       <Routes>
         <Route path="/login" element={loginElement} />
         <Route path="*" element={<Navigate replace to="/login" />} />
+      </Routes>
+    );
+  }
+
+  if (state.status === "password_change_required") {
+    return (
+      <Routes>
+        <Route path="/change-password" element={changePasswordElement} />
       </Routes>
     );
   }
