@@ -42,13 +42,17 @@ VALID_PASSWORD = "ordinary login phrase!"
 class FakeRedis:
     """Deterministic Redis boundary whose calls remain observable."""
 
-    result: object = field(default_factory=lambda: [1, 60])
+    result: object | None = None
+    attempts: int = 0
     calls: list[tuple[str, int, tuple[object, ...]]] = field(default_factory=list)
 
     def eval(self, script: str, numkeys: int, *keys_and_args: object) -> object:
         """Record one atomic rate-limit invocation."""
         self.calls.append((script, numkeys, keys_and_args))
-        return self.result
+        if self.result is not None:
+            return self.result
+        self.attempts += 1
+        return [self.attempts, 60]
 
 
 @pytest.fixture
@@ -253,3 +257,34 @@ def test_unknown_email_traverses_the_dummy_argon2_verification_path(
     assert response.status_code == 401
     assert len(observed_hashes) == 1
     assert observed_hashes[0].startswith("$argon2")
+
+
+def test_sixth_login_attempt_is_limited_before_password_verification(
+    login_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Return exact 429 metadata before a sixth password hash is evaluated."""
+    create_login_user(login_session_factory)
+    redis_client = FakeRedis()
+    verification_calls = 0
+
+    def reject_password(_password: str, _password_hash: str) -> bool:
+        nonlocal verification_calls
+        verification_calls += 1
+        return False
+
+    monkeypatch.setattr(login_service, "verify_password", reject_password)
+    configure_dependencies(login_session_factory, redis_client)
+
+    responses = [
+        asyncio.run(post_token("person@example.com", "wrong password phrase!"))
+        for _ in range(6)
+    ]
+
+    assert [response.status_code for response in responses] == [401, 401, 401, 401, 401, 429]
+    assert responses[-1].json() == {"detail": "Rate limit exceeded"}
+    assert int(responses[-1].headers["retry-after"]) > 0
+    assert responses[-1].headers["x-ratelimit-remaining"] == "0"
+    assert verification_calls == 5
+    with login_session_factory() as session:
+        assert session.execute(select(AuthSession)).scalars().all() == []
