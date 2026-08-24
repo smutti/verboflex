@@ -2,8 +2,10 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from redis import Redis
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from verboflex.auth.principal import CurrentPrincipal
 from verboflex.auth.rate_limits import (
@@ -13,9 +15,34 @@ from verboflex.auth.rate_limits import (
     get_redis_client,
     raise_rate_limited,
 )
-from verboflex.schemas.system import ErrorResponse, SystemStatusResponse
+from verboflex.core.config import Settings, get_settings
+from verboflex.db.session import get_db_session
+from verboflex.schemas.system import ErrorResponse, ServiceState, SystemStatusResponse
+from verboflex.services.system_status import SystemStatusService
 
 router = APIRouter(prefix="/system", tags=["system"])
+
+
+def get_system_status_service(
+    session: Annotated[Session, Depends(get_db_session)],
+    redis_client: Annotated[Redis, Depends(get_redis_client)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> SystemStatusService:
+    """Build real database/Redis probes and the pending worker seam."""
+
+    def database_probe() -> ServiceState:
+        session.execute(text("SELECT 1")).scalar_one()
+        return "online"
+
+    def redis_probe() -> ServiceState:
+        return "online" if redis_client.ping() else "unavailable"
+
+    return SystemStatusService(
+        database_probe=database_probe,
+        redis_probe=redis_probe,
+        worker_probe=lambda: "pending",
+        timeout_seconds=settings.service_probe_timeout_seconds,
+    )
 
 
 @router.get(
@@ -31,6 +58,7 @@ async def read_system_status(
     principal: CurrentPrincipal,
     redis_client: Annotated[Redis, Depends(get_redis_client)],
     local_limiter: Annotated[BoundedLocalRateLimiter, Depends(get_local_rate_limiter)],
+    service: Annotated[SystemStatusService, Depends(get_system_status_service)],
 ) -> SystemStatusResponse:
     """Expose the final bounded service-status signature."""
     limit = enforce_ordinary_read_rate_limit(
@@ -40,4 +68,11 @@ async def read_system_status(
     )
     if not limit.allowed:
         raise_rate_limited(limit)
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented")
+    snapshot = await service.collect()
+    return SystemStatusResponse(
+        api="online",
+        database=snapshot.database,
+        redis=snapshot.redis,
+        worker=snapshot.worker,
+        checked_at=snapshot.checked_at,
+    )
