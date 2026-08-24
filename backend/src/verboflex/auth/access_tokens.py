@@ -34,23 +34,29 @@ def issue_access_token(
     now: datetime | None = None,
 ) -> str:
     """Issue signed authority with the approved purpose-specific lifetime."""
-    if purpose != "access":
-        raise NotImplementedError
-    if session_id is None:
+    if purpose == "access" and session_id is None:
         raise ValueError("ordinary access tokens require a session id")
+    if purpose == "password_change" and session_id is not None:
+        raise ValueError("password change tokens must not carry a session id")
     if settings.jwt_secret_key is None:
         raise RuntimeError("JWT signing secret is not configured")
 
     issued_at = now or datetime.now(UTC)
-    expires_at = issued_at + timedelta(minutes=settings.access_token_expire_minutes)
+    lifetime_minutes = (
+        settings.access_token_expire_minutes
+        if purpose == "access"
+        else settings.password_change_token_expire_minutes
+    )
+    expires_at = issued_at + timedelta(minutes=lifetime_minutes)
     payload: dict[str, str | int] = {
         "sub": str(user_id),
-        "sid": str(session_id),
         "iat": int(issued_at.timestamp()),
         "exp": int(expires_at.timestamp()),
         "purpose": purpose,
         "token_version": token_version,
     }
+    if session_id is not None:
+        payload["sid"] = str(session_id)
     return jwt.encode(
         payload,
         settings.jwt_secret_key.get_secret_value(),
