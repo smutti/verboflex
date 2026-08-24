@@ -1,6 +1,7 @@
 """Authenticated non-leaking contracts for bounded service status."""
 
 import asyncio
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -56,6 +57,13 @@ async def request_status() -> httpx.Response:
         return await client.get("/api/v1/system/status")
 
 
+async def request_status_with_elapsed() -> tuple[httpx.Response, float]:
+    """Measure response latency before the test event loop drains worker threads."""
+    started_at = time.perf_counter()
+    response = await request_status()
+    return response, time.perf_counter() - started_at
+
+
 def test_ordinary_user_receives_only_the_exact_service_status_projection() -> None:
     """Replace the callable 501 seam with the approved bounded JSON contract."""
     app.dependency_overrides[get_current_principal] = ordinary_principal
@@ -108,3 +116,29 @@ def test_probe_exceptions_and_invalid_values_map_to_non_leaking_unavailable() ->
         "task_id",
     ):
         assert forbidden not in serialized
+
+
+def test_every_slow_probe_is_independently_timeout_bounded() -> None:
+    """Return all unavailable states within one timeout budget, not three serial waits."""
+
+    def slow_probe() -> ServiceState:
+        time.sleep(0.2)
+        return "online"
+
+    service = SystemStatusService(
+        database_probe=slow_probe,
+        redis_probe=slow_probe,
+        worker_probe=slow_probe,
+        timeout_seconds=0.02,
+    )
+    app.dependency_overrides[get_current_principal] = ordinary_principal
+    app.dependency_overrides[get_redis_client] = lambda: AvailableRedis()
+    app.dependency_overrides[get_system_status_service] = lambda: service
+
+    response, elapsed = asyncio.run(request_status_with_elapsed())
+
+    assert response.status_code == 200
+    assert response.json()["database"] == "unavailable"
+    assert response.json()["redis"] == "unavailable"
+    assert response.json()["worker"] == "unavailable"
+    assert elapsed < 0.1
