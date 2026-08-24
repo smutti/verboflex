@@ -138,6 +138,23 @@ def test_missing_or_malformed_logout_is_non_enumerating_and_clears_cookie(
     assert persisted.revoked_at is None
 
 
+def test_unknown_well_formed_logout_is_non_enumerating_and_clears_cookie(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Keep a structurally valid unknown token on the same idempotent response path."""
+    create_refresh_authority(refresh_session_factory)
+    configure_dependencies(refresh_session_factory, FakeRedis(result=[1, 60]))
+
+    response = asyncio.run(post_logout("Z" * 43))
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert_cookie_is_cleared(response)
+    with refresh_session_factory() as session:
+        persisted = session.get_one(AuthSession, SESSION_ID)
+    assert persisted.revoked_at is None
+
+
 def test_hostile_origin_cannot_revoke_or_reach_the_logout_limiter(
     refresh_session_factory: sessionmaker[Session],
 ) -> None:

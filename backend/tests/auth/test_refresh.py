@@ -192,6 +192,35 @@ def test_valid_refresh_rotates_once_and_returns_new_authority(
     assert claims.user_id == USER_ID
 
 
+def test_refresh_successor_uses_the_exact_rotation_timeline(
+    refresh_session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bind both successor expiry and access claims to the serialized rotation instant."""
+    create_refresh_authority(refresh_session_factory)
+    rotated_at = datetime.now(UTC).replace(microsecond=0)
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, timezone: object = None) -> FrozenDateTime:
+            return cls.fromtimestamp(rotated_at.timestamp(), UTC)
+
+    monkeypatch.setattr("verboflex.auth.refresh_sessions.datetime", FrozenDateTime)
+    configure_dependencies(refresh_session_factory)
+
+    response = asyncio.run(post_refresh())
+
+    assert response.status_code == 200
+    claims = decode_access_token(response.json()["access_token"], settings=refresh_settings())
+    assert claims.issued_at == rotated_at
+    with refresh_session_factory() as session:
+        successor = session.execute(
+            select(AuthSession).where(AuthSession.parent_id == SESSION_ID)
+        ).scalar_one()
+    assert successor.expires_at == rotated_at + timedelta(
+        days=refresh_settings().refresh_token_expire_days
+    )
+
+
 @pytest.mark.parametrize("origin", [None, "https://app.verboflex.example"])
 def test_absent_or_exact_allowed_origin_can_rotate(
     refresh_session_factory: sessionmaker[Session], origin: str | None

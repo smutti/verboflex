@@ -36,6 +36,9 @@ __all__ = ["refresh_session_factory"]
 CURRENT_PASSWORD = "temporary password phrase!"
 NEW_PASSWORD = "New secure phrase 2026!"
 SECOND_SESSION_ID = UUID("00000000-0000-4000-8000-000000000704")
+OTHER_USER_ID = UUID("00000000-0000-4000-8000-000000000705")
+OTHER_SESSION_ID = UUID("00000000-0000-4000-8000-000000000706")
+UNKNOWN_SESSION_ID = UUID("00000000-0000-4000-8000-000000000707")
 
 
 def create_password_change_authority(
@@ -249,6 +252,164 @@ def test_ordinary_current_user_authority_can_change_its_password(
         user = session.get_one(User, USER_ID)
     assert verify_password(NEW_PASSWORD, user.hashed_password)
     assert user.token_version == 1
+
+
+@pytest.mark.parametrize("principal_state", ["inactive", "version-mismatch"])
+def test_password_change_rejects_noncurrent_user_authority(
+    refresh_session_factory: sessionmaker[Session], principal_state: str
+) -> None:
+    """Require the signed subject to remain active and at its signed token version."""
+    restricted, _ordinary = create_password_change_authority(refresh_session_factory)
+    with refresh_session_factory.begin() as session:
+        user = session.get_one(User, USER_ID)
+        if principal_state == "inactive":
+            user.is_active = False
+        else:
+            user.token_version = 1
+    before = durable_password_state(refresh_session_factory)
+    configure_dependencies(refresh_session_factory, FakeRedis(result=[1, 60]))
+
+    response = asyncio.run(post_change_password(restricted))
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid access token"}
+    assert durable_password_state(refresh_session_factory) == before
+
+
+def test_password_change_rejects_signed_subject_missing_from_postgresql(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Reject a valid signature whose current user no longer exists."""
+    token = issue_access_token(
+        user_id=OTHER_USER_ID,
+        token_version=0,
+        purpose="password_change",
+        settings=refresh_settings(),
+    )
+    configure_dependencies(refresh_session_factory, FakeRedis(result=[1, 60]))
+
+    response = asyncio.run(post_change_password(token))
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid access token"}
+
+
+def test_restricted_password_change_requires_the_durable_change_flag(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Keep restricted-purpose authority valid only while the durable flag is set."""
+    restricted, _ordinary = create_password_change_authority(
+        refresh_session_factory,
+        must_change_password=False,
+    )
+    before = durable_password_state(refresh_session_factory)
+    configure_dependencies(refresh_session_factory, FakeRedis(result=[1, 60]))
+
+    response = asyncio.run(post_change_password(restricted))
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid access token"}
+    assert durable_password_state(refresh_session_factory) == before
+
+
+def test_ordinary_password_change_rejects_unknown_current_session(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Reject ordinary authority whose signed sid has no durable session."""
+    create_password_change_authority(refresh_session_factory, must_change_password=False)
+    ordinary = issue_access_token(
+        user_id=USER_ID,
+        session_id=UNKNOWN_SESSION_ID,
+        token_version=0,
+        purpose="access",
+        settings=refresh_settings(),
+    )
+    before = durable_password_state(refresh_session_factory)
+    configure_dependencies(refresh_session_factory, FakeRedis(result=[1, 60]))
+
+    response = asyncio.run(post_change_password(ordinary))
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid access token"}
+    assert durable_password_state(refresh_session_factory) == before
+
+
+def test_ordinary_password_change_rejects_session_at_exact_expiry(
+    refresh_session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Treat the exact durable expiry instant as invalid authority."""
+    _restricted, ordinary = create_password_change_authority(
+        refresh_session_factory,
+        must_change_password=False,
+    )
+    changed_at = datetime.now(UTC).replace(microsecond=0)
+    with refresh_session_factory.begin() as session:
+        session.get_one(AuthSession, SESSION_ID).expires_at = changed_at
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, timezone: object = None) -> FrozenDateTime:
+            return cls.fromtimestamp(changed_at.timestamp(), UTC)
+
+    monkeypatch.setattr(password_change_service, "datetime", FrozenDateTime)
+    before = durable_password_state(refresh_session_factory)
+    configure_dependencies(refresh_session_factory, FakeRedis(result=[1, 60]))
+
+    response = asyncio.run(post_change_password(ordinary))
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid access token"}
+    assert durable_password_state(refresh_session_factory) == before
+
+
+def test_password_change_increments_version_and_revokes_only_current_user_sessions(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Preserve other users and prior revocation timestamps while advancing authority."""
+    create_password_change_authority(refresh_session_factory)
+    prior_revocation = datetime.now(UTC) - timedelta(days=1)
+    with refresh_session_factory.begin() as session:
+        user = session.get_one(User, USER_ID)
+        user.token_version = 4
+        session.get_one(AuthSession, SECOND_SESSION_ID).revoked_at = prior_revocation
+        session.add(
+            User(
+                id=OTHER_USER_ID,
+                email="other@example.com",
+                display_name="Other Person",
+                hashed_password=hash_password("other secure phrase!"),
+                must_change_password=False,
+            )
+        )
+        session.add(
+            AuthSession(
+                id=OTHER_SESSION_ID,
+                user_id=OTHER_USER_ID,
+                family_id=OTHER_SESSION_ID,
+                token_hash="c" * 64,
+                expires_at=datetime.now(UTC) + timedelta(days=7),
+            )
+        )
+    restricted = issue_access_token(
+        user_id=USER_ID,
+        token_version=4,
+        purpose="password_change",
+        settings=refresh_settings(),
+    )
+    configure_dependencies(refresh_session_factory, FakeRedis(result=[1, 60]))
+
+    response = asyncio.run(post_change_password(restricted))
+
+    assert response.status_code == 204
+    with refresh_session_factory() as session:
+        user = session.get_one(User, USER_ID)
+        current_session = session.get_one(AuthSession, SESSION_ID)
+        prior_session = session.get_one(AuthSession, SECOND_SESSION_ID)
+        other_session = session.get_one(AuthSession, OTHER_SESSION_ID)
+    assert user.token_version == 5
+    assert current_session.revoked_at is not None
+    assert prior_session.revoked_at == prior_revocation
+    assert other_session.revoked_at is None
 
 
 @pytest.mark.parametrize("session_state", ["revoked", "expired"])
