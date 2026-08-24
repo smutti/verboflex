@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AnyHttpUrl, Field, PostgresDsn, RedisDsn, SecretStr
+from pydantic import AnyHttpUrl, Field, PostgresDsn, RedisDsn, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,6 +32,14 @@ class Settings(BaseSettings):
         extra="ignore",
         frozen=True,
     )
+
+    @field_validator("cors_origins")
+    @classmethod
+    def require_cors_origin(cls, origins: tuple[AnyHttpUrl, ...]) -> tuple[AnyHttpUrl, ...]:
+        """Require a concrete allowlist for credentialed browser requests."""
+        if not origins:
+            raise ValueError("CORS requires at least one exact HTTP origin")
+        return origins
 
 
 @lru_cache
