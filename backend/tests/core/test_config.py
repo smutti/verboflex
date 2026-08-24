@@ -124,3 +124,18 @@ def test_deployed_environments_reject_signing_secrets_shorter_than_32_bytes(
                 "refresh_cookie_secure": True,
             }
         )
+
+
+@pytest.mark.parametrize("app_env", ["staging", "production"])
+def test_deployed_environments_reject_insecure_refresh_cookies(
+    app_env: Literal["staging", "production"],
+) -> None:
+    """Only an explicit local HTTP environment may disable the Secure attribute."""
+    with pytest.raises(ValidationError, match="refresh cookie must be Secure"):
+        Settings.model_validate(
+            {
+                "app_env": app_env,
+                "jwt_secret_key": "0123456789abcdef" * 2,
+                "refresh_cookie_secure": False,
+            }
+        )
