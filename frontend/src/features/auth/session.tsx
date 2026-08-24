@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from "react";
@@ -96,14 +97,20 @@ export function SessionProvider({
   const [state, setState] = useState<SessionState>(
     restoreOnMount ? { status: "checking_session" } : { status: "signed_out" },
   );
+  const operationVersion = useRef(0);
 
   const login = useCallback(async (credentials: LoginCredentials) => {
+    const version = operationVersion.current + 1;
+    operationVersion.current = version;
     const tokenResult = await issueToken({
       body: {
         username: credentials.email,
         password: credentials.password,
       },
     });
+    if (operationVersion.current !== version) {
+      return;
+    }
     const authority = tokenResult.data;
     if (authority === undefined) {
       setState((current) =>
@@ -124,6 +131,9 @@ export function SessionProvider({
     const identityResult = await readCurrentUser({
       auth: authority.access_token,
     });
+    if (operationVersion.current !== version) {
+      return;
+    }
     if (identityResult.data === undefined) {
       setState((current) =>
         transitionSession(current, { type: "sign_out" }),
@@ -144,6 +154,8 @@ export function SessionProvider({
       if (state.status !== "password_change_required") {
         return;
       }
+      const version = operationVersion.current + 1;
+      operationVersion.current = version;
       const result = await generatedChangePassword({
         auth: state.accessToken,
         body: {
@@ -151,7 +163,10 @@ export function SessionProvider({
           new_password: passwords.newPassword,
         },
       });
-      if (result.error === undefined) {
+      if (
+        operationVersion.current === version &&
+        result.error === undefined
+      ) {
         setState((current) =>
           transitionSession(current, { type: "sign_out" }),
         );
@@ -161,6 +176,8 @@ export function SessionProvider({
   );
 
   const restoreSession = useCallback(async () => {
+    const version = operationVersion.current + 1;
+    operationVersion.current = version;
     setState((current) =>
       transitionSession(current, { type: "check_session" }),
     );
@@ -168,9 +185,14 @@ export function SessionProvider({
     try {
       refreshResult = await refreshAccessToken();
     } catch {
-      setState((current) =>
-        transitionSession(current, { type: "sign_out" }),
-      );
+      if (operationVersion.current === version) {
+        setState((current) =>
+          transitionSession(current, { type: "sign_out" }),
+        );
+      }
+      return;
+    }
+    if (operationVersion.current !== version) {
       return;
     }
     const authority = refreshResult.data;
@@ -183,6 +205,9 @@ export function SessionProvider({
     const identityResult = await readCurrentUser({
       auth: authority.access_token,
     });
+    if (operationVersion.current !== version) {
+      return;
+    }
     if (identityResult.data === undefined) {
       setState((current) =>
         transitionSession(current, { type: "sign_out" }),
@@ -205,6 +230,10 @@ export function SessionProvider({
   }, [restoreOnMount, restoreSession]);
 
   const logout = useCallback(async () => {
+    operationVersion.current += 1;
+    setState((current) =>
+      transitionSession(current, { type: "sign_out" }),
+    );
     try {
       await generatedLogout();
     } finally {
