@@ -10,6 +10,7 @@ import {
 
 import {
   changePassword as generatedChangePassword,
+  logout as generatedLogout,
   issueToken,
   readCurrentUser,
   refreshAccessToken,
@@ -149,15 +150,23 @@ export function SessionProvider({
     }
   }, [restoreOnMount, restoreSession]);
 
+  const logout = useCallback(async () => {
+    try {
+      await generatedLogout();
+    } finally {
+      setState({ status: "signed_out" });
+    }
+  }, []);
+
   const value = useMemo<SessionValue>(
     () => ({
       state,
       login,
       changePassword,
       restoreSession,
-      logout: notImplemented,
+      logout,
     }),
-    [changePassword, login, restoreSession, state],
+    [changePassword, login, logout, restoreSession, state],
   );
 
   return (
