@@ -4,10 +4,12 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import cast
 
 from verboflex.schemas.system import ServiceState
 
 ServiceProbe = Callable[[], ServiceState]
+_SERVICE_STATES = frozenset({"online", "unavailable", "pending"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,9 +54,12 @@ class SystemStatusService:
 
     async def _bounded(self, probe: ServiceProbe) -> ServiceState:
         try:
-            return await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 asyncio.to_thread(probe),
                 timeout=self._timeout_seconds,
             )
         except Exception:
             return "unavailable"
+        if result not in _SERVICE_STATES:
+            return "unavailable"
+        return cast(ServiceState, result)
