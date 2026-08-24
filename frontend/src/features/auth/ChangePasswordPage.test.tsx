@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -188,5 +188,43 @@ describe("required password change page", () => {
       "We could not change your password. Check the requirements and try again.",
     );
     expect(alert).not.toHaveTextContent(reason.message);
+  });
+
+  it("allows only one password replacement while the session action is pending", async () => {
+    let resolveChange: (() => void) | undefined;
+    changePasswordMock.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveChange = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    render(<ChangePasswordPage />);
+
+    await user.type(
+      screen.getByLabelText("Current password"),
+      "temporary phrase 2026!",
+    );
+    await user.type(
+      screen.getByLabelText("New password"),
+      "replacement phrase 2026!",
+    );
+    await user.type(
+      screen.getByLabelText("Confirm new password"),
+      "replacement phrase 2026!",
+    );
+    const submit = screen.getByRole("button", { name: "Set new password" });
+    await user.click(submit);
+
+    await waitFor(() => {
+      expect(submit).toBeDisabled();
+      expect(submit).toHaveAttribute("aria-busy", "true");
+    });
+    await user.click(submit);
+    expect(changePasswordMock).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      resolveChange?.();
+    });
+    await waitFor(() => expect(submit).toBeEnabled());
   });
 });
