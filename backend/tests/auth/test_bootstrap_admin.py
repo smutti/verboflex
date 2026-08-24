@@ -7,6 +7,7 @@ import os
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from io import StringIO
 from pathlib import Path
 from uuid import uuid4
 
@@ -23,6 +24,7 @@ from verboflex.cli import (
     bootstrap_first_admin,
     build_parser,
     main,
+    read_password,
     reset_user_password,
 )
 from verboflex.models.auth_session import AuthSession
@@ -330,3 +332,18 @@ def test_cli_reset_dispatches_without_exposing_the_replacement_password(
         assert verify_password(replacement, user.hashed_password) is True
         assert user.must_change_password is True
         assert user.token_version == 1
+
+
+def test_stdin_secret_reader_preserves_intentional_spaces_without_echo(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Non-terminal stdin strips only its line ending, never password spaces."""
+    monkeypatch.setattr("sys.stdin", StringIO("  protected phrase  \n"))
+
+    password = read_password("Password: ")
+
+    output = capsys.readouterr()
+    assert password == "  protected phrase  "
+    assert password not in output.out
+    assert password not in output.err
