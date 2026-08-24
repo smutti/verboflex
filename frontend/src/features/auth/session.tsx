@@ -1,10 +1,17 @@
 import {
+  useCallback,
   createContext,
   useContext,
+  useMemo,
+  useState,
   type PropsWithChildren,
 } from "react";
 
-import type { CurrentUserResponse } from "../../api/client";
+import {
+  issueToken,
+  readCurrentUser,
+  type CurrentUserResponse,
+} from "../../api/client";
 
 export type SessionState =
   | { status: "checking_session" }
@@ -45,18 +52,48 @@ export interface SessionProviderProps extends PropsWithChildren {
 }
 
 export function SessionProvider({ children }: SessionProviderProps) {
+  const [state, setState] = useState<SessionState>({ status: "signed_out" });
+
+  const login = useCallback(async (credentials: LoginCredentials) => {
+    const tokenResult = await issueToken({
+      body: {
+        username: credentials.email,
+        password: credentials.password,
+      },
+    });
+    const authority = tokenResult.data;
+    if (authority === undefined || authority.must_change_password) {
+      setState({ status: "signed_out" });
+      return;
+    }
+
+    const identityResult = await readCurrentUser({
+      auth: authority.access_token,
+    });
+    if (identityResult.data === undefined) {
+      setState({ status: "signed_out" });
+      return;
+    }
+    setState({
+      status: "authenticated",
+      accessToken: authority.access_token,
+      principal: identityResult.data,
+    });
+  }, []);
+
+  const value = useMemo<SessionValue>(
+    () => ({
+      state,
+      login,
+      changePassword: notImplemented,
+      restoreSession: notImplemented,
+      logout: notImplemented,
+    }),
+    [login, state],
+  );
+
   return (
-    <SessionContext.Provider
-      value={{
-        state: { status: "signed_out" },
-        login: notImplemented,
-        changePassword: notImplemented,
-        restoreSession: notImplemented,
-        logout: notImplemented,
-      }}
-    >
-      {children}
-    </SessionContext.Provider>
+    <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
   );
 }
 
