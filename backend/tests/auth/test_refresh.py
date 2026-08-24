@@ -15,7 +15,8 @@ import httpx
 import pytest
 from alembic.config import Config
 from psycopg import connect, sql
-from pydantic import SecretStr
+from pydantic import AnyHttpUrl, SecretStr
+from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -87,7 +88,7 @@ def refresh_settings() -> Settings:
     return Settings(
         jwt_secret_key=SecretStr(SIGNING_SECRET),
         refresh_cookie_secure=False,
-        cors_origins=("https://app.verboflex.example",),
+        cors_origins=(AnyHttpUrl("https://app.verboflex.example"),),
     )
 
 
@@ -142,8 +143,9 @@ async def post_refresh(
     async with httpx.AsyncClient(
         transport=transport,
         base_url="http://127.0.0.1",
+        cookies=cookies,
     ) as client:
-        return await client.post("/api/v1/auth/refresh", headers=headers, cookies=cookies)
+        return await client.post("/api/v1/auth/refresh", headers=headers)
 
 
 def test_valid_refresh_rotates_once_and_returns_new_authority(
@@ -186,3 +188,199 @@ def test_valid_refresh_rotates_once_and_returns_new_authority(
     claims = decode_access_token(response.json()["access_token"], settings=refresh_settings())
     assert claims.session_id == successor.id
     assert claims.user_id == USER_ID
+
+
+@pytest.mark.parametrize("origin", [None, "https://app.verboflex.example"])
+def test_absent_or_exact_allowed_origin_can_rotate(
+    refresh_session_factory: sessionmaker[Session], origin: str | None
+) -> None:
+    """Accept non-browser callers and the one exact configured browser origin."""
+    create_refresh_authority(refresh_session_factory)
+    configure_dependencies(refresh_session_factory)
+
+    response = asyncio.run(post_refresh(origin=origin))
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "session_state",
+    ["expired", "revoked"],
+)
+def test_expired_or_revoked_refresh_returns_exact_401_without_successor(
+    refresh_session_factory: sessionmaker[Session], session_state: str
+) -> None:
+    """Reject dead durable authority without creating another family member."""
+    create_refresh_authority(refresh_session_factory)
+    with refresh_session_factory.begin() as session:
+        auth_session = session.get_one(AuthSession, SESSION_ID)
+        if session_state == "expired":
+            auth_session.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        else:
+            auth_session.revoked_at = datetime.now(UTC)
+    configure_dependencies(refresh_session_factory)
+
+    response = asyncio.run(post_refresh())
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid refresh session"}
+    assert "set-cookie" not in response.headers
+    with refresh_session_factory() as session:
+        persisted = session.execute(select(AuthSession)).scalars().all()
+    assert len(persisted) == 1
+    assert persisted[0].used_at is None
+
+
+def test_refresh_is_invalid_at_its_exact_expiry_boundary(
+    refresh_session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reject a refresh session at, not only after, its durable expiry."""
+    create_refresh_authority(refresh_session_factory)
+    exact_expiry = datetime.now(UTC).replace(microsecond=0)
+    with refresh_session_factory.begin() as session:
+        session.get_one(AuthSession, SESSION_ID).expires_at = exact_expiry
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, timezone: object = None) -> FrozenDateTime:
+            return cls.fromtimestamp(exact_expiry.timestamp(), UTC)
+
+    monkeypatch.setattr("verboflex.auth.refresh_sessions.datetime", FrozenDateTime)
+    configure_dependencies(refresh_session_factory)
+
+    response = asyncio.run(post_refresh())
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid refresh session"}
+    with refresh_session_factory() as session:
+        assert session.execute(select(AuthSession)).scalars().all()[0].used_at is None
+
+
+@pytest.mark.parametrize("token", [None, "", "not-base64url", "A" * 42, "A" * 44])
+def test_missing_or_malformed_refresh_returns_exact_401_without_database_mutation(
+    refresh_session_factory: sessionmaker[Session], token: str | None
+) -> None:
+    """Reject absent and structurally malformed cookies through one stable surface."""
+    create_refresh_authority(refresh_session_factory)
+    configure_dependencies(refresh_session_factory)
+
+    response = asyncio.run(post_refresh(token))
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid refresh session"}
+    assert "set-cookie" not in response.headers
+    with refresh_session_factory() as session:
+        persisted = session.get_one(AuthSession, SESSION_ID)
+    assert persisted.used_at is None
+    assert persisted.revoked_at is None
+
+
+def test_replayed_predecessor_revokes_every_session_in_its_family(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Treat reuse of consumed authority as theft and revoke its successor."""
+    predecessor = create_refresh_authority(refresh_session_factory)
+    successor = AuthSession(
+        user_id=USER_ID,
+        family_id=FAMILY_ID,
+        parent_id=SESSION_ID,
+        token_hash="b" * 64,
+        expires_at=datetime.now(UTC) + timedelta(days=7),
+    )
+    with refresh_session_factory.begin() as session:
+        session.get_one(AuthSession, SESSION_ID).used_at = datetime.now(UTC)
+        session.add(successor)
+    configure_dependencies(refresh_session_factory)
+
+    response = asyncio.run(post_refresh())
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid refresh session"}
+    assert "set-cookie" not in response.headers
+    with refresh_session_factory() as session:
+        family = session.execute(
+            select(AuthSession).where(AuthSession.family_id == predecessor.family_id)
+        ).scalars().all()
+    assert len(family) == 2
+    assert all(item.revoked_at is not None for item in family)
+
+
+def test_hostile_origin_is_rejected_before_redis_or_postgresql_mutation(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Reject ambient-cookie CSRF before touching limiter or durable authority."""
+    create_refresh_authority(refresh_session_factory)
+    redis_client = configure_dependencies(refresh_session_factory)
+
+    response = asyncio.run(post_refresh(origin="https://attacker.example"))
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Origin not allowed"}
+    assert redis_client.calls == []
+    with refresh_session_factory() as session:
+        persisted = session.get_one(AuthSession, SESSION_ID)
+    assert persisted.used_at is None
+    assert persisted.revoked_at is None
+
+
+def test_request_thirty_one_is_limited_before_rotation(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Return exact 429 metadata before the over-limit request reaches PostgreSQL."""
+    create_refresh_authority(refresh_session_factory)
+    configure_dependencies(refresh_session_factory, FakeRedis(result=[31, 47]))
+
+    response = asyncio.run(post_refresh())
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Rate limit exceeded"}
+    assert response.headers["retry-after"] == "47"
+    assert response.headers["x-ratelimit-remaining"] == "0"
+    with refresh_session_factory() as session:
+        persisted = session.get_one(AuthSession, SESSION_ID)
+    assert persisted.used_at is None
+
+
+def test_redis_outage_fails_closed_before_refresh_mutation(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Return exact 503 when authoritative limiting is unavailable."""
+    create_refresh_authority(refresh_session_factory)
+    configure_dependencies(
+        refresh_session_factory,
+        FakeRedis(result=RedisConnectionError("redis unavailable")),
+    )
+
+    response = asyncio.run(post_refresh())
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Authentication service unavailable"}
+    assert "set-cookie" not in response.headers
+    with refresh_session_factory() as session:
+        persisted = session.get_one(AuthSession, SESSION_ID)
+    assert persisted.used_at is None
+    assert persisted.revoked_at is None
+
+
+def test_refresh_requests_exact_32_byte_token_entropy(
+    refresh_session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Require 256 random bits when creating the replacement cookie."""
+    create_refresh_authority(refresh_session_factory)
+    configure_dependencies(refresh_session_factory)
+    requested_bytes: list[int | None] = []
+
+    def deterministic_token(nbytes: int | None = None) -> str:
+        requested_bytes.append(nbytes)
+        return "B" * 43
+
+    monkeypatch.setattr(
+        "verboflex.auth.refresh_sessions.secrets.token_urlsafe",
+        deterministic_token,
+    )
+
+    response = asyncio.run(post_refresh())
+
+    assert response.status_code == 200
+    assert requested_bytes == [32]
+    assert response.cookies["verboflex_refresh"] == "B" * 43
