@@ -118,6 +118,13 @@ def decode_access_token(
 
         issued_at = datetime.fromtimestamp(payload["iat"], UTC)
         expires_at = datetime.fromtimestamp(payload["exp"], UTC)
+        expected_lifetime = (
+            settings.access_token_expire_minutes
+            if purpose == "access"
+            else settings.password_change_token_expire_minutes
+        )
+        if expires_at - issued_at != timedelta(minutes=expected_lifetime):
+            raise InvalidAccessToken("invalid access token")
         return AccessTokenClaims(
             user_id=UUID(payload["sub"]),
             session_id=UUID(session_value) if session_value is not None else None,
