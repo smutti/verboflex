@@ -1,10 +1,15 @@
-"""Redis-backed authentication rate-limit seams."""
+"""Redis-backed and bounded process-local request-rate seams."""
 
+import math
+import time
+from collections import OrderedDict
 from dataclasses import dataclass
+from ipaddress import ip_address
 from hashlib import sha256
-from typing import Annotated, Protocol
+from threading import Lock
+from typing import Annotated, Callable, Protocol
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException, Request, status
 from redis import Redis
 from redis.exceptions import RedisError
 
@@ -37,6 +42,9 @@ LOGIN_WINDOW_SECONDS = 60
 REFRESH_LIMIT = 30
 LOGOUT_LIMIT = 10
 PASSWORD_CHANGE_LIMIT = 10
+HEALTH_LIMIT = 60
+ORDINARY_READ_LIMIT = 120
+LOCAL_RATE_LIMIT_MAX_KEYS = 2048
 LOGIN_RATE_LIMIT_SCRIPT = """
 local current = redis.call('INCR', KEYS[1])
 if current == 1 then
@@ -45,6 +53,100 @@ end
 local ttl = redis.call('TTL', KEYS[1])
 return {current, ttl}
 """
+
+
+@dataclass(frozen=True, slots=True)
+class _LocalWindow:
+    """One bounded fixed-window counter."""
+
+    started_at: float
+    attempts: int
+
+
+class BoundedLocalRateLimiter:
+    """Thread-safe fixed windows with a strict actor-cardinality ceiling."""
+
+    def __init__(
+        self,
+        *,
+        max_keys: int = LOCAL_RATE_LIMIT_MAX_KEYS,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        if max_keys < 1:
+            raise ValueError("max_keys must be positive")
+        self._max_keys = max_keys
+        self._clock = clock
+        self._windows: OrderedDict[str, _LocalWindow] = OrderedDict()
+        self._lock = Lock()
+
+    def check(self, key: str, *, limit: int, window_seconds: int) -> LoginRateLimit:
+        """Count one request without allowing unbounded process memory growth."""
+        if limit < 1 or window_seconds < 1:
+            raise ValueError("rate policy values must be positive")
+        now = self._clock()
+        with self._lock:
+            current = self._windows.get(key)
+            if current is None or now >= current.started_at + window_seconds:
+                if current is None and len(self._windows) >= self._max_keys:
+                    self._windows.popitem(last=False)
+                current = _LocalWindow(started_at=now, attempts=1)
+            else:
+                current = _LocalWindow(
+                    started_at=current.started_at,
+                    attempts=current.attempts + 1,
+                )
+            self._windows[key] = current
+            self._windows.move_to_end(key)
+
+        retry_after = max(math.ceil(current.started_at + window_seconds - now), 1)
+        return LoginRateLimit(
+            allowed=current.attempts <= limit,
+            remaining=max(limit - current.attempts, 0),
+            retry_after=retry_after,
+        )
+
+
+_local_rate_limiter = BoundedLocalRateLimiter()
+
+
+def get_local_rate_limiter() -> BoundedLocalRateLimiter:
+    """Return the bounded process-local diagnostic limiter."""
+    return _local_rate_limiter
+
+
+def validated_client_ip(request: Request) -> str:
+    """Return only the server-observed, syntactically valid peer address."""
+    candidate = request.client.host if request.client is not None else ""
+    try:
+        return str(ip_address(candidate))
+    except ValueError:
+        return "unknown"
+
+
+def raise_rate_limited(result: LoginRateLimit) -> None:
+    """Raise the one stable Phase 1 exhaustion response."""
+    raise HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail="Rate limit exceeded",
+        headers={
+            "Retry-After": str(result.retry_after),
+            "X-RateLimit-Remaining": "0",
+        },
+    )
+
+
+def enforce_health_rate_limit(
+    request: Request,
+    limiter: Annotated[BoundedLocalRateLimiter, Depends(get_local_rate_limiter)],
+) -> None:
+    """Bound anonymous liveness reads by the validated network peer."""
+    result = limiter.check(
+        f"health:{validated_client_ip(request)}",
+        limit=HEALTH_LIMIT,
+        window_seconds=LOGIN_WINDOW_SECONDS,
+    )
+    if not result.allowed:
+        raise_rate_limited(result)
 
 
 def get_redis_client(
