@@ -145,6 +145,18 @@ def test_local_fallback_evicts_oldest_actor_at_its_cardinality_ceiling() -> None
     assert limiter.check("actor-a", limit=1, window_seconds=60).allowed is True
 
 
+def test_local_fallback_rejects_invalid_capacity_and_policy_values() -> None:
+    """Fail closed instead of accepting nonsensical or unbounded local policies."""
+    with pytest.raises(ValueError, match="max_keys must be positive"):
+        BoundedLocalRateLimiter(max_keys=0)
+
+    limiter = BoundedLocalRateLimiter()
+    with pytest.raises(ValueError, match="rate policy values must be positive"):
+        limiter.check("actor", limit=0, window_seconds=60)
+    with pytest.raises(ValueError, match="rate policy values must be positive"):
+        limiter.check("actor", limit=1, window_seconds=0)
+
+
 async def _me_requests(count: int) -> list[httpx.Response]:
     """Issue repeated protected identity reads for one server principal."""
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
