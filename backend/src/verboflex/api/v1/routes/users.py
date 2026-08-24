@@ -7,8 +7,12 @@ from redis import Redis
 
 from verboflex.auth.principal import CurrentPrincipal
 from verboflex.auth.rate_limits import (
+    LOGIN_WINDOW_SECONDS,
     ORDINARY_READ_LIMIT,
+    BoundedLocalRateLimiter,
+    RateLimitUnavailable,
     enforce_auth_action_rate_limit,
+    get_local_rate_limiter,
     get_redis_client,
     raise_rate_limited,
 )
@@ -30,15 +34,23 @@ router = APIRouter(prefix="/users", tags=["users"])
 async def read_current_user(
     principal: CurrentPrincipal,
     redis_client: Annotated[Redis, Depends(get_redis_client)],
+    local_limiter: Annotated[BoundedLocalRateLimiter, Depends(get_local_rate_limiter)],
 ) -> CurrentUserResponse:
     """Expose the final current-identity signature."""
-    limit = enforce_auth_action_rate_limit(
-        redis_client,
-        action="ordinary-read",
-        identity=str(principal.user_id),
-        client_ip="server-principal",
-        limit=ORDINARY_READ_LIMIT,
-    )
+    try:
+        limit = enforce_auth_action_rate_limit(
+            redis_client,
+            action="ordinary-read",
+            identity=str(principal.user_id),
+            client_ip="server-principal",
+            limit=ORDINARY_READ_LIMIT,
+        )
+    except RateLimitUnavailable:
+        limit = local_limiter.check(
+            f"ordinary-read:{principal.user_id}",
+            limit=ORDINARY_READ_LIMIT,
+            window_seconds=LOGIN_WINDOW_SECONDS,
+        )
     if not limit.allowed:
         raise_rate_limited(limit)
     return CurrentUserResponse(
