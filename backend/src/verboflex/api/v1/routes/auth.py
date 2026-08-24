@@ -23,6 +23,7 @@ from verboflex.auth.rate_limits import (
     RateLimitUnavailable,
     enforce_auth_action_rate_limit,
     get_redis_client,
+    validated_client_ip,
 )
 from verboflex.auth.refresh_sessions import (
     InvalidRefreshSession,
@@ -90,7 +91,7 @@ async def issue_token(
             redis_client,
             email=form_data.username,
             password=form_data.password,
-            client_ip=request.client.host if request.client is not None else "unknown",
+            client_ip=validated_client_ip(request),
             settings=settings,
         )
     except InvalidCredentials as error:
@@ -150,7 +151,7 @@ async def refresh_access_token(
             redis_client,
             action="refresh",
             identity=refresh_cookie or "missing",
-            client_ip=request.client.host if request.client is not None else "unknown",
+            client_ip=validated_client_ip(request),
             limit=REFRESH_LIMIT,
         )
         if not limit.allowed:
@@ -223,7 +224,7 @@ async def logout(
             redis_client,
             action="logout",
             identity=refresh_cookie or "missing",
-            client_ip=request.client.host if request.client is not None else "unknown",
+            client_ip=validated_client_ip(request),
             limit=LOGOUT_LIMIT,
         )
     except RateLimitUnavailable:
@@ -277,7 +278,7 @@ async def change_password(
             redis_client,
             action="password-change",
             identity=candidate.rate_limit_identity,
-            client_ip=request.client.host if request.client is not None else "unknown",
+            client_ip=validated_client_ip(request),
             limit=PASSWORD_CHANGE_LIMIT,
         )
     except RateLimitUnavailable as error:
