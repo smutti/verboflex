@@ -117,28 +117,24 @@ export function SessionProvider({
 
   const restoreSession = useCallback(async () => {
     setState({ status: "checking_session" });
-    try {
-      const refreshResult = await refreshAccessToken();
-      const authority = refreshResult.data;
-      if (authority === undefined || authority.must_change_password) {
-        setState({ status: "signed_out" });
-        return;
-      }
-      const identityResult = await readCurrentUser({
-        auth: authority.access_token,
-      });
-      if (identityResult.data === undefined) {
-        setState({ status: "signed_out" });
-        return;
-      }
-      setState({
-        status: "authenticated",
-        accessToken: authority.access_token,
-        principal: identityResult.data,
-      });
-    } catch {
+    const refreshResult = await refreshAccessToken();
+    const authority = refreshResult.data;
+    if (authority === undefined || authority.must_change_password) {
       setState({ status: "signed_out" });
+      return;
     }
+    const identityResult = await readCurrentUser({
+      auth: authority.access_token,
+    });
+    if (identityResult.data === undefined) {
+      setState({ status: "signed_out" });
+      return;
+    }
+    setState({
+      status: "authenticated",
+      accessToken: authority.access_token,
+      principal: identityResult.data,
+    });
   }, []);
 
   useEffect(() => {
