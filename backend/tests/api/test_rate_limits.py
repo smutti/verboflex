@@ -193,3 +193,24 @@ def test_system_status_is_rate_limited_before_its_callable_behavior_seam() -> No
     assert responses[120].status_code == 429
     assert responses[120].json() == {"detail": "Rate limit exceeded"}
     assert responses[120].headers["x-ratelimit-remaining"] == "0"
+
+
+def test_system_status_keeps_a_bounded_local_limit_during_redis_outage() -> None:
+    """Keep diagnostics reachable without making Redis failure an unbounded bypass."""
+    principal = Principal(
+        user_id=UUID("00000000-0000-4000-8000-000000000804"),
+        email="diagnostic@example.com",
+        display_name="Diagnostic Example",
+        roles=(RoleName("viewer"),),
+        must_change_password=False,
+    )
+    local_limiter = BoundedLocalRateLimiter(max_keys=4)
+    app.dependency_overrides[get_current_principal] = lambda: principal
+    app.dependency_overrides[get_redis_client] = lambda: FailingRedis()
+    app.dependency_overrides[get_local_rate_limiter] = lambda: local_limiter
+
+    responses = asyncio.run(_status_requests(121))
+
+    assert [response.status_code for response in responses[:120]] == [501] * 120
+    assert responses[120].status_code == 429
+    assert responses[120].headers["x-ratelimit-remaining"] == "0"
