@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -90,5 +90,36 @@ describe("login page", () => {
       "We could not sign you in. Check your email and password, then try again.",
     );
     expect(alert).not.toHaveTextContent(reason.message);
+  });
+
+  it("allows only one login submission while the session action is pending", async () => {
+    let resolveLogin: (() => void) | undefined;
+    loginMock.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveLogin = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    render(<LoginPage />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Email" }),
+      "person@example.com",
+    );
+    await user.type(screen.getByLabelText("Password"), "secure phrase 2026!");
+    const submit = screen.getByRole("button", { name: "Sign in to VerboFlex" });
+    await user.click(submit);
+
+    await waitFor(() => {
+      expect(submit).toBeDisabled();
+      expect(submit).toHaveAttribute("aria-busy", "true");
+    });
+    await user.click(submit);
+    expect(loginMock).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      resolveLogin?.();
+    });
+    await waitFor(() => expect(submit).toBeEnabled());
   });
 });
