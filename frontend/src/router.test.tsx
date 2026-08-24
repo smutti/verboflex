@@ -72,4 +72,27 @@ describe("session routes", () => {
       "/change-password",
     );
   });
+
+  it.each(["/", "/login", "/private-route"])(
+    "redirects restricted direct navigation from %s to password change",
+    async (initialEntry) => {
+      renderRoutes(
+        {
+          status: "password_change_required",
+          accessToken: "restricted-server-token",
+        },
+        initialEntry,
+      );
+
+      expect(
+        await screen.findByRole("heading", { name: "Password change route" }),
+      ).toBeVisible();
+      expect(screen.getByTestId("current-route")).toHaveTextContent(
+        "/change-password",
+      );
+      expect(
+        screen.queryByRole("heading", { name: "Ordinary route" }),
+      ).not.toBeInTheDocument();
+    },
+  );
 });
