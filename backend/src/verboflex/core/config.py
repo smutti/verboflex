@@ -3,6 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import AnyHttpUrl, Field, PostgresDsn, RedisDsn, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,11 +13,24 @@ class Settings(BaseSettings):
     app_name: str = "VerboFlex API"
     app_env: Literal["local", "staging", "production"] = "local"
     api_v1_prefix: str = "/api/v1"
+    database_url: PostgresDsn = PostgresDsn(
+        "postgresql+psycopg://verboflex@localhost:5432/verboflex"
+    )
+    redis_url: RedisDsn = RedisDsn("redis://localhost:6379/0")
+    jwt_secret_key: SecretStr | None = None
+    jwt_algorithm: Literal["HS256"] = "HS256"
+    cors_origins: tuple[AnyHttpUrl, ...] = (AnyHttpUrl("http://localhost:5173"),)
+    access_token_expire_minutes: int = Field(default=15, ge=1, le=60)
+    password_change_token_expire_minutes: int = Field(default=5, ge=1, le=15)
+    refresh_token_expire_days: int = Field(default=7, ge=1, le=30)
+    service_probe_timeout_seconds: float = Field(default=2.0, gt=0, le=30)
+    refresh_cookie_secure: bool = True
 
     model_config = SettingsConfigDict(
         env_prefix="VERBOFLEX_",
         case_sensitive=False,
         extra="ignore",
+        frozen=True,
     )
 
 
