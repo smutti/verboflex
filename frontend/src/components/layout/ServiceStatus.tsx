@@ -1,38 +1,81 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   readSystemStatus,
   type SystemStatusResponse,
 } from "../../api/client";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Alert, AlertDescription } from "../ui/alert";
 
 export interface ServiceStatusProps {
   accessToken: string;
 }
 
+type StatusState =
+  | { status: "loading" }
+  | { status: "loaded"; data: SystemStatusResponse }
+  | { status: "error" };
+
+const API_ERROR_COPY =
+  "We could not reach the API. Check that the backend is running, then retry the connection.";
+
 export function ServiceStatus({ accessToken }: ServiceStatusProps) {
-  const [status, setStatus] = useState<SystemStatusResponse | null>(null);
+  const [state, setState] = useState<StatusState>({ status: "loading" });
+  const requestVersion = useRef(0);
 
-  useEffect(() => {
-    let active = true;
+  const checkStatus = useCallback(async () => {
+    const version = requestVersion.current + 1;
+    requestVersion.current = version;
+    setState({ status: "loading" });
 
-    void readSystemStatus({ auth: accessToken })
-      .then((result) => {
-        if (active && result.data !== undefined) {
-          setStatus(result.data);
-        }
-      })
-      .catch(() => undefined);
-
-    return () => {
-      active = false;
-    };
+    try {
+      const result = await readSystemStatus({ auth: accessToken });
+      if (requestVersion.current !== version) {
+        return;
+      }
+      setState(
+        result.data === undefined
+          ? { status: "error" }
+          : { status: "loaded", data: result.data },
+      );
+    } catch {
+      if (requestVersion.current === version) {
+        setState({ status: "error" });
+      }
+    }
   }, [accessToken]);
 
-  if (status === null) {
+  useEffect(() => {
+    void checkStatus();
+
+    return () => {
+      requestVersion.current += 1;
+    };
+  }, [checkStatus]);
+
+  if (state.status === "loading") {
     return <p role="status">Checking service status</p>;
   }
 
+  if (state.status === "error") {
+    return (
+      <Alert className="rounded-lg">
+        <AlertDescription>
+          <p>{API_ERROR_COPY}</p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void checkStatus()}
+          >
+            Retry connection
+          </Button>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  const status = state.data;
   const services = [
     ["API", status.api],
     ["Database", status.database],
