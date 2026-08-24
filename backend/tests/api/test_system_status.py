@@ -122,6 +122,27 @@ def test_probe_exceptions_and_invalid_values_map_to_non_leaking_unavailable() ->
         assert forbidden not in serialized
 
 
+def test_online_probes_remain_online_in_the_exact_projection() -> None:
+    """Preserve genuine readiness without exposing probe implementation data."""
+    service = SystemStatusService(
+        database_probe=lambda: "online",
+        redis_probe=lambda: "online",
+        worker_probe=lambda: "online",
+        timeout_seconds=0.1,
+    )
+    app.dependency_overrides[get_current_principal] = ordinary_principal
+    app.dependency_overrides[get_redis_client] = lambda: AvailableRedis()
+    app.dependency_overrides[get_system_status_service] = lambda: service
+
+    response = asyncio.run(request_status())
+
+    assert response.status_code == 200
+    assert response.json()["api"] == "online"
+    assert response.json()["database"] == "online"
+    assert response.json()["redis"] == "online"
+    assert response.json()["worker"] == "online"
+
+
 def test_every_slow_probe_is_independently_timeout_bounded() -> None:
     """Return all unavailable states within one timeout budget, not three serial waits."""
 

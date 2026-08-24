@@ -4,7 +4,6 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import cast
 
 from verboflex.schemas.system import ServiceState
 
@@ -62,4 +61,4 @@ class SystemStatusService:
             return "unavailable"
         if result not in _SERVICE_STATES:
             return "unavailable"
-        return cast(ServiceState, result)
+        return result
