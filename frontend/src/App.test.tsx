@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
@@ -45,5 +45,28 @@ describe("API health tracer", () => {
       "status",
     );
     expect(readHealth).toHaveBeenCalledOnce();
+  });
+
+  it("renders sanitized API error copy and retries without raw diagnostics", async () => {
+    readHealth.mockResolvedValueOnce({
+      data: undefined,
+      error: { detail: "postgresql://db.internal:5432/verboflex" },
+    });
+
+    render(<App />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "We could not reach the API. Check that the backend is running, then retry the connection.",
+    );
+    expect(alert).not.toHaveTextContent("db.internal");
+
+    readHealth.mockReturnValueOnce(new Promise<never>(() => undefined));
+    fireEvent.click(screen.getByRole("button", { name: "Retry connection" }));
+
+    expect(readHealth).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Checking API connection",
+    );
   });
 });
