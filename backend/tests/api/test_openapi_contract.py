@@ -65,7 +65,8 @@ def _response_schema(operation: dict[str, Any], status_code: str) -> str | None:
         .get("application/json", {})
         .get("schema", {})
     )
-    return schema.get("$ref")
+    reference = schema.get("$ref")
+    return reference if isinstance(reference, str) else None
 
 
 def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
