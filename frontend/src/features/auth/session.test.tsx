@@ -1,4 +1,4 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -35,6 +35,10 @@ const principal = {
 
 function Wrapper({ children }: PropsWithChildren) {
   return <SessionProvider restoreOnMount={false}>{children}</SessionProvider>;
+}
+
+function RestoringWrapper({ children }: PropsWithChildren) {
+  return <SessionProvider>{children}</SessionProvider>;
 }
 
 describe("session transitions", () => {
@@ -143,5 +147,44 @@ describe("session transitions", () => {
       },
     });
     expect(result.current.state).toEqual({ status: "signed_out" });
+  });
+
+  it("reload starts checking then restores through generated refresh and me operations", async () => {
+    let resolveRefresh: ((result: unknown) => void) | undefined;
+    refreshAccessTokenMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRefresh = resolve;
+      }) as ReturnType<typeof refreshAccessToken>,
+    );
+    readCurrentUserMock.mockResolvedValue({ data: principal, error: undefined });
+    const { result } = renderHook(() => useSession(), {
+      wrapper: RestoringWrapper,
+    });
+
+    expect(result.current.state).toEqual({ status: "checking_session" });
+    expect(refreshAccessTokenMock).toHaveBeenCalledWith();
+
+    await act(async () => {
+      resolveRefresh?.({
+        data: {
+          access_token: "restored-memory-token",
+          expires_in: 900,
+          must_change_password: false,
+          token_type: "bearer",
+        },
+        error: undefined,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({
+        status: "authenticated",
+        accessToken: "restored-memory-token",
+        principal,
+      });
+    });
+    expect(readCurrentUserMock).toHaveBeenCalledWith({
+      auth: "restored-memory-token",
+    });
   });
 });
