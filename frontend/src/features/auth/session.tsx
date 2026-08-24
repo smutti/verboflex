@@ -27,6 +27,23 @@ export type SessionState =
       principal: CurrentUserResponse;
     };
 
+export type SessionEvent =
+  | { type: "check_session" }
+  | { type: "sign_out" }
+  | { type: "restrict"; accessToken: string }
+  | {
+      type: "authenticate";
+      accessToken: string;
+      principal: CurrentUserResponse;
+    };
+
+export function transitionSession(
+  state: SessionState,
+  _event: SessionEvent,
+): SessionState {
+  return state;
+}
+
 export interface LoginCredentials {
   email: string;
   password: string;
