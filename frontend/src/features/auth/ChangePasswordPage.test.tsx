@@ -137,4 +137,29 @@ describe("required password change page", () => {
     );
     expect(changePasswordMock).not.toHaveBeenCalled();
   });
+
+  it("submits valid replacement credentials through the restricted session action", async () => {
+    const user = userEvent.setup();
+    render(<ChangePasswordPage />);
+
+    await user.type(
+      screen.getByLabelText("Current password"),
+      "temporary phrase 2026!",
+    );
+    await user.type(
+      screen.getByLabelText("New password"),
+      "replacement phrase 2026!",
+    );
+    await user.type(
+      screen.getByLabelText("Confirm new password"),
+      "replacement phrase 2026!",
+    );
+    await user.click(screen.getByRole("button", { name: "Set new password" }));
+
+    expect(changePasswordMock).toHaveBeenCalledOnce();
+    expect(changePasswordMock).toHaveBeenCalledWith({
+      currentPassword: "temporary phrase 2026!",
+      newPassword: "replacement phrase 2026!",
+    });
+  });
 });
