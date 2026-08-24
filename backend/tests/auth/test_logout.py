@@ -6,6 +6,7 @@ import asyncio
 
 import httpx
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy.orm import Session, sessionmaker
 
 from tests.auth.test_refresh import (
@@ -172,3 +173,22 @@ def test_logout_request_eleven_is_limited_before_revocation(
     with refresh_session_factory() as session:
         persisted = session.get_one(AuthSession, SESSION_ID)
     assert persisted.revoked_at is None
+
+
+def test_logout_remains_available_when_redis_is_unavailable(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Prefer removal of ambient authority when the logout limiter is unavailable."""
+    create_refresh_authority(refresh_session_factory)
+    configure_dependencies(
+        refresh_session_factory,
+        FakeRedis(result=RedisConnectionError("redis unavailable")),
+    )
+
+    response = asyncio.run(post_logout())
+
+    assert response.status_code == 204
+    assert_cookie_is_cleared(response)
+    with refresh_session_factory() as session:
+        persisted = session.get_one(AuthSession, SESSION_ID)
+    assert persisted.revoked_at is not None

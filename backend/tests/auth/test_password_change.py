@@ -251,6 +251,31 @@ def test_ordinary_current_user_authority_can_change_its_password(
     assert user.token_version == 1
 
 
+@pytest.mark.parametrize("session_state", ["revoked", "expired"])
+def test_ordinary_password_change_rejects_dead_current_session(
+    refresh_session_factory: sessionmaker[Session], session_state: str
+) -> None:
+    """Require ordinary password-change authority to retain its current sid."""
+    _restricted, ordinary = create_password_change_authority(
+        refresh_session_factory,
+        must_change_password=False,
+    )
+    with refresh_session_factory.begin() as session:
+        auth_session = session.get_one(AuthSession, SESSION_ID)
+        if session_state == "revoked":
+            auth_session.revoked_at = datetime.now(UTC)
+        else:
+            auth_session.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    before = durable_password_state(refresh_session_factory)
+    configure_dependencies(refresh_session_factory, FakeRedis(result=[1, 60]))
+
+    response = asyncio.run(post_change_password(ordinary))
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid access token"}
+    assert durable_password_state(refresh_session_factory) == before
+
+
 @pytest.mark.parametrize("access_token", [None, "not-a-signed-token"])
 def test_missing_or_malformed_bearer_is_exact_401_without_redis_or_mutation(
     refresh_session_factory: sessionmaker[Session], access_token: str | None

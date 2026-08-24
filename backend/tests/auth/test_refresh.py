@@ -277,6 +277,47 @@ def test_missing_or_malformed_refresh_returns_exact_401_without_database_mutatio
     assert persisted.revoked_at is None
 
 
+def test_unknown_well_formed_refresh_returns_exact_401_without_database_mutation(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Reject a 256-bit-shaped token whose hash has no durable session."""
+    create_refresh_authority(refresh_session_factory)
+    configure_dependencies(refresh_session_factory)
+
+    response = asyncio.run(post_refresh("C" * 43))
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid refresh session"}
+    with refresh_session_factory() as session:
+        persisted = session.get_one(AuthSession, SESSION_ID)
+    assert persisted.used_at is None
+    assert persisted.revoked_at is None
+
+
+@pytest.mark.parametrize("user_state", ["inactive", "password-change-required"])
+def test_refresh_rejects_user_without_current_ordinary_authority(
+    refresh_session_factory: sessionmaker[Session], user_state: str
+) -> None:
+    """Reconcile the refresh holder with current user active/password policy."""
+    create_refresh_authority(refresh_session_factory)
+    with refresh_session_factory.begin() as session:
+        user = session.get_one(User, USER_ID)
+        if user_state == "inactive":
+            user.is_active = False
+        else:
+            user.must_change_password = True
+    configure_dependencies(refresh_session_factory)
+
+    response = asyncio.run(post_refresh())
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid refresh session"}
+    with refresh_session_factory() as session:
+        persisted = session.get_one(AuthSession, SESSION_ID)
+    assert persisted.used_at is None
+    assert persisted.revoked_at is None
+
+
 def test_replayed_predecessor_revokes_every_session_in_its_family(
     refresh_session_factory: sessionmaker[Session],
 ) -> None:
@@ -366,6 +407,22 @@ def test_redis_outage_fails_closed_before_refresh_mutation(
         persisted = session.get_one(AuthSession, SESSION_ID)
     assert persisted.used_at is None
     assert persisted.revoked_at is None
+
+
+@pytest.mark.parametrize("invalid_state", [[], [1], ["not-an-integer", 60]])
+def test_malformed_refresh_limiter_state_fails_closed(
+    refresh_session_factory: sessionmaker[Session], invalid_state: object
+) -> None:
+    """Treat incomplete or non-numeric Redis results as unavailable authority."""
+    create_refresh_authority(refresh_session_factory)
+    configure_dependencies(refresh_session_factory, FakeRedis(result=invalid_state))
+
+    response = asyncio.run(post_refresh())
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Authentication service unavailable"}
+    with refresh_session_factory() as session:
+        assert session.get_one(AuthSession, SESSION_ID).used_at is None
 
 
 def test_refresh_requests_exact_32_byte_token_entropy(
