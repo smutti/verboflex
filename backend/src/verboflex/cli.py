@@ -1,10 +1,13 @@
 """Privileged non-secret administrative command seams."""
 
-from sqlalchemy import func, select, text
+from datetime import UTC, datetime
+
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
 from verboflex.auth.identity import ASCII_WHITESPACE, normalize_email
-from verboflex.auth.passwords import hash_password
+from verboflex.auth.passwords import hash_password, validate_password_for_user
+from verboflex.models.auth_session import AuthSession
 from verboflex.models.role import Role
 from verboflex.models.user import User
 
@@ -63,6 +66,27 @@ def reset_user_password(
     *,
     email: str,
     password: str,
-) -> int:
-    """Callable RED seam for atomic credential reset and revocation."""
-    return 0
+) -> None:
+    """Replace one user's credential and revoke all authority atomically."""
+    normalized_email = normalize_email(email)
+    with session.begin():
+        user = session.execute(
+            select(User).where(User.email == normalized_email).with_for_update()
+        ).scalar_one_or_none()
+        if user is None:
+            raise ResetPasswordError("reset refused: account unavailable")
+
+        validate_password_for_user(
+            password,
+            normalized_email=normalized_email,
+            current_password_hash=user.hashed_password,
+        )
+        user.hashed_password = hash_password(password)
+        user.must_change_password = True
+        user.token_version += 1
+        session.execute(
+            update(AuthSession)
+            .where(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
+            .values(revoked_at=datetime.now(UTC))
+        )
+        session.flush()

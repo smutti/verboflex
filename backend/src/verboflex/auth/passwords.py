@@ -30,3 +30,17 @@ def verify_password(password: str, password_hash: str) -> bool:
         return PASSWORD_HASHER.verify(password, password_hash)
     except UnknownHashError:
         return False
+
+
+def validate_password_for_user(
+    password: str,
+    *,
+    normalized_email: str,
+    current_password_hash: str | None = None,
+) -> None:
+    """Reject identity-derived or unchanged credentials before persistence."""
+    validate_password(password)
+    if password.casefold() == normalized_email.casefold():
+        raise PasswordPolicyError("password must not equal login email")
+    if current_password_hash is not None and verify_password(password, current_password_hash):
+        raise PasswordPolicyError("password must differ from current password")
