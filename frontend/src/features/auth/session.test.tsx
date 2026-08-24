@@ -247,4 +247,38 @@ describe("session transitions", () => {
     expect(result.current.state).not.toHaveProperty("accessToken");
     expect(result.current.state).not.toHaveProperty("principal");
   });
+
+  it("a refresh response arriving after logout cannot restore stale authority", async () => {
+    let resolveRefresh: (() => void) | undefined;
+    refreshAccessTokenMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRefresh = () =>
+          resolve({
+            data: {
+              access_token: "stale-restored-token",
+              expires_in: 900,
+              must_change_password: false,
+              token_type: "bearer",
+            },
+            error: undefined,
+          });
+      }) as ReturnType<typeof refreshAccessToken>,
+    );
+    readCurrentUserMock.mockResolvedValue({ data: principal, error: undefined });
+    logoutMock.mockResolvedValue({ data: undefined, error: undefined });
+    const { result } = renderHook(() => useSession(), {
+      wrapper: RestoringWrapper,
+    });
+    expect(result.current.state).toEqual({ status: "checking_session" });
+
+    await act(async () => {
+      await result.current.logout();
+    });
+    await act(async () => {
+      resolveRefresh?.();
+    });
+
+    expect(result.current.state).toEqual({ status: "signed_out" });
+    expect(readCurrentUserMock).not.toHaveBeenCalled();
+  });
 });
