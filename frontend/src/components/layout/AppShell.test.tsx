@@ -25,6 +25,26 @@ vi.mock("../../features/auth/session", () => ({
 const readSystemStatusMock = vi.mocked(readSystemStatus);
 const useSessionMock = vi.mocked(useSession);
 
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: width,
+  });
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes("max-width") ? width < 768 : width >= 768,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
+
 const principal: CurrentUserResponse = {
   id: "73f123f7-ebad-4dad-8b5d-dcc3214b3b06",
   email: "person@example.com",
@@ -38,6 +58,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  setViewportWidth(1440);
   readSystemStatusMock.mockReset();
   readSystemStatusMock.mockReturnValue(new Promise<never>(() => undefined));
   useSessionMock.mockReset();
@@ -209,5 +230,27 @@ describe("authenticated application shell", () => {
     expect(readSystemStatusMock).toHaveBeenCalledWith({
       auth: "ordinary-server-token",
     });
+  });
+
+  it("exposes a quiet desktop navigation landmark with only the current workspace", () => {
+    render(
+      <AppShell
+        accessToken="ordinary-server-token"
+        onLogout={vi.fn()}
+        principal={principal}
+      />,
+    );
+
+    const navigation = screen.getByRole("navigation", {
+      name: "Primary navigation",
+    });
+    expect(navigation).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Workspace overview" }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("button", { name: /product/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /repository/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /review/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /pull request/i })).toBeNull();
   });
 });
