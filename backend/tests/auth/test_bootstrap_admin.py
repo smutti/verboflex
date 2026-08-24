@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import argparse
+import os
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -11,12 +11,12 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from alembic import command
 from alembic.config import Config
 from psycopg import connect, sql
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from alembic import command
 from verboflex.auth.passwords import PasswordPolicyError, verify_password
 from verboflex.cli import (
     BootstrapAdminError,
@@ -131,14 +131,16 @@ def test_second_bootstrap_rolls_back_without_changing_authority(
             password="first admin phrase!",
         )
 
-    with auth_session_factory() as session:
-        with pytest.raises(BootstrapAdminError, match="users already exist"):
-            bootstrap_first_admin(
-                session,
-                email="second@example.com",
-                display_name="Second",
-                password="second admin phrase!",
-            )
+    with (
+        auth_session_factory() as session,
+        pytest.raises(BootstrapAdminError, match="users already exist"),
+    ):
+        bootstrap_first_admin(
+            session,
+            email="second@example.com",
+            display_name="Second",
+            password="second admin phrase!",
+        )
 
     with auth_session_factory() as session:
         assert session.scalar(select(func.count()).select_from(User)) == 1
@@ -234,13 +236,12 @@ def test_rejected_admin_reset_rolls_back_every_authority_field(
         previous_hash = user.hashed_password
         previous_version = user.token_version
 
-    with auth_session_factory() as session:
-        with pytest.raises(PasswordPolicyError, match=message):
-            reset_user_password(
-                session,
-                email="admin@example.com",
-                password=rejected_password,
-            )
+    with auth_session_factory() as session, pytest.raises(PasswordPolicyError, match=message):
+        reset_user_password(
+            session,
+            email="admin@example.com",
+            password=rejected_password,
+        )
 
     with auth_session_factory() as session:
         user = session.get_one(User, user_id)
@@ -255,9 +256,7 @@ def test_cli_exposes_only_non_secret_bootstrap_and_reset_arguments() -> None:
     """Passwords have no normal argument, default, or parsed namespace field."""
     parser = build_parser()
     subparsers = next(
-        action
-        for action in parser._actions
-        if isinstance(action, argparse._SubParsersAction)
+        action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
     )
     assert set(subparsers.choices) == {"bootstrap-admin", "reset-password"}
 

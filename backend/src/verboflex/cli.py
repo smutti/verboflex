@@ -3,8 +3,9 @@
 import argparse
 import getpass
 import sys
+from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Protocol, Sequence
+from typing import Protocol
 
 from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
@@ -170,7 +171,12 @@ def main(
             else:
                 reset_user_password(session, email=arguments.email, password=password)
                 print("Password reset completed; password change is required.")
-    except (BootstrapAdminError, PasswordPolicyError, ResetPasswordError, SecretInputError) as error:
+    except (
+        BootstrapAdminError,
+        PasswordPolicyError,
+        ResetPasswordError,
+        SecretInputError,
+    ) as error:
         print(str(error), file=sys.stderr)
         return 1
     except ValueError:
