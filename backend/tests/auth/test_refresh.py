@@ -23,7 +23,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from alembic import command
 from verboflex.auth.access_tokens import decode_access_token
 from verboflex.auth.passwords import hash_password
-from verboflex.auth.rate_limits import get_redis_client
+from verboflex.auth.rate_limits import (
+    LOGIN_RATE_LIMIT_SCRIPT,
+    enforce_auth_action_rate_limit,
+    get_redis_client,
+)
 from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
 from verboflex.main import app
@@ -106,6 +110,33 @@ def configure_dependencies(
     app.dependency_overrides[get_redis_client] = lambda: client
     app.dependency_overrides[get_settings] = refresh_settings
     return client
+
+
+def test_sensitive_action_limiter_hashes_authority_and_preserves_exact_window_state() -> None:
+    """Prove the Redis key, script arguments, inclusive limit, and TTL floor."""
+    redis_client = FakeRedis(result=[30, 0])
+
+    result = enforce_auth_action_rate_limit(
+        redis_client,
+        action="refresh",
+        identity=REFRESH_TOKEN,
+        client_ip="192.0.2.10",
+        limit=30,
+    )
+
+    expected_digest = hashlib.sha256((f"{REFRESH_TOKEN}\0" + "192.0.2.10").encode()).hexdigest()
+    assert redis_client.calls == [
+        (
+            LOGIN_RATE_LIMIT_SCRIPT,
+            1,
+            (f"verboflex:auth:refresh:{expected_digest}", "60"),
+        )
+    ]
+    assert REFRESH_TOKEN not in redis_client.calls[0][2][0]
+    assert "192.0.2.10" not in redis_client.calls[0][2][0]
+    assert result.allowed is True
+    assert result.remaining == 0
+    assert result.retry_after == 1
 
 
 def create_refresh_authority(factory: sessionmaker[Session]) -> AuthSession:
@@ -197,7 +228,7 @@ def test_refresh_successor_uses_the_exact_rotation_timeline(
 ) -> None:
     """Bind both successor expiry and access claims to the serialized rotation instant."""
     create_refresh_authority(refresh_session_factory)
-    rotated_at = datetime.now(UTC).replace(microsecond=0)
+    rotated_at = (datetime.now(UTC) - timedelta(minutes=1)).replace(microsecond=0)
 
     class FrozenDateTime(datetime):
         @classmethod
