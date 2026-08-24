@@ -15,6 +15,7 @@ export function SessionRoutes({
   state,
   loginElement,
   changePasswordElement,
+  ordinaryElement,
 }: SessionRoutesProps) {
   if (state.status === "checking_session") {
     return (
@@ -53,5 +54,9 @@ export function SessionRoutes({
     );
   }
 
-  return null;
+  return (
+    <Routes>
+      <Route path="/" element={ordinaryElement} />
+    </Routes>
+  );
 }
