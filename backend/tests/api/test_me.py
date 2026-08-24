@@ -8,6 +8,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import httpx
+import jwt
 import pytest
 from alembic.config import Config
 from psycopg import connect, sql
@@ -206,3 +207,50 @@ def test_password_change_authority_returns_exact_403_without_identity_body(
 
     assert response.status_code == 403
     assert response.json() == {"detail": "Password change required"}
+
+
+def test_forged_role_claim_never_overrides_database_roles(
+    principal_session_factory: sessionmaker[Session],
+) -> None:
+    """Ignore caller-signed role fields and return only current PostgreSQL roles."""
+    with principal_session_factory.begin() as session:
+        viewer = session.execute(select(Role).where(Role.name == "viewer")).scalar_one()
+        session.add(
+            User(
+                id=USER_ID,
+                email="person@example.com",
+                display_name="Person Example",
+                hashed_password=hash_password("principal password phrase!"),
+                must_change_password=False,
+                roles=[viewer],
+            )
+        )
+        session.add(
+            AuthSession(
+                id=SESSION_ID,
+                user_id=USER_ID,
+                family_id=uuid4(),
+                token_hash="e" * 64,
+                expires_at=datetime.now(UTC) + timedelta(days=7),
+            )
+        )
+    now = datetime.now(UTC).replace(microsecond=0)
+    forged = jwt.encode(
+        {
+            "sub": str(USER_ID),
+            "sid": str(SESSION_ID),
+            "iat": int(now.timestamp()),
+            "exp": int(now.timestamp()) + 900,
+            "purpose": "access",
+            "token_version": 0,
+            "roles": ["admin"],
+        },
+        SIGNING_SECRET,
+        algorithm="HS256",
+    )
+    configure_principal_dependencies(principal_session_factory)
+
+    response = asyncio.run(get_me(forged))
+
+    assert response.status_code == 200
+    assert response.json()["roles"] == ["viewer"]
