@@ -83,34 +83,48 @@ def decode_access_token(
     """Verify and decode one bearer token for the expected authority purpose."""
     if settings.jwt_secret_key is None:
         raise RuntimeError("JWT signing secret is not configured")
-    payload = jwt.decode(
-        token,
-        settings.jwt_secret_key.get_secret_value(),
-        algorithms=[settings.jwt_algorithm],
-        options={"require": list(COMMON_REQUIRED_CLAIMS)},
-        leeway=CLOCK_SKEW_TOLERANCE_SECONDS,
-    )
-    purpose = payload["purpose"]
-    if purpose != expected_purpose:
-        raise ValueError("token purpose is not valid for this resource")
-    if not isinstance(payload["token_version"], int) or isinstance(
-        payload["token_version"], bool
-    ):
-        raise ValueError("token version must be an integer")
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key.get_secret_value(),
+            algorithms=[settings.jwt_algorithm],
+            options={"require": list(COMMON_REQUIRED_CLAIMS)},
+            leeway=CLOCK_SKEW_TOLERANCE_SECONDS,
+        )
+    except jwt.InvalidTokenError as error:
+        raise InvalidAccessToken("invalid access token") from error
 
-    session_value = payload.get("sid")
-    if purpose == "access" and session_value is None:
-        raise ValueError("ordinary access token is missing its session id")
-    if purpose == "password_change" and session_value is not None:
-        raise ValueError("password change token must not carry a session id")
+    try:
+        purpose = payload["purpose"]
+        if purpose not in ("access", "password_change"):
+            raise InvalidAccessToken("invalid access token")
+        if purpose != expected_purpose:
+            if purpose == "password_change" and expected_purpose == "access":
+                raise PasswordChangeRequired("password change required")
+            raise InvalidAccessToken("invalid access token")
+        token_version = payload["token_version"]
+        if (
+            not isinstance(token_version, int)
+            or isinstance(token_version, bool)
+            or token_version < 0
+        ):
+            raise InvalidAccessToken("invalid access token")
 
-    issued_at = datetime.fromtimestamp(payload["iat"], UTC)
-    expires_at = datetime.fromtimestamp(payload["exp"], UTC)
-    return AccessTokenClaims(
-        user_id=UUID(payload["sub"]),
-        session_id=UUID(session_value) if session_value is not None else None,
-        issued_at=issued_at,
-        expires_at=expires_at,
-        purpose=purpose,
-        token_version=payload["token_version"],
-    )
+        session_value = payload.get("sid")
+        if purpose == "access" and session_value is None:
+            raise InvalidAccessToken("invalid access token")
+        if purpose == "password_change" and session_value is not None:
+            raise InvalidAccessToken("invalid access token")
+
+        issued_at = datetime.fromtimestamp(payload["iat"], UTC)
+        expires_at = datetime.fromtimestamp(payload["exp"], UTC)
+        return AccessTokenClaims(
+            user_id=UUID(payload["sub"]),
+            session_id=UUID(session_value) if session_value is not None else None,
+            issued_at=issued_at,
+            expires_at=expires_at,
+            purpose=purpose,
+            token_version=token_version,
+        )
+    except (KeyError, TypeError, ValueError, OverflowError) as error:
+        raise InvalidAccessToken("invalid access token") from error
