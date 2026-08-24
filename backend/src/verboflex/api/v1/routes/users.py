@@ -1,8 +1,17 @@
-"""User contract stubs."""
+"""Bounded authenticated user contracts."""
 
-from fastapi import APIRouter, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, status
+from redis import Redis
 
 from verboflex.auth.principal import CurrentPrincipal
+from verboflex.auth.rate_limits import (
+    ORDINARY_READ_LIMIT,
+    enforce_auth_action_rate_limit,
+    get_redis_client,
+    raise_rate_limited,
+)
 from verboflex.schemas.system import ErrorResponse
 from verboflex.schemas.users import CurrentUserResponse
 
@@ -18,8 +27,20 @@ router = APIRouter(prefix="/users", tags=["users"])
         status.HTTP_429_TOO_MANY_REQUESTS: {"model": ErrorResponse},
     },
 )
-async def read_current_user(principal: CurrentPrincipal) -> CurrentUserResponse:
+async def read_current_user(
+    principal: CurrentPrincipal,
+    redis_client: Annotated[Redis, Depends(get_redis_client)],
+) -> CurrentUserResponse:
     """Expose the final current-identity signature."""
+    limit = enforce_auth_action_rate_limit(
+        redis_client,
+        action="ordinary-read",
+        identity=str(principal.user_id),
+        client_ip="server-principal",
+        limit=ORDINARY_READ_LIMIT,
+    )
+    if not limit.allowed:
+        raise_rate_limited(limit)
     return CurrentUserResponse(
         id=principal.user_id,
         email=principal.email,
