@@ -163,14 +163,15 @@ export function SessionProvider({
           new_password: passwords.newPassword,
         },
       });
-      if (
-        operationVersion.current === version &&
-        result.error === undefined
-      ) {
-        setState((current) =>
-          transitionSession(current, { type: "sign_out" }),
-        );
+      if (operationVersion.current !== version) {
+        return;
       }
+      if (result.error !== undefined) {
+        throw new Error("Session action failed");
+      }
+      setState((current) =>
+        transitionSession(current, { type: "sign_out" }),
+      );
     },
     [state],
   );
