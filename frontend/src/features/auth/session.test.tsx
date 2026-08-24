@@ -81,4 +81,31 @@ describe("session transitions", () => {
       principal,
     });
   });
+
+  it("temporary login enters the restricted state without exposing an ordinary principal", async () => {
+    issueTokenMock.mockResolvedValue({
+      data: {
+        access_token: "password-change-only-token",
+        expires_in: 300,
+        must_change_password: true,
+        token_type: "bearer",
+      },
+      error: undefined,
+    });
+    const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
+
+    await act(async () => {
+      await result.current.login({
+        email: "person@example.com",
+        password: "temporary password phrase!",
+      });
+    });
+
+    expect(readCurrentUserMock).not.toHaveBeenCalled();
+    expect(result.current.state).toEqual({
+      status: "password_change_required",
+      accessToken: "password-change-only-token",
+    });
+    expect(result.current.state).not.toHaveProperty("principal");
+  });
 });
