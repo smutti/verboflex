@@ -74,9 +74,7 @@ def login_session_factory() -> Iterator[sessionmaker[Session]]:
         engine.dispose()
         with connect(ADMIN_DATABASE_URL, autocommit=True) as admin_connection:
             admin_connection.execute(
-                sql.SQL("DROP DATABASE {} WITH (FORCE)").format(
-                    sql.Identifier(database_name)
-                )
+                sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database_name))
             )
 
 
@@ -88,9 +86,7 @@ def login_settings() -> Settings:
     )
 
 
-def configure_dependencies(
-    factory: sessionmaker[Session], redis_client: FakeRedis
-) -> None:
+def configure_dependencies(factory: sessionmaker[Session], redis_client: FakeRedis) -> None:
     """Wire the ASGI boundary to isolated PostgreSQL and deterministic Redis."""
 
     def override_session() -> Generator[Session]:
