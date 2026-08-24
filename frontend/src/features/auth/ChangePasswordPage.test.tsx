@@ -162,4 +162,31 @@ describe("required password change page", () => {
       newPassword: "replacement phrase 2026!",
     });
   });
+
+  it("announces a sanitized error when password replacement is rejected", async () => {
+    const reason = new Error("database.internal password policy detail");
+    changePasswordMock.mockRejectedValueOnce(reason);
+    const user = userEvent.setup();
+    render(<ChangePasswordPage />);
+
+    await user.type(
+      screen.getByLabelText("Current password"),
+      "temporary phrase 2026!",
+    );
+    await user.type(
+      screen.getByLabelText("New password"),
+      "replacement phrase 2026!",
+    );
+    await user.type(
+      screen.getByLabelText("Confirm new password"),
+      "replacement phrase 2026!",
+    );
+    await user.click(screen.getByRole("button", { name: "Set new password" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "We could not change your password. Check the requirements and try again.",
+    );
+    expect(alert).not.toHaveTextContent(reason.message);
+  });
 });
