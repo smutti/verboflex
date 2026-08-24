@@ -48,7 +48,7 @@ Every phase must complete these checks before it can be marked complete:
   5. Frontend uses React/Vite/TypeScript with shadcn/ui primitives available.
   6. Phase quality gate passes with tests, code review, and deploy/build smoke verification.
 
-**Plans**: 9/15 plans executed
+**Plans**: 10/15 plans executed
 
 Plans:
 
@@ -61,7 +61,7 @@ Plans:
 - [x] 01-07-PLAN.md — Refresh rotation/replay, logout, password change, and revocation
 - [x] 01-08-PLAN.md — Rate limits, bounded service status, and Celery/Redis execution
 - [x] 01-09-PLAN.md — Full generated OpenAPI contract and memory-only session state
-- [ ] 01-10-PLAN.md — Enumerated approved shadcn owned components
+- [x] 01-10-PLAN.md — Enumerated approved shadcn owned components
 - [ ] 01-11-PLAN.md — Exact Phase 1 theme tokens and drift test
 - [ ] 01-12-PLAN.md — Login/change-password routing and forms through TDD
 - [ ] 01-13-PLAN.md — Neutral dashboard, service status, responsive shell, and E2E
@@ -280,7 +280,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Platform Foundation | 9/15 | In Progress|  |
+| 1. Platform Foundation | 10/15 | In Progress|  |
 | 2. Admin Configuration | 0/6 | Not started | - |
 | 3. Bitbucket Read Integration | 0/5 | Not started | - |
 | 4. Localization Parser Foundation | 0/6 | Not started | - |
