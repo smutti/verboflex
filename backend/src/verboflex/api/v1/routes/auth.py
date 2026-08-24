@@ -99,7 +99,11 @@ async def issue_token(
     },
 )
 async def refresh_access_token(
+    _request: Request,
     _response: Response,
+    _session: Annotated[Session, Depends(get_db_session)],
+    _redis_client: Annotated[Redis, Depends(get_redis_client)],
+    _settings: Annotated[Settings, Depends(get_settings)],
     _refresh_cookie: RefreshCookie = None,
     _origin: RequestOrigin = None,
 ) -> AccessTokenResponse:
@@ -116,7 +120,11 @@ async def refresh_access_token(
     },
 )
 async def logout(
+    _request: Request,
     _response: Response,
+    _session: Annotated[Session, Depends(get_db_session)],
+    _redis_client: Annotated[Redis, Depends(get_redis_client)],
+    _settings: Annotated[Settings, Depends(get_settings)],
     _refresh_cookie: RefreshCookie = None,
     _origin: RequestOrigin = None,
 ) -> None:
@@ -136,9 +144,13 @@ async def logout(
     },
 )
 async def change_password(
+    _request: Request,
     _payload: ChangePasswordRequest,
     _response: Response,
     _access_token: OptionalBearerToken,
+    _session: Annotated[Session, Depends(get_db_session)],
+    _redis_client: Annotated[Redis, Depends(get_redis_client)],
+    _settings: Annotated[Settings, Depends(get_settings)],
 ) -> None:
     """Expose the final authenticated password-change signature."""
     raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented")
