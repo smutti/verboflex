@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -21,6 +23,7 @@ interface ChangePasswordFormValues {
 
 export function ChangePasswordPage() {
   const { changePassword } = useSession();
+  const [actionError, setActionError] = useState(false);
   const form = useForm<ChangePasswordFormValues>({
     defaultValues: {
       currentPassword: "",
@@ -42,10 +45,15 @@ export function ChangePasswordPage() {
           <form
             className="mt-8 grid gap-6"
             onSubmit={form.handleSubmit(async (values) => {
-              await changePassword({
-                currentPassword: values.currentPassword,
-                newPassword: values.newPassword,
-              });
+              setActionError(false);
+              try {
+                await changePassword({
+                  currentPassword: values.currentPassword,
+                  newPassword: values.newPassword,
+                });
+              } catch {
+                setActionError(true);
+              }
             })}
           >
             <FormField
@@ -117,6 +125,14 @@ export function ChangePasswordPage() {
                 </FormItem>
               )}
             />
+            {actionError ? (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  We could not change your password. Check the requirements and
+                  try again.
+                </AlertDescription>
+              </Alert>
+            ) : null}
             <Button className="w-full" type="submit">
               Set new password
             </Button>
