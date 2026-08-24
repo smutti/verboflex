@@ -1,5 +1,6 @@
 """Alembic runtime seam for VerboFlex migrations."""
 
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
@@ -9,6 +10,13 @@ from verboflex import models as models
 from verboflex.db.base import Base
 
 config = context.config
+
+environment_database_url = os.environ.get("VERBOFLEX_DATABASE_URL")
+if environment_database_url:
+    config.set_main_option(
+        "sqlalchemy.url",
+        environment_database_url.replace("%", "%%"),
+    )
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
