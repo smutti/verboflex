@@ -7,7 +7,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from pydantic import AnyHttpUrl, PostgresDsn, RedisDsn, ValidationError
 
-from verboflex.core.config import Settings
+from verboflex.core.config import Settings, get_settings
 
 
 def test_local_settings_are_typed_and_allow_explicit_insecure_cookie() -> None:
@@ -173,3 +173,14 @@ def test_deployed_environments_accept_strong_secret_and_secure_cookie(
 
     assert settings.app_env == app_env
     assert settings.refresh_cookie_secure is True
+
+
+def test_process_settings_are_cached_and_immutable() -> None:
+    """All application consumers share one frozen validated settings instance."""
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    assert get_settings() is settings
+    with pytest.raises(ValidationError, match="Instance is frozen"):
+        settings.app_env = "production"
