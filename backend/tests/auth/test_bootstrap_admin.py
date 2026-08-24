@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import argparse
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -20,6 +21,8 @@ from verboflex.auth.passwords import PasswordPolicyError, verify_password
 from verboflex.cli import (
     BootstrapAdminError,
     bootstrap_first_admin,
+    build_parser,
+    main,
     reset_user_password,
 )
 from verboflex.models.auth_session import AuthSession
@@ -246,3 +249,53 @@ def test_rejected_admin_reset_rolls_back_every_authority_field(
         assert user.token_version == previous_version
         assert user.must_change_password is False
         assert auth_session.revoked_at is None
+
+
+def test_cli_exposes_only_non_secret_bootstrap_and_reset_arguments() -> None:
+    """Passwords have no normal argument, default, or parsed namespace field."""
+    parser = build_parser()
+    subparsers = next(
+        action
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)
+    )
+    assert set(subparsers.choices) == {"bootstrap-admin", "reset-password"}
+
+    bootstrap = parser.parse_args(
+        [
+            "bootstrap-admin",
+            "--email",
+            "admin@example.com",
+            "--display-name",
+            "Admin",
+        ]
+    )
+    reset = parser.parse_args(["reset-password", "--email", "admin@example.com"])
+    assert "password" not in vars(bootstrap)
+    assert "password" not in vars(reset)
+
+
+def test_cli_bootstrap_reads_secret_outside_argv_and_never_echoes_it(
+    auth_session_factory: sessionmaker[Session],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The dispatcher obtains the password only through its secret reader."""
+    secret = "bootstrap from protected input!"
+    exit_code = main(
+        [
+            "bootstrap-admin",
+            "--email",
+            "admin@example.com",
+            "--display-name",
+            "Admin",
+        ],
+        password_reader=lambda _prompt: secret,
+        session_provider=auth_session_factory,
+    )
+
+    output = capsys.readouterr()
+    assert exit_code == 0
+    assert secret not in output.out
+    assert secret not in output.err
+    with auth_session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(User)) == 1

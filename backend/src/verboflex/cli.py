@@ -1,6 +1,8 @@
 """Privileged non-secret administrative command seams."""
 
+import argparse
 from datetime import UTC, datetime
+from typing import Protocol, Sequence
 
 from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
@@ -12,6 +14,18 @@ from verboflex.models.role import Role
 from verboflex.models.user import User
 
 FIRST_ADMIN_LOCK_KEY = 0x564552424F464C58
+
+
+class SessionProvider(Protocol):
+    """Callable that returns an independent SQLAlchemy session."""
+
+    def __call__(self) -> Session: ...
+
+
+class PasswordReader(Protocol):
+    """Callable secret-input boundary used by the CLI and its tests."""
+
+    def __call__(self, prompt: str) -> str: ...
 
 
 class BootstrapAdminError(RuntimeError):
@@ -90,3 +104,20 @@ def reset_user_password(
             .values(revoked_at=datetime.now(UTC))
         )
         session.flush()
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Callable RED seam for the non-secret command-line contract."""
+    parser = argparse.ArgumentParser(prog="verboflex")
+    parser.add_subparsers(dest="command")
+    return parser
+
+
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    password_reader: PasswordReader | None = None,
+    session_provider: SessionProvider | None = None,
+) -> int:
+    """Callable RED seam for the administrative command dispatcher."""
+    return 0
