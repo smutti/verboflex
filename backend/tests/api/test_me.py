@@ -57,9 +57,7 @@ def principal_session_factory() -> Iterator[sessionmaker[Session]]:
         engine.dispose()
         with connect(ADMIN_DATABASE_URL, autocommit=True) as admin_connection:
             admin_connection.execute(
-                sql.SQL("DROP DATABASE {} WITH (FORCE)").format(
-                    sql.Identifier(database_name)
-                )
+                sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database_name))
             )
 
 
