@@ -10,17 +10,17 @@
 - [ ] **PLAT-01**: The application is organized as separate frontend and backend applications.
 - [ ] **PLAT-02**: The frontend is implemented with React, Vite, TypeScript, and shadcn/ui project-owned components.
 - [ ] **PLAT-03**: The backend exposes a FastAPI HTTP API consumed by the frontend.
-- [ ] **PLAT-04**: The backend persists application data in PostgreSQL through SQLAlchemy models.
-- [ ] **PLAT-05**: The backend manages database schema changes through Alembic migrations.
+- [x] **PLAT-04**: The backend persists application data in PostgreSQL through SQLAlchemy models.
+- [x] **PLAT-05**: The backend manages database schema changes through Alembic migrations.
 - [ ] **PLAT-06**: Long-running imports, parsing, commits, and pull request operations run through Celery workers using Redis.
 - [ ] **PLAT-07**: The system records audit metadata for key mutations, including actor, timestamp, entity, and action.
 
 ### Authentication and Roles
 
-- [ ] **AUTH-01**: User can authenticate to the backend with an internal corporate-email/password account using OAuth2 bearer-token authentication; bootstrapped or reset credentials require a password change before normal application access.
+- [x] **AUTH-01**: User can authenticate to the backend with an internal corporate-email/password account using OAuth2 bearer-token authentication; bootstrapped or reset credentials require a password change before normal application access.
 - [ ] **AUTH-02**: Admin can create, update, administratively reset passwords for, deactivate, and view internal users.
 - [ ] **AUTH-03**: Admin can assign multiple roles to the same user.
-- [ ] **AUTH-04**: System supports the roles admin, product manager/reviewer, translator, and viewer.
+- [x] **AUTH-04**: System supports the roles admin, product manager/reviewer, translator, and viewer.
 - [ ] **AUTH-05**: Backend enforces role-based authorization on admin configuration, translation editing, approval, commenting, and PR submission APIs.
 - [ ] **AUTH-06**: Frontend hides or disables actions the authenticated user is not authorized to perform.
 
@@ -175,14 +175,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PLAT-01 | Phase 1 | Pending |
 | PLAT-02 | Phase 1 | Pending |
 | PLAT-03 | Phase 1 | Pending |
-| PLAT-04 | Phase 1 | Pending |
-| PLAT-05 | Phase 1 | Pending |
+| PLAT-04 | Phase 1 | Complete |
+| PLAT-05 | Phase 1 | Complete |
 | PLAT-06 | Phase 1 | Pending |
 | PLAT-07 | Phase 9 | Pending |
-| AUTH-01 | Phase 1 | Pending |
+| AUTH-01 | Phase 1 | Complete |
 | AUTH-02 | Phase 2 | Pending |
 | AUTH-03 | Phase 2 | Pending |
-| AUTH-04 | Phase 1 | Pending |
+| AUTH-04 | Phase 1 | Complete |
 | AUTH-05 | Phase 9 | Pending |
 | AUTH-06 | Phase 9 | Pending |
 | PROD-01 | Phase 2 | Pending |
@@ -251,6 +251,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UI-04 | Phase 8 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 77 total
 - Mapped to phases: 77
 - Unmapped: 0

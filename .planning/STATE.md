@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 01
 current_phase_name: Platform Foundation
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-08-24T15:38:02.001Z"
+stopped_at: Completed 01-05-PLAN.md
+last_updated: "2026-08-24T16:11:12.502Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 01 execution started
-state_head: e94c5a684a66f8ae18117516da812df2176b4c39
+state_head: 240fb7ed9d24068e4a689471e70e1be3cbb4711d
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 15
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 01 (Platform Foundation) — EXECUTING
-Plan: 5 of 15
+Plan: 6 of 15
 Status: Ready to execute
 Last activity: 2026-08-24 — Phase 01 execution started
 
@@ -62,6 +62,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P02 | 18 min | 2 tasks | 20 files |
 | Phase 01 P03 | 51 min | 2 tasks | 32 files |
 | Phase 01 P04 | 24 min | 2 tasks | 9 files |
+| Phase 01 P05 | 29 min | 2 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,10 @@ Recent decisions affecting current work:
 - [Phase 01]: Keep generated client configuration in src/api/config.ts with same-origin fallback and included credentials.
 - [Phase 01]: Typed deployed settings reject missing, sentinel, or sub-32-byte signing material and insecure refresh cookies; CORS accepts exact origins only.
 - [Phase 01]: API and worker share one backend image but run distinct one-process commands and health checks; named overlays stay provider-neutral and fail closed.
+- [Phase 01]: Corporate-email normalization trims only the database-aligned ASCII whitespace set, lowercases, validates, and remains provider-independent.
+- [Phase 01]: A PostgreSQL transaction advisory lock serializes the empty-user decision so concurrent bootstrap attempts leave exactly one admin.
+- [Phase 01]: Administrative reset locks the selected user, rehashes the password, forces a password change, increments token_version, and revokes only that user's live sessions in one transaction.
+- [Phase 01]: Passwords enter the CLI only through getpass or stdin; argv, defaults, logs, and plaintext persistence are forbidden.
 
 ### Pending Todos
 
@@ -116,6 +121,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-24T15:38:01.993Z
-Stopped at: Completed 01-04-PLAN.md
+Last session: 2026-08-24T16:11:12.495Z
+Stopped at: Completed 01-05-PLAN.md
 Resume file: None
