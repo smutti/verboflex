@@ -42,6 +42,30 @@ RefreshCookie = Annotated[str | None, Cookie(alias="verboflex_refresh")]
 RequestOrigin = Annotated[str | None, Header(alias="Origin")]
 
 
+def _set_refresh_cookie(response: Response, refresh_token: str, settings: Settings) -> None:
+    """Set refresh authority with the one approved cookie scope."""
+    response.set_cookie(
+        key="verboflex_refresh",
+        value=refresh_token,
+        max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
+        path="/api/v1/auth",
+        secure=settings.refresh_cookie_secure,
+        httponly=True,
+        samesite="lax",
+    )
+
+
+def _clear_refresh_cookie(response: Response, settings: Settings) -> None:
+    """Clear refresh authority with attributes matching the set-cookie scope."""
+    response.delete_cookie(
+        key="verboflex_refresh",
+        path="/api/v1/auth",
+        secure=settings.refresh_cookie_secure,
+        httponly=True,
+        samesite="lax",
+    )
+
+
 @router.post(
     "/token",
     response_model=AccessTokenResponse,
@@ -91,15 +115,7 @@ async def issue_token(
         ) from error
 
     if authority.refresh_token is not None:
-        response.set_cookie(
-            key="verboflex_refresh",
-            value=authority.refresh_token,
-            max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
-            path="/api/v1/auth",
-            secure=settings.refresh_cookie_secure,
-            httponly=True,
-            samesite="lax",
-        )
+        _set_refresh_cookie(response, authority.refresh_token, settings)
     return AccessTokenResponse(
         access_token=authority.access_token,
         token_type="bearer",
@@ -167,15 +183,7 @@ async def refresh_access_token(
             detail="Invalid refresh session",
         ) from error
 
-    response.set_cookie(
-        key="verboflex_refresh",
-        value=authority.refresh_token,
-        max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
-        path="/api/v1/auth",
-        secure=settings.refresh_cookie_secure,
-        httponly=True,
-        samesite="lax",
-    )
+    _set_refresh_cookie(response, authority.refresh_token, settings)
     return AccessTokenResponse(
         access_token=authority.access_token,
         token_type="bearer",
@@ -231,13 +239,7 @@ async def logout(
         )
 
     revoke_refresh_session(session, refresh_cookie)
-    response.delete_cookie(
-        key="verboflex_refresh",
-        path="/api/v1/auth",
-        secure=settings.refresh_cookie_secure,
-        httponly=True,
-        samesite="lax",
-    )
+    _clear_refresh_cookie(response, settings)
 
 
 @router.post(
@@ -317,10 +319,4 @@ async def change_password(
             detail=str(error),
         ) from error
 
-    response.delete_cookie(
-        key="verboflex_refresh",
-        path="/api/v1/auth",
-        secure=settings.refresh_cookie_secure,
-        httponly=True,
-        samesite="lax",
-    )
+    _clear_refresh_cookie(response, settings)

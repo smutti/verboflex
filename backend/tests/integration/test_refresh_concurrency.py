@@ -40,9 +40,11 @@ def test_two_real_postgresql_refreshes_create_at_most_one_successor_and_revoke_r
     denied = next(body for status_code, body in results if status_code == 401)
     assert denied == {"detail": "Invalid refresh session"}
     with refresh_session_factory() as session:
-        family = session.execute(
-            select(AuthSession).where(AuthSession.family_id == FAMILY_ID)
-        ).scalars().all()
+        family = (
+            session.execute(select(AuthSession).where(AuthSession.family_id == FAMILY_ID))
+            .scalars()
+            .all()
+        )
     successors = [item for item in family if item.parent_id is not None]
     assert len(successors) == 1
     assert len(family) == 2

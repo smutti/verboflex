@@ -171,9 +171,11 @@ def test_valid_refresh_rotates_once_and_returns_new_authority(
     assert "Path=/api/v1/auth" in response.headers["set-cookie"]
 
     with refresh_session_factory() as session:
-        persisted = session.execute(
-            select(AuthSession).order_by(AuthSession.created_at, AuthSession.id)
-        ).scalars().all()
+        persisted = (
+            session.execute(select(AuthSession).order_by(AuthSession.created_at, AuthSession.id))
+            .scalars()
+            .all()
+        )
     assert len(persisted) == 2
     predecessor = next(item for item in persisted if item.id == SESSION_ID)
     successor = next(item for item in persisted if item.id != SESSION_ID)
@@ -298,9 +300,13 @@ def test_replayed_predecessor_revokes_every_session_in_its_family(
     assert response.json() == {"detail": "Invalid refresh session"}
     assert "set-cookie" not in response.headers
     with refresh_session_factory() as session:
-        family = session.execute(
-            select(AuthSession).where(AuthSession.family_id == predecessor.family_id)
-        ).scalars().all()
+        family = (
+            session.execute(
+                select(AuthSession).where(AuthSession.family_id == predecessor.family_id)
+            )
+            .scalars()
+            .all()
+        )
     assert len(family) == 2
     assert all(item.revoked_at is not None for item in family)
 
