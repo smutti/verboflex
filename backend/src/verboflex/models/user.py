@@ -29,9 +29,7 @@ class User(Base):
         ),
     )
 
-    id: Mapped[UUID] = mapped_column(
-        PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
     email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     hashed_password: Mapped[str] = mapped_column(Text, nullable=False)

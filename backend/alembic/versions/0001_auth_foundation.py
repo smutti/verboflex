@@ -7,8 +7,9 @@ Revises:
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision: str = "0001_auth_foundation"
 down_revision: str | None = None
@@ -40,9 +41,7 @@ def upgrade() -> None:
         sa.Column("display_name", sa.String(length=200), nullable=False),
         sa.Column("hashed_password", sa.Text(), nullable=False),
         sa.Column("is_active", sa.Boolean(), server_default=sa.true(), nullable=False),
-        sa.Column(
-            "must_change_password", sa.Boolean(), server_default=sa.true(), nullable=False
-        ),
+        sa.Column("must_change_password", sa.Boolean(), server_default=sa.true(), nullable=False),
         sa.Column("token_version", sa.Integer(), server_default="0", nullable=False),
         sa.Column(
             "created_at",
@@ -137,9 +136,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("parent_id", name="uq_auth_sessions_parent_id"),
         sa.UniqueConstraint("token_hash", name="uq_auth_sessions_token_hash"),
     )
-    op.create_index(
-        "ix_auth_sessions_family_id", "auth_sessions", ["family_id"], unique=False
-    )
+    op.create_index("ix_auth_sessions_family_id", "auth_sessions", ["family_id"], unique=False)
     op.create_index("ix_auth_sessions_user_id", "auth_sessions", ["user_id"], unique=False)
 
 

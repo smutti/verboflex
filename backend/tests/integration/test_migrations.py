@@ -8,11 +8,12 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from alembic import command
 from alembic.config import Config
 from psycopg import connect, sql
 from sqlalchemy import Engine, create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
+
+from alembic import command
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 ADMIN_DATABASE_URL = os.environ.get(
@@ -33,11 +34,14 @@ def migrated_database() -> Iterator[tuple[Config, Engine]]:
     """Create an isolated PostgreSQL database and remove it after rehearsal."""
     database_name = f"verboflex_0105_{uuid4().hex}"
     with connect(ADMIN_DATABASE_URL, autocommit=True) as admin_connection:
-        admin_connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database_name)))
+        create_database = sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database_name))
+        admin_connection.execute(create_database)
 
     database_url = ADMIN_DATABASE_URL.rsplit("/", 1)[0] + f"/{database_name}"
     config = Config(BACKEND_ROOT / "alembic.ini")
-    config.set_main_option("sqlalchemy.url", database_url.replace("postgresql://", "postgresql+psycopg://"))
+    config.set_main_option(
+        "sqlalchemy.url", database_url.replace("postgresql://", "postgresql+psycopg://")
+    )
     engine = create_engine(database_url.replace("postgresql://", "postgresql+psycopg://"))
 
     try:
@@ -69,7 +73,7 @@ def test_auth_schema_upgrades_downgrades_and_upgrades_reversibly(
 def assert_auth_schema(engine: Engine) -> None:
     """Assert the authoritative tables, constraints, indexes, and role seed."""
     inspector = inspect(engine)
-    assert EXPECTED_TABLES <= set(inspector.get_table_names())
+    assert set(inspector.get_table_names()) >= EXPECTED_TABLES
 
     user_columns = {column["name"]: column for column in inspector.get_columns("users")}
     assert set(user_columns) == {
@@ -85,9 +89,7 @@ def assert_auth_schema(engine: Engine) -> None:
     }
     assert all(user_columns[name]["nullable"] is False for name in user_columns)
 
-    session_columns = {
-        column["name"]: column for column in inspector.get_columns("auth_sessions")
-    }
+    session_columns = {column["name"]: column for column in inspector.get_columns("auth_sessions")}
     assert set(session_columns) == {
         "id",
         "user_id",
@@ -150,15 +152,14 @@ def test_migration_constraints_reject_duplicates_and_roll_back_atomically(
     config, engine = migrated_database
     command.upgrade(config, "head")
 
-    with pytest.raises(IntegrityError):
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "INSERT INTO users "
-                    "(email, display_name, hashed_password) "
-                    "VALUES ('Mixed@Example.COM', 'Bad', 'not-a-real-secret')"
-                )
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users "
+                "(email, display_name, hashed_password) "
+                "VALUES ('Mixed@Example.COM', 'Bad', 'not-a-real-secret')"
             )
+        )
 
     with engine.connect() as connection:
         assert connection.execute(text("SELECT count(*) FROM users")).scalar_one() == 0
