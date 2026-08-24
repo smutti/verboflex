@@ -8,6 +8,7 @@ import {
   FormField,
   FormItem,
   FormLabel,
+  FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 
@@ -59,6 +60,11 @@ export function ChangePasswordPage() {
             <FormField
               control={form.control}
               name="newPassword"
+              rules={{
+                validate: (value) =>
+                  (value.length >= 12 && value.length <= 128) ||
+                  "Password must contain 12 to 128 characters.",
+              }}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>New password</FormLabel>
@@ -73,6 +79,7 @@ export function ChangePasswordPage() {
                     Use 12 to 128 characters. Spaces and Unicode characters are
                     allowed.
                   </FormDescription>
+                  <FormMessage role="alert" />
                 </FormItem>
               )}
             />
