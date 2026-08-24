@@ -1,7 +1,20 @@
 import type { CurrentUserResponse, RoleName } from "../../api/client";
-import { LayoutDashboard } from "lucide-react";
+import { LayoutDashboard, LogOut, Menu } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "../ui/sheet";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../ui/tooltip";
 import { Dashboard } from "../../pages/Dashboard";
 import { ServiceStatus } from "./ServiceStatus";
 
@@ -38,14 +51,55 @@ export function AppShell({ accessToken, onLogout, principal }: AppShellProps) {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="flex items-center justify-between gap-4 border-b bg-secondary px-6 py-4">
-        <strong className="text-heading font-semibold">VerboFlex</strong>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => void onLogout()}
-        >
-          Sign out of VerboFlex
-        </Button>
+        <div className="flex min-w-0 items-center gap-2">
+          <Sheet>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <SheetTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="md:hidden"
+                      aria-label="Open navigation"
+                    >
+                      <Menu aria-hidden="true" />
+                    </Button>
+                  </SheetTrigger>
+                </TooltipTrigger>
+                <TooltipContent>Open navigation</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <SheetContent side="left" className="w-72 max-w-[calc(100vw-32px)]">
+              <SheetHeader>
+                <SheetTitle>Navigation</SheetTitle>
+              </SheetHeader>
+              <div className="px-4">
+                <WorkspaceNavigation />
+              </div>
+            </SheetContent>
+          </Sheet>
+          <strong className="truncate text-heading font-semibold">
+            VerboFlex
+          </strong>
+        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                aria-label="Sign out of VerboFlex"
+                onClick={() => void onLogout()}
+              >
+                <LogOut aria-hidden="true" />
+                <span className="hidden sm:inline">Sign out of VerboFlex</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Sign out of VerboFlex</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </header>
       <div className="md:grid md:grid-cols-[16rem_minmax(0,1fr)]">
         <aside className="hidden min-h-[calc(100vh-65px)] border-r bg-secondary p-4 md:flex">

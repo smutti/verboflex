@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   readSystemStatus,
@@ -20,39 +20,36 @@ type StatusState =
 const API_ERROR_COPY =
   "We could not reach the API. Check that the backend is running, then retry the connection.";
 
+async function requestStatus(accessToken: string) {
+  try {
+    const result = await readSystemStatus({ auth: accessToken });
+    return result.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function ServiceStatus({ accessToken }: ServiceStatusProps) {
   const [state, setState] = useState<StatusState>({ status: "loading" });
   const requestVersion = useRef(0);
 
-  const checkStatus = useCallback(async () => {
+  useEffect(() => {
     const version = requestVersion.current + 1;
     requestVersion.current = version;
-    setState({ status: "loading" });
-
-    try {
-      const result = await readSystemStatus({ auth: accessToken });
-      if (requestVersion.current !== version) {
-        return;
-      }
-      setState(
-        result.data === undefined
-          ? { status: "error" }
-          : { status: "loaded", data: result.data },
-      );
-    } catch {
+    void requestStatus(accessToken).then((result) => {
       if (requestVersion.current === version) {
-        setState({ status: "error" });
+        setState(
+          result === null
+            ? { status: "error" }
+            : { status: "loaded", data: result },
+        );
       }
-    }
-  }, [accessToken]);
-
-  useEffect(() => {
-    void checkStatus();
+    });
 
     return () => {
       requestVersion.current += 1;
     };
-  }, [checkStatus]);
+  }, [accessToken]);
 
   if (state.status === "loading") {
     return <p role="status">Checking service status</p>;
@@ -66,7 +63,20 @@ export function ServiceStatus({ accessToken }: ServiceStatusProps) {
           <Button
             type="button"
             variant="outline"
-            onClick={() => void checkStatus()}
+            onClick={() => {
+              const version = requestVersion.current + 1;
+              requestVersion.current = version;
+              setState({ status: "loading" });
+              void requestStatus(accessToken).then((result) => {
+                if (requestVersion.current === version) {
+                  setState(
+                    result === null
+                      ? { status: "error" }
+                      : { status: "loaded", data: result },
+                  );
+                }
+              });
+            }}
           >
             Retry connection
           </Button>
