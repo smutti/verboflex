@@ -5,7 +5,7 @@ import os
 from pydantic import RedisDsn
 
 from verboflex.core.config import Settings
-from verboflex.worker.celery_app import create_celery_app
+from verboflex.worker.celery_app import create_celery_app, probe_worker_state
 from verboflex.worker.tasks import add
 
 TEST_REDIS_URL = os.environ.get(
@@ -34,3 +34,16 @@ def test_add_task_executes_through_redis_and_a_distinct_worker_process() -> None
         assert result.get(timeout=5) == 5
     finally:
         result.forget()
+
+
+def test_live_worker_probe_projects_only_online_state() -> None:
+    """Prove the public status seam detects the distinct worker without internals."""
+    producer = create_celery_app(
+        Settings(
+            redis_url=RedisDsn(TEST_REDIS_URL),
+            refresh_cookie_secure=False,
+            service_probe_timeout_seconds=1.0,
+        )
+    )
+
+    assert probe_worker_state(producer, timeout_seconds=1.0) == "online"

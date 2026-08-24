@@ -18,7 +18,7 @@ from verboflex.auth.rate_limits import (
 from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
 from verboflex.schemas.system import ErrorResponse, ServiceState, SystemStatusResponse
-from verboflex.services.system_status import SystemStatusService
+from verboflex.services.system_status import SystemStatusService, probe_default_worker
 
 router = APIRouter(prefix="/system", tags=["system"])
 
@@ -28,7 +28,7 @@ def get_system_status_service(
     redis_client: Annotated[Redis, Depends(get_redis_client)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> SystemStatusService:
-    """Build real database/Redis probes and the pending worker seam."""
+    """Build real timeout-bounded database, Redis, and worker probes."""
 
     def database_probe() -> ServiceState:
         session.execute(text("SELECT 1")).scalar_one()
@@ -40,7 +40,9 @@ def get_system_status_service(
     return SystemStatusService(
         database_probe=database_probe,
         redis_probe=redis_probe,
-        worker_probe=lambda: "pending",
+        worker_probe=lambda: probe_default_worker(
+            timeout_seconds=settings.service_probe_timeout_seconds,
+        ),
         timeout_seconds=settings.service_probe_timeout_seconds,
     )
 

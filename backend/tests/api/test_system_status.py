@@ -164,20 +164,16 @@ def test_default_status_service_obtains_worker_state_through_bounded_probe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Replace the static pending seam with the real bounded Celery probe."""
-    worker_application = object()
     captured: dict[str, object] = {}
 
-    def capture_worker_probe(application: object, *, timeout_seconds: float) -> ServiceState:
-        captured["application"] = application
+    def capture_worker_probe(*, timeout_seconds: float) -> ServiceState:
         captured["timeout_seconds"] = timeout_seconds
         return "online"
 
-    monkeypatch.setattr(system_routes, "celery_app", worker_application, raising=False)
     monkeypatch.setattr(
         system_routes,
-        "probe_worker_state",
+        "probe_default_worker",
         capture_worker_probe,
-        raising=False,
     )
     settings = Settings(
         service_probe_timeout_seconds=0.25,
@@ -193,7 +189,6 @@ def test_default_status_service_obtains_worker_state_through_bounded_probe(
 
     assert snapshot.worker == "online"
     assert captured == {
-        "application": worker_application,
         "timeout_seconds": 0.25,
     }
 

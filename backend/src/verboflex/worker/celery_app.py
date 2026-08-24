@@ -3,6 +3,7 @@
 from celery import Celery
 
 from verboflex.core.config import Settings, get_settings
+from verboflex.schemas.system import ServiceState
 
 
 def create_celery_app(settings: Settings | None = None) -> Celery:
@@ -34,6 +35,19 @@ def create_celery_app(settings: Settings | None = None) -> Celery:
         worker_hijack_root_logger=False,
     )
     return application
+
+
+def probe_worker_state(
+    application: Celery,
+    *,
+    timeout_seconds: float,
+) -> ServiceState:
+    """Project a bounded Celery control ping onto the public safe state enum."""
+    try:
+        replies = application.control.inspect(timeout=timeout_seconds).ping()
+    except Exception:
+        return "unavailable"
+    return "online" if replies else "unavailable"
 
 
 app = create_celery_app()

@@ -62,3 +62,10 @@ class SystemStatusService:
         if result not in _SERVICE_STATES:
             return "unavailable"
         return result
+
+
+def probe_default_worker(*, timeout_seconds: float) -> ServiceState:
+    """Reach the worker boundary without coupling HTTP route modules to tasks."""
+    from verboflex.worker.celery_app import app, probe_worker_state
+
+    return probe_worker_state(app, timeout_seconds=timeout_seconds)
