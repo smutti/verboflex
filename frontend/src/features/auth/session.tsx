@@ -117,7 +117,13 @@ export function SessionProvider({
 
   const restoreSession = useCallback(async () => {
     setState({ status: "checking_session" });
-    const refreshResult = await refreshAccessToken();
+    let refreshResult: Awaited<ReturnType<typeof refreshAccessToken>>;
+    try {
+      refreshResult = await refreshAccessToken();
+    } catch {
+      setState({ status: "signed_out" });
+      return;
+    }
     const authority = refreshResult.data;
     if (authority === undefined || authority.must_change_password) {
       setState({ status: "signed_out" });
