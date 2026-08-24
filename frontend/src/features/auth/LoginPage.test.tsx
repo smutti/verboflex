@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LoginPage } from "./LoginPage";
@@ -16,6 +17,7 @@ const useSessionMock = vi.mocked(useSession);
 describe("login page", () => {
   beforeEach(() => {
     loginMock.mockReset();
+    loginMock.mockResolvedValue(undefined);
     useSessionMock.mockReturnValue({
       state: { status: "signed_out" },
       login: loginMock,
@@ -44,5 +46,25 @@ describe("login page", () => {
     expect(
       screen.getByRole("button", { name: "Sign in to VerboFlex" }),
     ).toBeEnabled();
+  });
+
+  it("submits the entered corporate email and password through the session action", async () => {
+    const user = userEvent.setup();
+    render(<LoginPage />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Email" }),
+      "person@example.com",
+    );
+    await user.type(screen.getByLabelText("Password"), "secure phrase 2026!");
+    await user.click(
+      screen.getByRole("button", { name: "Sign in to VerboFlex" }),
+    );
+
+    expect(loginMock).toHaveBeenCalledOnce();
+    expect(loginMock).toHaveBeenCalledWith({
+      email: "person@example.com",
+      password: "secure phrase 2026!",
+    });
   });
 });
