@@ -6,6 +6,14 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { SessionRoutes } from "./router";
 
+const ordinaryPrincipal = {
+  id: "73f123f7-ebad-4dad-8b5d-dcc3214b3b06",
+  email: "person@example.com",
+  display_name: "Person",
+  roles: ["translator" as const],
+  must_change_password: false,
+};
+
 afterEach(() => {
   cleanup();
 });
@@ -95,4 +103,20 @@ describe("session routes", () => {
       ).not.toBeInTheDocument();
     },
   );
+
+  it("renders the ordinary application route for authenticated authority", () => {
+    renderRoutes(
+      {
+        status: "authenticated",
+        accessToken: "ordinary-server-token",
+        principal: ordinaryPrincipal,
+      },
+      "/",
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Ordinary route" }),
+    ).toBeVisible();
+    expect(screen.getByTestId("current-route")).toHaveTextContent("/");
+  });
 });
