@@ -62,8 +62,15 @@ export function SessionProvider({ children }: SessionProviderProps) {
       },
     });
     const authority = tokenResult.data;
-    if (authority === undefined || authority.must_change_password) {
+    if (authority === undefined) {
       setState({ status: "signed_out" });
+      return;
+    }
+    if (authority.must_change_password) {
+      setState({
+        status: "password_change_required",
+        accessToken: authority.access_token,
+      });
       return;
     }
 
