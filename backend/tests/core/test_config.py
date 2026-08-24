@@ -9,9 +9,11 @@ def test_local_settings_are_typed_and_allow_explicit_insecure_cookie() -> None:
     """Local HTTP can opt out of Secure while every operational value is typed."""
     settings = Settings(
         app_env="local",
-        database_url="postgresql+psycopg://verboflex@postgres:5432/verboflex",
-        redis_url="redis://redis:6379/0",
-        cors_origins=["http://localhost:5173"],
+        database_url=PostgresDsn(
+            "postgresql+psycopg://verboflex@postgres:5432/verboflex"
+        ),
+        redis_url=RedisDsn("redis://redis:6379/0"),
+        cors_origins=(AnyHttpUrl("http://localhost:5173"),),
         access_token_expire_minutes=15,
         password_change_token_expire_minutes=5,
         refresh_token_expire_days=7,
