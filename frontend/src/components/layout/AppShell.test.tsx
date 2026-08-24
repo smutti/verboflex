@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -252,5 +252,35 @@ describe("authenticated application shell", () => {
     expect(screen.queryByRole("button", { name: /repository/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /review/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /pull request/i })).toBeNull();
+  });
+
+  it("opens labelled sheet navigation from the icon control at mobile width", async () => {
+    setViewportWidth(375);
+    const user = userEvent.setup();
+    render(
+      <AppShell
+        accessToken="ordinary-server-token"
+        onLogout={vi.fn()}
+        principal={principal}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Open navigation" });
+    expect(trigger).toHaveAttribute("aria-label", "Open navigation");
+
+    await user.hover(trigger);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Open navigation",
+    );
+
+    await user.click(trigger);
+
+    const sheet = await screen.findByRole("dialog", { name: "Navigation" });
+    expect(
+      within(sheet).getByRole("navigation", { name: "Primary navigation" }),
+    ).toBeVisible();
+    expect(
+      within(sheet).getByRole("button", { name: "Workspace overview" }),
+    ).toHaveAttribute("aria-current", "page");
   });
 });
