@@ -2,9 +2,9 @@
 
 import string
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
-import pytest
 
 from verboflex.auth.identity import normalize_email
 from verboflex.auth.passwords import (
