@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 6
+open_count: 7
 waived_count: 0
 fixed_count: 0
-total_count: 6
-last_updated: 2026-08-24T14:07:24.648Z
+total_count: 7
+last_updated: 2026-08-24T15:36:10.327Z
 ---
 
 # Broken Windows Ledger
@@ -21,6 +21,7 @@ last_updated: 2026-08-24T14:07:24.648Z
 | 4 | 01 | stub | backend/src/verboflex/api/v1/routes/auth.py | 89 | POST /auth/change-password remains an intentional callable 501 seam until Plan 01-07 | open |  | 2026-08-24T14:07:24.532Z |  |
 | 5 | 01 | stub | backend/src/verboflex/api/v1/routes/users.py | 23 | GET /users/me remains an intentional callable 501 seam until Plan 01-06 | open |  | 2026-08-24T14:07:24.591Z |  |
 | 6 | 01 | stub | backend/src/verboflex/api/v1/routes/system.py | 22 | GET /system/status remains an intentional callable 501 seam until Plan 01-08 | open |  | 2026-08-24T14:07:24.648Z |  |
+| 7 | 01 | stub | docker-compose.yml | 76 | Compose worker command and healthcheck target the Celery app intentionally deferred to Plan 01-08 | open |  | 2026-08-24T15:36:10.327Z |  |
 
 ````json
 [
@@ -94,6 +95,18 @@ last_updated: 2026-08-24T14:07:24.648Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-24T14:07:24.648Z",
+    "resolved_at": null
+  },
+  {
+    "id": 7,
+    "kind": "stub",
+    "phase": "01",
+    "file": "docker-compose.yml",
+    "line": 76,
+    "description": "Compose worker command and healthcheck target the Celery app intentionally deferred to Plan 01-08",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-24T15:36:10.327Z",
     "resolved_at": null
   }
 ]

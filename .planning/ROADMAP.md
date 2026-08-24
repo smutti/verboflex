@@ -48,14 +48,14 @@ Every phase must complete these checks before it can be marked complete:
   5. Frontend uses React/Vite/TypeScript with shadcn/ui primitives available.
   6. Phase quality gate passes with tests, code review, and deploy/build smoke verification.
 
-**Plans**: 3/15 plans executed
+**Plans**: 4/15 plans executed
 
 Plans:
 
 - [x] 01-01-PLAN.md — Blocking backend/frontend package-legitimacy approvals
 - [x] 01-02-PLAN.md — Locked FastAPI scaffold, callable endpoint stubs, and health
 - [x] 01-03-PLAN.md — Locked Vite scaffold and generated health tracer
-- [ ] 01-04-PLAN.md — Secure settings and local/staging/production-oriented Docker baseline
+- [x] 01-04-PLAN.md — Secure settings and local/staging/production-oriented Docker baseline
 - [ ] 01-05-PLAN.md — Reversible auth schema, exact roles, and first-admin/reset CLI
 - [ ] 01-06-PLAN.md — OAuth2 login, access tokens, current identity, and backend roles
 - [ ] 01-07-PLAN.md — Refresh rotation/replay, logout, password change, and revocation
@@ -280,7 +280,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Platform Foundation | 3/15 | In Progress|  |
+| 1. Platform Foundation | 4/15 | In Progress|  |
 | 2. Admin Configuration | 0/6 | Not started | - |
 | 3. Bitbucket Read Integration | 0/5 | Not started | - |
 | 4. Localization Parser Foundation | 0/6 | Not started | - |
