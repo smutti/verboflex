@@ -24,7 +24,12 @@ from alembic import command
 from verboflex.auth import login as login_service
 from verboflex.auth.access_tokens import decode_access_token
 from verboflex.auth.passwords import hash_password
-from verboflex.auth.rate_limits import get_redis_client
+from verboflex.auth.rate_limits import (
+    LOGIN_RATE_LIMIT_SCRIPT,
+    LOGIN_WINDOW_SECONDS,
+    enforce_login_rate_limit,
+    get_redis_client,
+)
 from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
 from verboflex.main import app
@@ -213,6 +218,62 @@ def test_temporary_login_creates_only_password_change_authority(
     assert claims.session_id is None
 
 
+def test_ordinary_login_requests_exact_refresh_token_entropy(
+    login_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Request 32 random bytes for the opaque refresh credential."""
+    create_login_user(login_session_factory)
+    requested_bytes: list[int | None] = []
+
+    def deterministic_token(nbytes: int | None = None) -> str:
+        requested_bytes.append(nbytes)
+        return "opaque-refresh-token-for-entropy-contract"
+
+    monkeypatch.setattr("verboflex.auth.login.secrets.token_urlsafe", deterministic_token)
+    configure_dependencies(login_session_factory, FakeRedis())
+
+    response = asyncio.run(post_token("person@example.com", VALID_PASSWORD))
+
+    assert response.status_code == 200
+    assert requested_bytes == [32]
+    with login_session_factory() as session:
+        persisted = session.execute(select(AuthSession)).scalar_one()
+    assert (
+        persisted.token_hash
+        == hashlib.sha256(response.cookies["verboflex_refresh"].encode()).hexdigest()
+    )
+
+
+def test_malformed_identifier_uses_canonical_limit_key_without_a_user_query(
+    login_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rate-limit malformed identifiers consistently while preserving the dummy path."""
+    redis_client = FakeRedis()
+    configure_dependencies(login_session_factory, redis_client)
+
+    def forbidden_query(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("malformed identifiers must not reach the user query")
+
+    monkeypatch.setattr(Session, "execute", forbidden_query)
+
+    response = asyncio.run(post_token(" \tNOT AN EMAIL\r ", VALID_PASSWORD))
+
+    normalized_email = "not an email"
+    identity_digest = hashlib.sha256(
+        f"{normalized_email}\0{httpx.URL('http://127.0.0.1').host}".encode()
+    ).hexdigest()
+    assert response.status_code == 401
+    assert redis_client.calls == [
+        (
+            LOGIN_RATE_LIMIT_SCRIPT,
+            1,
+            (f"verboflex:auth:login:{identity_digest}", str(LOGIN_WINDOW_SECONDS)),
+        )
+    ]
+
+
 @pytest.mark.parametrize(
     ("scenario", "submitted_email", "submitted_password", "is_active"),
     [
@@ -346,3 +407,36 @@ def test_redis_dependency_uses_the_configured_database_url() -> None:
     assert client.connection_pool.connection_kwargs["host"] == "127.0.0.1"
     assert client.connection_pool.connection_kwargs["port"] == 6380
     assert client.connection_pool.connection_kwargs["db"] == 4
+    assert client.connection_pool.connection_kwargs["decode_responses"] is True
+
+
+@pytest.mark.parametrize(
+    ("raw_state", "expected_allowed", "expected_remaining", "expected_retry_after"),
+    [([3, 42], True, 2, 42), ([6, 0], False, 0, 1)],
+)
+def test_rate_limiter_uses_one_exact_atomic_redis_contract(
+    raw_state: list[int],
+    expected_allowed: bool,
+    expected_remaining: int,
+    expected_retry_after: int,
+) -> None:
+    """Bind the fixed-window result and privacy-preserving Redis key exactly."""
+    redis_client = FakeRedis(result=raw_state)
+
+    result = enforce_login_rate_limit(
+        redis_client,
+        normalized_email="person@example.com",
+        client_ip="192.0.2.42",
+    )
+
+    digest = hashlib.sha256(b"person@example.com\x00192.0.2.42").hexdigest()
+    assert redis_client.calls == [
+        (
+            LOGIN_RATE_LIMIT_SCRIPT,
+            1,
+            (f"verboflex:auth:login:{digest}", str(LOGIN_WINDOW_SECONDS)),
+        )
+    ]
+    assert result.allowed is expected_allowed
+    assert result.remaining == expected_remaining
+    assert result.retry_after == expected_retry_after

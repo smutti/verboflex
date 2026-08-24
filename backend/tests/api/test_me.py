@@ -160,7 +160,10 @@ def test_missing_or_invalid_bearer_authority_returns_exact_401(
     assert response.headers["www-authenticate"] == "Bearer"
 
 
-@pytest.mark.parametrize("durable_state", ["stale-version", "inactive", "revoked-session"])
+@pytest.mark.parametrize(
+    "durable_state",
+    ["stale-version", "inactive", "revoked-session", "missing-session", "expired-session"],
+)
 def test_stale_inactive_or_revoked_authority_returns_exact_401(
     principal_session_factory: sessionmaker[Session],
     durable_state: str,
@@ -174,8 +177,12 @@ def test_stale_inactive_or_revoked_authority_returns_exact_401(
             user.token_version += 1
         elif durable_state == "inactive":
             user.is_active = False
-        else:
+        elif durable_state == "revoked-session":
             auth_session.revoked_at = datetime.now(UTC)
+        elif durable_state == "missing-session":
+            session.delete(auth_session)
+        else:
+            auth_session.expires_at = datetime.now(UTC) - timedelta(seconds=1)
     configure_principal_dependencies(principal_session_factory)
 
     response = asyncio.run(get_me(access_token))
@@ -183,6 +190,30 @@ def test_stale_inactive_or_revoked_authority_returns_exact_401(
     assert response.status_code == 401
     assert response.json() == {"detail": "Invalid access token"}
     assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_session_is_invalid_at_its_exact_expiry_boundary(
+    principal_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reject a session at, not only after, its durable expiry timestamp."""
+    access_token = create_principal_authority(principal_session_factory)
+    exact_expiry = datetime.now(UTC).replace(microsecond=0)
+    with principal_session_factory.begin() as session:
+        session.get_one(AuthSession, SESSION_ID).expires_at = exact_expiry
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, timezone: object = None) -> FrozenDateTime:
+            return cls.fromtimestamp(exact_expiry.timestamp(), UTC)
+
+    monkeypatch.setattr("verboflex.auth.principal.datetime", FrozenDateTime)
+    configure_principal_dependencies(principal_session_factory)
+
+    response = asyncio.run(get_me(access_token))
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid access token"}
 
 
 def test_password_change_authority_returns_exact_403_without_identity_body(
