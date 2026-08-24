@@ -72,7 +72,7 @@ Use uv for backend dependency locking and execution because it is available loca
 | Redis Python client | 8.1.0 observed | Celery Redis support | Exact compatible version is frozen by `uv.lock`. |
 | React | 19.2.8 observed | SPA runtime | Exact compatible version is frozen by `package-lock.json`. |
 | Vite | 8.2.2 observed | Dev/build tooling | Exact compatible version is frozen by `package-lock.json`. |
-| TypeScript | 7.0.2 observed | Frontend type system | Exact compatible version is frozen by `package-lock.json`. |
+| TypeScript | 6.0.3 selected | Frontend type system | Exact compatible version is frozen by `package-lock.json`; TypeScript 7.0.2 is incompatible with the approved generator 0.99.0 runtime. |
 | shadcn CLI | 4.19.0 observed | UI component installation | Exact audited version is invoked project-locally. |
 | Docker Compose | 5.3.1 local | Service orchestration | Required Docker baseline and multi-compose staging/prod overlays. |
 
@@ -162,7 +162,7 @@ The GSD PyPI adapter cannot obtain weekly download counts, so it conservatively 
 | `sonner` | 2.0.8 | <30d | 51,906,228 | github.com/emilkowalski/sonner | SUS | Flagged — human approval required |
 | `vite` | 8.2.2 | <30d | 169,369,863 | github.com/vitejs/vite | SUS | Flagged — human approval required |
 | `@vitejs/plugin-react` | 6.1.0 | <30d | 83,483,737 | github.com/vitejs/vite-plugin-react | SUS | Flagged — human approval required |
-| `typescript` | 7.0.2 | >30d | 269,606,477 | github.com/microsoft/TypeScript | OK | Approved |
+| `typescript` | 6.0.3 | >30d | 269,606,477 | github.com/microsoft/TypeScript; Microsoft publisher accounts | OK | Selected compatible version; Node 24 supported and within the generator's declared peer range |
 | `tailwindcss` | 4.3.3 | >30d | 125,155,069 | github.com/tailwindlabs/tailwindcss | OK | Approved |
 | `@tailwindcss/vite` | 4.3.3 | >30d | 46,022,969 | github.com/tailwindlabs/tailwindcss | OK | Approved |
 | `tw-animate-css` | 1.4.0 | >30d | 38,303,711 | github.com/Wombosvideo/tw-animate-css | OK | Approved |
@@ -193,6 +193,8 @@ The GSD PyPI adapter cannot obtain weekly download counts, so it conservatively 
 **Build-backend revision (2026-08-24):** `uv_build` was added only after the executor proved that an installable `src/verboflex` project requires a PEP 517 build backend. Official uv guidance recommends the native backend with an upper version bound; PyPI verifies Astral Software Inc., the `astral-sh/uv` source repository, Python `>=3.8` including the Python 3.14 classifier, and release 0.11.12. The selected `>=0.11.12,<0.12.0` range matches the installed uv 0.11.12 executable, whose bundled backend can satisfy the build. The user explicitly approved this amended dependency boundary with “procedi”.
 
 **Frontend type-dependency revision (2026-08-24):** `@types/react@19.2.18` and `@types/react-dom@19.2.5` were added only after the executor proved that React 19.2.8 does not bundle TypeScript declarations and `@testing-library/react@16.3.2` declares both packages as optional peers. npm verifies the Microsoft-maintained `types` publisher account, the official `DefinitelyTyped/DefinitelyTyped` repository, registry integrity hashes, and a compatible `@types/react-dom` peer requirement of `@types/react^19.2.0`. The user explicitly approved exactly these two direct development dependencies with “approvo”.
+
+**Frontend compiler compatibility resolution (2026-08-24):** The approved `typescript` package is frozen at 6.0.3 rather than the initially observed 7.0.2. A real generator run proved that `@hey-api/openapi-ts@0.99.0` accesses a compiler API removed in TypeScript 7, while its declared peer range accepts TypeScript 6. npm verifies the official Microsoft repository and publisher accounts; TypeScript 6.0.3 supports Node 24 and introduces no new package name.
 
 ## Architecture Patterns
 
