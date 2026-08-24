@@ -1,9 +1,17 @@
 """Typed application settings seam."""
 
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import AnyHttpUrl, Field, PostgresDsn, RedisDsn, SecretStr, field_validator
+from pydantic import (
+    AnyHttpUrl,
+    Field,
+    PostgresDsn,
+    RedisDsn,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -66,6 +74,13 @@ class Settings(BaseSettings):
         ):
             raise ValueError("CORS allowlist must contain exact HTTP origins")
         return origins
+
+    @model_validator(mode="after")
+    def validate_deployment_security(self) -> Self:
+        """Fail deployed environments closed when signing material is absent."""
+        if self.app_env != "local" and self.jwt_secret_key is None:
+            raise ValueError("JWT signing secret is required in staging and production")
+        return self
 
 
 @lru_cache
