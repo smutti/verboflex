@@ -15,6 +15,7 @@ import httpx
 import pytest
 from alembic.config import Config
 from psycopg import connect, sql
+from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -49,6 +50,8 @@ class FakeRedis:
     def eval(self, script: str, numkeys: int, *keys_and_args: object) -> object:
         """Record one atomic rate-limit invocation."""
         self.calls.append((script, numkeys, keys_and_args))
+        if isinstance(self.result, BaseException):
+            raise self.result
         if self.result is not None:
             return self.result
         self.attempts += 1
@@ -277,8 +280,7 @@ def test_sixth_login_attempt_is_limited_before_password_verification(
     configure_dependencies(login_session_factory, redis_client)
 
     responses = [
-        asyncio.run(post_token("person@example.com", "wrong password phrase!"))
-        for _ in range(6)
+        asyncio.run(post_token("person@example.com", "wrong password phrase!")) for _ in range(6)
     ]
 
     assert [response.status_code for response in responses] == [401, 401, 401, 401, 401, 429]
@@ -286,5 +288,30 @@ def test_sixth_login_attempt_is_limited_before_password_verification(
     assert int(responses[-1].headers["retry-after"]) > 0
     assert responses[-1].headers["x-ratelimit-remaining"] == "0"
     assert verification_calls == 5
+    with login_session_factory() as session:
+        assert session.execute(select(AuthSession)).scalars().all() == []
+
+
+def test_redis_outage_fails_closed_before_verification_or_mutation(
+    login_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Return exact 503 without touching Argon2 or durable session state."""
+    create_login_user(login_session_factory)
+
+    def forbidden_verification(_password: str, _password_hash: str) -> bool:
+        raise AssertionError("password verification must not run during Redis outage")
+
+    monkeypatch.setattr(login_service, "verify_password", forbidden_verification)
+    configure_dependencies(
+        login_session_factory,
+        FakeRedis(result=RedisConnectionError("redis unavailable")),
+    )
+
+    response = asyncio.run(post_token("person@example.com", VALID_PASSWORD))
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Authentication service unavailable"}
+    assert "set-cookie" not in response.headers
     with login_session_factory() as session:
         assert session.execute(select(AuthSession)).scalars().all() == []
