@@ -47,3 +47,9 @@ def test_database_url_requires_a_named_postgresql_database() -> None:
     """A syntactically valid server-only DSN is not an operational database target."""
     with pytest.raises(ValidationError, match="must name a PostgreSQL database"):
         Settings(database_url=PostgresDsn("postgresql+psycopg://verboflex@postgres"))
+
+
+def test_redis_url_rejects_a_non_numeric_database_path() -> None:
+    """Reject Redis paths that the client cannot interpret as a database index."""
+    with pytest.raises(ValidationError, match="non-negative numeric database"):
+        Settings(redis_url=RedisDsn("redis://redis:6379/not-a-database"))
