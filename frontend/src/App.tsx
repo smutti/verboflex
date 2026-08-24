@@ -1,25 +1,59 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { readHealthApiV1HealthGet } from "./api/client";
 
+type ConnectionState = "error" | "loading" | "online";
+
+const API_ERROR_COPY =
+  "We could not reach the API. Check that the backend is running, then retry the connection.";
+
 export function App() {
-  const [connectionCopy, setConnectionCopy] = useState(
-    "Checking API connection",
-  );
+  const [connectionState, setConnectionState] =
+    useState<ConnectionState>("loading");
+  const requestVersion = useRef(0);
 
-  useEffect(() => {
-    let isActive = true;
+  const checkHealth = useCallback(async () => {
+    const version = requestVersion.current + 1;
+    requestVersion.current = version;
+    setConnectionState("loading");
 
-    void readHealthApiV1HealthGet().then((result) => {
-      if (isActive && result.data?.status === "ok") {
-        setConnectionCopy("API online");
+    try {
+      const result = await readHealthApiV1HealthGet();
+
+      if (requestVersion.current === version) {
+        setConnectionState(
+          result.data?.status === "ok" ? "online" : "error",
+        );
       }
-    });
-
-    return () => {
-      isActive = false;
-    };
+    } catch {
+      if (requestVersion.current === version) {
+        setConnectionState("error");
+      }
+    }
   }, []);
 
-  return <p role="status">{connectionCopy}</p>;
+  useEffect(() => {
+    void checkHealth();
+
+    return () => {
+      requestVersion.current += 1;
+    };
+  }, [checkHealth]);
+
+  if (connectionState === "error") {
+    return (
+      <section role="alert">
+        <p>{API_ERROR_COPY}</p>
+        <button type="button" onClick={() => void checkHealth()}>
+          Retry connection
+        </button>
+      </section>
+    );
+  }
+
+  return (
+    <p role="status">
+      {connectionState === "online" ? "API online" : "Checking API connection"}
+    </p>
+  );
 }
