@@ -14,6 +14,8 @@ WORKDIR /app
 COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
 
+COPY backend/alembic.ini ./alembic.ini
+COPY backend/alembic ./alembic
 COPY backend/src ./src
 RUN uv sync --locked --no-dev --no-editable
 
@@ -28,6 +30,8 @@ RUN groupadd --system verboflex \
 
 WORKDIR /app
 COPY --from=builder --chown=verboflex:verboflex /opt/venv /opt/venv
+COPY --from=builder --chown=verboflex:verboflex /app/alembic.ini /app/alembic.ini
+COPY --from=builder --chown=verboflex:verboflex /app/alembic /app/alembic
 
 USER verboflex
 EXPOSE 8000
