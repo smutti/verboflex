@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 01
 current_phase_name: Platform Foundation
 status: executing
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-08-24T16:11:12.502Z"
+stopped_at: Completed 01-06-PLAN.md
+last_updated: "2026-08-24T16:53:25.296Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 01 execution started
-state_head: 240fb7ed9d24068e4a689471e70e1be3cbb4711d
+state_head: d97b0d31990af1253c6678041a15c66c4c12909f
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 15
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 01 (Platform Foundation) — EXECUTING
-Plan: 6 of 15
+Plan: 7 of 15
 Status: Ready to execute
 Last activity: 2026-08-24 — Phase 01 execution started
 
@@ -63,6 +63,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P03 | 51 min | 2 tasks | 32 files |
 | Phase 01 P04 | 24 min | 2 tasks | 9 files |
 | Phase 01 P05 | 29 min | 2 tasks | 19 files |
+| Phase 01 P06 | 38 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,10 @@ Recent decisions affecting current work:
 - [Phase 01]: A PostgreSQL transaction advisory lock serializes the empty-user decision so concurrent bootstrap attempts leave exactly one admin.
 - [Phase 01]: Administrative reset locks the selected user, rehashes the password, forces a password change, increments token_version, and revokes only that user's live sessions in one transaction.
 - [Phase 01]: Passwords enter the CLI only through getpass or stdin; argv, defaults, logs, and plaintext persistence are forbidden.
+- [Phase 01]: JWT authority uses explicit HS256, required claims, a five-second tolerance, and exact purpose-specific lifetimes.
+- [Phase 01]: Login rate limiting is Redis-authoritative before lookup and Argon2 and fails closed with 503.
+- [Phase 01]: Protected authority always reconciles active state, token_version, sessions, password policy, and roles with PostgreSQL.
+- [Phase 01]: Refresh plaintext uses 32 random bytes, is never persisted, and is exposed only through the scoped HttpOnly cookie.
 
 ### Pending Todos
 
@@ -121,6 +126,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-24T16:11:12.495Z
-Stopped at: Completed 01-05-PLAN.md
+Last session: 2026-08-24T16:53:25.288Z
+Stopped at: Completed 01-06-PLAN.md
 Resume file: None
