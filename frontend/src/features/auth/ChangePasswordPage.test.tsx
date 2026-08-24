@@ -89,4 +89,30 @@ describe("required password change page", () => {
     );
     expect(changePasswordMock).not.toHaveBeenCalled();
   });
+
+  it("announces and associates a password confirmation mismatch", async () => {
+    const user = userEvent.setup();
+    render(<ChangePasswordPage />);
+
+    await user.type(
+      screen.getByLabelText("Current password"),
+      "temporary phrase 2026!",
+    );
+    await user.type(
+      screen.getByLabelText("New password"),
+      "replacement phrase 2026!",
+    );
+    const confirmation = screen.getByLabelText("Confirm new password");
+    await user.type(confirmation, "different phrase 2026!");
+    await user.click(screen.getByRole("button", { name: "Set new password" }));
+
+    const error = await screen.findByRole("alert");
+    expect(error).toHaveTextContent("Passwords do not match.");
+    expect(confirmation).toHaveAttribute("aria-invalid", "true");
+    expect(confirmation).toHaveAttribute(
+      "aria-describedby",
+      expect.stringContaining(error.id),
+    );
+    expect(changePasswordMock).not.toHaveBeenCalled();
+  });
 });
