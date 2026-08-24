@@ -188,4 +188,33 @@ describe("session transitions", () => {
       auth: "restored-memory-token",
     });
   });
+
+  it("refresh failure signs out without retaining a stale identity", async () => {
+    issueTokenMock.mockResolvedValue({
+      data: {
+        access_token: "ordinary-memory-token",
+        expires_in: 900,
+        must_change_password: false,
+        token_type: "bearer",
+      },
+      error: undefined,
+    });
+    readCurrentUserMock.mockResolvedValue({ data: principal, error: undefined });
+    const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
+    await act(async () => {
+      await result.current.login({
+        email: "person@example.com",
+        password: "ordinary login phrase!",
+      });
+    });
+    refreshAccessTokenMock.mockRejectedValue(new Error("network unavailable"));
+
+    await act(async () => {
+      await result.current.restoreSession().catch(() => undefined);
+    });
+
+    expect(result.current.state).toEqual({ status: "signed_out" });
+    expect(result.current.state).not.toHaveProperty("principal");
+    expect(readCurrentUserMock).toHaveBeenCalledOnce();
+  });
 });
