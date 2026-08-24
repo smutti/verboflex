@@ -1,11 +1,17 @@
 """Contracts for short-lived signed access authority."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import jwt
+import pytest
 
-from verboflex.auth.access_tokens import decode_access_token, issue_access_token
+from verboflex.auth.access_tokens import (
+    InvalidAccessToken,
+    PasswordChangeRequired,
+    decode_access_token,
+    issue_access_token,
+)
 from verboflex.core.config import Settings
 
 SIGNING_SECRET = "0123456789abcdef" * 2
@@ -90,3 +96,86 @@ def test_ordinary_access_token_round_trips_through_strict_verification() -> None
     assert claims.expires_at.timestamp() - claims.issued_at.timestamp() == 900
     assert claims.purpose == "access"
     assert claims.token_version == 11
+
+
+def test_signature_tampering_is_rejected_as_invalid_authority() -> None:
+    """Never accept a caller-modified signature under the configured HS256 key."""
+    token = issue_access_token(
+        user_id=uuid4(),
+        session_id=uuid4(),
+        token_version=0,
+        purpose="access",
+        settings=token_settings(),
+    )
+    header, payload, signature = token.split(".")
+    replacement = "A" if signature[0] != "A" else "B"
+    tampered = ".".join((header, payload, replacement + signature[1:]))
+
+    with pytest.raises(InvalidAccessToken):
+        decode_access_token(tampered, settings=token_settings())
+
+
+def test_expired_access_token_is_rejected_as_invalid_authority() -> None:
+    """Expiry validation remains active and uses only the configured tolerance."""
+    issued_at = datetime.now(UTC) - timedelta(minutes=20)
+    expired = issue_access_token(
+        user_id=uuid4(),
+        session_id=uuid4(),
+        token_version=0,
+        purpose="access",
+        settings=token_settings(),
+        now=issued_at,
+    )
+
+    with pytest.raises(InvalidAccessToken):
+        decode_access_token(expired, settings=token_settings())
+
+
+def test_missing_required_claim_is_rejected_as_invalid_authority() -> None:
+    """A signed token is still invalid when any authority dimension is absent."""
+    now = datetime.now(UTC)
+    incomplete = jwt.encode(
+        {
+            "sub": str(uuid4()),
+            "sid": str(uuid4()),
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(minutes=15)).timestamp()),
+            "purpose": "access",
+        },
+        SIGNING_SECRET,
+        algorithm="HS256",
+    )
+
+    with pytest.raises(InvalidAccessToken):
+        decode_access_token(incomplete, settings=token_settings())
+
+
+def test_password_change_authority_is_denied_from_an_ordinary_resource() -> None:
+    """Translate restricted purpose to the dedicated 403 authorization seam."""
+    restricted = issue_access_token(
+        user_id=uuid4(),
+        token_version=0,
+        purpose="password_change",
+        settings=token_settings(),
+    )
+
+    with pytest.raises(PasswordChangeRequired):
+        decode_access_token(restricted, settings=token_settings())
+
+
+def test_ordinary_authority_is_invalid_for_password_change_only_access() -> None:
+    """Ordinary sessions cannot be relabeled as password-change authority."""
+    ordinary = issue_access_token(
+        user_id=uuid4(),
+        session_id=uuid4(),
+        token_version=0,
+        purpose="access",
+        settings=token_settings(),
+    )
+
+    with pytest.raises(InvalidAccessToken):
+        decode_access_token(
+            ordinary,
+            settings=token_settings(),
+            expected_purpose="password_change",
+        )
