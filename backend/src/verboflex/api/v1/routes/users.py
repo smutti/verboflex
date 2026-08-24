@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, status
 
-from verboflex.api.v1.routes.auth import OptionalBearerToken
+from verboflex.auth.principal import CurrentPrincipal
 from verboflex.schemas.system import ErrorResponse
 from verboflex.schemas.users import CurrentUserResponse
 
@@ -18,6 +18,6 @@ router = APIRouter(prefix="/users", tags=["users"])
         status.HTTP_429_TOO_MANY_REQUESTS: {"model": ErrorResponse},
     },
 )
-async def read_current_user(_access_token: OptionalBearerToken) -> CurrentUserResponse:
+async def read_current_user(_principal: CurrentPrincipal) -> CurrentUserResponse:
     """Expose the final current-identity signature."""
     raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented")
