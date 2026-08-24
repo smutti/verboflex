@@ -1,6 +1,7 @@
 """Property and boundary contracts for identity and password primitives."""
 
 import string
+from typing import Literal
 
 import pytest
 from hypothesis import given
@@ -15,6 +16,7 @@ from verboflex.auth.passwords import (
 )
 
 ASCII_WHITESPACE = " \t\n\r\f\v"
+SURROGATE_CATEGORIES: tuple[Literal["Cs"], ...] = ("Cs",)
 
 
 @given(
@@ -78,7 +80,7 @@ def test_password_character_boundaries_are_12_through_128(
 
 @given(
     st.text(
-        alphabet=st.characters(blacklist_categories=("Cs",)),
+        alphabet=st.characters(blacklist_categories=SURROGATE_CATEGORIES),
         min_size=12,
         max_size=128,
     )

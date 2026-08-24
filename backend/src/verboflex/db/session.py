@@ -1,6 +1,6 @@
 """Synchronous PostgreSQL session boundary for API and CLI transactions."""
 
-from collections.abc import Iterator
+from collections.abc import Generator
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -18,7 +18,7 @@ engine = build_engine()
 SessionFactory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
 
 
-def get_db_session() -> Iterator[Session]:
+def get_db_session() -> Generator[Session]:
     """Yield one request-scoped session and roll it back on any failure."""
     with SessionFactory() as session:
         try:
