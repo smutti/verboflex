@@ -2,7 +2,7 @@
 phase: 1
 slug: platform-foundation
 status: approved
-shadcn_initialized: false
+shadcn_initialized: true
 preset: official-new-york-v4-radix
 created: 2026-05-05
 reviewed_at: 2026-08-24
@@ -41,7 +41,7 @@ Out of scope: product/repository configuration, translation search, review works
 
 ### Initialization Contract
 
-- `components.json` does not exist yet because Phase 1 has not scaffolded `frontend/`.
+- `components.json` now records the neutral official `new-york` configuration, which the Tailwind v4 CLI resolves to the modern `new-york-v4` Radix registry source.
 - Phase 1 execution must create the Vite app first, then initialize the official modern `new-york-v4` Radix registry configuration with the exact project-local `shadcn@4.19.0` CLI.
 - Generated shadcn components must live in `frontend/src/components/ui`.
 - The official Sidebar registry dependency hook must live at `frontend/src/hooks/use-mobile.ts`.
