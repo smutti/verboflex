@@ -11,6 +11,8 @@ from verboflex.main import app
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CHECKED_IN_SCHEMA = REPOSITORY_ROOT / "frontend" / "openapi.json"
+FRONTEND_SOURCE = REPOSITORY_ROOT / "frontend" / "src"
+GENERATED_CLIENT = FRONTEND_SOURCE / "api" / "client"
 
 EXPECTED_OPERATIONS = {
     ("/api/v1/auth/change-password", "post"): (
@@ -126,12 +128,54 @@ def test_export_is_canonical_and_matches_the_checked_in_schema() -> None:
 
     assert first == second
     assert first == CHECKED_IN_SCHEMA.read_bytes()
-    assert first == (
-        json.dumps(
-            json.loads(first),
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        + "\n"
-    ).encode()
+    assert (
+        first
+        == (
+            json.dumps(
+                json.loads(first),
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode()
+    )
+
+
+def _handwritten_api_type_declarations(source: str) -> set[str]:
+    generated_names = {
+        "AccessTokenResponse",
+        "ChangePasswordRequest",
+        "CurrentUserResponse",
+        "ErrorResponse",
+        "RoleName",
+        "SystemStatusResponse",
+    }
+    return {
+        name
+        for name in generated_names
+        if f"interface {name}" in source or f"type {name} =" in source
+    }
+
+
+def test_generated_client_configuration_is_central_and_contract_types_are_not_duplicated() -> None:
+    """Use one credentialed runtime config and reject handwritten wire-type copies."""
+    config = (FRONTEND_SOURCE / "api" / "config.ts").read_text()
+    generated_entrypoint = (GENERATED_CLIENT / "client.gen.ts").read_text()
+    handwritten_source = "\n".join(
+        path.read_text()
+        for path in sorted(FRONTEND_SOURCE.rglob("*.ts*"))
+        if GENERATED_CLIENT not in path.parents
+    )
+
+    assert 'credentials: "include"' in config
+    assert 'configuredBaseUrl || "/"' in config
+    assert "import { createClientConfig } from '../config.ts';" in generated_entrypoint
+    assert _handwritten_api_type_declarations(handwritten_source) == set()
+
+
+def test_duplicate_type_guard_rejects_a_known_bad_declaration() -> None:
+    """Prove the narrow handwritten-contract checker reaches its failure seam."""
+    known_bad = "export interface AccessTokenResponse { access_token: string }"
+
+    assert _handwritten_api_type_declarations(known_bad) == {"AccessTokenResponse"}
