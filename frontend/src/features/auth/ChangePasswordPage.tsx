@@ -133,7 +133,12 @@ export function ChangePasswordPage() {
                 </AlertDescription>
               </Alert>
             ) : null}
-            <Button className="w-full" type="submit">
+            <Button
+              aria-busy={form.formState.isSubmitting}
+              className="w-full"
+              disabled={form.formState.isSubmitting}
+              type="submit"
+            >
               Set new password
             </Button>
           </form>
