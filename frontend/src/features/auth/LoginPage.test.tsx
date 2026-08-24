@@ -122,4 +122,18 @@ describe("login page", () => {
     });
     await waitFor(() => expect(submit).toBeEnabled());
   });
+
+  it("offers email, password, then submit in logical keyboard order", async () => {
+    const user = userEvent.setup();
+    render(<LoginPage />);
+
+    await user.tab();
+    expect(screen.getByRole("textbox", { name: "Email" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByLabelText("Password")).toHaveFocus();
+    await user.tab();
+    expect(
+      screen.getByRole("button", { name: "Sign in to VerboFlex" }),
+    ).toHaveFocus();
+  });
 });
