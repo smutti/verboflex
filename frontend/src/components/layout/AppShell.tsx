@@ -61,7 +61,7 @@ export function AppShell({ accessToken, onLogout, principal }: AppShellProps) {
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="md:hidden"
+                      className="lg:hidden"
                       aria-label="Open navigation"
                     >
                       <Menu aria-hidden="true" />
@@ -101,8 +101,8 @@ export function AppShell({ accessToken, onLogout, principal }: AppShellProps) {
           </Tooltip>
         </TooltipProvider>
       </header>
-      <div className="md:grid md:grid-cols-[16rem_minmax(0,1fr)]">
-        <aside className="hidden min-h-[calc(100vh-65px)] border-r bg-secondary p-4 md:flex">
+      <div className="lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <aside className="hidden min-h-[calc(100vh-65px)] border-r bg-secondary p-4 lg:flex">
           <WorkspaceNavigation />
         </aside>
         <main className="grid min-w-0 content-start gap-8 px-6 py-8">

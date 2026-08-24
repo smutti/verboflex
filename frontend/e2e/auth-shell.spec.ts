@@ -122,7 +122,7 @@ test("auth shell completes forced change, refresh, responsive navigation, and lo
   await expect(page.getByLabel("Current password")).toBeFocused();
   await page.keyboard.type(temporaryPassword);
   await page.keyboard.press("Tab");
-  await expect(page.getByLabel("New password")).toBeFocused();
+  await expect(page.getByLabel("New password", { exact: true })).toBeFocused();
   await page.keyboard.type(ordinaryPassword);
   await page.keyboard.press("Tab");
   await expect(page.getByLabel("Confirm new password")).toBeFocused();
