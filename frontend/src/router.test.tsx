@@ -119,4 +119,26 @@ describe("session routes", () => {
     ).toBeVisible();
     expect(screen.getByTestId("current-route")).toHaveTextContent("/");
   });
+
+  it.each(["/login", "/change-password", "/private-route"])(
+    "redirects authenticated direct navigation from %s to the application",
+    async (initialEntry) => {
+      renderRoutes(
+        {
+          status: "authenticated",
+          accessToken: "ordinary-server-token",
+          principal: ordinaryPrincipal,
+        },
+        initialEntry,
+      );
+
+      expect(
+        await screen.findByRole("heading", { name: "Ordinary route" }),
+      ).toBeVisible();
+      expect(screen.getByTestId("current-route")).toHaveTextContent("/");
+      expect(
+        screen.queryByRole("heading", { name: "Password change route" }),
+      ).not.toBeInTheDocument();
+    },
+  );
 });
