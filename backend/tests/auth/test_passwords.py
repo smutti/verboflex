@@ -4,7 +4,7 @@ import string
 from typing import Literal
 
 import pytest
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 
 from verboflex.auth.identity import normalize_email
@@ -51,6 +51,12 @@ def test_malformed_email_is_rejected_without_echoing_the_identifier() -> None:
         normalize_email("not an email")
 
 
+def test_non_ascii_boundary_whitespace_is_not_silently_canonicalized() -> None:
+    """Only the database-aligned ASCII trim set is accepted around an email."""
+    with pytest.raises(ValueError, match="^invalid email address$"):
+        normalize_email("\N{NO-BREAK SPACE}admin@example.com\N{NO-BREAK SPACE}")
+
+
 def test_unicode_and_space_password_is_stored_only_as_argon2() -> None:
     """Approved Unicode and space-containing passwords survive secure hashing."""
     password = "  密碼 phrase 2026!  "
@@ -78,6 +84,8 @@ def test_password_character_boundaries_are_12_through_128(
         validate_password(invalid_password)
 
 
+@example("x" * 12)
+@example("x" * 128)
 @given(
     st.text(
         alphabet=st.characters(blacklist_categories=SURROGATE_CATEGORIES),

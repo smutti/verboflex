@@ -72,6 +72,7 @@ quote-style = "double"
 
 [tool.mutmut]
 paths_to_mutate = ["src/verboflex/"]
+also_copy = ["alembic.ini", "alembic"]
 tests_dir = ["tests/"]
 
 [tool.pip-licenses]

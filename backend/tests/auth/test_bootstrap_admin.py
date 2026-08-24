@@ -247,6 +247,102 @@ def test_admin_reset_rehashes_and_revokes_every_session_atomically(
         assert all(auth_session.revoked_at is not None for auth_session in sessions)
 
 
+def test_admin_reset_does_not_revoke_another_users_session(
+    auth_session_factory: sessionmaker[Session],
+) -> None:
+    """Credential recovery is scoped to the selected user's refresh authority."""
+    with auth_session_factory() as session:
+        admin = bootstrap_first_admin(
+            session,
+            email="admin@example.com",
+            display_name="Admin",
+            password="first admin phrase!",
+        )
+        admin_id = admin.id
+
+    expires_at = datetime.now(UTC) + timedelta(days=7)
+    with auth_session_factory.begin() as session:
+        admin = session.get_one(User, admin_id)
+        other_user = User(
+            email="other@example.com",
+            display_name="Other User",
+            hashed_password=admin.hashed_password,
+        )
+        session.add(other_user)
+        session.flush()
+        other_user_id = other_user.id
+        session.add_all(
+            [
+                AuthSession(
+                    user_id=admin_id,
+                    family_id=uuid4(),
+                    token_hash="c" * 64,
+                    expires_at=expires_at,
+                ),
+                AuthSession(
+                    user_id=other_user_id,
+                    family_id=uuid4(),
+                    token_hash="d" * 64,
+                    expires_at=expires_at,
+                ),
+            ]
+        )
+
+    with auth_session_factory() as session:
+        reset_user_password(
+            session,
+            email="admin@example.com",
+            password="replacement admin phrase!",
+        )
+
+    with auth_session_factory() as session:
+        admin_session = session.execute(
+            select(AuthSession).where(AuthSession.user_id == admin_id)
+        ).scalar_one()
+        other_session = session.execute(
+            select(AuthSession).where(AuthSession.user_id == other_user_id)
+        ).scalar_one()
+        assert admin_session.revoked_at is not None
+        assert other_session.revoked_at is None
+
+
+def test_admin_reset_preserves_an_existing_session_revocation_time(
+    auth_session_factory: sessionmaker[Session],
+) -> None:
+    """A reset never rewrites the audit time of authority revoked earlier."""
+    with auth_session_factory() as session:
+        admin = bootstrap_first_admin(
+            session,
+            email="admin@example.com",
+            display_name="Admin",
+            password="first admin phrase!",
+        )
+        admin_id = admin.id
+
+    previous_revocation = datetime(2026, 1, 1, tzinfo=UTC)
+    with auth_session_factory.begin() as session:
+        session.add(
+            AuthSession(
+                user_id=admin_id,
+                family_id=uuid4(),
+                token_hash="e" * 64,
+                revoked_at=previous_revocation,
+                expires_at=datetime.now(UTC) + timedelta(days=7),
+            )
+        )
+
+    with auth_session_factory() as session:
+        reset_user_password(
+            session,
+            email="admin@example.com",
+            password="replacement admin phrase!",
+        )
+
+    with auth_session_factory() as session:
+        auth_session = session.execute(select(AuthSession)).scalar_one()
+        assert auth_session.revoked_at == previous_revocation
+
+
 @pytest.mark.parametrize(
     ("rejected_password", "message"),
     [
