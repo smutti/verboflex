@@ -57,6 +57,7 @@ export function SessionRoutes({
   return (
     <Routes>
       <Route path="/" element={ordinaryElement} />
+      <Route path="*" element={<Navigate replace to="/" />} />
     </Routes>
   );
 }
