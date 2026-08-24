@@ -89,6 +89,8 @@ class Settings(BaseSettings):
         sentinel_markers = ("replace", "changeme", "placeholder", "example", "notareal")
         if any(marker in normalized_secret for marker in sentinel_markers):
             raise ValueError("JWT signing secret must not use a placeholder value")
+        if len(secret.encode("utf-8")) < 32:
+            raise ValueError("JWT signing secret must contain at least 32 bytes")
         return self
 
 
