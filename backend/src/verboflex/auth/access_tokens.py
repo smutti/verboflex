@@ -1,9 +1,11 @@
 """Signed short-lived access authority seams."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 from uuid import UUID
+
+import jwt
 
 from verboflex.core.config import Settings
 
@@ -32,7 +34,28 @@ def issue_access_token(
     now: datetime | None = None,
 ) -> str:
     """Issue signed authority with the approved purpose-specific lifetime."""
-    raise NotImplementedError
+    if purpose != "access":
+        raise NotImplementedError
+    if session_id is None:
+        raise ValueError("ordinary access tokens require a session id")
+    if settings.jwt_secret_key is None:
+        raise RuntimeError("JWT signing secret is not configured")
+
+    issued_at = now or datetime.now(UTC)
+    expires_at = issued_at + timedelta(minutes=settings.access_token_expire_minutes)
+    payload: dict[str, str | int] = {
+        "sub": str(user_id),
+        "sid": str(session_id),
+        "iat": int(issued_at.timestamp()),
+        "exp": int(expires_at.timestamp()),
+        "purpose": purpose,
+        "token_version": token_version,
+    }
+    return jwt.encode(
+        payload,
+        settings.jwt_secret_key.get_secret_value(),
+        algorithm=settings.jwt_algorithm,
+    )
 
 
 def decode_access_token(
