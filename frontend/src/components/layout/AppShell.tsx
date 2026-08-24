@@ -1,6 +1,7 @@
 import type { CurrentUserResponse, RoleName } from "../../api/client";
 import { Badge } from "../ui/badge";
 import { Dashboard } from "../../pages/Dashboard";
+import { ServiceStatus } from "./ServiceStatus";
 
 export interface AppShellProps {
   accessToken: string;
@@ -15,7 +16,7 @@ const ROLE_LABELS: Record<RoleName, string> = {
   viewer: "Viewer",
 };
 
-export function AppShell({ principal }: AppShellProps) {
+export function AppShell({ accessToken, principal }: AppShellProps) {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b bg-secondary px-6 py-4">
@@ -47,6 +48,7 @@ export function AppShell({ principal }: AppShellProps) {
             </div>
           </div>
         </section>
+        <ServiceStatus accessToken={accessToken} />
         <Dashboard />
       </main>
     </div>
