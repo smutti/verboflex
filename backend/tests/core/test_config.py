@@ -108,3 +108,19 @@ def test_deployed_environments_reject_sentinel_signing_secrets(
                 "refresh_cookie_secure": True,
             }
         )
+
+
+@pytest.mark.parametrize("app_env", ["staging", "production"])
+@pytest.mark.parametrize("short_secret", ["x" * 31, "é" * 15])
+def test_deployed_environments_reject_signing_secrets_shorter_than_32_bytes(
+    app_env: Literal["staging", "production"], short_secret: str
+) -> None:
+    """The minimum applies to encoded key bytes rather than Unicode characters."""
+    with pytest.raises(ValidationError, match="at least 32 bytes"):
+        Settings.model_validate(
+            {
+                "app_env": app_env,
+                "jwt_secret_key": short_secret,
+                "refresh_cookie_secure": True,
+            }
+        )
