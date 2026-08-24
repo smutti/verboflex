@@ -1,5 +1,7 @@
 """Executable contracts for deployment settings."""
 
+from typing import Literal
+
 import pytest
 from pydantic import AnyHttpUrl, PostgresDsn, RedisDsn, ValidationError
 
@@ -74,3 +76,12 @@ def test_token_lifetimes_and_probe_timeout_are_bounded(
     """Reject zero, negative, or operationally excessive timing values."""
     with pytest.raises(ValidationError):
         Settings.model_validate({field_name: invalid_value})
+
+
+@pytest.mark.parametrize("app_env", ["staging", "production"])
+def test_deployed_environments_reject_a_missing_signing_secret(
+    app_env: Literal["staging", "production"],
+) -> None:
+    """A deployed process never starts without an explicit signing secret."""
+    with pytest.raises(ValidationError, match="signing secret is required"):
+        Settings(app_env=app_env, jwt_secret_key=None, refresh_cookie_secure=True)
