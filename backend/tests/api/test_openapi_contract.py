@@ -1,0 +1,137 @@
+"""Executable contract for the browser-facing FastAPI surface."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+from typing import Any
+
+from verboflex.main import app
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+CHECKED_IN_SCHEMA = REPOSITORY_ROOT / "frontend" / "openapi.json"
+
+EXPECTED_OPERATIONS = {
+    ("/api/v1/auth/change-password", "post"): (
+        "change_password",
+        {"204", "400", "401", "422", "429", "503"},
+        True,
+    ),
+    ("/api/v1/auth/logout", "post"): (
+        "logout",
+        {"204", "403", "422", "429"},
+        False,
+    ),
+    ("/api/v1/auth/refresh", "post"): (
+        "refresh_access_token",
+        {"200", "401", "403", "422", "429", "503"},
+        False,
+    ),
+    ("/api/v1/auth/token", "post"): (
+        "issue_token",
+        {"200", "401", "422", "429", "503"},
+        False,
+    ),
+    ("/api/v1/health", "get"): ("read_health", {"200", "429"}, False),
+    ("/api/v1/system/status", "get"): (
+        "read_system_status",
+        {"200", "401", "403", "429"},
+        True,
+    ),
+    ("/api/v1/users/me", "get"): (
+        "read_current_user",
+        {"200", "401", "403", "429"},
+        True,
+    ),
+}
+
+
+def _operation_entries(schema: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
+    return {
+        (path, method): operation
+        for path, path_item in schema["paths"].items()
+        for method, operation in path_item.items()
+        if method in {"delete", "get", "patch", "post", "put"}
+    }
+
+
+def _response_schema(operation: dict[str, Any], status_code: str) -> str | None:
+    schema = (
+        operation["responses"][status_code]
+        .get("content", {})
+        .get("application/json", {})
+        .get("schema", {})
+    )
+    return schema.get("$ref")
+
+
+def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
+    """Freeze every approved method, operation id, response, and bearer boundary."""
+    schema = app.openapi()
+    operations = _operation_entries(schema)
+
+    assert set(operations) == set(EXPECTED_OPERATIONS)
+    for key, (operation_id, response_codes, requires_bearer) in EXPECTED_OPERATIONS.items():
+        operation = operations[key]
+        assert operation["operationId"] == operation_id
+        assert set(operation["responses"]) == response_codes
+        assert operation.get("security") == (
+            [{"OAuth2PasswordBearer": []}] if requires_bearer else None
+        )
+
+    error_response_codes = {
+        ("/api/v1/auth/change-password", "post"): {"400", "401", "422", "429", "503"},
+        ("/api/v1/auth/logout", "post"): {"403", "429"},
+        ("/api/v1/auth/refresh", "post"): {"401", "403", "429", "503"},
+        ("/api/v1/auth/token", "post"): {"401", "429", "503"},
+        ("/api/v1/health", "get"): {"429"},
+        ("/api/v1/system/status", "get"): {"401", "403", "429"},
+        ("/api/v1/users/me", "get"): {"401", "403", "429"},
+    }
+    for key, status_codes in error_response_codes.items():
+        for status_code in status_codes:
+            assert _response_schema(operations[key], status_code) == (
+                "#/components/schemas/ErrorResponse"
+            )
+
+    assert schema["components"]["securitySchemes"] == {
+        "OAuth2PasswordBearer": {
+            "flows": {
+                "password": {
+                    "scopes": {},
+                    "tokenUrl": "/api/v1/auth/token",
+                }
+            },
+            "type": "oauth2",
+        }
+    }
+
+
+def test_export_is_canonical_and_matches_the_checked_in_schema() -> None:
+    """Two exports are byte-identical and equal the tracked frontend input."""
+    command = ["uv", "run", "python", "-m", "verboflex.scripts.export_openapi"]
+    first = subprocess.run(
+        command,
+        cwd=REPOSITORY_ROOT / "backend",
+        check=True,
+        capture_output=True,
+    ).stdout
+    second = subprocess.run(
+        command,
+        cwd=REPOSITORY_ROOT / "backend",
+        check=True,
+        capture_output=True,
+    ).stdout
+
+    assert first == second
+    assert first == CHECKED_IN_SCHEMA.read_bytes()
+    assert first == (
+        json.dumps(
+            json.loads(first),
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode()
