@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
 from verboflex.api.v1.routes.auth import get_redis_client
+from verboflex.auth import login as login_service
 from verboflex.auth.access_tokens import decode_access_token
 from verboflex.auth.passwords import hash_password
 from verboflex.core.config import Settings, get_settings
@@ -202,3 +203,53 @@ def test_temporary_login_creates_only_password_change_authority(
     )
     assert claims.user_id == user.id
     assert claims.session_id is None
+
+
+@pytest.mark.parametrize(
+    ("scenario", "submitted_email", "submitted_password", "is_active"),
+    [
+        ("wrong password", "person@example.com", "wrong password phrase!", True),
+        ("unknown email", "unknown@example.com", VALID_PASSWORD, True),
+        ("inactive account", "person@example.com", VALID_PASSWORD, False),
+    ],
+)
+def test_invalid_unknown_and_inactive_credentials_are_indistinguishable(
+    login_session_factory: sessionmaker[Session],
+    scenario: str,
+    submitted_email: str,
+    submitted_password: str,
+    is_active: bool,
+) -> None:
+    """Return one stable 401 surface and create no authority in every case."""
+    create_login_user(login_session_factory, is_active=is_active)
+    configure_dependencies(login_session_factory, FakeRedis())
+
+    response = asyncio.run(post_token(submitted_email, submitted_password))
+
+    assert response.status_code == 401, scenario
+    assert response.json() == {"detail": "Invalid credentials"}
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert "set-cookie" not in response.headers
+    with login_session_factory() as session:
+        assert session.execute(select(AuthSession)).scalars().all() == []
+
+
+def test_unknown_email_traverses_the_dummy_argon2_verification_path(
+    login_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unknown accounts still pay one password-verification path without authority."""
+    observed_hashes: list[str] = []
+
+    def observe_verification(_password: str, password_hash: str) -> bool:
+        observed_hashes.append(password_hash)
+        return False
+
+    monkeypatch.setattr(login_service, "verify_password", observe_verification)
+    configure_dependencies(login_session_factory, FakeRedis())
+
+    response = asyncio.run(post_token("unknown@example.com", VALID_PASSWORD))
+
+    assert response.status_code == 401
+    assert len(observed_hashes) == 1
+    assert observed_hashes[0].startswith("$argon2")
