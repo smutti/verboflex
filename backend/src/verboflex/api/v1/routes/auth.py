@@ -7,7 +7,8 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from redis import Redis
 from sqlalchemy.orm import Session
 
-from verboflex.auth.rate_limits import get_redis_client
+from verboflex.auth.login import InvalidCredentials, LoginRateLimited, authenticate_login
+from verboflex.auth.rate_limits import RateLimitUnavailable, get_redis_client
 from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
 from verboflex.schemas.auth import AccessTokenResponse, ChangePasswordRequest
@@ -31,15 +32,60 @@ RequestOrigin = Annotated[str | None, Header(alias="Origin")]
     },
 )
 async def issue_token(
-    _request: Request,
-    _response: Response,
-    _form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-    _session: Annotated[Session, Depends(get_db_session)],
-    _redis_client: Annotated[Redis, Depends(get_redis_client)],
-    _settings: Annotated[Settings, Depends(get_settings)],
+    request: Request,
+    response: Response,
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    session: Annotated[Session, Depends(get_db_session)],
+    redis_client: Annotated[Redis, Depends(get_redis_client)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> AccessTokenResponse:
     """Expose the final login request and response signature."""
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented")
+    try:
+        authority = authenticate_login(
+            session,
+            redis_client,
+            email=form_data.username,
+            password=form_data.password,
+            client_ip=request.client.host if request.client is not None else "unknown",
+            settings=settings,
+        )
+    except InvalidCredentials as error:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from error
+    except LoginRateLimited as error:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded",
+            headers={
+                "Retry-After": str(error.retry_after),
+                "X-RateLimit-Remaining": "0",
+            },
+        ) from error
+    except RateLimitUnavailable as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable",
+        ) from error
+
+    if authority.refresh_token is not None:
+        response.set_cookie(
+            key="verboflex_refresh",
+            value=authority.refresh_token,
+            max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
+            path="/api/v1/auth",
+            secure=settings.refresh_cookie_secure,
+            httponly=True,
+            samesite="lax",
+        )
+    return AccessTokenResponse(
+        access_token=authority.access_token,
+        token_type="bearer",
+        expires_in=authority.expires_in,
+        must_change_password=authority.must_change_password,
+    )
 
 
 @router.post(

@@ -1,10 +1,12 @@
 """Redis-backed authentication rate-limit seams."""
 
 from dataclasses import dataclass
+from hashlib import sha256
 from typing import Annotated, Protocol
 
 from fastapi import Depends
 from redis import Redis
+from redis.exceptions import RedisError
 
 from verboflex.core.config import Settings, get_settings
 
@@ -12,7 +14,7 @@ from verboflex.core.config import Settings, get_settings
 class RedisRateLimitClient(Protocol):
     """Minimal Redis capability needed by authentication limits."""
 
-    def eval(self, script: str, numkeys: int, *keys_and_args: object) -> object:
+    def eval(self, script: str, numkeys: int, *keys_and_args: str) -> object:
         """Execute one atomic limiter script."""
         ...
 
@@ -24,6 +26,22 @@ class LoginRateLimit:
     allowed: bool
     remaining: int
     retry_after: int
+
+
+class RateLimitUnavailable(RuntimeError):
+    """Raised when authoritative Redis limiter state cannot be obtained."""
+
+
+LOGIN_LIMIT = 5
+LOGIN_WINDOW_SECONDS = 60
+LOGIN_RATE_LIMIT_SCRIPT = """
+local current = redis.call('INCR', KEYS[1])
+if current == 1 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+local ttl = redis.call('TTL', KEYS[1])
+return {current, ttl}
+"""
 
 
 def get_redis_client(
@@ -40,4 +58,25 @@ def enforce_login_rate_limit(
     client_ip: str,
 ) -> LoginRateLimit:
     """Count a normalized-email-and-IP login attempt before verification."""
-    raise NotImplementedError
+    identity_digest = sha256(f"{normalized_email}\0{client_ip}".encode()).hexdigest()
+    key = f"verboflex:auth:login:{identity_digest}"
+    try:
+        raw_result = redis_client.eval(
+            LOGIN_RATE_LIMIT_SCRIPT,
+            1,
+            key,
+            str(LOGIN_WINDOW_SECONDS),
+        )
+        if not isinstance(raw_result, (list, tuple)) or len(raw_result) != 2:
+            raise RateLimitUnavailable("login rate limiter returned invalid state")
+        attempts = int(raw_result[0])
+        ttl = int(raw_result[1])
+    except (RedisError, TypeError, ValueError) as error:
+        raise RateLimitUnavailable("login rate limiter is unavailable") from error
+
+    retry_after = max(ttl, 1)
+    return LoginRateLimit(
+        allowed=attempts <= LOGIN_LIMIT,
+        remaining=max(LOGIN_LIMIT - attempts, 0),
+        retry_after=retry_after,
+    )
