@@ -37,6 +37,16 @@ class FailingRedis:
         raise RedisConnectionError("redis unavailable at 10.0.0.5:6379")
 
 
+@dataclass
+class FakeClock:
+    """Controllable monotonic clock for exact reset boundaries."""
+
+    now: float = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
 @pytest.fixture(autouse=True)
 def clear_dependency_overrides() -> Iterator[None]:
     """Keep limiter state and dependency substitutions isolated by scenario."""
@@ -45,21 +55,61 @@ def clear_dependency_overrides() -> Iterator[None]:
     app.dependency_overrides.clear()
 
 
-async def _health_requests(count: int) -> list[httpx.Response]:
+async def _health_requests(
+    count: int,
+    *,
+    forwarded_ips: bool = False,
+) -> list[httpx.Response]:
     """Issue repeated liveness reads from one server-observed client address."""
     transport = httpx.ASGITransport(app=app, client=("192.0.2.10", 44000))
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        return [await client.get("/api/v1/health") for _ in range(count)]
+        return [
+            await client.get(
+                "/api/v1/health",
+                headers={"X-Forwarded-For": f"198.51.100.{index % 250 + 1}"}
+                if forwarded_ips
+                else None,
+            )
+            for index in range(count)
+        ]
 
 
 def test_health_allows_sixty_requests_then_blocks_before_handler_work() -> None:
     """Apply the exact inclusive health boundary and stable recovery metadata."""
+    limiter = BoundedLocalRateLimiter()
+    app.dependency_overrides[get_local_rate_limiter] = lambda: limiter
     responses = asyncio.run(_health_requests(61))
 
     assert [response.status_code for response in responses[:60]] == [200] * 60
     assert responses[60].status_code == 429
     assert responses[60].json() == {"detail": "Rate limit exceeded"}
     assert int(responses[60].headers["retry-after"]) > 0
+    assert responses[60].headers["x-ratelimit-remaining"] == "0"
+
+
+def test_health_resets_at_the_exact_window_boundary() -> None:
+    """Permit a new request when the complete fixed window has elapsed."""
+    clock = FakeClock()
+    limiter = BoundedLocalRateLimiter(clock=clock)
+    app.dependency_overrides[get_local_rate_limiter] = lambda: limiter
+    assert asyncio.run(_health_requests(60))[-1].status_code == 200
+    assert asyncio.run(_health_requests(1))[0].status_code == 429
+
+    clock.now += 60
+
+    reset_response = asyncio.run(_health_requests(1))[0]
+    assert reset_response.status_code == 200
+    assert reset_response.json() == {"status": "ok"}
+
+
+def test_health_ignores_untrusted_forwarded_ip_headers() -> None:
+    """Do not let callers rotate limiter keys through proxy-shaped headers."""
+    limiter = BoundedLocalRateLimiter()
+    app.dependency_overrides[get_local_rate_limiter] = lambda: limiter
+
+    responses = asyncio.run(_health_requests(61, forwarded_ips=True))
+
+    assert responses[60].status_code == 429
     assert responses[60].headers["x-ratelimit-remaining"] == "0"
 
 
