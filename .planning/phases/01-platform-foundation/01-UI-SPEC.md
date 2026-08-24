@@ -3,7 +3,7 @@ phase: 1
 slug: platform-foundation
 status: approved
 shadcn_initialized: false
-preset: phase-1-execution-initializes-shadcn-after-vite-scaffold
+preset: official-new-york-v4-radix
 created: 2026-05-05
 reviewed_at: 2026-08-24
 ---
@@ -34,16 +34,17 @@ Out of scope: product/repository configuration, translation search, review works
 | Property | Value |
 |----------|-------|
 | Tool | shadcn/ui |
-| Preset | Initialize during Phase 1 execution after `frontend/` exists; use the shadcn Vite flow with CSS variables and neutral base tokens. |
-| Component library | Radix primitives through shadcn/ui official components |
+| Preset | Official `new-york-v4` Radix source through `shadcn@4.19.0`, with CSS variables and neutral base tokens. |
+| Component library | Unified `radix-ui` primitives through shadcn/ui official modern components |
 | Icon library | lucide-react |
 | Font | System UI stack: `Inter`, `ui-sans-serif`, `system-ui`, `sans-serif`; do not load a remote font in Phase 1. |
 
 ### Initialization Contract
 
 - `components.json` does not exist yet because Phase 1 has not scaffolded `frontend/`.
-- Phase 1 execution must create the Vite app first, then run `npx shadcn init`.
+- Phase 1 execution must create the Vite app first, then initialize the official modern `new-york-v4` Radix registry configuration with the exact project-local `shadcn@4.19.0` CLI.
 - Generated shadcn components must live in `frontend/src/components/ui`.
+- The official Sidebar registry dependency hook must live at `frontend/src/hooks/use-mobile.ts`.
 - Use official shadcn components only in Phase 1; no third-party registries.
 - Use lucide icons inside buttons where an icon clarifies the action.
 
@@ -216,7 +217,7 @@ All action labels must be specific verb-and-object copy; avoid generic confirmat
 
 | Registry | Blocks Used | Safety Gate |
 |----------|-------------|-------------|
-| shadcn official | button, input, label, form, alert, badge, tooltip, dropdown-menu, separator, sidebar, sheet, skeleton, sonner | not required |
+| shadcn official `new-york-v4` Radix | button, input, label, form, alert, badge, tooltip, dropdown-menu, separator, sidebar, sheet, skeleton, sonner; required hook `use-mobile` | not required |
 | third-party registries | none | not applicable |
 
 No third-party blocks are approved for Phase 1.

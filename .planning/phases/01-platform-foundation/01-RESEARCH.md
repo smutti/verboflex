@@ -153,13 +153,15 @@ The GSD PyPI adapter cannot obtain weekly download counts, so it conservatively 
 | `class-variance-authority` | 0.7.1 | >30d | 64,279,699 | github.com/joe-bell/cva | OK | Approved |
 | `clsx` | 2.1.1 | >30d | 120,733,677 | github.com/lukeed/clsx | OK | Approved |
 | `tailwind-merge` | 3.6.0 | >30d | 82,644,022 | github.com/dcastil/tailwind-merge | OK | Approved |
-| `@radix-ui/react-slot` | 1.3.3 | >30d | 174,163,038 | github.com/radix-ui/primitives | OK | Approved |
-| `@radix-ui/react-label` | 2.1.15 | >30d | 57,630,615 | github.com/radix-ui/primitives | OK | Approved |
-| `@radix-ui/react-tooltip` | 1.2.16 | >30d | 58,492,481 | github.com/radix-ui/primitives | OK | Approved |
-| `@radix-ui/react-dropdown-menu` | 2.1.24 | >30d | 58,328,475 | github.com/radix-ui/primitives | OK | Approved |
-| `@radix-ui/react-separator` | 1.1.15 | >30d | 57,419,445 | github.com/radix-ui/primitives | OK | Approved |
-| `@radix-ui/react-dialog` | 1.1.23 | >30d | 72,282,918 | github.com/radix-ui/primitives | OK | Approved |
+| `radix-ui` | 1.6.7 | current | registry rechecked | github.com/radix-ui/primitives; maintainers `chancestrickland`, `mark-workos` | OK | Approved modern unified direct package; React/ReactDOM peer ranges include 19 |
+| `@radix-ui/react-slot` | 1.3.3 | >30d | 174,163,038 | github.com/radix-ui/primitives | OK | Superseded as a direct dependency; may appear only transitively through `radix-ui` |
+| `@radix-ui/react-label` | 2.1.15 | >30d | 57,630,615 | github.com/radix-ui/primitives | OK | Superseded as a direct dependency; may appear only transitively through `radix-ui` |
+| `@radix-ui/react-tooltip` | 1.2.16 | >30d | 58,492,481 | github.com/radix-ui/primitives | OK | Superseded as a direct dependency; may appear only transitively through `radix-ui` |
+| `@radix-ui/react-dropdown-menu` | 2.1.24 | >30d | 58,328,475 | github.com/radix-ui/primitives | OK | Superseded as a direct dependency; may appear only transitively through `radix-ui` |
+| `@radix-ui/react-separator` | 1.1.15 | >30d | 57,419,445 | github.com/radix-ui/primitives | OK | Superseded as a direct dependency; may appear only transitively through `radix-ui` |
+| `@radix-ui/react-dialog` | 1.1.23 | >30d | 72,282,918 | github.com/radix-ui/primitives | OK | Superseded as a direct dependency; may appear only transitively through `radix-ui` |
 | `sonner` | 2.0.8 | <30d | 51,906,228 | github.com/emilkowalski/sonner | SUS | Flagged — human approval required |
+| `next-themes` | 0.4.6 | current | registry rechecked | github.com/pacocoursey/next-themes; maintainers `paco`, `trm217` | OK | Explicitly approved for official modern Sonner; React/ReactDOM peer ranges include 19 |
 | `vite` | 8.2.2 | <30d | 169,369,863 | github.com/vitejs/vite | SUS | Flagged — human approval required |
 | `@vitejs/plugin-react` | 6.1.0 | <30d | 83,483,737 | github.com/vitejs/vite-plugin-react | SUS | Flagged — human approval required |
 | `typescript` | 6.0.3 | >30d | 269,606,477 | github.com/microsoft/TypeScript; Microsoft publisher accounts | OK | Selected compatible version; Node 24 supported and within the generator's declared peer range |
@@ -197,6 +199,8 @@ The GSD PyPI adapter cannot obtain weekly download counts, so it conservatively 
 **Frontend compiler compatibility resolution (2026-08-24):** The approved `typescript` package is frozen at 6.0.3 rather than the initially observed 7.0.2. A real generator run proved that `@hey-api/openapi-ts@0.99.0` accesses a compiler API removed in TypeScript 7, while its declared peer range accepts TypeScript 6. npm verifies the official Microsoft repository and publisher accounts; TypeScript 6.0.3 supports Node 24 and introduces no new package name.
 
 **shadcn registry-boundary revision (2026-08-24):** `shadcn@4.19.0` was reverified on npm as the official `shadcn-ui/ui` CLI, maintained by `shadcn` and the Vercel shadcn npm bot, with integrity `sha512-EQF6R+CUXTsEP2BpyhxrUEAFesrtFD1POvVOf5jM+wkgtA4kG1EW1+1Wlmi9LqiprSL681JJXBcS0u8WkVVVyQ==` and Node `>=20.18.1` compatibility. The live official v4 registry style now requests the unapproved unified `radix-ui` package; the official legacy `sonner` item requests unapproved `next-themes`; the official legacy `sidebar` item requests a separate `use-mobile` registry hook. The user explicitly approved “Approvo, procedi” for the conservative boundary: use the verified official legacy component sources, remove `next-themes` from `sonner.tsx` by accepting theme through props/default, inline the official `useIsMobile` hook into `sidebar.tsx`, retain the individually approved `@radix-ui/*` packages, and create exactly the 13 enumerated UI component files. Direct `radix-ui`, direct `next-themes`, and an extra `use-mobile` hook file remain prohibited.
+
+**Modern shadcn boundary supersession (2026-08-24):** The user superseded the preceding conservative adaptation with “Procedi con il moderno e implementa”. The current official `new-york-v4` Radix registry sources are authoritative. npm reverified `radix-ui@1.6.7` from `radix-ui/primitives` with integrity `sha512-QBdhh1arIEUvPC0dQ5+nwWAxt7+N+oP/9jPwjJkGFoSk/sqxg32gJtSXGtFh8frAIcS6oC9cx2Q+7KYCQLOAeA==` and React/ReactDOM 19-compatible peers, and `next-themes@0.4.6` from `pacocoursey/next-themes` with integrity `sha512-pZvgD5L0IEvX5/9GWyHMf3m8BKiVQwsCMHfoFosXtXBMnaS0ZnIJ9ST4b4NqLVKDEm8QBxoNNGNaBv2JNF6XNA==` and React/ReactDOM 19-compatible peers. The individually named Radix packages are no longer selected as direct dependencies and may occur only transitively. The official `use-mobile` hook file is required by Sidebar. Base UI, React Aria, and third-party registries remain excluded.
 
 ## Architecture Patterns
 
