@@ -61,9 +61,14 @@ export function ChangePasswordPage() {
               control={form.control}
               name="newPassword"
               rules={{
-                validate: (value) =>
-                  (value.length >= 12 && value.length <= 128) ||
-                  "Password must contain 12 to 128 characters.",
+                validate: {
+                  length: (value) =>
+                    (value.length >= 12 && value.length <= 128) ||
+                    "Password must contain 12 to 128 characters.",
+                  differsFromCurrent: (value) =>
+                    value !== form.getValues("currentPassword") ||
+                    "New password must differ from current password.",
+                },
               }}
               render={({ field }) => (
                 <FormItem>
