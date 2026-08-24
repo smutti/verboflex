@@ -100,7 +100,7 @@ def configure_dependencies(factory: sessionmaker[Session], redis_client: FakeRed
 
 async def post_token(username: str, password: str) -> httpx.Response:
     """Submit the exact OAuth2 form through the ASGI transport."""
-    transport = httpx.ASGITransport(app=app)
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(
         transport=transport,
         base_url="http://127.0.0.1",
@@ -171,3 +171,34 @@ def test_ordinary_login_creates_only_hashed_refresh_authority(
     assert claims.user_id == user.id
     assert claims.session_id == persisted.id
     assert redis_client.calls
+
+
+def test_temporary_login_creates_only_password_change_authority(
+    login_session_factory: sessionmaker[Session],
+) -> None:
+    """Return five-minute restricted authority without refresh persistence."""
+    user = create_login_user(login_session_factory, must_change_password=True)
+    redis_client = FakeRedis()
+    configure_dependencies(login_session_factory, redis_client)
+
+    response = asyncio.run(post_token("person@example.com", VALID_PASSWORD))
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "access_token": response.json()["access_token"],
+        "token_type": "bearer",
+        "expires_in": 300,
+        "must_change_password": True,
+    }
+    assert "verboflex_refresh" not in response.cookies
+    assert "set-cookie" not in response.headers
+    with login_session_factory() as session:
+        assert session.execute(select(AuthSession)).scalars().all() == []
+
+    claims = decode_access_token(
+        response.json()["access_token"],
+        settings=login_settings(),
+        expected_purpose="password_change",
+    )
+    assert claims.user_id == user.id
+    assert claims.session_id is None
