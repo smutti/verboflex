@@ -1,89 +1,82 @@
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { readSystemStatus } from "./api/client";
 import { App } from "./App";
-import { readHealth } from "./api/client";
+import { useSession } from "./features/auth/session";
 
-vi.mock("./api/client", () => ({
-  readHealth: vi.fn(),
+vi.mock("./api/client", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./api/client")>();
+  return {
+    ...original,
+    readSystemStatus: vi.fn(),
+  };
+});
+
+vi.mock("./features/auth/session", () => ({
+  useSession: vi.fn(),
 }));
 
-const readHealthMock = vi.mocked(readHealth);
+const readSystemStatusMock = vi.mocked(readSystemStatus);
+const useSessionMock = vi.mocked(useSession);
 
-describe("API health tracer", () => {
+const principal = {
+  id: "73f123f7-ebad-4dad-8b5d-dcc3214b3b06",
+  email: "person@example.com",
+  display_name: "Person Example",
+  roles: ["translator" as const],
+  must_change_password: false,
+};
+
+describe("authenticated application entry", () => {
   afterEach(() => {
     cleanup();
   });
 
   beforeEach(() => {
-    readHealthMock.mockReset();
+    readSystemStatusMock.mockReset();
+    readSystemStatusMock.mockReturnValue(new Promise<never>(() => undefined));
+    useSessionMock.mockReset();
   });
 
-  it("renders loading while the generated health call is pending", () => {
-    readHealthMock.mockReturnValue(new Promise<never>(() => undefined));
-
-    render(<App />);
-
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Checking API connection",
-    );
-    expect(readHealthMock).toHaveBeenCalledOnce();
-  });
-
-  it("renders API online for the exact healthy response", async () => {
-    readHealthMock.mockResolvedValue({
-      data: { status: "ok" },
-      error: undefined,
+  it("renders the shell only from an authenticated session principal", () => {
+    useSessionMock.mockReturnValue({
+      state: {
+        status: "authenticated",
+        accessToken: "ordinary-memory-token",
+        principal,
+      },
+      login: vi.fn(),
+      changePassword: vi.fn(),
+      restoreSession: vi.fn(),
+      logout: vi.fn(),
     });
 
     render(<App />);
 
-    expect(await screen.findByText("API online")).toHaveAttribute(
-      "role",
-      "status",
-    );
-    expect(readHealthMock).toHaveBeenCalledOnce();
-  });
-
-  it("renders sanitized API error copy and retries without raw diagnostics", async () => {
-    readHealthMock.mockResolvedValueOnce({
-      data: undefined,
-      error: { detail: "postgresql://db.internal:5432/verboflex" },
-    });
-
-    render(<App />);
-
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent(
-      "We could not reach the API. Check that the backend is running, then retry the connection.",
-    );
-    expect(alert).not.toHaveTextContent("db.internal");
-
-    readHealthMock.mockReturnValueOnce(new Promise<never>(() => undefined));
-    fireEvent.click(screen.getByRole("button", { name: "Retry connection" }));
-
-    expect(readHealthMock).toHaveBeenCalledTimes(2);
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Checking API connection",
-    );
-  });
-
-  it("sanitizes rejected network diagnostics", async () => {
-    readHealthMock.mockRejectedValueOnce(
-      new Error("Failed to fetch postgresql://db.internal:5432/verboflex"),
-    );
-
-    render(<App />);
-
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent(
-      "We could not reach the API. Check that the backend is running, then retry the connection.",
-    );
-    expect(alert).not.toHaveTextContent("db.internal");
     expect(
-      screen.getByRole("button", { name: "Retry connection" }),
-    ).toBeEnabled();
+      screen.getByRole("heading", { name: "Workspace overview" }),
+    ).toBeVisible();
+    expect(screen.getByText("Person Example")).toBeVisible();
+    expect(readSystemStatusMock).toHaveBeenCalledWith({
+      auth: "ordinary-memory-token",
+    });
+  });
+
+  it("fails closed when rendered outside ordinary authenticated authority", () => {
+    useSessionMock.mockReturnValue({
+      state: { status: "signed_out" },
+      login: vi.fn(),
+      changePassword: vi.fn(),
+      restoreSession: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    const { container } = render(<App />);
+
+    expect(container).toBeEmptyDOMElement();
+    expect(readSystemStatusMock).not.toHaveBeenCalled();
   });
 });
