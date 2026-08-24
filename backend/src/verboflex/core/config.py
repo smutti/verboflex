@@ -33,6 +33,14 @@ class Settings(BaseSettings):
         frozen=True,
     )
 
+    @field_validator("database_url")
+    @classmethod
+    def require_database_name(cls, database_url: PostgresDsn) -> PostgresDsn:
+        """Reject PostgreSQL server addresses without a concrete database."""
+        if database_url.path is None or not database_url.path.strip("/"):
+            raise ValueError("database_url must name a PostgreSQL database")
+        return database_url
+
     @field_validator("cors_origins")
     @classmethod
     def require_cors_origin(cls, origins: tuple[AnyHttpUrl, ...]) -> tuple[AnyHttpUrl, ...]:
