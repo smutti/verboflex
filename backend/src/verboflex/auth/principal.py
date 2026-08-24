@@ -109,4 +109,16 @@ CurrentPrincipal = Annotated[Principal, Depends(get_current_principal)]
 
 def require_roles(*allowed: RoleName) -> Callable[[Principal], Principal]:
     """Build a reusable dependency accepting any database-loaded allowed role."""
-    raise NotImplementedError
+    accepted = frozenset(allowed)
+    if not accepted:
+        raise ValueError("at least one allowed role is required")
+
+    def dependency(principal: CurrentPrincipal) -> Principal:
+        if accepted.isdisjoint(principal.roles):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+        return principal
+
+    return dependency
