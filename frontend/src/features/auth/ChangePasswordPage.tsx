@@ -86,6 +86,11 @@ export function ChangePasswordPage() {
             <FormField
               control={form.control}
               name="confirmPassword"
+              rules={{
+                validate: (value) =>
+                  value === form.getValues("newPassword") ||
+                  "Passwords do not match.",
+              }}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Confirm new password</FormLabel>
@@ -96,6 +101,7 @@ export function ChangePasswordPage() {
                       {...field}
                     />
                   </FormControl>
+                  <FormMessage role="alert" />
                 </FormItem>
               )}
             />
