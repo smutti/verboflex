@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -18,6 +20,7 @@ interface LoginFormValues {
 
 export function LoginPage() {
   const { login } = useSession();
+  const [authError, setAuthError] = useState(false);
   const form = useForm<LoginFormValues>({
     defaultValues: { email: "", password: "" },
   });
@@ -30,7 +33,12 @@ export function LoginPage() {
           <form
             className="mt-8 grid gap-6"
             onSubmit={form.handleSubmit(async (values) => {
-              await login(values);
+              setAuthError(false);
+              try {
+                await login(values);
+              } catch {
+                setAuthError(true);
+              }
             })}
           >
             <FormField
@@ -66,6 +74,14 @@ export function LoginPage() {
                 </FormItem>
               )}
             />
+            {authError ? (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  We could not sign you in. Check your email and password,
+                  then try again.
+                </AlertDescription>
+              </Alert>
+            ) : null}
             <Button className="w-full" type="submit">
               Sign in to VerboFlex
             </Button>
