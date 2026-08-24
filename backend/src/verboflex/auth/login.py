@@ -77,7 +77,18 @@ def authenticate_login(
     if user is None or not password_matches or not user.is_active:
         raise InvalidCredentials("invalid credentials")
     if user.must_change_password:
-        raise NotImplementedError
+        access_token = issue_access_token(
+            user_id=user.id,
+            token_version=user.token_version,
+            purpose="password_change",
+            settings=settings,
+        )
+        return LoginAuthority(
+            access_token=access_token,
+            expires_in=settings.password_change_token_expire_minutes * 60,
+            must_change_password=True,
+            refresh_token=None,
+        )
 
     now = datetime.now(UTC)
     refresh_token = secrets.token_urlsafe(32)
