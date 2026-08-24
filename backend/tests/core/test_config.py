@@ -35,3 +35,9 @@ def test_cors_requires_at_least_one_exact_http_origin() -> None:
     """Credentialed browser requests never run with an empty allowlist."""
     with pytest.raises(ValidationError, match="at least one exact HTTP origin"):
         Settings(cors_origins=())
+
+
+def test_cors_rejects_urls_that_are_not_exact_origins() -> None:
+    """Paths, queries, fragments, and embedded credentials are not origins."""
+    with pytest.raises(ValidationError, match="must contain exact HTTP origins"):
+        Settings(cors_origins=(AnyHttpUrl("https://app.verboflex.example/path"),))
