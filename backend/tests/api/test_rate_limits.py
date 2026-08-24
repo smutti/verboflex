@@ -13,6 +13,7 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy.orm import Session
 
 from verboflex.api.v1.routes import auth as auth_routes
+from verboflex.api.v1.routes.system import get_system_status_service
 from verboflex.auth.principal import Principal, get_current_principal
 from verboflex.auth.rate_limits import (
     BoundedLocalRateLimiter,
@@ -22,7 +23,9 @@ from verboflex.auth.rate_limits import (
 from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
 from verboflex.main import app
+from verboflex.schemas.system import ServiceState
 from verboflex.schemas.users import RoleName
+from verboflex.services.system_status import SystemStatusService
 
 
 @dataclass
@@ -51,6 +54,17 @@ class FakeClock:
 
     def __call__(self) -> float:
         return self.now
+
+
+@dataclass
+class ProbeCounter:
+    """Count real status-probe invocations behind the rate boundary."""
+
+    calls: int = 0
+
+    def online(self) -> ServiceState:
+        self.calls += 1
+        return "online"
 
 
 @pytest.fixture(autouse=True)
@@ -192,8 +206,8 @@ def test_current_user_read_uses_bounded_local_limit_when_redis_is_unavailable() 
     assert responses[120].headers["x-ratelimit-remaining"] == "0"
 
 
-def test_system_status_is_rate_limited_before_its_callable_behavior_seam() -> None:
-    """Bound diagnostic reads while preserving the dedicated 501 TDD start state."""
+def test_system_status_is_rate_limited_before_probe_work() -> None:
+    """Reject request 121 without executing any of the three service probes."""
     principal = Principal(
         user_id=UUID("00000000-0000-4000-8000-000000000803"),
         email="operator@example.com",
@@ -202,15 +216,24 @@ def test_system_status_is_rate_limited_before_its_callable_behavior_seam() -> No
         must_change_password=False,
     )
     redis_client = CountingRedis()
+    probes = ProbeCounter()
+    service = SystemStatusService(
+        database_probe=probes.online,
+        redis_probe=probes.online,
+        worker_probe=probes.online,
+        timeout_seconds=0.1,
+    )
     app.dependency_overrides[get_current_principal] = lambda: principal
     app.dependency_overrides[get_redis_client] = lambda: redis_client
+    app.dependency_overrides[get_system_status_service] = lambda: service
 
     responses = asyncio.run(_status_requests(121))
 
-    assert [response.status_code for response in responses[:120]] == [501] * 120
+    assert [response.status_code for response in responses[:120]] == [200] * 120
     assert responses[120].status_code == 429
     assert responses[120].json() == {"detail": "Rate limit exceeded"}
     assert responses[120].headers["x-ratelimit-remaining"] == "0"
+    assert probes.calls == 120 * 3
 
 
 def test_system_status_keeps_a_bounded_local_limit_during_redis_outage() -> None:
@@ -223,15 +246,24 @@ def test_system_status_keeps_a_bounded_local_limit_during_redis_outage() -> None
         must_change_password=False,
     )
     local_limiter = BoundedLocalRateLimiter(max_keys=4)
+    probes = ProbeCounter()
+    service = SystemStatusService(
+        database_probe=probes.online,
+        redis_probe=probes.online,
+        worker_probe=probes.online,
+        timeout_seconds=0.1,
+    )
     app.dependency_overrides[get_current_principal] = lambda: principal
     app.dependency_overrides[get_redis_client] = lambda: FailingRedis()
     app.dependency_overrides[get_local_rate_limiter] = lambda: local_limiter
+    app.dependency_overrides[get_system_status_service] = lambda: service
 
     responses = asyncio.run(_status_requests(121))
 
-    assert [response.status_code for response in responses[:120]] == [501] * 120
+    assert [response.status_code for response in responses[:120]] == [200] * 120
     assert responses[120].status_code == 429
     assert responses[120].headers["x-ratelimit-remaining"] == "0"
+    assert probes.calls == 120 * 3
 
 
 def test_login_uses_only_a_validated_server_observed_client_ip(
