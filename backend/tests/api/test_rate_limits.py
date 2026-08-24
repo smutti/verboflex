@@ -120,6 +120,13 @@ async def _me_requests(count: int) -> list[httpx.Response]:
         return [await client.get("/api/v1/users/me") for _ in range(count)]
 
 
+async def _status_requests(count: int) -> list[httpx.Response]:
+    """Issue repeated status reads while the callable behavior seam remains 501."""
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        return [await client.get("/api/v1/system/status") for _ in range(count)]
+
+
 def test_current_user_read_allows_one_hundred_twenty_then_blocks() -> None:
     """Derive the ordinary-read key from authenticated server authority."""
     principal = Principal(
@@ -162,6 +169,27 @@ def test_current_user_read_uses_bounded_local_limit_when_redis_is_unavailable() 
     responses = asyncio.run(_me_requests(121))
 
     assert [response.status_code for response in responses[:120]] == [200] * 120
+    assert responses[120].status_code == 429
+    assert responses[120].json() == {"detail": "Rate limit exceeded"}
+    assert responses[120].headers["x-ratelimit-remaining"] == "0"
+
+
+def test_system_status_is_rate_limited_before_its_callable_behavior_seam() -> None:
+    """Bound diagnostic reads while preserving the dedicated 501 TDD start state."""
+    principal = Principal(
+        user_id=UUID("00000000-0000-4000-8000-000000000803"),
+        email="operator@example.com",
+        display_name="Operator Example",
+        roles=(RoleName("viewer"),),
+        must_change_password=False,
+    )
+    redis_client = CountingRedis()
+    app.dependency_overrides[get_current_principal] = lambda: principal
+    app.dependency_overrides[get_redis_client] = lambda: redis_client
+
+    responses = asyncio.run(_status_requests(121))
+
+    assert [response.status_code for response in responses[:120]] == [501] * 120
     assert responses[120].status_code == 429
     assert responses[120].json() == {"detail": "Rate limit exceeded"}
     assert responses[120].headers["x-ratelimit-remaining"] == "0"
