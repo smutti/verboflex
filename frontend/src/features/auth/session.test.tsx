@@ -150,10 +150,19 @@ describe("session transitions", () => {
   });
 
   it("reload starts checking then restores through generated refresh and me operations", async () => {
-    let resolveRefresh: ((result: unknown) => void) | undefined;
+    let resolveRefresh: (() => void) | undefined;
     refreshAccessTokenMock.mockReturnValue(
       new Promise((resolve) => {
-        resolveRefresh = resolve;
+        resolveRefresh = () =>
+          resolve({
+            data: {
+              access_token: "restored-memory-token",
+              expires_in: 900,
+              must_change_password: false,
+              token_type: "bearer",
+            },
+            error: undefined,
+          });
       }) as ReturnType<typeof refreshAccessToken>,
     );
     readCurrentUserMock.mockResolvedValue({ data: principal, error: undefined });
@@ -165,15 +174,7 @@ describe("session transitions", () => {
     expect(refreshAccessTokenMock).toHaveBeenCalledWith();
 
     await act(async () => {
-      resolveRefresh?.({
-        data: {
-          access_token: "restored-memory-token",
-          expires_in: 900,
-          must_change_password: false,
-          token_type: "bearer",
-        },
-        error: undefined,
-      });
+      resolveRefresh?.();
     });
 
     await waitFor(() => {
