@@ -1,6 +1,7 @@
 """Executable contracts for deployment settings."""
 
-from pydantic import AnyHttpUrl, PostgresDsn, RedisDsn
+import pytest
+from pydantic import AnyHttpUrl, PostgresDsn, RedisDsn, ValidationError
 
 from verboflex.core.config import Settings
 
@@ -28,3 +29,9 @@ def test_local_settings_are_typed_and_allow_explicit_insecure_cookie() -> None:
     assert settings.refresh_token_expire_days == 7
     assert settings.service_probe_timeout_seconds == 2.0
     assert settings.refresh_cookie_secure is False
+
+
+def test_cors_requires_at_least_one_exact_http_origin() -> None:
+    """Credentialed browser requests never run with an empty allowlist."""
+    with pytest.raises(ValidationError, match="at least one exact HTTP origin"):
+        Settings(cors_origins=())
