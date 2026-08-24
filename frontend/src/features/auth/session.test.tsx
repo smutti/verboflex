@@ -168,6 +168,43 @@ describe("session transitions", () => {
     expect(result.current.state).toEqual({ status: "signed_out" });
   });
 
+  it("rejects a failed password change without exposing backend diagnostics", async () => {
+    issueTokenMock.mockResolvedValue({
+      data: {
+        access_token: "password-change-only-token",
+        expires_in: 300,
+        must_change_password: true,
+        token_type: "bearer",
+      },
+      error: undefined,
+    });
+    changePasswordMock.mockResolvedValue({
+      data: undefined,
+      error: { detail: "Current password is incorrect" },
+    });
+    const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
+    await act(async () => {
+      await result.current.login({
+        email: "person@example.com",
+        password: "temporary password phrase!",
+      });
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.changePassword({
+          currentPassword: "wrong temporary phrase!",
+          newPassword: "replacement password phrase!",
+        }),
+      ).rejects.toThrow("Session action failed");
+    });
+
+    expect(result.current.state).toEqual({
+      status: "password_change_required",
+      accessToken: "password-change-only-token",
+    });
+  });
+
   it("reload starts checking then restores through generated refresh and me operations", async () => {
     let resolveRefresh: (() => void) | undefined;
     refreshAccessTokenMock.mockReturnValue(
