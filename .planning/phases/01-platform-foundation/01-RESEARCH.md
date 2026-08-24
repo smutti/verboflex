@@ -1,18 +1,20 @@
 # Phase 1: Platform Foundation - Research
 
 **Researched:** 2026-05-05
+**Decision update:** 2026-08-24 (internal authentication flow)
 **Domain:** Split web application foundation, OAuth2/JWT auth, Dockerized FastAPI/React stack
 **Confidence:** HIGH
 
 ## User Constraints
 
 - **D-01:** Use OWASP-aligned OAuth2 behavior for Phase 1 rather than inventing a custom session model.
-- **D-02:** Establish an internal username/password OAuth2 token flow for v1, with a clean boundary for future external OAuth2/OIDC identity provider integration.
+- **D-02:** Establish an internal email/password OAuth2 token flow for v1. Use corporate email as the unique login identifier, create the first admin and perform Phase 1 administrative password resets through CLI commands, require a password change after bootstrap/reset, and keep a clean boundary for future Microsoft Entra ID or other external OAuth2/OIDC identity provider integration.
 - **D-03:** Use short-lived bearer/JWT access tokens with explicit expiry.
 - **D-04:** Include a refresh/session strategy in the design; downstream planning should choose concrete lifetimes and rotation behavior from OWASP guidance.
 - **D-05:** Do not persist auth tokens in browser `localStorage`.
 - **D-06:** Where cookies are used, require secure cookie attributes such as `HttpOnly`, `Secure`, and `SameSite` as appropriate to the deployment.
 - **D-07:** Backend role checks must be enforced on protected API endpoints; frontend hiding/disabling controls is not sufficient authorization.
+- **D-07a:** Password changes, administrative resets, account deactivation, and logout revoke the affected refresh sessions.
 - **D-08:** Use Docker as the execution and deployment baseline.
 - **D-09:** Provide staging and production-oriented configurations/environments from Phase 1, even if they initially run the same application slice.
 - **D-10:** Phase 1 smoke verification must prove the Dockerized frontend, backend, PostgreSQL, Redis, Celery worker, and Alembic migrations can run.
@@ -37,7 +39,7 @@
 
 Phase 1 should build a conventional split-app foundation: `backend/` owns the FastAPI API, SQLAlchemy models, Alembic migrations, auth/token logic, and Celery worker; `frontend/` owns the Vite React SPA, shadcn/ui components, generated API client, auth shell, and neutral dashboard. Docker Compose should be the canonical run path for local, staging, and production-like smoke checks. [CITED: https://fastapi.tiangolo.com/deployment/docker/] [CITED: https://docs.docker.com/compose/how-tos/multiple-compose-files/]
 
-Use uv for backend dependency locking and execution because it is available locally and its project model gives `pyproject.toml`, `.python-version`, and `uv.lock` as reproducible inputs. [VERIFIED: `uv --version` -> 0.10.3] [CITED: https://docs.astral.sh/uv/guides/projects/] Use npm for the frontend because Node and npm are available locally and shadcn/ui documents Vite setup through npm-compatible commands. [VERIFIED: `node --version` -> v24.3.0, `npm --version` -> 11.4.2] [CITED: https://ui.shadcn.com/docs/installation/vite]
+Use uv for backend dependency locking and execution because it is available locally and its project model gives `pyproject.toml`, `.python-version`, and `uv.lock` as reproducible inputs. [VERIFIED: `uv --version` -> 0.11.12] [CITED: https://docs.astral.sh/uv/guides/projects/] Use npm for the frontend because Node and npm are available locally and shadcn/ui documents Vite setup through npm-compatible commands. [VERIFIED: `node --version` -> v24.15.0, `npm --version` -> 11.16.0] [CITED: https://ui.shadcn.com/docs/installation/vite]
 
 **Primary recommendation:** Scaffold a Docker-first split application with uv-managed FastAPI backend, npm-managed Vite frontend, server-side OAuth2/JWT auth plus rotated refresh sessions, generated `@hey-api/openapi-ts` client, and a repeatable phase quality gate.
 
@@ -60,33 +62,33 @@ Use uv for backend dependency locking and execution because it is available loca
 
 | Library / Tool | Version | Purpose | Why Standard |
 |----------------|---------|---------|--------------|
-| Python | 3.14.2 local | Backend runtime | Matches local runtime and current project stack. [VERIFIED: `python3 --version`] |
-| uv | 0.10.3 local | Backend dependency/project management | Provides `pyproject.toml`, `.python-version`, `uv.lock`, and `uv run`. [CITED: https://docs.astral.sh/uv/guides/projects/] |
-| FastAPI | 0.136.1 | HTTP API and OpenAPI | Official security, SQL, Docker, and SDK-generation docs fit this phase. [VERIFIED: PyPI] |
-| SQLAlchemy | 2.0.49 | ORM | Standard pairing with Alembic and PostgreSQL. [VERIFIED: PyPI] |
-| Alembic | 1.18.4 | Migrations | Official migration tool for SQLAlchemy. [VERIFIED: PyPI] |
+| Python | 3.14.7 selected/available via uv | Backend runtime | Bare system `python3` is 3.9.6; `.python-version` and uv select 3.14.7 for the project. |
+| uv | 0.11.12 local | Backend dependency/project management | Provides `pyproject.toml`, `.python-version`, `uv.lock`, and `uv run`. [CITED: https://docs.astral.sh/uv/guides/projects/] |
+| FastAPI | 0.141.1 observed | HTTP API and OpenAPI | Exact compatible version is frozen by `uv.lock`; see Package Legitimacy Audit. |
+| SQLAlchemy | 2.0.52 observed | ORM | Exact compatible version is frozen by `uv.lock`. |
+| Alembic | 1.19.1 observed | Migrations | Exact compatible version is frozen by `uv.lock`. |
 | psycopg | 3.3.4 | PostgreSQL driver | Current PostgreSQL driver for SQLAlchemy connection URLs. [VERIFIED: PyPI] |
 | Celery | 5.6.3 | Background worker | Celery officially documents Redis broker/result backend support. [CITED: https://docs.celeryq.dev/en/stable/getting-started/backends-and-brokers/redis.html] |
-| Redis Python client | 7.4.0 | Celery Redis support | Current redis-py package required by Celery Redis transport. [VERIFIED: PyPI] |
-| React | 19.2.5 | SPA runtime | Project-selected frontend stack. [VERIFIED: npm registry] |
-| Vite | 8.0.10 | Dev/build tooling | Official Vite docs include React TypeScript templates. [CITED: https://vite.dev/guide/] |
-| TypeScript | 6.0.3 | Frontend type system | Required for generated client and React code. [VERIFIED: npm registry] |
-| shadcn CLI | 4.7.0 | UI component installation | Current CLI for installing project-owned shadcn/ui components. [VERIFIED: npm registry] |
-| Docker Compose | v2.38.2 local | Service orchestration | Required Docker baseline and multi-compose staging/prod overlays. [VERIFIED: `docker compose version`] |
+| Redis Python client | 8.1.0 observed | Celery Redis support | Exact compatible version is frozen by `uv.lock`. |
+| React | 19.2.8 observed | SPA runtime | Exact compatible version is frozen by `package-lock.json`. |
+| Vite | 8.2.2 observed | Dev/build tooling | Exact compatible version is frozen by `package-lock.json`. |
+| TypeScript | 7.0.2 observed | Frontend type system | Exact compatible version is frozen by `package-lock.json`. |
+| shadcn CLI | 4.19.0 observed | UI component installation | Exact audited version is invoked project-locally. |
+| Docker Compose | 5.3.1 local | Service orchestration | Required Docker baseline and multi-compose staging/prod overlays. |
 
 ### Supporting
 
 | Library / Tool | Version | Purpose | When to Use |
 |----------------|---------|---------|-------------|
-| pydantic-settings | 2.14.0 | Environment settings | Use for typed backend config (`DATABASE_URL`, `REDIS_URL`, token TTLs, CORS, environment). |
-| PyJWT | 2.12.1 | JWT signing/verification | Use for signed access tokens. FastAPI docs use PyJWT in JWT auth examples. [CITED: https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/] |
-| pwdlib[argon2] | 0.3.0 | Password hashing | FastAPI docs recommend `pwdlib` and Argon2 for password hashing. [CITED: https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/] |
-| python-multipart | 0.0.27 | OAuth2 form parsing | Required for `OAuth2PasswordRequestForm` form submissions. |
-| pytest | 9.0.3 | Backend tests | FastAPI test client and service/unit test runner. [CITED: https://docs.pytest.org/en/stable/getting-started.html] |
+| pydantic-settings | 2.15.0 observed | Environment settings | Exact compatible version is frozen by `uv.lock`. |
+| PyJWT | 2.13.0 observed | JWT signing/verification | Use for signed access tokens. |
+| pwdlib[argon2] | 0.3.1 observed | Password hashing | FastAPI docs recommend `pwdlib` and Argon2. |
+| python-multipart | 0.0.32 observed | OAuth2 form parsing | Required for `OAuth2PasswordRequestForm`. |
+| pytest | 9.1.1 observed | Backend tests | Exact compatible version is frozen by `uv.lock`. |
 | httpx | 0.28.1 | Test HTTP client | Used by FastAPI/Starlette testing patterns and direct API integration checks. |
-| Vitest | 4.1.5 | Frontend tests | Vite-native test runner. [CITED: https://vitest.dev/guide/] |
+| Vitest | 4.1.11 observed | Frontend tests | Vite-native test runner. |
 | @testing-library/react | 16.3.2 | Component tests | Verify dashboard/auth shell behavior without browser E2E overhead. |
-| @hey-api/openapi-ts | 0.97.1 | Generated API SDK/client | Generates TypeScript SDK/client from FastAPI OpenAPI; docs warn exact pinning because it is pre-1.0. [CITED: https://heyapi.dev/openapi-ts/get-started] |
+| @hey-api/openapi-ts | 0.99.0 observed | Generated API SDK/client | Exact pin required because it is pre-1.0. |
 | @hey-api/client-fetch | bundled/default plugin | Fetch API client | Use generated fetch client and runtime config for base URL/auth. [CITED: https://heyapi.dev/openapi-ts/clients/fetch] |
 
 ### Alternatives Considered
@@ -97,6 +99,93 @@ Use uv for backend dependency locking and execution because it is available loca
 | @hey-api/openapi-ts | openapi-typescript + openapi-fetch | Lighter type-only path, but user requested a generated client and Hey API generates SDK/client code. |
 | JWT access + opaque refresh session | Long-lived JWT only | Simpler but weaker revocation/session control and worse fit for OWASP-aligned session behavior. |
 | Docker Compose overlays | Separate unrelated compose files | Overlays let staging/prod reuse base service definitions and reduce drift. |
+
+## Package Legitimacy Audit
+
+> Required because Phase 1 installs Python and npm packages. Checked on 2026-08-24 with the GSD registry seam and independently confirmed with `python3.14 -m pip index versions <package>` or `npm view <package> version`. The audit covers every direct dependency authorized by `01-SPEC.md`; transitive dependencies remain constrained by the committed lockfiles and final vulnerability/license audits.
+
+The GSD PyPI adapter cannot obtain weekly download counts, so it conservatively classifies every Python package as `SUS` even when the package exists and exposes project metadata. The npm adapter marks a current release `SUS` when it is less than 30 days old or its download count is unavailable. These are blocking human-verification items, not `SLOP` findings. Exact compatible versions will be selected for Python 3.14/Node 24 and frozen in `uv.lock`/`package-lock.json`; no unlisted direct package may be installed without a SPEC revision.
+
+### Python packages
+
+| Package | Registry version observed | Latest release / age signal | Downloads | Source metadata | Verdict | Disposition |
+|---|---:|---|---|---|---|---|
+| `fastapi` | 0.141.1 | 2026-07-29 / <30d | unavailable to adapter | github.com/fastapi/fastapi | SUS | Flagged — human approval required |
+| `uvicorn` | 0.52.4 | 2026-08-19 / <30d | unavailable to adapter | github.com/Kludex/uvicorn | SUS | Flagged — human approval required |
+| `pydantic-settings` | 2.15.0 | 2026-08-07 / <30d | unavailable to adapter | github.com/pydantic/pydantic-settings | SUS | Flagged — human approval required |
+| `sqlalchemy` | 2.0.52 | 2026-08-11 / <30d | unavailable to adapter | sqlalchemy.org | SUS | Flagged — human approval required |
+| `alembic` | 1.19.1 | 2026-08-08 / <30d | unavailable to adapter | github.com/sqlalchemy/alembic | SUS | Flagged — human approval required |
+| `psycopg` | 3.3.4 | 2026-05-01 / >30d | unavailable to adapter | psycopg.org | SUS | Flagged — human approval required |
+| `celery` | 5.6.3 | 2026-03-26 / >30d | unavailable to adapter | docs.celeryq.dev | SUS | Flagged — human approval required |
+| `redis` | 8.1.0 | 2026-07-30 / <30d | unavailable to adapter | github.com/redis/redis-py | SUS | Flagged — human approval required |
+| `PyJWT` | 2.13.0 | 2026-05-21 / >30d | unavailable to adapter | github.com/jpadilla/pyjwt | SUS | Flagged — human approval required |
+| `pwdlib` | 0.3.1 | 2026-08-12 / <30d | unavailable to adapter | github.com/frankie567/pwdlib | SUS | Flagged — human approval required |
+| `python-multipart` | 0.0.32 | 2026-06-04 / >30d | unavailable to adapter | github.com/Kludex/python-multipart | SUS | Flagged — human approval required |
+| `email-validator` | 2.3.0 | 2025-08-26 / >30d | unavailable to adapter | github.com/JoshData/python-email-validator | SUS | Flagged — human approval required |
+| `pytest` | 9.1.1 | 2026-06-19 / >30d | unavailable to adapter | github.com/pytest-dev/pytest | SUS | Flagged — human approval required |
+| `pytest-cov` | 7.1.0 | 2026-03-21 / >30d | unavailable to adapter | none in PyPI metadata | SUS | Flagged — verify publisher/source before install |
+| `httpx` | 0.28.1 | 2024-12-06 / >30d | unavailable to adapter | github.com/encode/httpx | SUS | Flagged — human approval required |
+| `mypy` | 2.3.1 | 2026-08-15 / <30d | unavailable to adapter | mypy-lang.org | SUS | Flagged — human approval required |
+| `ruff` | 0.16.4 | 2026-08-20 / <30d | unavailable to adapter | docs.astral.sh/ruff | SUS | Flagged — human approval required |
+| `hypothesis` | 6.165.10 | 2026-08-16 / <30d | unavailable to adapter | none in PyPI metadata | SUS | Flagged — verify publisher/source before install |
+| `pytest-randomly` | 4.1.0 | 2026-04-20 / >30d | unavailable to adapter | none in PyPI metadata | SUS | Flagged — verify publisher/source before install |
+| `mutmut` | 3.7.0 | 2026-07-31 / <30d | unavailable to adapter | github.com/boxed/mutmut | SUS | Flagged — human approval required |
+| `diff-cover` | 10.5.1 | 2026-08-16 / <30d | unavailable to adapter | github.com/Bachmann1234/diff-cover | SUS | Flagged — human approval required |
+| `pip-audit` | 2.10.1 | 2026-06-10 / >30d | unavailable to adapter | github.com/pypa/pip-audit | SUS | Flagged — human approval required |
+| `pip-licenses` | 5.5.5 | 2026-03-28 / >30d | unavailable to adapter | none in PyPI metadata | SUS | Flagged — verify publisher/source before install |
+| `detect-secrets` | 1.5.0 | 2024-05-06 / >30d | unavailable to adapter | github.com/Yelp/detect-secrets | SUS | Flagged — human approval required |
+| `radon` | 6.0.1 | 2023-03-26 / >30d | unavailable to adapter | github.com/rubik/radon | SUS | Flagged — human approval required |
+
+### npm packages
+
+| Package | Registry version observed | Latest release / age signal | Downloads/week | Source repo | Verdict | Disposition |
+|---|---:|---|---:|---|---|---|
+| `react` | 19.2.8 | >30d | 170,480,639 | github.com/react/react | OK | Approved |
+| `react-dom` | 19.2.8 | >30d | 159,631,504 | github.com/react/react | OK | Approved |
+| `react-router-dom` | 7.18.2 | <30d | 42,644,027 | github.com/remix-run/react-router | SUS | Flagged — human approval required |
+| `react-hook-form` | 7.86.0 | <30d | 59,949,398 | github.com/react-hook-form/react-hook-form | SUS | Flagged — human approval required |
+| `zod` | 4.4.3 | >30d | 265,744,393 | github.com/colinhacks/zod | OK | Approved |
+| `@hookform/resolvers` | 5.9.1 | <30d | 50,943,846 | github.com/react-hook-form/resolvers | SUS | Flagged — human approval required |
+| `lucide-react` | 1.34.0 | <30d | 96,054,697 | github.com/lucide-icons/lucide | SUS | Flagged — human approval required |
+| `class-variance-authority` | 0.7.1 | >30d | 64,279,699 | github.com/joe-bell/cva | OK | Approved |
+| `clsx` | 2.1.1 | >30d | 120,733,677 | github.com/lukeed/clsx | OK | Approved |
+| `tailwind-merge` | 3.6.0 | >30d | 82,644,022 | github.com/dcastil/tailwind-merge | OK | Approved |
+| `@radix-ui/react-slot` | 1.3.3 | >30d | 174,163,038 | github.com/radix-ui/primitives | OK | Approved |
+| `@radix-ui/react-label` | 2.1.15 | >30d | 57,630,615 | github.com/radix-ui/primitives | OK | Approved |
+| `@radix-ui/react-tooltip` | 1.2.16 | >30d | 58,492,481 | github.com/radix-ui/primitives | OK | Approved |
+| `@radix-ui/react-dropdown-menu` | 2.1.24 | >30d | 58,328,475 | github.com/radix-ui/primitives | OK | Approved |
+| `@radix-ui/react-separator` | 1.1.15 | >30d | 57,419,445 | github.com/radix-ui/primitives | OK | Approved |
+| `@radix-ui/react-dialog` | 1.1.23 | >30d | 72,282,918 | github.com/radix-ui/primitives | OK | Approved |
+| `sonner` | 2.0.8 | <30d | 51,906,228 | github.com/emilkowalski/sonner | SUS | Flagged — human approval required |
+| `vite` | 8.2.2 | <30d | 169,369,863 | github.com/vitejs/vite | SUS | Flagged — human approval required |
+| `@vitejs/plugin-react` | 6.1.0 | <30d | 83,483,737 | github.com/vitejs/vite-plugin-react | SUS | Flagged — human approval required |
+| `typescript` | 7.0.2 | >30d | 269,606,477 | github.com/microsoft/TypeScript | OK | Approved |
+| `tailwindcss` | 4.3.3 | >30d | 125,155,069 | github.com/tailwindlabs/tailwindcss | OK | Approved |
+| `@tailwindcss/vite` | 4.3.3 | >30d | 46,022,969 | github.com/tailwindlabs/tailwindcss | OK | Approved |
+| `tw-animate-css` | 1.4.0 | >30d | 38,303,711 | github.com/Wombosvideo/tw-animate-css | OK | Approved |
+| `shadcn` | 4.19.0 | <30d | 8,179,709 | github.com/shadcn-ui/ui | SUS | Flagged — human approval required |
+| `@hey-api/openapi-ts` | 0.99.0 | >30d | 4,316,910 | github.com/hey-api/hey-api | OK | Approved; exact pre-1.0 version must be pinned |
+| `vitest` | 4.1.11 | <30d | 93,297,210 | github.com/vitest-dev/vitest | SUS | Flagged — human approval required |
+| `@vitest/coverage-v8` | 4.1.11 | <30d | 35,214,441 | github.com/vitest-dev/vitest | SUS | Flagged — human approval required |
+| `jsdom` | 30.0.1 | <30d | 94,597,810 | github.com/jsdom/jsdom | SUS | Flagged — human approval required |
+| `@testing-library/react` | 16.3.2 | >30d | 54,661,785 | github.com/testing-library/react-testing-library | OK | Approved |
+| `@testing-library/user-event` | 14.6.6 | <30d | 48,658,310 | github.com/testing-library/user-event | SUS | Flagged — human approval required |
+| `@testing-library/jest-dom` | 7.0.1 | <30d | 61,215,754 | github.com/testing-library/jest-dom | SUS | Flagged — human approval required |
+| `eslint` | 10.9.0 | <30d | 157,876,271 | github.com/eslint/eslint | SUS | Flagged — human approval required |
+| `@eslint/js` | 10.0.1 | >30d | 141,529,920 | github.com/eslint/eslint | OK | Approved |
+| `typescript-eslint` | 8.67.0 | <30d | 87,927,852 | github.com/typescript-eslint/typescript-eslint | SUS | Flagged — human approval required |
+| `eslint-plugin-react-hooks` | 7.1.1 | >30d | 97,785,728 | github.com/facebook/react | OK | Approved |
+| `eslint-plugin-react-refresh` | 0.5.4 | <30d | 41,443,200 | github.com/ArnaudBarre/eslint-plugin-react-refresh | SUS | Flagged — human approval required |
+| `eslint-plugin-jsx-a11y` | 6.10.2 | >30d | 44,758,896 | github.com/jsx-eslint/eslint-plugin-jsx-a11y | OK | Approved |
+| `prettier` | 3.9.6 | >30d | 131,193,178 | github.com/prettier/prettier | OK | Approved |
+| `@stryker-mutator/core` | 10.0.0 | <30d | 2,183,317 | github.com/stryker-mutator/stryker-js | SUS | Flagged — human approval required |
+| `@stryker-mutator/vitest-runner` | 10.0.0 | <30d | 1,407,341 | github.com/stryker-mutator/stryker-js | SUS | Flagged — human approval required |
+| `fast-check` | 4.9.0 | >30d | unavailable to adapter | github.com/dubzzz/fast-check | SUS | Flagged — human approval required |
+| `@playwright/test` | 1.62.1 | <30d | unavailable to adapter | github.com/microsoft/playwright | SUS | Flagged — human approval required |
+
+**Packages removed due to `SLOP` verdict:** none.
+
+**Packages flagged as suspicious `SUS`:** all Python packages because PyPI download evidence is unavailable to the GSD adapter; the npm rows explicitly marked `SUS` because of release age or unavailable download evidence. The planner must place a blocking human-verification checkpoint before the grouped backend and frontend installs. Approval of the dependency setup in `01-SPEC.md` may satisfy those checkpoints only when the approval explicitly acknowledges this audit.
 
 ## Architecture Patterns
 
@@ -180,7 +269,7 @@ Required settings for Phase 1:
 
 Use FastAPI `OAuth2PasswordBearer` and `OAuth2PasswordRequestForm` for login. [CITED: https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/] Issue:
 - a 15-minute signed JWT access token returned in JSON as `{ "access_token": "...", "token_type": "bearer" }`
-- a 7-day opaque refresh token stored server-side as a hash in `auth_sessions` and delivered as `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/api/v1/auth/refresh`
+- a 7-day opaque refresh token stored server-side as a hash in `auth_sessions` and delivered as `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/api/v1/auth`
 - refresh-token rotation on every refresh
 - logout that revokes the current refresh session
 
@@ -189,12 +278,14 @@ The frontend must store the access token in memory only. It must not use `localS
 ### Pattern 3: Role Model
 
 Create a simple internal role model in Phase 1:
-- `users`: `id`, `email`, `display_name`, `hashed_password`, `is_active`, `created_at`, `updated_at`
+- `users`: `id`, `email`, `display_name`, `hashed_password`, `is_active`, `must_change_password`, `created_at`, `updated_at`
 - `roles`: `id`, `name`, `created_at`
 - `user_roles`: `user_id`, `role_id`
-- initial roles: `admin`, `product_manager`, `translator`, `viewer`
+- initial roles: `admin`, `product_manager_reviewer`, `translator`, `viewer`
 - protected `/api/v1/users/me` returns identity plus roles
-- dependency shape: `require_roles("admin")`, `require_roles("admin", "product_manager")`
+- dependency shape: `require_roles("admin")`, `require_roles("admin", "product_manager_reviewer")`
+- a CLI bootstrap command creates the first admin without shipping default credentials
+- administrative password reset sets `must_change_password` and revokes existing refresh sessions
 
 This satisfies AUTH-04 and creates the enforcement path future phases will reuse.
 
@@ -297,28 +388,21 @@ export const createClientConfig: CreateClientConfig = (config) => ({
 |---|-------|---------|---------------|
 | A1 | The first execution will allow adding uv-managed backend files and npm-managed frontend files rather than requiring a different internal package policy. | Summary / Standard Stack | Low; user already selected the language/framework stack and local uv/npm are available. |
 
-## Open Questions
+## Resolved Scope Decisions
 
-1. **Final hosting target**
-   - What we know: Docker, staging, and production-oriented configs are required now.
-   - What's unclear: The eventual platform for staging/production deployment is not specified.
-   - Recommendation: Phase 1 should provide Docker Compose staging/prod overlays and smoke commands, not cloud-provider-specific deployment.
-
-2. **External identity provider**
-   - What we know: v1 uses internal users with OAuth2 bearer-token authentication; external OIDC is deferred.
-   - What's unclear: Future provider details.
-   - Recommendation: Keep auth services behind interfaces and preserve internal role mapping in PostgreSQL.
+1. **Deployment target:** Docker Compose local plus staging- and production-oriented overlays are sufficient for Phase 1. A cloud/provider-specific hosting target remains undecided and out of scope; no provider adapter is required by this phase.
+2. **Identity provider:** Internal corporate-email/password authentication is the Phase 1 implementation. Microsoft Entra ID and other external OAuth2/OIDC providers are deferred to ENT-01; PostgreSQL role mapping remains provider-independent.
 
 ## Environment Availability
 
 | Dependency | Required By | Available | Version | Fallback |
 |------------|-------------|-----------|---------|----------|
-| Python | Backend | YES | 3.14.2 | Docker Python image |
-| uv | Backend dependency management | YES | 0.10.3 | pip + requirements, not recommended |
-| Node | Frontend | YES | v24.3.0 | Docker Node image |
-| npm | Frontend dependencies/scripts | YES | 11.4.2 | Docker Node image |
-| Docker | Run/deploy baseline | YES | 28.3.2 | None for Phase 1 smoke |
-| Docker Compose | Multi-service smoke | YES | v2.38.2 | None for Phase 1 smoke |
+| Python | Backend | YES | 3.14.7 selected/available via uv; bare `python3` is 3.9.6 | Docker Python image |
+| uv | Backend dependency management | YES | 0.11.12 | pip + requirements, not recommended |
+| Node | Frontend | YES | v24.15.0 | Docker Node image |
+| npm | Frontend dependencies/scripts | YES | 11.16.0 | Docker Node image |
+| Docker | Run/deploy baseline | YES | 29.7.2 | None for Phase 1 smoke |
+| Docker Compose | Multi-service smoke | YES | 5.3.1 | None for Phase 1 smoke |
 
 **Missing dependencies with no fallback:** None.
 
@@ -330,7 +414,7 @@ export const createClientConfig: CreateClientConfig = (config) => ({
 
 | Property | Value |
 |----------|-------|
-| Framework | Backend: pytest 9.0.3; Frontend: Vitest 4.1.5; Smoke: Docker Compose v2.38.2 |
+| Framework | Backend: pytest 9.1.1 observed; Frontend: Vitest 4.1.11 observed; Smoke: Docker Compose 5.3.1 |
 | Config file | Backend: `backend/pyproject.toml`; Frontend: `frontend/vite.config.ts`; Docker: `docker-compose.yml` |
 | Quick run command | `cd backend && uv run pytest -q` and `cd frontend && npm run test -- --run` |
 | Full suite command | `cd backend && uv run pytest -q && cd ../frontend && npm run test -- --run && npm run build && cd .. && docker compose up -d --build && docker compose ps` |
@@ -345,8 +429,8 @@ export const createClientConfig: CreateClientConfig = (config) => ({
 | PLAT-04 | SQLAlchemy connects to PostgreSQL settings and session dependency | backend unit/integration | `cd backend && uv run pytest tests/db/test_session.py -q` | NO - Wave 0 |
 | PLAT-05 | Alembic upgrades initial schema | migration/smoke | `docker compose run --rm backend uv run alembic upgrade head` | NO - Wave 0 |
 | PLAT-06 | Celery worker executes sample task through Redis | integration/smoke | `cd backend && uv run pytest tests/worker/test_smoke_task.py -q` | NO - Wave 0 |
-| AUTH-01 | OAuth2 token endpoint returns bearer token and protected endpoint requires it | backend API/security | `cd backend && uv run pytest tests/auth/test_tokens.py -q` | NO - Wave 0 |
-| AUTH-04 | Roles `admin`, `product_manager`, `translator`, `viewer` exist and can attach to users | backend model/API | `cd backend && uv run pytest tests/auth/test_roles.py -q` | NO - Wave 0 |
+| AUTH-01 | Login, access/refresh/logout, forced password change, and protected identity enforce the approved authority model | backend API/security | `cd backend && uv run pytest tests/auth/test_access_tokens.py tests/auth/test_login.py tests/auth/test_refresh.py tests/auth/test_logout.py tests/auth/test_password_change.py tests/api/test_me.py -q` | NO - Wave 0 |
+| AUTH-04 | Roles `admin`, `product_manager_reviewer`, `translator`, `viewer` exist and can attach to users | backend model/API | `cd backend && uv run pytest tests/auth/test_roles.py -q` | NO - Wave 0 |
 | UI-01 | shadcn/ui primitives are installed and imported by app shell | frontend unit/build | `cd frontend && npm run test -- --run && npm run build` | NO - Wave 0 |
 
 ### Sampling Rate
@@ -412,25 +496,7 @@ export const createClientConfig: CreateClientConfig = (config) => ({
 
 ### Version Checks
 
-- `npm view vite version` -> 8.0.10
-- `npm view react version` -> 19.2.5
-- `npm view typescript version` -> 6.0.3
-- `npm view shadcn version` -> 4.7.0
-- `npm view @hey-api/openapi-ts version` -> 0.97.1
-- `npm view vitest version` -> 4.1.5
-- `npm view @testing-library/react version` -> 16.3.2
-- `python3 -m pip index versions fastapi` -> 0.136.1
-- `python3 -m pip index versions celery` -> 5.6.3
-- `python3 -m pip index versions alembic` -> 1.18.4
-- `python3 -m pip index versions sqlalchemy` -> 2.0.49
-- `python3 -m pip index versions psycopg` -> 3.3.4
-- `python3 -m pip index versions redis` -> 7.4.0
-- `python3 -m pip index versions pydantic-settings` -> 2.14.0
-- `python3 -m pip index versions pyjwt` -> 2.12.1
-- `python3 -m pip index versions pwdlib` -> 0.3.0
-- `python3 -m pip index versions python-multipart` -> 0.0.27
-- `python3 -m pip index versions pytest` -> 9.0.3
-- `python3 -m pip index versions httpx` -> 0.28.1
+Current registry observations are maintained once in `## Package Legitimacy Audit`; project execution selects compatible versions and freezes them in `uv.lock` and `package-lock.json`. Local tools verified for planning: bare `python3` 3.9.6, uv-selected Python 3.14.7, uv 0.11.12, Node 24.15.0, npm 11.16.0, Docker 29.7.2, and Docker Compose 5.3.1.
 
 ### Secondary (MEDIUM confidence)
 
@@ -452,4 +518,3 @@ export const createClientConfig: CreateClientConfig = (config) => ({
 **Valid until:** 2026-06-04 for stable architecture; package versions should be refreshed before implementation if more than 7 days pass.
 
 ## RESEARCH COMPLETE
-

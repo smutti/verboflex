@@ -39,19 +39,29 @@ Every phase must complete these checks before it can be marked complete:
 **UI hint**: yes
 **Success Criteria** (what must be TRUE):
   1. Developer can run separate `frontend` and `backend` applications locally.
-  2. Backend exposes FastAPI health/auth scaffolding and connects to PostgreSQL through SQLAlchemy.
+  2. Backend exposes FastAPI health scaffolding, internal email/password OAuth2 authentication, first-admin CLI bootstrap, and PostgreSQL connectivity through SQLAlchemy.
   3. Alembic can create and upgrade the initial schema.
   4. Redis and Celery can execute a sample background job.
   5. Frontend uses React/Vite/TypeScript with shadcn/ui primitives available.
   6. Phase quality gate passes with tests, code review, and deploy/build smoke verification.
-**Plans**: 5 plans
+**Plans**: 15 plans
 
 Plans:
-- [ ] 01-01: Repository layout, tooling, and local Docker services
-- [ ] 01-02: FastAPI, SQLAlchemy, Alembic, and base schema
-- [ ] 01-03: OAuth2 token foundation and role model
-- [ ] 01-04: React/Vite/shadcn frontend shell and Celery/Redis smoke test
-- [ ] 01-05: Phase quality gate - tests, code review, and deploy/build verification
+- [ ] 01-01-PLAN.md — Blocking backend/frontend package-legitimacy approvals
+- [ ] 01-02-PLAN.md — Locked FastAPI scaffold, callable endpoint stubs, and health
+- [ ] 01-03-PLAN.md — Locked Vite scaffold and generated health tracer
+- [ ] 01-04-PLAN.md — Secure settings and local/staging/production-oriented Docker baseline
+- [ ] 01-05-PLAN.md — Reversible auth schema, exact roles, and first-admin/reset CLI
+- [ ] 01-06-PLAN.md — OAuth2 login, access tokens, current identity, and backend roles
+- [ ] 01-07-PLAN.md — Refresh rotation/replay, logout, password change, and revocation
+- [ ] 01-08-PLAN.md — Rate limits, bounded service status, and Celery/Redis execution
+- [ ] 01-09-PLAN.md — Full generated OpenAPI contract and memory-only session state
+- [ ] 01-10-PLAN.md — Enumerated approved shadcn owned components
+- [ ] 01-11-PLAN.md — Exact Phase 1 theme tokens and drift test
+- [ ] 01-12-PLAN.md — Login/change-password routing and forms through TDD
+- [ ] 01-13-PLAN.md — Neutral dashboard, service status, responsive shell, and E2E
+- [ ] 01-14-PLAN.md — Fail-closed gauntlet/smoke plus fresh-context code and ASVS L1 review gate
+- [ ] 01-15-PLAN.md — Final immutable-source gauntlet, evidence, and independent-verifier handoff
 
 ### Phase 2: Admin Configuration
 **Goal**: Let admins configure users, roles, products, Bitbucket repositories, branches, localization layouts, and PR behavior.
@@ -233,7 +243,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Platform Foundation | 0/5 | Not started | - |
+| 1. Platform Foundation | 0/15 | Not started | - |
 | 2. Admin Configuration | 0/6 | Not started | - |
 | 3. Bitbucket Read Integration | 0/5 | Not started | - |
 | 4. Localization Parser Foundation | 0/6 | Not started | - |

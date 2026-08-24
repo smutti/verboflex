@@ -5,7 +5,7 @@ status: approved
 shadcn_initialized: false
 preset: phase-1-execution-initializes-shadcn-after-vite-scaffold
 created: 2026-05-05
-reviewed_at: 2026-05-05
+reviewed_at: 2026-08-24
 ---
 
 # Phase 1 - UI Design Contract
@@ -18,7 +18,8 @@ reviewed_at: 2026-05-05
 
 Phase 1 UI delivers the first runnable VerboFlex shell only:
 
-- Unauthenticated login screen for the internal OAuth2 password flow.
+- Unauthenticated login screen for the internal OAuth2 email/password flow.
+- Required password-change screen for bootstrapped or administratively reset credentials.
 - Session-aware application chrome after login.
 - Neutral landing dashboard that can later adapt by role, usage, or product context.
 - Empty placeholders for future modules without implementing product, repository, localization, review, comment, constraint, Bitbucket, or pull request workflows.
@@ -53,6 +54,7 @@ Out of scope: product/repository configuration, translation search, review works
 | Screen / Surface | Route | Purpose | Primary Elements |
 |------------------|-------|---------|------------------|
 | Login | `/login` | Authenticate internal users through OAuth2 password flow. | VerboFlex wordmark text, email input, password input, `Sign in to VerboFlex` button, inline auth error. |
+| Required Password Change | `/change-password` | Replace a bootstrapped or administratively reset password before entering the application. | Current password, new password, confirmation, password requirements, `Set new password` button, inline validation errors. |
 | Dashboard Shell | `/` | First authenticated screen. | Sidebar/top navigation, current user menu, role badges, service status strip, dashboard content. |
 | Session Loading | `/` before `/me` resolves | Avoid flashing unauthenticated content. | Centered skeleton rows and `Checking session` text. |
 | API Error State | Any authenticated route | Explain backend connectivity/auth problems. | Alert, `Retry connection` button, short diagnostic copy. |
@@ -86,6 +88,7 @@ The primary visual anchor after login is the top-left product identity plus the 
 - Buttons must expose default, hover, focus-visible, disabled, and loading states.
 - Icon-only controls require tooltip text and accessible labels.
 - Auth errors appear inline above the login button.
+- Users flagged for a required password change are routed to `/change-password` and cannot enter authenticated application routes until the change succeeds.
 - API connectivity errors use a visible alert with a retry action.
 - The app must never persist tokens to `localStorage` or `sessionStorage`.
 
@@ -187,6 +190,9 @@ Do not add table, tabs, dialog, select, or data-grid-heavy primitives in Phase 1
 | Empty state body | `Phase 1 confirms the platform shell, session, and services. Product and translation workflows will appear after configuration is added.` |
 | Session loading | `Checking session` |
 | Auth error state | `We could not sign you in. Check your email and password, then try again.` |
+| Required password change heading | `Set a new password` |
+| Required password change body | `Your temporary password must be replaced before you can continue.` |
+| Required password change action | `Set new password` |
 | API error state | `We could not reach the API. Check that the backend is running, then retry the connection.` |
 | Destructive confirmation | No destructive actions in Phase 1. Sign out is a reversible session action and uses `Sign out of VerboFlex` without a destructive confirmation dialog. |
 
@@ -198,6 +204,7 @@ All action labels must be specific verb-and-object copy; avoid generic confirmat
 
 - Every input has a visible label and programmatic label.
 - Error text is associated with the relevant form or alert region.
+- Password requirements and confirmation errors are visible, programmatically associated with the relevant fields, and announced without relying on color alone.
 - Focus-visible state uses the accent color and must be visible against both dominant and secondary surfaces.
 - Role badges are text-first; color alone must not encode role meaning.
 - Service statuses must use text labels such as `API online`, `Redis unavailable`, and `Worker pending`.
@@ -238,4 +245,4 @@ No third-party blocks are approved for Phase 1.
 - [x] Dimension 5 Spacing: PASS
 - [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** approved 2026-05-05
+**Approval:** approved 2026-08-24 (authentication addendum confirmed)

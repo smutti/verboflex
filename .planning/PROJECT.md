@@ -33,7 +33,7 @@ Product teams can quickly find, review, constrain, modify, comment on, and appro
 - [ ] Authorized users can review a translation and mark it as draft, approved, or rejected.
 - [ ] Authorized users can modify translation text directly in the platform.
 - [ ] Authorized users can add comments to individual translations.
-- [ ] Platform supports an internal user and role model with users able to hold multiple roles.
+- [ ] Platform supports internal corporate-email/password accounts and a role model with users able to hold multiple roles.
 - [ ] Initial roles include admin, product manager/reviewer, translator, and viewer.
 - [ ] When translation changes are submitted, the platform commits them back to the relevant Bitbucket Cloud repository.
 - [ ] When translation changes are submitted, the platform opens a pull request against the configured or user-selected target branch according to the product's PR configuration.
@@ -82,7 +82,7 @@ The initial review model is intentionally simple. Translations have draft, appro
 | Prioritize repository modeling and Bitbucket write-back automation | Products use different localization structures, and the core value depends on safely committing changes and opening PRs. | - Pending |
 | Support Android XML, Qt `.ts`, JSON, and iOS `.strings` first | These formats match the known product technologies and localization file structures. | - Pending |
 | Use admin-configured cross-repository mappings | Some products separate keys from translations, and the relationship should be explicit in the UI. | - Pending |
-| Use simple internal users with multiple roles | This covers initial authorization needs without blocking on external identity integration. | - Pending |
+| Use internal email/password accounts with multiple roles | V1 avoids dependency on an external identity provider while retaining a provider-independent role model. Corporate email is the unique login identifier; the first admin is bootstrapped by CLI; password reset is admin-managed with a mandatory first-login password change. Microsoft Entra ID/OIDC remains a future integration. | Accepted 2026-08-24 |
 | Use simple translation states for v1 | Draft, approved, and rejected states provide an actionable review loop without overdesigning workflow rules. | - Pending |
 | Limit v1 constraints to maximum character length | This is the known immediate constraint and keeps the validation model small. | - Pending |
 | Defer Figma integration | UI design context is valuable, but the core repository-backed review and PR workflow must work first. | - Pending |

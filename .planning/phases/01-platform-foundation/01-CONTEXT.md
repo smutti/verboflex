@@ -1,6 +1,7 @@
 # Phase 1: Platform Foundation - Context
 
 **Gathered:** 2026-05-05
+**Updated:** 2026-08-24 (internal authentication decisions)
 **Status:** Ready for planning
 
 <domain>
@@ -17,12 +18,13 @@ This phase must not implement product/repository configuration, Bitbucket integr
 
 ### Auth Session Policy
 - **D-01:** Use OWASP-aligned OAuth2 behavior for Phase 1 rather than inventing a custom session model.
-- **D-02:** Establish an internal username/password OAuth2 token flow for v1, with a clean boundary for future external OAuth2/OIDC identity provider integration.
+- **D-02:** Establish an internal email/password OAuth2 token flow for v1. Corporate email is the unique login identifier, the first admin and Phase 1 administrative password resets are handled through CLI commands, and users must change a bootstrapped or reset password on first login. Keep a clean boundary for future Microsoft Entra ID or other external OAuth2/OIDC identity provider integration.
 - **D-03:** Use short-lived bearer/JWT access tokens with explicit expiry.
 - **D-04:** Include a refresh/session strategy in the design; downstream planning should choose concrete lifetimes and rotation behavior from OWASP guidance.
 - **D-05:** Do not persist auth tokens in browser `localStorage`.
 - **D-06:** Where cookies are used, require secure cookie attributes such as `HttpOnly`, `Secure`, and `SameSite` as appropriate to the deployment.
 - **D-07:** Backend role checks must be enforced on protected API endpoints; frontend hiding/disabling controls is not sufficient authorization.
+- **D-07a:** Password changes, administrative resets, account deactivation, and logout must revoke the affected refresh sessions.
 
 ### Run and Deploy Baseline
 - **D-08:** Use Docker as the execution and deployment baseline.
@@ -77,7 +79,7 @@ This phase must not implement product/repository configuration, Bitbucket integr
 - None yet. The repository currently contains planning artifacts and `AGENTS.md`, not implementation code.
 
 ### Established Patterns
-- Planning docs are local-only under `.planning/`.
+- Planning docs live under `.planning/`.
 - Root `AGENTS.md` carries the project stack, constraints, and GSD workflow guidance.
 - Phase quality gates are now an explicit project and roadmap constraint.
 
@@ -92,6 +94,8 @@ This phase must not implement product/repository configuration, Bitbucket integr
 ## Specific Ideas
 
 - The first post-login experience should be a neutral dashboard that can later adapt to the logged-in user's role or usage.
+- The login identifier is the user's corporate email address; self-service email-based password recovery is not part of Phase 1.
+- Phase 1 must provide a forced password-change experience for bootstrapped or administratively reset credentials.
 - Staging and production should exist as named deployment/configuration targets from the foundation phase.
 - The OpenAPI client should be generated, not hand-written.
 - "Standard OWASP behavior" is a locked auth/security reference for Phase 1 planning.

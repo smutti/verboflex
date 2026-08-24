@@ -17,8 +17,8 @@
 
 ### Authentication and Roles
 
-- [ ] **AUTH-01**: User can authenticate to the backend using OAuth2 bearer-token authentication.
-- [ ] **AUTH-02**: Admin can create, update, deactivate, and view internal users.
+- [ ] **AUTH-01**: User can authenticate to the backend with an internal corporate-email/password account using OAuth2 bearer-token authentication; bootstrapped or reset credentials require a password change before normal application access.
+- [ ] **AUTH-02**: Admin can create, update, administratively reset passwords for, deactivate, and view internal users.
 - [ ] **AUTH-03**: Admin can assign multiple roles to the same user.
 - [ ] **AUTH-04**: System supports the roles admin, product manager/reviewer, translator, and viewer.
 - [ ] **AUTH-05**: Backend enforces role-based authorization on admin configuration, translation editing, approval, commenting, and PR submission APIs.

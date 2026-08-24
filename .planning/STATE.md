@@ -2,7 +2,7 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-04)
+See: .planning/PROJECT.md (updated 2026-08-24)
 
 **Core value:** Product teams can quickly find, review, constrain, modify, comment on, and approve translations, then send approved changes back through the standard Bitbucket Cloud pull request workflow.
 **Current focus:** Phase 1: Platform Foundation
@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-05-04)
 ## Current Position
 
 Phase: 1 of 9 (Platform Foundation)
-Plan: 0 of 5 in current phase
-Status: Phase 1 UI-SPEC approved; ready to plan
-Last activity: 2026-05-05 - Phase 1 UI design contract approved
+Plan: 0 of 15 in current phase
+Status: Phase 1 plans revised and checked; SPEC approval pending
+Last activity: 2026-08-24 - Phase 1 plan-checker revision completed
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -27,7 +27,7 @@ Progress: [░░░░░░░░░░] 0%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1. Platform Foundation | 0/5 | 0.0h | N/A |
+| 1. Platform Foundation | 0/15 | 0.0h | N/A |
 
 **Recent Trend:**
 - Last 5 plans: none
@@ -46,6 +46,9 @@ Recent decisions affecting current work:
 - Frontend and backend are separate applications.
 - Frontend uses React, Vite, TypeScript, and shadcn/ui.
 - Backend uses Python, FastAPI, OAuth2, PostgreSQL, SQLAlchemy, and Alembic.
+- V1 authentication uses internal accounts with corporate email as the unique login identifier and password credentials managed by VerboFlex.
+- The first admin is created through a CLI bootstrap command; password reset is admin-managed and requires a password change on first login.
+- Microsoft Entra ID/OIDC authentication remains a future integration; the internal role model must stay provider-independent.
 - Background work uses Celery and Redis.
 - V1 supports Android XML, Qt `.ts`, JSON, and iOS `.strings`.
 - V1 uses simple draft/approved/rejected review states and per-translation comments.
@@ -58,7 +61,6 @@ None yet.
 
 ### Blockers/Concerns
 
-- Phase 1 must decide OAuth2 detail: internal password flow with JWT vs future external OAuth2/OIDC provider boundary.
 - Phase 3 must decide Bitbucket Cloud credential type and least-privilege scope model.
 - Phase 4 must clarify JSON shape conventions and Qt `.ts` edit scope.
 - Phase 8 must define exact allowed product-specific PR grouping options.
@@ -77,6 +79,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-05 14:11 CEST
-Stopped at: Phase 1 UI-SPEC approved; next step is Phase 1 planning
-Resume file: .planning/phases/01-platform-foundation/01-UI-SPEC.md
+Last session: 2026-08-24 CEST
+Stopped at: Phase 1 plan revision complete; awaiting explicit SPEC approval before implementation
+Resume file: .planning/phases/01-platform-foundation/01-SPEC.md
