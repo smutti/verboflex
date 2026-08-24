@@ -39,6 +39,15 @@ class Settings(BaseSettings):
         """Require a concrete allowlist for credentialed browser requests."""
         if not origins:
             raise ValueError("CORS requires at least one exact HTTP origin")
+        if any(
+            origin.path not in (None, "", "/")
+            or origin.query is not None
+            or origin.fragment is not None
+            or origin.username is not None
+            or origin.password is not None
+            for origin in origins
+        ):
+            raise ValueError("CORS allowlist must contain exact HTTP origins")
         return origins
 
 
