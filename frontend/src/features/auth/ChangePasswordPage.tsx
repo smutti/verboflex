@@ -11,6 +11,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useSession } from "./session";
 
 interface ChangePasswordFormValues {
   currentPassword: string;
@@ -19,6 +20,7 @@ interface ChangePasswordFormValues {
 }
 
 export function ChangePasswordPage() {
+  const { changePassword } = useSession();
   const form = useForm<ChangePasswordFormValues>({
     defaultValues: {
       currentPassword: "",
@@ -39,7 +41,12 @@ export function ChangePasswordPage() {
         <Form {...form}>
           <form
             className="mt-8 grid gap-6"
-            onSubmit={form.handleSubmit(() => undefined)}
+            onSubmit={form.handleSubmit(async (values) => {
+              await changePassword({
+                currentPassword: values.currentPassword,
+                newPassword: values.newPassword,
+              });
+            })}
           >
             <FormField
               control={form.control}
