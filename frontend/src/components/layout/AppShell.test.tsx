@@ -25,6 +25,17 @@ vi.mock("../../features/auth/session", () => ({
 const readSystemStatusMock = vi.mocked(readSystemStatus);
 const useSessionMock = vi.mocked(useSession);
 
+class TestResizeObserver implements ResizeObserver {
+  disconnect() {}
+  observe() {}
+  unobserve() {}
+}
+
+Object.defineProperty(globalThis, "ResizeObserver", {
+  configurable: true,
+  value: TestResizeObserver,
+});
+
 function setViewportWidth(width: number) {
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
