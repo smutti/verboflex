@@ -1,14 +1,20 @@
 """Endpoint-level contracts for bounded Phase 1 request rates."""
 
 import asyncio
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from uuid import UUID
 
 import httpx
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 from verboflex.auth.principal import Principal, get_current_principal
-from verboflex.auth.rate_limits import get_redis_client
+from verboflex.auth.rate_limits import (
+    BoundedLocalRateLimiter,
+    get_local_rate_limiter,
+    get_redis_client,
+)
 from verboflex.main import app
 from verboflex.schemas.users import RoleName
 
@@ -24,8 +30,15 @@ class CountingRedis:
         return [len(self.calls), 60]
 
 
+class FailingRedis:
+    """Model a Redis outage at the atomic counter boundary."""
+
+    def eval(self, _script: str, _numkeys: int, *_args: object) -> object:
+        raise RedisConnectionError("redis unavailable at 10.0.0.5:6379")
+
+
 @pytest.fixture(autouse=True)
-def clear_dependency_overrides() -> None:
+def clear_dependency_overrides() -> Iterator[None]:
     """Keep limiter state and dependency substitutions isolated by scenario."""
     app.dependency_overrides.clear()
     yield
@@ -80,3 +93,25 @@ def test_current_user_read_allows_one_hundred_twenty_then_blocks() -> None:
     keys = [call[2][0] for call in redis_client.calls]
     assert all(isinstance(key, str) for key in keys)
     assert all(str(principal.user_id) not in key for key in keys)
+
+
+def test_current_user_read_uses_bounded_local_limit_when_redis_is_unavailable() -> None:
+    """Keep ordinary reads usable but still bounded during a Redis outage."""
+    principal = Principal(
+        user_id=UUID("00000000-0000-4000-8000-000000000802"),
+        email="reader@example.com",
+        display_name="Reader Example",
+        roles=(RoleName("viewer"),),
+        must_change_password=False,
+    )
+    local_limiter = BoundedLocalRateLimiter(max_keys=4)
+    app.dependency_overrides[get_current_principal] = lambda: principal
+    app.dependency_overrides[get_redis_client] = lambda: FailingRedis()
+    app.dependency_overrides[get_local_rate_limiter] = lambda: local_limiter
+
+    responses = asyncio.run(_me_requests(121))
+
+    assert [response.status_code for response in responses[:120]] == [200] * 120
+    assert responses[120].status_code == 429
+    assert responses[120].json() == {"detail": "Rate limit exceeded"}
+    assert responses[120].headers["x-ratelimit-remaining"] == "0"
