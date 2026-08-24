@@ -10,3 +10,7 @@ backend/.coverage
 backend/coverage.xml
 backend/htmlcov/
 backend/mutants/
+
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
