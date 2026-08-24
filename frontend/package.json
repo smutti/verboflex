@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --max-warnings 0",
     "test": "vitest",
+    "e2e": "playwright test",
     "api:schema": "cd ../backend && uv run python -m verboflex.scripts.export_openapi > ../frontend/openapi.json",
     "api:generate": "npm run api:schema && openapi-ts",
     "api:check": "npm run api:generate && git diff --exit-code -- openapi.json src/api/client"
