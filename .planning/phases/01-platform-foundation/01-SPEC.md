@@ -57,6 +57,12 @@ The phase is complete only when the approved behaviors below have passed the ful
 
 The backend CLI uses Python standard-library `argparse` and `getpass`; no CLI framework is added.
 
+### New backend build dependencies
+
+| Dependency | Justification |
+|---|---|
+| `uv_build>=0.11.12,<0.12.0` | PEP 517 build backend required to install the approved `src/verboflex` package under `uv run`; the bound matches the installed uv 0.11.12 tool and prevents an unreviewed backend-minor upgrade. |
+
 ### New backend development dependencies
 
 | Dependency | Justification |
@@ -459,3 +465,4 @@ These are blocking planning and review constraints: no external identity provide
 - 2026-08-24: Added a mandatory fresh-context code review and OWASP ASVS L1 revision gate before final evidence; its closed findings/resolutions artifact is part of the immutable source set, critical/high findings block, and every fix forces a new digest and full gauntlet.
 - 2026-08-24: Approved explicitly by the user with the statement “Approvo la SPEC Phase 1 e l’audit delle dipendenze.” This authorizes the exact behavior contract, the audited grouped dependency installations after publisher/source/compatibility rechecks, the implementation branch, and the RED → GREEN → REFACTOR execution loop.
 - 2026-08-24: Aligned independent Tier 3 verification with the full `old-coder` verifier protocol: exactly four blind inputs, append-only blind-first attacks, delayed EVIDENCE comparison, human finding grades, source-specific four-state verdicts, and a two-round default cap.
+- 2026-08-24: Added `uv_build>=0.11.12,<0.12.0` as the sole backend build dependency after discovering that the approved installable `src/verboflex` layout requires a PEP 517 backend. The user explicitly approved this dependency-boundary revision with “procedi”. PyPI identifies Astral Software Inc. and the official `astral-sh/uv` repository; Python 3.14 is supported, and the bound matches the installed uv 0.11.12 backend copy.

@@ -110,6 +110,7 @@ The GSD PyPI adapter cannot obtain weekly download counts, so it conservatively 
 
 | Package | Registry version observed | Latest release / age signal | Downloads | Source metadata | Verdict | Disposition |
 |---|---:|---|---|---|---|---|
+| `uv_build` | 0.11.12 selected (`>=0.11.12,<0.12.0`) | 2026-05-08 / >30d | unavailable to adapter | github.com/astral-sh/uv; publisher Astral Software Inc. verified by PyPI | SUS | Explicitly approved after SPEC revision; bounded to installed uv 0.11.12 and Python 3.14 compatible |
 | `fastapi` | 0.141.1 | 2026-07-29 / <30d | unavailable to adapter | github.com/fastapi/fastapi | SUS | Flagged — human approval required |
 | `uvicorn` | 0.52.4 | 2026-08-19 / <30d | unavailable to adapter | github.com/Kludex/uvicorn | SUS | Flagged — human approval required |
 | `pydantic-settings` | 2.15.0 | 2026-08-07 / <30d | unavailable to adapter | github.com/pydantic/pydantic-settings | SUS | Flagged — human approval required |
@@ -186,6 +187,8 @@ The GSD PyPI adapter cannot obtain weekly download counts, so it conservatively 
 **Packages removed due to `SLOP` verdict:** none.
 
 **Packages flagged as suspicious `SUS`:** all Python packages because PyPI download evidence is unavailable to the GSD adapter; the npm rows explicitly marked `SUS` because of release age or unavailable download evidence. The planner must place a blocking human-verification checkpoint before the grouped backend and frontend installs. Approval of the dependency setup in `01-SPEC.md` may satisfy those checkpoints only when the approval explicitly acknowledges this audit.
+
+**Build-backend revision (2026-08-24):** `uv_build` was added only after the executor proved that an installable `src/verboflex` project requires a PEP 517 build backend. Official uv guidance recommends the native backend with an upper version bound; PyPI verifies Astral Software Inc., the `astral-sh/uv` source repository, Python `>=3.8` including the Python 3.14 classifier, and release 0.11.12. The selected `>=0.11.12,<0.12.0` range matches the installed uv 0.11.12 executable, whose bundled backend can satisfy the build. The user explicitly approved this amended dependency boundary with “procedi”.
 
 ## Architecture Patterns
 
