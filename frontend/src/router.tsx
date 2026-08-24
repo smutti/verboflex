@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Route, Routes } from "react-router-dom";
 
 import type { SessionState } from "./features/auth/session";
 import { Skeleton } from "./components/ui/skeleton";
@@ -10,7 +11,7 @@ export interface SessionRoutesProps {
   ordinaryElement: ReactNode;
 }
 
-export function SessionRoutes({ state }: SessionRoutesProps) {
+export function SessionRoutes({ state, loginElement }: SessionRoutesProps) {
   if (state.status === "checking_session") {
     return (
       <main className="flex min-h-screen items-center justify-center px-6">
@@ -24,6 +25,14 @@ export function SessionRoutes({ state }: SessionRoutesProps) {
           <span>Checking session</span>
         </div>
       </main>
+    );
+  }
+
+  if (state.status === "signed_out") {
+    return (
+      <Routes>
+        <Route path="/login" element={loginElement} />
+      </Routes>
     );
   }
 
