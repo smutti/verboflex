@@ -3,6 +3,8 @@
 from typing import Literal
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 from pydantic import AnyHttpUrl, PostgresDsn, RedisDsn, ValidationError
 
 from verboflex.core.config import Settings
@@ -120,6 +122,21 @@ def test_deployed_environments_reject_signing_secrets_shorter_than_32_bytes(
         Settings.model_validate(
             {
                 "app_env": app_env,
+                "jwt_secret_key": short_secret,
+                "refresh_cookie_secure": True,
+            }
+        )
+
+
+@given(st.text(alphabet=st.characters(min_codepoint=33, max_codepoint=126), max_size=31))
+def test_production_rejects_every_generated_ascii_secret_shorter_than_32_bytes(
+    short_secret: str,
+) -> None:
+    """Every generated ASCII key below the byte boundary fails closed."""
+    with pytest.raises(ValidationError):
+        Settings.model_validate(
+            {
+                "app_env": "production",
                 "jwt_secret_key": short_secret,
                 "refresh_cookie_secure": True,
             }
