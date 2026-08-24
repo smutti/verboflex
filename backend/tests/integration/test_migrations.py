@@ -164,3 +164,11 @@ def test_migration_constraints_reject_duplicates_and_roll_back_atomically(
     with engine.connect() as connection:
         assert connection.execute(text("SELECT count(*) FROM users")).scalar_one() == 0
         assert connection.execute(text("SELECT count(*) FROM roles")).scalar_one() == 4
+
+
+def test_declarative_metadata_contains_every_auth_model() -> None:
+    """Alembic imports the complete model graph before assigning metadata."""
+    from verboflex import models  # noqa: F401
+    from verboflex.db.base import Base
+
+    assert set(Base.metadata.tables) == EXPECTED_TABLES

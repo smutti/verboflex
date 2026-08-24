@@ -298,3 +298,35 @@ def test_cli_bootstrap_reads_secret_outside_argv_and_never_echoes_it(
     assert secret not in output.err
     with auth_session_factory() as session:
         assert session.scalar(select(func.count()).select_from(User)) == 1
+
+
+def test_cli_reset_dispatches_without_exposing_the_replacement_password(
+    auth_session_factory: sessionmaker[Session],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Wire reset to the same protected reader and atomic service boundary."""
+    with auth_session_factory() as session:
+        user = bootstrap_first_admin(
+            session,
+            email="admin@example.com",
+            display_name="Admin",
+            password="first admin phrase!",
+        )
+        user_id = user.id
+
+    replacement = "replacement protected phrase!"
+    exit_code = main(
+        ["reset-password", "--email", "admin@example.com"],
+        password_reader=lambda _prompt: replacement,
+        session_provider=auth_session_factory,
+    )
+
+    output = capsys.readouterr()
+    assert exit_code == 0
+    assert replacement not in output.out
+    assert replacement not in output.err
+    with auth_session_factory() as session:
+        user = session.get_one(User, user_id)
+        assert verify_password(replacement, user.hashed_password) is True
+        assert user.must_change_password is True
+        assert user.token_version == 1
