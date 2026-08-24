@@ -113,6 +113,25 @@ describe("session transitions", () => {
     expect(result.current.state).not.toHaveProperty("principal");
   });
 
+  it("rejects an invalid login result without exposing backend diagnostics", async () => {
+    issueTokenMock.mockResolvedValue({
+      data: undefined,
+      error: { detail: "Invalid credentials" },
+    });
+    const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
+
+    await act(async () => {
+      await expect(
+        result.current.login({
+          email: "person@example.com",
+          password: "wrong phrase 2026!",
+        }),
+      ).rejects.toThrow("Session action failed");
+    });
+
+    expect(result.current.state).toEqual({ status: "signed_out" });
+  });
+
   it("successful required password change clears authority and becomes signed out", async () => {
     issueTokenMock.mockResolvedValue({
       data: {
