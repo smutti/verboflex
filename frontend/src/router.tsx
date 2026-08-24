@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
-import type { SessionState } from "./features/auth/session";
+import { App } from "./App";
 import { Skeleton } from "./components/ui/skeleton";
+import { ChangePasswordPage } from "./features/auth/ChangePasswordPage";
+import { LoginPage } from "./features/auth/LoginPage";
+import { useSession, type SessionState } from "./features/auth/session";
 
 export interface SessionRoutesProps {
   state: SessionState;
@@ -63,5 +66,14 @@ export function SessionRoutes({
 }
 
 export function AppRouter() {
-  return null;
+  const { state } = useSession();
+
+  return (
+    <SessionRoutes
+      state={state}
+      loginElement={<LoginPage />}
+      changePasswordElement={<ChangePasswordPage />}
+      ordinaryElement={<App />}
+    />
+  );
 }
