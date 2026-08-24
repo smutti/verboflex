@@ -85,3 +85,26 @@ def test_deployed_environments_reject_a_missing_signing_secret(
     """A deployed process never starts without an explicit signing secret."""
     with pytest.raises(ValidationError, match="signing secret is required"):
         Settings(app_env=app_env, jwt_secret_key=None, refresh_cookie_secure=True)
+
+
+@pytest.mark.parametrize("app_env", ["staging", "production"])
+@pytest.mark.parametrize(
+    "sentinel",
+    [
+        "replace-me-with-at-least-32-random-bytes",
+        "change-me-before-deploying-this-app-please",
+        "example-placeholder-not-a-real-secret-value",
+    ],
+)
+def test_deployed_environments_reject_sentinel_signing_secrets(
+    app_env: Literal["staging", "production"], sentinel: str
+) -> None:
+    """Long documentation placeholders remain unusable deployment credentials."""
+    with pytest.raises(ValidationError, match="must not use a placeholder value"):
+        Settings.model_validate(
+            {
+                "app_env": app_env,
+                "jwt_secret_key": sentinel,
+                "refresh_cookie_secure": True,
+            }
+        )
