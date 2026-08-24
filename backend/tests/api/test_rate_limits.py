@@ -133,6 +133,18 @@ def test_health_ignores_untrusted_forwarded_ip_headers() -> None:
     assert responses[60].headers["x-ratelimit-remaining"] == "0"
 
 
+def test_local_fallback_evicts_oldest_actor_at_its_cardinality_ceiling() -> None:
+    """Keep outage fallback memory bounded even when actor keys churn."""
+    limiter = BoundedLocalRateLimiter(max_keys=2)
+    assert limiter.check("actor-a", limit=1, window_seconds=60).allowed is True
+    assert limiter.check("actor-a", limit=1, window_seconds=60).allowed is False
+
+    assert limiter.check("actor-b", limit=1, window_seconds=60).allowed is True
+    assert limiter.check("actor-c", limit=1, window_seconds=60).allowed is True
+
+    assert limiter.check("actor-a", limit=1, window_seconds=60).allowed is True
+
+
 async def _me_requests(count: int) -> list[httpx.Response]:
     """Issue repeated protected identity reads for one server principal."""
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)

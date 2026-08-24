@@ -1,7 +1,10 @@
 """Pure and real-transport contracts for the sample Celery task."""
 
 import os
+from dataclasses import dataclass, field
+from typing import cast
 
+from celery import Celery
 from pydantic import RedisDsn
 
 from verboflex.core.config import Settings
@@ -47,3 +50,35 @@ def test_live_worker_probe_projects_only_online_state() -> None:
     )
 
     assert probe_worker_state(producer, timeout_seconds=1.0) == "online"
+
+
+@dataclass
+class SilentControl:
+    """Model a bounded Celery inspect call with no replying worker."""
+
+    timeouts: list[float] = field(default_factory=list)
+
+    class Inspect:
+        def ping(self) -> None:
+            return None
+
+    def inspect(self, *, timeout: float) -> Inspect:
+        self.timeouts.append(timeout)
+        return self.Inspect()
+
+
+@dataclass
+class SilentCelery:
+    """Provide only the control surface used by the public worker probe."""
+
+    control: SilentControl = field(default_factory=SilentControl)
+
+
+def test_worker_probe_maps_no_reply_to_bounded_unavailable_state() -> None:
+    """Never expose inspect diagnostics when no worker replies in time."""
+    application = SilentCelery()
+
+    state = probe_worker_state(cast(Celery, application), timeout_seconds=0.25)
+
+    assert state == "unavailable"
+    assert application.control.timeouts == [0.25]
