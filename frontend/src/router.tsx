@@ -61,3 +61,7 @@ export function SessionRoutes({
     </Routes>
   );
 }
+
+export function AppRouter() {
+  return null;
+}

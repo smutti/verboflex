@@ -1,10 +1,28 @@
 import "@testing-library/jest-dom/vitest";
 
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SessionRoutes } from "./router";
+import {
+  changePassword as generatedChangePassword,
+  issueToken,
+} from "./api/client";
+import { SessionProvider } from "./features/auth/session";
+import { AppRouter, SessionRoutes } from "./router";
+
+vi.mock("./api/client", () => ({
+  changePassword: vi.fn(),
+  issueToken: vi.fn(),
+  logout: vi.fn(),
+  readCurrentUser: vi.fn(),
+  readHealth: vi.fn(),
+  refreshAccessToken: vi.fn(),
+}));
+
+const issueTokenMock = vi.mocked(issueToken);
+const changePasswordMock = vi.mocked(generatedChangePassword);
 
 const ordinaryPrincipal = {
   id: "73f123f7-ebad-4dad-8b5d-dcc3214b3b06",
@@ -16,6 +34,11 @@ const ordinaryPrincipal = {
 
 afterEach(() => {
   cleanup();
+});
+
+beforeEach(() => {
+  issueTokenMock.mockReset();
+  changePasswordMock.mockReset();
 });
 
 function LocationMarker() {
@@ -141,4 +164,63 @@ describe("session routes", () => {
       ).not.toBeInTheDocument();
     },
   );
+
+  it("returns a successful required-password change to signed-out login", async () => {
+    issueTokenMock.mockResolvedValue({
+      data: {
+        access_token: "password-change-only-token",
+        expires_in: 300,
+        must_change_password: true,
+        token_type: "bearer",
+      },
+      error: undefined,
+    });
+    changePasswordMock.mockResolvedValue({ data: undefined, error: undefined });
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/login"]}>
+        <SessionProvider restoreOnMount={false}>
+          <AppRouter />
+          <LocationMarker />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Email" }),
+      "person@example.com",
+    );
+    await user.type(
+      screen.getByLabelText("Password"),
+      "temporary phrase 2026!",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Sign in to VerboFlex" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Set a new password" }),
+    ).toBeVisible();
+    expect(screen.getByTestId("current-route")).toHaveTextContent(
+      "/change-password",
+    );
+
+    await user.type(
+      screen.getByLabelText("Current password"),
+      "temporary phrase 2026!",
+    );
+    await user.type(
+      screen.getByLabelText("New password"),
+      "replacement phrase 2026!",
+    );
+    await user.type(
+      screen.getByLabelText("Confirm new password"),
+      "replacement phrase 2026!",
+    );
+    await user.click(screen.getByRole("button", { name: "Set new password" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "VerboFlex" }),
+    ).toBeVisible();
+    expect(screen.getByTestId("current-route")).toHaveTextContent("/login");
+  });
 });
