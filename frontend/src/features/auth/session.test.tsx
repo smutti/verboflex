@@ -217,4 +217,34 @@ describe("session transitions", () => {
     expect(result.current.state).not.toHaveProperty("principal");
     expect(readCurrentUserMock).toHaveBeenCalledOnce();
   });
+
+  it("logout clears React memory even when the generated network call fails", async () => {
+    issueTokenMock.mockResolvedValue({
+      data: {
+        access_token: "ordinary-memory-token",
+        expires_in: 900,
+        must_change_password: false,
+        token_type: "bearer",
+      },
+      error: undefined,
+    });
+    readCurrentUserMock.mockResolvedValue({ data: principal, error: undefined });
+    logoutMock.mockRejectedValue(new Error("logout network unavailable"));
+    const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
+    await act(async () => {
+      await result.current.login({
+        email: "person@example.com",
+        password: "ordinary login phrase!",
+      });
+    });
+
+    await act(async () => {
+      await result.current.logout().catch(() => undefined);
+    });
+
+    expect(logoutMock).toHaveBeenCalledWith();
+    expect(result.current.state).toEqual({ status: "signed_out" });
+    expect(result.current.state).not.toHaveProperty("accessToken");
+    expect(result.current.state).not.toHaveProperty("principal");
+  });
 });
