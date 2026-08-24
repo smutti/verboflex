@@ -53,3 +53,24 @@ def test_redis_url_rejects_a_non_numeric_database_path() -> None:
     """Reject Redis paths that the client cannot interpret as a database index."""
     with pytest.raises(ValidationError, match="non-negative numeric database"):
         Settings(redis_url=RedisDsn("redis://redis:6379/not-a-database"))
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    [
+        ("access_token_expire_minutes", 0),
+        ("access_token_expire_minutes", 61),
+        ("password_change_token_expire_minutes", 0),
+        ("password_change_token_expire_minutes", 16),
+        ("refresh_token_expire_days", 0),
+        ("refresh_token_expire_days", 31),
+        ("service_probe_timeout_seconds", 0),
+        ("service_probe_timeout_seconds", 30.1),
+    ],
+)
+def test_token_lifetimes_and_probe_timeout_are_bounded(
+    field_name: str, invalid_value: int | float
+) -> None:
+    """Reject zero, negative, or operationally excessive timing values."""
+    with pytest.raises(ValidationError):
+        Settings.model_validate({field_name: invalid_value})
