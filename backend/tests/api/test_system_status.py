@@ -4,15 +4,19 @@ import asyncio
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import cast
 from uuid import UUID
 
 import httpx
 import pytest
 
+from verboflex.api.v1.routes.system import get_system_status_service
 from verboflex.auth.principal import Principal, get_current_principal
 from verboflex.auth.rate_limits import get_redis_client
 from verboflex.main import app
+from verboflex.schemas.system import ServiceState
 from verboflex.schemas.users import RoleName
+from verboflex.services.system_status import SystemStatusService
 
 
 @dataclass
@@ -67,3 +71,40 @@ def test_ordinary_user_receives_only_the_exact_service_status_projection() -> No
     assert response.json()["worker"] in {"online", "unavailable", "pending"}
     checked_at = datetime.fromisoformat(response.json()["checked_at"].replace("Z", "+00:00"))
     assert checked_at.tzinfo is not None
+
+
+def test_probe_exceptions_and_invalid_values_map_to_non_leaking_unavailable() -> None:
+    """Never project raw diagnostics, addresses, exceptions, or task identifiers."""
+
+    def failing_database_probe() -> ServiceState:
+        raise RuntimeError("postgresql://admin:secret@db.internal:5432/verboflex")
+
+    service = SystemStatusService(
+        database_probe=failing_database_probe,
+        redis_probe=lambda: cast(ServiceState, "redis://cache.internal:6379/0"),
+        worker_probe=lambda: "pending",
+        timeout_seconds=0.1,
+    )
+    app.dependency_overrides[get_current_principal] = ordinary_principal
+    app.dependency_overrides[get_redis_client] = lambda: AvailableRedis()
+    app.dependency_overrides[get_system_status_service] = lambda: service
+
+    response = asyncio.run(request_status())
+
+    assert response.status_code == 200
+    assert response.json()["database"] == "unavailable"
+    assert response.json()["redis"] == "unavailable"
+    assert response.json()["worker"] == "pending"
+    serialized = response.text.casefold()
+    for forbidden in (
+        "postgresql",
+        "redis://",
+        "admin",
+        "secret",
+        "internal",
+        "5432",
+        "6379",
+        "traceback",
+        "task_id",
+    ):
+        assert forbidden not in serialized
