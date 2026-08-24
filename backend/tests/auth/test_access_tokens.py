@@ -1,6 +1,7 @@
 """Contracts for short-lived signed access authority."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import jwt
@@ -10,6 +11,8 @@ from hypothesis import strategies as st
 from pydantic import SecretStr
 
 from verboflex.auth.access_tokens import (
+    CLOCK_SKEW_TOLERANCE_SECONDS,
+    COMMON_REQUIRED_CLAIMS,
     InvalidAccessToken,
     PasswordChangeRequired,
     TokenPurpose,
@@ -135,6 +138,95 @@ def test_issuer_and_decoder_fail_closed_without_a_signing_secret() -> None:
         )
     with pytest.raises(RuntimeError, match="JWT signing secret is not configured"):
         decode_access_token("irrelevant", settings=unsigned_settings)
+
+
+def test_jwt_library_receives_the_explicit_approved_security_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pin HS256, required claims, and clock tolerance at the library boundary."""
+    original_encode = cast(Any, jwt.encode)
+    original_decode = cast(Any, jwt.decode)
+    encode_kwargs: dict[str, object] = {}
+    decode_kwargs: dict[str, object] = {}
+
+    def observe_encode(*args: object, **kwargs: object) -> str:
+        encode_kwargs.update(kwargs)
+        return cast(str, original_encode(*args, **kwargs))
+
+    def observe_decode(*args: object, **kwargs: object) -> dict[str, object]:
+        decode_kwargs.update(kwargs)
+        return cast(dict[str, object], original_decode(*args, **kwargs))
+
+    monkeypatch.setattr(jwt, "encode", observe_encode)
+    token = issue_access_token(
+        user_id=uuid4(),
+        session_id=uuid4(),
+        token_version=0,
+        purpose="access",
+        settings=token_settings(),
+    )
+    monkeypatch.setattr(jwt, "decode", observe_decode)
+
+    decode_access_token(token, settings=token_settings())
+
+    assert encode_kwargs["algorithm"] == "HS256"
+    assert decode_kwargs["algorithms"] == ["HS256"]
+    assert decode_kwargs["options"] == {"require": list(COMMON_REQUIRED_CLAIMS)}
+    assert decode_kwargs["leeway"] == CLOCK_SKEW_TOLERANCE_SECONDS
+
+
+def test_issuer_requests_an_explicit_utc_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default issuance must not depend on the host's local timezone."""
+    observed_timezones: list[object] = []
+    issued_at = datetime.now(UTC).replace(microsecond=0)
+
+    class ObservedDateTime(datetime):
+        @classmethod
+        def now(cls, timezone: object = None) -> ObservedDateTime:
+            observed_timezones.append(timezone)
+            return cls.fromtimestamp(issued_at.timestamp(), UTC)
+
+    monkeypatch.setattr("verboflex.auth.access_tokens.datetime", ObservedDateTime)
+
+    token = issue_access_token(
+        user_id=uuid4(),
+        session_id=uuid4(),
+        token_version=0,
+        purpose="access",
+        settings=token_settings(),
+    )
+
+    assert observed_timezones == [UTC]
+    assert jwt.decode(token, SIGNING_SECRET, algorithms=["HS256"])["iat"] == int(
+        issued_at.timestamp()
+    )
+
+
+@pytest.mark.parametrize(("expired_seconds", "accepted"), [(2, True), (7, False)])
+def test_expiry_clock_skew_is_bounded_to_five_seconds(
+    expired_seconds: int,
+    accepted: bool,
+) -> None:
+    """Accept only the documented five-second network clock tolerance."""
+    expires_at = datetime.now(UTC).replace(microsecond=0) - timedelta(seconds=expired_seconds)
+    token = jwt.encode(
+        {
+            "sub": str(uuid4()),
+            "sid": str(uuid4()),
+            "iat": int(expires_at.timestamp()) - 900,
+            "exp": int(expires_at.timestamp()),
+            "purpose": "access",
+            "token_version": 0,
+        },
+        SIGNING_SECRET,
+        algorithm="HS256",
+    )
+
+    if accepted:
+        assert decode_access_token(token, settings=token_settings()).expires_at == expires_at
+    else:
+        with pytest.raises(InvalidAccessToken):
+            decode_access_token(token, settings=token_settings())
 
 
 def test_signature_tampering_is_rejected_as_invalid_authority() -> None:
