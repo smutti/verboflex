@@ -1,5 +1,6 @@
 import type { CurrentUserResponse, RoleName } from "../../api/client";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
 import { Dashboard } from "../../pages/Dashboard";
 import { ServiceStatus } from "./ServiceStatus";
 
@@ -16,11 +17,18 @@ const ROLE_LABELS: Record<RoleName, string> = {
   viewer: "Viewer",
 };
 
-export function AppShell({ accessToken, principal }: AppShellProps) {
+export function AppShell({ accessToken, onLogout, principal }: AppShellProps) {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b bg-secondary px-6 py-4">
+      <header className="flex items-center justify-between gap-4 border-b bg-secondary px-6 py-4">
         <strong className="text-heading font-semibold">VerboFlex</strong>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => void onLogout()}
+        >
+          Sign out of VerboFlex
+        </Button>
       </header>
       <main className="grid gap-8 px-6 py-8">
         <section aria-labelledby="workspace-overview-title" className="grid gap-4">
