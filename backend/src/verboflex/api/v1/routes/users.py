@@ -1,6 +1,6 @@
 """User contract stubs."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 
 from verboflex.auth.principal import CurrentPrincipal
 from verboflex.schemas.system import ErrorResponse
@@ -18,6 +18,12 @@ router = APIRouter(prefix="/users", tags=["users"])
         status.HTTP_429_TOO_MANY_REQUESTS: {"model": ErrorResponse},
     },
 )
-async def read_current_user(_principal: CurrentPrincipal) -> CurrentUserResponse:
+async def read_current_user(principal: CurrentPrincipal) -> CurrentUserResponse:
     """Expose the final current-identity signature."""
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented")
+    return CurrentUserResponse(
+        id=principal.user_id,
+        email=principal.email,
+        display_name=principal.display_name,
+        roles=list(principal.roles),
+        must_change_password=principal.must_change_password,
+    )
