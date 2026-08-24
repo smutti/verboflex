@@ -196,6 +196,8 @@ The GSD PyPI adapter cannot obtain weekly download counts, so it conservatively 
 
 **Frontend compiler compatibility resolution (2026-08-24):** The approved `typescript` package is frozen at 6.0.3 rather than the initially observed 7.0.2. A real generator run proved that `@hey-api/openapi-ts@0.99.0` accesses a compiler API removed in TypeScript 7, while its declared peer range accepts TypeScript 6. npm verifies the official Microsoft repository and publisher accounts; TypeScript 6.0.3 supports Node 24 and introduces no new package name.
 
+**shadcn registry-boundary revision (2026-08-24):** `shadcn@4.19.0` was reverified on npm as the official `shadcn-ui/ui` CLI, maintained by `shadcn` and the Vercel shadcn npm bot, with integrity `sha512-EQF6R+CUXTsEP2BpyhxrUEAFesrtFD1POvVOf5jM+wkgtA4kG1EW1+1Wlmi9LqiprSL681JJXBcS0u8WkVVVyQ==` and Node `>=20.18.1` compatibility. The live official v4 registry style now requests the unapproved unified `radix-ui` package; the official legacy `sonner` item requests unapproved `next-themes`; the official legacy `sidebar` item requests a separate `use-mobile` registry hook. The user explicitly approved “Approvo, procedi” for the conservative boundary: use the verified official legacy component sources, remove `next-themes` from `sonner.tsx` by accepting theme through props/default, inline the official `useIsMobile` hook into `sidebar.tsx`, retain the individually approved `@radix-ui/*` packages, and create exactly the 13 enumerated UI component files. Direct `radix-ui`, direct `next-themes`, and an extra `use-mobile` hook file remain prohibited.
+
 ## Architecture Patterns
 
 ### System Architecture Diagram
