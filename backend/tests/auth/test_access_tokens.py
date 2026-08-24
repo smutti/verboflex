@@ -5,6 +5,8 @@ from uuid import uuid4
 
 import jwt
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from verboflex.auth.access_tokens import (
     InvalidAccessToken,
@@ -179,3 +181,24 @@ def test_ordinary_authority_is_invalid_for_password_change_only_access() -> None
             settings=token_settings(),
             expected_purpose="password_change",
         )
+
+
+@given(extra_seconds=st.integers(min_value=1, max_value=3600))
+def test_generated_overlong_expiry_windows_fail_closed(extra_seconds: int) -> None:
+    """Signed claims cannot extend ordinary authority past the approved lifetime."""
+    issued_at = datetime.now(UTC).replace(microsecond=0)
+    token = jwt.encode(
+        {
+            "sub": str(uuid4()),
+            "sid": str(uuid4()),
+            "iat": int(issued_at.timestamp()),
+            "exp": int(issued_at.timestamp()) + 900 + extra_seconds,
+            "purpose": "access",
+            "token_version": 0,
+        },
+        SIGNING_SECRET,
+        algorithm="HS256",
+    )
+
+    with pytest.raises(InvalidAccessToken):
+        decode_access_token(token, settings=token_settings())
