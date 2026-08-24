@@ -85,4 +85,34 @@ describe("authenticated application shell", () => {
       auth: "ordinary-server-token",
     });
   });
+
+  it("renders every server service enum as an explicit text label", async () => {
+    readSystemStatusMock.mockResolvedValue({
+      data: {
+        api: "online",
+        database: "online",
+        redis: "unavailable",
+        worker: "pending",
+        checked_at: "2026-08-24T20:10:00Z",
+      },
+      error: undefined,
+    });
+
+    render(
+      <AppShell
+        accessToken="ordinary-server-token"
+        onLogout={vi.fn()}
+        principal={principal}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Service status" }),
+    ).toBeVisible();
+    expect(screen.getByText("API online")).toBeVisible();
+    expect(screen.getByText("Database online")).toBeVisible();
+    expect(screen.getByText("Redis unavailable")).toBeVisible();
+    expect(screen.getByText("Worker pending")).toBeVisible();
+    expect(screen.queryByText("Checking service status")).not.toBeInTheDocument();
+  });
 });
