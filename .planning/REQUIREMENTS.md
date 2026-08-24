@@ -8,8 +8,8 @@
 ### Platform Foundation
 
 - [ ] **PLAT-01**: The application is organized as separate frontend and backend applications.
-- [ ] **PLAT-02**: The frontend is implemented with React, Vite, TypeScript, and shadcn/ui project-owned components.
-- [ ] **PLAT-03**: The backend exposes a FastAPI HTTP API consumed by the frontend.
+- [x] **PLAT-02**: The frontend is implemented with React, Vite, TypeScript, and shadcn/ui project-owned components.
+- [x] **PLAT-03**: The backend exposes a FastAPI HTTP API consumed by the frontend.
 - [x] **PLAT-04**: The backend persists application data in PostgreSQL through SQLAlchemy models.
 - [x] **PLAT-05**: The backend manages database schema changes through Alembic migrations.
 - [ ] **PLAT-06**: Long-running imports, parsing, commits, and pull request operations run through Celery workers using Redis.
@@ -173,8 +173,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PLAT-01 | Phase 1 | Pending |
-| PLAT-02 | Phase 1 | Pending |
-| PLAT-03 | Phase 1 | Pending |
+| PLAT-02 | Phase 1 | Complete |
+| PLAT-03 | Phase 1 | Complete |
 | PLAT-04 | Phase 1 | Complete |
 | PLAT-05 | Phase 1 | Complete |
 | PLAT-06 | Phase 1 | Pending |

@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 01
 current_phase_name: Platform Foundation
 status: executing
-stopped_at: Completed 01-08-PLAN.md
-last_updated: "2026-08-24T18:11:50.910Z"
+stopped_at: Completed 01-09-PLAN.md
+last_updated: "2026-08-24T18:38:08.284Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 01 execution started
-state_head: d68a1c72e9dab6b296de3b69f9eea7dd3609a2e8
+state_head: 2403bfe6da7f4ad13f634a7ad78b1bb7561c5d2e
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 15
-  completed_plans: 8
+  completed_plans: 9
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 01 (Platform Foundation) — EXECUTING
-Plan: 9 of 15
+Plan: 10 of 15
 Status: Ready to execute
 Last activity: 2026-08-24 — Phase 01 execution started
 
@@ -66,6 +66,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P06 | 38 min | 3 tasks | 10 files |
 | Phase 01 P07 | 33 min | 3 tasks | 12 files |
 | Phase 01 P08 | 33min | 3 tasks | 13 files |
+| Phase 01 P09 | 19min | 2 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -111,6 +112,9 @@ Recent decisions affecting current work:
 - [Phase 01]: Limiter identity uses normalized server authority or the validated server-observed peer and never trusts forwarded headers implicitly. — Prevents callers from rotating keys through spoofed proxy headers before an explicit trusted-proxy policy exists.
 - [Phase 01]: Service status projects only approved enums through independently timeout-bounded database, Redis, and worker probes. — Keeps operations useful without leaking addresses, credentials, exceptions, stacks, task identifiers, or raw inspect output.
 - [Phase 01]: Celery tasks are JSON-only, named, non-eager, and executed by a distinct Redis-backed worker process outside HTTP routes. — Establishes the reusable background-work boundary required by later import and pull-request phases.
+- [Phase 01]: Freeze explicit stable operation IDs and regenerate only from canonical FastAPI OpenAPI.
+- [Phase 01]: Browser authority is React-memory-only and async transitions are versioned so logout invalidates stale responses.
+- [Phase 01]: Guard credential persistence with narrow AST checks and fail-control fixtures.
 
 ### Pending Todos
 
@@ -136,6 +140,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-24T18:11:50.903Z
-Stopped at: Completed 01-08-PLAN.md
+Last session: 2026-08-24T18:38:08.277Z
+Stopped at: Completed 01-09-PLAN.md
 Resume file: None
