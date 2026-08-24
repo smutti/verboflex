@@ -3,11 +3,12 @@
 import math
 import time
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass
-from ipaddress import ip_address
 from hashlib import sha256
+from ipaddress import ip_address
 from threading import Lock
-from typing import Annotated, Callable, Protocol
+from typing import Annotated, Protocol
 
 from fastapi import Depends, HTTPException, Request, status
 from redis import Redis
@@ -218,3 +219,26 @@ def enforce_auth_action_rate_limit(
         remaining=max(limit - attempts, 0),
         retry_after=retry_after,
     )
+
+
+def enforce_ordinary_read_rate_limit(
+    redis_client: RedisRateLimitClient,
+    local_limiter: BoundedLocalRateLimiter,
+    *,
+    user_id: str,
+) -> LoginRateLimit:
+    """Prefer shared Redis state and retain a bounded diagnostic fallback."""
+    try:
+        return enforce_auth_action_rate_limit(
+            redis_client,
+            action="ordinary-read",
+            identity=user_id,
+            client_ip="server-principal",
+            limit=ORDINARY_READ_LIMIT,
+        )
+    except RateLimitUnavailable:
+        return local_limiter.check(
+            f"ordinary-read:{user_id}",
+            limit=ORDINARY_READ_LIMIT,
+            window_seconds=LOGIN_WINDOW_SECONDS,
+        )

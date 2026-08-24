@@ -165,8 +165,9 @@ def test_current_user_read_allows_one_hundred_twenty_then_blocks() -> None:
     assert int(responses[120].headers["retry-after"]) > 0
     assert responses[120].headers["x-ratelimit-remaining"] == "0"
     keys = [call[2][0] for call in redis_client.calls]
-    assert all(isinstance(key, str) for key in keys)
-    assert all(str(principal.user_id) not in key for key in keys)
+    for key in keys:
+        assert isinstance(key, str)
+        assert str(principal.user_id) not in key
 
 
 def test_current_user_read_uses_bounded_local_limit_when_redis_is_unavailable() -> None:
