@@ -227,4 +227,20 @@ describe("required password change page", () => {
     });
     await waitFor(() => expect(submit).toBeEnabled());
   });
+
+  it("offers current, new, confirmation, then submit in logical keyboard order", async () => {
+    const user = userEvent.setup();
+    render(<ChangePasswordPage />);
+
+    await user.tab();
+    expect(screen.getByLabelText("Current password")).toHaveFocus();
+    await user.tab();
+    expect(screen.getByLabelText("New password")).toHaveFocus();
+    await user.tab();
+    expect(screen.getByLabelText("Confirm new password")).toHaveFocus();
+    await user.tab();
+    expect(
+      screen.getByRole("button", { name: "Set new password" }),
+    ).toHaveFocus();
+  });
 });
