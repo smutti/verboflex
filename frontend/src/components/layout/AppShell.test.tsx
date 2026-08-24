@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { readSystemStatus, type CurrentUserResponse } from "../../api/client";
@@ -114,5 +115,46 @@ describe("authenticated application shell", () => {
     expect(screen.getByText("Redis unavailable")).toBeVisible();
     expect(screen.getByText("Worker pending")).toBeVisible();
     expect(screen.queryByText("Checking service status")).not.toBeInTheDocument();
+  });
+
+  it("sanitizes service failures, never fabricates online, and retries", async () => {
+    readSystemStatusMock
+      .mockResolvedValueOnce({
+        data: undefined,
+        error: { detail: "redis://cache.internal:6379/0" },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          api: "online",
+          database: "online",
+          redis: "online",
+          worker: "online",
+          checked_at: "2026-08-24T20:11:00Z",
+        },
+        error: undefined,
+      });
+    const user = userEvent.setup();
+
+    render(
+      <AppShell
+        accessToken="ordinary-server-token"
+        onLogout={vi.fn()}
+        principal={principal}
+      />,
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "We could not reach the API. Check that the backend is running, then retry the connection.",
+    );
+    expect(alert).not.toHaveTextContent("cache.internal");
+    expect(screen.queryByText("API online")).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Retry connection" }),
+    );
+
+    expect(await screen.findByText("API online")).toBeVisible();
+    expect(readSystemStatusMock).toHaveBeenCalledTimes(2);
   });
 });
