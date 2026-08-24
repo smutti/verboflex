@@ -110,13 +110,14 @@ def create_principal_authority(factory: sessionmaker[Session]) -> str:
     )
 
 
-async def get_me(access_token: str) -> httpx.Response:
+async def get_me(access_token: str | None) -> httpx.Response:
     """Call the registered protected route through the ASGI boundary."""
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": f"Bearer {access_token}"} if access_token is not None else None
         return await client.get(
             "/api/v1/users/me",
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers=headers,
         )
 
 
@@ -137,3 +138,71 @@ def test_current_identity_returns_only_the_safe_provider_independent_projection(
         "roles": ["admin", "translator"],
         "must_change_password": False,
     }
+
+
+@pytest.mark.parametrize("access_token", [None, "not-a-signed-jwt"])
+def test_missing_or_invalid_bearer_authority_returns_exact_401(
+    principal_session_factory: sessionmaker[Session],
+    access_token: str | None,
+) -> None:
+    """Reject absent and malformed authority through one non-sensitive surface."""
+    configure_principal_dependencies(principal_session_factory)
+
+    response = asyncio.run(get_me(access_token))
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid access token"}
+    assert response.headers["www-authenticate"] == "Bearer"
+
+
+@pytest.mark.parametrize("durable_state", ["stale-version", "inactive", "revoked-session"])
+def test_stale_inactive_or_revoked_authority_returns_exact_401(
+    principal_session_factory: sessionmaker[Session],
+    durable_state: str,
+) -> None:
+    """Durable user and session state overrides otherwise valid signed claims."""
+    access_token = create_principal_authority(principal_session_factory)
+    with principal_session_factory.begin() as session:
+        user = session.get_one(User, USER_ID)
+        auth_session = session.get_one(AuthSession, SESSION_ID)
+        if durable_state == "stale-version":
+            user.token_version += 1
+        elif durable_state == "inactive":
+            user.is_active = False
+        else:
+            auth_session.revoked_at = datetime.now(UTC)
+    configure_principal_dependencies(principal_session_factory)
+
+    response = asyncio.run(get_me(access_token))
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid access token"}
+    assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_password_change_authority_returns_exact_403_without_identity_body(
+    principal_session_factory: sessionmaker[Session],
+) -> None:
+    """Restricted credentials cannot disclose the ordinary identity projection."""
+    with principal_session_factory.begin() as session:
+        session.add(
+            User(
+                id=USER_ID,
+                email="person@example.com",
+                display_name="Person Example",
+                hashed_password=hash_password("principal password phrase!"),
+                must_change_password=True,
+            )
+        )
+    restricted = issue_access_token(
+        user_id=USER_ID,
+        token_version=0,
+        purpose="password_change",
+        settings=principal_settings(),
+    )
+    configure_principal_dependencies(principal_session_factory)
+
+    response = asyncio.run(get_me(restricted))
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Password change required"}
