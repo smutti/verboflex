@@ -69,4 +69,21 @@ describe("API health tracer", () => {
       "Checking API connection",
     );
   });
+
+  it("sanitizes rejected network diagnostics", async () => {
+    readHealth.mockRejectedValueOnce(
+      new Error("Failed to fetch postgresql://db.internal:5432/verboflex"),
+    );
+
+    render(<App />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "We could not reach the API. Check that the backend is running, then retry the connection.",
+    );
+    expect(alert).not.toHaveTextContent("db.internal");
+    expect(
+      screen.getByRole("button", { name: "Retry connection" }),
+    ).toBeEnabled();
+  });
 });
