@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import {
+  changePassword as generatedChangePassword,
   issueToken,
   readCurrentUser,
   type CurrentUserResponse,
@@ -88,15 +89,34 @@ export function SessionProvider({ children }: SessionProviderProps) {
     });
   }, []);
 
+  const changePassword = useCallback(
+    async (passwords: PasswordChange) => {
+      if (state.status !== "password_change_required") {
+        return;
+      }
+      const result = await generatedChangePassword({
+        auth: state.accessToken,
+        body: {
+          current_password: passwords.currentPassword,
+          new_password: passwords.newPassword,
+        },
+      });
+      if (result.error === undefined) {
+        setState({ status: "signed_out" });
+      }
+    },
+    [state],
+  );
+
   const value = useMemo<SessionValue>(
     () => ({
       state,
       login,
-      changePassword: notImplemented,
+      changePassword,
       restoreSession: notImplemented,
       logout: notImplemented,
     }),
-    [login, state],
+    [changePassword, login, state],
   );
 
   return (
