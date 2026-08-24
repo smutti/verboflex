@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -15,8 +16,13 @@ from psycopg import connect, sql
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from verboflex.auth.passwords import verify_password
-from verboflex.cli import BootstrapAdminError, bootstrap_first_admin
+from verboflex.auth.passwords import PasswordPolicyError, verify_password
+from verboflex.cli import (
+    BootstrapAdminError,
+    bootstrap_first_admin,
+    reset_user_password,
+)
+from verboflex.models.auth_session import AuthSession
 from verboflex.models.role import Role
 from verboflex.models.user import User
 
@@ -134,3 +140,109 @@ def test_second_bootstrap_rolls_back_without_changing_authority(
     with auth_session_factory() as session:
         assert session.scalar(select(func.count()).select_from(User)) == 1
         assert session.scalar(select(func.count()).select_from(Role)) == 4
+
+
+def test_admin_reset_rehashes_and_revokes_every_session_atomically(
+    auth_session_factory: sessionmaker[Session],
+) -> None:
+    """Reset credentials, bump token version, and revoke all refresh authority."""
+    current_password = "first admin phrase!"
+    with auth_session_factory() as session:
+        user = bootstrap_first_admin(
+            session,
+            email="admin@example.com",
+            display_name="Admin",
+            password=current_password,
+        )
+        user_id = user.id
+
+    expires_at = datetime.now(UTC) + timedelta(days=7)
+    with auth_session_factory.begin() as session:
+        user = session.get_one(User, user_id)
+        user.must_change_password = False
+        user.token_version = 7
+        session.add_all(
+            [
+                AuthSession(
+                    user_id=user_id,
+                    family_id=uuid4(),
+                    token_hash="a" * 64,
+                    expires_at=expires_at,
+                ),
+                AuthSession(
+                    user_id=user_id,
+                    family_id=uuid4(),
+                    token_hash="b" * 64,
+                    expires_at=expires_at,
+                ),
+            ]
+        )
+        previous_hash = user.hashed_password
+
+    new_password = "new admin phrase 2026!"
+    with auth_session_factory() as session:
+        reset_user_password(session, email=" ADMIN@EXAMPLE.COM ", password=new_password)
+
+    with auth_session_factory() as session:
+        user = session.get_one(User, user_id)
+        sessions = session.execute(select(AuthSession)).scalars().all()
+        assert user.hashed_password != previous_hash
+        assert verify_password(new_password, user.hashed_password) is True
+        assert user.must_change_password is True
+        assert user.token_version == 8
+        assert len(sessions) == 2
+        assert all(auth_session.revoked_at is not None for auth_session in sessions)
+
+
+@pytest.mark.parametrize(
+    ("rejected_password", "message"),
+    [
+        ("first admin phrase!", "must differ from current password"),
+        ("admin@example.com", "must not equal login email"),
+    ],
+)
+def test_rejected_admin_reset_rolls_back_every_authority_field(
+    auth_session_factory: sessionmaker[Session],
+    rejected_password: str,
+    message: str,
+) -> None:
+    """Rejected reset inputs leave hashes, versions, flags, and sessions intact."""
+    current_password = "first admin phrase!"
+    with auth_session_factory() as session:
+        user = bootstrap_first_admin(
+            session,
+            email="admin@example.com",
+            display_name="Admin",
+            password=current_password,
+        )
+        user_id = user.id
+
+    with auth_session_factory.begin() as session:
+        user = session.get_one(User, user_id)
+        user.must_change_password = False
+        session.add(
+            AuthSession(
+                user_id=user_id,
+                family_id=uuid4(),
+                token_hash="c" * 64,
+                expires_at=datetime.now(UTC) + timedelta(days=7),
+            )
+        )
+        previous_hash = user.hashed_password
+        previous_version = user.token_version
+
+    with auth_session_factory() as session:
+        with pytest.raises(PasswordPolicyError, match=message):
+            reset_user_password(
+                session,
+                email="admin@example.com",
+                password=rejected_password,
+            )
+
+    with auth_session_factory() as session:
+        user = session.get_one(User, user_id)
+        auth_session = session.execute(select(AuthSession)).scalar_one()
+        assert user.hashed_password == previous_hash
+        assert user.token_version == previous_version
+        assert user.must_change_password is False
+        assert auth_session.revoked_at is None

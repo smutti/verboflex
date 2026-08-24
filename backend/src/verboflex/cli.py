@@ -15,6 +15,10 @@ class BootstrapAdminError(RuntimeError):
     """Raised when the database is not eligible for first-admin bootstrap."""
 
 
+class ResetPasswordError(RuntimeError):
+    """Raised when an administrative reset cannot identify its account."""
+
+
 def bootstrap_first_admin(
     session: Session,
     *,
@@ -52,3 +56,13 @@ def bootstrap_first_admin(
         session.add(user)
         session.flush()
         return user
+
+
+def reset_user_password(
+    session: Session,
+    *,
+    email: str,
+    password: str,
+) -> int:
+    """Callable RED seam for atomic credential reset and revocation."""
+    return 0
