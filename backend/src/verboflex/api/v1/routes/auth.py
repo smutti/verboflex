@@ -2,9 +2,14 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from redis import Redis
+from sqlalchemy.orm import Session
 
+from verboflex.auth.rate_limits import get_redis_client
+from verboflex.core.config import Settings, get_settings
+from verboflex.db.session import get_db_session
 from verboflex.schemas.auth import AccessTokenResponse, ChangePasswordRequest
 from verboflex.schemas.system import ErrorResponse
 
@@ -26,8 +31,12 @@ RequestOrigin = Annotated[str | None, Header(alias="Origin")]
     },
 )
 async def issue_token(
+    _request: Request,
     _response: Response,
     _form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    _session: Annotated[Session, Depends(get_db_session)],
+    _redis_client: Annotated[Redis, Depends(get_redis_client)],
+    _settings: Annotated[Settings, Depends(get_settings)],
 ) -> AccessTokenResponse:
     """Expose the final login request and response signature."""
     raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented")
