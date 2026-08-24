@@ -46,4 +46,13 @@ describe("session routes", () => {
     expect(screen.getByRole("heading", { name: "Login route" })).toBeVisible();
     expect(screen.getByTestId("current-route")).toHaveTextContent("/login");
   });
+
+  it("redirects signed-out direct navigation to login", async () => {
+    renderRoutes({ status: "signed_out" }, "/private-route");
+
+    expect(
+      await screen.findByRole("heading", { name: "Login route" }),
+    ).toBeVisible();
+    expect(screen.getByTestId("current-route")).toHaveTextContent("/login");
+  });
 });
