@@ -43,3 +43,26 @@ def test_ordinary_access_token_has_exact_authority_and_fifteen_minute_lifetime()
         "purpose": "access",
         "token_version": 7,
     }
+
+
+def test_password_change_token_omits_session_and_expires_after_five_minutes() -> None:
+    """Temporary credentials receive only sessionless five-minute authority."""
+    user_id = uuid4()
+    issued_at = datetime.now(UTC).replace(microsecond=0)
+
+    token = issue_access_token(
+        user_id=user_id,
+        token_version=3,
+        purpose="password_change",
+        settings=token_settings(),
+        now=issued_at,
+    )
+
+    payload = jwt.decode(token, SIGNING_SECRET, algorithms=["HS256"])
+    assert payload == {
+        "sub": str(user_id),
+        "iat": int(issued_at.timestamp()),
+        "exp": int(issued_at.timestamp()) + 300,
+        "purpose": "password_change",
+        "token_version": 3,
+    }
