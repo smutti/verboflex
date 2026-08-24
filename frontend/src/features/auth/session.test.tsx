@@ -108,4 +108,40 @@ describe("session transitions", () => {
     });
     expect(result.current.state).not.toHaveProperty("principal");
   });
+
+  it("successful required password change clears authority and becomes signed out", async () => {
+    issueTokenMock.mockResolvedValue({
+      data: {
+        access_token: "password-change-only-token",
+        expires_in: 300,
+        must_change_password: true,
+        token_type: "bearer",
+      },
+      error: undefined,
+    });
+    changePasswordMock.mockResolvedValue({ data: undefined, error: undefined });
+    const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
+    await act(async () => {
+      await result.current.login({
+        email: "person@example.com",
+        password: "temporary password phrase!",
+      });
+    });
+
+    await act(async () => {
+      await result.current.changePassword({
+        currentPassword: "temporary password phrase!",
+        newPassword: "replacement password phrase!",
+      });
+    });
+
+    expect(changePasswordMock).toHaveBeenCalledWith({
+      auth: "password-change-only-token",
+      body: {
+        current_password: "temporary password phrase!",
+        new_password: "replacement password phrase!",
+      },
+    });
+    expect(result.current.state).toEqual({ status: "signed_out" });
+  });
 });
