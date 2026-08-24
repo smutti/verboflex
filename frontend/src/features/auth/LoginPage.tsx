@@ -9,6 +9,7 @@ import {
   FormLabel,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useSession } from "./session";
 
 interface LoginFormValues {
   email: string;
@@ -16,6 +17,7 @@ interface LoginFormValues {
 }
 
 export function LoginPage() {
+  const { login } = useSession();
   const form = useForm<LoginFormValues>({
     defaultValues: { email: "", password: "" },
   });
@@ -27,7 +29,9 @@ export function LoginPage() {
         <Form {...form}>
           <form
             className="mt-8 grid gap-6"
-            onSubmit={form.handleSubmit(() => undefined)}
+            onSubmit={form.handleSubmit(async (values) => {
+              await login(values);
+            })}
           >
             <FormField
               control={form.control}
