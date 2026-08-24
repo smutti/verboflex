@@ -10,10 +10,13 @@ from uuid import UUID
 
 import httpx
 import pytest
+from pydantic import SecretStr
 
 from verboflex.api.v1.routes.system import get_system_status_service
+from verboflex.auth.access_tokens import issue_access_token
 from verboflex.auth.principal import Principal, get_current_principal
 from verboflex.auth.rate_limits import get_redis_client
+from verboflex.core.config import Settings, get_settings
 from verboflex.main import app
 from verboflex.schemas.system import ServiceState
 from verboflex.schemas.users import RoleName
@@ -50,11 +53,12 @@ def ordinary_principal() -> Principal:
     )
 
 
-async def request_status() -> httpx.Response:
+async def request_status(access_token: str | None = None) -> httpx.Response:
     """Call the registered status route through the ASGI boundary."""
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        return await client.get("/api/v1/system/status")
+        headers = {"Authorization": f"Bearer {access_token}"} if access_token else None
+        return await client.get("/api/v1/system/status", headers=headers)
 
 
 async def request_status_with_elapsed() -> tuple[httpx.Response, float]:
@@ -142,3 +146,33 @@ def test_every_slow_probe_is_independently_timeout_bounded() -> None:
     assert response.json()["redis"] == "unavailable"
     assert response.json()["worker"] == "unavailable"
     assert elapsed < 0.1
+
+
+def test_missing_authority_is_rejected_before_any_service_probe() -> None:
+    """Use the shared ordinary-principal dependency for exact missing-auth denial."""
+
+    response = asyncio.run(request_status())
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid access token"}
+    assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_password_change_authority_is_rejected_before_any_service_probe() -> None:
+    """Keep restricted credentials out of the ordinary status resource."""
+    settings = Settings(
+        jwt_secret_key=SecretStr("0123456789abcdef" * 2),
+        refresh_cookie_secure=False,
+    )
+    restricted = issue_access_token(
+        user_id=UUID("00000000-0000-4000-8000-000000000812"),
+        token_version=0,
+        purpose="password_change",
+        settings=settings,
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+
+    response = asyncio.run(request_status(restricted))
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Password change required"}
