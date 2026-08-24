@@ -32,14 +32,6 @@ class RateLimitUnavailable(RuntimeError):
     """Raised when authoritative Redis limiter state cannot be obtained."""
 
 
-class AuthRateLimited(RuntimeError):
-    """Raised before a sensitive authentication action exceeds its window."""
-
-    def __init__(self, retry_after: int) -> None:
-        super().__init__("authentication rate limit exceeded")
-        self.retry_after = retry_after
-
-
 LOGIN_LIMIT = 5
 LOGIN_WINDOW_SECONDS = 60
 REFRESH_LIMIT = 30
