@@ -55,4 +55,21 @@ describe("session routes", () => {
     ).toBeVisible();
     expect(screen.getByTestId("current-route")).toHaveTextContent("/login");
   });
+
+  it("renders only the password-change route for restricted authority", () => {
+    renderRoutes(
+      {
+        status: "password_change_required",
+        accessToken: "restricted-server-token",
+      },
+      "/change-password",
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Password change route" }),
+    ).toBeVisible();
+    expect(screen.getByTestId("current-route")).toHaveTextContent(
+      "/change-password",
+    );
+  });
 });
