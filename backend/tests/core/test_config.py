@@ -139,3 +139,20 @@ def test_deployed_environments_reject_insecure_refresh_cookies(
                 "refresh_cookie_secure": False,
             }
         )
+
+
+@pytest.mark.parametrize("app_env", ["staging", "production"])
+def test_deployed_environments_accept_strong_secret_and_secure_cookie(
+    app_env: Literal["staging", "production"],
+) -> None:
+    """Fail-closed checks retain the approved secure startup path."""
+    settings = Settings.model_validate(
+        {
+            "app_env": app_env,
+            "jwt_secret_key": "0123456789abcdef" * 2,
+            "refresh_cookie_secure": True,
+        }
+    )
+
+    assert settings.app_env == app_env
+    assert settings.refresh_cookie_secure is True
