@@ -2,6 +2,7 @@ import {
   useCallback,
   createContext,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type PropsWithChildren,
@@ -11,6 +12,7 @@ import {
   changePassword as generatedChangePassword,
   issueToken,
   readCurrentUser,
+  refreshAccessToken,
   type CurrentUserResponse,
 } from "../../api/client";
 
@@ -52,8 +54,13 @@ export interface SessionProviderProps extends PropsWithChildren {
   restoreOnMount?: boolean;
 }
 
-export function SessionProvider({ children }: SessionProviderProps) {
-  const [state, setState] = useState<SessionState>({ status: "signed_out" });
+export function SessionProvider({
+  children,
+  restoreOnMount = true,
+}: SessionProviderProps) {
+  const [state, setState] = useState<SessionState>(
+    restoreOnMount ? { status: "checking_session" } : { status: "signed_out" },
+  );
 
   const login = useCallback(async (credentials: LoginCredentials) => {
     const tokenResult = await issueToken({
@@ -108,15 +115,47 @@ export function SessionProvider({ children }: SessionProviderProps) {
     [state],
   );
 
+  const restoreSession = useCallback(async () => {
+    setState({ status: "checking_session" });
+    try {
+      const refreshResult = await refreshAccessToken();
+      const authority = refreshResult.data;
+      if (authority === undefined || authority.must_change_password) {
+        setState({ status: "signed_out" });
+        return;
+      }
+      const identityResult = await readCurrentUser({
+        auth: authority.access_token,
+      });
+      if (identityResult.data === undefined) {
+        setState({ status: "signed_out" });
+        return;
+      }
+      setState({
+        status: "authenticated",
+        accessToken: authority.access_token,
+        principal: identityResult.data,
+      });
+    } catch {
+      setState({ status: "signed_out" });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (restoreOnMount) {
+      void restoreSession();
+    }
+  }, [restoreOnMount, restoreSession]);
+
   const value = useMemo<SessionValue>(
     () => ({
       state,
       login,
       changePassword,
-      restoreSession: notImplemented,
+      restoreSession,
       logout: notImplemented,
     }),
-    [changePassword, login, state],
+    [changePassword, login, restoreSession, state],
   );
 
   return (
