@@ -112,3 +112,24 @@ def rotate_refresh_session(
     if replay_detected or authority is None:
         raise InvalidRefreshSession("invalid refresh session")
     return authority
+
+
+def revoke_refresh_session(
+    session: Session,
+    refresh_token: str | None,
+    *,
+    now: datetime | None = None,
+) -> None:
+    """Idempotently revoke the session named by a valid-looking cookie."""
+    if not _is_well_formed_refresh_token(refresh_token):
+        return
+    assert refresh_token is not None
+    revoked_at = now or datetime.now(UTC)
+    with session.begin():
+        auth_session = session.execute(
+            select(AuthSession)
+            .where(AuthSession.token_hash == hash_refresh_token(refresh_token))
+            .with_for_update()
+        ).scalar_one_or_none()
+        if auth_session is not None and auth_session.revoked_at is None:
+            auth_session.revoked_at = revoked_at
