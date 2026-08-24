@@ -132,8 +132,10 @@ def test_sensitive_action_limiter_hashes_authority_and_preserves_exact_window_st
             (f"verboflex:auth:refresh:{expected_digest}", "60"),
         )
     ]
-    assert REFRESH_TOKEN not in redis_client.calls[0][2][0]
-    assert "192.0.2.10" not in redis_client.calls[0][2][0]
+    redis_key = redis_client.calls[0][2][0]
+    assert isinstance(redis_key, str)
+    assert REFRESH_TOKEN not in redis_key
+    assert "192.0.2.10" not in redis_key
     assert result.allowed is True
     assert result.remaining == 0
     assert result.retry_after == 1
