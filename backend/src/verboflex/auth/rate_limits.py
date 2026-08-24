@@ -154,7 +154,12 @@ def get_redis_client(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> Redis:
     """Build a decoded synchronous Redis client for request dependencies."""
-    return Redis.from_url(str(settings.redis_url), decode_responses=True)
+    return Redis.from_url(
+        str(settings.redis_url),
+        decode_responses=True,
+        socket_connect_timeout=settings.service_probe_timeout_seconds,
+        socket_timeout=settings.service_probe_timeout_seconds,
+    )
 
 
 def enforce_login_rate_limit(
