@@ -115,4 +115,26 @@ describe("required password change page", () => {
     );
     expect(changePasswordMock).not.toHaveBeenCalled();
   });
+
+  it("rejects a replacement equal to the current password", async () => {
+    const user = userEvent.setup();
+    render(<ChangePasswordPage />);
+
+    const currentPassword = "same password 2026!";
+    await user.type(screen.getByLabelText("Current password"), currentPassword);
+    const newPassword = screen.getByLabelText("New password");
+    await user.type(newPassword, currentPassword);
+    await user.type(screen.getByLabelText("Confirm new password"), currentPassword);
+    await user.click(screen.getByRole("button", { name: "Set new password" }));
+
+    const error = await screen.findByRole("alert");
+    expect(error).toHaveTextContent(
+      "New password must differ from current password.",
+    );
+    expect(newPassword).toHaveAttribute(
+      "aria-describedby",
+      expect.stringContaining(error.id),
+    );
+    expect(changePasswordMock).not.toHaveBeenCalled();
+  });
 });
