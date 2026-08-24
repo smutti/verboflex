@@ -93,6 +93,7 @@ The backend CLI uses Python standard-library `argparse` and `getpass`; no CLI fr
 | Dependency | Justification |
 |---|---|
 | `vite`, `@vitejs/plugin-react`, `typescript` | Project-selected build and type toolchain. |
+| `@types/react`, `@types/react-dom` | Official DefinitelyTyped declarations required for the approved React/ReactDOM TypeScript scaffold; React does not bundle these declarations and Testing Library exposes them only as optional peers. |
 | `tailwindcss`, `@tailwindcss/vite`, `tw-animate-css`, `shadcn` | Project-owned shadcn/Tailwind component generation and styles. |
 | `@hey-api/openapi-ts` | Exact-version generated TypeScript client from FastAPI OpenAPI. |
 | `vitest`, `@vitest/coverage-v8`, `jsdom` | Unit/component tests and machine-readable branch coverage. |
@@ -466,3 +467,4 @@ These are blocking planning and review constraints: no external identity provide
 - 2026-08-24: Approved explicitly by the user with the statement “Approvo la SPEC Phase 1 e l’audit delle dipendenze.” This authorizes the exact behavior contract, the audited grouped dependency installations after publisher/source/compatibility rechecks, the implementation branch, and the RED → GREEN → REFACTOR execution loop.
 - 2026-08-24: Aligned independent Tier 3 verification with the full `old-coder` verifier protocol: exactly four blind inputs, append-only blind-first attacks, delayed EVIDENCE comparison, human finding grades, source-specific four-state verdicts, and a two-round default cap.
 - 2026-08-24: Added `uv_build>=0.11.12,<0.12.0` as the sole backend build dependency after discovering that the approved installable `src/verboflex` layout requires a PEP 517 backend. The user explicitly approved this dependency-boundary revision with “procedi”. PyPI identifies Astral Software Inc. and the official `astral-sh/uv` repository; Python 3.14 is supported, and the bound matches the installed uv 0.11.12 backend copy.
+- 2026-08-24: Added exact direct development dependencies `@types/react@19.2.18` and `@types/react-dom@19.2.5` after the frontend preflight proved that React 19.2.8 ships no TypeScript declarations and Testing Library marks both type packages as optional peers. The user explicitly approved this dependency-boundary revision with “approvo”. npm identifies the Microsoft-maintained `types` publisher account and the official `DefinitelyTyped/DefinitelyTyped` repository; `@types/react-dom@19.2.5` requires the compatible `@types/react^19.2.0` line.

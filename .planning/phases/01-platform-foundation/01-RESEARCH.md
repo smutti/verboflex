@@ -143,6 +143,8 @@ The GSD PyPI adapter cannot obtain weekly download counts, so it conservatively 
 |---|---:|---|---:|---|---|---|
 | `react` | 19.2.8 | >30d | 170,480,639 | github.com/react/react | OK | Approved |
 | `react-dom` | 19.2.8 | >30d | 159,631,504 | github.com/react/react | OK | Approved |
+| `@types/react` | 19.2.18 | <30d | unavailable to adapter | github.com/DefinitelyTyped/DefinitelyTyped; publisher `types` (`ts-npm-types@microsoft.com`) | SUS | Explicitly approved after SPEC revision; exact version matches React 19.2 and Testing Library's optional peer range |
+| `@types/react-dom` | 19.2.5 | <30d | unavailable to adapter | github.com/DefinitelyTyped/DefinitelyTyped; publisher `types` (`ts-npm-types@microsoft.com`) | SUS | Explicitly approved after SPEC revision; exact version requires compatible `@types/react^19.2.0` |
 | `react-router-dom` | 7.18.2 | <30d | 42,644,027 | github.com/remix-run/react-router | SUS | Flagged — human approval required |
 | `react-hook-form` | 7.86.0 | <30d | 59,949,398 | github.com/react-hook-form/react-hook-form | SUS | Flagged — human approval required |
 | `zod` | 4.4.3 | >30d | 265,744,393 | github.com/colinhacks/zod | OK | Approved |
@@ -189,6 +191,8 @@ The GSD PyPI adapter cannot obtain weekly download counts, so it conservatively 
 **Packages flagged as suspicious `SUS`:** all Python packages because PyPI download evidence is unavailable to the GSD adapter; the npm rows explicitly marked `SUS` because of release age or unavailable download evidence. The planner must place a blocking human-verification checkpoint before the grouped backend and frontend installs. Approval of the dependency setup in `01-SPEC.md` may satisfy those checkpoints only when the approval explicitly acknowledges this audit.
 
 **Build-backend revision (2026-08-24):** `uv_build` was added only after the executor proved that an installable `src/verboflex` project requires a PEP 517 build backend. Official uv guidance recommends the native backend with an upper version bound; PyPI verifies Astral Software Inc., the `astral-sh/uv` source repository, Python `>=3.8` including the Python 3.14 classifier, and release 0.11.12. The selected `>=0.11.12,<0.12.0` range matches the installed uv 0.11.12 executable, whose bundled backend can satisfy the build. The user explicitly approved this amended dependency boundary with “procedi”.
+
+**Frontend type-dependency revision (2026-08-24):** `@types/react@19.2.18` and `@types/react-dom@19.2.5` were added only after the executor proved that React 19.2.8 does not bundle TypeScript declarations and `@testing-library/react@16.3.2` declares both packages as optional peers. npm verifies the Microsoft-maintained `types` publisher account, the official `DefinitelyTyped/DefinitelyTyped` repository, registry integrity hashes, and a compatible `@types/react-dom` peer requirement of `@types/react^19.2.0`. The user explicitly approved exactly these two direct development dependencies with “approvo”.
 
 ## Architecture Patterns
 
