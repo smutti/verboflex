@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 01
 current_phase_name: Platform Foundation
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-08-24T14:10:39.218Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-08-24T15:07:40.893Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 01 execution started
-state_head: 95bb094816bcfd4d91d434f4c6a0077c970b7963
+state_head: bda91c7983155b52b0db1c09b54f1bcc17b933a3
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 15
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 01 (Platform Foundation) — EXECUTING
-Plan: 3 of 15
+Plan: 4 of 15
 Status: Ready to execute
 Last activity: 2026-08-24 — Phase 01 execution started
 
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 |------|----------|-------|-------|
 | Phase 01 P01 | 1 min | 2 tasks | 1 files |
 | Phase 01 P02 | 18 min | 2 tasks | 20 files |
+| Phase 01 P03 | 51 min | 2 tasks | 32 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,9 @@ Recent decisions affecting current work:
 - [Phase 01]: Use uv_build 0.11.12 as the sole bounded PEP 517 backend for the installable src layout.
 - [Phase 01]: Pin approved redis-py to 6.4.0, the newest release compatible with Celery and Kombu's redis<6.5 bound.
 - [Phase 01]: Keep every non-health Phase 1 API route as a final-signature callable 501 seam until its dedicated TDD plan.
+- [Phase 01]: Exact-pin TypeScript 6.0.3 for compatibility with the approved generated-client toolchain.
+- [Phase 01]: Patch the generator graph through a js-yaml 4.3.1 transitive override while preserving the direct dependency allowlist.
+- [Phase 01]: Keep generated client configuration in src/api/config.ts with same-origin fallback and included credentials.
 
 ### Pending Todos
 
@@ -109,6 +113,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-24T14:10:39.212Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-08-24T15:07:40.886Z
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None
