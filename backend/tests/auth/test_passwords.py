@@ -43,6 +43,12 @@ def test_corporate_email_normalization_handles_the_approved_example() -> None:
     assert normalize_email(" \tPERSON@EXAMPLE.COM\r\n") == "person@example.com"
 
 
+def test_malformed_email_is_rejected_without_echoing_the_identifier() -> None:
+    """Invalid identifiers fail at the canonical seam with one generic diagnostic."""
+    with pytest.raises(ValueError, match="^invalid email address$"):
+        normalize_email("not an email")
+
+
 def test_unicode_and_space_password_is_stored_only_as_argon2() -> None:
     """Approved Unicode and space-containing passwords survive secure hashing."""
     password = "  密碼 phrase 2026!  "
@@ -54,6 +60,11 @@ def test_unicode_and_space_password_is_stored_only_as_argon2() -> None:
     assert password_hash.startswith("$argon2")
     assert verify_password(password, password_hash) is True
     assert verify_password(password + "wrong", password_hash) is False
+
+
+def test_unknown_password_hash_format_fails_closed() -> None:
+    """Malformed or unsupported stored hashes never authenticate a password."""
+    assert verify_password("valid length phrase!", "not-a-recognized-hash") is False
 
 
 @pytest.mark.parametrize("invalid_password", ["x" * 11, "x" * 129])

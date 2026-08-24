@@ -21,12 +21,15 @@ from alembic import command
 from verboflex.auth.passwords import PasswordPolicyError, verify_password
 from verboflex.cli import (
     BootstrapAdminError,
+    ResetPasswordError,
+    SecretInputError,
     bootstrap_first_admin,
     build_parser,
     main,
     read_password,
     reset_user_password,
 )
+from verboflex.db import session as db_session
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.role import Role
 from verboflex.models.user import User
@@ -149,6 +152,49 @@ def test_second_bootstrap_rolls_back_without_changing_authority(
         assert session.scalar(select(func.count()).select_from(Role)) == 4
 
 
+def test_bootstrap_rejects_a_blank_display_name_without_writing(
+    auth_session_factory: sessionmaker[Session],
+) -> None:
+    """Whitespace-only display identity fails before durable authority exists."""
+    with (
+        auth_session_factory() as session,
+        pytest.raises(BootstrapAdminError, match="display name is required"),
+    ):
+        bootstrap_first_admin(
+            session,
+            email="admin@example.com",
+            display_name=" \t\r\n",
+            password="first admin phrase!",
+        )
+
+    with auth_session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(User)) == 0
+
+
+def test_bootstrap_rolls_back_when_the_fixed_admin_role_is_missing(
+    auth_session_factory: sessionmaker[Session],
+) -> None:
+    """A damaged seed cannot create a user without its required authority."""
+    with auth_session_factory.begin() as session:
+        admin_role = session.execute(select(Role).where(Role.name == "admin")).scalar_one()
+        session.delete(admin_role)
+
+    with (
+        auth_session_factory() as session,
+        pytest.raises(BootstrapAdminError, match="admin role is unavailable"),
+    ):
+        bootstrap_first_admin(
+            session,
+            email="admin@example.com",
+            display_name="Admin",
+            password="first admin phrase!",
+        )
+
+    with auth_session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(User)) == 0
+        assert session.scalar(select(func.count()).select_from(Role)) == 3
+
+
 def test_admin_reset_rehashes_and_revokes_every_session_atomically(
     auth_session_factory: sessionmaker[Session],
 ) -> None:
@@ -254,6 +300,25 @@ def test_rejected_admin_reset_rolls_back_every_authority_field(
         assert auth_session.revoked_at is None
 
 
+def test_reset_unknown_account_is_non_mutating_and_non_enumerating(
+    auth_session_factory: sessionmaker[Session],
+) -> None:
+    """An unavailable reset target exposes no database detail and changes nothing."""
+    with (
+        auth_session_factory() as session,
+        pytest.raises(ResetPasswordError, match="account unavailable"),
+    ):
+        reset_user_password(
+            session,
+            email="unknown@example.com",
+            password="replacement protected phrase!",
+        )
+
+    with auth_session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(User)) == 0
+        assert session.scalar(select(func.count()).select_from(Role)) == 4
+
+
 def test_cli_exposes_only_non_secret_bootstrap_and_reset_arguments() -> None:
     """Passwords have no normal argument, default, or parsed namespace field."""
     parser = build_parser()
@@ -347,3 +412,128 @@ def test_stdin_secret_reader_preserves_intentional_spaces_without_echo(
     assert password == "  protected phrase  "
     assert password not in output.out
     assert password not in output.err
+
+
+def test_terminal_secret_reader_delegates_to_getpass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Interactive terminals use getpass instead of visible stdin reads."""
+    terminal = StringIO()
+    monkeypatch.setattr(terminal, "isatty", lambda: True)
+    monkeypatch.setattr("sys.stdin", terminal)
+    monkeypatch.setattr("verboflex.cli.getpass.getpass", lambda _prompt: "protected phrase!")
+
+    assert read_password("Password: ") == "protected phrase!"
+
+
+def test_closed_stdin_fails_without_inventing_a_default_password(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """EOF is a hard input error rather than an implicit credential."""
+    monkeypatch.setattr("sys.stdin", StringIO())
+
+    with pytest.raises(SecretInputError, match="password input is required"):
+        read_password("Password: ")
+
+
+def test_cli_returns_non_secret_failure_for_expected_bootstrap_refusal(
+    auth_session_factory: sessionmaker[Session],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Expected admin errors produce a non-zero, password-free diagnostic."""
+    with auth_session_factory() as session:
+        bootstrap_first_admin(
+            session,
+            email="admin@example.com",
+            display_name="Admin",
+            password="first admin phrase!",
+        )
+
+    secret = "second protected phrase!"
+    exit_code = main(
+        [
+            "bootstrap-admin",
+            "--email",
+            "second@example.com",
+            "--display-name",
+            "Second",
+        ],
+        password_reader=lambda _prompt: secret,
+        session_provider=auth_session_factory,
+    )
+
+    output = capsys.readouterr()
+    assert exit_code == 1
+    assert "users already exist" in output.err
+    assert secret not in output.out
+    assert secret not in output.err
+
+
+def test_cli_masks_invalid_email_details(
+    auth_session_factory: sessionmaker[Session],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Identity parsing failures collapse to the canonical safe diagnostic."""
+    exit_code = main(
+        [
+            "bootstrap-admin",
+            "--email",
+            "not an email",
+            "--display-name",
+            "Admin",
+        ],
+        password_reader=lambda _prompt: "protected phrase!",
+        session_provider=auth_session_factory,
+    )
+
+    output = capsys.readouterr()
+    assert exit_code == 1
+    assert output.err.strip() == "invalid email address"
+
+
+def test_cli_defaults_use_stdin_and_the_configured_session_factory(
+    auth_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real dispatcher defaults wire stdin to the application session seam."""
+    monkeypatch.setattr("sys.stdin", StringIO("protected default phrase!\n"))
+    monkeypatch.setattr("verboflex.cli.SessionFactory", auth_session_factory)
+
+    assert (
+        main(
+            [
+                "bootstrap-admin",
+                "--email",
+                "admin@example.com",
+                "--display-name",
+                "Admin",
+            ]
+        )
+        == 0
+    )
+    with auth_session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(User)) == 1
+
+
+def test_database_dependency_rolls_back_on_caller_failure(
+    auth_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A request exception cannot leave an uncommitted identity write behind."""
+    monkeypatch.setattr(db_session, "SessionFactory", auth_session_factory)
+    dependency = db_session.get_db_session()
+    session = next(dependency)
+    session.add(
+        User(
+            email="rollback@example.com",
+            display_name="Rollback",
+            hashed_password="non-secret-test-hash",
+        )
+    )
+    session.flush()
+
+    with pytest.raises(RuntimeError, match="forced rollback"):
+        dependency.throw(RuntimeError("forced rollback"))
+
+    with auth_session_factory() as verification_session:
+        assert verification_session.scalar(select(func.count()).select_from(User)) == 0
