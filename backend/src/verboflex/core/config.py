@@ -41,6 +41,15 @@ class Settings(BaseSettings):
             raise ValueError("database_url must name a PostgreSQL database")
         return database_url
 
+    @field_validator("redis_url")
+    @classmethod
+    def require_redis_database_index(cls, redis_url: RedisDsn) -> RedisDsn:
+        """Reject Redis paths that are not valid non-negative database indexes."""
+        path = redis_url.path
+        if path not in (None, "", "/") and not path.removeprefix("/").isdecimal():
+            raise ValueError("redis_url must use a non-negative numeric database")
+        return redis_url
+
     @field_validator("cors_origins")
     @classmethod
     def require_cors_origin(cls, origins: tuple[AnyHttpUrl, ...]) -> tuple[AnyHttpUrl, ...]:
