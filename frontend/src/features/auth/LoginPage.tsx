@@ -82,7 +82,12 @@ export function LoginPage() {
                 </AlertDescription>
               </Alert>
             ) : null}
-            <Button className="w-full" type="submit">
+            <Button
+              aria-busy={form.formState.isSubmitting}
+              className="w-full"
+              disabled={form.formState.isSubmitting}
+              type="submit"
+            >
               Sign in to VerboFlex
             </Button>
           </form>
