@@ -1,6 +1,6 @@
 """Celery application configured for the separate Redis-backed worker process."""
 
-from celery import Celery
+from celery import Celery  # type: ignore[import-untyped]
 
 from verboflex.core.config import Settings, get_settings
 from verboflex.schemas.system import ServiceState

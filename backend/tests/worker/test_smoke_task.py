@@ -2,9 +2,8 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import cast
+from typing import Any, cast
 
-from celery import Celery
 from pydantic import RedisDsn
 
 from verboflex.core.config import Settings
@@ -78,7 +77,7 @@ def test_worker_probe_maps_no_reply_to_bounded_unavailable_state() -> None:
     """Never expose inspect diagnostics when no worker replies in time."""
     application = SilentCelery()
 
-    state = probe_worker_state(cast(Celery, application), timeout_seconds=0.25)
+    state = probe_worker_state(cast(Any, application), timeout_seconds=0.25)
 
     assert state == "unavailable"
     assert application.control.timeouts == [0.25]
