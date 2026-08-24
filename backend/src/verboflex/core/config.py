@@ -78,8 +78,17 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_deployment_security(self) -> Self:
         """Fail deployed environments closed when signing material is absent."""
-        if self.app_env != "local" and self.jwt_secret_key is None:
+        if self.app_env == "local":
+            return self
+        if self.jwt_secret_key is None:
             raise ValueError("JWT signing secret is required in staging and production")
+        secret = self.jwt_secret_key.get_secret_value()
+        normalized_secret = "".join(
+            character for character in secret.casefold() if character.isalnum()
+        )
+        sentinel_markers = ("replace", "changeme", "placeholder", "example", "notareal")
+        if any(marker in normalized_secret for marker in sentinel_markers):
+            raise ValueError("JWT signing secret must not use a placeholder value")
         return self
 
 
