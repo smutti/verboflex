@@ -61,6 +61,16 @@ run_command() {
   [ "$rc" -eq 0 ] || die "$label failed with exit code $rc"
 }
 
+run_required_checks() {
+  local check rc
+  for check in "$@"; do
+    "$check" || {
+      rc=$?
+      return "$rc"
+    }
+  done
+}
+
 run_layer() {
   local layer=$1
   shift
@@ -342,12 +352,24 @@ types() {
   (cd "$FRONTEND_ROOT" && npm run typecheck)
 }
 
-lint_format_complexity() {
+backend_static_checks() {
+  (cd "$BACKEND_ROOT" && uv run ruff check src tests) &&
+    (cd "$BACKEND_ROOT" && uv run ruff format --check src tests)
+}
+
+frontend_static_checks() {
+  (cd "$FRONTEND_ROOT" && npm run lint) &&
+    (cd "$FRONTEND_ROOT" && npm run format:check)
+}
+
+backend_complexity_check() {
   local complexity_report=/tmp/verboflex-phase01-radon.txt
-  (cd "$BACKEND_ROOT" && uv run ruff check src tests && uv run ruff format --check src tests)
-  (cd "$FRONTEND_ROOT" && npm run lint && npm run format:check)
   (cd "$BACKEND_ROOT" && uv run radon cc src -s -n C) >"$complexity_report"
   assert_complexity_below_c "$complexity_report"
+}
+
+lint_format_complexity() {
+  run_required_checks backend_static_checks frontend_static_checks backend_complexity_check
 }
 
 backend_coverage_body() {
@@ -612,6 +634,24 @@ self_test_mutation_verdict() {
   printf 'mutation verdict negative control: PASS\n'
 }
 
+self_test_check_sequence() (
+  local fixture log rc
+  fixture=$(mktemp -d)
+  log="$fixture/checks.log"
+  trap 'rm -rf "$fixture"' EXIT INT TERM
+  first_check() { printf 'first\n' >>"$log"; }
+  failing_check() { printf 'failure\n' >>"$log"; return 42; }
+  forbidden_check() { printf 'forbidden\n' >>"$log"; }
+  set +e
+  run_required_checks first_check failing_check forbidden_check
+  rc=$?
+  set -e
+  [ "$rc" -eq 42 ] || die "required check failure status was not propagated"
+  printf '%s\n' first failure | diff -u - "$log" >/dev/null \
+    || die "required checks continued after a failure"
+  printf 'required check sequence negative control: PASS\n'
+)
+
 case "${1:-}" in
   --preflight) checker_preflight ;;
   --self-test-openapi-control) openapi_negative_control ;;
@@ -619,6 +659,7 @@ case "${1:-}" in
   --self-test-candidate-contract) self_test_candidate_contract ;;
   --self-test-infra-lifecycle) self_test_infra_lifecycle ;;
   --self-test-mutation-verdict) self_test_mutation_verdict ;;
+  --self-test-check-sequence) self_test_check_sequence ;;
   --post-fix-candidate) run_post_fix_candidate ;;
   -h|--help)
     printf 'usage: tools/gauntlet.sh [--preflight|--post-fix-candidate]\n'
