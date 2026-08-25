@@ -354,8 +354,11 @@ core_api_flow() {
     -H "Origin: $SMOKE_ALLOWED_ORIGIN" -H "Cookie: __Host-verboflex_refresh=$next_cookie")
   assert_status 204 "$status" logout-second
   status=$(http_request GET "$SMOKE_BACKEND_URL/api/v1/users/me" "$response" "$headers" \
+    -H "Authorization: Bearer $ordinary_token")
+  assert_status 401 "$status" pre-rotation-revoked-access
+  status=$(http_request GET "$SMOKE_BACKEND_URL/api/v1/users/me" "$response" "$headers" \
     -H "Authorization: Bearer $access_token")
-  assert_status 401 "$status" revoked-access
+  assert_status 401 "$status" successor-revoked-access
 }
 
 reset_admin_for_browser() {
