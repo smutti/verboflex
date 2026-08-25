@@ -94,7 +94,7 @@ class BoundedLocalRateLimiter:
             current = self._windows.get(key)
             if current is None or now >= current.started_at + window_seconds:
                 if current is None and len(self._windows) >= self._max_keys:
-                    self._windows.popitem(last=False)
+                    self._windows.pop(next(iter(self._windows)))
                 current = _LocalWindow(started_at=now, attempts=1)
             else:
                 current = _LocalWindow(
@@ -122,7 +122,9 @@ def get_local_rate_limiter() -> BoundedLocalRateLimiter:
 
 def validated_client_ip(request: Request) -> str:
     """Return only the server-observed, syntactically valid peer address."""
-    candidate = request.client.host if request.client is not None else ""
+    if request.client is None:
+        return "unknown"
+    candidate = request.client.host
     try:
         return str(ip_address(candidate))
     except ValueError:
