@@ -73,6 +73,7 @@ grep -Fq 'required check sequence negative control: PASS' "$output_file"
 "$repo_root/tools/gauntlet.sh" --self-test-frontend-coverage >"$output_file" 2>&1
 grep -Fq 'frontend changed-line coverage negative controls: PASS' "$output_file"
 grep -Fq 'frontend coverage exclusion mapping negative control: PASS' "$output_file"
+grep -Fq 'frontend Cobertura partial-branch negative control: PASS' "$output_file"
 
 "$repo_root/tools/gauntlet.sh" --self-test-secret-audit-policy >"$output_file" 2>&1
 grep -Fq 'secret audit exact-policy negative control: PASS' "$output_file"
