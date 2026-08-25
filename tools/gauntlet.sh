@@ -27,6 +27,19 @@ supply-chain-secrets
 staging-adversarial-smoke
 final-source-state"
 
+readonly EXPECTED_CANDIDATE_LAYERS="source-state-candidate
+backend-tests
+frontend-tests-browser
+types
+lint-format-complexity
+changed-line-coverage
+mutation-properties
+migration-rehearsal
+openapi-drift
+supply-chain-secrets
+staging-adversarial-smoke
+candidate-source-state"
+
 TEST_POSTGRES_NAME=""
 TEST_REDIS_NAME=""
 TEST_WORKER_PID=""
@@ -116,10 +129,11 @@ assert_complexity_below_c() {
 }
 
 audit_layer_record() {
+  local expected_layers=${1:-$EXPECTED_LAYERS}
   local expected_file actual_file
   expected_file=$(mktemp)
   actual_file=$(mktemp)
-  printf '%s\n' "$EXPECTED_LAYERS" >"$expected_file"
+  printf '%s\n' "$expected_layers" >"$expected_file"
   [ -f "$LAYER_RECORD" ] || die "layer completion record is missing"
   sed '/^$/d' "$LAYER_RECORD" >"$actual_file"
   assert_files_equal "$expected_file" "$actual_file"
@@ -466,6 +480,14 @@ source_state_layer() {
   printf '%s\n' "$digest" >"$DIGEST_RECORD"
 }
 
+candidate_source_state_layer() {
+  local digest
+  "$SOURCE_STATE" --verify-review-candidate
+  digest=$($SOURCE_STATE --digest)
+  [ "${#digest}" -eq 64 ] || die "candidate source digest is malformed"
+  printf '%s\n' "$digest" >"$DIGEST_RECORD"
+}
+
 final_source_state() {
   "$SOURCE_STATE" --verify-final-before-report
 }
@@ -491,12 +513,47 @@ run_full_gauntlet() {
   printf '\nPHASE 1 GAUNTLET: PASS\n'
 }
 
+run_post_fix_candidate() {
+  : >"$LAYER_RECORD"
+  trap cleanup_test_infra EXIT INT TERM
+  run_layer source-state-candidate candidate_source_state_layer
+  run_layer backend-tests backend_tests
+  run_layer frontend-tests-browser frontend_tests_browser
+  run_layer types types
+  run_layer lint-format-complexity lint_format_complexity
+  run_layer changed-line-coverage changed_line_coverage
+  run_layer mutation-properties mutation_properties
+  run_layer migration-rehearsal migration_rehearsal
+  run_layer openapi-drift openapi_drift
+  run_layer supply-chain-secrets supply_chain_secrets
+  run_layer staging-adversarial-smoke staging_adversarial_smoke
+  run_layer candidate-source-state final_source_state
+  audit_layer_record "$EXPECTED_CANDIDATE_LAYERS"
+  cleanup_test_infra
+  trap - EXIT INT TERM
+  printf '\nPHASE 1 POST-FIX CANDIDATE VALIDATION: PASS (NON-FINAL)\n'
+}
+
+self_test_candidate_contract() {
+  printf '%s\n' "$EXPECTED_CANDIDATE_LAYERS" >"$LAYER_RECORD"
+  audit_layer_record "$EXPECTED_CANDIDATE_LAYERS"
+  sed '$d' "$LAYER_RECORD" >"$LAYER_RECORD.incomplete"
+  cp "$LAYER_RECORD.incomplete" "$LAYER_RECORD"
+  expect_control_failure candidate-layer-completion 'controlled drift detected' \
+    audit_layer_record "$EXPECTED_CANDIDATE_LAYERS"
+  "$SOURCE_STATE" --help | grep -Fq -- '--verify-review-candidate' \
+    || die "candidate review source contract is missing"
+  printf 'post-fix candidate contract: PASS\n'
+}
+
 case "${1:-}" in
   --preflight) checker_preflight ;;
   --self-test-openapi-control) openapi_negative_control ;;
   --self-test-staging-layer) self_test_staging_layer ;;
+  --self-test-candidate-contract) self_test_candidate_contract ;;
+  --post-fix-candidate) run_post_fix_candidate ;;
   -h|--help)
-    printf 'usage: tools/gauntlet.sh [--preflight]\n'
+    printf 'usage: tools/gauntlet.sh [--preflight|--post-fix-candidate]\n'
     ;;
   '') run_full_gauntlet ;;
   *) die "unknown option: $1" ;;

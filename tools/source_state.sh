@@ -208,10 +208,31 @@ verify_review_closed_contract() {
 verify_review_contract() {
   local review_file=$1
   local actual_digest=$2
-  local reviewed_digest
   verify_review_closed_contract "$review_file"
+  verify_review_source_contract "$review_file" "$actual_digest"
+}
+
+verify_review_source_contract() {
+  local review_file=$1
+  local actual_digest=$2
+  local reviewed_digest
+  [ -f "$review_file" ] || die "review artifact is missing: ${review_file#$DEFAULT_ROOT/}"
   reviewed_digest=$(extract_markdown_value "$review_file" 'Reviewed-source-digest')
   verify_digest_value "$reviewed_digest" "$actual_digest"
+}
+
+verify_review_candidate_contract() {
+  local review_file=$1
+  local actual_digest=$2
+  local status_value open_count gauntlet_status
+  [ -f "$review_file" ] || die "review artifact is missing: ${review_file#$DEFAULT_ROOT/}"
+  status_value=$(extract_review_value "$review_file" 'Review-status')
+  open_count=$(extract_review_value "$review_file" 'Open-critical-high')
+  gauntlet_status=$(extract_review_value "$review_file" 'Full-gauntlet-status')
+  [ "$status_value" = "OPEN" ] || die "candidate review status is not OPEN"
+  [ "$open_count" = "0" ] || die "candidate review has unresolved critical/high findings"
+  [ "$gauntlet_status" = "PENDING" ] || die "candidate full-gauntlet status is not PENDING"
+  verify_review_source_contract "$review_file" "$actual_digest"
 }
 
 expect_failure() {
@@ -352,7 +373,7 @@ self_test_manifest() {
 usage() {
   printf '%s\n' \
     'usage: tools/source_state.sh --digest | --review-digest | --self-test-manifest' \
-    '       tools/source_state.sh --verify-review-closed | --verify-review-source' \
+    '       tools/source_state.sh --verify-review-closed | --verify-review-source | --verify-review-candidate' \
     '       tools/source_state.sh --verify-final-before-report | --verify-report-digest'
 }
 
@@ -373,6 +394,10 @@ case "$command" in
   --verify-review-source)
     actual=$(compute_digest "$DEFAULT_ROOT" "$DEFAULT_MANIFEST" review)
     verify_review_contract "$DEFAULT_ROOT/$REVIEW_PATH" "$actual"
+    ;;
+  --verify-review-candidate)
+    actual=$(compute_digest "$DEFAULT_ROOT" "$DEFAULT_MANIFEST" review)
+    verify_review_candidate_contract "$DEFAULT_ROOT/$REVIEW_PATH" "$actual"
     ;;
   --verify-final-before-report)
     [ -f "$DIGEST_RECORD" ] || die "gauntlet digest record is missing: $DIGEST_RECORD"
