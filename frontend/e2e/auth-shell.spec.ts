@@ -183,17 +183,24 @@ test("auth shell completes forced change, refresh, responsive navigation, and lo
       ).toBeVisible();
     } else {
       await expect(navigationTrigger).toBeVisible();
-      await navigationTrigger.focus();
-      await expect(navigationTrigger).toBeFocused();
-      await page.keyboard.press("Enter");
-      const sheet = page.getByRole("dialog", { name: "Navigation" });
-      await expect(sheet).toBeVisible();
-      await expect(sheet.locator(":focus")).toHaveCount(1);
-      await expect(
-        sheet.getByRole("button", { name: "Workspace overview" }),
-      ).toHaveAttribute("aria-current", "page");
-      await page.keyboard.press("Escape");
-      await expect(sheet).toBeHidden();
+      for (const cycle of [1, 2, 3, 4]) {
+        await test.step(`${width}px keyboard navigation cycle ${cycle}`, async () => {
+          await navigationTrigger.focus();
+          await expect(navigationTrigger).toBeFocused();
+          await page.keyboard.press("Enter");
+          const sheet = page.getByRole("dialog", { name: "Navigation" });
+          await expect(sheet).toBeVisible();
+          const focusedControl = sheet.locator(":focus");
+          await expect(focusedControl).toHaveCount(1);
+          await expect(focusedControl).toBeVisible();
+          await expect(
+            sheet.getByRole("button", { name: "Workspace overview" }),
+          ).toHaveAttribute("aria-current", "page");
+          await focusedControl.press("Escape");
+          await expect(sheet).toBeHidden();
+          await expect(navigationTrigger).toBeFocused();
+        });
+      }
     }
   }
 
