@@ -24,6 +24,9 @@ vi.mock("../../features/auth/session", () => ({
 
 const readSystemStatusMock = vi.mocked(readSystemStatus);
 const useSessionMock = vi.mocked(useSession);
+type ReadSystemStatusResult = Awaited<
+  ReturnType<typeof readSystemStatus<false>>
+>;
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -238,8 +241,8 @@ describe("authenticated application shell", () => {
   });
 
   it("ignores an initial status response superseded by newer authority", async () => {
-    const stale = deferred<Awaited<ReturnType<typeof readSystemStatus>>>();
-    const current = deferred<Awaited<ReturnType<typeof readSystemStatus>>>();
+    const stale = deferred<ReadSystemStatusResult>();
+    const current = deferred<ReadSystemStatusResult>();
     readSystemStatusMock
       .mockReturnValueOnce(stale.promise)
       .mockReturnValueOnce(current.promise);
@@ -292,8 +295,8 @@ describe("authenticated application shell", () => {
   });
 
   it("ignores a retry response superseded by a new access token", async () => {
-    const staleRetry = deferred<Awaited<ReturnType<typeof readSystemStatus>>>();
-    const current = deferred<Awaited<ReturnType<typeof readSystemStatus>>>();
+    const staleRetry = deferred<ReadSystemStatusResult>();
+    const current = deferred<ReadSystemStatusResult>();
     readSystemStatusMock
       .mockResolvedValueOnce({
         data: undefined,
