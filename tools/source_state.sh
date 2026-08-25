@@ -85,8 +85,12 @@ resolve_manifest() {
   done <"$exclude_rules"
   sort -u "$excluded_paths" -o "$excluded_paths"
 
-  awk -F '|' 'NR==FNR { excluded[$0]=1; next } !excluded[$2] { print }' \
-    "$excluded_paths" "$included_candidates" | sort -u >"$destination"
+  if [ -s "$excluded_paths" ]; then
+    awk -F '|' 'NR==FNR { excluded[$0]=1; next } !excluded[$2] { print }' \
+      "$excluded_paths" "$included_candidates" | sort -u >"$destination"
+  else
+    sort -u "$included_candidates" >"$destination"
+  fi
 
   for required in implementation tests config lockfiles migrations verifier-scripts review; do
     if [ "$mode" = "review" ] && [ "$required" = "review" ]; then
@@ -233,10 +237,8 @@ self_test_manifest() {
   [ "${#baseline}" -eq 64 ] || die "positive control did not produce a SHA-256 digest"
 
   sed 's#:(glob)reports/\*\*#:(glob)absent-artifacts/**#' \
-    "$manifest" >"$fixture/config/empty-exclusion-manifest.txt"
-  git -C "$fixture" add config/empty-exclusion-manifest.txt
-  git -C "$fixture" commit -qm empty-exclusion-fixture
-  digest=$(compute_digest "$fixture" config/empty-exclusion-manifest.txt final)
+    "$manifest" >"$fixture/empty-exclusion-manifest.txt"
+  digest=$(compute_digest "$fixture" empty-exclusion-manifest.txt final)
   [ "${#digest}" -eq 64 ] || die "empty exclusion set removed included source"
 
   for path in app/main.txt tests/test.txt config/app.conf locks/deps.lock migrations/001.sql \
