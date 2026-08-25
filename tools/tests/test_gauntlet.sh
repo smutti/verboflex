@@ -38,6 +38,7 @@ for required_suite in \
   tests/integration/test_refresh_concurrency.py; do
   grep -Fq "\"$required_suite\"" "$repo_root/backend/pyproject.toml"
 done
+grep -Fq 'on_dependency_change = "rerun"' "$repo_root/backend/pyproject.toml"
 
 "$repo_root/tools/gauntlet.sh" --self-test-candidate-contract >"$output_file" 2>&1
 grep -Fq 'post-fix candidate contract: PASS' "$output_file"
