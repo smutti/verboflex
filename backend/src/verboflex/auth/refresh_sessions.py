@@ -152,7 +152,7 @@ def revoke_refresh_session(
     *,
     now: datetime | None = None,
 ) -> None:
-    """Idempotently revoke the session named by a valid-looking cookie."""
+    """Idempotently revoke the complete family named by a valid-looking cookie."""
     if not _is_well_formed_refresh_token(refresh_token):
         return
     assert refresh_token is not None
@@ -163,5 +163,12 @@ def revoke_refresh_session(
             .where(AuthSession.token_hash == hash_refresh_token(refresh_token))
             .with_for_update()
         ).scalar_one_or_none()
-        if auth_session is not None and auth_session.revoked_at is None:
-            auth_session.revoked_at = revoked_at
+        if auth_session is not None:
+            session.execute(
+                update(AuthSession)
+                .where(
+                    AuthSession.family_id == auth_session.family_id,
+                    AuthSession.revoked_at.is_(None),
+                )
+                .values(revoked_at=revoked_at)
+            )
