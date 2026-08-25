@@ -1,13 +1,13 @@
 # Phase 1 Fresh-Context Code and Security Review
 
-- Review-status: OPEN
+- Review-status: CLOSED
 - Open-critical-high: 0
-- Full-gauntlet-status: PENDING
+- Full-gauntlet-status: PASS
 - Reviewed-source-digest: `14f4e2795d168b488a33a9fca1a8a8fe746d0ec9df29dd640ab883a98427f709`
 - Review-date: 2026-08-25
 - Review-mode: fresh-context independent goal-backward and OWASP ASVS-aligned source review
 - Candidate-verdict: PASS_FOR_POST_FIX_GAUNTLET
-- Closure-verdict: PENDING
+- Closure-verdict: PASS
 - Critical: 0
 - High: 0
 - Medium: 0
@@ -22,10 +22,10 @@ Low finding: a development-only transitive `qs` advisory with no production
 dependency path.
 
 This fresh source-bound review records the candidate verdict
-**PASS_FOR_POST_FIX_GAUNTLET**. The artifact deliberately remains
-**OPEN/PENDING**: the complete post-fix gauntlet has not yet been run against
-this reviewed digest, so this review makes no full-gauntlet PASS or closure
-claim.
+**PASS_FOR_POST_FIX_GAUNTLET**. The complete post-fix candidate gauntlet then
+passed against the unchanged source, and the same fresh-context reviewer
+independently reconciled its external log, exact layer record, digest records,
+current source state, and cleanup. The review is therefore **CLOSED/PASS**.
 
 ## Scope and source identity
 
@@ -161,10 +161,24 @@ logout-query mutations adjacent to the two equivalent join spellings.
 
 ### Phase B — complete post-fix candidate gauntlet
 
-**PENDING.** A complete gauntlet must run against the exact reviewed digest
-above. Only after unchanged-source evidence and an independent closure check may
-this artifact be promoted to CLOSED/PASS. Evidence from an earlier source
-digest is historical and is not reused as current closure evidence.
+**PASS.** The complete post-fix candidate gauntlet ran from initial through
+candidate-source-state against exact final-mode source digest
+`7068ee4e74bbb0e714baccb471b09c70f41fca211f2cc68d9eeeede72aa87851`.
+The external initial digest, candidate digest, and independently recomputed
+current digest were byte-identical. The preserved review-mode digest remains
+`14f4e2795d168b488a33a9fca1a8a8fe746d0ec9df29dd640ab883a98427f709`.
+
+The exact 13-line layer record matched `EXPECTED_CANDIDATE_LAYERS`, in order:
+source-state-candidate, checker-self-tests, backend-tests,
+frontend-tests-browser, types, lint-format-complexity, changed-line-coverage,
+mutation-properties, migration-rehearsal, openapi-drift,
+supply-chain-secrets, staging-adversarial-smoke, and candidate-source-state.
+The log contains every corresponding layer heading and ends exactly with
+`PHASE 1 POST-FIX CANDIDATE VALIDATION: PASS (NON-FINAL)`. Backend mutation
+finished 893/893 with exactly 891 killed and only the two documented equivalent
+join mutants surviving; the compiled PostgreSQL equivalence proof passed.
+Post-run inspection found no scoped gauntlet/smoke container or Celery worker.
+No source changed between initial and terminal source-state checks.
 
 ## Open finding
 
@@ -190,7 +204,7 @@ than being silently waived.
 | ID | Severity | Status | Verified disposition and evidence |
 | --- | --- | --- | --- |
 | VF-SEC-001 | Medium | RESOLVED | `tools/source_manifest.txt` binds implementation, tests, configuration, lockfiles, migrations, verifier scripts, deployment contract, and final review artifact. Empty/missing/category/parser/dirty-path controls fail closed; the manifest self-test passed. |
-| VF-SEC-002 | Medium | RESOLVED | Candidate metadata is single-valued, OPEN/PENDING, and bound to the exact current review digest. `source_state.sh` separately enforces candidate and closure states, preventing either artifact state from masquerading as the other; the closure contract has not been invoked for this digest. |
+| VF-SEC-002 | Medium | RESOLVED | Candidate metadata was single-valued, OPEN/PENDING, and bound to the exact current review digest during execution. After the complete unchanged-source candidate PASS and independent log/layer/digest/cleanup reconciliation, closure metadata is single-valued CLOSED/PASS. `source_state.sh` separately enforces candidate and closure states, preventing either artifact state from masquerading as the other. |
 | VF-SEC-003 | Medium | RESOLVED | The current FastAPI OpenAPI export is byte-identical to `frontend/openapi.json`; generated client drift is checked and the controlled OpenAPI mutation is restored before the real comparison. Auth request limits and response/security contracts are present in the committed schema. |
 | VF-SEC-004 | Medium | RESOLVED | Real-smoke and adversarial tools use private temporary directories/files, generated one-run secrets, explicit timeouts, exact Compose project/image identifiers, stdin/getpass secret entry, scoped cleanup traps, and preflight negative controls. No review-owned container or temporary secret artifact remained. |
 | VF-SEC-005 | Medium | RESOLVED | Backend mutation scope is the nine handwritten auth/session modules listed in `backend/pyproject.toml`; frontend scope is `frontend/src/features/auth/session.tsx` with threshold 100. Freshness, zero-result, property-attribution, exact-range, and verdict fail-closed controls passed their packaged self-tests. Full mutation execution for this digest remains part of the pending post-fix gauntlet. |
@@ -424,21 +438,21 @@ fresh repository scan matched the exact 23-row policy.
 | Backend dependency audit | PASS — no known vulnerability in published packages |
 | Frontend production dependency audit | PASS — zero vulnerabilities |
 | Frontend complete dependency audit | EXPECTED LOW DEBT — VF-SEC-007 only |
-| Full post-fix candidate gauntlet | PENDING — preceding attempts exposed the resolved TS2345 and navigation-dispatch findings; no PASS is claimed for this digest |
-| Independent closure check | PENDING — artifact remains OPEN/PENDING |
+| Full post-fix candidate gauntlet | PASS — all exact 13 candidate layers completed against final-mode digest `7068ee4e74bbb0e714baccb471b09c70f41fca211f2cc68d9eeeede72aa87851`; log terminates with the non-final candidate PASS marker |
+| Backend complete mutation | PASS — 893 total, 891 killed, exactly the two documented SQLAlchemy join equivalents survived, and no other verdict class remained |
+| Independent closure check | PASS — initial/candidate/current digests matched, exact layer sequence and terminal log marker reconciled, review digest remained `14f4e2795d168b488a33a9fca1a8a8fe746d0ec9df29dd640ab883a98427f709`, and no scoped container or worker remained |
 
 ## Final disposition
 
 - Critical / High / Medium / Low: **0 / 0 / 0 / 1**
 - Open Critical/High: **0**
 - Candidate verdict: **PASS_FOR_POST_FIX_GAUNTLET**
-- Closure verdict: **PENDING**
-- Full-gauntlet status: **PENDING**
-- Review status: **OPEN**
+- Closure verdict: **PASS**
+- Full-gauntlet status: **PASS**
+- Review status: **CLOSED**
 
 VF-SEC-007 remains deliberately visible and open at Low severity. Its ship-time
 disposition is mandatory: upgrade the development dependency chain or record a
-time-bounded risk acceptance, then rerun the dependency audit. This candidate
-review neither closes that debt nor substitutes for the pending complete
-post-fix gauntlet, independent closure check, or future live deployment/TLS
+time-bounded risk acceptance, then rerun the dependency audit. Review closure
+does not close that debt and does not substitute for future live deployment/TLS
 evidence required by the release process.
