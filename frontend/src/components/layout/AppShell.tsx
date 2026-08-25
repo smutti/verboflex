@@ -83,7 +83,9 @@ export function AppShell({ accessToken, onLogout, principal }: AppShellProps) {
                     </Button>
                   </SheetTrigger>
                 </TooltipTrigger>
-                <TooltipContent>Open navigation</TooltipContent>
+                {!navigationOpen && (
+                  <TooltipContent>Open navigation</TooltipContent>
+                )}
               </Tooltip>
             </TooltipProvider>
             <SheetContent side="left" className="w-72 max-w-[calc(100vw-32px)]">
