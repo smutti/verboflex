@@ -21,12 +21,21 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
+from verboflex.auth import refresh_sessions as refresh_service
 from verboflex.auth.access_tokens import decode_access_token
 from verboflex.auth.passwords import hash_password
 from verboflex.auth.rate_limits import (
     LOGIN_RATE_LIMIT_SCRIPT,
     enforce_auth_action_rate_limit,
     get_redis_client,
+)
+from verboflex.auth.refresh_sessions import (
+    INVALID_REFRESH_SESSION_MESSAGE,
+    InvalidRefreshSession,
+    _load_predecessor,
+    _require_refresh_user,
+    revoke_refresh_session,
+    rotate_refresh_session,
 )
 from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
@@ -252,6 +261,79 @@ def test_refresh_successor_uses_the_exact_rotation_timeline(
     assert successor.expires_at == rotated_at + timedelta(
         days=refresh_settings().refresh_token_expire_days
     )
+
+
+def test_refresh_service_denials_preserve_exact_opaque_semantics(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Keep unknown, dead, and ineligible authority on one internal denial."""
+    create_refresh_authority(refresh_session_factory)
+
+    with (
+        refresh_session_factory() as session,
+        pytest.raises(InvalidRefreshSession) as missing_error,
+    ):
+        _load_predecessor(session, "Z" * 43)
+    assert missing_error.value.args == (INVALID_REFRESH_SESSION_MESSAGE,)
+
+    rotated_at = datetime.now(UTC)
+    with refresh_session_factory() as session:
+        predecessor = session.get_one(AuthSession, SESSION_ID)
+        predecessor.expires_at = rotated_at
+        with pytest.raises(InvalidRefreshSession) as dead_error:
+            _require_refresh_user(session, predecessor, rotated_at=rotated_at)
+    assert dead_error.value.args == (INVALID_REFRESH_SESSION_MESSAGE,)
+
+    with refresh_session_factory.begin() as session:
+        session.get_one(User, USER_ID).must_change_password = True
+    with refresh_session_factory() as session:
+        predecessor = session.get_one(AuthSession, SESSION_ID)
+        with pytest.raises(InvalidRefreshSession) as user_error:
+            _require_refresh_user(session, predecessor, rotated_at=rotated_at)
+    assert user_error.value.args == (INVALID_REFRESH_SESSION_MESSAGE,)
+
+    with (
+        refresh_session_factory() as session,
+        pytest.raises(InvalidRefreshSession) as malformed_error,
+    ):
+        rotate_refresh_session(session, None, settings=refresh_settings())
+    assert malformed_error.value.args == (INVALID_REFRESH_SESSION_MESSAGE,)
+
+
+def test_refresh_rotation_fails_closed_when_successor_authority_is_missing(
+    refresh_session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reject an impossible empty successor instead of returning invalid authority."""
+    create_refresh_authority(refresh_session_factory)
+    monkeypatch.setattr(refresh_service, "_create_successor_authority", lambda *_args, **_kw: None)
+
+    with refresh_session_factory() as session, pytest.raises(InvalidRefreshSession) as error:
+        rotate_refresh_session(session, REFRESH_TOKEN, settings=refresh_settings())
+
+    assert error.value.args == (INVALID_REFRESH_SESSION_MESSAGE,)
+
+
+def test_logout_default_revocation_clock_is_explicit_utc(
+    refresh_session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Never derive durable revocation state from the host local timezone."""
+    create_refresh_authority(refresh_session_factory)
+    observed_timezones: list[object] = []
+    revoked_at = datetime.now(UTC).replace(microsecond=0)
+
+    class ObservedDateTime(datetime):
+        @classmethod
+        def now(cls, timezone: object = None) -> ObservedDateTime:
+            observed_timezones.append(timezone)
+            return cls.fromtimestamp(revoked_at.timestamp(), UTC)
+
+    monkeypatch.setattr(refresh_service, "datetime", ObservedDateTime)
+    with refresh_session_factory() as session:
+        revoke_refresh_session(session, REFRESH_TOKEN)
+
+    assert observed_timezones == [UTC]
+    with refresh_session_factory() as session:
+        assert session.get_one(AuthSession, SESSION_ID).revoked_at == revoked_at
 
 
 @pytest.mark.parametrize("origin", [None, "https://app.verboflex.example"])
