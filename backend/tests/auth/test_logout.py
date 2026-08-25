@@ -265,9 +265,7 @@ def test_distinct_sessions_for_one_user_share_the_logout_rate_budget(
     redis_keys = [call[2][0] for call in redis_client.calls]
     assert len(redis_keys) == 2
     assert redis_keys[0] == redis_keys[1]
-    expected_digest = hashlib.sha256(
-        f"{USER_ID}\0authenticated-user".encode()
-    ).hexdigest()
+    expected_digest = hashlib.sha256(f"{USER_ID}\0authenticated-user".encode()).hexdigest()
     assert redis_keys[0] == f"verboflex:auth:logout:{expected_digest}"
     assert REFRESH_TOKEN not in redis_keys[0]
     assert second_token not in redis_keys[0]
@@ -298,9 +296,7 @@ def test_stale_logout_credentials_use_the_peer_bounded_anonymous_budget(
     response = asyncio.run(post_logout())
 
     assert response.status_code == 204
-    expected_digest = hashlib.sha256(
-        "invalid-logout-session\x00127.0.0.1".encode()
-    ).hexdigest()
+    expected_digest = hashlib.sha256(b"invalid-logout-session\x00127.0.0.1").hexdigest()
     assert redis_client.calls[0][2][0] == f"verboflex:auth:logout:{expected_digest}"
     assert REFRESH_TOKEN not in str(redis_client.calls[0][2][0])
 

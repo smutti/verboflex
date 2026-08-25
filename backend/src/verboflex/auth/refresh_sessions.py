@@ -77,14 +77,21 @@ def refresh_rate_limit_identity(session: Session, refresh_token: str | None) -> 
 
 
 def logout_rate_limit_user_id(session: Session, refresh_token: str | None) -> UUID | None:
-    """Resolve a valid-looking logout credential to its durable owning user."""
+    """Resolve only current live logout authority to its durable owning user."""
     if not _is_well_formed_refresh_token(refresh_token):
         return None
     assert refresh_token is not None
+    evaluated_at = datetime.now(UTC)
     with session.begin():
         return session.execute(
-            select(AuthSession.user_id).where(
-                AuthSession.token_hash == hash_refresh_token(refresh_token)
+            select(AuthSession.user_id)
+            .join(User, User.id == AuthSession.user_id)
+            .where(
+                AuthSession.token_hash == hash_refresh_token(refresh_token),
+                AuthSession.used_at.is_(None),
+                AuthSession.revoked_at.is_(None),
+                AuthSession.expires_at > evaluated_at,
+                User.is_active.is_(True),
             )
         ).scalar_one_or_none()
 
