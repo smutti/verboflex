@@ -28,6 +28,7 @@ from verboflex.auth.rate_limits import (
 )
 from verboflex.auth.refresh_sessions import (
     InvalidRefreshSession,
+    logout_rate_limit_user_id,
     refresh_rate_limit_identity,
     revoke_refresh_session,
     rotate_refresh_session,
@@ -43,6 +44,8 @@ from verboflex.schemas.system import ErrorResponse
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 REFRESH_COOKIE_NAME = "__Host-verboflex_refresh"
+INVALID_LOGOUT_RATE_IDENTITY = "invalid-logout-session"
+AUTHENTICATED_LOGOUT_RATE_SCOPE = "authenticated-user"
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
 OptionalBearerToken = Annotated[str | None, Depends(oauth2_scheme)]
@@ -230,11 +233,17 @@ async def logout(
         ) from error
 
     try:
+        client_ip = validated_client_ip(request)
+        logout_user_id = logout_rate_limit_user_id(session, refresh_cookie)
         limit = enforce_auth_action_rate_limit(
             redis_client,
             action="logout",
-            identity=refresh_cookie or "missing",
-            client_ip=validated_client_ip(request),
+            identity=(
+                str(logout_user_id) if logout_user_id is not None else INVALID_LOGOUT_RATE_IDENTITY
+            ),
+            client_ip=(
+                AUTHENTICATED_LOGOUT_RATE_SCOPE if logout_user_id is not None else client_ip
+            ),
             limit=LOGOUT_LIMIT,
         )
     except RateLimitUnavailable:

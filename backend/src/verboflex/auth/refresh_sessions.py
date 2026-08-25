@@ -4,6 +4,7 @@ import hashlib
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -73,6 +74,19 @@ def refresh_rate_limit_identity(session: Session, refresh_token: str | None) -> 
     if family_id is None:
         return INVALID_REFRESH_RATE_IDENTITY
     return str(family_id)
+
+
+def logout_rate_limit_user_id(session: Session, refresh_token: str | None) -> UUID | None:
+    """Resolve a valid-looking logout credential to its durable owning user."""
+    if not _is_well_formed_refresh_token(refresh_token):
+        return None
+    assert refresh_token is not None
+    with session.begin():
+        return session.execute(
+            select(AuthSession.user_id).where(
+                AuthSession.token_hash == hash_refresh_token(refresh_token)
+            )
+        ).scalar_one_or_none()
 
 
 def _revoke_replayed_family(

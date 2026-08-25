@@ -302,6 +302,13 @@ Feature: API authorization and incident controls
     And the sixth response includes positive Retry-After and X-RateLimit-Remaining 0
     And password verification is not called for the blocked attempt
 
+  Scenario: logout rate limit follows the authenticated user across sessions
+    Given one active user owns multiple valid refresh sessions
+    When logout requests use those distinct session credentials
+    Then all requests consume the same 10-per-minute authenticated-user budget
+    And invalid or unknown credentials use a peer-bounded anonymous budget
+    And no raw refresh credential or user identifier is stored in the limiter key
+
   Scenario: security-sensitive auth fails closed when Redis is unavailable
     Given Redis is unavailable
     When login, refresh, or password change is attempted
@@ -480,3 +487,4 @@ These are blocking planning and review constraints: no external identity provide
 - 2026-08-24: Superseded the immediately preceding conservative legacy adaptation after the user explicitly directed “Procedi con il moderno e implementa”. The authoritative Phase 1 boundary is now the verified official `shadcn@4.19.0` modern `new-york-v4` Radix registry source: direct `radix-ui@1.6.7` replaces the individual `@radix-ui/react-*` direct packages, direct `next-themes@0.4.6` is authorized for the unmodified official Sonner source, and the official `frontend/src/hooks/use-mobile.ts` registry file is authorized for Sidebar. The source allowlist remains the same 13 UI primitives plus `components.json`, `src/lib/utils.ts`, and that required hook, for 16 registry-owned/configuration files total. Base UI, React Aria, third-party registries, and any other direct dependency or generated file remain forbidden.
 - 2026-08-25: Human-graded verifier finding F-01 as a description/SPEC revision. The hardened cookie behavior already implemented is now authoritative: `__Host-verboflex_refresh`, `Secure` always enabled, and `Path=/`. The earlier local insecure-cookie allowance is withdrawn; local HTTP API clients may authenticate, but a browser only accepts and returns this refresh cookie over a secure context.
 - 2026-08-25: Human-graded verifier finding F-07 as behavioural. Account deactivation is now an explicit non-secret administrative CLI transition: only an active account may transition, and the same transaction marks it inactive, increments `token_version`, and revokes every live refresh session without rewriting earlier revocation timestamps.
+- 2026-08-25: Human-graded verifier finding F-08 as behavioural. Logout resolves a valid refresh credential to its durable owning user before limiting, so distinct sessions and client addresses share the same authenticated-user budget; invalid or unknown credentials remain peer-bounded without exposing raw authority in Redis.
