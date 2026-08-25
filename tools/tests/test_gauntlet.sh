@@ -61,6 +61,9 @@ grep -Fq 'test infrastructure lifecycle: PASS' "$output_file"
 "$repo_root/tools/gauntlet.sh" --self-test-mutation-verdict >"$output_file" 2>&1
 grep -Fq 'mutation verdict negative control: PASS' "$output_file"
 
+"$repo_root/tools/gauntlet.sh" --self-test-equivalent-mutants >"$output_file" 2>&1
+grep -Fq 'exact equivalent mutation controls: PASS' "$output_file"
+
 "$repo_root/tools/gauntlet.sh" --self-test-mutation-freshness >"$output_file" 2>&1
 grep -Fq 'mutation freshness negative control: PASS' "$output_file"
 

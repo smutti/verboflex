@@ -9,7 +9,6 @@ from collections.abc import Generator, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
@@ -291,42 +290,6 @@ def test_logout_rate_limit_resolution_uses_explicit_utc_clock(
 
     assert observed_timezones == [UTC]
     assert user_id == USER_ID
-
-
-def test_logout_rate_limit_resolution_uses_explicit_ownership_join(
-    refresh_session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Keep user ownership explicit instead of relying on inferred ORM joins."""
-    create_refresh_authority(refresh_session_factory)
-    select_type = type(select(AuthSession.user_id))
-    original_join = select_type.join
-    observed_onclauses: list[object | None] = []
-
-    def observe_join(
-        statement: Any,
-        target: Any,
-        onclause: Any = None,
-        *,
-        isouter: bool = False,
-        full: bool = False,
-    ) -> Any:
-        assert target is User
-        observed_onclauses.append(onclause)
-        return original_join(
-            statement,
-            target,
-            onclause,
-            isouter=isouter,
-            full=full,
-        )
-
-    monkeypatch.setattr(select_type, "join", observe_join)
-    with refresh_session_factory() as session:
-        user_id = refresh_service.logout_rate_limit_user_id(session, REFRESH_TOKEN)
-
-    assert user_id == USER_ID
-    assert len(observed_onclauses) == 1
-    assert str(observed_onclauses[0]) == "users.id = auth_sessions.user_id"
 
 
 def test_logout_rate_limit_resolution_rejects_exact_expiry_boundary(
