@@ -7,7 +7,7 @@ import hashlib
 import os
 from collections.abc import Generator, Iterator
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -272,6 +272,81 @@ def test_malformed_identifier_uses_canonical_limit_key_without_a_user_query(
             (f"verboflex:auth:login:{identity_digest}", str(LOGIN_WINDOW_SECONDS)),
         )
     ]
+
+
+def test_malformed_identifier_fallback_strips_only_approved_ascii_whitespace(
+    login_session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Do not let Python's broader Unicode whitespace set rewrite limiter identity."""
+    observed_identifiers: list[str] = []
+
+    def observe_limit(
+        _redis_client: object,
+        *,
+        normalized_email: str,
+        client_ip: str,
+    ) -> object:
+        del client_ip
+        observed_identifiers.append(normalized_email)
+        return type("Allowed", (), {"allowed": True, "retry_after": 0})()
+
+    monkeypatch.setattr(login_service, "enforce_login_rate_limit", observe_limit)
+    with (
+        login_session_factory() as session,
+        pytest.raises(login_service.InvalidCredentials) as error,
+    ):
+        login_service.authenticate_login(
+            session,
+            FakeRedis(),
+            email="\N{NO-BREAK SPACE}NOT AN EMAIL\N{NO-BREAK SPACE}",
+            password=VALID_PASSWORD,
+            client_ip="192.0.2.10",
+            settings=login_settings(),
+        )
+
+    assert observed_identifiers == ["\N{NO-BREAK SPACE}not an email\N{NO-BREAK SPACE}"]
+    assert error.value.args == (login_service.INVALID_CREDENTIALS_MESSAGE,)
+
+
+def test_login_rate_limit_exception_preserves_exact_internal_semantics() -> None:
+    """Keep the retry metadata paired with one stable internal exhaustion reason."""
+    error = login_service.LoginRateLimited(23)
+
+    assert error.args == (login_service.LOGIN_RATE_LIMITED_MESSAGE,)
+    assert error.retry_after == 23
+
+
+def test_ordinary_login_binds_access_claims_to_the_session_creation_clock(
+    login_session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Use one UTC instant for refresh expiry and ordinary bearer issuance."""
+    create_login_user(login_session_factory)
+    observed_now: list[datetime | None] = []
+
+    def observe_issue_access_token(**kwargs: object) -> str:
+        observed_now.append(kwargs.get("now"))
+        return "observed-access-token"
+
+    monkeypatch.setattr(login_service, "issue_access_token", observe_issue_access_token)
+    with login_session_factory() as session:
+        authority = login_service.authenticate_login(
+            session,
+            FakeRedis(),
+            email="person@example.com",
+            password=VALID_PASSWORD,
+            client_ip="192.0.2.10",
+            settings=login_settings(),
+        )
+    with login_session_factory() as session:
+        persisted = session.execute(select(AuthSession)).scalar_one()
+
+    assert authority.access_token == "observed-access-token"
+    assert len(observed_now) == 1
+    assert observed_now[0] is not None
+    assert observed_now[0].tzinfo == UTC
+    assert persisted.expires_at == observed_now[0] + timedelta(
+        days=login_settings().refresh_token_expire_days
+    )
 
 
 @pytest.mark.parametrize(
