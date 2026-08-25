@@ -207,8 +207,8 @@ checker_preflight() {
     || die "Prettier exact pin is missing"
   grep -Fq 'thresholds:' "$FRONTEND_ROOT/stryker.config.mjs" \
     || die "Stryker fail threshold is missing"
-  grep -Fq 'source_paths = ["src/verboflex/auth"]' "$BACKEND_ROOT/pyproject.toml" \
-    || die "mutmut handwritten auth target is missing"
+  grep -Fq 'source_paths = ["src"]' "$BACKEND_ROOT/pyproject.toml" \
+    || die "mutmut complete import tree is missing"
   grep -Fq 'include|review|docs/reviews/phase-01-code-security.md' \
     "$GAUNTLET_DIR/source_manifest.txt" || die "review artifact is absent from source manifest"
   printf '%s\n' "$EXPECTED_LAYERS" >"$LAYER_RECORD"

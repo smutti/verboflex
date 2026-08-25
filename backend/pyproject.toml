@@ -71,7 +71,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 quote-style = "double"
 
 [tool.mutmut]
-source_paths = ["src/verboflex/auth"]
+source_paths = ["src"]
 only_mutate = [
   "src/verboflex/auth/access_tokens.py",
   "src/verboflex/auth/identity.py",
