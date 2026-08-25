@@ -23,6 +23,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from alembic import command
 from verboflex.auth import refresh_sessions as refresh_service
 from verboflex.auth.access_tokens import decode_access_token
+from verboflex.auth.origin import (
+    ORIGIN_NOT_ALLOWED_MESSAGE,
+    OriginNotAllowed,
+    enforce_cookie_origin,
+)
 from verboflex.auth.passwords import hash_password
 from verboflex.auth.rate_limits import (
     LOGIN_RATE_LIMIT_SCRIPT,
@@ -347,6 +352,14 @@ def test_absent_or_exact_allowed_origin_can_rotate(
     response = asyncio.run(post_refresh(origin=origin))
 
     assert response.status_code == 200
+
+
+def test_hostile_origin_denial_preserves_exact_internal_semantics() -> None:
+    """Keep exact-origin rejection stable before the HTTP layer makes it opaque."""
+    with pytest.raises(OriginNotAllowed) as error:
+        enforce_cookie_origin("https://attacker.example", settings=refresh_settings())
+
+    assert error.value.args == (ORIGIN_NOT_ALLOWED_MESSAGE,)
 
 
 @pytest.mark.parametrize(
