@@ -97,6 +97,7 @@ pytest_add_cli_args_test_selection = [
 ]
 mutate_only_covered_lines = true
 use_git_change_detection = false
+on_dependency_change = "rerun"
 
 [tool.pip-licenses]
 from = "mixed"
