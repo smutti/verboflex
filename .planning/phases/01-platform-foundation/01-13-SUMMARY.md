@@ -19,7 +19,7 @@ affects: [phase-1-gauntlet, phase-1-ui-review, admin-shell]
 actuals:
   tokens: 9209
   tasks: 2
-  commits: 28
+  commits: 29
 
 tech-stack:
   added:
@@ -61,7 +61,7 @@ patterns-established:
   - "Authenticated shell states use exact visible text, accessible landmarks, labelled icon controls, tooltips, bounded radii, and min-width containment."
   - "Real-browser auth checks reset a disposable admin through stdin, exercise forced replacement, and assert that Web Storage remains empty."
 
-requirements-completed: []
+requirements-completed: [PLAT-02, AUTH-04, UI-01]
 
 coverage:
   - id: D12
@@ -95,23 +95,23 @@ coverage:
         status: pass
       - kind: manual
         ref: "In-app browser visual check"
-        status: pending
+        status: pass
     human_judgment: true
 
-duration: 32min
-completed: null
-status: checkpoint
+duration: 35min
+completed: 2026-08-25
+status: complete
 ---
 
-# Phase 1 Plan 13: Authenticated Shell and Browser Evidence Checkpoint
+# Phase 1 Plan 13: Authenticated Shell and Browser Evidence Summary
 
-**The modern authenticated shell and every automated contract are green; final manual inspection of the password-change and authenticated pages awaits the browser-safety handoff below.**
+**The modern authenticated shell, full real auth path, responsive layouts, and final manual browser inspection are green.**
 
 ## Performance
 
-- **Duration to checkpoint:** 32 min
+- **Active duration:** 35 min
 - **Started:** 2026-08-24T20:07:26Z
-- **Checkpoint:** 2026-08-24T20:39Z
+- **Completed:** 2026-08-25
 - **Tasks implemented:** 2
 - **Files created/modified:** 18
 - **Implementation/test commits:** 28
@@ -157,6 +157,9 @@ status: checkpoint
 - The required browser skill and complete browser-client documentation were read before browser actions.
 - `/login` was manually inspected through the in-app browser at 1440, 768, and 375 pixels. It is a quiet single panel with exact labels/button, no marketing treatment, no horizontal overflow (`bodyWidth` exactly matched each viewport), and a 333px panel at the 375px viewport.
 - Visible focus uses the approved teal 2px treatment with 2px offset. Screenshots were inspected through the browser runtime and were not committed.
+- Under the user's action-time confirmation, the disposable temporary login reached `/change-password`; the user personally pressed the final `Set new password` action. The observed redirect returned to `/login`, and the fresh ordinary login succeeded.
+- The authenticated dashboard was manually inspected at 1440x900, 768x900, and 375x812. Identity `phase13@example.com`, role `Administrator`, workspace content, service status, desktop/sidebar and tablet/mobile sheet hierarchy were visible with no overflow, overlap, or clipped text. The temporary viewport override was reset.
+- A second manual logout was not repeated because the already-green Playwright scenario exercises the real logout and storage outcome; isolated-stack cleanup immediately invalidated the disposable session and removed all data.
 - No cookie or Web Storage inspection was performed through the manual browser. The authorized repository Playwright test alone performs the planned Web Storage assertion.
 
 ## Security and API Evidence
@@ -186,32 +189,28 @@ status: checkpoint
 - The first full backend run correctly failed because the repository integration suite expects dedicated PostgreSQL on 55432, Redis on 56379, and a real worker. Plan-owned disposable test containers were started, and the macOS Python 3.14 Celery prefork attempt segfaulted before accepting work. A distinct `--pool=solo --concurrency=1` worker then passed all 208 tests. The test-only worker and containers were stopped and auto-removed; the application checkpoint stack remains intact.
 - No unapproved direct dependency, generated API drift, product/repository/review/PR functionality, credential storage, or unrelated source change was introduced.
 
-## Human Browser Checkpoint
+## Human Browser Check: PASSED
 
-The in-app browser safety policy requires action-time confirmation before any password is typed and requires the user—not the agent—to submit the final password-change action. The agent therefore stopped at the login page without typing credentials or bypassing the browser through cookie/storage manipulation.
+- The user supplied the required action-time confirmation for the disposable local credentials and personally submitted the final password replacement.
+- `/login`, `/change-password`, and `/` were observed through the in-app browser with the required hierarchy, copy, focus, status, responsive navigation, and overflow checks.
+- Browser safety was preserved: no agent-side final password submission and no manual cookie or Web Storage inspection occurred.
 
-Preserved checkpoint state:
+## Cleanup
 
-- In-app browser tab: `http://localhost:8080/login`, marked for handoff.
-- Docker project: `verboflex_phase01_plan13`; all five services healthy.
-- Disposable admin: reset to its temporary password with mandatory change required; credentials are intentionally not written to this repository.
+- Docker project `verboflex_phase01_plan13` was stopped and removed with both isolated PostgreSQL/Redis volumes and its network. Ports 8000 and 8080 have no listener.
+- The chmod-600 credential handoff file `/tmp/verboflex-plan13-iab-credentials.json` was explicitly deleted and is not recoverable. It was never part of the repository.
+- The earlier test-only PostgreSQL/Redis containers and solo Celery worker had already been stopped and removed after the full backend gate.
 
-Exact confirmation/handoff wording to resume:
-
-> Confermo l'inserimento delle credenziali di test usa-e-getta nel sito locale `http://localhost:8080` e prenderò io il controllo per premere personalmente `Set new password` nel passaggio finale.
-
-After that confirmation, the user must take control for the final `Set new password` submission. The remaining work is to inspect `/change-password` and the authenticated `/` page at 1440/768/375 through the preserved visible browser session, verify the sheet/status/focus/hierarchy, perform or confirm logout, then remove the isolated Docker stack/volumes and mark Plan 01-13 complete in STATE/ROADMAP.
-
-## Self-Check: CHECKPOINT
+## Self-Check: PASSED
 
 - All implementation and automated acceptance behavior exists and is committed.
 - Every non-human plan gate is green against the final committed source state.
-- Only the explicit browser-safety human check and subsequent disposable-stack cleanup remain.
+- The browser-safety human check passed and every plan-owned runtime/data artifact was removed.
 - The only unrelated working-tree path remains the pre-existing untracked `.planning/milestone.lock`, which was never staged or modified.
 
-## CHECKPOINT REACHED
+## PLAN COMPLETE
 
 ---
 
 *Phase: 01-platform-foundation*
-*Checkpoint: 2026-08-24*
+*Completed: 2026-08-25*
