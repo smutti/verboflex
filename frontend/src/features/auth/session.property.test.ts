@@ -53,6 +53,32 @@ function assertAuthorityInvariant(state: SessionState) {
 }
 
 describe("session state properties", () => {
+  it("fails closed for restricted and authenticated events without valid authority", () => {
+    expect(
+      transitionSession(
+        { status: "checking_session" },
+        { type: "restrict", accessToken: "" },
+      ),
+    ).toEqual({ status: "signed_out" });
+
+    expect(
+      transitionSession(
+        { status: "checking_session" },
+        {
+          type: "authenticate",
+          accessToken: "",
+          principal: {
+            id: "73f123f7-ebad-4dad-8b5d-dcc3214b3b06",
+            email: "person@example.com",
+            display_name: "Person",
+            roles: ["translator"],
+            must_change_password: false,
+          },
+        },
+      ),
+    ).toEqual({ status: "signed_out" });
+  });
+
   it("preserves ordinary-token and no-principal invariants across event sequences", () => {
     fc.assert(
       fc.property(
