@@ -13,9 +13,18 @@ from pydantic import SecretStr
 from verboflex.auth.access_tokens import (
     CLOCK_SKEW_TOLERANCE_SECONDS,
     COMMON_REQUIRED_CLAIMS,
+    INVALID_ACCESS_TOKEN_MESSAGE,
+    ORDINARY_SESSION_REQUIRED_MESSAGE,
+    PASSWORD_CHANGE_REQUIRED_MESSAGE,
+    PASSWORD_CHANGE_SESSION_FORBIDDEN_MESSAGE,
     InvalidAccessToken,
     PasswordChangeRequired,
     TokenPurpose,
+    _claims_from_payload,
+    _validated_datetime,
+    _validated_purpose,
+    _validated_session_id,
+    _validated_token_version,
     decode_access_token,
     issue_access_token,
 )
@@ -106,15 +115,19 @@ def test_ordinary_access_token_round_trips_through_strict_verification() -> None
 
 
 @pytest.mark.parametrize(
-    ("purpose", "session_id"),
-    [("access", None), ("password_change", uuid4())],
+    ("purpose", "session_id", "expected_message"),
+    [
+        ("access", None, ORDINARY_SESSION_REQUIRED_MESSAGE),
+        ("password_change", uuid4(), PASSWORD_CHANGE_SESSION_FORBIDDEN_MESSAGE),
+    ],
 )
 def test_issuer_rejects_purpose_session_mismatches(
     purpose: TokenPurpose,
     session_id: UUID | None,
+    expected_message: str,
 ) -> None:
     """Refuse to mint authority whose session shape contradicts its purpose."""
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as error:
         issue_access_token(
             user_id=uuid4(),
             session_id=session_id,
@@ -122,6 +135,85 @@ def test_issuer_rejects_purpose_session_mismatches(
             purpose=purpose,
             settings=token_settings(),
         )
+    assert error.value.args == (expected_message,)
+
+
+@pytest.mark.parametrize(
+    ("operation", "expected_exception", "expected_message"),
+    [
+        (
+            lambda: _validated_purpose({"purpose": "unapproved"}, "access"),
+            InvalidAccessToken,
+            INVALID_ACCESS_TOKEN_MESSAGE,
+        ),
+        (
+            lambda: _validated_purpose({"purpose": "password_change"}, "access"),
+            PasswordChangeRequired,
+            PASSWORD_CHANGE_REQUIRED_MESSAGE,
+        ),
+        (
+            lambda: _validated_purpose({"purpose": "access"}, "password_change"),
+            InvalidAccessToken,
+            INVALID_ACCESS_TOKEN_MESSAGE,
+        ),
+        (
+            lambda: _validated_token_version({"token_version": True}),
+            InvalidAccessToken,
+            INVALID_ACCESS_TOKEN_MESSAGE,
+        ),
+        (
+            lambda: _validated_session_id({"sid": str(uuid4())}, "password_change"),
+            InvalidAccessToken,
+            INVALID_ACCESS_TOKEN_MESSAGE,
+        ),
+        (
+            lambda: _validated_session_id({}, "access"),
+            InvalidAccessToken,
+            INVALID_ACCESS_TOKEN_MESSAGE,
+        ),
+        (
+            lambda: _validated_datetime({"iat": "not-a-timestamp"}, "iat"),
+            InvalidAccessToken,
+            INVALID_ACCESS_TOKEN_MESSAGE,
+        ),
+    ],
+)
+def test_token_validators_preserve_exact_denial_semantics(
+    operation: Any,
+    expected_exception: type[Exception],
+    expected_message: str,
+) -> None:
+    """Keep purpose, session, version, and timestamp denials exact and typed."""
+    with pytest.raises(expected_exception) as error:
+        operation()
+    assert error.value.args == (expected_message,)
+
+
+def test_payload_and_decoder_failures_preserve_exact_invalid_token_semantics() -> None:
+    """Translate lifetime, signature, and claim failures to one exact denial."""
+    issued_at = datetime.now(UTC).replace(microsecond=0)
+    payload: dict[str, object] = {
+        "sub": str(uuid4()),
+        "sid": str(uuid4()),
+        "iat": int(issued_at.timestamp()),
+        "exp": int(issued_at.timestamp()) + 901,
+        "purpose": "access",
+        "token_version": 0,
+    }
+    with pytest.raises(InvalidAccessToken) as lifetime_error:
+        _claims_from_payload(payload, settings=token_settings(), expected_purpose="access")
+    assert lifetime_error.value.args == (INVALID_ACCESS_TOKEN_MESSAGE,)
+
+    with pytest.raises(InvalidAccessToken) as signature_error:
+        decode_access_token("not-a-token", settings=token_settings())
+    assert signature_error.value.args == (INVALID_ACCESS_TOKEN_MESSAGE,)
+
+    payload["exp"] = int(issued_at.timestamp()) + 900
+    payload["sub"] = "not-a-uuid"
+    malformed = jwt.encode(payload, SIGNING_SECRET, algorithm="HS256")
+    with pytest.raises(InvalidAccessToken) as claim_error:
+        decode_access_token(malformed, settings=token_settings())
+    assert claim_error.value.args == (INVALID_ACCESS_TOKEN_MESSAGE,)
 
 
 def test_issuer_and_decoder_fail_closed_without_a_signing_secret() -> None:
