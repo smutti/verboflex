@@ -1,0 +1,19 @@
+[tool.pytest.ini_options]
+addopts = ["--strict-config", "--strict-markers", "-ra"]
+testpaths = ["tests"]
+
+[tool.mutmut]
+source_paths = ["src"]
+only_mutate = [
+  "src/verboflex/auth/access_tokens.py",
+  "src/verboflex/auth/identity.py",
+  "src/verboflex/auth/passwords.py",
+]
+pytest_add_cli_args_test_selection = [
+  "tests/auth/test_access_tokens.py",
+  "tests/auth/test_passwords.py",
+  "tests/core/test_config.py",
+]
+mutate_only_covered_lines = true
+use_git_change_detection = false
+on_dependency_change = "rerun"

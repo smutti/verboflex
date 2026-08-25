@@ -96,6 +96,12 @@ describe("session state properties", () => {
             state = transitionSession(state, event);
             assertAuthorityInvariant(state);
 
+            if (event.type === "check_session") {
+              expect(state).toEqual({ status: "checking_session" });
+            }
+            if (event.type === "sign_out") {
+              expect(state).toEqual({ status: "signed_out" });
+            }
             if (
               event.type === "authenticate" &&
               event.accessToken.length > 0 &&

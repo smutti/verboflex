@@ -13,6 +13,7 @@ readonly LAYER_RECORD="${VERBOFLEX_GAUNTLET_LAYER_FILE:-/tmp/verboflex-phase01-g
 readonly BACKEND_COVERAGE="/tmp/verboflex-phase01-backend-coverage.xml"
 readonly FRONTEND_COVERAGE_DIR="/tmp/verboflex-phase01-frontend-coverage"
 readonly SECRET_SCAN="/tmp/verboflex-phase01-secrets.json"
+readonly BACKEND_PROPERTY_MUTATION_CONFIG="$GAUNTLET_DIR/mutmut-property.toml"
 
 readonly EXPECTED_LAYERS="source-state
 backend-tests
@@ -483,6 +484,29 @@ backend_mutation_body() (
   assert_mutation_stats_fresh "$mutation_stats"
 )
 
+backend_property_mutation() (
+  local workspace mutation_backend mutation_results mutation_stats
+  workspace=$(create_fresh_backend_workspace)
+  trap 'rm -rf "$workspace"' EXIT INT TERM
+  mutation_backend="$workspace/backend"
+  mutation_stats="$mutation_backend/mutants/mutmut-cicd-stats.json"
+  cp "$BACKEND_PROPERTY_MUTATION_CONFIG" "$mutation_backend/pyproject.toml"
+  (cd "$mutation_backend" && "$BACKEND_ROOT/.venv/bin/mutmut" run)
+  (cd "$mutation_backend" && "$BACKEND_ROOT/.venv/bin/mutmut" export-cicd-stats)
+  mutation_results=$(cd "$mutation_backend" && "$BACKEND_ROOT/.venv/bin/mutmut" results)
+  assert_no_surviving_mutants "$mutation_results"
+  assert_mutation_stats_fresh "$mutation_stats"
+)
+
+frontend_property_mutation() {
+  (cd "$FRONTEND_ROOT" && npm run test:mutation -- \
+    --mutate 'src/features/auth/session.tsx:39-91' \
+    --testFiles 'src/features/auth/session.property.test.ts' \
+    --reporters clear-text \
+    --tempDirName '.stryker-property-tmp' \
+    --cleanTempDir always)
+}
+
 assert_no_surviving_mutants() {
   local mutation_results=$1
   if [ -n "$mutation_results" ]; then
@@ -493,7 +517,11 @@ assert_no_surviving_mutants() {
 
 mutation_properties() {
   with_test_infra backend_mutation_body
+  backend_property_mutation
   (cd "$FRONTEND_ROOT" && npm run test:mutation)
+  frontend_property_mutation
+  (cd "$BACKEND_ROOT" && uv run pytest -q tests/auth/test_access_tokens.py \
+    tests/auth/test_passwords.py tests/core/test_config.py)
   (cd "$FRONTEND_ROOT" && npm run test -- --run src/features/auth/session.property.test.ts)
 }
 
@@ -756,6 +784,25 @@ self_test_mutation_freshness() (
   printf 'mutation freshness negative control: PASS\n'
 )
 
+self_test_property_mutation() {
+  local frontend_scope
+  [ -f "$BACKEND_PROPERTY_MUTATION_CONFIG" ] \
+    || die "backend property mutation config is missing"
+  for required_path in \
+    src/verboflex/auth/access_tokens.py \
+    src/verboflex/auth/identity.py \
+    src/verboflex/auth/passwords.py; do
+    grep -Fq "\"$required_path\"" "$BACKEND_PROPERTY_MUTATION_CONFIG" \
+      || die "backend property mutation scope is incomplete"
+  done
+  frontend_scope=$(sed -n '39,91p' "$FRONTEND_ROOT/src/features/auth/session.tsx")
+  printf '%s\n' "$frontend_scope" | grep -Fq 'export function transitionSession' \
+    || die "frontend property mutation range omits transitionSession"
+  printf '%s\n' "$frontend_scope" | grep -Fq 'export function initialSessionState' \
+    || die "frontend property mutation range omits initialSessionState"
+  printf 'property mutation attribution contract: PASS\n'
+}
+
 self_test_check_sequence() (
   local fixture log rc
   fixture=$(mktemp -d)
@@ -828,6 +875,7 @@ case "${1:-}" in
   --self-test-infra-lifecycle) self_test_infra_lifecycle ;;
   --self-test-mutation-verdict) self_test_mutation_verdict ;;
   --self-test-mutation-freshness) self_test_mutation_freshness ;;
+  --self-test-property-mutation) self_test_property_mutation ;;
   --self-test-check-sequence) self_test_check_sequence ;;
   --self-test-frontend-coverage) self_test_frontend_coverage ;;
   --self-test-secret-audit-policy) self_test_secret_audit_policy ;;

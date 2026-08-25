@@ -84,6 +84,20 @@ def test_password_character_boundaries_are_12_through_128(
         validate_password(invalid_password)
 
 
+@given(
+    st.one_of(
+        st.text(max_size=11),
+        st.text(min_size=129, max_size=160),
+    )
+)
+def test_every_generated_out_of_range_password_has_the_exact_denial(password: str) -> None:
+    """Generated invalid lengths preserve the public policy diagnostic exactly."""
+    with pytest.raises(PasswordPolicyError) as error:
+        validate_password(password)
+
+    assert error.value.args == ("password must contain 12 to 128 characters",)
+
+
 @example("x" * 12)
 @example("x" * 128)
 @given(
