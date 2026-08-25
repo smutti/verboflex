@@ -239,6 +239,26 @@ self_test_manifest() {
   baseline=$(compute_digest "$fixture" tools/source_manifest.txt final)
   [ "${#baseline}" -eq 64 ] || die "positive control did not produce a SHA-256 digest"
 
+  digest=$(compute_digest "$fixture" tools/source_manifest.txt review)
+  printf '%s\n' \
+    '- Review-status: CLOSED' \
+    '- Open-critical-high: 0' \
+    "- Reviewed-source-digest: \`$digest\`" >"$fixture/docs/reviews/phase-01-code-security.md"
+  verify_review_contract "$fixture/docs/reviews/phase-01-code-security.md" "$digest"
+  sed 's/Review-status: CLOSED/Review-status: OPEN/' \
+    "$fixture/docs/reviews/phase-01-code-security.md" >"$fixture/open-review.md"
+  expect_failure 'review status is not CLOSED' \
+    verify_review_contract "$fixture/open-review.md" "$digest"
+  sed 's/Open-critical-high: 0/Open-critical-high: 1/' \
+    "$fixture/docs/reviews/phase-01-code-security.md" >"$fixture/nonzero-review.md"
+  expect_failure 'review has unresolved critical/high findings' \
+    verify_review_contract "$fixture/nonzero-review.md" "$digest"
+  printf '%s\n' '- Review-status: OPEN' >>"$fixture/docs/reviews/phase-01-code-security.md"
+  expect_failure 'expected exactly one Review-status value' \
+    verify_review_contract "$fixture/docs/reviews/phase-01-code-security.md" "$digest"
+  expect_failure 'review artifact is missing' \
+    verify_review_contract "$fixture/missing-review.md" "$digest"
+
   {
     cat "$manifest"
     printf 'include|implementation|:(glob)missing-implementation/**\n'

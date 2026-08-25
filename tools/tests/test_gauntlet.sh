@@ -12,3 +12,5 @@ if ! "$repo_root/tools/gauntlet.sh" --preflight >"$output_file" 2>&1; then
 fi
 
 grep -Fq 'gauntlet preflight: PASS' "$output_file"
+grep -Fq '"$SOURCE_STATE" --verify-review-closed' "$repo_root/tools/gauntlet.sh"
+grep -Fq '"$SOURCE_STATE" --verify-review-source' "$repo_root/tools/gauntlet.sh"
