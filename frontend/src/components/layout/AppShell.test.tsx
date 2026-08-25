@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -24,6 +24,14 @@ vi.mock("../../features/auth/session", () => ({
 
 const readSystemStatusMock = vi.mocked(readSystemStatus);
 const useSessionMock = vi.mocked(useSession);
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 class TestResizeObserver implements ResizeObserver {
   disconnect() {}
@@ -227,6 +235,122 @@ describe("authenticated application shell", () => {
     );
     expect(retryAlert).not.toHaveTextContent("internal-cache");
     expect(readSystemStatusMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores an initial status response superseded by newer authority", async () => {
+    const stale = deferred<Awaited<ReturnType<typeof readSystemStatus>>>();
+    const current = deferred<Awaited<ReturnType<typeof readSystemStatus>>>();
+    readSystemStatusMock
+      .mockReturnValueOnce(stale.promise)
+      .mockReturnValueOnce(current.promise);
+    const view = render(
+      <AppShell
+        accessToken="superseded-token"
+        onLogout={vi.fn()}
+        principal={principal}
+      />,
+    );
+
+    view.rerender(
+      <AppShell
+        accessToken="current-token"
+        onLogout={vi.fn()}
+        principal={principal}
+      />,
+    );
+    await act(async () => {
+      stale.resolve({
+        data: {
+          api: "online",
+          database: "online",
+          redis: "online",
+          worker: "online",
+          checked_at: "2026-08-24T20:12:00Z",
+        },
+        error: undefined,
+      });
+    });
+
+    expect(screen.queryByText("API online")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Checking service status",
+    );
+
+    await act(async () => {
+      current.resolve({
+        data: {
+          api: "online",
+          database: "online",
+          redis: "pending",
+          worker: "online",
+          checked_at: "2026-08-24T20:13:00Z",
+        },
+        error: undefined,
+      });
+    });
+    expect(await screen.findByText("Redis pending")).toBeVisible();
+  });
+
+  it("ignores a retry response superseded by a new access token", async () => {
+    const staleRetry = deferred<Awaited<ReturnType<typeof readSystemStatus>>>();
+    const current = deferred<Awaited<ReturnType<typeof readSystemStatus>>>();
+    readSystemStatusMock
+      .mockResolvedValueOnce({
+        data: undefined,
+        error: { detail: "status unavailable" },
+      })
+      .mockReturnValueOnce(staleRetry.promise)
+      .mockReturnValueOnce(current.promise);
+    const user = userEvent.setup();
+    const view = render(
+      <AppShell
+        accessToken="retry-token"
+        onLogout={vi.fn()}
+        principal={principal}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Retry connection" }),
+    );
+    view.rerender(
+      <AppShell
+        accessToken="replacement-token"
+        onLogout={vi.fn()}
+        principal={principal}
+      />,
+    );
+    await act(async () => {
+      staleRetry.resolve({
+        data: {
+          api: "online",
+          database: "online",
+          redis: "unavailable",
+          worker: "online",
+          checked_at: "2026-08-24T20:14:00Z",
+        },
+        error: undefined,
+      });
+    });
+
+    expect(screen.queryByText("Redis unavailable")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Checking service status",
+    );
+
+    await act(async () => {
+      current.resolve({
+        data: {
+          api: "online",
+          database: "online",
+          redis: "online",
+          worker: "pending",
+          checked_at: "2026-08-24T20:15:00Z",
+        },
+        error: undefined,
+      });
+    });
+    expect(await screen.findByText("Worker pending")).toBeVisible();
   });
 
   it("offers the exact reversible logout action through session authority", async () => {
