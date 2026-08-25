@@ -179,7 +179,7 @@ assert_diff_coverage_nonempty() {
   if grep -Fq 'No lines with coverage information in this diff.' "$report"; then
     die "changed-line coverage matched no coverable frontend lines"
   fi
-  grep -Eq '^Total: [1-9][0-9]* lines$' "$report" \
+  grep -Eq '^Total:[[:space:]]+[1-9][0-9]*[[:space:]]+lines[[:space:]]*$' "$report" \
     || die "changed-line coverage did not report a nonzero frontend line total"
 }
 
