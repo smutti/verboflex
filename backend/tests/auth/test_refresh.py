@@ -9,6 +9,7 @@ from collections.abc import Generator, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
@@ -270,6 +271,86 @@ def test_refresh_rate_limit_key_is_stable_for_family_and_bounded_for_invalid_tok
     assert redis_keys[0] != redis_keys[2]
 
 
+def test_logout_rate_limit_resolution_uses_explicit_utc_clock(
+    refresh_session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Evaluate live logout authority against an explicitly UTC instant."""
+    create_refresh_authority(refresh_session_factory)
+    evaluated_at = datetime.now(UTC).replace(microsecond=0)
+    observed_timezones: list[object] = []
+
+    class ObservedDateTime(datetime):
+        @classmethod
+        def now(cls, timezone: object = None) -> ObservedDateTime:
+            observed_timezones.append(timezone)
+            return cls.fromtimestamp(evaluated_at.timestamp(), UTC)
+
+    monkeypatch.setattr(refresh_service, "datetime", ObservedDateTime)
+    with refresh_session_factory() as session:
+        user_id = refresh_service.logout_rate_limit_user_id(session, REFRESH_TOKEN)
+
+    assert observed_timezones == [UTC]
+    assert user_id == USER_ID
+
+
+def test_logout_rate_limit_resolution_uses_explicit_ownership_join(
+    refresh_session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep user ownership explicit instead of relying on inferred ORM joins."""
+    create_refresh_authority(refresh_session_factory)
+    select_type = type(select(AuthSession.user_id))
+    original_join = select_type.join
+    observed_onclauses: list[object | None] = []
+
+    def observe_join(
+        statement: Any,
+        target: Any,
+        onclause: Any = None,
+        *,
+        isouter: bool = False,
+        full: bool = False,
+    ) -> Any:
+        assert target is User
+        observed_onclauses.append(onclause)
+        return original_join(
+            statement,
+            target,
+            onclause,
+            isouter=isouter,
+            full=full,
+        )
+
+    monkeypatch.setattr(select_type, "join", observe_join)
+    with refresh_session_factory() as session:
+        user_id = refresh_service.logout_rate_limit_user_id(session, REFRESH_TOKEN)
+
+    assert user_id == USER_ID
+    assert len(observed_onclauses) == 1
+    assert str(observed_onclauses[0]) == "users.id = auth_sessions.user_id"
+
+
+def test_logout_rate_limit_resolution_rejects_exact_expiry_boundary(
+    refresh_session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Treat a logout credential as stale at its exact durable expiry."""
+    create_refresh_authority(refresh_session_factory)
+    exact_expiry = datetime.now(UTC).replace(microsecond=0)
+    with refresh_session_factory.begin() as session:
+        session.get_one(AuthSession, SESSION_ID).expires_at = exact_expiry
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, timezone: object = None) -> FrozenDateTime:
+            assert timezone is UTC
+            return cls.fromtimestamp(exact_expiry.timestamp(), UTC)
+
+    monkeypatch.setattr(refresh_service, "datetime", FrozenDateTime)
+    with refresh_session_factory() as session:
+        user_id = refresh_service.logout_rate_limit_user_id(session, REFRESH_TOKEN)
+
+    assert user_id is None
+
+
 def test_refresh_successor_uses_the_exact_rotation_timeline(
     refresh_session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -370,6 +451,35 @@ def test_logout_default_revocation_clock_is_explicit_utc(
     assert observed_timezones == [UTC]
     with refresh_session_factory() as session:
         assert session.get_one(AuthSession, SESSION_ID).revoked_at == revoked_at
+
+
+def test_logout_preserves_prior_revocation_time_while_finishing_family(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Do not rewrite audit history when idempotently revoking a mixed family."""
+    create_refresh_authority(refresh_session_factory)
+    sibling_id = UUID("00000000-0000-4000-8000-000000000704")
+    prior_revocation = datetime.now(UTC).replace(microsecond=0)
+    completed_at = prior_revocation + timedelta(minutes=5)
+    with refresh_session_factory.begin() as session:
+        session.get_one(AuthSession, SESSION_ID).revoked_at = prior_revocation
+        session.add(
+            AuthSession(
+                id=sibling_id,
+                user_id=USER_ID,
+                family_id=FAMILY_ID,
+                parent_id=SESSION_ID,
+                token_hash="b" * 64,
+                expires_at=completed_at + timedelta(days=7),
+            )
+        )
+
+    with refresh_session_factory() as session:
+        revoke_refresh_session(session, REFRESH_TOKEN, now=completed_at)
+
+    with refresh_session_factory() as session:
+        assert session.get_one(AuthSession, SESSION_ID).revoked_at == prior_revocation
+        assert session.get_one(AuthSession, sibling_id).revoked_at == completed_at
 
 
 @pytest.mark.parametrize("origin", [None, "https://app.verboflex.example"])
