@@ -3,9 +3,9 @@
 - Review-status: OPEN
 - Open-critical-high: 0
 - Full-gauntlet-status: PENDING
-- Reviewed-source-digest: `9d8930798b065c864ce1f86a99612f0c0c416e84edb217fdc5c5339f0e10b3de`
+- Reviewed-source-digest: `60658f82cd814c9180a9a2bb9db1da90a82cb23620c8ee5d2705e33bc969c5bc`
 - Review-date: 2026-08-25
-- Review-mode: fresh-context independent adversarial source review
+- Review-mode: fresh-context independent goal-backward and OWASP ASVS-aligned source review
 - Candidate-verdict: PASS_FOR_POST_FIX_GAUNTLET
 - Critical: 0
 - High: 0
@@ -14,182 +14,275 @@
 
 ## Candidate conclusion
 
-The current source candidate has no open Critical, High, or Medium finding. The two
-previously blocking findings, VF-SEC-010 and VF-SEC-011, are resolved in source and
-covered by focused PostgreSQL-backed tests plus an independent HTTP-boundary probe.
-VF-SEC-007 remains open as non-runtime, dev-only dependency debt at Low severity.
+The reviewed candidate has no open Critical, High, or Medium finding and no new
+finding was introduced by this review. VF-SEC-001 through VF-SEC-006 and
+VF-SEC-008 through VF-SEC-011 remain resolved in the reviewed source.
+VF-SEC-007 remains the sole open Low finding: a development-only transitive
+`qs` advisory with no production dependency path.
 
-The candidate verdict is **PASS_FOR_POST_FIX_GAUNTLET**. This artifact is deliberately
-OPEN and the full post-fix gauntlet is deliberately PENDING. It does not claim a
-CLOSED review, a completed live TLS exercise, or a full-gauntlet PASS.
+The candidate verdict is **PASS_FOR_POST_FIX_GAUNTLET**. This artifact remains
+deliberately **OPEN** and the complete post-fix gauntlet remains deliberately
+**PENDING**. This review does not claim a fresh full-gauntlet PASS, live managed
+TLS-edge proof, or final review closure.
 
 ## Scope and source identity
 
-The blind inspection used `.planning/phases/01-platform-foundation/01-SPEC.md`,
-`01-14-PLAN.md`, the 01-02 through 01-13 summaries only as an index, and every
-source/test/configuration path resolved by `tools/source_manifest.txt`. The
-manifest resolved to 147 unique tracked paths. The previous review artifact was
-opened only after the blind source inspection, to reconcile the VF-SEC identifiers.
+The review covered the approved Phase 1 contract, the authentication and
+authorization call chains, frontend session authority, generated API contract,
+deployment configuration, smoke/adversarial harnesses, custom gauntlet checks,
+and every path selected by `tools/source_manifest.txt` in review mode.
 
-`bash tools/source_state.sh --review-digest` was run twice immediately before
-writing. Both runs exited 0 and returned the exact digest recorded above. The review
-artifact itself is excluded from that digest by the canonical manifest contract.
+The canonical manifest resolved 156 clean tracked paths:
+
+| Category | Paths |
+| --- | ---: |
+| implementation | 88 |
+| tests | 33 |
+| config | 18 |
+| lockfiles | 3 |
+| migrations | 4 |
+| verifier-scripts | 9 |
+| deployment-contract | 1 |
+
+`bash tools/source_state.sh --review-digest` was executed twice immediately
+before this artifact was written. Both runs exited zero and returned exactly
+`60658f82cd814c9180a9a2bb9db1da90a82cb23620c8ee5d2705e33bc969c5bc`.
+The review artifact is excluded only from review-mode digest computation and is
+included by the final source-set contract.
 
 ## Open finding
 
 ### VF-SEC-007 — Low — dev-only transitive `qs` advisory
 
-`npm audit --omit=dev` reports zero runtime vulnerabilities. The complete audit
-still reports the known Moderate advisory GHSA-q8mj-m7cp-5q26 through the dev-only
-`typed-rest-client -> qs` chain. It is not bundled into the production frontend and
-does not create a Phase 1 runtime exploit path. It remains open at Low severity for
-explicit ship-time disposition rather than being silently waived.
+**Status:** OPEN, nonblocking for the post-fix candidate gauntlet; explicit
+ship-time disposition remains required.
 
-## Resolved findings
+`pip-audit` reports no known vulnerability in published backend dependencies and
+`npm audit --omit=dev --audit-level=low` reports zero frontend runtime
+vulnerabilities. The complete npm audit reports GHSA-q8mj-m7cp-5q26 through the
+development-only `typed-rest-client -> qs` chain. The affected package is not in
+the production frontend dependency tree or bundle. This remains visible rather
+than being silently waived.
 
-### VF-SEC-010 — refresh rate-limit identity and ordering
+**ASVS alignment:** V14 Configuration / dependency hygiene.
 
-Disposition: **RESOLVED**.
+## Historical finding disposition
 
-- `backend/src/verboflex/auth/refresh_sessions.py` derives a refresh rate-limit
-  identity from the server-owned `AuthSession.family_id`, not from the presented
-  bearer value. Successors copy the predecessor family identifier, so R1, R2, and
-  every later successor share one stable family identity.
-- Malformed tokens and well-formed-but-unknown tokens both collapse to the constant
-  `invalid-refresh-session`. They cannot create attacker-controlled cardinality.
-  `enforce_auth_action_rate_limit` combines that bounded identity with the validated
-  peer IP and hashes the composite before constructing the Redis key.
-- In `backend/src/verboflex/api/v1/routes/auth.py`, the refresh limiter runs before
-  `rotate_refresh_session`. Request 31 returns the exact 429 contract without
-  consuming or rotating the refresh token.
-- A Redis failure raises the exact 503 authentication-unavailable response and does
-  not rotate the token or set a successor cookie.
-- `test_refresh_rate_limit_key_is_stable_for_family_and_bounded_for_invalid_tokens`
-  proves equal keys for R1/R2, equal sentinel keys for distinct invalid tokens, and
-  separation between a real family and the invalid sentinel. Focused tests also
-  prove request-31 ordering and the Redis failure path.
-
-The lookup needed to resolve a well-formed token to server-owned family identity
-precedes Redis, but no rotation or durable session mutation does. That is consistent
-with the required “rate before rotation” boundary.
-
-### VF-SEC-011 — bounded authentication inputs at the HTTP boundary
-
-Disposition: **RESOLVED**.
-
-- `BoundedOAuth2PasswordRequestForm` enforces `username.max_length=320`,
-  `password.max_length=128`, `client_id.max_length=320`,
-  `client_secret.max_length=128`, and `scope.max_length=1024`.
-- `ChangePasswordRequest` publishes `maxLength: 128` for both
-  `current_password` and `new_password`. The route performs the same bounds check
-  before bearer decoding, rate limiting, database mutation, or Argon2 work.
-- `frontend/openapi.json` contains those exact maximum lengths: login username 320,
-  password 128, client ID 320, client secret 128, scope 1024, and current/new
-  passwords 128.
-- Oversized login username/password tests return 422 with no Redis call. Oversized
-  current/new password tests return 422 with no Redis call and unchanged durable
-  password state.
-- An independent request-level probe also exercised overlong `client_id`,
-  `client_secret`, and `scope`: all returned 422 before the route handler and
-  before Redis. The oversized password-change probe returned the stable envelope
-  `{"detail":"Password must contain 12 to 128 characters"}`.
-
-## Security review matrix
-
-| ID | Severity | Status | Independent disposition |
+| ID | Severity | Status | Verified disposition and evidence |
 | --- | --- | --- | --- |
-| VF-SEC-001 | Medium | RESOLVED | The canonical manifest binds the reviewed implementation, tests, deployment contracts, tools, runbook, generated OpenAPI, and lockfiles. Manifest self-test passes. |
-| VF-SEC-002 | Medium | RESOLVED | Candidate metadata is single-valued, source-bound, OPEN, and explicitly PENDING; the candidate gate validates it against the live digest. |
-| VF-SEC-003 | Medium | RESOLVED | Generated OpenAPI is checked for drift and the bounded auth schemas are present in the committed client contract. |
-| VF-SEC-004 | Medium | RESOLVED | Smoke tooling uses isolated temporary state, restrictive permissions, cleanup traps, and explicit preflight validation. |
-| VF-SEC-005 | Medium | RESOLVED | Current mutation runs killed 779/779 backend mutants and 153/153 frontend mutants, with zero survivors, timeouts, uncovered mutants, or errors. |
-| VF-SEC-006 | Medium | RESOLVED | The runbook defines the managed TLS edge, TLS 1.2/1.3, trusted certificate, HTTP redirect/unreachability, HSTS, loopback-only forwarding, and loopback-bound application ports. Live staging proof remains a separate post-fix gate. |
-| VF-SEC-007 | Low | OPEN | The remaining `qs` advisory is confined to a dev-only transitive chain; production dependency audit is clean. Ship-time disposition is still required. |
-| VF-SEC-008 | Medium | RESOLVED | Refresh cookies use exactly `__Host-verboflex_refresh`, `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`, and no `Domain`; clear semantics match set semantics. Tests reject legacy/wrong prefix, path, and domain variants. |
-| VF-SEC-009 | Medium | RESOLVED | Logout locks the presented session and revokes the whole family. The R0→R1 scenario proves both A1 and A2 return the exact 401 contract after logout; repeated logout remains idempotent. |
-| VF-SEC-010 | Medium | RESOLVED | Stable server-owned family-plus-IP rate identity, bounded invalid sentinel-plus-IP, limiter before rotation, exact 429, and Redis failure 503 are implemented and tested. |
-| VF-SEC-011 | Medium | RESOLVED | Login, OAuth optional fields, and password-change inputs have finite OpenAPI/runtime bounds and reject oversize requests with 422 before Redis/Argon2 while preserving the password-change error envelope. |
+| VF-SEC-001 | Medium | RESOLVED | `tools/source_manifest.txt` binds implementation, tests, configuration, lockfiles, migrations, verifier scripts, deployment contract, and final review artifact. Empty/missing/category/parser/dirty-path controls fail closed; the manifest self-test passed. |
+| VF-SEC-002 | Medium | RESOLVED | Candidate metadata is single-valued and source-bound. `source_state.sh` separately enforces OPEN/zero-critical-high/PENDING for a candidate and CLOSED/zero-critical-high for the later final review contract, preventing this candidate from masquerading as closure. |
+| VF-SEC-003 | Medium | RESOLVED | The current FastAPI OpenAPI export is byte-identical to `frontend/openapi.json`; generated client drift is checked and the controlled OpenAPI mutation is restored before the real comparison. Auth request limits and response/security contracts are present in the committed schema. |
+| VF-SEC-004 | Medium | RESOLVED | Real-smoke and adversarial tools use private temporary directories/files, generated one-run secrets, explicit timeouts, exact Compose project/image identifiers, stdin/getpass secret entry, scoped cleanup traps, and preflight negative controls. No review-owned container or temporary secret artifact remained. |
+| VF-SEC-005 | Medium | RESOLVED | Backend mutation scope is the nine handwritten auth/session modules listed in `backend/pyproject.toml`; frontend scope is `frontend/src/features/auth/session.tsx` with threshold 100. Backend `mutmut results` contains no survivor and the available Stryker result contains 153/153 Killed. The gate rejects any non-empty backend survivor verdict and Stryker breaks below 100; a fresh complete mutation execution remains part of the PENDING gauntlet. |
+| VF-SEC-006 | Medium | RESOLVED | Compose exposes application ports on loopback only and does not publish PostgreSQL/Redis. The runbook requires a trusted TLS edge, TLS 1.2/1.3, HTTP redirect or unreachability, HSTS, hostname/certificate validation, and loopback-only forwarding. Live edge proof remains a separate later gate. |
+| VF-SEC-007 | Low | OPEN | One Moderate npm advisory is confined to the dev-only `typed-rest-client -> qs` chain. Backend and frontend runtime audits are clean; explicit ship-time disposition is retained. |
+| VF-SEC-008 | Medium | RESOLVED | Login and refresh emit only `__Host-verboflex_refresh` with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`, and no `Domain`; temporary login emits no refresh cookie. Logout and password change delete the same exact host cookie scope. Tests and smoke reject legacy `__Secure-verboflex_refresh`, unprefixed names, wrong path, or Domain. |
+| VF-SEC-009 | Medium | RESOLVED | Logout resolves the presented session, locks it, and revokes every member of its server-owned family. The R0 -> R1 test and real smoke prove both pre-rotation A1 and successor A2 fail with the exact 401 after logout; repeated logout returns the same empty 204 and matching deletion cookie. |
+| VF-SEC-010 | Medium | RESOLVED | Refresh limiting derives identity from durable `AuthSession.family_id` plus the validated peer IP. R1/R2 share a key; all malformed or unknown tokens collapse to `invalid-refresh-session` plus IP; real-family and sentinel keys differ and raw authority is absent from Redis keys. Request 31 returns exact 429 before rotation, and invalid Redis state/outage returns exact 503 without mutation or successor cookie. |
+| VF-SEC-011 | Medium | RESOLVED | Login username/password/client_id/client_secret/scope limits are enforced by FastAPI form parsing; password-change current/new limits are checked before bearer decoding, Redis evaluation, durable mutation, or Argon2. The committed OpenAPI publishes 320/128/320/128/1024 and 128/128 maxima. Independent request probes returned 422 for all five oversized login/OAuth cases with zero Redis calls, and focused password-change tests preserve the exact stable 422 envelope and durable state. |
 
-## Additional adversarial review
+## Security and correctness review
 
-### Authentication, replay, and concurrency
+### Authentication and bootstrap
 
-Access JWT decoding fixes the algorithm, requires and type-checks the security claims,
-enforces purpose and bounded lifetime, and then revalidates durable user, session,
-active-state, token-version, and role authority. Refresh rotation locks the predecessor;
-a replay revokes the entire family. The PostgreSQL concurrency test produces one 200,
-one exact 401, one successor, and a revoked family.
+- Bootstrap normalizes the email, validates password policy, obtains a
+  PostgreSQL transaction advisory lock, requires an empty user table and the
+  seeded admin role, and creates one active forced-change administrator. The CLI
+  exposes no password option and reads through getpass or one non-echoed stdin
+  line. Concurrent/second bootstrap and rollback paths are covered.
+- Login applies finite HTTP form bounds before route work, normalizes the email,
+  limits normalized-email plus server-observed IP before user lookup or Argon2,
+  performs dummy Argon2 verification for unknown identities, and returns one
+  non-enumerating 401 for unknown, inactive, or incorrect credentials.
+- Deployed settings restrict JWT to HS256, require at least 32 secret bytes,
+  reject common placeholder markers, require Secure cookies, and validate exact
+  HTTP origins before serving.
 
-Login rate limiting uses normalized email plus validated peer IP before user lookup or
-Argon2 and fails closed with 503 when Redis is unavailable. Refresh uses the stable
-family/sentinel identity described above. Password change, authenticated reads, and
-health checks have explicit finite limits. The local health fallback is bounded rather
-than an unbounded attacker-controlled map.
+### Access and refresh authority
 
-### Origin, CORS, and cookie boundary
+- JWT decoding fixes the algorithm, requires subject/iat/exp/purpose/version,
+  validates claim types, enforces purpose-specific exact lifetime and session-id
+  semantics, and then revalidates active user, token version, durable session,
+  expiry, revocation, password-change flag, and server-loaded roles.
+- Ordinary access tokens require a durable session ID. Forced-change tokens
+  carry no session ID and cannot reach ordinary protected endpoints. Password
+  replacement increments token version and revokes every still-live session for
+  that user in the same database transaction.
+- Refresh material is 32 random bytes, persists only as SHA-256, rotates under a
+  predecessor row lock, keeps a stable server-owned family ID, and revokes the
+  complete family on replay. The PostgreSQL concurrency contract permits exactly
+  one successor and denies/revokes replayed authority.
 
-Present `Origin` values are checked against the exact configured allowlist before
-state mutation; absent Origin remains compatible with non-browser clients. CORS uses
-explicit origins, credentials, the GET/POST method set, and only Authorization and
-Content-Type headers—no wildcard trust. Host-cookie tests cover exact namespace and
-attribute semantics.
+### Cookie, origin, CORS, and logout boundary
 
-### Error handling and secret redaction
+- The cookie contract uses the host-only `__Host-` namespace correctly:
+  `Secure`, `Path=/`, no Domain, plus `HttpOnly` and `SameSite=Lax`. Set and
+  delete operations use the same name and scope; legacy cookie names are never
+  read or emitted.
+- Cookie-authenticated mutations reject any present Origin outside the exact
+  configured allowlist before Redis or PostgreSQL mutation. Absent Origin
+  remains supported for non-browser clients. CORS permits credentials only for
+  explicit origins, GET/POST, Authorization, and Content-Type; it uses no
+  credentialed wildcard.
+- Logout intentionally remains available when Redis is unavailable, clears the
+  browser cookie, and revokes the complete durable refresh family when the
+  supplied cookie resolves. Missing, malformed, unknown, repeated, and valid
+  logout responses remain non-enumerating.
 
-Authentication failures use stable non-enumerating envelopes. Tooling avoids shell
-xtrace, creates private temporary directories/files, does not print bearer, refresh,
-database, or signing secrets, and obtains CLI secrets from stdin/getpass. Frontend
-guards reject credential persistence through Web Storage, IndexedDB, URL surfaces,
-logs, and analytics; the guard includes both positive and negative controls.
+### Rate limits and bounded work
 
-### TLS and deployment boundary
+- Login is limited at 5/minute per normalized-email plus validated peer IP;
+  refresh at 30/minute per stable family/sentinel plus IP; logout at 10/minute;
+  password change at 10/minute per cryptographically verified user plus IP;
+  ordinary reads at 120/minute per durable principal; health at 60/minute per
+  validated peer.
+- Redis scripts perform atomic INCR/EXPIRE, validate the two-element numeric
+  response, bound Retry-After to a positive value, and hash raw identifiers out
+  of keys. Security-sensitive login, refresh, and password-change actions fail
+  closed on unavailable/invalid Redis state. The diagnostic local fallback is a
+  locked bounded LRU map rather than an attacker-unbounded dictionary.
+- Oversized credential requests are rejected before expensive password work and
+  before Redis evaluation. Rate-limit exhaustion is also proven to occur before
+  Argon2 verification or refresh/password durable mutation.
 
-Compose binds backend and frontend ports to loopback and does not publish PostgreSQL or
-Redis. The documented production boundary terminates trusted TLS at an external managed
-edge and permits only loopback forwarding to the application. Repository evidence can
-verify that contract; the live-edge exercise remains intentionally pending.
+### API, OpenAPI, and frontend session authority
 
-### Coverage and test quality
+- The seven-operation API surface, exact methods/status families, OAuth2 bearer
+  markers, error models, form/JSON bounds, operation IDs, canonical export, and
+  generated client are guarded against drift.
+- Browser access tokens exist only in React memory. Refresh authority remains in
+  the Secure HttpOnly cookie and every generated call uses central
+  `credentials: "include"`. Principal identity and roles come only from
+  `/users/me`; the frontend does not decode bearer claims or invent authority.
+- The state machine confines checking, signed-out, forced-change, and ordinary
+  routes. A monotonic operation token prevents late login/identity/refresh or
+  password-change completions from restoring React authority after logout or a
+  newer transition. Logout clears React authority before the network call, even
+  if that call fails.
+- The AST credential-storage guard rejects access/refresh/password material in
+  Web Storage, IndexedDB, URLs, logs, or analytics and has both known-good and
+  known-bad controls.
 
-Backend and frontend coverage commands enforce 100% line/branch/statement/function
-thresholds for the governed handwritten source, with narrowly declared exclusions for
-generated clients, the migration, project-owned shadcn primitives, and entrypoint-only
-wiring. The fresh focused PostgreSQL run passed 10/10 security tests. Mutation
-verification independently completed at 100% for both governed mutation scopes. The
-full coverage and end-to-end re-execution belong to the still-PENDING post-fix
-gauntlet, so this review does not promote their historical result into a current full
-gauntlet PASS.
+### Infrastructure, source state, and smoke
 
-## ASVS-oriented disposition
+- Backend runtime is non-root, frontend is a production static build, app ports
+  are loopback-bound, and data services are internal-only. Staging/production
+  use SCRAM PostgreSQL auth and fail configuration on empty/placeholder/short JWT
+  material or insecure refresh-cookie configuration.
+- Source-state hashing covers sorted paths plus file digests, verifies every
+  required category, rejects missing/untracked/staged/unstaged inputs, and
+  distinguishes review-mode from final-mode source identity. Layer records must
+  match the exact ordered list before a success message can be printed.
+- The smoke path covers migration upgrade/downgrade/upgrade, protected bootstrap,
+  health/readiness, Celery result 5, temporary login/change/login, exact cookie
+  attributes, me/status, rotation, family logout A1/A2 invalidation, browser
+  reload/storage/viewports/logout, hostile tokens/origin, replay/concurrency,
+  brute-force boundary, non-enumeration, and Redis outage behavior.
+
+## Latest gate verification
+
+### Static-check failure propagation and Ruff formatting
+
+`run_required_checks` invokes each named check in order and immediately returns
+the exact first non-zero status. `backend_static_checks` itself links `ruff check`
+and `ruff format --check` with `&&`, so either Ruff step becomes the wrapper's
+first failure. The repository negative control returns 42 at the middle check and
+proves the following check is not invoked.
+
+An additional isolated probe used the real `backend_static_checks` function with
+a fake Ruff executable: lint returned zero, format returned 42, the wrapper
+returned 42, and neither frontend checks nor complexity ran. Current real Ruff
+checks also passed:
+
+- `uv run ruff check src tests`: PASS.
+- `uv run ruff format --check src tests`: PASS — 58 files already formatted.
+
+### Detect-secrets exact policy and 23/23 classification
+
+The gauntlet converts every detection to the exact tuple
+`path|line|plugin|hashed-fingerprint`, sorts the result, and compares it byte for
+byte with the source-bound audited policy. There is no plugin-wide, file-wide, or
+count-only waiver for any of the 23 accepted detections. A missing, changed,
+moved, retyped, re-fingerprinted, or additional detection fails the comparison.
+
+The normal scanner omits dependency lockfiles and `.planning/` from its command
+line; an independent scan of all 195 tracked files, including those paths,
+returned the same 23 detections and zero additional detection. Thus those scope
+exclusions hide no current candidate finding and are not used to waive any of
+the 23 entries below.
+
+| # | Bound detection | Classification |
+| ---: | --- | --- |
+| 1 | `src/verboflex/auth/access_tokens.py|16|Secret Keyword|3591079abcc3407a2c2ed76661ec29a7ec0d1cb8` | False positive: public error constant `password change required`; no credential value. |
+| 2 | `src/verboflex/auth/access_tokens.py|17|Secret Keyword|06c49c9b4bd885fbdc2a04cc3f65b214292b0da9` | False positive: missing-JWT-secret diagnostic; no secret is embedded. |
+| 3 | `src/verboflex/auth/access_tokens.py|19|Secret Keyword|411a5e3d10eceaebc65194fdafdd05fb8e432e38` | False positive: public token-purpose/session diagnostic. |
+| 4 | `src/verboflex/auth/password_change.py|25|Secret Keyword|443fe4e817f15f5b62b02db228cd59ec2d5cfc8f` | False positive: generic invalid-access diagnostic. |
+| 5 | `src/verboflex/auth/password_change.py|26|Secret Keyword|3b8788b039ebfe732e34b976cabe8fe87a3ceb17` | False positive: generic incorrect-current-password diagnostic. |
+| 6 | `src/verboflex/auth/password_change.py|55|Secret Keyword|42213dc7f2ef60d5d6744c00f091a46b2161dda5` | False positive: public password-policy message. |
+| 7 | `src/verboflex/auth/principal.py|28|Secret Keyword|3591079abcc3407a2c2ed76661ec29a7ec0d1cb8` | False positive: public forced-change diagnostic. |
+| 8 | `src/verboflex/auth/principal.py|29|Secret Keyword|82bde2d99285779d940c36fdcdb9c3e9afa40d2f` | False positive: public forced-change response detail. |
+| 9 | `src/verboflex/auth/refresh_sessions.py|19|Base64 High Entropy String|e582429052cdb908833560f6f7582d232de37c4d` | False positive: the literal public base64url alphabet used for syntax validation, not generated authority. |
+| 10 | `tests/api/test_rate_limits.py|189|Secret Keyword|5ac066cfb3bcf9973a0b40daeb7f5606103c1bd3` | False positive: local HTTP password fixture. |
+| 11 | `tests/api/test_system_status.py|109|Basic Auth Credentials|e5e9fa1ba31ecd1ae84f75caaa474f3a663f05f4` | False positive: deliberately fake database URL inside a redaction test; the test proves it is not exposed. |
+| 12 | `tests/auth/test_bootstrap_admin.py|136|Secret Keyword|985a4d67132193977275067aca18c13f8c8371c8` | False positive: isolated bootstrap password fixture. |
+| 13 | `tests/auth/test_bootstrap_admin.py|147|Secret Keyword|d36b093dec485bfd20ef697ca6c1ad79e1ac9210` | False positive: isolated second-bootstrap password fixture. |
+| 14 | `tests/auth/test_bootstrap_admin.py|235|Secret Keyword|3da24dfed48aa2721da14e6f79e588440b934675` | False positive: isolated reset-password fixture. |
+| 15 | `tests/auth/test_bootstrap_admin.py|295|Secret Keyword|028e59d8204d08fecd6aad12434b872fe4319f6d` | False positive: isolated replacement-password fixture. |
+| 16 | `tests/auth/test_bootstrap_admin.py|410|Secret Keyword|5d9dec21ffdbb45c64f0ea2b1abf3b25c2afc728` | False positive: isolated unknown-account reset fixture. |
+| 17 | `tests/auth/test_bootstrap_admin.py|445|Secret Keyword|1123e04e3b43d460543f1b0bf94e67a0a636b2cc` | False positive: in-memory secret-reader fixture proving CLI input routing. |
+| 18 | `tests/auth/test_bootstrap_admin.py|548|Secret Keyword|cdd076c21ce35f40d40b6c16d12bd40876050a6f` | False positive: in-memory protected-input fixture. |
+| 19 | `tests/auth/test_bootstrap_admin.py|626|Secret Keyword|18468712bc6eede8cb7adf8932b073bf56773a11` | False positive: explicit `non-secret-test-hash` rollback fixture. |
+| 20 | `tests/auth/test_login.py|45|Secret Keyword|e7e0ea25217b715c566268c0607e48acef3b9ccf` | False positive: local valid-password fixture for isolated databases. |
+| 21 | `tests/auth/test_password_change.py|188|Secret Keyword|a95b347855753c3b784594a28fa00ec116430d1c` | False positive: deliberately wrong current-password test input. |
+| 22 | `tests/auth/test_password_change.py|36|Secret Keyword|bc27f09f74d82f81b559a27a26bd03f580960364` | False positive: isolated current-password fixture. |
+| 23 | `tests/auth/test_password_change.py|37|Secret Keyword|ba8d4568d2e2f6531c78080cedddb3a16f08afd5` | False positive: isolated replacement-password fixture. |
+
+All **23/23 are false positives**. No real secret was found.
+
+The detector negative control supplies a syntactically real AWS access-key
+fixture and must fail. The exact-policy negative control adds a new unreviewed
+tuple and must fail. Both passed their expected-failure assertions, while the
+fresh repository scan matched the exact 23-row policy.
+
+## ASVS-oriented result
 
 | ASVS area | Candidate result | Evidence |
 | --- | --- | --- |
-| V2 Authentication | PASS | Bounded password inputs, Argon2 boundary, non-enumerating login, durable token-version checks, forced password-change restriction. |
-| V3 Session Management | PASS | Exact host cookie, rotation, replay-family revocation, logout-family revocation, concurrency invariant. |
-| V4 Access Control | PASS | Server-derived roles and restricted-token purpose enforcement on protected routes. |
-| V5 Validation | PASS | HTTP-boundary length limits, exact Origin allowlist, strict JWT claim validation, generated OpenAPI bounds. |
-| V7 Error Handling and Logging | PASS | Stable public envelopes, Redis fail-closed behavior where required, secret-redaction guards. |
-| V9 Communications | PASS AT REPOSITORY BOUNDARY | Loopback-only origins and explicit TLS/HSTS edge contract; live validation remains pending. |
-| V13 API and Web Service | PASS | Explicit CORS, rate limits, OpenAPI drift checks, request validation, deterministic 401/422/429/503 behavior. |
-| V14 Configuration | PARTIAL, NONBLOCKING | Runtime dependency set is clean; VF-SEC-007 retains one dev-only transitive advisory at Low. |
+| V2 Authentication | PASS | Bounded credential parsing, Argon2 and dummy verification, non-enumerating login, bootstrap/reset safeguards, forced-change authority. |
+| V3 Session Management | PASS | Exact host cookie, hashed opaque refresh values, rotation, replay-family revocation, logout-family revocation, durable access-session binding, concurrency invariant. |
+| V4 Access Control | PASS | Durable active user/version/session checks, server-derived roles, forced-change purpose isolation, reusable role dependency. |
+| V5 Validation | PASS | Exact origin allowlist, bounded form/JSON credential inputs, normalized email, strict JWT claim/lifetime/type validation, generated schema bounds. |
+| V7 Error Handling and Logging | PASS | Stable non-enumerating envelopes, no stack/connection/hash leakage, secret-input and storage/logging guards, bounded outage behavior. |
+| V9 Communications | PASS AT REPOSITORY BOUNDARY | Loopback-only app publication, Secure cookie, explicit managed TLS/HSTS contract. Live certificate/redirect/HSTS proof remains pending. |
+| V13 API and Web Service | PASS | Exact OpenAPI surface, explicit credentialed CORS, deterministic 401/403/422/429/503 behavior, server-side limits and authorization. |
+| V14 Configuration | PARTIAL, NONBLOCKING | Deployed secret/cookie validation and runtime audits pass; VF-SEC-007 remains Low dev-only debt. |
 
 ## Fresh verification record
 
 | Check | Result |
 | --- | --- |
-| Canonical review digest, two independent runs | PASS — exact `9d8930798b065c864ce1f86a99612f0c0c416e84edb217fdc5c5339f0e10b3de` both times |
+| Canonical review digest, two immediate pre-write runs | PASS — exact `60658f82cd814c9180a9a2bb9db1da90a82cb23620c8ee5d2705e33bc969c5bc` twice |
+| Canonical manifest resolution | PASS — 156 clean paths across every required review-mode category |
 | Manifest self-test | PASS |
 | Gauntlet preflight | PASS |
 | Real-smoke preflight | PASS |
 | Adversarial-auth self-test | PASS |
-| Focused PostgreSQL security selection | PASS — 10/10 |
-| Independent HTTP auth-boundary probe | PASS — five login/OAuth oversize cases and one password-change oversize case returned 422; zero Redis calls |
-| Backend mutation | PASS — 779 killed, 0 surviving or uncovered |
-| Frontend mutation | PASS — 153 killed, 0 surviving or uncovered |
-| Backend dependency integrity/audit | PASS — lock check valid, no known vulnerabilities in published packages |
-| Frontend runtime dependency audit | PASS — 0 vulnerabilities |
-| Frontend full dependency audit | EXPECTED LOW DEBT — VF-SEC-007 only |
-| Full post-fix candidate gauntlet | PENDING |
+| Ruff lint and format | PASS — lint clean; 58 files already formatted |
+| Actual Ruff-format failure propagation probe | PASS — returned 42 and skipped frontend/complexity checks |
+| Required-check repository negative control | PASS — exact first error propagated; later check did not run |
+| OpenAPI current export | PASS — byte-identical to committed schema |
+| Focused PostgreSQL security selection | PASS — 11/11, including exact cookie, family logout, stable refresh limiter, request-31/Redis ordering, bounded inputs, and OpenAPI limits |
+| Independent login/OAuth oversize HTTP probe | PASS — five 422 responses, zero Redis calls |
+| Detect-secrets exact policy | PASS — 23/23 exact tuple match |
+| Detect-secrets full tracked-tree cross-check | PASS — 195 files, the same 23 detections, zero extra detection |
+| Detect-secrets true-key and unreviewed-tuple negative controls | PASS — both failed as required |
+| Backend mutation verdict state | PASS — configured nine-module scope, no survivor reported; fresh full run remains in PENDING gauntlet |
+| Frontend mutation result state | PASS — configured session scope, 153/153 Killed; fresh full run remains in PENDING gauntlet |
+| Backend dependency audit | PASS — no known vulnerability in published packages |
+| Frontend production dependency audit | PASS — zero vulnerabilities |
+| Frontend complete dependency audit | EXPECTED LOW DEBT — VF-SEC-007 only |
+| Full post-fix candidate gauntlet | PENDING — not run or claimed by this review |
 
 ## Final disposition
 
@@ -199,6 +292,6 @@ gauntlet PASS.
 - Full-gauntlet status: **PENDING**
 - Review status: **OPEN**
 
-The next valid promotion step is the post-fix candidate gauntlet. Only a source-bound
-successful gauntlet and the required live deployment evidence may produce later
-closure artifacts; this candidate review does not do so.
+The next valid step is a complete post-fix candidate gauntlet against this exact
+source digest. Only a successful unchanged-source round and the later required
+live/deployment evidence may promote the review to a closed artifact.
