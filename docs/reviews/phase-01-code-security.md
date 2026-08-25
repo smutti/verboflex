@@ -1,13 +1,13 @@
 # Phase 1 Fresh-Context Code and Security Review
 
-- Review-status: CLOSED
+- Review-status: OPEN
 - Open-critical-high: 0
-- Full-gauntlet-status: PASS
-- Reviewed-source-digest: `446563d1b84a057edda7b10395303be6acd99d528473cc78ae00b65ca3acc62a`
+- Full-gauntlet-status: PENDING
+- Reviewed-source-digest: `d6a37b36642dfbe05f7dbc8eef2058aecaa1a46c84623d2656c0f19b2930303a`
 - Review-date: 2026-08-25
 - Review-mode: fresh-context independent goal-backward and OWASP ASVS-aligned source review
 - Candidate-verdict: PASS_FOR_POST_FIX_GAUNTLET
-- Closure-verdict: PASS
+- Closure-verdict: PENDING
 - Critical: 0
 - High: 0
 - Medium: 0
@@ -563,3 +563,66 @@ disposition is mandatory: upgrade the development dependency chain or record a
 time-bounded risk acceptance, then rerun the dependency audit. Review closure
 does not close that debt and does not substitute for future live deployment/TLS
 evidence required by the release process.
+
+## Current source-bound candidate — deterministic JWT signature-byte tamper
+
+This section is the authoritative current-state continuation of the review. It
+preserves, but supersedes as current evidence, the preceding `CLOSED/PASS`
+conclusion and final disposition. Those statements remain historical for their
+exact earlier source state and do not contribute a PASS to this candidate.
+
+### Official failure and human decision
+
+An exact official run after the preceding closure reached the adversarial auth
+layer and failed with `tampered-token expected HTTP 401, got 200`. The human
+classified this as a behavioural Medium defect in the checker/adversarial
+harness, not as a production-authentication acceptance defect. The legacy
+harness replaced only the final base64url character. For signatures whose final
+quantum contains padding bits, distinct final characters can decode to the same
+signature bytes; the request can therefore remain the original valid JWT even
+though its compact text changed. The failed run is retained as historical
+failure evidence and contributes no current or historical PASS.
+
+The source-bound TDD history is `112af30` -> `c1fb597`. RED commit `112af30`
+adds a concrete `header.payload._w` fixture proving that the legacy textual
+mutation can produce a different compact token with byte-identical signature,
+and requires explicit self-test evidence that tampered signature bytes differ.
+GREEN commit `c1fb597` decodes the signature, flips one bit of its first byte,
+re-encodes canonical unpadded base64url, and fails closed unless the original
+and tampered signature byte strings differ. The live adversarial request still
+requires exact HTTP 401; no status assertion, response path, retry, wait, skip,
+or timeout was weakened or added.
+
+### Independent source/security re-review
+
+The fresh-context review was performed at exact HEAD
+`c1fb597fbfe8d21802c2594e6e3b1b37eaa639c9`. Two consecutive immediate
+pre-write review-mode computations returned the same canonical digest,
+`d6a37b36642dfbe05f7dbc8eef2058aecaa1a46c84623d2656c0f19b2930303a`.
+The collision fixture, adversarial harness positive and negative controls,
+packaged wrapper, manifest self-test, gauntlet preflight, staging-layer and
+candidate-contract controls, exact secret-policy control, shell syntax, and a
+direct production-decoder signature-byte probe all passed.
+
+Direct diff and call-chain inspection found no production auth or API change:
+the auth subtree object remains `f365fd1b0447f2aae3a7fcea66958825faa91433`
+and the API subtree remains `675f9cb6683437014e43d500276df13df350460c`
+from the preceding closed source through this HEAD. The fixed Python programs
+receive JWT material over standard input rather than code interpolation; no
+`eval`, command construction from token data, token logging, new secret,
+waiver, assertion weakening, or error-propagation regression was introduced.
+No new material or disputed Critical, High, Medium, or Low finding was found.
+VF-SEC-007 remains unchanged as the sole open Low development-only debt.
+
+### Current candidate disposition
+
+- Critical / High / Medium / Low: **0 / 0 / 0 / 1**
+- Open Critical/High: **0**
+- Candidate verdict: **PASS_FOR_POST_FIX_GAUNTLET**
+- Closure verdict: **PENDING**
+- Full-gauntlet status: **PENDING**
+- Review status: **OPEN**
+
+The next admissible result is the complete source-bound post-fix candidate
+gauntlet. Until it completes and is independently reconciled, no current
+full-gauntlet or closure PASS is claimed.
