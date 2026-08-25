@@ -1,29 +1,32 @@
-# Phase 1 Fresh-Context Code and Security Candidate Review
+# Phase 1 Fresh-Context Code and Security Review
 
-- Review-status: OPEN
+- Review-status: CLOSED
 - Open-critical-high: 0
-- Full-gauntlet-status: PENDING
+- Full-gauntlet-status: PASS
 - Reviewed-source-digest: `60658f82cd814c9180a9a2bb9db1da90a82cb23620c8ee5d2705e33bc969c5bc`
 - Review-date: 2026-08-25
 - Review-mode: fresh-context independent goal-backward and OWASP ASVS-aligned source review
 - Candidate-verdict: PASS_FOR_POST_FIX_GAUNTLET
+- Closure-verdict: PASS_WITH_LOW_DEV_ONLY_DEBT
 - Critical: 0
 - High: 0
 - Medium: 0
 - Low: 1
 
-## Candidate conclusion
+## Conclusion
 
-The reviewed candidate has no open Critical, High, or Medium finding and no new
-finding was introduced by this review. VF-SEC-001 through VF-SEC-006 and
-VF-SEC-008 through VF-SEC-011 remain resolved in the reviewed source.
-VF-SEC-007 remains the sole open Low finding: a development-only transitive
-`qs` advisory with no production dependency path.
+The reviewed source has no open Critical, High, or Medium finding and no new
+finding was introduced by the independent review or complete post-fix run.
+VF-SEC-001 through VF-SEC-006 and VF-SEC-008 through VF-SEC-011 remain
+resolved. VF-SEC-007 remains the sole open Low finding: a development-only
+transitive `qs` advisory with no production dependency path.
 
-The candidate verdict is **PASS_FOR_POST_FIX_GAUNTLET**. This artifact remains
-deliberately **OPEN** and the complete post-fix gauntlet remains deliberately
-**PENDING**. This review does not claim a fresh full-gauntlet PASS, live managed
-TLS-edge proof, or final review closure.
+The blind review first produced the candidate verdict
+**PASS_FOR_POST_FIX_GAUNTLET** while this artifact remained OPEN/PENDING. A
+complete post-fix candidate gauntlet then passed against the unchanged reviewed
+source, and the independent reviewer reverified the source identity before
+closure. The final Phase 1 source-review verdict is
+**PASS_WITH_LOW_DEV_ONLY_DEBT** and this artifact is now **CLOSED/PASS**.
 
 ## Scope and source identity
 
@@ -45,17 +48,65 @@ The canonical manifest resolved 156 clean tracked paths:
 | deployment-contract | 1 |
 
 `bash tools/source_state.sh --review-digest` was executed twice immediately
-before this artifact was written. Both runs exited zero and returned exactly
+before the candidate artifact was written and twice again immediately before
+review closure. All four runs exited zero and returned exactly
 `60658f82cd814c9180a9a2bb9db1da90a82cb23620c8ee5d2705e33bc969c5bc`.
 The review artifact is excluded only from review-mode digest computation and is
 included by the final source-set contract.
+
+## Review lifecycle and post-fix evidence
+
+### Phase A — blind candidate review
+
+The fresh-context reviewer independently inspected the complete Phase 1 source
+and security surface, classified the exact 23 detect-secrets detections, ran
+focused source and PostgreSQL probes, and verified the newest Ruff/fail-fast and
+secret-policy controls. The digest matched twice, no new finding was opened,
+and the artifact was deliberately left `OPEN` with the gauntlet `PENDING` and
+verdict `PASS_FOR_POST_FIX_GAUNTLET`.
+
+### Phase B — complete post-fix candidate gauntlet
+
+The complete post-fix candidate gauntlet finished **PASS (NON-FINAL)** against
+the same review digest and without source changes. Its recorded evidence is:
+
+| Layer | Recorded result |
+| --- | --- |
+| Backend and frontend tests | PASS — backend 251/251; frontend 72/72 |
+| Frontend delivery | PASS — production build and Playwright 1/1 |
+| Static and formatting gates | PASS — mypy, tsc, Ruff check/format, ESLint, Prettier, and Radon |
+| Changed-line coverage | PASS — backend 973/973 = 100%; frontend diff has no uncovered line |
+| Mutation testing | PASS — mutmut 779 Killed with zero other verdict; Stryker 153 Killed with zero survived/timeout/no-coverage/error, score 100% |
+| Property suites | PASS — backend 71; frontend 3 |
+| Database migrations | PASS — 3/3 |
+| API contract | PASS — OpenAPI negative and positive controls |
+| Secret and dependency gates | PASS — exact detect-secrets policy and dependency audits |
+| Runtime/integration surface | PASS — staging, adversarial auth, Celery, and browser checks |
+| Candidate source identity | PASS — final candidate-source-state check |
+
+The exact Compose projects
+`verboflex_phase01_smoke_8378_1787657687` and
+`verboflex_phase01_smoke_9118_1787657860` were removed after the run. The
+reported cleanup found zero remaining project containers, volumes, images, or
+workers. The source tree was unchanged; the unrelated untracked milestone lock
+was not part of the reviewed source and was left untouched.
+
+### Phase C — independent reviewer closure
+
+After receiving the complete-run evidence, the reviewer re-read the candidate
+artifact, recomputed the non-self-referential review digest twice, confirmed the
+same exact value, and promoted only the review metadata and evidence record.
+The closure/source-state contract was then checked against the closed artifact.
 
 ## Open finding
 
 ### VF-SEC-007 — Low — dev-only transitive `qs` advisory
 
-**Status:** OPEN, nonblocking for the post-fix candidate gauntlet; explicit
-ship-time disposition remains required.
+**Status:** OPEN Low, accepted as nonblocking for Phase 1 source-review closure.
+Before ship, update the development dependency chain to a non-vulnerable `qs`
+version or record an explicit time-bounded risk acceptance with owner and
+expiry. Re-run the complete dependency audit at ship time; any runtime path,
+severity increase, or additional advisory makes the finding blocking.
 
 `pip-audit` reports no known vulnerability in published backend dependencies and
 `npm audit --omit=dev --audit-level=low` reports zero frontend runtime
@@ -71,10 +122,10 @@ than being silently waived.
 | ID | Severity | Status | Verified disposition and evidence |
 | --- | --- | --- | --- |
 | VF-SEC-001 | Medium | RESOLVED | `tools/source_manifest.txt` binds implementation, tests, configuration, lockfiles, migrations, verifier scripts, deployment contract, and final review artifact. Empty/missing/category/parser/dirty-path controls fail closed; the manifest self-test passed. |
-| VF-SEC-002 | Medium | RESOLVED | Candidate metadata is single-valued and source-bound. `source_state.sh` separately enforces OPEN/zero-critical-high/PENDING for a candidate and CLOSED/zero-critical-high for the later final review contract, preventing this candidate from masquerading as closure. |
+| VF-SEC-002 | Medium | RESOLVED | Candidate metadata was single-valued and source-bound while OPEN/PENDING. After the complete unchanged-source gauntlet, `source_state.sh` separately enforced CLOSED/zero-critical-high/PASS and the reviewed-source digest, preventing either the candidate or closure artifact from masquerading as another state. |
 | VF-SEC-003 | Medium | RESOLVED | The current FastAPI OpenAPI export is byte-identical to `frontend/openapi.json`; generated client drift is checked and the controlled OpenAPI mutation is restored before the real comparison. Auth request limits and response/security contracts are present in the committed schema. |
 | VF-SEC-004 | Medium | RESOLVED | Real-smoke and adversarial tools use private temporary directories/files, generated one-run secrets, explicit timeouts, exact Compose project/image identifiers, stdin/getpass secret entry, scoped cleanup traps, and preflight negative controls. No review-owned container or temporary secret artifact remained. |
-| VF-SEC-005 | Medium | RESOLVED | Backend mutation scope is the nine handwritten auth/session modules listed in `backend/pyproject.toml`; frontend scope is `frontend/src/features/auth/session.tsx` with threshold 100. Backend `mutmut results` contains no survivor and the available Stryker result contains 153/153 Killed. The gate rejects any non-empty backend survivor verdict and Stryker breaks below 100; a fresh complete mutation execution remains part of the PENDING gauntlet. |
+| VF-SEC-005 | Medium | RESOLVED | Backend mutation scope is the nine handwritten auth/session modules listed in `backend/pyproject.toml`; frontend scope is `frontend/src/features/auth/session.tsx` with threshold 100. The complete post-fix run produced mutmut 779 Killed with zero other verdict and Stryker 153 Killed with zero survived/timeout/no-coverage/error, score 100%. The gate rejects any non-Killed backend verdict and any Stryker result below 100. |
 | VF-SEC-006 | Medium | RESOLVED | Compose exposes application ports on loopback only and does not publish PostgreSQL/Redis. The runbook requires a trusted TLS edge, TLS 1.2/1.3, HTTP redirect or unreachability, HSTS, hostname/certificate validation, and loopback-only forwarding. Live edge proof remains a separate later gate. |
 | VF-SEC-007 | Low | OPEN | One Moderate npm advisory is confined to the dev-only `typed-rest-client -> qs` chain. Backend and frontend runtime audits are clean; explicit ship-time disposition is retained. |
 | VF-SEC-008 | Medium | RESOLVED | Login and refresh emit only `__Host-verboflex_refresh` with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`, and no `Domain`; temporary login emits no refresh cookie. Logout and password change delete the same exact host cookie scope. Tests and smoke reject legacy `__Secure-verboflex_refresh`, unprefixed names, wrong path, or Domain. |
@@ -247,7 +298,7 @@ fresh repository scan matched the exact 23-row policy.
 
 ## ASVS-oriented result
 
-| ASVS area | Candidate result | Evidence |
+| ASVS area | Review result | Evidence |
 | --- | --- | --- |
 | V2 Authentication | PASS | Bounded credential parsing, Argon2 and dummy verification, non-enumerating login, bootstrap/reset safeguards, forced-change authority. |
 | V3 Session Management | PASS | Exact host cookie, hashed opaque refresh values, rotation, replay-family revocation, logout-family revocation, durable access-session binding, concurrency invariant. |
@@ -256,7 +307,7 @@ fresh repository scan matched the exact 23-row policy.
 | V7 Error Handling and Logging | PASS | Stable non-enumerating envelopes, no stack/connection/hash leakage, secret-input and storage/logging guards, bounded outage behavior. |
 | V9 Communications | PASS AT REPOSITORY BOUNDARY | Loopback-only app publication, Secure cookie, explicit managed TLS/HSTS contract. Live certificate/redirect/HSTS proof remains pending. |
 | V13 API and Web Service | PASS | Exact OpenAPI surface, explicit credentialed CORS, deterministic 401/403/422/429/503 behavior, server-side limits and authorization. |
-| V14 Configuration | PARTIAL, NONBLOCKING | Deployed secret/cookie validation and runtime audits pass; VF-SEC-007 remains Low dev-only debt. |
+| V14 Configuration | PASS WITH LOW DEBT | Deployed secret/cookie validation and runtime audits pass; VF-SEC-007 remains tracked Low dev-only debt with an explicit ship-time disposition. |
 
 ## Fresh verification record
 
@@ -277,21 +328,27 @@ fresh repository scan matched the exact 23-row policy.
 | Detect-secrets exact policy | PASS — 23/23 exact tuple match |
 | Detect-secrets full tracked-tree cross-check | PASS — 195 files, the same 23 detections, zero extra detection |
 | Detect-secrets true-key and unreviewed-tuple negative controls | PASS — both failed as required |
-| Backend mutation verdict state | PASS — configured nine-module scope, no survivor reported; fresh full run remains in PENDING gauntlet |
-| Frontend mutation result state | PASS — configured session scope, 153/153 Killed; fresh full run remains in PENDING gauntlet |
+| Backend mutation verdict state | PASS — configured nine-module scope; complete run 779 Killed, zero other verdict |
+| Frontend mutation result state | PASS — configured session scope; complete run 153/153 Killed, zero survived/timeout/no-coverage/error, score 100% |
 | Backend dependency audit | PASS — no known vulnerability in published packages |
 | Frontend production dependency audit | PASS — zero vulnerabilities |
 | Frontend complete dependency audit | EXPECTED LOW DEBT — VF-SEC-007 only |
-| Full post-fix candidate gauntlet | PENDING — not run or claimed by this review |
+| Full post-fix candidate gauntlet | PASS (NON-FINAL run) — unchanged-source evidence recorded in the review lifecycle table |
+| Closure digest, two immediate pre-write runs | PASS — exact `60658f82cd814c9180a9a2bb9db1da90a82cb23620c8ee5d2705e33bc969c5bc` twice |
+| Closed-review metadata contract | PASS — `Review-status: CLOSED`, zero open Critical/High, and `Full-gauntlet-status: PASS` |
+| Closed-review source binding | PASS — artifact references the exact non-self-referential review digest |
 
 ## Final disposition
 
 - Critical / High / Medium / Low: **0 / 0 / 0 / 1**
 - Open Critical/High: **0**
 - Candidate verdict: **PASS_FOR_POST_FIX_GAUNTLET**
-- Full-gauntlet status: **PENDING**
-- Review status: **OPEN**
+- Closure verdict: **PASS_WITH_LOW_DEV_ONLY_DEBT**
+- Full-gauntlet status: **PASS**
+- Review status: **CLOSED**
 
-The next valid step is a complete post-fix candidate gauntlet against this exact
-source digest. Only a successful unchanged-source round and the later required
-live/deployment evidence may promote the review to a closed artifact.
+VF-SEC-007 remains deliberately visible and open at Low severity. Its ship-time
+disposition is mandatory: upgrade the development dependency chain or record a
+time-bounded risk acceptance, then rerun the dependency audit. This closure does
+not waive that debt or any future live deployment/TLS evidence required by the
+release process.
