@@ -439,14 +439,49 @@ changed_line_coverage() {
   rm -f "$normalized_frontend_lcov" "$frontend_diff_report"
 }
 
-backend_mutation_body() {
-  local mutation_results
-  (cd "$BACKEND_ROOT" && uv run mutmut run)
-  mutation_results=$(cd "$BACKEND_ROOT" && uv run mutmut results)
-  assert_no_surviving_mutants "$mutation_results"
-  (cd "$BACKEND_ROOT" && uv run pytest -q tests/auth/test_access_tokens.py \
-    tests/auth/test_passwords.py tests/core/test_config.py)
+create_fresh_backend_workspace() {
+  local workspace
+  workspace=$(mktemp -d)
+  if ! git -C "$REPO_ROOT" archive --format=tar HEAD backend | tar -xf - -C "$workspace"; then
+    rm -rf "$workspace"
+    die "could not materialize fresh backend mutation workspace"
+  fi
+  [ ! -e "$workspace/backend/mutants" ] || {
+    rm -rf "$workspace"
+    die "fresh backend mutation workspace unexpectedly contains cached mutants"
+  }
+  printf '%s\n' "$workspace"
 }
+
+assert_mutation_stats_fresh() {
+  local stats_file=$1 totals total killed invalid
+  [ -f "$stats_file" ] || die "mutation statistics are missing"
+  totals=$("$BACKEND_ROOT/.venv/bin/python" -c '
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+keys = ("survived", "no_tests", "skipped", "suspicious", "timeout", "check_was_interrupted_by_user", "segfault")
+print(data.get("total", 0), data.get("killed", 0), sum(data.get(key, 0) for key in keys))
+' "$stats_file") || die "mutation statistics could not be parsed"
+  read -r total killed invalid <<EOF
+$totals
+EOF
+  [ "$total" -gt 0 ] || die "fresh mutation run produced zero mutants"
+  [ "$killed" -eq "$total" ] || die "fresh mutation run did not kill every mutant"
+  [ "$invalid" -eq 0 ] || die "fresh mutation run contains a non-killed verdict"
+}
+
+backend_mutation_body() (
+  local workspace mutation_backend mutation_results mutation_stats
+  workspace=$(create_fresh_backend_workspace)
+  trap 'rm -rf "$workspace"' EXIT INT TERM
+  mutation_backend="$workspace/backend"
+  mutation_stats="$mutation_backend/mutants/mutmut-cicd-stats.json"
+  (cd "$mutation_backend" && "$BACKEND_ROOT/.venv/bin/mutmut" run)
+  (cd "$mutation_backend" && "$BACKEND_ROOT/.venv/bin/mutmut" export-cicd-stats)
+  mutation_results=$(cd "$mutation_backend" && "$BACKEND_ROOT/.venv/bin/mutmut" results)
+  assert_no_surviving_mutants "$mutation_results"
+  assert_mutation_stats_fresh "$mutation_stats"
+)
 
 assert_no_surviving_mutants() {
   local mutation_results=$1
@@ -703,6 +738,24 @@ self_test_mutation_verdict() {
   printf 'mutation verdict negative control: PASS\n'
 }
 
+self_test_mutation_freshness() (
+  local fixture fresh_stats stale_stats
+  fixture=$(mktemp -d)
+  fresh_stats="$fixture/fresh.json"
+  stale_stats="$fixture/stale.json"
+  trap 'rm -rf "$fixture"' EXIT INT TERM
+  printf '%s\n' \
+    '{"killed": 2, "survived": 0, "total": 2, "no_tests": 0, "skipped": 0, "suspicious": 0, "timeout": 0, "check_was_interrupted_by_user": 0, "segfault": 0}' \
+    >"$fresh_stats"
+  printf '%s\n' \
+    '{"killed": 0, "survived": 0, "total": 0, "no_tests": 0, "skipped": 0, "suspicious": 0, "timeout": 0, "check_was_interrupted_by_user": 0, "segfault": 0}' \
+    >"$stale_stats"
+  assert_mutation_stats_fresh "$fresh_stats"
+  expect_control_failure mutation-freshness 'fresh mutation run produced zero mutants' \
+    assert_mutation_stats_fresh "$stale_stats"
+  printf 'mutation freshness negative control: PASS\n'
+)
+
 self_test_check_sequence() (
   local fixture log rc
   fixture=$(mktemp -d)
@@ -774,6 +827,7 @@ case "${1:-}" in
   --self-test-candidate-contract) self_test_candidate_contract ;;
   --self-test-infra-lifecycle) self_test_infra_lifecycle ;;
   --self-test-mutation-verdict) self_test_mutation_verdict ;;
+  --self-test-mutation-freshness) self_test_mutation_freshness ;;
   --self-test-check-sequence) self_test_check_sequence ;;
   --self-test-frontend-coverage) self_test_frontend_coverage ;;
   --self-test-secret-audit-policy) self_test_secret_audit_policy ;;
