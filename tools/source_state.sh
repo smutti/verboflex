@@ -95,7 +95,7 @@ resolve_manifest() {
     sort -u "$included_candidates" >"$destination"
   fi
 
-  for required in implementation tests config lockfiles migrations verifier-scripts review; do
+  for required in implementation tests config lockfiles migrations verifier-scripts deployment-contract review; do
     if [ "$mode" = "review" ] && [ "$required" = "review" ]; then
       continue
     fi
@@ -273,6 +273,7 @@ self_test_manifest() {
     'include|lockfiles|:(glob)locks/**' \
     'include|migrations|:(glob)migrations/**' \
     'include|verifier-scripts|:(glob)tools/**' \
+    'include|deployment-contract|docs/phase-01-smoke.md' \
     'include|review|docs/reviews/phase-01-code-security.md' \
     'exclude|artifact|:(glob)reports/**|raw reports are outside the source set' >"$manifest"
   printf 'implementation\n' >"$fixture/app/main.txt"
@@ -280,10 +281,12 @@ self_test_manifest() {
   printf 'config\n' >"$fixture/config/app.conf"
   printf 'lock\n' >"$fixture/locks/deps.lock"
   printf 'migration\n' >"$fixture/migrations/001.sql"
+  printf 'deployment contract\n' >"$fixture/docs/phase-01-smoke.md"
   printf 'review\n' >"$fixture/docs/reviews/phase-01-code-security.md"
   printf 'raw report\n' >"$fixture/reports/run.log"
   git -C "$fixture" add app/main.txt tests/test.txt config/app.conf locks/deps.lock \
-    migrations/001.sql tools/source_manifest.txt docs/reviews/phase-01-code-security.md reports/run.log
+    migrations/001.sql tools/source_manifest.txt docs/phase-01-smoke.md \
+    docs/reviews/phase-01-code-security.md reports/run.log
   git -C "$fixture" commit -qm fixture
 
   baseline=$(compute_digest "$fixture" tools/source_manifest.txt final)
@@ -334,7 +337,7 @@ self_test_manifest() {
   [ "${#digest}" -eq 64 ] || die "empty exclusion set removed included source"
 
   for path in app/main.txt tests/test.txt config/app.conf locks/deps.lock migrations/001.sql \
-    tools/source_manifest.txt docs/reviews/phase-01-code-security.md; do
+    tools/source_manifest.txt docs/phase-01-smoke.md docs/reviews/phase-01-code-security.md; do
     if [ "$path" = "tools/source_manifest.txt" ]; then
       printf '# changed manifest comment\n' >>"$fixture/$path"
     else

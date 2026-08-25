@@ -32,6 +32,7 @@ include|lockfiles|frontend/package-lock.json
 include|migrations|backend/alembic.ini
 include|migrations|:(glob)backend/alembic/**/*.py
 include|verifier-scripts|:(glob)tools/**
+include|deployment-contract|docs/phase-01-smoke.md
 include|review|docs/reviews/phase-01-code-security.md
 
 exclude|artifact|docs/evidence/phase-01.md|evidence is generated only after final digest verification
