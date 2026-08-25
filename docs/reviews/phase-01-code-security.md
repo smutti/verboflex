@@ -3,7 +3,7 @@
 - Review-status: OPEN
 - Open-critical-high: 0
 - Full-gauntlet-status: PENDING
-- Reviewed-source-digest: `763557c2e5b719516105322a773cb141dca92ead7f91ef23db0814f79fb4ba42`
+- Reviewed-source-digest: `8a3e5bf647ed0be78dc5826001c98123b889ed0fc3a65ffd2df36eddf2bca46a`
 - Review-date: 2026-08-25
 - Review-mode: fresh-context independent goal-backward and OWASP ASVS-aligned source review
 - Candidate-verdict: PASS_FOR_POST_FIX_GAUNTLET
@@ -17,7 +17,7 @@
 
 The reviewed source has no open Critical, High, or Medium finding and no SPEC
 gap requiring escalation. F-01 through F-08 and VF-SEC-001 through VF-SEC-006,
-VF-SEC-008 through VF-SEC-015 are resolved. VF-SEC-007 remains the sole open
+VF-SEC-008 through VF-SEC-016 are resolved. VF-SEC-007 remains the sole open
 Low finding: a development-only transitive `qs` advisory with no production
 dependency path.
 
@@ -49,7 +49,7 @@ The canonical manifest resolved 159 clean tracked paths:
 `bash tools/source_state.sh --review-digest` was executed twice consecutively
 immediately before this candidate artifact was written. Both runs exited zero
 and returned exactly
-`763557c2e5b719516105322a773cb141dca92ead7f91ef23db0814f79fb4ba42`.
+`8a3e5bf647ed0be78dc5826001c98123b889ed0fc3a65ffd2df36eddf2bca46a`.
 The review artifact is excluded only from review-mode digest computation and is
 included by the final source-set contract.
 
@@ -61,7 +61,7 @@ The fresh-context reviewer independently inspected the complete Phase 1 source
 and security surface, classified the exact 23 detect-secrets detections, ran
 focused source, PostgreSQL, frontend, dependency, archived-RED, production
 Cobertura, cleanup, and exact-secret-policy probes, and revalidated F-01 through
-F-08 plus VF-SEC-012 through VF-SEC-015. The digest matched twice, no new
+F-08 plus VF-SEC-012 through VF-SEC-016. The digest matched twice, no new
 material finding was opened, and the artifact is deliberately left `OPEN` with
 the gauntlet `PENDING` and verdict `PASS_FOR_POST_FIX_GAUNTLET`.
 
@@ -71,6 +71,17 @@ the gauntlet `PENDING` and verdict `PASS_FOR_POST_FIX_GAUNTLET`.
   `45681aed630a5b5863a2723c1413c29f6055101499d442b2148224c6081636c3`
   remains historical only. Subsequent coverage-gate tests and fixes invalidated
   it and produced the current review digest above.
+- The subsequent post-fix candidate attempt at review digest
+  `763557c2e5b719516105322a773cb141dca92ead7f91ef23db0814f79fb4ba42`
+  exposed TypeScript TS2345 at the four deferred service-status resolutions in
+  `AppShell.test.tsx` (then lines 244/245/302/303). The human graded the finding
+  behavioural Medium. It is resolved without a production change or broad cast:
+  the test now names `Awaited<ReturnType<typeof readSystemStatus<false>>>`, which
+  exactly matches the generated SDK's default `ThrowOnError = false` and the
+  production call site that supplies no override. On the current digest the
+  focused AppShell suite passed 11/11, frontend typecheck passed, and the
+  production build passed. The failed candidate attempt remains historical and
+  is not represented as a full-gauntlet PASS.
 - The reported cleanup/unbound concern was human-graded as a false positive.
   A production-identity execution of the real `changed_line_coverage` function
   exited zero, ran cleanup, and left no `verboflex-gauntlet-postgres-*` or
@@ -129,6 +140,7 @@ than being silently waived.
 | VF-SEC-013 | Medium | RESOLVED | Logout assigns the durable user-global budget only when the presented refresh session is unused, unrevoked, unexpired and belongs to an active user. Used, revoked, expired, inactive-user, malformed, and unknown credentials use the anonymous sentinel plus validated peer, preventing a stale credential from draining a live user's global logout quota. The archived RED source at `01cae15` failed all four stale-state probes; the reviewed source passes them while retaining empty 204 idempotence and family-wide revocation for live authority. |
 | VF-SEC-014 | Medium | RESOLVED | Frontend production changed-line branch coverage now consumes normalized Cobertura rather than branch-permissive LCOV, binds exclusions to the exact four-row source-owned map, rejects non-canonical paths, vacuous/zero totals, extra handwritten exclusions, and a concrete 50%-branch divergent fixture. The production path passed at 100% for 152 frontend lines; backend changed-line coverage passed at 100% for 1003 lines. |
 | VF-SEC-015 | Medium | RESOLVED | Source-bound TDD additions moved nine accepted detect-secrets findings. The exact policy was updated only at those nine line coordinates; all 23 paths/plugins/fingerprints and classifications are preserved byte-for-byte, a fresh repository scan matches exactly, and true-key plus unreviewed-tuple controls still fail as required. |
+| VF-SEC-016 | Medium | RESOLVED | The candidate gauntlet exposed TS2345 for deferred `readSystemStatus` responses because bare `ReturnType` retained an over-broad generic result. The test-only fix specializes the generated call to `<false>`, exactly matching the production call site's SDK default. AppShell 11/11, `tsc --noEmit`, and the Vite production build pass with no broad cast and no production-source change. |
 
 ## Plan 01-15 fix revalidation
 
@@ -325,7 +337,7 @@ fresh repository scan matched the exact 23-row policy.
 
 | Check | Result |
 | --- | --- |
-| Canonical review digest, two consecutive immediate pre-write runs | PASS — exact `763557c2e5b719516105322a773cb141dca92ead7f91ef23db0814f79fb4ba42` twice |
+| Canonical review digest, two consecutive immediate pre-write runs | PASS — exact `8a3e5bf647ed0be78dc5826001c98123b889ed0fc3a65ffd2df36eddf2bca46a` twice |
 | Canonical manifest resolution | PASS — 159 clean paths across every required review-mode category |
 | Manifest self-test | PASS |
 | Packaged gauntlet, real-smoke, and adversarial-auth self-tests | PASS |
@@ -333,18 +345,18 @@ fresh repository scan matched the exact 23-row policy.
 | Frontend coverage, mutation freshness, and property-mutation self-tests | PASS — exact exclusion-map, Cobertura path, vacuity, partial-branch, stale-result, and survivor controls rejected as required |
 | VF-SEC-012 archived RED probe | PASS — source at `7002e0f` exited 1 with caller-layer-record corruption; reviewed source passes |
 | VF-SEC-013 archived RED probe | PASS — source at `01cae15` failed exactly the used, inactive-user, revoked, and expired stale-token cases |
-| Current PostgreSQL auth/logout selection | PASS — 76/76, including live user-global budget, four anonymous peer-bounded stale states, deactivation, and idempotence |
+| Current PostgreSQL cookie/deactivation/logout selection | PASS — 23/23, including exact set/delete cookie scope, live user-global budget, four anonymous peer-bounded stale states, deactivation, family revocation, and idempotence |
 | Ruff lint and format | PASS — lint clean; 58 files already formatted |
 | Backend typing | PASS — mypy checked 36 source files |
-| Production changed-line coverage and cleanup | PASS — backend 100% over 1003 lines after 260/260 tests; frontend 100% over 152 lines after 75/75 tests; production-identity function exited zero with no gauntlet container or Celery worker remaining |
-| Frontend unit suite | PASS — 75/75 with shuffled seed 1401 |
-| Frontend type, lint, format, build, and generated API checks | PASS |
+| Production changed-line coverage and cleanup | PASS — packaged Cobertura normalization, exact four-row exclusions, non-vacuity, and concrete partial-branch controls passed on the current source; the prior production-identity run passed backend 100% over 1003 lines and frontend 100% over 152 lines and left no gauntlet container or Celery worker. The current delta is test-only typing, so the human-graded cleanup false positive is not reopened. |
+| Frontend AppShell unit focus | PASS — 11/11 on the current digest; the earlier complete 75/75 candidate unit run remains historical rather than a current full-gauntlet claim |
+| Frontend typecheck and production build | PASS — generated `ThrowOnError = false` result shape is accepted without broad casts; Vite transformed 1948 modules |
 | Detect-secrets exact policy | PASS — 23/23 exact tuple match |
 | Detect-secrets true-key and unreviewed-tuple negative controls | PASS — both failed as required |
 | Backend dependency audit | PASS — no known vulnerability in published packages |
 | Frontend production dependency audit | PASS — zero vulnerabilities |
 | Frontend complete dependency audit | EXPECTED LOW DEBT — VF-SEC-007 only |
-| Full post-fix candidate gauntlet | PENDING — no PASS claimed for this digest |
+| Full post-fix candidate gauntlet | PENDING — the preceding attempt exposed the resolved TS2345 finding; no PASS is claimed for this digest |
 | Independent closure check | PENDING — artifact remains OPEN/PENDING |
 
 ## Final disposition
