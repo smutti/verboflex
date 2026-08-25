@@ -17,6 +17,12 @@ grep -Fq '"$SOURCE_STATE" --verify-review-source' "$repo_root/tools/gauntlet.sh"
 grep -Fq 'run_layer checker-self-tests packaged_checker_self_tests' \
   "$repo_root/tools/gauntlet.sh"
 
+if [ "${VERBOFLEX_CHECKER_ISOLATION_NESTED:-0}" != "1" ]; then
+  "$repo_root/tools/gauntlet.sh" --self-test-packaged-checker-isolation \
+    >"$output_file" 2>&1
+  grep -Fq 'packaged checker layer isolation: PASS' "$output_file"
+fi
+
 "$repo_root/tools/gauntlet.sh" --self-test-openapi-control >"$output_file" 2>&1
 grep -Fq 'OpenAPI drift negative control: PASS' "$output_file"
 

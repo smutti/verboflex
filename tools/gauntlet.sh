@@ -266,14 +266,42 @@ checker_preflight() {
 
 packaged_checker_self_tests() {
   local checker
-  for checker in \
-    "$GAUNTLET_DIR/tests/test_source_state.sh" \
-    "$GAUNTLET_DIR/tests/test_gauntlet.sh" \
-    "$GAUNTLET_DIR/tests/test_real_smoke.sh" \
-    "$GAUNTLET_DIR/tests/test_adversarial_auth.sh"; do
+  local -a checkers
+  if [ "$#" -gt 0 ]; then
+    checkers=("$@")
+  else
+    checkers=(
+      "$GAUNTLET_DIR/tests/test_source_state.sh"
+      "$GAUNTLET_DIR/tests/test_gauntlet.sh"
+      "$GAUNTLET_DIR/tests/test_real_smoke.sh"
+      "$GAUNTLET_DIR/tests/test_adversarial_auth.sh"
+    )
+  fi
+  for checker in "${checkers[@]}"; do
     [ -x "$checker" ] || die "packaged checker self-test is not executable: $checker"
     "$checker"
   done
+}
+
+self_test_packaged_checker_isolation() {
+  local sentinel_file fake_checker
+  sentinel_file=$(mktemp)
+  fake_checker="${sentinel_file}.checker"
+  trap 'rm -f "$sentinel_file" "$fake_checker"' EXIT
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'printf "nested-checker-overwrite\\n" >"$VERBOFLEX_GAUNTLET_LAYER_FILE"' \
+    >"$fake_checker"
+  chmod +x "$fake_checker"
+  printf 'caller-owned-layer-record\n' >"$sentinel_file"
+
+  VERBOFLEX_GAUNTLET_LAYER_FILE="$sentinel_file" \
+    VERBOFLEX_CHECKER_ISOLATION_NESTED=1 \
+    packaged_checker_self_tests "$fake_checker"
+
+  [ "$(cat "$sentinel_file")" = 'caller-owned-layer-record' ] \
+    || die 'packaged checker self-tests modified the caller-owned layer record'
+  printf 'packaged checker layer isolation: PASS\n'
 }
 
 cleanup_test_infra() {
@@ -893,6 +921,7 @@ case "${1:-}" in
   --self-test-mutation-freshness) self_test_mutation_freshness ;;
   --self-test-property-mutation) self_test_property_mutation ;;
   --self-test-check-sequence) self_test_check_sequence ;;
+  --self-test-packaged-checker-isolation) self_test_packaged_checker_isolation ;;
   --self-test-frontend-coverage) self_test_frontend_coverage ;;
   --self-test-secret-audit-policy) self_test_secret_audit_policy ;;
   --post-fix-candidate) run_post_fix_candidate ;;
