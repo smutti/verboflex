@@ -450,5 +450,19 @@ describe("authenticated application shell", () => {
     expect(
       within(sheet).getByRole("button", { name: "Workspace overview" }),
     ).toHaveAttribute("aria-current", "page");
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
+    expect(trigger).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    const reopenedSheet = await screen.findByRole("dialog", {
+      name: "Navigation",
+    });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(reopenedSheet.contains(document.activeElement)).toBe(true);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
+    expect(trigger).toHaveFocus();
   });
 });

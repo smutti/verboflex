@@ -1,5 +1,6 @@
 import type { CurrentUserResponse, RoleName } from "../../api/client";
 import { LayoutDashboard, LogOut, Menu } from "lucide-react";
+import { useState } from "react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
@@ -48,13 +49,27 @@ function WorkspaceNavigation() {
 }
 
 export function AppShell({ accessToken, onLogout, principal }: AppShellProps) {
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const [navigationTooltipOpen, setNavigationTooltipOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="flex items-center justify-between gap-4 border-b bg-secondary px-6 py-4">
         <div className="flex min-w-0 items-center gap-2">
-          <Sheet>
+          <Sheet
+            open={navigationOpen}
+            onOpenChange={(open) => {
+              setNavigationOpen(open);
+              if (open) {
+                setNavigationTooltipOpen(false);
+              }
+            }}
+          >
             <TooltipProvider>
-              <Tooltip>
+              <Tooltip
+                open={!navigationOpen && navigationTooltipOpen}
+                onOpenChange={setNavigationTooltipOpen}
+              >
                 <TooltipTrigger asChild>
                   <SheetTrigger asChild>
                     <Button
