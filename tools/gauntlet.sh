@@ -497,9 +497,14 @@ backend_coverage_body() {
     --cov=verboflex --cov-branch --cov-report="xml:$BACKEND_COVERAGE")
 }
 
-changed_line_coverage() {
-  local normalized_frontend_coverage frontend_diff_report frontend_diff_rc
+changed_line_coverage() (
+  local frontend_coverage_workspace normalized_frontend_coverage frontend_diff_report
+  local frontend_diff_rc
   local -a frontend_excludes
+  frontend_coverage_workspace=$(mktemp -d)
+  normalized_frontend_coverage="$frontend_coverage_workspace/frontend-coverage.xml"
+  frontend_diff_report="$frontend_coverage_workspace/diff-cover-report.txt"
+  trap 'rm -rf "$frontend_coverage_workspace"' EXIT INT TERM
   with_test_infra backend_coverage_body
   (cd "$FRONTEND_ROOT" && npm run test:coverage -- --sequence.shuffle --sequence.seed="$RANDOM_SEED" \
     --coverage.provider=v8 --coverage.reporter=text --coverage.reporter=cobertura \
@@ -508,8 +513,6 @@ changed_line_coverage() {
     --compare-branch "$PHASE_BASE_COMMIT" --branch-coverage --fail-under 100 \
     --exclude 'backend/alembic/**' 'backend/src/verboflex/main.py' \
       'backend/src/verboflex/scripts/export_openapi.py')
-  normalized_frontend_coverage=$(mktemp)
-  frontend_diff_report=$(mktemp)
   normalize_frontend_cobertura \
     "$FRONTEND_COVERAGE_DIR/cobertura-coverage.xml" "$normalized_frontend_coverage"
   while IFS= read -r exclusion; do
@@ -524,8 +527,7 @@ changed_line_coverage() {
   sed -n '1,240p' "$frontend_diff_report"
   [ "$frontend_diff_rc" -eq 0 ] || die "frontend changed-line coverage failed"
   assert_diff_coverage_nonempty "$frontend_diff_report"
-  rm -f "$normalized_frontend_coverage" "$frontend_diff_report"
-}
+)
 
 create_fresh_backend_workspace() {
   local workspace
@@ -915,8 +917,8 @@ self_test_frontend_coverage() (
   local partial_coverage partial_diff partial_report partial_rc
   local positive_diff positive_report positive_rc
   fixture=$(mktemp -d)
-  source="$fixture/source.lcov"
-  normalized="$fixture/normalized.lcov"
+  source="$fixture/source.xml"
+  normalized="$fixture/frontend-coverage.xml"
   valid_report="$fixture/valid-report"
   vacuous_report="$fixture/vacuous-report"
   valid_map="$fixture/frontend-coverage-exclusions"
