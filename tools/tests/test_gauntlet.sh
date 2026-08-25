@@ -20,3 +20,21 @@ grep -Fq 'OpenAPI drift negative control: PASS' "$output_file"
 
 "$repo_root/tools/gauntlet.sh" --self-test-staging-layer >"$output_file" 2>&1
 grep -Fq 'staging/adversarial layer contract: PASS' "$output_file"
+
+for required_path in \
+  src/verboflex/auth/login.py \
+  src/verboflex/auth/password_change.py \
+  src/verboflex/auth/principal.py \
+  src/verboflex/auth/refresh_sessions.py; do
+  grep -Fq "\"$required_path\"" "$repo_root/backend/pyproject.toml"
+done
+
+for required_suite in \
+  tests/auth/test_login.py \
+  tests/auth/test_password_change.py \
+  tests/auth/test_refresh.py \
+  tests/auth/test_logout.py \
+  tests/api/test_me.py \
+  tests/integration/test_refresh_concurrency.py; do
+  grep -Fq "\"$required_suite\"" "$repo_root/backend/pyproject.toml"
+done
