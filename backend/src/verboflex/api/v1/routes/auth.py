@@ -3,7 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordBearer
 from redis import Redis
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from verboflex.auth.password_change import (
     decode_password_change_candidate,
     replace_current_password,
 )
+from verboflex.auth.passwords import MAX_PASSWORD_CHARACTERS
 from verboflex.auth.rate_limits import (
     LOGOUT_LIMIT,
     PASSWORD_CHANGE_LIMIT,
@@ -33,7 +34,11 @@ from verboflex.auth.refresh_sessions import (
 )
 from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
-from verboflex.schemas.auth import AccessTokenResponse, ChangePasswordRequest
+from verboflex.schemas.auth import (
+    AccessTokenResponse,
+    BoundedOAuth2PasswordRequestForm,
+    ChangePasswordRequest,
+)
 from verboflex.schemas.system import ErrorResponse
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -82,7 +87,7 @@ def _clear_refresh_cookie(response: Response) -> None:
 async def issue_token(
     request: Request,
     response: Response,
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    form_data: Annotated[BoundedOAuth2PasswordRequestForm, Depends()],
     session: Annotated[Session, Depends(get_db_session)],
     redis_client: Annotated[Redis, Depends(get_redis_client)],
     settings: Annotated[Settings, Depends(get_settings)],
@@ -270,6 +275,14 @@ async def change_password(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> None:
     """Expose the final authenticated password-change signature."""
+    if (
+        len(payload.current_password) > MAX_PASSWORD_CHARACTERS
+        or len(payload.new_password) > MAX_PASSWORD_CHARACTERS
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Password must contain 12 to 128 characters",
+        )
     try:
         candidate = decode_password_change_candidate(access_token, settings=settings)
     except InvalidPasswordChangePrincipal as error:
