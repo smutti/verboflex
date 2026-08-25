@@ -162,8 +162,12 @@ def test_ordinary_login_creates_only_hashed_refresh_authority(
         "expires_in": 900,
         "must_change_password": False,
     }
-    refresh_token = response.cookies["verboflex_refresh"]
+    refresh_token = response.cookies["__Secure-verboflex_refresh"]
     set_cookie = response.headers["set-cookie"]
+    assert "__Secure-verboflex_refresh=" in set_cookie
+    assert "verboflex_refresh=" not in set_cookie.replace(
+        "__Secure-verboflex_refresh=", ""
+    )
     assert "HttpOnly" in set_cookie
     assert "SameSite=lax" in set_cookie
     assert "Path=/api/v1/auth" in set_cookie
