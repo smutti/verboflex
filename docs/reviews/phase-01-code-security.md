@@ -3,7 +3,7 @@
 - Review-status: OPEN
 - Open-critical-high: 0
 - Full-gauntlet-status: PENDING
-- Reviewed-source-digest: `6bbff02fa710c8fcd1fef51d72da712ab781862a7830bf9bfcfbd3a5a1f6ad29`
+- Reviewed-source-digest: `14f4e2795d168b488a33a9fca1a8a8fe746d0ec9df29dd640ab883a98427f709`
 - Review-date: 2026-08-25
 - Review-mode: fresh-context independent goal-backward and OWASP ASVS-aligned source review
 - Candidate-verdict: PASS_FOR_POST_FIX_GAUNTLET
@@ -34,7 +34,7 @@ authorization call chains, frontend session authority, generated API contract,
 deployment configuration, smoke/adversarial harnesses, custom gauntlet checks,
 and every path selected by `tools/source_manifest.txt` in review mode.
 
-The canonical manifest resolved 159 clean tracked paths:
+The canonical manifest resolved 161 clean tracked paths:
 
 | Category | Paths |
 | --- | ---: |
@@ -43,13 +43,13 @@ The canonical manifest resolved 159 clean tracked paths:
 | config | 19 |
 | lockfiles | 3 |
 | migrations | 4 |
-| verifier-scripts | 11 |
+| verifier-scripts | 13 |
 | deployment-contract | 1 |
 
 `bash tools/source_state.sh --review-digest` was executed twice consecutively
 immediately before this candidate artifact was written. Both runs exited zero
 and returned exactly
-`6bbff02fa710c8fcd1fef51d72da712ab781862a7830bf9bfcfbd3a5a1f6ad29`.
+`14f4e2795d168b488a33a9fca1a8a8fe746d0ec9df29dd640ab883a98427f709`.
 The review artifact is excluded only from review-mode digest computation and is
 included by the final source-set contract.
 
@@ -67,6 +67,10 @@ the gauntlet `PENDING` and verdict `PASS_FOR_POST_FIX_GAUNTLET`.
 
 ### Candidate revalidation history and human decisions
 
+- The prior source-review candidate at review digest
+  `6bbff02fa710c8fcd1fef51d72da712ab781862a7830bf9bfcfbd3a5a1f6ad29`
+  remains historical only. The exact equivalent-mutant gate added afterward
+  invalidated that digest and produced the current review digest above.
 - The earlier candidate at review digest
   `45681aed630a5b5863a2723c1413c29f6055101499d442b2148224c6081636c3`
   remains historical only. Subsequent coverage-gate tests and fixes invalidated
@@ -123,6 +127,37 @@ the gauntlet `PENDING` and verdict `PASS_FOR_POST_FIX_GAUNTLET`.
   every path, plugin, hashed fingerprint, classification, and both negative
   controls remain unchanged. No file-wide, plugin-wide, count-only, or other
   waiver was added.
+
+### Exact equivalent-mutant decision and proof
+
+The human-approved disposition is exact and narrow: only
+`logout_rate_limit_user_id__mutmut_18` (`join(User, None)`) and
+`logout_rate_limit_user_id__mutmut_20` (`join(User)`) are equivalent mutants.
+SQLAlchemy 2.0.52 infers the sole `AuthSession.user_id -> User.id` foreign-key
+relationship for both variants. With the PostgreSQL dialect, the explicit
+production join and both variants compile byte-identically and contain exactly
+one `JOIN users ON users.id = auth_sessions.user_id`. The deliberately
+divergent `join(User, true())` control compiles `JOIN users ON true` and is
+rejected.
+
+The production mutation gate requires exactly 893 total verdicts: exactly 891
+non-equivalent mutants killed, exactly the two named survivors, and zero
+`no_tests`, skipped, suspicious, timeout, interrupted, segfault, or other
+unclassified verdicts. Exact-result controls reject a missing survivor, any
+additional survivor, 890/3 statistics, a broadened mapping row, and a diff that
+changes anything beyond the two reviewed join forms. The source manifest binds
+`tools/gauntlet.sh`, `tools/equivalent_mutants.txt`, and
+`tools/verify_equivalent_mutants.py` through the `tools/**` verifier-script
+rule, so none of the checker inputs sits outside the candidate digest.
+
+TDD history is preserved as `3ac757c` -> `9f28dd2`: the RED commit removed the
+prior `Select.join` monkeypatch/spelling test and required the new fail-closed
+checker self-test; the GREEN commit added the exact mapping, compiled
+PostgreSQL proof, divergent control, fresh 891/2/893 statistics contract, and
+diff binding. The structural monkeypatch test is not used. Focused PostgreSQL
+auth/logout selection still passes 7/7, and the mutation contract retains all
+891 substantive non-equivalent kills rather than waiving the three meaningful
+logout-query mutations adjacent to the two equivalent join spellings.
 
 ### Phase B — complete post-fix candidate gauntlet
 
@@ -367,8 +402,10 @@ fresh repository scan matched the exact 23-row policy.
 
 | Check | Result |
 | --- | --- |
-| Canonical review digest, two consecutive immediate pre-write runs | PASS — exact `6bbff02fa710c8fcd1fef51d72da712ab781862a7830bf9bfcfbd3a5a1f6ad29` twice |
-| Canonical manifest resolution | PASS — 159 clean paths across every required review-mode category |
+| Canonical review digest, two consecutive immediate pre-write runs | PASS — exact `14f4e2795d168b488a33a9fca1a8a8fe746d0ec9df29dd640ab883a98427f709` twice |
+| Canonical manifest resolution | PASS — 161 clean paths across every required review-mode category |
+| Exact equivalent-mutant gate | PASS — exact 891 killed plus the two named equivalent joins out of 893; extra/missing mappings, 890/3 statistics, broadened mapping, and divergent diff controls failed as required; byte-identical PostgreSQL SQL and `JOIN users ON true` negative control passed |
+| Equivalent-gate TDD and focused auth behavior | PASS — `3ac757c` removed the forbidden structural join monkeypatch and introduced RED; `9f28dd2` supplied GREEN; focused PostgreSQL auth/logout selection passed 7/7 |
 | Manifest self-test | PASS |
 | Packaged gauntlet, real-smoke, and adversarial-auth self-tests | PASS |
 | Packaged checker sequence/isolation self-tests | PASS — mandatory invocation and private layer-record ownership enforced |
