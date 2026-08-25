@@ -14,6 +14,7 @@ readonly BACKEND_COVERAGE="/tmp/verboflex-phase01-backend-coverage.xml"
 readonly FRONTEND_COVERAGE_DIR="/tmp/verboflex-phase01-frontend-coverage"
 readonly SECRET_SCAN="/tmp/verboflex-phase01-secrets.json"
 readonly BACKEND_PROPERTY_MUTATION_CONFIG="$GAUNTLET_DIR/mutmut-property.toml"
+readonly FRONTEND_COVERAGE_EXCLUSION_MAP="$GAUNTLET_DIR/frontend_coverage_exclusions.txt"
 
 readonly EXPECTED_LAYERS="source-state
 checker-self-tests
@@ -175,6 +176,36 @@ assert_diff_coverage_nonempty() {
   fi
   grep -Eq '^Total: [1-9][0-9]* lines$' "$report" \
     || die "changed-line coverage did not report a nonzero frontend line total"
+}
+
+write_expected_frontend_coverage_exclusion_map() {
+  printf '%s\n' \
+    'frontend/src/api/client/**|OpenAPI-generated internals; drift is enforced separately' \
+    'frontend/src/components/ui/**|official project-owned shadcn registry source' \
+    'frontend/src/hooks/use-mobile.ts|official shadcn registry support source' \
+    'frontend/src/main.tsx|entrypoint-only application wiring'
+}
+
+assert_frontend_coverage_exclusion_map() {
+  local mapping=$1 expected
+  [ -s "$mapping" ] || die "frontend coverage exclusion mapping is missing"
+  expected=$(mktemp)
+  write_expected_frontend_coverage_exclusion_map >"$expected"
+  if ! cmp -s "$expected" "$mapping"; then
+    rm -f "$expected"
+    die "frontend coverage exclusion mapping drifted outside the approved SPEC scope"
+  fi
+  rm -f "$expected"
+}
+
+frontend_coverage_exclude_patterns() {
+  local mapping=${1:-$FRONTEND_COVERAGE_EXCLUSION_MAP} path reason
+  assert_frontend_coverage_exclusion_map "$mapping"
+  while IFS='|' read -r path reason; do
+    [ -n "$path" ] && [ -n "$reason" ] \
+      || die "frontend coverage exclusion mapping contains an incomplete row"
+    printf '*/%s\n' "$path"
+  done <"$mapping"
 }
 
 audit_layer_record() {
@@ -463,6 +494,7 @@ backend_coverage_body() {
 
 changed_line_coverage() {
   local normalized_frontend_lcov frontend_diff_report frontend_diff_rc
+  local -a frontend_excludes
   with_test_infra backend_coverage_body
   (cd "$FRONTEND_ROOT" && npm run test:coverage -- --sequence.shuffle --sequence.seed="$RANDOM_SEED" \
     --coverage.provider=v8 --coverage.reporter=text --coverage.reporter=lcov \
@@ -474,11 +506,13 @@ changed_line_coverage() {
   normalized_frontend_lcov=$(mktemp)
   frontend_diff_report=$(mktemp)
   normalize_frontend_lcov "$FRONTEND_COVERAGE_DIR/lcov.info" "$normalized_frontend_lcov"
+  while IFS= read -r exclusion; do
+    frontend_excludes+=("$exclusion")
+  done < <(frontend_coverage_exclude_patterns)
   set +e
   (cd "$BACKEND_ROOT" && uv run diff-cover "$normalized_frontend_lcov" \
     --compare-branch "$PHASE_BASE_COMMIT" --branch-coverage --fail-under 100 \
-    --exclude 'frontend/src/api/client/**' 'frontend/src/components/ui/**' \
-      'frontend/src/hooks/use-mobile.ts' 'frontend/src/main.tsx') >"$frontend_diff_report" 2>&1
+    --exclude "${frontend_excludes[@]}") >"$frontend_diff_report" 2>&1
   frontend_diff_rc=$?
   set -e
   sed -n '1,240p' "$frontend_diff_report"
@@ -871,12 +905,15 @@ self_test_check_sequence() (
 )
 
 self_test_frontend_coverage() (
-  local fixture source normalized valid_report vacuous_report
+  local fixture source normalized valid_report vacuous_report valid_map invalid_map patterns
   fixture=$(mktemp -d)
   source="$fixture/source.lcov"
   normalized="$fixture/normalized.lcov"
   valid_report="$fixture/valid-report"
   vacuous_report="$fixture/vacuous-report"
+  valid_map="$fixture/frontend-coverage-exclusions"
+  invalid_map="$fixture/frontend-coverage-exclusions-invalid"
+  patterns="$fixture/frontend-coverage-patterns"
   trap 'rm -rf "$fixture"' EXIT INT TERM
 
   printf '%s\n' 'TN:' 'SF:src/features/auth/session.tsx' 'DA:1,1' 'end_of_record' >"$source"
@@ -898,6 +935,20 @@ self_test_frontend_coverage() (
   expect_control_failure frontend-lcov-path \
     'frontend LCOV contains missing or non-canonical source paths' \
     normalize_frontend_lcov "$source" "$normalized"
+
+  write_expected_frontend_coverage_exclusion_map >"$valid_map"
+  assert_frontend_coverage_exclusion_map "$valid_map"
+  frontend_coverage_exclude_patterns "$valid_map" >"$patterns"
+  grep -Fq '*/frontend/src/api/client/**' "$patterns" \
+    || die "frontend coverage generated-code exclusion is not absolute-path safe"
+  cp "$valid_map" "$invalid_map"
+  printf '%s\n' \
+    'frontend/src/components/layout/**|forbidden handwritten production exclusion' \
+    >>"$invalid_map"
+  expect_control_failure frontend-coverage-exclusion-map \
+    'frontend coverage exclusion mapping drifted outside the approved SPEC scope' \
+    assert_frontend_coverage_exclusion_map "$invalid_map"
+  printf 'frontend coverage exclusion mapping negative control: PASS\n'
   printf 'frontend changed-line coverage negative controls: PASS\n'
 )
 
