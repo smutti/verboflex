@@ -3,7 +3,7 @@
 - Review-status: OPEN
 - Open-critical-high: 0
 - Full-gauntlet-status: PENDING
-- Reviewed-source-digest: `45681aed630a5b5863a2723c1413c29f6055101499d442b2148224c6081636c3`
+- Reviewed-source-digest: `763557c2e5b719516105322a773cb141dca92ead7f91ef23db0814f79fb4ba42`
 - Review-date: 2026-08-25
 - Review-mode: fresh-context independent goal-backward and OWASP ASVS-aligned source review
 - Candidate-verdict: PASS_FOR_POST_FIX_GAUNTLET
@@ -17,7 +17,7 @@
 
 The reviewed source has no open Critical, High, or Medium finding and no SPEC
 gap requiring escalation. F-01 through F-08 and VF-SEC-001 through VF-SEC-006,
-VF-SEC-008 through VF-SEC-013 are resolved. VF-SEC-007 remains the sole open
+VF-SEC-008 through VF-SEC-015 are resolved. VF-SEC-007 remains the sole open
 Low finding: a development-only transitive `qs` advisory with no production
 dependency path.
 
@@ -34,7 +34,7 @@ authorization call chains, frontend session authority, generated API contract,
 deployment configuration, smoke/adversarial harnesses, custom gauntlet checks,
 and every path selected by `tools/source_manifest.txt` in review mode.
 
-The canonical manifest resolved 158 clean tracked paths:
+The canonical manifest resolved 159 clean tracked paths:
 
 | Category | Paths |
 | --- | ---: |
@@ -43,13 +43,13 @@ The canonical manifest resolved 158 clean tracked paths:
 | config | 19 |
 | lockfiles | 3 |
 | migrations | 4 |
-| verifier-scripts | 10 |
+| verifier-scripts | 11 |
 | deployment-contract | 1 |
 
 `bash tools/source_state.sh --review-digest` was executed twice consecutively
 immediately before this candidate artifact was written. Both runs exited zero
 and returned exactly
-`45681aed630a5b5863a2723c1413c29f6055101499d442b2148224c6081636c3`.
+`763557c2e5b719516105322a773cb141dca92ead7f91ef23db0814f79fb4ba42`.
 The review artifact is excluded only from review-mode digest computation and is
 included by the final source-set contract.
 
@@ -59,11 +59,30 @@ included by the final source-set contract.
 
 The fresh-context reviewer independently inspected the complete Phase 1 source
 and security surface, classified the exact 23 detect-secrets detections, ran
-focused source, PostgreSQL, frontend, dependency, and archived-RED probes, and
-revalidated F-01 through F-08 plus VF-SEC-012 and VF-SEC-013. The digest matched
-twice, no new material finding was opened, and the artifact is deliberately
-left `OPEN` with the gauntlet `PENDING` and verdict
-`PASS_FOR_POST_FIX_GAUNTLET`.
+focused source, PostgreSQL, frontend, dependency, archived-RED, production
+Cobertura, cleanup, and exact-secret-policy probes, and revalidated F-01 through
+F-08 plus VF-SEC-012 through VF-SEC-015. The digest matched twice, no new
+material finding was opened, and the artifact is deliberately left `OPEN` with
+the gauntlet `PENDING` and verdict `PASS_FOR_POST_FIX_GAUNTLET`.
+
+### Candidate revalidation history and human decisions
+
+- The earlier candidate at review digest
+  `45681aed630a5b5863a2723c1413c29f6055101499d442b2148224c6081636c3`
+  remains historical only. Subsequent coverage-gate tests and fixes invalidated
+  it and produced the current review digest above.
+- The reported cleanup/unbound concern was human-graded as a false positive.
+  A production-identity execution of the real `changed_line_coverage` function
+  exited zero, ran cleanup, and left no `verboflex-gauntlet-postgres-*` or
+  `verboflex-gauntlet-redis-*` container and no Celery gauntlet worker. An
+  earlier invalid direct-source probe had changed `$0` and therefore resolved
+  `REPO_ROOT` to the parent directory; its failure is not production evidence,
+  and its two exactly named containers were removed before the valid probe.
+- The detect-secrets line drift was human-graded behavioural and resolved by
+  rebinding only nine line numbers. The policy still contains exactly 23 rows;
+  every path, plugin, hashed fingerprint, classification, and both negative
+  controls remain unchanged. No file-wide, plugin-wide, count-only, or other
+  waiver was added.
 
 ### Phase B — complete post-fix candidate gauntlet
 
@@ -108,6 +127,8 @@ than being silently waived.
 | VF-SEC-011 | Medium | RESOLVED | Login username/password/client_id/client_secret/scope limits are enforced by FastAPI form parsing; password-change current/new limits are checked before bearer decoding, Redis evaluation, durable mutation, or Argon2. The committed OpenAPI publishes 320/128/320/128/1024 and 128/128 maxima. Independent request probes returned 422 for all five oversized login/OAuth cases with zero Redis calls, and focused password-change tests preserve the exact stable 422 envelope and durable state. |
 | VF-SEC-012 | Medium | RESOLVED | Packaged checker self-tests run in an isolated subshell with a private temporary layer record and cannot mutate caller-owned `LAYER_RECORD`. The archived RED source at `7002e0f` failed with `packaged checker self-tests modified the caller-owned layer record`; the reviewed source passes the same isolation probe. |
 | VF-SEC-013 | Medium | RESOLVED | Logout assigns the durable user-global budget only when the presented refresh session is unused, unrevoked, unexpired and belongs to an active user. Used, revoked, expired, inactive-user, malformed, and unknown credentials use the anonymous sentinel plus validated peer, preventing a stale credential from draining a live user's global logout quota. The archived RED source at `01cae15` failed all four stale-state probes; the reviewed source passes them while retaining empty 204 idempotence and family-wide revocation for live authority. |
+| VF-SEC-014 | Medium | RESOLVED | Frontend production changed-line branch coverage now consumes normalized Cobertura rather than branch-permissive LCOV, binds exclusions to the exact four-row source-owned map, rejects non-canonical paths, vacuous/zero totals, extra handwritten exclusions, and a concrete 50%-branch divergent fixture. The production path passed at 100% for 152 frontend lines; backend changed-line coverage passed at 100% for 1003 lines. |
+| VF-SEC-015 | Medium | RESOLVED | Source-bound TDD additions moved nine accepted detect-secrets findings. The exact policy was updated only at those nine line coordinates; all 23 paths/plugins/fingerprints and classifications are preserved byte-for-byte, a fresh repository scan matches exactly, and true-key plus unreviewed-tuple controls still fail as required. |
 
 ## Plan 01-15 fix revalidation
 
@@ -115,7 +136,7 @@ than being silently waived.
 | --- | --- | --- |
 | F-01 | PASS | Login/refresh set, and logout/password-change delete, only the hard-coded `__Host-verboflex_refresh` cookie with Secure, HttpOnly, SameSite=Lax, Path=/ and no Domain. |
 | F-02 | PASS | `backend/.python-version` is bound into the source manifest and the manifest negative control rejects its omission or mutation. |
-| F-03 | PASS | Frontend changed-line coverage canonicalizes LCOV source paths and fails closed for a vacuous or unresolved changed-line set; the packaged self-test passed. |
+| F-03 | PASS | Frontend changed-line coverage canonicalizes Cobertura source paths, enforces exact approved exclusions, and fails closed for a vacuous, unresolved, or partially covered branch set; packaged and production-path probes passed. |
 | F-04 | PASS | Backend mutation execution requires a fresh isolated workspace and rejects missing, zero-total, or stale statistics; the mutation-freshness self-test passed. |
 | F-05 | PASS | Property-only mutation attribution is source-bound by `tools/mutmut-property.toml`, and the frontend reducer range is exact; the property-mutation self-test passed. |
 | F-06 | PASS | Packaged checker self-tests are mandatory in the candidate/full gauntlet sequence and are isolated from caller state; both sequence and isolation self-tests passed. |
@@ -264,17 +285,17 @@ any of the 23 entries below.
 | 6 | `src/verboflex/auth/password_change.py|55|Secret Keyword|42213dc7f2ef60d5d6744c00f091a46b2161dda5` | False positive: public password-policy message. |
 | 7 | `src/verboflex/auth/principal.py|28|Secret Keyword|3591079abcc3407a2c2ed76661ec29a7ec0d1cb8` | False positive: public forced-change diagnostic. |
 | 8 | `src/verboflex/auth/principal.py|29|Secret Keyword|82bde2d99285779d940c36fdcdb9c3e9afa40d2f` | False positive: public forced-change response detail. |
-| 9 | `src/verboflex/auth/refresh_sessions.py|19|Base64 High Entropy String|e582429052cdb908833560f6f7582d232de37c4d` | False positive: the literal public base64url alphabet used for syntax validation, not generated authority. |
+| 9 | `src/verboflex/auth/refresh_sessions.py|20|Base64 High Entropy String|e582429052cdb908833560f6f7582d232de37c4d` | False positive: the literal public base64url alphabet used for syntax validation, not generated authority. |
 | 10 | `tests/api/test_rate_limits.py|189|Secret Keyword|5ac066cfb3bcf9973a0b40daeb7f5606103c1bd3` | False positive: local HTTP password fixture. |
 | 11 | `tests/api/test_system_status.py|109|Basic Auth Credentials|e5e9fa1ba31ecd1ae84f75caaa474f3a663f05f4` | False positive: deliberately fake database URL inside a redaction test; the test proves it is not exposed. |
-| 12 | `tests/auth/test_bootstrap_admin.py|136|Secret Keyword|985a4d67132193977275067aca18c13f8c8371c8` | False positive: isolated bootstrap password fixture. |
-| 13 | `tests/auth/test_bootstrap_admin.py|147|Secret Keyword|d36b093dec485bfd20ef697ca6c1ad79e1ac9210` | False positive: isolated second-bootstrap password fixture. |
-| 14 | `tests/auth/test_bootstrap_admin.py|235|Secret Keyword|3da24dfed48aa2721da14e6f79e588440b934675` | False positive: isolated reset-password fixture. |
-| 15 | `tests/auth/test_bootstrap_admin.py|295|Secret Keyword|028e59d8204d08fecd6aad12434b872fe4319f6d` | False positive: isolated replacement-password fixture. |
-| 16 | `tests/auth/test_bootstrap_admin.py|410|Secret Keyword|5d9dec21ffdbb45c64f0ea2b1abf3b25c2afc728` | False positive: isolated unknown-account reset fixture. |
-| 17 | `tests/auth/test_bootstrap_admin.py|445|Secret Keyword|1123e04e3b43d460543f1b0bf94e67a0a636b2cc` | False positive: in-memory secret-reader fixture proving CLI input routing. |
-| 18 | `tests/auth/test_bootstrap_admin.py|548|Secret Keyword|cdd076c21ce35f40d40b6c16d12bd40876050a6f` | False positive: in-memory protected-input fixture. |
-| 19 | `tests/auth/test_bootstrap_admin.py|626|Secret Keyword|18468712bc6eede8cb7adf8932b073bf56773a11` | False positive: explicit `non-secret-test-hash` rollback fixture. |
+| 12 | `tests/auth/test_bootstrap_admin.py|137|Secret Keyword|985a4d67132193977275067aca18c13f8c8371c8` | False positive: isolated bootstrap password fixture. |
+| 13 | `tests/auth/test_bootstrap_admin.py|148|Secret Keyword|d36b093dec485bfd20ef697ca6c1ad79e1ac9210` | False positive: isolated second-bootstrap password fixture. |
+| 14 | `tests/auth/test_bootstrap_admin.py|236|Secret Keyword|3da24dfed48aa2721da14e6f79e588440b934675` | False positive: isolated reset-password fixture. |
+| 15 | `tests/auth/test_bootstrap_admin.py|296|Secret Keyword|028e59d8204d08fecd6aad12434b872fe4319f6d` | False positive: isolated replacement-password fixture. |
+| 16 | `tests/auth/test_bootstrap_admin.py|411|Secret Keyword|5d9dec21ffdbb45c64f0ea2b1abf3b25c2afc728` | False positive: isolated unknown-account reset fixture. |
+| 17 | `tests/auth/test_bootstrap_admin.py|586|Secret Keyword|1123e04e3b43d460543f1b0bf94e67a0a636b2cc` | False positive: in-memory secret-reader fixture proving CLI input routing. |
+| 18 | `tests/auth/test_bootstrap_admin.py|689|Secret Keyword|cdd076c21ce35f40d40b6c16d12bd40876050a6f` | False positive: in-memory protected-input fixture. |
+| 19 | `tests/auth/test_bootstrap_admin.py|767|Secret Keyword|18468712bc6eede8cb7adf8932b073bf56773a11` | False positive: explicit `non-secret-test-hash` rollback fixture. |
 | 20 | `tests/auth/test_login.py|45|Secret Keyword|e7e0ea25217b715c566268c0607e48acef3b9ccf` | False positive: local valid-password fixture for isolated databases. |
 | 21 | `tests/auth/test_password_change.py|188|Secret Keyword|a95b347855753c3b784594a28fa00ec116430d1c` | False positive: deliberately wrong current-password test input. |
 | 22 | `tests/auth/test_password_change.py|36|Secret Keyword|bc27f09f74d82f81b559a27a26bd03f580960364` | False positive: isolated current-password fixture. |
@@ -304,18 +325,19 @@ fresh repository scan matched the exact 23-row policy.
 
 | Check | Result |
 | --- | --- |
-| Canonical review digest, two consecutive immediate pre-write runs | PASS — exact `45681aed630a5b5863a2723c1413c29f6055101499d442b2148224c6081636c3` twice |
-| Canonical manifest resolution | PASS — 158 clean paths across every required review-mode category |
+| Canonical review digest, two consecutive immediate pre-write runs | PASS — exact `763557c2e5b719516105322a773cb141dca92ead7f91ef23db0814f79fb4ba42` twice |
+| Canonical manifest resolution | PASS — 159 clean paths across every required review-mode category |
 | Manifest self-test | PASS |
 | Packaged gauntlet, real-smoke, and adversarial-auth self-tests | PASS |
 | Packaged checker sequence/isolation self-tests | PASS — mandatory invocation and private layer-record ownership enforced |
-| Frontend coverage, mutation freshness, and property-mutation self-tests | PASS — negative controls rejected as required |
+| Frontend coverage, mutation freshness, and property-mutation self-tests | PASS — exact exclusion-map, Cobertura path, vacuity, partial-branch, stale-result, and survivor controls rejected as required |
 | VF-SEC-012 archived RED probe | PASS — source at `7002e0f` exited 1 with caller-layer-record corruption; reviewed source passes |
 | VF-SEC-013 archived RED probe | PASS — source at `01cae15` failed exactly the used, inactive-user, revoked, and expired stale-token cases |
 | Current PostgreSQL auth/logout selection | PASS — 76/76, including live user-global budget, four anonymous peer-bounded stale states, deactivation, and idempotence |
 | Ruff lint and format | PASS — lint clean; 58 files already formatted |
 | Backend typing | PASS — mypy checked 36 source files |
-| Frontend unit suite | PASS — 72/72 with shuffled seed 1401 |
+| Production changed-line coverage and cleanup | PASS — backend 100% over 1003 lines after 260/260 tests; frontend 100% over 152 lines after 75/75 tests; production-identity function exited zero with no gauntlet container or Celery worker remaining |
+| Frontend unit suite | PASS — 75/75 with shuffled seed 1401 |
 | Frontend type, lint, format, build, and generated API checks | PASS |
 | Detect-secrets exact policy | PASS — 23/23 exact tuple match |
 | Detect-secrets true-key and unreviewed-tuple negative controls | PASS — both failed as required |
