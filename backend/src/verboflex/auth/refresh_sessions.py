@@ -4,7 +4,6 @@ import hashlib
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -93,7 +92,6 @@ def _create_successor_authority(
 ) -> RefreshAuthority:
     successor_token = secrets.token_urlsafe(REFRESH_TOKEN_BYTES)
     successor = AuthSession(
-        id=uuid4(),
         user_id=predecessor.user_id,
         family_id=predecessor.family_id,
         parent_id=predecessor.id,
@@ -129,13 +127,11 @@ def rotate_refresh_session(
         raise InvalidRefreshSession(INVALID_REFRESH_SESSION_MESSAGE)
     assert refresh_token is not None
     rotated_at = now or datetime.now(UTC)
-    replay_detected = False
-    authority: RefreshAuthority | None = None
 
     with session.begin():
         predecessor = _load_predecessor(session, refresh_token)
         if _revoke_replayed_family(session, predecessor, rotated_at=rotated_at):
-            replay_detected = True
+            authority = None
         else:
             authority = _create_successor_authority(
                 session,
@@ -145,7 +141,7 @@ def rotate_refresh_session(
                 rotated_at=rotated_at,
             )
 
-    if replay_detected or authority is None:
+    if authority is None:
         raise InvalidRefreshSession(INVALID_REFRESH_SESSION_MESSAGE)
     return authority
 
