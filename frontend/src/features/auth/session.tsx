@@ -1,9 +1,7 @@
 import {
-  useCallback,
   createContext,
   useContext,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type PropsWithChildren,
@@ -86,6 +84,12 @@ export interface SessionValue {
 
 const SessionContext = createContext<SessionValue | null>(null);
 
+export function initialSessionState(restoreOnMount: boolean): SessionState {
+  return restoreOnMount
+    ? { status: "checking_session" }
+    : { status: "signed_out" };
+}
+
 export interface SessionProviderProps extends PropsWithChildren {
   restoreOnMount?: boolean;
 }
@@ -94,21 +98,21 @@ export function SessionProvider({
   children,
   restoreOnMount = true,
 }: SessionProviderProps) {
-  const [state, setState] = useState<SessionState>(
-    restoreOnMount ? { status: "checking_session" } : { status: "signed_out" },
+  const [state, setState] = useState<SessionState>(() =>
+    initialSessionState(restoreOnMount),
   );
-  const operationVersion = useRef(0);
+  const activeOperation = useRef(Symbol());
 
-  const login = useCallback(async (credentials: LoginCredentials) => {
-    const version = operationVersion.current + 1;
-    operationVersion.current = version;
+  async function login(credentials: LoginCredentials) {
+    const operation = Symbol();
+    activeOperation.current = operation;
     const tokenResult = await issueToken({
       body: {
         username: credentials.email,
         password: credentials.password,
       },
     });
-    if (operationVersion.current !== version) {
+    if (activeOperation.current !== operation) {
       return;
     }
     const authority = tokenResult.data;
@@ -129,7 +133,7 @@ export function SessionProvider({
     const identityResult = await readCurrentUser({
       auth: authority.access_token,
     });
-    if (operationVersion.current !== version) {
+    if (activeOperation.current !== operation) {
       return;
     }
     if (identityResult.data === undefined) {
@@ -143,36 +147,33 @@ export function SessionProvider({
         principal: identityResult.data,
       }),
     );
-  }, []);
+  }
 
-  const changePassword = useCallback(
-    async (passwords: PasswordChange) => {
-      if (state.status !== "password_change_required") {
-        return;
-      }
-      const version = operationVersion.current + 1;
-      operationVersion.current = version;
-      const result = await generatedChangePassword({
-        auth: state.accessToken,
-        body: {
-          current_password: passwords.currentPassword,
-          new_password: passwords.newPassword,
-        },
-      });
-      if (operationVersion.current !== version) {
-        return;
-      }
-      if (result.error !== undefined) {
-        throw new Error("Session action failed");
-      }
-      setState((current) => transitionSession(current, { type: "sign_out" }));
-    },
-    [state],
-  );
+  async function changePassword(passwords: PasswordChange) {
+    if (state.status !== "password_change_required") {
+      return;
+    }
+    const operation = Symbol();
+    activeOperation.current = operation;
+    const result = await generatedChangePassword({
+      auth: state.accessToken,
+      body: {
+        current_password: passwords.currentPassword,
+        new_password: passwords.newPassword,
+      },
+    });
+    if (activeOperation.current !== operation) {
+      return;
+    }
+    if (result.error !== undefined) {
+      throw new Error("Session action failed");
+    }
+    setState((current) => transitionSession(current, { type: "sign_out" }));
+  }
 
-  const restoreSession = useCallback(async () => {
-    const version = operationVersion.current + 1;
-    operationVersion.current = version;
+  async function restoreSession() {
+    const operation = Symbol();
+    activeOperation.current = operation;
     setState((current) =>
       transitionSession(current, { type: "check_session" }),
     );
@@ -180,12 +181,12 @@ export function SessionProvider({
     try {
       refreshResult = await refreshAccessToken();
     } catch {
-      if (operationVersion.current === version) {
+      if (activeOperation.current === operation) {
         setState((current) => transitionSession(current, { type: "sign_out" }));
       }
       return;
     }
-    if (operationVersion.current !== version) {
+    if (activeOperation.current !== operation) {
       return;
     }
     const authority = refreshResult.data;
@@ -196,7 +197,7 @@ export function SessionProvider({
     const identityResult = await readCurrentUser({
       auth: authority.access_token,
     });
-    if (operationVersion.current !== version) {
+    if (activeOperation.current !== operation) {
       return;
     }
     if (identityResult.data === undefined) {
@@ -210,34 +211,29 @@ export function SessionProvider({
         principal: identityResult.data,
       }),
     );
-  }, []);
+  }
+
+  const restoreSessionRef = useRef(restoreSession);
 
   useEffect(() => {
     if (restoreOnMount) {
-      void restoreSession();
+      void restoreSessionRef.current();
     }
-  }, [restoreOnMount, restoreSession]);
+  }, [restoreOnMount]);
 
-  const logout = useCallback(async () => {
-    operationVersion.current += 1;
+  async function logout() {
+    activeOperation.current = Symbol();
     setState((current) => transitionSession(current, { type: "sign_out" }));
-    try {
-      await generatedLogout();
-    } finally {
-      setState((current) => transitionSession(current, { type: "sign_out" }));
-    }
-  }, []);
+    await generatedLogout();
+  }
 
-  const value = useMemo<SessionValue>(
-    () => ({
-      state,
-      login,
-      changePassword,
-      restoreSession,
-      logout,
-    }),
-    [changePassword, login, logout, restoreSession, state],
-  );
+  const value: SessionValue = {
+    state,
+    login,
+    changePassword,
+    restoreSession,
+    logout,
+  };
 
   return (
     <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
