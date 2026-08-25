@@ -7,7 +7,7 @@ const config = {
   mutate: ["src/features/auth/session.tsx"],
   vitest: {
     configFile: "vite.config.ts",
-    related: true,
+    related: false,
   },
   reporters: ["clear-text", "json"],
   jsonReporter: {
