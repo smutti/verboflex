@@ -381,6 +381,13 @@ def test_health_limit_uses_the_validated_peer_in_its_exact_key() -> None:
     assert calls == [("health:192.0.2.44", 60, 60)]
 
 
+def test_missing_server_peer_projects_to_one_bounded_unknown_identity() -> None:
+    """Treat absent ASGI client metadata as the same safe unknown actor."""
+    request = Request({"type": "http", "client": None})
+
+    assert rate_limits.validated_client_ip(request) == "unknown"
+
+
 def test_redis_client_applies_both_bounded_socket_timeouts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
