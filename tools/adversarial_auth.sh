@@ -58,6 +58,63 @@ json_field() {
   )
 }
 
+tamper_token_signature() {
+  local token=$1
+  printf '%s' "$token" | (
+    cd "$REPO_ROOT/backend"
+    uv run python -c '
+import base64
+import binascii
+import sys
+
+token = sys.stdin.read().strip()
+parts = token.split(".")
+if len(parts) != 3:
+    raise SystemExit("token must contain exactly three segments")
+try:
+    signature = base64.urlsafe_b64decode(
+        parts[2] + "=" * (-len(parts[2]) % 4)
+    )
+except (binascii.Error, ValueError) as error:
+    raise SystemExit("token signature is not valid base64url") from error
+if not signature:
+    raise SystemExit("token signature is empty")
+mutated_signature = bytes([signature[0] ^ 1]) + signature[1:]
+parts[2] = base64.urlsafe_b64encode(mutated_signature).rstrip(b"=").decode("ascii")
+print(".".join(parts))
+'
+  )
+}
+
+assert_signature_bytes_differ() {
+  local original_token=$1
+  local tampered_token=$2
+  printf '%s\n%s\n' "$original_token" "$tampered_token" | (
+    cd "$REPO_ROOT/backend"
+    uv run python -c '
+import base64
+import binascii
+import sys
+
+tokens = sys.stdin.read().splitlines()
+if len(tokens) != 2:
+    raise SystemExit("signature comparison requires exactly two tokens")
+
+def signature_bytes(token: str) -> bytes:
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise SystemExit("token must contain exactly three segments")
+    try:
+        return base64.urlsafe_b64decode(parts[2] + "=" * (-len(parts[2]) % 4))
+    except (binascii.Error, ValueError) as error:
+        raise SystemExit("token signature is not valid base64url") from error
+
+if signature_bytes(tokens[0]) == signature_bytes(tokens[1]):
+    raise SystemExit("signature bytes did not change")
+'
+  )
+}
+
 write_login_form() {
   local destination=$1
   local email=$2
@@ -84,7 +141,7 @@ http_request() {
 }
 
 self_test() {
-  local fixture
+  local fixture token_fixture tampered_fixture
   fixture=$(mktemp)
   printf '{"detail":"Invalid credentials"}\n' >"$fixture"
   assert_status 401 401 status-positive-control
@@ -92,7 +149,13 @@ self_test() {
   expect_failure 'expected HTTP 401, got 200' assert_status 401 200 status-negative-control
   expect_failure 'unexpected JSON body' \
     assert_json_exact "$fixture" '{"detail":"different"}' json-negative-control
+  token_fixture='header.payload._w'
+  tampered_fixture=$(tamper_token_signature "$token_fixture")
+  assert_signature_bytes_differ "$token_fixture" "$tampered_fixture"
+  expect_failure 'signature bytes did not change' \
+    assert_signature_bytes_differ "$token_fixture" "$token_fixture"
   rm -f "$fixture"
+  printf 'tampered signature bytes differ: PASS\n'
   printf 'adversarial auth self-test: PASS\n'
 }
 
@@ -150,11 +213,8 @@ run_adversarial() {
   refresh_cookie=$(sed -n 's/^set-cookie: __Host-verboflex_refresh=\([^;]*\).*/\1/ip' "$headers" | sed -n '1p')
   [ -n "$refresh_cookie" ] || die "ordinary login did not set a refresh cookie"
 
-  if [ "${ordinary_token%?}x" = "$ordinary_token" ]; then
-    tampered_token="${ordinary_token%?}y"
-  else
-    tampered_token="${ordinary_token%?}x"
-  fi
+  tampered_token=$(tamper_token_signature "$ordinary_token")
+  assert_signature_bytes_differ "$ordinary_token" "$tampered_token"
   status=$(http_request GET "$VERBOFLEX_SMOKE_BACKEND_URL/api/v1/users/me" \
     "$response" "$headers" -H "Authorization: Bearer $tampered_token")
   assert_status 401 "$status" tampered-token
