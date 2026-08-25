@@ -425,12 +425,37 @@ supply_chain_secrets() {
   (cd "$FRONTEND_ROOT" && npm query ':root > *' --json >/tmp/verboflex-phase01-npm-licenses.json)
 }
 
-staging_adversarial_smoke() {
-  [ -x "$GAUNTLET_DIR/real_smoke.sh" ] || die "real smoke harness is missing"
-  [ -x "$GAUNTLET_DIR/adversarial_auth.sh" ] || die "adversarial auth harness is missing"
-  "$GAUNTLET_DIR/real_smoke.sh"
-  "$GAUNTLET_DIR/adversarial_auth.sh"
+run_staging_adversarial_smoke() {
+  local smoke_script=$1
+  [ -x "$smoke_script" ] || die "real smoke harness is missing"
+  "$smoke_script"
 }
+
+staging_adversarial_smoke() {
+  [ -x "$GAUNTLET_DIR/adversarial_auth.sh" ] || die "adversarial auth harness is missing"
+  run_staging_adversarial_smoke "$GAUNTLET_DIR/real_smoke.sh"
+}
+
+self_test_staging_layer() (
+  local fixture counter success_script failure_script rc
+  fixture=$(mktemp -d)
+  counter="$fixture/count"
+  success_script="$fixture/success-smoke"
+  failure_script="$fixture/failure-smoke"
+  trap 'rm -rf "$fixture"' EXIT INT TERM
+  printf '%s\n' '#!/bin/sh' 'printf "run\n" >>"$GAUNTLET_LAYER_COUNTER"' >"$success_script"
+  printf '%s\n' '#!/bin/sh' 'exit 42' >"$failure_script"
+  chmod 700 "$success_script" "$failure_script"
+  export GAUNTLET_LAYER_COUNTER="$counter"
+  run_staging_adversarial_smoke "$success_script"
+  [ "$(wc -l <"$counter" | tr -d ' ')" = "1" ] || die "staging layer did not run exactly once"
+  set +e
+  run_staging_adversarial_smoke "$failure_script"
+  rc=$?
+  set -e
+  [ "$rc" -eq 42 ] || die "staging layer did not propagate adversarial failure"
+  printf 'staging/adversarial layer contract: PASS\n'
+)
 
 source_state_layer() {
   local digest
@@ -469,6 +494,7 @@ run_full_gauntlet() {
 case "${1:-}" in
   --preflight) checker_preflight ;;
   --self-test-openapi-control) openapi_negative_control ;;
+  --self-test-staging-layer) self_test_staging_layer ;;
   -h|--help)
     printf 'usage: tools/gauntlet.sh [--preflight]\n'
     ;;
