@@ -12,3 +12,11 @@ if ! "$repo_root/tools/source_state.sh" --self-test-manifest >"$output_file" 2>&
 fi
 
 grep -Fq 'source manifest self-test: PASS' "$output_file"
+
+while IFS='|' read -r directive category pathspec _reason; do
+  [ "$directive" = "include" ] || continue
+  if [ -z "$(git -C "$repo_root" ls-files --cached --others --exclude-standard -- "$pathspec")" ]; then
+    printf 'include rule resolved no paths: %s (%s)\n' "$pathspec" "$category" >&2
+    exit 1
+  fi
+done <"$repo_root/tools/source_manifest.txt"

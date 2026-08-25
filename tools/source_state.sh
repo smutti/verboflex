@@ -236,6 +236,13 @@ self_test_manifest() {
   baseline=$(compute_digest "$fixture" tools/source_manifest.txt final)
   [ "${#baseline}" -eq 64 ] || die "positive control did not produce a SHA-256 digest"
 
+  {
+    cat "$manifest"
+    printf 'include|implementation|:(glob)missing-implementation/**\n'
+  } >"$fixture/empty-include-rule-manifest.txt"
+  expect_failure 'include rule is empty: implementation' \
+    compute_digest "$fixture" empty-include-rule-manifest.txt final
+
   sed 's#:(glob)reports/\*\*#:(glob)absent-artifacts/**#' \
     "$manifest" >"$fixture/empty-exclusion-manifest.txt"
   digest=$(compute_digest "$fixture" empty-exclusion-manifest.txt final)
