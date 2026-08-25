@@ -7,12 +7,12 @@
 
 ### Platform Foundation
 
-- [ ] **PLAT-01**: The application is organized as separate frontend and backend applications.
+- [x] **PLAT-01**: The application is organized as separate frontend and backend applications.
 - [x] **PLAT-02**: The frontend is implemented with React, Vite, TypeScript, and shadcn/ui project-owned components.
 - [x] **PLAT-03**: The backend exposes a FastAPI HTTP API consumed by the frontend.
 - [x] **PLAT-04**: The backend persists application data in PostgreSQL through SQLAlchemy models.
 - [x] **PLAT-05**: The backend manages database schema changes through Alembic migrations.
-- [ ] **PLAT-06**: Long-running imports, parsing, commits, and pull request operations run through Celery workers using Redis.
+- [x] **PLAT-06**: Long-running imports, parsing, commits, and pull request operations run through Celery workers using Redis.
 - [ ] **PLAT-07**: The system records audit metadata for key mutations, including actor, timestamp, entity, and action.
 
 ### Authentication and Roles
@@ -172,12 +172,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PLAT-01 | Phase 1 | Pending |
+| PLAT-01 | Phase 1 | Complete |
 | PLAT-02 | Phase 1 | Complete |
 | PLAT-03 | Phase 1 | Complete |
 | PLAT-04 | Phase 1 | Complete |
 | PLAT-05 | Phase 1 | Complete |
-| PLAT-06 | Phase 1 | Pending |
+| PLAT-06 | Phase 1 | Complete |
 | PLAT-07 | Phase 9 | Pending |
 | AUTH-01 | Phase 1 | Complete |
 | AUTH-02 | Phase 2 | Pending |
