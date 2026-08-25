@@ -351,28 +351,34 @@ migration_rehearsal() {
   TEST_WORKER_PID=""
 }
 
-openapi_negative_control() {
+openapi_negative_control() (
   local target="$BACKEND_ROOT/src/verboflex/api/v1/routes/health.py"
-  local backup generated_backup client_backup output rc
+  local backup output rc before_digest mutated_digest restored_digest
   backup=$(mktemp)
-  generated_backup=$(mktemp)
-  client_backup=$(mktemp -d)
   cp "$target" "$backup"
-  cp "$FRONTEND_ROOT/openapi.json" "$generated_backup"
-  cp -R "$FRONTEND_ROOT/src/api/client/." "$client_backup/"
-  perl -0pi -e 's/health_status/health_status_negative_control/' "$target"
+  before_digest=$(shasum -a 256 "$target" | awk '{print $1}')
+  restore_openapi_control() {
+    cp "$backup" "$target"
+    git -C "$REPO_ROOT" restore --worktree -- frontend/openapi.json frontend/src/api/client
+  }
+  trap restore_openapi_control EXIT INT TERM
+  perl -0pi -e 's/async def read_health\(/async def read_health_negative_control\(/' "$target"
+  mutated_digest=$(shasum -a 256 "$target" | awk '{print $1}')
+  [ "$mutated_digest" != "$before_digest" ] || die "OpenAPI drift control did not mutate its subject"
   set +e
   output=$(cd "$FRONTEND_ROOT" && npm run api:check 2>&1)
   rc=$?
   set -e
-  cp "$backup" "$target"
-  cp "$generated_backup" "$FRONTEND_ROOT/openapi.json"
-  rm -rf "$FRONTEND_ROOT/src/api/client"
-  mkdir -p "$FRONTEND_ROOT/src/api/client"
-  cp -R "$client_backup/." "$FRONTEND_ROOT/src/api/client/"
+  restore_openapi_control
+  trap - EXIT INT TERM
+  restored_digest=$(shasum -a 256 "$target" | awk '{print $1}')
+  [ "$restored_digest" = "$before_digest" ] || die "OpenAPI drift control did not restore its subject"
+  git -C "$REPO_ROOT" diff --quiet -- frontend/openapi.json frontend/src/api/client \
+    || die "OpenAPI drift control did not restore generated clients"
   [ "$rc" -ne 0 ] || die "OpenAPI drift negative control unexpectedly passed"
   printf '%s' "$output" | grep -Fq 'diff --git' || die "OpenAPI drift control failed for the wrong reason"
-}
+  printf 'OpenAPI drift negative control: PASS\n'
+)
 
 openapi_drift() {
   openapi_negative_control
@@ -462,6 +468,7 @@ run_full_gauntlet() {
 
 case "${1:-}" in
   --preflight) checker_preflight ;;
+  --self-test-openapi-control) openapi_negative_control ;;
   -h|--help)
     printf 'usage: tools/gauntlet.sh [--preflight]\n'
     ;;
