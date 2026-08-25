@@ -72,6 +72,7 @@ quote-style = "double"
 
 [tool.mutmut]
 source_paths = ["src"]
+also_copy = ["alembic", "alembic.ini"]
 only_mutate = [
   "src/verboflex/auth/access_tokens.py",
   "src/verboflex/auth/identity.py",
