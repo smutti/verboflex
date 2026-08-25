@@ -138,6 +138,42 @@ assert_complexity_below_c() {
   [ ! -s "$report" ] || die "complexity grade C or worse detected"
 }
 
+normalize_frontend_lcov() {
+  local input=$1 output=$2
+  [ -f "$input" ] || die "frontend LCOV input is missing"
+  if ! awk '
+    BEGIN { seen = 0; valid = 1 }
+    /^SF:/ {
+      path = substr($0, 4)
+      if (path ~ /^\// || path ~ /(^|\/)\.\.(\/|$)/) {
+        valid = 0
+      } else if (path ~ /^src\//) {
+        $0 = "SF:frontend/" path
+        seen++
+      } else if (path ~ /^frontend\/src\//) {
+        seen++
+      } else {
+        valid = 0
+      }
+    }
+    { print }
+    END { if (!valid || seen == 0) exit 1 }
+  ' "$input" >"$output"; then
+    rm -f "$output"
+    die "frontend LCOV contains missing or non-canonical source paths"
+  fi
+}
+
+assert_diff_coverage_nonempty() {
+  local report=$1
+  [ -f "$report" ] || die "diff coverage output is missing"
+  if grep -Fq 'No lines with coverage information in this diff.' "$report"; then
+    die "changed-line coverage matched no coverable frontend lines"
+  fi
+  grep -Eq '^Total: [1-9][0-9]* lines$' "$report" \
+    || die "changed-line coverage did not report a nonzero frontend line total"
+}
+
 audit_layer_record() {
   local expected_layers=${1:-$EXPECTED_LAYERS}
   local expected_file actual_file
@@ -378,6 +414,7 @@ backend_coverage_body() {
 }
 
 changed_line_coverage() {
+  local normalized_frontend_lcov frontend_diff_report frontend_diff_rc
   with_test_infra backend_coverage_body
   (cd "$FRONTEND_ROOT" && npm run test:coverage -- --sequence.shuffle --sequence.seed="$RANDOM_SEED" \
     --coverage.provider=v8 --coverage.reporter=text --coverage.reporter=lcov \
@@ -386,10 +423,20 @@ changed_line_coverage() {
     --compare-branch "$PHASE_BASE_COMMIT" --branch-coverage --fail-under 100 \
     --exclude 'backend/alembic/**' 'backend/src/verboflex/main.py' \
       'backend/src/verboflex/scripts/export_openapi.py')
-  (cd "$BACKEND_ROOT" && uv run diff-cover "$FRONTEND_COVERAGE_DIR/lcov.info" \
+  normalized_frontend_lcov=$(mktemp)
+  frontend_diff_report=$(mktemp)
+  normalize_frontend_lcov "$FRONTEND_COVERAGE_DIR/lcov.info" "$normalized_frontend_lcov"
+  set +e
+  (cd "$BACKEND_ROOT" && uv run diff-cover "$normalized_frontend_lcov" \
     --compare-branch "$PHASE_BASE_COMMIT" --branch-coverage --fail-under 100 \
     --exclude 'frontend/src/api/client/**' 'frontend/src/components/ui/**' \
-      'frontend/src/hooks/use-mobile.ts' 'frontend/src/main.tsx')
+      'frontend/src/hooks/use-mobile.ts' 'frontend/src/main.tsx') >"$frontend_diff_report" 2>&1
+  frontend_diff_rc=$?
+  set -e
+  sed -n '1,240p' "$frontend_diff_report"
+  [ "$frontend_diff_rc" -eq 0 ] || die "frontend changed-line coverage failed"
+  assert_diff_coverage_nonempty "$frontend_diff_report"
+  rm -f "$normalized_frontend_lcov" "$frontend_diff_report"
 }
 
 backend_mutation_body() {
@@ -674,6 +721,37 @@ self_test_check_sequence() (
   printf 'required check sequence negative control: PASS\n'
 )
 
+self_test_frontend_coverage() (
+  local fixture source normalized valid_report vacuous_report
+  fixture=$(mktemp -d)
+  source="$fixture/source.lcov"
+  normalized="$fixture/normalized.lcov"
+  valid_report="$fixture/valid-report"
+  vacuous_report="$fixture/vacuous-report"
+  trap 'rm -rf "$fixture"' EXIT INT TERM
+
+  printf '%s\n' 'TN:' 'SF:src/features/auth/session.tsx' 'DA:1,1' 'end_of_record' >"$source"
+  normalize_frontend_lcov "$source" "$normalized"
+  grep -Fq 'SF:frontend/src/features/auth/session.tsx' "$normalized" \
+    || die "frontend LCOV path normalization drifted"
+
+  printf '%s\n' 'Diff Coverage' 'Total: 1 lines' 'Missing: 0 lines' 'Coverage: 100%' \
+    >"$valid_report"
+  assert_diff_coverage_nonempty "$valid_report"
+
+  printf '%s\n' 'Diff Coverage' 'No lines with coverage information in this diff.' \
+    >"$vacuous_report"
+  expect_control_failure frontend-coverage-vacuity \
+    'changed-line coverage matched no coverable frontend lines' \
+    assert_diff_coverage_nonempty "$vacuous_report"
+
+  printf '%s\n' 'TN:' 'SF:/absolute/session.tsx' 'DA:1,1' 'end_of_record' >"$source"
+  expect_control_failure frontend-lcov-path \
+    'frontend LCOV contains missing or non-canonical source paths' \
+    normalize_frontend_lcov "$source" "$normalized"
+  printf 'frontend changed-line coverage negative controls: PASS\n'
+)
+
 self_test_secret_audit_policy() (
   local fixture findings
   fixture=$(mktemp -d)
@@ -697,6 +775,7 @@ case "${1:-}" in
   --self-test-infra-lifecycle) self_test_infra_lifecycle ;;
   --self-test-mutation-verdict) self_test_mutation_verdict ;;
   --self-test-check-sequence) self_test_check_sequence ;;
+  --self-test-frontend-coverage) self_test_frontend_coverage ;;
   --self-test-secret-audit-policy) self_test_secret_audit_policy ;;
   --post-fix-candidate) run_post_fix_candidate ;;
   -h|--help)
