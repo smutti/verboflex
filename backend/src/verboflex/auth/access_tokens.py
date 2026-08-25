@@ -86,7 +86,7 @@ def _validated_purpose(payload: dict[str, object], expected: TokenPurpose) -> To
     purpose = raw_purpose
     if purpose == expected:
         return purpose
-    if purpose == "password_change" and expected == "access":
+    if (purpose, expected) == ("password_change", "access"):
         raise PasswordChangeRequired(PASSWORD_CHANGE_REQUIRED_MESSAGE)
     raise InvalidAccessToken(INVALID_ACCESS_TOKEN_MESSAGE)
 
