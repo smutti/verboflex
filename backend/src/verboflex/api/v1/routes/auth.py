@@ -36,7 +36,7 @@ from verboflex.schemas.auth import AccessTokenResponse, ChangePasswordRequest
 from verboflex.schemas.system import ErrorResponse
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
-REFRESH_COOKIE_NAME = "__Secure-verboflex_refresh"
+REFRESH_COOKIE_NAME = "__Host-verboflex_refresh"
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
 OptionalBearerToken = Annotated[str | None, Depends(oauth2_scheme)]
@@ -50,19 +50,19 @@ def _set_refresh_cookie(response: Response, refresh_token: str, settings: Settin
         key=REFRESH_COOKIE_NAME,
         value=refresh_token,
         max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
-        path="/api/v1/auth",
-        secure=settings.refresh_cookie_secure,
+        path="/",
+        secure=True,
         httponly=True,
         samesite="lax",
     )
 
 
-def _clear_refresh_cookie(response: Response, settings: Settings) -> None:
+def _clear_refresh_cookie(response: Response) -> None:
     """Clear refresh authority with attributes matching the set-cookie scope."""
     response.delete_cookie(
         key=REFRESH_COOKIE_NAME,
-        path="/api/v1/auth",
-        secure=settings.refresh_cookie_secure,
+        path="/",
+        secure=True,
         httponly=True,
         samesite="lax",
     )
@@ -244,7 +244,7 @@ async def logout(
         )
 
     revoke_refresh_session(session, refresh_cookie)
-    _clear_refresh_cookie(response, settings)
+    _clear_refresh_cookie(response)
 
 
 @router.post(
@@ -325,4 +325,4 @@ async def change_password(
             detail=str(error),
         ) from error
 
-    _clear_refresh_cookie(response, settings)
+    _clear_refresh_cookie(response)

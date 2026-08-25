@@ -50,7 +50,7 @@ tools/real_smoke.sh --browser-only
 
 A successful full run proves, in order:
 
-1. The staging configuration accepts a generated strong JWT secret and the Secure, HttpOnly `__Secure-verboflex_refresh` cookie contract while the preflight rejects placeholder secrets, insecure cookies, legacy unprefixed cookies, and deliberately wrong assertions.
+1. The staging configuration accepts a generated strong JWT secret and the Secure, HttpOnly, `Path=/`, no-Domain `__Host-verboflex_refresh` cookie contract while the preflight rejects placeholder secrets, insecure cookies, legacy cookie names, and deliberately wrong assertions.
 2. PostgreSQL and Redis become healthy under an isolated Compose project; Alembic completes `upgrade -> downgrade -> upgrade`; the first administrator is bootstrapped through stdin without credential output.
 3. The backend, worker, and production frontend become ready within bounded polling deadlines, and a real Celery task returns exactly `5`.
 4. The API completes temporary login, forced password change, ordinary login, identity/status reads, refresh rotation, double logout, and stale-authority rejection with exact status/body/cookie checks.

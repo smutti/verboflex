@@ -147,7 +147,7 @@ run_adversarial() {
     --data-binary "@$login_form")
   assert_status 200 "$status" ordinary-login
   ordinary_token=$(json_field "$response" access_token)
-  refresh_cookie=$(sed -n 's/^set-cookie: __Secure-verboflex_refresh=\([^;]*\).*/\1/ip' "$headers" | sed -n '1p')
+  refresh_cookie=$(sed -n 's/^set-cookie: __Host-verboflex_refresh=\([^;]*\).*/\1/ip' "$headers" | sed -n '1p')
   [ -n "$refresh_cookie" ] || die "ordinary login did not set a refresh cookie"
 
   if [ "${ordinary_token%?}x" = "$ordinary_token" ]; then
@@ -167,7 +167,7 @@ run_adversarial() {
 
   status=$(http_request POST "$VERBOFLEX_SMOKE_BACKEND_URL/api/v1/auth/refresh" \
     "$response" "$headers" -H 'Origin: https://attacker.example' \
-    -H "Cookie: __Secure-verboflex_refresh=$refresh_cookie")
+    -H "Cookie: __Host-verboflex_refresh=$refresh_cookie")
   assert_status 403 "$status" hostile-origin
   assert_json_exact "$response" '{"detail":"Origin not allowed"}' hostile-origin
 
@@ -220,12 +220,12 @@ run_adversarial() {
   replay_two="$RUNTIME_DIR/replay-two.status"
   curl --silent --show-error --max-time 10 --request POST --output "$RUNTIME_DIR/replay-one.json" \
     --write-out '%{http_code}' -H "Origin: $VERBOFLEX_SMOKE_ALLOWED_ORIGIN" \
-    -H "Cookie: __Secure-verboflex_refresh=$refresh_cookie" \
+    -H "Cookie: __Host-verboflex_refresh=$refresh_cookie" \
     "$VERBOFLEX_SMOKE_BACKEND_URL/api/v1/auth/refresh" >"$replay_one" &
   local replay_pid_one=$!
   curl --silent --show-error --max-time 10 --request POST --output "$RUNTIME_DIR/replay-two.json" \
     --write-out '%{http_code}' -H "Origin: $VERBOFLEX_SMOKE_ALLOWED_ORIGIN" \
-    -H "Cookie: __Secure-verboflex_refresh=$refresh_cookie" \
+    -H "Cookie: __Host-verboflex_refresh=$refresh_cookie" \
     "$VERBOFLEX_SMOKE_BACKEND_URL/api/v1/auth/refresh" >"$replay_two" &
   local replay_pid_two=$!
   wait "$replay_pid_one"
@@ -260,11 +260,11 @@ run_adversarial() {
   assert_status 503 "$status" redis-outage-password-change
   status=$(http_request POST "$VERBOFLEX_SMOKE_BACKEND_URL/api/v1/auth/refresh" \
     "$response" "$headers" -H "Origin: $VERBOFLEX_SMOKE_ALLOWED_ORIGIN" \
-    -H "Cookie: __Secure-verboflex_refresh=$refresh_cookie")
+    -H "Cookie: __Host-verboflex_refresh=$refresh_cookie")
   assert_status 503 "$status" redis-outage-refresh
   status=$(http_request POST "$VERBOFLEX_SMOKE_BACKEND_URL/api/v1/auth/logout" \
     "$response" "$headers" -H "Origin: $VERBOFLEX_SMOKE_ALLOWED_ORIGIN" \
-    -H "Cookie: __Secure-verboflex_refresh=$refresh_cookie")
+    -H "Cookie: __Host-verboflex_refresh=$refresh_cookie")
   assert_status 204 "$status" redis-outage-logout
   status=$(http_request GET "$VERBOFLEX_SMOKE_BACKEND_URL/api/v1/health" "$response" "$headers")
   assert_status 200 "$status" redis-outage-health

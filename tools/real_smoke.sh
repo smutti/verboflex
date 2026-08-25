@@ -288,7 +288,8 @@ core_api_flow() {
   restricted_token=$(json_field "$response" access_token)
   [ "$(json_field "$response" must_change_password)" = "True" ] || die "temporary login was not restricted"
   [ "$(json_field "$response" expires_in)" = "300" ] || die "temporary login lifetime drifted"
-  if grep -Eiq '^set-cookie: __Secure-verboflex_refresh=' "$headers"; then die "temporary login issued refresh authority"; fi
+  if grep -Eiq '^set-cookie: __Host-verboflex_refresh=' "$headers"; then die "temporary login issued refresh authority"; fi
+  if grep -Eiq '^set-cookie: (__Secure-verboflex_refresh|verboflex_refresh)=' "$headers"; then die "temporary login issued legacy refresh authority"; fi
 
   status=$(http_request GET "$SMOKE_BACKEND_URL/api/v1/users/me" "$response" "$headers" \
     -H "Authorization: Bearer $restricted_token")
@@ -302,7 +303,7 @@ core_api_flow() {
     -H 'Content-Type: application/json' -H "Authorization: Bearer $restricted_token" \
     --data-binary "@$SMOKE_RUNTIME_DIR/change.json")
   assert_status 204 "$status" password-change
-  grep -Eiq '^set-cookie: __Secure-verboflex_refresh=.*Max-Age=0' "$headers" \
+  grep -Eiq '^set-cookie: __Host-verboflex_refresh=.*Max-Age=0' "$headers" \
     || die "password change did not clear refresh authority"
 
   status=$(http_request POST "$SMOKE_BACKEND_URL/api/v1/auth/token" "$response" "$headers" \
@@ -317,11 +318,13 @@ core_api_flow() {
   ordinary_token=$(json_field "$response" access_token)
   [ "$(json_field "$response" must_change_password)" = "False" ] || die "ordinary login remained restricted"
   [ "$(json_field "$response" expires_in)" = "900" ] || die "ordinary login lifetime drifted"
-  grep -Eiq '^set-cookie: __Secure-verboflex_refresh=.*HttpOnly' "$headers" || die "refresh cookie omitted HttpOnly"
-  grep -Eiq '^set-cookie: __Secure-verboflex_refresh=.*Secure' "$headers" || die "staging refresh cookie omitted Secure"
-  grep -Eiq '^set-cookie: __Secure-verboflex_refresh=.*SameSite=lax' "$headers" || die "refresh cookie SameSite drifted"
-  grep -Eiq '^set-cookie: __Secure-verboflex_refresh=.*Path=/api/v1/auth' "$headers" || die "refresh cookie Path drifted"
-  refresh_cookie=$(sed -n 's/^set-cookie: __Secure-verboflex_refresh=\([^;]*\).*/\1/ip' "$headers" | sed -n '1p')
+  grep -Eiq '^set-cookie: __Host-verboflex_refresh=.*HttpOnly' "$headers" || die "refresh cookie omitted HttpOnly"
+  if grep -Eiq '^set-cookie: (__Secure-verboflex_refresh|verboflex_refresh)=' "$headers"; then die "ordinary login emitted legacy refresh cookie"; fi
+  grep -Eiq '^set-cookie: __Host-verboflex_refresh=.*Secure' "$headers" || die "staging refresh cookie omitted Secure"
+  grep -Eiq '^set-cookie: __Host-verboflex_refresh=.*SameSite=lax' "$headers" || die "refresh cookie SameSite drifted"
+  grep -Eiq '^set-cookie: __Host-verboflex_refresh=.*Path=/([;[:space:]]|$)' "$headers" || die "refresh cookie Path drifted"
+  if grep -Eiq '^set-cookie: __Host-verboflex_refresh=.*Domain=' "$headers"; then die "refresh cookie Domain must be absent"; fi
+  refresh_cookie=$(sed -n 's/^set-cookie: __Host-verboflex_refresh=\([^;]*\).*/\1/ip' "$headers" | sed -n '1p')
   [ -n "$refresh_cookie" ] || die "ordinary login omitted refresh cookie"
 
   status=$(http_request GET "$SMOKE_BACKEND_URL/api/v1/users/me" "$response" "$headers" \
@@ -337,18 +340,18 @@ core_api_flow() {
     "$response")
 
   status=$(http_request POST "$SMOKE_BACKEND_URL/api/v1/auth/refresh" "$response" "$headers" \
-    -H "Origin: $SMOKE_ALLOWED_ORIGIN" -H "Cookie: __Secure-verboflex_refresh=$refresh_cookie")
+    -H "Origin: $SMOKE_ALLOWED_ORIGIN" -H "Cookie: __Host-verboflex_refresh=$refresh_cookie")
   assert_status 200 "$status" refresh
   access_token=$(json_field "$response" access_token)
   [ -n "$access_token" ] || die "refresh omitted access token"
-  next_cookie=$(sed -n 's/^set-cookie: __Secure-verboflex_refresh=\([^;]*\).*/\1/ip' "$headers" | sed -n '1p')
+  next_cookie=$(sed -n 's/^set-cookie: __Host-verboflex_refresh=\([^;]*\).*/\1/ip' "$headers" | sed -n '1p')
   [ -n "$next_cookie" ] && [ "$next_cookie" != "$refresh_cookie" ] || die "refresh did not rotate cookie"
 
   status=$(http_request POST "$SMOKE_BACKEND_URL/api/v1/auth/logout" "$response" "$headers" \
-    -H "Origin: $SMOKE_ALLOWED_ORIGIN" -H "Cookie: __Secure-verboflex_refresh=$next_cookie")
+    -H "Origin: $SMOKE_ALLOWED_ORIGIN" -H "Cookie: __Host-verboflex_refresh=$next_cookie")
   assert_status 204 "$status" logout-first
   status=$(http_request POST "$SMOKE_BACKEND_URL/api/v1/auth/logout" "$response" "$headers" \
-    -H "Origin: $SMOKE_ALLOWED_ORIGIN" -H "Cookie: __Secure-verboflex_refresh=$next_cookie")
+    -H "Origin: $SMOKE_ALLOWED_ORIGIN" -H "Cookie: __Host-verboflex_refresh=$next_cookie")
   assert_status 204 "$status" logout-second
   status=$(http_request GET "$SMOKE_BACKEND_URL/api/v1/users/me" "$response" "$headers" \
     -H "Authorization: Bearer $access_token")
