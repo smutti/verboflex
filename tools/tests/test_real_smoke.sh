@@ -25,3 +25,4 @@ for overlay in docker-compose.staging.yml docker-compose.prod.yml; do
 done
 
 grep -Fq 'TLS termination boundary' "$repo_root/docs/phase-01-smoke.md"
+grep -Fq '__Secure-verboflex_refresh' "$repo_root/tools/real_smoke.sh"

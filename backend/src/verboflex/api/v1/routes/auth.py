@@ -36,17 +36,18 @@ from verboflex.schemas.auth import AccessTokenResponse, ChangePasswordRequest
 from verboflex.schemas.system import ErrorResponse
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
+REFRESH_COOKIE_NAME = "__Secure-verboflex_refresh"
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
 OptionalBearerToken = Annotated[str | None, Depends(oauth2_scheme)]
-RefreshCookie = Annotated[str | None, Cookie(alias="verboflex_refresh")]
+RefreshCookie = Annotated[str | None, Cookie(alias=REFRESH_COOKIE_NAME)]
 RequestOrigin = Annotated[str | None, Header(alias="Origin")]
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str, settings: Settings) -> None:
     """Set refresh authority with the one approved cookie scope."""
     response.set_cookie(
-        key="verboflex_refresh",
+        key=REFRESH_COOKIE_NAME,
         value=refresh_token,
         max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
         path="/api/v1/auth",
@@ -59,7 +60,7 @@ def _set_refresh_cookie(response: Response, refresh_token: str, settings: Settin
 def _clear_refresh_cookie(response: Response, settings: Settings) -> None:
     """Clear refresh authority with attributes matching the set-cookie scope."""
     response.delete_cookie(
-        key="verboflex_refresh",
+        key=REFRESH_COOKIE_NAME,
         path="/api/v1/auth",
         secure=settings.refresh_cookie_secure,
         httponly=True,

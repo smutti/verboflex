@@ -127,7 +127,7 @@ def test_password_change_updates_credentials_and_revokes_all_old_authority(
     assert response.status_code == 204
     assert response.content == b""
     set_cookie = response.headers["set-cookie"]
-    assert "verboflex_refresh=" in set_cookie
+    assert "__Secure-verboflex_refresh=" in set_cookie
     assert "Max-Age=0" in set_cookie
     assert "Path=/api/v1/auth" in set_cookie
     assert "HttpOnly" in set_cookie

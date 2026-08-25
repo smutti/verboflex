@@ -2,6 +2,8 @@
 set -euo pipefail
 
 repo_root=$(git rev-parse --show-toplevel)
+
+grep -Fq '__Secure-verboflex_refresh' "$repo_root/tools/adversarial_auth.sh"
 output_file=$(mktemp)
 trap 'rm -f "$output_file"' EXIT
 

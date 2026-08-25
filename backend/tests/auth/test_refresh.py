@@ -185,7 +185,7 @@ async def post_refresh(
 ) -> httpx.Response:
     """Call the registered refresh route with ambient cookie authority."""
     headers = {"Origin": origin} if origin is not None else {}
-    cookies = {"verboflex_refresh": token} if token is not None else None
+    cookies = {"__Secure-verboflex_refresh": token} if token is not None else None
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(
         transport=transport,
@@ -211,7 +211,7 @@ def test_valid_refresh_rotates_once_and_returns_new_authority(
         "expires_in": 900,
         "must_change_password": False,
     }
-    successor_token = response.cookies["verboflex_refresh"]
+    successor_token = response.cookies["__Secure-verboflex_refresh"]
     assert successor_token != REFRESH_TOKEN
     assert "HttpOnly" in response.headers["set-cookie"]
     assert "SameSite=lax" in response.headers["set-cookie"]
@@ -603,4 +603,4 @@ def test_refresh_requests_exact_32_byte_token_entropy(
 
     assert response.status_code == 200
     assert requested_bytes == [32]
-    assert response.cookies["verboflex_refresh"] == "B" * 43
+    assert response.cookies["__Secure-verboflex_refresh"] == "B" * 43

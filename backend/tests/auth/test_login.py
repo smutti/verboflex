@@ -165,9 +165,7 @@ def test_ordinary_login_creates_only_hashed_refresh_authority(
     refresh_token = response.cookies["__Secure-verboflex_refresh"]
     set_cookie = response.headers["set-cookie"]
     assert "__Secure-verboflex_refresh=" in set_cookie
-    assert "verboflex_refresh=" not in set_cookie.replace(
-        "__Secure-verboflex_refresh=", ""
-    )
+    assert "verboflex_refresh=" not in set_cookie.replace("__Secure-verboflex_refresh=", "")
     assert "HttpOnly" in set_cookie
     assert "SameSite=lax" in set_cookie
     assert "Path=/api/v1/auth" in set_cookie
@@ -208,7 +206,7 @@ def test_temporary_login_creates_only_password_change_authority(
         "expires_in": 300,
         "must_change_password": True,
     }
-    assert "verboflex_refresh" not in response.cookies
+    assert "__Secure-verboflex_refresh" not in response.cookies
     assert "set-cookie" not in response.headers
     with login_session_factory() as session:
         assert session.execute(select(AuthSession)).scalars().all() == []
@@ -245,7 +243,7 @@ def test_ordinary_login_requests_exact_refresh_token_entropy(
         persisted = session.execute(select(AuthSession)).scalar_one()
     assert (
         persisted.token_hash
-        == hashlib.sha256(response.cookies["verboflex_refresh"].encode()).hexdigest()
+        == hashlib.sha256(response.cookies["__Secure-verboflex_refresh"].encode()).hexdigest()
     )
 
 
