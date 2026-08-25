@@ -457,35 +457,57 @@ openapi_drift() {
   (cd "$FRONTEND_ROOT" && npm run api:check)
 }
 
+write_audited_secret_policy() {
+  cat <<'AUDITED_FALSE_POSITIVES'
+src/verboflex/auth/access_tokens.py|16|Secret Keyword|3591079abcc3407a2c2ed76661ec29a7ec0d1cb8
+src/verboflex/auth/access_tokens.py|17|Secret Keyword|06c49c9b4bd885fbdc2a04cc3f65b214292b0da9
+src/verboflex/auth/access_tokens.py|19|Secret Keyword|411a5e3d10eceaebc65194fdafdd05fb8e432e38
+src/verboflex/auth/password_change.py|25|Secret Keyword|443fe4e817f15f5b62b02db228cd59ec2d5cfc8f
+src/verboflex/auth/password_change.py|26|Secret Keyword|3b8788b039ebfe732e34b976cabe8fe87a3ceb17
+src/verboflex/auth/password_change.py|55|Secret Keyword|42213dc7f2ef60d5d6744c00f091a46b2161dda5
+src/verboflex/auth/principal.py|28|Secret Keyword|3591079abcc3407a2c2ed76661ec29a7ec0d1cb8
+src/verboflex/auth/principal.py|29|Secret Keyword|82bde2d99285779d940c36fdcdb9c3e9afa40d2f
+src/verboflex/auth/refresh_sessions.py|19|Base64 High Entropy String|e582429052cdb908833560f6f7582d232de37c4d
+tests/api/test_rate_limits.py|189|Secret Keyword|5ac066cfb3bcf9973a0b40daeb7f5606103c1bd3
+tests/api/test_system_status.py|109|Basic Auth Credentials|e5e9fa1ba31ecd1ae84f75caaa474f3a663f05f4
+tests/auth/test_bootstrap_admin.py|136|Secret Keyword|985a4d67132193977275067aca18c13f8c8371c8
+tests/auth/test_bootstrap_admin.py|147|Secret Keyword|d36b093dec485bfd20ef697ca6c1ad79e1ac9210
+tests/auth/test_bootstrap_admin.py|235|Secret Keyword|3da24dfed48aa2721da14e6f79e588440b934675
+tests/auth/test_bootstrap_admin.py|295|Secret Keyword|028e59d8204d08fecd6aad12434b872fe4319f6d
+tests/auth/test_bootstrap_admin.py|410|Secret Keyword|5d9dec21ffdbb45c64f0ea2b1abf3b25c2afc728
+tests/auth/test_bootstrap_admin.py|445|Secret Keyword|1123e04e3b43d460543f1b0bf94e67a0a636b2cc
+tests/auth/test_bootstrap_admin.py|548|Secret Keyword|cdd076c21ce35f40d40b6c16d12bd40876050a6f
+tests/auth/test_bootstrap_admin.py|626|Secret Keyword|18468712bc6eede8cb7adf8932b073bf56773a11
+tests/auth/test_login.py|45|Secret Keyword|e7e0ea25217b715c566268c0607e48acef3b9ccf
+tests/auth/test_password_change.py|188|Secret Keyword|a95b347855753c3b784594a28fa00ec116430d1c
+tests/auth/test_password_change.py|36|Secret Keyword|bc27f09f74d82f81b559a27a26bd03f580960364
+tests/auth/test_password_change.py|37|Secret Keyword|ba8d4568d2e2f6531c78080cedddb3a16f08afd5
+AUDITED_FALSE_POSITIVES
+}
+
+assert_audited_secret_findings() {
+  local findings_file=$1 policy_file
+  policy_file=$(mktemp)
+  write_audited_secret_policy >"$policy_file"
+  if ! diff -u "$policy_file" "$findings_file"; then
+    rm -f "$policy_file"
+    die "detected secrets outside the audited false-positive map"
+  fi
+  rm -f "$policy_file"
+}
+
 scan_repository_secrets() {
-  local files_file findings_file count
+  local files_file findings_file
   files_file=$(mktemp)
   findings_file=$(mktemp)
   git -C "$REPO_ROOT" ls-files | \
     grep -Ev '^(backend/uv.lock|frontend/package-lock.json|\.planning/)' >"$files_file"
   (cd "$BACKEND_ROOT" && uv run detect-secrets scan $(sed 's#^#../#' "$files_file")) >"$SECRET_SCAN"
   (cd "$BACKEND_ROOT" && uv run python -c \
-    'import json,sys; d=json.load(open(sys.argv[1])); print("\\n".join(sorted(f"{p}|{x[chr(116)+chr(121)+chr(112)+chr(101)]}|{x[chr(104)+chr(97)+chr(115)+chr(104)+chr(101)+chr(100)+chr(95)+chr(115)+chr(101)+chr(99)+chr(114)+chr(101)+chr(116)]}" for p,v in d["results"].items() for x in v)))' \
+    'import json,sys; d=json.load(open(sys.argv[1])); print("\n".join(sorted(f"{p}|{x[chr(108)+chr(105)+chr(110)+chr(101)+chr(95)+chr(110)+chr(117)+chr(109)+chr(98)+chr(101)+chr(114)]}|{x[chr(116)+chr(121)+chr(112)+chr(101)]}|{x[chr(104)+chr(97)+chr(115)+chr(104)+chr(101)+chr(100)+chr(95)+chr(115)+chr(101)+chr(99)+chr(114)+chr(101)+chr(116)]}" for p,v in d["results"].items() for x in v)))' \
     "$SECRET_SCAN") >"$findings_file"
-  count=$(wc -l <"$findings_file" | tr -d ' ')
-  [ "$count" = "15" ] || die "detected secrets outside the audited false-positive map"
-  diff -u - "$findings_file" <<'AUDITED_FALSE_POSITIVES'
-src/verboflex/auth/refresh_sessions.py|Base64 High Entropy String|e582429052cdb908833560f6f7582d232de37c4d
-tests/api/test_rate_limits.py|Secret Keyword|5ac066cfb3bcf9973a0b40daeb7f5606103c1bd3
-tests/api/test_system_status.py|Basic Auth Credentials|e5e9fa1ba31ecd1ae84f75caaa474f3a663f05f4
-tests/auth/test_bootstrap_admin.py|Secret Keyword|028e59d8204d08fecd6aad12434b872fe4319f6d
-tests/auth/test_bootstrap_admin.py|Secret Keyword|1123e04e3b43d460543f1b0bf94e67a0a636b2cc
-tests/auth/test_bootstrap_admin.py|Secret Keyword|18468712bc6eede8cb7adf8932b073bf56773a11
-tests/auth/test_bootstrap_admin.py|Secret Keyword|3da24dfed48aa2721da14e6f79e588440b934675
-tests/auth/test_bootstrap_admin.py|Secret Keyword|5d9dec21ffdbb45c64f0ea2b1abf3b25c2afc728
-tests/auth/test_bootstrap_admin.py|Secret Keyword|985a4d67132193977275067aca18c13f8c8371c8
-tests/auth/test_bootstrap_admin.py|Secret Keyword|cdd076c21ce35f40d40b6c16d12bd40876050a6f
-tests/auth/test_bootstrap_admin.py|Secret Keyword|d36b093dec485bfd20ef697ca6c1ad79e1ac9210
-tests/auth/test_login.py|Secret Keyword|e7e0ea25217b715c566268c0607e48acef3b9ccf
-tests/auth/test_password_change.py|Secret Keyword|a95b347855753c3b784594a28fa00ec116430d1c
-tests/auth/test_password_change.py|Secret Keyword|ba8d4568d2e2f6531c78080cedddb3a16f08afd5
-tests/auth/test_password_change.py|Secret Keyword|bc27f09f74d82f81b559a27a26bd03f580960364
-AUDITED_FALSE_POSITIVES
+  assert_audited_secret_findings "$findings_file"
+  rm -f "$files_file" "$findings_file"
 }
 
 supply_chain_secrets() {
@@ -652,6 +674,21 @@ self_test_check_sequence() (
   printf 'required check sequence negative control: PASS\n'
 )
 
+self_test_secret_audit_policy() (
+  local fixture findings
+  fixture=$(mktemp -d)
+  findings="$fixture/findings"
+  trap 'rm -rf "$fixture"' EXIT INT TERM
+  scan_repository_secrets
+  write_audited_secret_policy >"$findings"
+  assert_audited_secret_findings "$findings"
+  printf '%s\n' 'src/new.py|1|Secret Keyword|unreviewed-fingerprint' >>"$findings"
+  expect_control_failure secret-audit-policy \
+    'detected secrets outside the audited false-positive map' \
+    assert_audited_secret_findings "$findings"
+  printf 'secret audit exact-policy negative control: PASS\n'
+)
+
 case "${1:-}" in
   --preflight) checker_preflight ;;
   --self-test-openapi-control) openapi_negative_control ;;
@@ -660,6 +697,7 @@ case "${1:-}" in
   --self-test-infra-lifecycle) self_test_infra_lifecycle ;;
   --self-test-mutation-verdict) self_test_mutation_verdict ;;
   --self-test-check-sequence) self_test_check_sequence ;;
+  --self-test-secret-audit-policy) self_test_secret_audit_policy ;;
   --post-fix-candidate) run_post_fix_candidate ;;
   -h|--help)
     printf 'usage: tools/gauntlet.sh [--preflight|--post-fix-candidate]\n'
