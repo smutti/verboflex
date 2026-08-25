@@ -17,6 +17,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
+from verboflex.auth import principal as principal_service
 from verboflex.auth.access_tokens import issue_access_token
 from verboflex.auth.passwords import hash_password
 from verboflex.core.config import Settings, get_settings
@@ -158,6 +159,83 @@ def test_missing_or_invalid_bearer_authority_returns_exact_401(
     assert response.status_code == 401
     assert response.json() == {"detail": "Invalid access token"}
     assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_principal_service_denials_preserve_exact_internal_semantics(
+    principal_session_factory: sessionmaker[Session],
+) -> None:
+    """Keep absent bearer, invalid signature, user, and session failures exact."""
+    with pytest.raises(principal_service.InvalidPrincipal) as user_error:
+        principal_service._require_current_user(None, token_version=0)
+    assert user_error.value.args == (principal_service.INVALID_PRINCIPAL_MESSAGE,)
+
+    now = datetime.now(UTC)
+    with pytest.raises(principal_service.InvalidPrincipal) as missing_session_error:
+        principal_service._require_current_session(None, user_id=USER_ID, now=now)
+    assert missing_session_error.value.args == (principal_service.INVALID_PRINCIPAL_MESSAGE,)
+
+    dead_session = AuthSession(
+        id=SESSION_ID,
+        user_id=USER_ID,
+        family_id=uuid4(),
+        token_hash="d" * 64,
+        expires_at=now,
+    )
+    with pytest.raises(principal_service.InvalidPrincipal) as dead_session_error:
+        principal_service._require_current_session(dead_session, user_id=USER_ID, now=now)
+    assert dead_session_error.value.args == (principal_service.INVALID_PRINCIPAL_MESSAGE,)
+
+    with principal_session_factory() as session:
+        with pytest.raises(principal_service.InvalidPrincipal) as missing_bearer_error:
+            principal_service.load_principal(session, None, settings=principal_settings())
+        with pytest.raises(principal_service.InvalidPrincipal) as invalid_bearer_error:
+            principal_service.load_principal(
+                session,
+                "not-a-signed-token",
+                settings=principal_settings(),
+            )
+    assert missing_bearer_error.value.args == (principal_service.MISSING_ACCESS_TOKEN_MESSAGE,)
+    assert invalid_bearer_error.value.args == (principal_service.INVALID_PRINCIPAL_MESSAGE,)
+
+
+def test_principal_password_flag_denial_preserves_exact_internal_semantics(
+    principal_session_factory: sessionmaker[Session],
+) -> None:
+    """Keep durable password policy on its dedicated typed denial."""
+    access_token = create_principal_authority(principal_session_factory)
+    with principal_session_factory.begin() as session:
+        session.get_one(User, USER_ID).must_change_password = True
+    with (
+        principal_session_factory() as session,
+        pytest.raises(principal_service.PasswordChangeRequired) as error,
+    ):
+        principal_service.load_principal(
+            session,
+            access_token,
+            settings=principal_settings(),
+        )
+
+    assert error.value.args == (principal_service.PASSWORD_CHANGE_REQUIRED_MESSAGE,)
+
+
+def test_principal_unknown_role_denial_preserves_exact_internal_semantics(
+    principal_session_factory: sessionmaker[Session],
+) -> None:
+    """Keep corrupt durable roles distinct internally while HTTP remains opaque."""
+    access_token = create_principal_authority(principal_session_factory)
+    with principal_session_factory.begin() as session:
+        session.execute(select(Role).where(Role.name == "translator")).scalar_one().name = "owner"
+    with (
+        principal_session_factory() as session,
+        pytest.raises(principal_service.InvalidPrincipal) as error,
+    ):
+        principal_service.load_principal(
+            session,
+            access_token,
+            settings=principal_settings(),
+        )
+
+    assert error.value.args == (principal_service.INVALID_ROLE_STATE_MESSAGE,)
 
 
 @pytest.mark.parametrize(
