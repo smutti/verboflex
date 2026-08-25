@@ -49,6 +49,7 @@ candidate-source-state"
 TEST_POSTGRES_NAME=""
 TEST_REDIS_NAME=""
 TEST_WORKER_PID=""
+TEST_WORKER_HOSTNAME=""
 
 die() {
   printf 'gauntlet error: %s\n' "$1" >&2
@@ -361,6 +362,9 @@ cleanup_test_infra() {
     set -e
     case "$rc" in 0|143) ;; *) printf 'worker cleanup exited %s\n' "$rc" >&2 ;; esac
   fi
+  if [ -n "$TEST_WORKER_PID" ] && kill -0 "$TEST_WORKER_PID" 2>/dev/null; then
+    die "Celery test worker survived cleanup"
+  fi
   if [ -n "$TEST_POSTGRES_NAME" ]; then
     set +e
     docker stop --time 5 "$TEST_POSTGRES_NAME" >/dev/null
@@ -378,6 +382,7 @@ cleanup_test_infra() {
   TEST_POSTGRES_NAME=""
   TEST_REDIS_NAME=""
   TEST_WORKER_PID=""
+  TEST_WORKER_HOSTNAME=""
 }
 
 run_lifecycle() {
@@ -418,6 +423,7 @@ start_test_infra() {
   suffix="$$"
   TEST_POSTGRES_NAME="verboflex-gauntlet-postgres-$suffix"
   TEST_REDIS_NAME="verboflex-gauntlet-redis-$suffix"
+  TEST_WORKER_HOSTNAME="verboflex-gauntlet-$suffix@%h"
   worker_log="/tmp/verboflex-phase01-worker-$suffix.log"
   docker run -d --rm --name "$TEST_POSTGRES_NAME" -e POSTGRES_HOST_AUTH_METHOD=trust \
     -p 127.0.0.1::5432 postgres:18-alpine >/dev/null
@@ -433,8 +439,9 @@ start_test_infra() {
   (
     cd "$BACKEND_ROOT"
     VERBOFLEX_REDIS_URL="$VERBOFLEX_TEST_CELERY_REDIS_URL" \
-      uv run celery -A verboflex.worker.celery_app worker --loglevel=WARNING \
-      --pool=solo --concurrency=1 --hostname="verboflex-gauntlet@%h"
+      exec "$BACKEND_ROOT/.venv/bin/celery" -A verboflex.worker.celery_app \
+      worker --loglevel=WARNING --pool=solo --concurrency=1 \
+      --hostname="$TEST_WORKER_HOSTNAME"
   ) >"$worker_log" 2>&1 &
   TEST_WORKER_PID=$!
   local deadline
@@ -930,6 +937,55 @@ self_test_infra_lifecycle() (
   printf 'test infrastructure lifecycle: PASS\n'
 )
 
+self_test_infra_failure_cleanup() (
+  local fixture identity output rc worker_pid worker_hostname postgres_name redis_name processes
+  fixture=$(mktemp -d)
+  identity="$fixture/identity"
+  output="$fixture/candidate-failure.log"
+  trap 'cleanup_test_infra; rm -rf "$fixture"' EXIT INT TERM
+
+  failure_probe_start() {
+    start_test_infra
+    printf '%s\n%s\n%s\n%s\n' \
+      "$TEST_WORKER_PID" "$TEST_WORKER_HOSTNAME" \
+      "$TEST_POSTGRES_NAME" "$TEST_REDIS_NAME" >"$identity"
+  }
+  failure_probe_backend_layer() {
+    run_lifecycle failure_probe_start cleanup_test_infra true
+  }
+  failure_probe_frontend_layer() { return 42; }
+
+  set +e
+  (
+    trap cleanup_test_infra EXIT INT TERM
+    run_layer backend-tests failure_probe_backend_layer
+    run_layer frontend-tests-browser failure_probe_frontend_layer
+  ) >"$output" 2>&1
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || die "controlled frontend layer failure unexpectedly passed"
+  grep -Fq 'layer frontend-tests-browser failed with exit code 42' "$output" \
+    || die "controlled candidate sequence failed for the wrong reason"
+  [ -s "$identity" ] || die "failure cleanup probe did not record infrastructure identity"
+  worker_pid=$(sed -n '1p' "$identity")
+  worker_hostname=$(sed -n '2p' "$identity")
+  postgres_name=$(sed -n '3p' "$identity")
+  redis_name=$(sed -n '4p' "$identity")
+  [ -n "$worker_pid" ] && [ -n "$worker_hostname" ] \
+    && [ -n "$postgres_name" ] && [ -n "$redis_name" ] \
+    || die "failure cleanup probe recorded incomplete infrastructure identity"
+  ! kill -0 "$worker_pid" 2>/dev/null \
+    || die "controlled candidate failure left the tracked Celery worker running"
+  processes=$(ps -axo command=)
+  ! printf '%s\n' "$processes" | grep -Fq -- "--hostname=$worker_hostname" \
+    || die "controlled candidate failure orphaned a Celery worker"
+  ! docker ps -a --format '{{.Names}}' | grep -Fxq "$postgres_name" \
+    || die "controlled candidate failure left PostgreSQL test infrastructure"
+  ! docker ps -a --format '{{.Names}}' | grep -Fxq "$redis_name" \
+    || die "controlled candidate failure left Redis test infrastructure"
+  printf 'test infrastructure failure cleanup: PASS\n'
+)
+
 self_test_mutation_verdict() {
   assert_no_surviving_mutants ""
   expect_control_failure mutation-survivor 'surviving mutation verdicts are forbidden' \
@@ -1184,6 +1240,7 @@ case "${1:-}" in
   --self-test-staging-layer) self_test_staging_layer ;;
   --self-test-candidate-contract) self_test_candidate_contract ;;
   --self-test-infra-lifecycle) self_test_infra_lifecycle ;;
+  --self-test-infra-failure-cleanup) self_test_infra_failure_cleanup ;;
   --self-test-mutation-verdict) self_test_mutation_verdict ;;
   --self-test-equivalent-mutants) self_test_equivalent_mutants ;;
   --self-test-mutation-freshness) self_test_mutation_freshness ;;
