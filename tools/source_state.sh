@@ -287,6 +287,17 @@ self_test_manifest() {
     verify_review_contract "$fixture/docs/reviews/phase-01-code-security.md" "$digest"
   expect_failure 'review artifact is missing' \
     verify_review_contract "$fixture/missing-review.md" "$digest"
+
+  printf '%s\n' \
+    '- Review-status: OPEN' \
+    '- Open-critical-high: 0' \
+    '- Full-gauntlet-status: PENDING' \
+    "- Reviewed-source-digest: \`$digest\`" >"$fixture/candidate-review.md"
+  verify_review_candidate_contract "$fixture/candidate-review.md" "$digest"
+  sed 's/Full-gauntlet-status: PENDING/Full-gauntlet-status: PASS/' \
+    "$fixture/candidate-review.md" >"$fixture/false-candidate-review.md"
+  expect_failure 'candidate full-gauntlet status is not PENDING' \
+    verify_review_candidate_contract "$fixture/false-candidate-review.md" "$digest"
   git -C "$fixture" restore -- docs/reviews/phase-01-code-security.md
 
   {
