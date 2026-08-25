@@ -38,6 +38,23 @@ class Principal:
     must_change_password: bool
 
 
+def _require_current_user(user: User | None, *, token_version: int) -> User:
+    if user is None or not user.is_active or user.token_version != token_version:
+        raise InvalidPrincipal("invalid access token")
+    return user
+
+
+def _require_current_session(
+    auth_session: AuthSession | None, *, user_id: UUID, now: datetime
+) -> None:
+    if auth_session is None:
+        raise InvalidPrincipal("invalid access token")
+    if auth_session.user_id != user_id:
+        raise InvalidPrincipal("invalid access token")
+    if auth_session.revoked_at is not None or auth_session.expires_at <= now:
+        raise InvalidPrincipal("invalid access token")
+
+
 def load_principal(
     session: Session,
     access_token: str | None,
@@ -52,21 +69,14 @@ def load_principal(
     except InvalidAccessToken as error:
         raise InvalidPrincipal("invalid access token") from error
 
-    user = session.execute(select(User).where(User.id == claims.user_id)).scalar_one_or_none()
+    user = _require_current_user(
+        session.execute(select(User).where(User.id == claims.user_id)).scalar_one_or_none(),
+        token_version=claims.token_version,
+    )
     auth_session = (
         session.get(AuthSession, claims.session_id) if claims.session_id is not None else None
     )
-    now = datetime.now(UTC)
-    if (
-        user is None
-        or not user.is_active
-        or user.token_version != claims.token_version
-        or auth_session is None
-        or auth_session.user_id != user.id
-        or auth_session.revoked_at is not None
-        or auth_session.expires_at <= now
-    ):
-        raise InvalidPrincipal("invalid access token")
+    _require_current_session(auth_session, user_id=user.id, now=datetime.now(UTC))
     if user.must_change_password:
         raise PasswordChangeRequired("password change required")
 

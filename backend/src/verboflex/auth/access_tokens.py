@@ -74,6 +74,71 @@ def issue_access_token(
     )
 
 
+def _validated_purpose(payload: dict[str, object], expected: TokenPurpose) -> TokenPurpose:
+    raw_purpose = payload["purpose"]
+    if raw_purpose not in ("access", "password_change"):
+        raise InvalidAccessToken("invalid access token")
+    purpose = raw_purpose
+    if purpose == expected:
+        return purpose
+    if purpose == "password_change" and expected == "access":
+        raise PasswordChangeRequired("password change required")
+    raise InvalidAccessToken("invalid access token")
+
+
+def _validated_token_version(payload: dict[str, object]) -> int:
+    token_version = payload["token_version"]
+    if not isinstance(token_version, int) or isinstance(token_version, bool) or token_version < 0:
+        raise InvalidAccessToken("invalid access token")
+    return token_version
+
+
+def _validated_session_id(payload: dict[str, object], purpose: TokenPurpose) -> UUID | None:
+    session_value = payload.get("sid")
+    if purpose == "password_change":
+        if session_value is not None:
+            raise InvalidAccessToken("invalid access token")
+        return None
+    if not isinstance(session_value, str):
+        raise InvalidAccessToken("invalid access token")
+    return UUID(session_value)
+
+
+def _validated_datetime(payload: dict[str, object], claim: str) -> datetime:
+    timestamp = payload[claim]
+    if not isinstance(timestamp, (int, float)) or isinstance(timestamp, bool):
+        raise InvalidAccessToken("invalid access token")
+    return datetime.fromtimestamp(timestamp, UTC)
+
+
+def _claims_from_payload(
+    payload: dict[str, object], *, settings: Settings, expected_purpose: TokenPurpose
+) -> AccessTokenClaims:
+    purpose = _validated_purpose(payload, expected_purpose)
+    token_version = _validated_token_version(payload)
+    session_id = _validated_session_id(payload, purpose)
+    issued_at = _validated_datetime(payload, "iat")
+    expires_at = _validated_datetime(payload, "exp")
+    lifetime_minutes = (
+        settings.access_token_expire_minutes
+        if purpose == "access"
+        else settings.password_change_token_expire_minutes
+    )
+    if expires_at - issued_at != timedelta(minutes=lifetime_minutes):
+        raise InvalidAccessToken("invalid access token")
+    subject = payload["sub"]
+    if not isinstance(subject, str):
+        raise InvalidAccessToken("invalid access token")
+    return AccessTokenClaims(
+        user_id=UUID(subject),
+        session_id=session_id,
+        issued_at=issued_at,
+        expires_at=expires_at,
+        purpose=purpose,
+        token_version=token_version,
+    )
+
+
 def decode_access_token(
     token: str,
     *,
@@ -95,43 +160,10 @@ def decode_access_token(
         raise InvalidAccessToken("invalid access token") from error
 
     try:
-        purpose = payload["purpose"]
-        if purpose not in ("access", "password_change"):
-            raise InvalidAccessToken("invalid access token")
-        if purpose != expected_purpose:
-            if purpose == "password_change" and expected_purpose == "access":
-                raise PasswordChangeRequired("password change required")
-            raise InvalidAccessToken("invalid access token")
-        token_version = payload["token_version"]
-        if (
-            not isinstance(token_version, int)
-            or isinstance(token_version, bool)
-            or token_version < 0
-        ):
-            raise InvalidAccessToken("invalid access token")
-
-        session_value = payload.get("sid")
-        if purpose == "access" and session_value is None:
-            raise InvalidAccessToken("invalid access token")
-        if purpose == "password_change" and session_value is not None:
-            raise InvalidAccessToken("invalid access token")
-
-        issued_at = datetime.fromtimestamp(payload["iat"], UTC)
-        expires_at = datetime.fromtimestamp(payload["exp"], UTC)
-        expected_lifetime = (
-            settings.access_token_expire_minutes
-            if purpose == "access"
-            else settings.password_change_token_expire_minutes
-        )
-        if expires_at - issued_at != timedelta(minutes=expected_lifetime):
-            raise InvalidAccessToken("invalid access token")
-        return AccessTokenClaims(
-            user_id=UUID(payload["sub"]),
-            session_id=UUID(session_value) if session_value is not None else None,
-            issued_at=issued_at,
-            expires_at=expires_at,
-            purpose=purpose,
-            token_version=token_version,
+        return _claims_from_payload(
+            payload,
+            settings=settings,
+            expected_purpose=expected_purpose,
         )
     except (KeyError, TypeError, ValueError, OverflowError) as error:
         raise InvalidAccessToken("invalid access token") from error

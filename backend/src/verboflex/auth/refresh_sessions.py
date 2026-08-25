@@ -47,6 +47,75 @@ def _is_well_formed_refresh_token(token: str | None) -> bool:
     )
 
 
+def _load_predecessor(session: Session, refresh_token: str) -> AuthSession:
+    predecessor = session.execute(
+        select(AuthSession)
+        .where(AuthSession.token_hash == hash_refresh_token(refresh_token))
+        .with_for_update()
+    ).scalar_one_or_none()
+    if predecessor is None:
+        raise InvalidRefreshSession("invalid refresh session")
+    return predecessor
+
+
+def _revoke_replayed_family(
+    session: Session, predecessor: AuthSession, *, rotated_at: datetime
+) -> bool:
+    if predecessor.used_at is None:
+        return False
+    session.execute(
+        update(AuthSession)
+        .where(AuthSession.family_id == predecessor.family_id)
+        .values(revoked_at=rotated_at)
+    )
+    return True
+
+
+def _require_refresh_user(
+    session: Session, predecessor: AuthSession, *, rotated_at: datetime
+) -> User:
+    if predecessor.revoked_at is not None or predecessor.expires_at <= rotated_at:
+        raise InvalidRefreshSession("invalid refresh session")
+    user = session.get(User, predecessor.user_id)
+    if user is None or not user.is_active or user.must_change_password:
+        raise InvalidRefreshSession("invalid refresh session")
+    return user
+
+
+def _create_successor_authority(
+    session: Session,
+    predecessor: AuthSession,
+    user: User,
+    *,
+    settings: Settings,
+    rotated_at: datetime,
+) -> RefreshAuthority:
+    successor_token = secrets.token_urlsafe(REFRESH_TOKEN_BYTES)
+    successor = AuthSession(
+        id=uuid4(),
+        user_id=predecessor.user_id,
+        family_id=predecessor.family_id,
+        parent_id=predecessor.id,
+        token_hash=hash_refresh_token(successor_token),
+        expires_at=rotated_at + timedelta(days=settings.refresh_token_expire_days),
+    )
+    predecessor.used_at = rotated_at
+    session.add(successor)
+    session.flush()
+    return RefreshAuthority(
+        access_token=issue_access_token(
+            user_id=user.id,
+            session_id=successor.id,
+            token_version=user.token_version,
+            purpose="access",
+            settings=settings,
+            now=rotated_at,
+        ),
+        refresh_token=successor_token,
+        expires_in=settings.access_token_expire_minutes * 60,
+    )
+
+
 def rotate_refresh_session(
     session: Session,
     refresh_token: str | None,
@@ -63,50 +132,16 @@ def rotate_refresh_session(
     authority: RefreshAuthority | None = None
 
     with session.begin():
-        predecessor = session.execute(
-            select(AuthSession)
-            .where(AuthSession.token_hash == hash_refresh_token(refresh_token))
-            .with_for_update()
-        ).scalar_one_or_none()
-        if predecessor is None:
-            raise InvalidRefreshSession("invalid refresh session")
-
-        if predecessor.used_at is not None:
-            session.execute(
-                update(AuthSession)
-                .where(AuthSession.family_id == predecessor.family_id)
-                .values(revoked_at=rotated_at)
-            )
+        predecessor = _load_predecessor(session, refresh_token)
+        if _revoke_replayed_family(session, predecessor, rotated_at=rotated_at):
             replay_detected = True
-        elif predecessor.revoked_at is not None or predecessor.expires_at <= rotated_at:
-            raise InvalidRefreshSession("invalid refresh session")
         else:
-            user = session.get(User, predecessor.user_id)
-            if user is None or not user.is_active or user.must_change_password:
-                raise InvalidRefreshSession("invalid refresh session")
-            successor_token = secrets.token_urlsafe(REFRESH_TOKEN_BYTES)
-            successor = AuthSession(
-                id=uuid4(),
-                user_id=predecessor.user_id,
-                family_id=predecessor.family_id,
-                parent_id=predecessor.id,
-                token_hash=hash_refresh_token(successor_token),
-                expires_at=rotated_at + timedelta(days=settings.refresh_token_expire_days),
-            )
-            predecessor.used_at = rotated_at
-            session.add(successor)
-            session.flush()
-            authority = RefreshAuthority(
-                access_token=issue_access_token(
-                    user_id=user.id,
-                    session_id=successor.id,
-                    token_version=user.token_version,
-                    purpose="access",
-                    settings=settings,
-                    now=rotated_at,
-                ),
-                refresh_token=successor_token,
-                expires_in=settings.access_token_expire_minutes * 60,
+            authority = _create_successor_authority(
+                session,
+                predecessor,
+                _require_refresh_user(session, predecessor, rotated_at=rotated_at),
+                settings=settings,
+                rotated_at=rotated_at,
             )
 
     if replay_detected or authority is None:

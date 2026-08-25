@@ -46,6 +46,13 @@ class PasswordChangeCandidate:
         return str(self.claims.user_id)
 
 
+PASSWORD_POLICY_DETAILS = {
+    "password must contain 12 to 128 characters": "Password must contain 12 to 128 characters",
+    "password must not equal login email": "Password must not equal login email",
+    "password must differ from current password": "New password must differ from current password",
+}
+
+
 def decode_password_change_candidate(
     access_token: str | None,
     *,
@@ -68,6 +75,52 @@ def decode_password_change_candidate(
     return PasswordChangeCandidate(claims=claims)
 
 
+def _load_password_change_user(session: Session, claims: AccessTokenClaims) -> User:
+    user = session.execute(
+        select(User).where(User.id == claims.user_id).with_for_update()
+    ).scalar_one_or_none()
+    if user is None or not user.is_active or user.token_version != claims.token_version:
+        raise InvalidPasswordChangePrincipal("invalid access token")
+    if claims.purpose == "password_change" and not user.must_change_password:
+        raise InvalidPasswordChangePrincipal("invalid access token")
+    return user
+
+
+def _require_access_session(
+    session: Session,
+    claims: AccessTokenClaims,
+    *,
+    user_id: object,
+    changed_at: datetime,
+) -> None:
+    if claims.purpose != "access":
+        return
+    auth_session = (
+        session.execute(
+            select(AuthSession).where(AuthSession.id == claims.session_id).with_for_update()
+        ).scalar_one_or_none()
+        if claims.session_id is not None
+        else None
+    )
+    if auth_session is None or auth_session.user_id != user_id:
+        raise InvalidPasswordChangePrincipal("invalid access token")
+    if auth_session.revoked_at is not None or auth_session.expires_at <= changed_at:
+        raise InvalidPasswordChangePrincipal("invalid access token")
+
+
+def _validate_new_password(user: User, current_password: str, new_password: str) -> None:
+    if not verify_password(current_password, user.hashed_password):
+        raise IncorrectCurrentPassword("current password is incorrect")
+    try:
+        validate_password_for_user(
+            new_password,
+            normalized_email=user.email,
+            current_password_hash=user.hashed_password,
+        )
+    except PasswordPolicyError as error:
+        raise PasswordChangePolicyError(PASSWORD_POLICY_DETAILS[str(error)]) from error
+
+
 def replace_current_password(
     session: Session,
     candidate: PasswordChangeCandidate,
@@ -80,52 +133,9 @@ def replace_current_password(
     changed_at = now or datetime.now(UTC)
     claims = candidate.claims
     with session.begin():
-        user = session.execute(
-            select(User).where(User.id == claims.user_id).with_for_update()
-        ).scalar_one_or_none()
-        if (
-            user is None
-            or not user.is_active
-            or user.token_version != claims.token_version
-            or (claims.purpose == "password_change" and not user.must_change_password)
-        ):
-            raise InvalidPasswordChangePrincipal("invalid access token")
-
-        if claims.purpose == "access":
-            auth_session = (
-                session.execute(
-                    select(AuthSession).where(AuthSession.id == claims.session_id).with_for_update()
-                ).scalar_one_or_none()
-                if claims.session_id is not None
-                else None
-            )
-            if (
-                auth_session is None
-                or auth_session.user_id != user.id
-                or auth_session.revoked_at is not None
-                or auth_session.expires_at <= changed_at
-            ):
-                raise InvalidPasswordChangePrincipal("invalid access token")
-
-        if not verify_password(current_password, user.hashed_password):
-            raise IncorrectCurrentPassword("current password is incorrect")
-        try:
-            validate_password_for_user(
-                new_password,
-                normalized_email=user.email,
-                current_password_hash=user.hashed_password,
-            )
-        except PasswordPolicyError as error:
-            details = {
-                "password must contain 12 to 128 characters": (
-                    "Password must contain 12 to 128 characters"
-                ),
-                "password must not equal login email": "Password must not equal login email",
-                "password must differ from current password": (
-                    "New password must differ from current password"
-                ),
-            }
-            raise PasswordChangePolicyError(details[str(error)]) from error
+        user = _load_password_change_user(session, claims)
+        _require_access_session(session, claims, user_id=user.id, changed_at=changed_at)
+        _validate_new_password(user, current_password, new_password)
 
         user.hashed_password = hash_password(new_password)
         user.must_change_password = False
