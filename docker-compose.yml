@@ -56,7 +56,7 @@ services:
     <<: *backend-common
     command: ["uvicorn", "verboflex.main:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
-      - "${VERBOFLEX_BACKEND_PORT:-8000}:8000"
+      - "127.0.0.1:${VERBOFLEX_BACKEND_PORT:-8000}:8000"
     healthcheck:
       test:
         [
@@ -97,7 +97,7 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "${VERBOFLEX_FRONTEND_PORT:-8080}:80"
+      - "127.0.0.1:${VERBOFLEX_FRONTEND_PORT:-8080}:80"
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--output-document=/dev/null", "http://127.0.0.1/"]
       interval: 10s

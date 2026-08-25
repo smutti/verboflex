@@ -10,6 +10,20 @@ This smoke is the command-driven deployment proof for the Phase 1 authentication
 
 The harness does not accept or print reusable credentials. Admin passwords and the JWT/database secrets are generated for the isolated run, passed through protected temporary files or non-echoed stdin, and discarded during cleanup.
 
+## TLS termination boundary
+
+The staging and production Compose overlays are application-origin deployments behind a separately managed TLS edge; they are not safe as a standalone Internet-facing stack. Both the backend and frontend publish plaintext container ports only on host loopback (`127.0.0.1`), so an edge process on the same host may reach them but a remote client cannot bypass TLS by connecting to those ports.
+
+The deployment owner must provide the external edge and verify all of these controls before exposing the service:
+
+- a publicly trusted certificate for the configured frontend and API origins;
+- TLS 1.2 or TLS 1.3 only, with certificate and hostname validation intact;
+- HTTP either unreachable or redirected to HTTPS;
+- `Strict-Transport-Security: max-age=31536000; includeSubDomains` on browser responses;
+- forwarding only to the loopback ports rendered by the applicable Compose overlay.
+
+The repository smoke verifies the loopback binding and HTTPS origin configuration. Certificate, redirect, and HSTS checks belong to the environment-specific edge smoke because no private key or certificate is stored in this repository.
+
 ## Commands
 
 Run the fast sensitivity checks before the full deployment proof:
