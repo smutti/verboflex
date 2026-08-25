@@ -216,6 +216,24 @@ def test_payload_and_decoder_failures_preserve_exact_invalid_token_semantics() -
     assert claim_error.value.args == (INVALID_ACCESS_TOKEN_MESSAGE,)
 
 
+def test_non_string_subject_is_rejected_before_uuid_coercion() -> None:
+    """Reject signed claim types that cannot represent the canonical UUID subject."""
+    issued_at = datetime.now(UTC).replace(microsecond=0)
+    payload: dict[str, object] = {
+        "sub": 42,
+        "sid": str(uuid4()),
+        "iat": int(issued_at.timestamp()),
+        "exp": int(issued_at.timestamp()) + 900,
+        "purpose": "access",
+        "token_version": 0,
+    }
+
+    with pytest.raises(InvalidAccessToken) as error:
+        _claims_from_payload(payload, settings=token_settings(), expected_purpose="access")
+
+    assert error.value.args == (INVALID_ACCESS_TOKEN_MESSAGE,)
+
+
 def test_issuer_and_decoder_fail_closed_without_a_signing_secret() -> None:
     """Never mint or trust bearer authority when signing material is absent."""
     unsigned_settings = Settings(jwt_secret_key=None, refresh_cookie_secure=False)

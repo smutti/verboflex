@@ -174,6 +174,23 @@ def test_principal_service_denials_preserve_exact_internal_semantics(
         principal_service._require_current_session(None, user_id=USER_ID, now=now)
     assert missing_session_error.value.args == (principal_service.INVALID_PRINCIPAL_MESSAGE,)
 
+    mismatched_session = AuthSession(
+        id=SESSION_ID,
+        user_id=uuid4(),
+        family_id=uuid4(),
+        token_hash="m" * 64,
+        expires_at=now + timedelta(minutes=15),
+    )
+    with pytest.raises(principal_service.InvalidPrincipal) as mismatched_session_error:
+        principal_service._require_current_session(
+            mismatched_session,
+            user_id=USER_ID,
+            now=now,
+        )
+    assert mismatched_session_error.value.args == (
+        principal_service.INVALID_PRINCIPAL_MESSAGE,
+    )
+
     dead_session = AuthSession(
         id=SESSION_ID,
         user_id=USER_ID,

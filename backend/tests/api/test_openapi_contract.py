@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import runpy
 import subprocess
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
 from verboflex.main import app
+from verboflex.scripts import export_openapi
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CHECKED_IN_SCHEMA = REPOSITORY_ROOT / "frontend" / "openapi.json"
@@ -141,6 +145,23 @@ def test_export_is_canonical_and_matches_the_checked_in_schema() -> None:
             + "\n"
         ).encode()
     )
+
+
+def test_export_entrypoint_is_exercised_in_process() -> None:
+    """Keep both import and executable entrypoint paths inside coverage accounting."""
+    direct_output = StringIO()
+    with redirect_stdout(direct_output):
+        export_openapi.main()
+
+    entrypoint_output = StringIO()
+    with redirect_stdout(entrypoint_output):
+        runpy.run_path(
+            str(REPOSITORY_ROOT / "backend/src/verboflex/scripts/export_openapi.py"),
+            run_name="__main__",
+        )
+
+    assert entrypoint_output.getvalue() == direct_output.getvalue()
+    assert json.loads(entrypoint_output.getvalue()) == app.openapi()
 
 
 def _handwritten_api_type_declarations(source: str) -> set[str]:
