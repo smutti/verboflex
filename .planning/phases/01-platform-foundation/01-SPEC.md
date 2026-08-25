@@ -200,6 +200,14 @@ Feature: Runnable platform foundation
     Then it exits non-zero with a non-secret diagnostic
     And no user or role assignment changes
 
+  Scenario: administrative deactivation destroys existing authority
+    Given an active internal user has current access tokens and refresh sessions
+    When `verboflex deactivate-user --email <email>` performs the active-to-inactive transition
+    Then `is_active` becomes false and `token_version` increments exactly once
+    And every live refresh session for that user is revoked at the transition time
+    And sessions for other users and existing revocation timestamps do not change
+    And an unknown or already inactive account is refused without mutation
+
 Feature: Internal OAuth2 authentication
   Scenario: active user receives an ordinary session
     Given active user person@example.com has a non-temporary valid password
@@ -471,3 +479,4 @@ These are blocking planning and review constraints: no external identity provide
 - 2026-08-24: Pinned the Phase 1 component-generation boundary to the verified official legacy shadcn registry sources after the current v4 registry was found to require the unapproved unified `radix-ui` package, while official `sonner` requested unapproved `next-themes` and official `sidebar` requested an extra `use-mobile` registry file. The user explicitly approved the conservative adaptation with “Approvo, procedi”: `sonner.tsx` must accept its theme through component props/default without `next-themes`; the official `useIsMobile` hook must be inlined into `sidebar.tsx`; the approved individual `@radix-ui/*` packages remain authoritative; exactly the 13 enumerated UI component files may be created. Direct `radix-ui`, direct `next-themes`, and a separate `use-mobile` hook file are forbidden.
 - 2026-08-24: Superseded the immediately preceding conservative legacy adaptation after the user explicitly directed “Procedi con il moderno e implementa”. The authoritative Phase 1 boundary is now the verified official `shadcn@4.19.0` modern `new-york-v4` Radix registry source: direct `radix-ui@1.6.7` replaces the individual `@radix-ui/react-*` direct packages, direct `next-themes@0.4.6` is authorized for the unmodified official Sonner source, and the official `frontend/src/hooks/use-mobile.ts` registry file is authorized for Sidebar. The source allowlist remains the same 13 UI primitives plus `components.json`, `src/lib/utils.ts`, and that required hook, for 16 registry-owned/configuration files total. Base UI, React Aria, third-party registries, and any other direct dependency or generated file remain forbidden.
 - 2026-08-25: Human-graded verifier finding F-01 as a description/SPEC revision. The hardened cookie behavior already implemented is now authoritative: `__Host-verboflex_refresh`, `Secure` always enabled, and `Path=/`. The earlier local insecure-cookie allowance is withdrawn; local HTTP API clients may authenticate, but a browser only accepts and returns this refresh cookie over a secure context.
+- 2026-08-25: Human-graded verifier finding F-07 as behavioural. Account deactivation is now an explicit non-secret administrative CLI transition: only an active account may transition, and the same transaction marks it inactive, increments `token_version`, and revokes every live refresh session without rewriting earlier revocation timestamps.

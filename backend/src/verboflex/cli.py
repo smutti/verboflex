@@ -48,6 +48,10 @@ class ResetPasswordError(RuntimeError):
     """Raised when an administrative reset cannot identify its account."""
 
 
+class DeactivateUserError(RuntimeError):
+    """Raised when an account cannot make an active-to-inactive transition."""
+
+
 def bootstrap_first_admin(
     session: Session,
     *,
@@ -118,8 +122,34 @@ def reset_user_password(
         session.flush()
 
 
+def deactivate_user(
+    session: Session,
+    *,
+    email: str,
+    now: datetime | None = None,
+) -> None:
+    """Deactivate one account and destroy all of its existing session authority."""
+    normalized_email = normalize_email(email)
+    deactivated_at = now or datetime.now(UTC)
+    with session.begin():
+        user = session.execute(
+            select(User).where(User.email == normalized_email).with_for_update()
+        ).scalar_one_or_none()
+        if user is None or not user.is_active:
+            raise DeactivateUserError("deactivation refused: account unavailable")
+
+        user.is_active = False
+        user.token_version += 1
+        session.execute(
+            update(AuthSession)
+            .where(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
+            .values(revoked_at=deactivated_at)
+        )
+        session.flush()
+
+
 def build_parser() -> argparse.ArgumentParser:
-    """Build the two Phase 1 admin commands with no password argument."""
+    """Build the three Phase 1 admin commands with no password argument."""
     parser = argparse.ArgumentParser(prog="verboflex")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -133,6 +163,11 @@ def build_parser() -> argparse.ArgumentParser:
         "reset-password", help="administratively replace an internal password"
     )
     reset_parser.add_argument("--email", required=True)
+
+    deactivate_parser = subparsers.add_parser(
+        "deactivate-user", help="deactivate an internal account and revoke its sessions"
+    )
+    deactivate_parser.add_argument("--email", required=True)
     return parser
 
 
@@ -158,9 +193,12 @@ def main(
     provide_session = session_provider or SessionFactory
 
     try:
-        password = read_secret("Password: ")
         with provide_session() as session:
-            if arguments.command == "bootstrap-admin":
+            if arguments.command == "deactivate-user":
+                deactivate_user(session, email=arguments.email)
+                print("Account deactivated; all sessions revoked.")
+            elif arguments.command == "bootstrap-admin":
+                password = read_secret("Password: ")
                 bootstrap_first_admin(
                     session,
                     email=arguments.email,
@@ -169,10 +207,12 @@ def main(
                 )
                 print("First administrator created.")
             else:
+                password = read_secret("Password: ")
                 reset_user_password(session, email=arguments.email, password=password)
                 print("Password reset completed; password change is required.")
     except (
         BootstrapAdminError,
+        DeactivateUserError,
         PasswordPolicyError,
         ResetPasswordError,
         SecretInputError,
