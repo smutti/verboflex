@@ -77,8 +77,8 @@ export function LoginPage() {
             {authError ? (
               <Alert variant="destructive">
                 <AlertDescription>
-                  We could not sign you in. Check your email and password,
-                  then try again.
+                  We could not sign you in. Check your email and password, then
+                  try again.
                 </AlertDescription>
               </Alert>
             ) : null}

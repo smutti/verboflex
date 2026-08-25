@@ -113,9 +113,7 @@ export function SessionProvider({
     }
     const authority = tokenResult.data;
     if (authority === undefined) {
-      setState((current) =>
-        transitionSession(current, { type: "sign_out" }),
-      );
+      setState((current) => transitionSession(current, { type: "sign_out" }));
       throw new Error("Session action failed");
     }
     if (authority.must_change_password) {
@@ -135,9 +133,7 @@ export function SessionProvider({
       return;
     }
     if (identityResult.data === undefined) {
-      setState((current) =>
-        transitionSession(current, { type: "sign_out" }),
-      );
+      setState((current) => transitionSession(current, { type: "sign_out" }));
       return;
     }
     setState((current) =>
@@ -169,9 +165,7 @@ export function SessionProvider({
       if (result.error !== undefined) {
         throw new Error("Session action failed");
       }
-      setState((current) =>
-        transitionSession(current, { type: "sign_out" }),
-      );
+      setState((current) => transitionSession(current, { type: "sign_out" }));
     },
     [state],
   );
@@ -187,9 +181,7 @@ export function SessionProvider({
       refreshResult = await refreshAccessToken();
     } catch {
       if (operationVersion.current === version) {
-        setState((current) =>
-          transitionSession(current, { type: "sign_out" }),
-        );
+        setState((current) => transitionSession(current, { type: "sign_out" }));
       }
       return;
     }
@@ -198,9 +190,7 @@ export function SessionProvider({
     }
     const authority = refreshResult.data;
     if (authority === undefined || authority.must_change_password) {
-      setState((current) =>
-        transitionSession(current, { type: "sign_out" }),
-      );
+      setState((current) => transitionSession(current, { type: "sign_out" }));
       return;
     }
     const identityResult = await readCurrentUser({
@@ -210,9 +200,7 @@ export function SessionProvider({
       return;
     }
     if (identityResult.data === undefined) {
-      setState((current) =>
-        transitionSession(current, { type: "sign_out" }),
-      );
+      setState((current) => transitionSession(current, { type: "sign_out" }));
       return;
     }
     setState((current) =>
@@ -232,15 +220,11 @@ export function SessionProvider({
 
   const logout = useCallback(async () => {
     operationVersion.current += 1;
-    setState((current) =>
-      transitionSession(current, { type: "sign_out" }),
-    );
+    setState((current) => transitionSession(current, { type: "sign_out" }));
     try {
       await generatedLogout();
     } finally {
-      setState((current) =>
-        transitionSession(current, { type: "sign_out" }),
-      );
+      setState((current) => transitionSession(current, { type: "sign_out" }));
     }
   }, []);
 

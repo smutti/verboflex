@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import {
-  readSystemStatus,
-  type SystemStatusResponse,
-} from "../../api/client";
+import { readSystemStatus, type SystemStatusResponse } from "../../api/client";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Alert, AlertDescription } from "../ui/alert";
@@ -99,14 +96,12 @@ export function ServiceStatus({ accessToken }: ServiceStatusProps) {
       className="grid gap-4 border-y bg-secondary px-4 py-4"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2
-          id="service-status-title"
-          className="text-heading font-semibold"
-        >
+        <h2 id="service-status-title" className="text-heading font-semibold">
           Service status
         </h2>
         <p className="text-label text-muted-foreground">
-          Last checked: <time dateTime={status.checked_at}>{status.checked_at}</time>
+          Last checked:{" "}
+          <time dateTime={status.checked_at}>{status.checked_at}</time>
         </p>
       </div>
       <ul className="flex flex-wrap gap-2" aria-label="Platform services">

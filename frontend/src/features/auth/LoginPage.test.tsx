@@ -71,26 +71,29 @@ describe("login page", () => {
   it.each([
     new Error("401 unknown account"),
     new Error("Failed to fetch https://api.internal/auth/token"),
-  ])("shows the same non-enumerating error for rejected login", async (reason) => {
-    loginMock.mockRejectedValueOnce(reason);
-    const user = userEvent.setup();
-    render(<LoginPage />);
+  ])(
+    "shows the same non-enumerating error for rejected login",
+    async (reason) => {
+      loginMock.mockRejectedValueOnce(reason);
+      const user = userEvent.setup();
+      render(<LoginPage />);
 
-    await user.type(
-      screen.getByRole("textbox", { name: "Email" }),
-      "person@example.com",
-    );
-    await user.type(screen.getByLabelText("Password"), "wrong phrase 2026!");
-    await user.click(
-      screen.getByRole("button", { name: "Sign in to VerboFlex" }),
-    );
+      await user.type(
+        screen.getByRole("textbox", { name: "Email" }),
+        "person@example.com",
+      );
+      await user.type(screen.getByLabelText("Password"), "wrong phrase 2026!");
+      await user.click(
+        screen.getByRole("button", { name: "Sign in to VerboFlex" }),
+      );
 
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent(
-      "We could not sign you in. Check your email and password, then try again.",
-    );
-    expect(alert).not.toHaveTextContent(reason.message);
-  });
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent(
+        "We could not sign you in. Check your email and password, then try again.",
+      );
+      expect(alert).not.toHaveTextContent(reason.message);
+    },
+  );
 
   it("allows only one login submission while the session action is pending", async () => {
     let resolveLogin: (() => void) | undefined;

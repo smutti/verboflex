@@ -66,17 +66,21 @@ describe("approved Phase 1 theme contract", () => {
       "--type-heading-size": "20px",
       "--type-display-size": "28px",
     });
-    expect(selectProperties(rootProperties, /^--type-.+-line-height$/)).toEqual({
-      "--type-label-line-height": "1.3",
-      "--type-body-line-height": "1.5",
-      "--type-heading-line-height": "1.25",
-      "--type-display-line-height": "1.15",
-    });
+    expect(selectProperties(rootProperties, /^--type-.+-line-height$/)).toEqual(
+      {
+        "--type-label-line-height": "1.3",
+        "--type-body-line-height": "1.5",
+        "--type-heading-line-height": "1.25",
+        "--type-display-line-height": "1.15",
+      },
+    );
     expect(selectProperties(rootProperties, /^--weight-/)).toEqual({
       "--weight-regular": "400",
       "--weight-semibold": "600",
     });
-    expect(selectProperties(themeProperties, /^--text-(?!.*line-height)/)).toEqual({
+    expect(
+      selectProperties(themeProperties, /^--text-(?!.*line-height)/),
+    ).toEqual({
       "--text-label": "var(--type-label-size)",
       "--text-body": "var(--type-body-size)",
       "--text-heading": "var(--type-heading-size)",
@@ -155,12 +159,16 @@ describe("approved Phase 1 theme contract", () => {
 
     for (const value of Object.values(radii)) {
       const resolved =
-        value === "var(--panel-radius)" ? rootProperties["--panel-radius"] : value;
+        value === "var(--panel-radius)"
+          ? rootProperties["--panel-radius"]
+          : value;
       expect(Number.parseInt(resolved, 10)).toBeLessThanOrEqual(8);
     }
   });
 
   it("imports the governed stylesheet exactly once at the app entry", () => {
-    expect(appEntry.match(/import\s+["']\.\/index\.css["'];/gu)).toHaveLength(1);
+    expect(appEntry.match(/import\s+["']\.\/index\.css["'];/gu)).toHaveLength(
+      1,
+    );
   });
 });

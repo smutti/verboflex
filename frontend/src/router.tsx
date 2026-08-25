@@ -49,10 +49,7 @@ export function SessionRoutes({
     return (
       <Routes>
         <Route path="/change-password" element={changePasswordElement} />
-        <Route
-          path="*"
-          element={<Navigate replace to="/change-password" />}
-        />
+        <Route path="*" element={<Navigate replace to="/change-password" />} />
       </Routes>
     );
   }

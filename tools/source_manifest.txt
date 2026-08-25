@@ -18,6 +18,7 @@ include|config|frontend/index.html
 include|config|frontend/openapi-ts.config.ts
 include|config|frontend/openapi.json
 include|config|frontend/playwright.config.ts
+include|config|frontend/.prettierignore
 include|config|frontend/stryker.config.mjs
 include|config|frontend/tsconfig.json
 include|config|frontend/vite.config.ts

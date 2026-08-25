@@ -118,8 +118,8 @@ export function AppShell({ accessToken, onLogout, principal }: AppShellProps) {
                 Workspace overview
               </h1>
               <p className="text-muted-foreground">
-                Your review workspace will appear here as products and repositories
-                are configured.
+                Your review workspace will appear here as products and
+                repositories are configured.
               </p>
             </div>
             <div className="grid gap-2">

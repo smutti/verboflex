@@ -155,7 +155,9 @@ describe("authenticated application shell", () => {
     expect(screen.getByText("Database online")).toBeVisible();
     expect(screen.getByText("Redis unavailable")).toBeVisible();
     expect(screen.getByText("Worker pending")).toBeVisible();
-    expect(screen.queryByText("Checking service status")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Checking service status"),
+    ).not.toBeInTheDocument();
   });
 
   it("sanitizes service failures, never fabricates online, and retries", async () => {
@@ -191,9 +193,7 @@ describe("authenticated application shell", () => {
     expect(alert).not.toHaveTextContent("cache.internal");
     expect(screen.queryByText("API online")).not.toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole("button", { name: "Retry connection" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Retry connection" }));
 
     expect(await screen.findByText("API online")).toBeVisible();
     expect(readSystemStatusMock).toHaveBeenCalledTimes(2);

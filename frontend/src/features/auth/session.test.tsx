@@ -60,7 +60,10 @@ describe("session transitions", () => {
       },
       error: undefined,
     });
-    readCurrentUserMock.mockResolvedValue({ data: principal, error: undefined });
+    readCurrentUserMock.mockResolvedValue({
+      data: principal,
+      error: undefined,
+    });
     const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
 
     await act(async () => {
@@ -221,7 +224,10 @@ describe("session transitions", () => {
           });
       }) as ReturnType<typeof refreshAccessToken>,
     );
-    readCurrentUserMock.mockResolvedValue({ data: principal, error: undefined });
+    readCurrentUserMock.mockResolvedValue({
+      data: principal,
+      error: undefined,
+    });
     const { result } = renderHook(() => useSession(), {
       wrapper: RestoringWrapper,
     });
@@ -255,7 +261,10 @@ describe("session transitions", () => {
       },
       error: undefined,
     });
-    readCurrentUserMock.mockResolvedValue({ data: principal, error: undefined });
+    readCurrentUserMock.mockResolvedValue({
+      data: principal,
+      error: undefined,
+    });
     const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
     await act(async () => {
       await result.current.login({
@@ -284,7 +293,10 @@ describe("session transitions", () => {
       },
       error: undefined,
     });
-    readCurrentUserMock.mockResolvedValue({ data: principal, error: undefined });
+    readCurrentUserMock.mockResolvedValue({
+      data: principal,
+      error: undefined,
+    });
     logoutMock.mockRejectedValue(new Error("logout network unavailable"));
     const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
     await act(async () => {
@@ -320,7 +332,10 @@ describe("session transitions", () => {
           });
       }) as ReturnType<typeof refreshAccessToken>,
     );
-    readCurrentUserMock.mockResolvedValue({ data: principal, error: undefined });
+    readCurrentUserMock.mockResolvedValue({
+      data: principal,
+      error: undefined,
+    });
     logoutMock.mockResolvedValue({ data: undefined, error: undefined });
     const { result } = renderHook(() => useSession(), {
       wrapper: RestoringWrapper,

@@ -2,11 +2,7 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 type ForbiddenSurface =
-  | "analytics"
-  | "indexeddb"
-  | "logs"
-  | "url"
-  | "web-storage";
+  "analytics" | "indexeddb" | "logs" | "url" | "web-storage";
 
 interface Violation {
   file: string;
@@ -17,7 +13,10 @@ interface Violation {
 const credentialPattern =
   /\b(?:access[_-]?token|refresh[_-]?token|authorization|bearer|credential)\b/i;
 
-function scanCredentialPersistence(file: string, sourceText: string): Violation[] {
+function scanCredentialPersistence(
+  file: string,
+  sourceText: string,
+): Violation[] {
   const source = ts.createSourceFile(
     file,
     sourceText,
@@ -38,9 +37,7 @@ function scanCredentialPersistence(file: string, sourceText: string): Violation[
     const nodeText = node.getText(source);
     if (ts.isCallExpression(node) && credentialPattern.test(nodeText)) {
       const target = node.expression.getText(source).toLowerCase();
-      if (
-        /(?:^|\.)(?:localstorage|sessionstorage)\.setitem$/.test(target)
-      ) {
+      if (/(?:^|\.)(?:localstorage|sessionstorage)\.setitem$/.test(target)) {
         report("web-storage", node);
       } else if (
         /(?:store|objectstore|indexeddb|\bdb)\.(?:add|put)$/.test(target)
@@ -95,8 +92,7 @@ describe("browser credential persistence guard", () => {
     );
     const violations = Object.entries(productionFiles)
       .filter(
-        ([file]) =>
-          !file.includes("/api/client/") && !file.includes(".test."),
+        ([file]) => !file.includes("/api/client/") && !file.includes(".test."),
       )
       .flatMap(([file, source]) => scanCredentialPersistence(file, source));
 

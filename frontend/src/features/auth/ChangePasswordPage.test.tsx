@@ -40,9 +40,11 @@ describe("required password change page", () => {
     expect(
       screen.getByRole("heading", { name: "Set a new password" }),
     ).toBeVisible();
-    expect(screen.getByText(
-      "Your temporary password must be replaced before you can continue.",
-    )).toBeVisible();
+    expect(
+      screen.getByText(
+        "Your temporary password must be replaced before you can continue.",
+      ),
+    ).toBeVisible();
     expect(screen.getByLabelText("Current password")).toHaveAttribute(
       "type",
       "password",
@@ -124,7 +126,10 @@ describe("required password change page", () => {
     await user.type(screen.getByLabelText("Current password"), currentPassword);
     const newPassword = screen.getByLabelText("New password");
     await user.type(newPassword, currentPassword);
-    await user.type(screen.getByLabelText("Confirm new password"), currentPassword);
+    await user.type(
+      screen.getByLabelText("Confirm new password"),
+      currentPassword,
+    );
     await user.click(screen.getByRole("button", { name: "Set new password" }));
 
     const error = await screen.findByRole("alert");
