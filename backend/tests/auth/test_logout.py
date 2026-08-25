@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from tests.auth.test_refresh import (
     REFRESH_TOKEN,
     SESSION_ID,
+    USER_ID,
     FakeRedis,
     configure_dependencies,
     create_refresh_authority,
@@ -25,6 +26,7 @@ from tests.auth.test_refresh import (
 from verboflex.auth.access_tokens import issue_access_token
 from verboflex.auth.refresh_sessions import rotate_refresh_session
 from verboflex.models.auth_session import AuthSession
+from verboflex.models.user import User
 
 __all__ = ["refresh_session_factory"]
 
@@ -263,8 +265,44 @@ def test_distinct_sessions_for_one_user_share_the_logout_rate_budget(
     redis_keys = [call[2][0] for call in redis_client.calls]
     assert len(redis_keys) == 2
     assert redis_keys[0] == redis_keys[1]
+    expected_digest = hashlib.sha256(
+        f"{USER_ID}\0authenticated-user".encode()
+    ).hexdigest()
+    assert redis_keys[0] == f"verboflex:auth:logout:{expected_digest}"
     assert REFRESH_TOKEN not in redis_keys[0]
     assert second_token not in redis_keys[0]
+
+
+@pytest.mark.parametrize("invalid_state", ["used", "revoked", "expired", "inactive"])
+def test_stale_logout_credentials_use_the_peer_bounded_anonymous_budget(
+    refresh_session_factory: sessionmaker[Session], invalid_state: str
+) -> None:
+    """Keep stale authority out of the live user's cross-session logout budget."""
+    create_refresh_authority(refresh_session_factory)
+    transition_at = datetime.now(UTC)
+    with refresh_session_factory.begin() as session:
+        persisted = session.get_one(AuthSession, SESSION_ID)
+        if invalid_state == "used":
+            persisted.used_at = transition_at
+        elif invalid_state == "revoked":
+            persisted.revoked_at = transition_at
+        elif invalid_state == "expired":
+            persisted.expires_at = transition_at - timedelta(seconds=1)
+        else:
+            session.get_one(User, USER_ID).is_active = False
+    redis_client = configure_dependencies(
+        refresh_session_factory,
+        FakeRedis(result=[1, 60]),
+    )
+
+    response = asyncio.run(post_logout())
+
+    assert response.status_code == 204
+    expected_digest = hashlib.sha256(
+        "invalid-logout-session\x00127.0.0.1".encode()
+    ).hexdigest()
+    assert redis_client.calls[0][2][0] == f"verboflex:auth:logout:{expected_digest}"
+    assert REFRESH_TOKEN not in str(redis_client.calls[0][2][0])
 
 
 def test_logout_remains_available_when_redis_is_unavailable(
