@@ -3,7 +3,7 @@
 - Review-status: OPEN
 - Open-critical-high: 0
 - Full-gauntlet-status: PENDING
-- Reviewed-source-digest: `58d86b96b2c6f26cec82aff93987130dda68159a7dcff7c0cd3084630fc7b764`
+- Reviewed-source-digest: `446563d1b84a057edda7b10395303be6acd99d528473cc78ae00b65ca3acc62a`
 - Review-date: 2026-08-25
 - Review-mode: fresh-context independent goal-backward and OWASP ASVS-aligned source review
 - Candidate-verdict: PASS_FOR_POST_FIX_GAUNTLET
@@ -17,18 +17,20 @@
 
 The reviewed source has no open Critical, High, or Medium finding and no SPEC
 gap requiring escalation. F-01 through F-08 and VF-SEC-001 through VF-SEC-006,
-VF-SEC-008 through VF-SEC-017 are resolved. VF-SEC-007 remains the sole open
+VF-SEC-008 through VF-SEC-018 are resolved. VF-SEC-007 remains the sole open
 Low finding: a development-only transitive `qs` advisory with no production
 dependency path.
 
 This fresh source-bound review records the candidate verdict
-**PASS_FOR_POST_FIX_GAUNTLET**. The prior `CLOSED/PASS` state is historical: an
-exact later full run exposed an E2E lifecycle race in its responsive Navigation
-assertion, and no PASS is claimed for that failed run. Commit `fd107b9` corrects
-the harness to wait for actual dialog teardown before reopening while preserving
-all eight controlled viewport/focus cycles. The complete post-fix candidate
-gauntlet for this source state has not run yet, so the review remains
-**OPEN/PENDING**.
+**PASS_FOR_POST_FIX_GAUNTLET**. Every prior `CLOSED/PASS` or candidate state is
+historical. Later exact runs exposed first the human-graded behavioural Medium
+responsive Escape defect and then the human-graded behavioural Medium checker
+cleanup defect; neither failed run contributes a PASS. Commit `389bb58` removes
+the TooltipContent layer while the responsive Sheet owns focus, and the
+`596b32c` RED -> `cf98c3a` GREEN cleanup cycle makes the tracked process the
+actual Celery worker and proves forced later-layer failure leaves zero worker,
+PostgreSQL, or Redis infrastructure. The complete post-fix candidate gauntlet
+for this source state has not run yet, so the review remains **OPEN/PENDING**.
 
 ## Scope and source identity
 
@@ -50,9 +52,9 @@ The canonical manifest resolved 161 clean tracked paths:
 | deployment-contract | 1 |
 
 `bash tools/source_state.sh --review-digest` was executed twice consecutively
-immediately before this candidate artifact was written. Both runs exited zero
+immediately after this candidate artifact was written. Both runs exited zero
 and returned exactly
-`58d86b96b2c6f26cec82aff93987130dda68159a7dcff7c0cd3084630fc7b764`.
+`446563d1b84a057edda7b10395303be6acd99d528473cc78ae00b65ca3acc62a`.
 The review artifact is excluded only from review-mode digest computation and is
 included by the final source-set contract.
 
@@ -64,7 +66,7 @@ The fresh-context reviewer independently inspected the complete Phase 1 source
 and security surface, classified the exact 23 detect-secrets detections, ran
 focused source, PostgreSQL, frontend, dependency, archived-RED, production
 Cobertura, cleanup, and exact-secret-policy probes, and revalidated F-01 through
-F-08 plus VF-SEC-012 through VF-SEC-017. The digest matched twice, no new
+F-08 plus VF-SEC-012 through VF-SEC-018. The digest matched twice, no new
 material finding was opened, and the artifact is deliberately left `OPEN` with
 the gauntlet `PENDING` and verdict `PASS_FOR_POST_FIX_GAUNTLET`.
 
@@ -118,6 +120,14 @@ the gauntlet `PENDING` and verdict `PASS_FOR_POST_FIX_GAUNTLET`.
   `e6c88d9` candidate supplied the exact failing RED, no assertion was weakened,
   no production behavior was mocked, and no retry, wait, skip, or timeout
   inflation was introduced.
+- Commit `fd107b9` subsequently made actual Radix dialog DOM teardown, rather
+  than accessibility-hidden state, the invariant before every reopen. A later
+  exact browser run still exposed the same human-graded behavioural Medium
+  VF-SEC-017: TooltipContent could remain as a closing dismissable layer while
+  the Sheet owned focus and consume Escape. Commit `389bb58` is the final
+  production correction: TooltipContent is unmounted whenever the controlled
+  Sheet is open. It preserves the official icon tooltip while the Sheet is
+  closed and changes no wait, retry, skip, assertion, or timeout.
 - The reported cleanup/unbound concern was human-graded as a false positive.
   A production-identity execution of the real `changed_line_coverage` function
   exited zero, ran cleanup, and left no `verboflex-gauntlet-postgres-*` or
@@ -125,6 +135,18 @@ the gauntlet `PENDING` and verdict `PASS_FOR_POST_FIX_GAUNTLET`.
   earlier invalid direct-source probe had changed `$0` and therefore resolved
   `REPO_ROOT` to the parent directory; its failure is not production evidence,
   and its two exactly named containers were removed before the valid probe.
+- A distinct later candidate failure supplied valid production-identity
+  evidence for VF-SEC-018: the backgrounded `uv run celery` wrapper exited while
+  its Celery child survived with PPID 1 after a later frontend layer failed.
+  The human graded this checker-cleanup defect behavioural Medium. RED commit
+  `596b32c` requires an actual backend-infrastructure layer followed by a
+  controlled frontend-layer failure to leave zero tracked PID, unique-hostname
+  Celery process, PostgreSQL container, and Redis container. GREEN commit
+  `cf98c3a` directly `exec`s the venv Celery binary, assigns a run-unique
+  hostname, and makes surviving tracked PID a fail-closed cleanup error. A
+  one-off reversion to the old launcher failed with the exact diagnostic
+  `controlled candidate failure orphaned a Celery worker`; the restored GREEN
+  passes the same real lifecycle test and the complete packaged checker suite.
 - The detect-secrets line drift was human-graded behavioural and resolved by
   rebinding only nine line numbers. The policy still contains exactly 23 rows;
   every path, plugin, hashed fingerprint, classification, and both negative
@@ -183,7 +205,7 @@ join mutants surviving; the compiled PostgreSQL equivalence proof passed.
 Post-run inspection found no scoped gauntlet/smoke container or Celery worker.
 No source changed between initial and terminal source-state checks.
 
-### Current candidate — responsive Sheet teardown correction
+### Current candidate — responsive focus and checker lifecycle corrections
 
 The immediately preceding closed source state and its PASS evidence above are
 historical only. A later exact official full run on that state reached the real
@@ -200,15 +222,26 @@ existing four cycles at 768px and four at 375px, focused-control Escape,
 `aria-current` assertion, and trigger-focus restoration are unchanged. The
 correction adds no explicit wait, retry, skip, weakened assertion, or timeout
 inflation; it distinguishes accessibility-hidden state from completed Radix
-presence teardown.
+presence teardown. Commit `389bb58` completes the production focus-layer fix by
+unmounting TooltipContent while the Sheet owns focus, so a closing tooltip
+dismissable layer cannot consume the Sheet's Escape. The raw teardown locator,
+all eight cycles, focused-control dispatch, `aria-current`, and trigger-focus
+restoration remain unchanged.
 
-Three independent browser-only real staging runs supplied with the correction
-passed all eight cycles each. In this fresh-context review, an additional exact
-`tools/real_smoke.sh --browser-only` run passed Playwright 1/1 in 12.6 seconds,
-all eight controlled cycles, the production build, scoped cleanup, and the
+In this fresh-context review, six independent exact
+`tools/real_smoke.sh --browser-only` runs passed Playwright 1/1 in 12.1-12.8
+seconds each. Every run exercised four cycles at 768px plus four at 375px,
+completed the production build and scoped cleanup, and emitted exactly one
 terminal `real staging smoke: PASS` marker. The focused AppShell suite passed
-11/11; TypeScript, ESLint, and Prettier also passed. Direct source and test
-inspection found no test gaming, production behavior change, source/security
+11/11; TypeScript, ESLint, Prettier, and the production build also passed.
+
+The real `--self-test-infra-failure-cleanup` probe and the complete packaged
+checker suite passed on `cf98c3a`. The probe executed actual PostgreSQL, Redis,
+and Celery infrastructure, forced the following frontend layer to return 42,
+verified the expected layer-failure diagnostic, and found zero tracked worker,
+unique-hostname worker process, PostgreSQL container, or Redis container. A
+post-suite independent process/container scan also found zero matching residue.
+Direct source and test inspection found no test gaming, source/security
 regression, or new material finding. The current candidate verdict is therefore
 `PASS_FOR_POST_FIX_GAUNTLET`; the complete candidate gauntlet remains pending.
 
@@ -251,7 +284,8 @@ than being silently waived.
 | VF-SEC-014 | Medium | RESOLVED | Frontend production changed-line branch coverage now consumes normalized Cobertura rather than branch-permissive LCOV, binds exclusions to the exact four-row source-owned map, rejects non-canonical paths, vacuous/zero totals, extra handwritten exclusions, and a concrete 50%-branch divergent fixture. The production path passed at 100% for 152 frontend lines; backend changed-line coverage passed at 100% for 1003 lines. |
 | VF-SEC-015 | Medium | RESOLVED | Source-bound TDD additions moved nine accepted detect-secrets findings. The exact policy was updated only at those nine line coordinates; all 23 paths/plugins/fingerprints and classifications are preserved byte-for-byte, a fresh repository scan matches exactly, and true-key plus unreviewed-tuple controls still fail as required. |
 | VF-SEC-016 | Medium | RESOLVED | The candidate gauntlet exposed TS2345 for deferred `readSystemStatus` responses because bare `ReturnType` retained an over-broad generic result. The test-only fix specializes the generated call to `<false>`, exactly matching the production call site's SDK default. AppShell 11/11, `tsc --noEmit`, and the Vite production build pass with no broad cast and no production-source change. |
-| VF-SEC-017 | Medium | RESOLVED | Human-graded behavioural navigation-overlay failure. The first harness-only correction at `e6c88d9` strengthened the RED to four focused-control Escape cycles at each of 768px and 375px but failed again at the 768px second cycle, leaving the live Sheet `data-state=open` for five seconds; the finding therefore remained open. Production GREEN `7f93715` gives Sheet and Tooltip separate controlled authority and forces the tooltip closed as the Sheet opens while preserving the official icon tooltip. AppShell 11/11 proves two open/Escape cycles, no tooltip inside the open Sheet, real closure, and trigger-focus restoration. A later official full run exposed a harness lifecycle race at the 375px second cycle: `toBeHidden()` allowed reopening before the closing Radix dialog had left the DOM. Commit `fd107b9` now requires the raw Sheet dialog count to reach zero before the next cycle while retaining all eight cycles and focus checks. Three supplied browser-only staging runs and one fresh-review run passed all eight cycles; the fresh run passed Playwright 1/1 in 12.6 seconds and scoped cleanup. No retry, explicit wait, skip, weakened assertion, mock, production change, or timeout inflation was introduced. Every failed run remains historical and makes no full-gauntlet PASS claim. |
+| VF-SEC-017 | Medium | RESOLVED | Human-graded behavioural navigation-overlay failure. `e6c88d9` strengthened the RED to four focused-control Escape cycles at each of 768px and 375px; failed candidate runs then proved both visible-open and repeated-cycle failures. Production GREEN `7f93715` separated Sheet and Tooltip state, `fd107b9` requires the raw Sheet dialog DOM count to reach zero before reopen, and `389bb58` unmounts TooltipContent while the Sheet owns focus so its closing dismissable layer cannot consume Escape. AppShell passed 11/11 and six independent browser-only staging runs passed all eight cycles each in 12.1-12.8 seconds. No explicit wait, retry, skip, assertion weakening, timeout inflation, or mock was introduced. Every failed run remains historical and makes no full-gauntlet PASS claim. |
+| VF-SEC-018 | Medium | RESOLVED | Human-graded behavioural checker-cleanup failure. A valid candidate failure proved the `uv run celery` wrapper could exit while its Celery child survived with PPID 1. RED `596b32c` requires a real backend-infrastructure layer followed by controlled frontend failure to leave zero tracked PID, unique-hostname worker, PostgreSQL, and Redis. GREEN `cf98c3a` directly execs the venv Celery process, assigns a unique hostname, and fails closed if its tracked PID survives. One-off restoration of the old launcher failed with `controlled candidate failure orphaned a Celery worker`; restored GREEN plus the complete packaged checker suite passed, and independent residue scans found zero worker or container. |
 
 ## Plan 01-15 fix revalidation
 
@@ -448,7 +482,7 @@ fresh repository scan matched the exact 23-row policy.
 
 | Check | Result |
 | --- | --- |
-| Canonical review digest, two consecutive immediate pre-write runs | PASS — exact `58d86b96b2c6f26cec82aff93987130dda68159a7dcff7c0cd3084630fc7b764` twice |
+| Canonical review digest, two consecutive immediate post-write runs | PASS — exact `446563d1b84a057edda7b10395303be6acd99d528473cc78ae00b65ca3acc62a` twice |
 | Canonical manifest resolution | PASS — 161 clean paths across every required review-mode category |
 | Exact equivalent-mutant gate | PASS — exact 891 killed plus the two named equivalent joins out of 893; extra/missing mappings, 890/3 statistics, broadened mapping, and divergent diff controls failed as required; byte-identical PostgreSQL SQL and `JOIN users ON true` negative control passed |
 | Equivalent-gate TDD and focused auth behavior | PASS — `3ac757c` removed the forbidden structural join monkeypatch and introduced RED; `9f28dd2` supplied GREEN; focused PostgreSQL auth/logout selection passed 7/7 |
@@ -461,10 +495,11 @@ fresh repository scan matched the exact 23-row policy.
 | Current PostgreSQL cookie/deactivation/logout selection | PASS — 23/23, including exact set/delete cookie scope, live user-global budget, four anonymous peer-bounded stale states, deactivation, family revocation, and idempotence |
 | Ruff lint and format | PASS — lint clean; 58 files already formatted |
 | Backend typing | PASS — mypy checked 36 source files |
-| Production changed-line coverage and cleanup | PASS — packaged Cobertura normalization, exact four-row exclusions, non-vacuity, and concrete partial-branch controls passed on the current source; the prior production-identity run passed backend 100% over 1003 lines and frontend 100% over 152 lines and left no gauntlet container or Celery worker. The current delta spans production `AppShell.tsx`, its unit coverage, and the strengthened E2E, and supplies no new RED evidence against cleanup, so the human-graded cleanup false positive is not reopened. |
+| Production changed-line coverage | HISTORICAL PASS — packaged Cobertura normalization, exact four-row exclusions, non-vacuity, and concrete partial-branch controls passed; the prior production-identity run passed backend 100% over 1003 lines and frontend 100% over 152 lines. The current source changed afterward and therefore makes no current complete coverage-layer PASS claim. |
 | Frontend AppShell unit focus | PASS — 11/11 on the current digest; the earlier complete 75/75 candidate unit run remains historical rather than a current full-gauntlet claim |
 | Frontend typecheck and production build | PASS — generated `ThrowOnError = false` result shape is accepted without broad casts; Vite transformed 1948 modules |
-| Responsive navigation regression | PASS — after the later official full run failed at the 375px second cycle because `toBeHidden()` did not prove Radix presence teardown, `fd107b9` requires the raw Sheet dialog to reach DOM count zero before reopening. Four cycles at each of 768px and 375px, focused-control Escape, `aria-current`, and trigger-focus restoration remain exact. Three supplied browser-only staging runs plus one fresh-review run passed all eight cycles; the fresh run passed Playwright 1/1 in 12.6 seconds and cleanup. AppShell passed 11/11. No explicit wait/retry/skip/assertion weakening/timeout inflation or production-source change. |
+| Responsive navigation regression | PASS — `fd107b9` requires raw Sheet dialog DOM teardown before reopening and `389bb58` unmounts TooltipContent while the Sheet owns focus. Four cycles at each of 768px and 375px, focused-control Escape, `aria-current`, and trigger-focus restoration remain exact. Six independent fresh-review browser-only staging runs passed all eight cycles each in 12.1-12.8 seconds with production build and cleanup; AppShell passed 11/11. No explicit wait/retry/skip/assertion weakening/timeout inflation or mock. |
+| Candidate failure lifecycle cleanup | PASS — `596b32c` RED -> `cf98c3a` GREEN. The real controlled backend-infrastructure then frontend-layer-failure probe and the complete packaged checker suite passed. The tracked Celery PID was gone, the unique worker hostname was absent from the process table, the exact PostgreSQL/Redis containers were absent, and a post-suite scan found zero matching residue. One-off old-launcher reversion failed with the exact orphan-worker diagnostic. |
 | Detect-secrets exact policy | PASS — 23/23 exact tuple match |
 | Detect-secrets true-key and unreviewed-tuple negative controls | PASS — both failed as required |
 | Backend dependency audit | PASS — no known vulnerability in published packages |
@@ -473,7 +508,7 @@ fresh repository scan matched the exact 23-row policy.
 | Historical post-fix candidate gauntlet | HISTORICAL PASS — all exact 13 candidate layers completed against final-mode digest `7068ee4e74bbb0e714baccb471b09c70f41fca211f2cc68d9eeeede72aa87851`; the source state was later invalidated and this is not a current PASS claim |
 | Backend complete mutation | PASS — 893 total, 891 killed, exactly the two documented SQLAlchemy join equivalents survived, and no other verdict class remained |
 | Historical independent closure check | HISTORICAL PASS — initial/candidate/current digests matched, exact layer sequence and terminal log marker reconciled, review digest was `14f4e2795d168b488a33a9fca1a8a8fe746d0ec9df29dd640ab883a98427f709`, and no scoped container or worker remained; current source differs |
-| Current post-fix candidate gauntlet | PENDING — no complete-gauntlet PASS is claimed for review digest `58d86b96b2c6f26cec82aff93987130dda68159a7dcff7c0cd3084630fc7b764` |
+| Current post-fix candidate gauntlet | PENDING — no complete-gauntlet PASS is claimed for review digest `446563d1b84a057edda7b10395303be6acd99d528473cc78ae00b65ca3acc62a` |
 
 ## Final disposition
 
