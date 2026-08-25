@@ -197,7 +197,9 @@ test("auth shell completes forced change, refresh, responsive navigation, and lo
             sheet.getByRole("button", { name: "Workspace overview" }),
           ).toHaveAttribute("aria-current", "page");
           await focusedControl.press("Escape");
-          await expect(sheet).toBeHidden();
+          await expect(
+            page.locator('[data-slot="sheet-content"][role="dialog"]'),
+          ).toHaveCount(0);
           await expect(navigationTrigger).toBeFocused();
         });
       }
