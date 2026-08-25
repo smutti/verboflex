@@ -11,6 +11,7 @@ include|tests|:(glob)frontend/src/**/*.test.ts
 include|tests|:(glob)frontend/src/**/*.test.tsx
 include|tests|:(glob)frontend/e2e/**/*.ts
 include|config|.env.example
+include|config|backend/.python-version
 include|config|backend/pyproject.toml
 include|config|frontend/components.json
 include|config|frontend/eslint.config.js
