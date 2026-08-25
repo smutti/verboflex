@@ -371,10 +371,20 @@ changed_line_coverage() {
 }
 
 backend_mutation_body() {
+  local mutation_results
   (cd "$BACKEND_ROOT" && uv run mutmut run)
-  (cd "$BACKEND_ROOT" && uv run mutmut results)
+  mutation_results=$(cd "$BACKEND_ROOT" && uv run mutmut results)
+  assert_no_surviving_mutants "$mutation_results"
   (cd "$BACKEND_ROOT" && uv run pytest -q tests/auth/test_access_tokens.py \
     tests/auth/test_passwords.py tests/core/test_config.py)
+}
+
+assert_no_surviving_mutants() {
+  local mutation_results=$1
+  if [ -n "$mutation_results" ]; then
+    printf '%s\n' "$mutation_results" >&2
+    die "surviving mutation verdicts are forbidden"
+  fi
 }
 
 mutation_properties() {
@@ -595,12 +605,20 @@ self_test_infra_lifecycle() (
   printf 'test infrastructure lifecycle: PASS\n'
 )
 
+self_test_mutation_verdict() {
+  assert_no_surviving_mutants ""
+  expect_control_failure mutation-survivor 'surviving mutation verdicts are forbidden' \
+    assert_no_surviving_mutants '    example.module.x_behavior__mutmut_1: survived'
+  printf 'mutation verdict negative control: PASS\n'
+}
+
 case "${1:-}" in
   --preflight) checker_preflight ;;
   --self-test-openapi-control) openapi_negative_control ;;
   --self-test-staging-layer) self_test_staging_layer ;;
   --self-test-candidate-contract) self_test_candidate_contract ;;
   --self-test-infra-lifecycle) self_test_infra_lifecycle ;;
+  --self-test-mutation-verdict) self_test_mutation_verdict ;;
   --post-fix-candidate) run_post_fix_candidate ;;
   -h|--help)
     printf 'usage: tools/gauntlet.sh [--preflight|--post-fix-candidate]\n'
