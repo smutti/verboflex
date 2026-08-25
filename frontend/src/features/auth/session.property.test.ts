@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { CurrentUserResponse, RoleName } from "../../api/client";
 import {
+  initialSessionState,
   transitionSession,
   type SessionEvent,
   type SessionState,
@@ -53,6 +54,11 @@ function assertAuthorityInvariant(state: SessionState) {
 }
 
 describe("session state properties", () => {
+  it("selects the exact initial state for automatic and manual restoration", () => {
+    expect(initialSessionState(true)).toEqual({ status: "checking_session" });
+    expect(initialSessionState(false)).toEqual({ status: "signed_out" });
+  });
+
   it("fails closed for restricted and authenticated events without valid authority", () => {
     expect(
       transitionSession(
