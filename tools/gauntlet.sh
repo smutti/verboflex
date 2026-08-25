@@ -279,11 +279,16 @@ packaged_checker_self_tests() {
   fi
   for checker in "${checkers[@]}"; do
     [ -x "$checker" ] || die "packaged checker self-test is not executable: $checker"
-    "$checker"
+    (
+      local nested_layer_record
+      nested_layer_record=$(mktemp)
+      trap 'rm -f "$nested_layer_record"' EXIT
+      VERBOFLEX_GAUNTLET_LAYER_FILE="$nested_layer_record" "$checker"
+    )
   done
 }
 
-self_test_packaged_checker_isolation() {
+self_test_packaged_checker_isolation() (
   local sentinel_file fake_checker
   sentinel_file=$(mktemp)
   fake_checker="${sentinel_file}.checker"
@@ -302,7 +307,7 @@ self_test_packaged_checker_isolation() {
   [ "$(cat "$sentinel_file")" = 'caller-owned-layer-record' ] \
     || die 'packaged checker self-tests modified the caller-owned layer record'
   printf 'packaged checker layer isolation: PASS\n'
-}
+)
 
 cleanup_test_infra() {
   local rc
