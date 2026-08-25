@@ -341,7 +341,10 @@ describe("session transitions", () => {
       await result.current.logout();
     });
     await act(async () => {
-      change.resolve({ data: undefined, error: undefined });
+      change.resolve({
+        data: undefined,
+        error: { detail: "Stale password-change failure" },
+      });
       await pendingChange;
     });
 
@@ -509,12 +512,24 @@ describe("session transitions", () => {
     expect(result.current.state).toEqual({ status: "signed_out" });
   });
 
-  it("ignores a refresh rejection invalidated by logout", async () => {
+  it("ignores a refresh rejection invalidated by a newer login", async () => {
     const refresh = deferred<Awaited<ReturnType<typeof refreshAccessToken>>>();
     refreshAccessTokenMock.mockReturnValue(
       refresh.promise as ReturnType<typeof refreshAccessToken>,
     );
-    logoutMock.mockResolvedValue({ data: undefined, error: undefined });
+    issueTokenMock.mockResolvedValue({
+      data: {
+        access_token: "newer-login-token",
+        expires_in: 900,
+        must_change_password: false,
+        token_type: "bearer",
+      },
+      error: undefined,
+    });
+    readCurrentUserMock.mockResolvedValue({
+      data: principal,
+      error: undefined,
+    });
     const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
     let pendingRestore!: Promise<void>;
 
@@ -522,14 +537,21 @@ describe("session transitions", () => {
       pendingRestore = result.current.restoreSession();
     });
     await act(async () => {
-      await result.current.logout();
+      await result.current.login({
+        email: "person@example.com",
+        password: "ordinary login phrase!",
+      });
     });
     await act(async () => {
       refresh.reject(new Error("stale refresh rejection"));
       await pendingRestore;
     });
 
-    expect(result.current.state).toEqual({ status: "signed_out" });
+    expect(result.current.state).toEqual({
+      status: "authenticated",
+      accessToken: "newer-login-token",
+      principal,
+    });
   });
 
   it("ignores a restored identity response invalidated by logout", async () => {
