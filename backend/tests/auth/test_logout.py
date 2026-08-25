@@ -31,7 +31,7 @@ async def post_logout(
 ) -> httpx.Response:
     """Call logout through its ambient refresh-cookie boundary."""
     headers = {"Origin": origin} if origin is not None else {}
-    cookies = {"__Secure-verboflex_refresh": token} if token is not None else None
+    cookies = {"__Host-verboflex_refresh": token} if token is not None else None
     from verboflex.main import app
 
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
@@ -77,9 +77,12 @@ def test_valid_logout_revokes_current_session_and_clears_cookie(
     assert response.status_code == 204
     assert response.content == b""
     set_cookie = response.headers["set-cookie"]
-    assert "__Secure-verboflex_refresh=" in set_cookie
+    assert "__Host-verboflex_refresh=" in set_cookie
     assert "Max-Age=0" in set_cookie
-    assert "Path=/api/v1/auth" in set_cookie
+    assert "Secure" in set_cookie
+    assert "; Path=/;" in set_cookie
+    assert "Domain=" not in set_cookie
+    assert "Path=/api/v1/auth" not in set_cookie
     assert "HttpOnly" in set_cookie
     assert "SameSite=lax" in set_cookie
     with refresh_session_factory() as session:
@@ -94,9 +97,12 @@ def test_valid_logout_revokes_current_session_and_clears_cookie(
 def assert_cookie_is_cleared(response: httpx.Response) -> None:
     """Assert the one approved deletion path and security attributes."""
     set_cookie = response.headers["set-cookie"]
-    assert "__Secure-verboflex_refresh=" in set_cookie
+    assert "__Host-verboflex_refresh=" in set_cookie
     assert "Max-Age=0" in set_cookie
-    assert "Path=/api/v1/auth" in set_cookie
+    assert "Secure" in set_cookie
+    assert "; Path=/;" in set_cookie
+    assert "Domain=" not in set_cookie
+    assert "Path=/api/v1/auth" not in set_cookie
     assert "HttpOnly" in set_cookie
     assert "SameSite=lax" in set_cookie
 
