@@ -199,6 +199,36 @@ describe("authenticated application shell", () => {
     expect(readSystemStatusMock).toHaveBeenCalledTimes(2);
   });
 
+  it("sanitizes rejected status requests and keeps a failed retry recoverable", async () => {
+    readSystemStatusMock
+      .mockRejectedValueOnce(new Error("postgresql://internal-primary"))
+      .mockRejectedValueOnce(new Error("redis://internal-cache"));
+    const user = userEvent.setup();
+
+    render(
+      <AppShell
+        accessToken="ordinary-server-token"
+        onLogout={vi.fn()}
+        principal={principal}
+      />,
+    );
+
+    const initialAlert = await screen.findByRole("alert");
+    expect(initialAlert).toHaveTextContent(
+      "We could not reach the API. Check that the backend is running, then retry the connection.",
+    );
+    expect(initialAlert).not.toHaveTextContent("internal-primary");
+
+    await user.click(screen.getByRole("button", { name: "Retry connection" }));
+
+    const retryAlert = await screen.findByRole("alert");
+    expect(retryAlert).toHaveTextContent(
+      "We could not reach the API. Check that the backend is running, then retry the connection.",
+    );
+    expect(retryAlert).not.toHaveTextContent("internal-cache");
+    expect(readSystemStatusMock).toHaveBeenCalledTimes(2);
+  });
+
   it("offers the exact reversible logout action through session authority", async () => {
     const onLogout = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
