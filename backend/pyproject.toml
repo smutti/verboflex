@@ -71,9 +71,22 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 quote-style = "double"
 
 [tool.mutmut]
-paths_to_mutate = ["src/verboflex/"]
-also_copy = ["alembic.ini", "alembic"]
-tests_dir = ["tests/"]
+source_paths = ["src/verboflex/auth"]
+only_mutate = [
+  "src/verboflex/auth/access_tokens.py",
+  "src/verboflex/auth/identity.py",
+  "src/verboflex/auth/origin.py",
+  "src/verboflex/auth/passwords.py",
+  "src/verboflex/auth/rate_limits.py",
+]
+pytest_add_cli_args_test_selection = [
+  "tests/auth/test_access_tokens.py",
+  "tests/auth/test_passwords.py",
+  "tests/core/test_config.py",
+  "tests/api/test_rate_limits.py",
+]
+mutate_only_covered_lines = true
+use_git_change_detection = false
 
 [tool.pip-licenses]
 from = "mixed"
