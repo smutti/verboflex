@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, render, renderHook, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -64,6 +64,27 @@ describe("session transitions", () => {
     const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
 
     expect(result.current.state).toEqual({ status: "signed_out" });
+  });
+
+  it("starts restoration when the provider option changes after mount", async () => {
+    refreshAccessTokenMock.mockResolvedValue({
+      data: undefined,
+      error: { detail: "No session" },
+    });
+    const view = render(
+      <SessionProvider restoreOnMount={false}>
+        <div>session child</div>
+      </SessionProvider>,
+    );
+    expect(refreshAccessTokenMock).not.toHaveBeenCalled();
+
+    view.rerender(
+      <SessionProvider restoreOnMount>
+        <div>session child</div>
+      </SessionProvider>,
+    );
+
+    await waitFor(() => expect(refreshAccessTokenMock).toHaveBeenCalledOnce());
   });
 
   it("rejects session access outside the provider boundary", () => {
