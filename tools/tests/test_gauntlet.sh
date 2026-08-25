@@ -42,3 +42,6 @@ done
 "$repo_root/tools/gauntlet.sh" --self-test-candidate-contract >"$output_file" 2>&1
 grep -Fq 'post-fix candidate contract: PASS' "$output_file"
 grep -Fq -- '--post-fix-candidate' "$repo_root/tools/gauntlet.sh"
+
+"$repo_root/tools/gauntlet.sh" --self-test-infra-lifecycle >"$output_file" 2>&1
+grep -Fq 'test infrastructure lifecycle: PASS' "$output_file"
