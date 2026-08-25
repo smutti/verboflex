@@ -249,9 +249,7 @@ def test_refresh_rate_limit_key_is_stable_for_family_and_bounded_for_invalid_tok
     create_refresh_authority(refresh_session_factory)
     redis_client = configure_dependencies(refresh_session_factory)
     with refresh_session_factory() as session:
-        assert refresh_service.refresh_rate_limit_identity(session, REFRESH_TOKEN) == str(
-            FAMILY_ID
-        )
+        assert refresh_service.refresh_rate_limit_identity(session, REFRESH_TOKEN) == str(FAMILY_ID)
         assert (
             refresh_service.refresh_rate_limit_identity(session, "B" * 43)
             == refresh_service.INVALID_REFRESH_RATE_IDENTITY

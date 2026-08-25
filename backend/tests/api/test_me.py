@@ -187,9 +187,7 @@ def test_principal_service_denials_preserve_exact_internal_semantics(
             user_id=USER_ID,
             now=now,
         )
-    assert mismatched_session_error.value.args == (
-        principal_service.INVALID_PRINCIPAL_MESSAGE,
-    )
+    assert mismatched_session_error.value.args == (principal_service.INVALID_PRINCIPAL_MESSAGE,)
 
     dead_session = AuthSession(
         id=SESSION_ID,
