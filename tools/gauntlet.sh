@@ -666,17 +666,17 @@ src/verboflex/auth/password_change.py|26|Secret Keyword|3b8788b039ebfe732e34b976
 src/verboflex/auth/password_change.py|55|Secret Keyword|42213dc7f2ef60d5d6744c00f091a46b2161dda5
 src/verboflex/auth/principal.py|28|Secret Keyword|3591079abcc3407a2c2ed76661ec29a7ec0d1cb8
 src/verboflex/auth/principal.py|29|Secret Keyword|82bde2d99285779d940c36fdcdb9c3e9afa40d2f
-src/verboflex/auth/refresh_sessions.py|19|Base64 High Entropy String|e582429052cdb908833560f6f7582d232de37c4d
+src/verboflex/auth/refresh_sessions.py|20|Base64 High Entropy String|e582429052cdb908833560f6f7582d232de37c4d
 tests/api/test_rate_limits.py|189|Secret Keyword|5ac066cfb3bcf9973a0b40daeb7f5606103c1bd3
 tests/api/test_system_status.py|109|Basic Auth Credentials|e5e9fa1ba31ecd1ae84f75caaa474f3a663f05f4
-tests/auth/test_bootstrap_admin.py|136|Secret Keyword|985a4d67132193977275067aca18c13f8c8371c8
-tests/auth/test_bootstrap_admin.py|147|Secret Keyword|d36b093dec485bfd20ef697ca6c1ad79e1ac9210
-tests/auth/test_bootstrap_admin.py|235|Secret Keyword|3da24dfed48aa2721da14e6f79e588440b934675
-tests/auth/test_bootstrap_admin.py|295|Secret Keyword|028e59d8204d08fecd6aad12434b872fe4319f6d
-tests/auth/test_bootstrap_admin.py|410|Secret Keyword|5d9dec21ffdbb45c64f0ea2b1abf3b25c2afc728
-tests/auth/test_bootstrap_admin.py|445|Secret Keyword|1123e04e3b43d460543f1b0bf94e67a0a636b2cc
-tests/auth/test_bootstrap_admin.py|548|Secret Keyword|cdd076c21ce35f40d40b6c16d12bd40876050a6f
-tests/auth/test_bootstrap_admin.py|626|Secret Keyword|18468712bc6eede8cb7adf8932b073bf56773a11
+tests/auth/test_bootstrap_admin.py|137|Secret Keyword|985a4d67132193977275067aca18c13f8c8371c8
+tests/auth/test_bootstrap_admin.py|148|Secret Keyword|d36b093dec485bfd20ef697ca6c1ad79e1ac9210
+tests/auth/test_bootstrap_admin.py|236|Secret Keyword|3da24dfed48aa2721da14e6f79e588440b934675
+tests/auth/test_bootstrap_admin.py|296|Secret Keyword|028e59d8204d08fecd6aad12434b872fe4319f6d
+tests/auth/test_bootstrap_admin.py|411|Secret Keyword|5d9dec21ffdbb45c64f0ea2b1abf3b25c2afc728
+tests/auth/test_bootstrap_admin.py|586|Secret Keyword|1123e04e3b43d460543f1b0bf94e67a0a636b2cc
+tests/auth/test_bootstrap_admin.py|689|Secret Keyword|cdd076c21ce35f40d40b6c16d12bd40876050a6f
+tests/auth/test_bootstrap_admin.py|767|Secret Keyword|18468712bc6eede8cb7adf8932b073bf56773a11
 tests/auth/test_login.py|45|Secret Keyword|e7e0ea25217b715c566268c0607e48acef3b9ccf
 tests/auth/test_password_change.py|188|Secret Keyword|a95b347855753c3b784594a28fa00ec116430d1c
 tests/auth/test_password_change.py|36|Secret Keyword|bc27f09f74d82f81b559a27a26bd03f580960364
