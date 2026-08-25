@@ -191,6 +191,118 @@ def test_wrong_current_password_is_exact_400_and_atomic(
     assert durable_password_state(refresh_session_factory) == before
 
 
+def test_password_change_service_denials_preserve_exact_internal_semantics(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Keep bearer, durable-user, session, and current-password denials exact."""
+    with pytest.raises(password_change_service.InvalidPasswordChangePrincipal) as missing_error:
+        password_change_service.decode_password_change_candidate(
+            None,
+            settings=refresh_settings(),
+        )
+    assert missing_error.value.args == (
+        password_change_service.INVALID_PASSWORD_CHANGE_PRINCIPAL_MESSAGE,
+    )
+
+    with pytest.raises(password_change_service.InvalidPasswordChangePrincipal) as invalid_error:
+        password_change_service.decode_password_change_candidate(
+            "not-a-token",
+            settings=refresh_settings(),
+        )
+    assert invalid_error.value.args == (
+        password_change_service.INVALID_PASSWORD_CHANGE_PRINCIPAL_MESSAGE,
+    )
+
+    restricted, ordinary = create_password_change_authority(refresh_session_factory)
+    restricted_candidate = password_change_service.decode_password_change_candidate(
+        restricted,
+        settings=refresh_settings(),
+    )
+    ordinary_candidate = password_change_service.decode_password_change_candidate(
+        ordinary,
+        settings=refresh_settings(),
+    )
+
+    with refresh_session_factory.begin() as session:
+        session.get_one(User, USER_ID).is_active = False
+    with (
+        refresh_session_factory() as session,
+        pytest.raises(password_change_service.InvalidPasswordChangePrincipal) as inactive_error,
+    ):
+        password_change_service._load_password_change_user(
+            session,
+            restricted_candidate.claims,
+        )
+    assert inactive_error.value.args == (
+        password_change_service.INVALID_PASSWORD_CHANGE_PRINCIPAL_MESSAGE,
+    )
+
+    with refresh_session_factory.begin() as session:
+        user = session.get_one(User, USER_ID)
+        user.is_active = True
+        user.must_change_password = False
+    with (
+        refresh_session_factory() as session,
+        pytest.raises(password_change_service.InvalidPasswordChangePrincipal) as forced_flag_error,
+    ):
+        password_change_service._load_password_change_user(
+            session,
+            restricted_candidate.claims,
+        )
+    assert forced_flag_error.value.args == (
+        password_change_service.INVALID_PASSWORD_CHANGE_PRINCIPAL_MESSAGE,
+    )
+
+    changed_at = datetime.now(UTC)
+    with refresh_session_factory() as session:
+        missing_session_claims = password_change_service.AccessTokenClaims(
+            user_id=USER_ID,
+            session_id=UNKNOWN_SESSION_ID,
+            issued_at=ordinary_candidate.claims.issued_at,
+            expires_at=ordinary_candidate.claims.expires_at,
+            purpose="access",
+            token_version=ordinary_candidate.claims.token_version,
+        )
+        with pytest.raises(
+            password_change_service.InvalidPasswordChangePrincipal
+        ) as missing_session_error:
+            password_change_service._require_access_session(
+                session,
+                missing_session_claims,
+                user_id=USER_ID,
+                changed_at=changed_at,
+            )
+    assert missing_session_error.value.args == (
+        password_change_service.INVALID_PASSWORD_CHANGE_PRINCIPAL_MESSAGE,
+    )
+
+    with refresh_session_factory.begin() as session:
+        session.get_one(AuthSession, SESSION_ID).revoked_at = changed_at
+    with refresh_session_factory() as session:
+        with pytest.raises(
+            password_change_service.InvalidPasswordChangePrincipal
+        ) as dead_session_error:
+            password_change_service._require_access_session(
+                session,
+                ordinary_candidate.claims,
+                user_id=USER_ID,
+                changed_at=changed_at,
+            )
+        user = session.get_one(User, USER_ID)
+        with pytest.raises(password_change_service.IncorrectCurrentPassword) as password_error:
+            password_change_service._validate_new_password(
+                user,
+                "wrong current phrase!",
+                NEW_PASSWORD,
+            )
+    assert dead_session_error.value.args == (
+        password_change_service.INVALID_PASSWORD_CHANGE_PRINCIPAL_MESSAGE,
+    )
+    assert password_error.value.args == (
+        password_change_service.INCORRECT_CURRENT_PASSWORD_MESSAGE,
+    )
+
+
 @pytest.mark.parametrize(
     ("new_password", "expected_detail"),
     [
