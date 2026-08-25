@@ -164,6 +164,18 @@ def test_export_entrypoint_is_exercised_in_process() -> None:
     assert json.loads(entrypoint_output.getvalue()) == app.openapi()
 
 
+def test_authentication_credential_fields_have_explicit_maximum_lengths() -> None:
+    """Publish the exact input bounds enforced before identity or Argon2 work."""
+    schemas = app.openapi()["components"]["schemas"]
+    login_fields = schemas["Body_issue_token"]["properties"]
+    change_fields = schemas["ChangePasswordRequest"]["properties"]
+
+    assert login_fields["username"]["maxLength"] == 320
+    assert login_fields["password"]["maxLength"] == 128
+    assert change_fields["current_password"]["maxLength"] == 128
+    assert change_fields["new_password"]["maxLength"] == 128
+
+
 def _handwritten_api_type_declarations(source: str) -> set[str]:
     generated_names = {
         "AccessTokenResponse",

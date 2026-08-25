@@ -194,6 +194,37 @@ def test_wrong_current_password_is_exact_400_and_atomic(
     assert durable_password_state(refresh_session_factory) == before
 
 
+@pytest.mark.parametrize(
+    ("current_password", "new_password"),
+    [
+        ("c" * 129, NEW_PASSWORD),
+        (CURRENT_PASSWORD, "n" * 129),
+    ],
+)
+def test_overlong_password_change_fields_are_rejected_before_rate_or_argon2(
+    refresh_session_factory: sessionmaker[Session],
+    current_password: str,
+    new_password: str,
+) -> None:
+    """Reject oversized JSON credentials before rate-limit and hashing services."""
+    restricted, _ordinary = create_password_change_authority(refresh_session_factory)
+    before = durable_password_state(refresh_session_factory)
+    redis_client = FakeRedis(result=[1, 60])
+    configure_dependencies(refresh_session_factory, redis_client)
+
+    response = asyncio.run(
+        post_change_password(
+            restricted,
+            current_password=current_password,
+            new_password=new_password,
+        )
+    )
+
+    assert response.status_code == 422
+    assert redis_client.calls == []
+    assert durable_password_state(refresh_session_factory) == before
+
+
 def test_password_change_service_denials_preserve_exact_internal_semantics(
     refresh_session_factory: sessionmaker[Session],
 ) -> None:

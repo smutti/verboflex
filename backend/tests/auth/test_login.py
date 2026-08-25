@@ -224,6 +224,28 @@ def test_temporary_login_creates_only_password_change_authority(
     assert claims.session_id is None
 
 
+@pytest.mark.parametrize(
+    ("username", "password"),
+    [
+        ("u" * 321, VALID_PASSWORD),
+        ("person@example.com", "p" * 129),
+    ],
+)
+def test_overlong_login_credentials_are_rejected_before_rate_or_hash_work(
+    login_session_factory: sessionmaker[Session],
+    username: str,
+    password: str,
+) -> None:
+    """Bound form decoding before Redis, identity lookup, or Argon2 verification."""
+    redis_client = FakeRedis()
+    configure_dependencies(login_session_factory, redis_client)
+
+    response = asyncio.run(post_token(username, password))
+
+    assert response.status_code == 422
+    assert redis_client.calls == []
+
+
 def test_ordinary_login_requests_exact_refresh_token_entropy(
     login_session_factory: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,
