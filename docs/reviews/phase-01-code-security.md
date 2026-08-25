@@ -1,13 +1,13 @@
 # Phase 1 Fresh-Context Code and Security Review
 
-- Review-status: OPEN
+- Review-status: CLOSED
 - Open-critical-high: 0
-- Full-gauntlet-status: PENDING
+- Full-gauntlet-status: PASS
 - Reviewed-source-digest: `d6a37b36642dfbe05f7dbc8eef2058aecaa1a46c84623d2656c0f19b2930303a`
 - Review-date: 2026-08-25
 - Review-mode: fresh-context independent goal-backward and OWASP ASVS-aligned source review
 - Candidate-verdict: PASS_FOR_POST_FIX_GAUNTLET
-- Closure-verdict: PENDING
+- Closure-verdict: PASS
 - Critical: 0
 - High: 0
 - Medium: 0
@@ -626,3 +626,59 @@ VF-SEC-007 remains unchanged as the sole open Low development-only debt.
 The next admissible result is the complete source-bound post-fix candidate
 gauntlet. Until it completes and is independently reconciled, no current
 full-gauntlet or closure PASS is claimed.
+
+## Closure — deterministic JWT signature-byte tamper candidate
+
+The immediately preceding `OPEN/PENDING` disposition is preserved as the exact
+pre-gauntlet candidate state. The earlier official
+`tampered-token expected HTTP 401, got 200` failure also remains historical: it
+contributes no PASS and retains the human decision that the defect was a
+behavioural Medium in the adversarial harness, resolved by the source-bound
+`112af30` -> `c1fb597` RED/GREEN cycle without production-auth changes.
+
+The complete post-fix candidate gauntlet exited zero. Closure reconciliation
+used the authorized artifacts in
+`/tmp/verboflex-phase01-round2.8TTofh/tamper-candidate.W7d2wG`: `candidate.log`,
+`candidate.layers`, `initial.digest`, `candidate.digest`, and `exit.status`.
+The external initial digest, recorded candidate digest, and independently
+recomputed immediate pre-closure final-mode digest were byte-identical:
+`162519a6728d315411144f52029b0030e0c9b62f79d3e4f065916a069fffdfac`.
+Two consecutive review-mode computations remained byte-identical at
+`d6a37b36642dfbe05f7dbc8eef2058aecaa1a46c84623d2656c0f19b2930303a`.
+
+The layer artifact contained exactly 13 entries and matched the log headings in
+the required order: source-state-candidate, checker-self-tests, backend-tests,
+frontend-tests-browser, types, lint-format-complexity,
+changed-line-coverage, mutation-properties, migration-rehearsal, openapi-drift,
+supply-chain-secrets, staging-adversarial-smoke, and candidate-source-state.
+The last non-empty log line was exactly
+`PHASE 1 POST-FIX CANDIDATE VALIDATION: PASS (NON-FINAL)`.
+
+The reconciled log records backend and frontend changed-line coverage at 100%
+over 1003 and 157 lines respectively. Backend mutation completed 893/893 with
+891 killed and only the two documented equivalent joins surviving; the exact
+SQL equivalence proof passed, and the property-only run killed 199/199.
+Frontend mutation killed 153/153 in the complete run and 37/37 in the
+property-only run, both at 100.00% with no survivor, timeout, uncovered mutant,
+or error. The browser-only layer and complete staging layer each passed
+Playwright 1/1 in 12.6 seconds. The complete staging layer also emitted
+`adversarial auth: PASS` and `real staging smoke: PASS`.
+
+Independent post-run inspection found no process or container matching either
+exact smoke project used by the candidate and no `verboflex-gauntlet-*` worker
+or container. No source changed across the candidate run, no reconciliation
+mismatch or new material finding was found, and VF-SEC-007 remains deliberately
+open as the sole Low development-only debt.
+
+### Closure disposition
+
+- Critical / High / Medium / Low: **0 / 0 / 0 / 1**
+- Open Critical/High: **0**
+- Candidate verdict: **PASS_FOR_POST_FIX_GAUNTLET**
+- Closure verdict: **PASS**
+- Full-gauntlet status: **PASS**
+- Review status: **CLOSED**
+
+This closure applies only to the exact reviewed source digest above. It does not
+close VF-SEC-007 or substitute for the release process's future live
+deployment/TLS and ship-time dependency evidence.
