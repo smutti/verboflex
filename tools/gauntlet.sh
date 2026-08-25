@@ -428,6 +428,8 @@ staging_adversarial_smoke() {
 
 source_state_layer() {
   local digest
+  "$SOURCE_STATE" --verify-review-closed
+  "$SOURCE_STATE" --verify-review-source
   digest=$($SOURCE_STATE --digest)
   [ "${#digest}" -eq 64 ] || die "initial source digest is malformed"
   printf '%s\n' "$digest" >"$DIGEST_RECORD"

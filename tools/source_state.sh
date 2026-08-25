@@ -179,10 +179,39 @@ extract_markdown_value() {
   local file=$1
   local label=$2
   local value
-  value=$(sed -n "s/^- ${label}: \\`\\([0-9a-f][0-9a-f]*\\)\\`$/\\1/p" "$file")
+  value=$(sed -n 's/^- '"$label"': `\([0-9a-f][0-9a-f]*\)`$/\1/p' "$file")
   [ "$(printf '%s\n' "$value" | sed '/^$/d' | wc -l | tr -d ' ')" = "1" ] \
     || die "expected exactly one $label value in ${file#$DEFAULT_ROOT/}"
   printf '%s\n' "$value"
+}
+
+extract_review_value() {
+  local file=$1
+  local label=$2
+  local value
+  value=$(sed -n "s/^- ${label}: \(.*\)$/\1/p" "$file")
+  [ "$(printf '%s\n' "$value" | sed '/^$/d' | wc -l | tr -d ' ')" = "1" ] \
+    || die "expected exactly one $label value in ${file#$DEFAULT_ROOT/}"
+  printf '%s\n' "$value"
+}
+
+verify_review_closed_contract() {
+  local review_file=$1
+  local status_value open_count
+  [ -f "$review_file" ] || die "review artifact is missing: ${review_file#$DEFAULT_ROOT/}"
+  status_value=$(extract_review_value "$review_file" 'Review-status')
+  open_count=$(extract_review_value "$review_file" 'Open-critical-high')
+  [ "$status_value" = "CLOSED" ] || die "review status is not CLOSED"
+  [ "$open_count" = "0" ] || die "review has unresolved critical/high findings"
+}
+
+verify_review_contract() {
+  local review_file=$1
+  local actual_digest=$2
+  local reviewed_digest
+  verify_review_closed_contract "$review_file"
+  reviewed_digest=$(extract_markdown_value "$review_file" 'Reviewed-source-digest')
+  verify_digest_value "$reviewed_digest" "$actual_digest"
 }
 
 expect_failure() {
@@ -258,6 +287,7 @@ self_test_manifest() {
     verify_review_contract "$fixture/docs/reviews/phase-01-code-security.md" "$digest"
   expect_failure 'review artifact is missing' \
     verify_review_contract "$fixture/missing-review.md" "$digest"
+  git -C "$fixture" restore -- docs/reviews/phase-01-code-security.md
 
   {
     cat "$manifest"
@@ -327,17 +357,11 @@ case "$command" in
     self_test_manifest
     ;;
   --verify-review-closed)
-    [ -f "$DEFAULT_ROOT/$REVIEW_PATH" ] || die "review artifact is missing: $REVIEW_PATH"
-    grep -Fxq -- '- Review-status: CLOSED' "$DEFAULT_ROOT/$REVIEW_PATH" \
-      || die "review status is not CLOSED"
-    grep -Fxq -- '- Open-critical-high: 0' "$DEFAULT_ROOT/$REVIEW_PATH" \
-      || die "review has unresolved critical/high findings"
+    verify_review_closed_contract "$DEFAULT_ROOT/$REVIEW_PATH"
     ;;
   --verify-review-source)
-    [ -f "$DEFAULT_ROOT/$REVIEW_PATH" ] || die "review artifact is missing: $REVIEW_PATH"
-    expected=$(extract_markdown_value "$DEFAULT_ROOT/$REVIEW_PATH" 'Reviewed-source-digest')
     actual=$(compute_digest "$DEFAULT_ROOT" "$DEFAULT_MANIFEST" review)
-    verify_digest_value "$expected" "$actual"
+    verify_review_contract "$DEFAULT_ROOT/$REVIEW_PATH" "$actual"
     ;;
   --verify-final-before-report)
     [ -f "$DIGEST_RECORD" ] || die "gauntlet digest record is missing: $DIGEST_RECORD"
