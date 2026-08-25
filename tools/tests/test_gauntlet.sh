@@ -48,3 +48,6 @@ grep -Fq -- '--post-fix-candidate' "$repo_root/tools/gauntlet.sh"
 
 "$repo_root/tools/gauntlet.sh" --self-test-infra-lifecycle >"$output_file" 2>&1
 grep -Fq 'test infrastructure lifecycle: PASS' "$output_file"
+
+"$repo_root/tools/gauntlet.sh" --self-test-mutation-verdict >"$output_file" 2>&1
+grep -Fq 'mutation verdict negative control: PASS' "$output_file"
