@@ -3,277 +3,149 @@
 - Review-status: OPEN
 - Open-critical-high: 0
 - Full-gauntlet-status: PENDING
-- Reviewed-source-digest: `fcb8b0839fb83f57d1934d85f4aa302480b2134c7ef0dfb788de50bac4929612`
+- Reviewed-source-digest: `94a75a85d862e9bcabd96fed8cf91006853f734db5d165ca09148a98e7dd82c0`
 - Review-date: 2026-08-25
 - Reviewer: independent fresh-context Phase 1 code/security reviewer
 - Critical: 0
 - High: 0
-- Medium: 2
+- Medium: 1
 - Low: 1
 
-## Candidate status
+## Gate conclusion
 
-This is a post-fix review **candidate**, not a closed review. No critical or high
-finding remains open in the reviewed source state, but the complete post-fix
-candidate gauntlet has **not** been executed. `Full-gauntlet-status` therefore
-remains `PENDING`, `Review-status` remains `OPEN`, and this artifact makes no
-full-gauntlet PASS claim. The final review may become `CLOSED` only after the
-source-bound candidate workflow completes and any subsequently changed source is
-reviewed under its new digest.
+This artifact is an **OPEN candidate**, not a closed review. The complete
+`tools/gauntlet.sh --post-fix-candidate` run has **not** been executed against this
+candidate, so `Full-gauntlet-status` remains `PENDING` and no full-gauntlet PASS is
+claimed. In addition, `VF-SEC-008` remains an open medium finding after the canonical
+cookie contract was tightened. The review must not become `CLOSED` until that source
+change is made, a new digest is computed, a fresh review accepts it, and the complete
+source-bound gauntlet succeeds.
 
-## Fresh-context method and source identity
+## Fresh-context scope and method
 
-The independent review was completed before the previous contents of this artifact
+The independent analysis was completed before the previous contents of this artifact
 were read. Initial context was limited to the approved Phase 1 SPEC,
-`tools/source_manifest.txt`, the exact review-mode source tree resolved from that
-manifest, and summaries `01-02-SUMMARY.md` through `01-13-SUMMARY.md`. Builder
-conversations were not consulted. Only after independent correctness, regression,
-security-boundary, dependency, verifier, and ASVS analysis was complete was the
-previous artifact opened to reconcile `VF-SEC-001` through `VF-SEC-007`.
+`tools/source_manifest.txt`, the exact review-mode source tree, and summaries
+`01-02-SUMMARY.md` through `01-13-SUMMARY.md`. Builder conversations were not read.
+Only afterward was the previous artifact opened to reconcile `VF-SEC-001` through
+`VF-SEC-008`.
 
-The required independent digest check reproduced the expected candidate identity:
+`tools/source_state.sh --review-digest` reproduced the expected clean source identity:
 
 ```text
-$ tools/source_state.sh --review-digest
-fcb8b0839fb83f57d1934d85f4aa302480b2134c7ef0dfb788de50bac4929612
+94a75a85d862e9bcabd96fed8cf91006853f734db5d165ca09148a98e7dd82c0
 ```
 
-Review mode resolved 145 unique paths and 33,669 lines. Category membership (a
-path may belong to both implementation and tests) was:
-
-| Category | Resolved entries |
-| --- | ---: |
-| Implementation | 88 |
-| Tests | 33 |
-| Configuration | 18 |
-| Lockfiles | 3 |
-| Migrations | 4 |
-| Verifier scripts | 9 |
-
-The review artifact is deliberately excluded from the review digest. The reviewed
-tree covered the FastAPI routes and services, JWT and refresh-session authority,
-password change and bootstrap flows, database models/migration, Celery/Redis
-boundaries, React session state and generated API client, frontend unit/E2E tests,
-Compose/Docker/nginx configuration, lockfiles, and all verifier scripts.
-
-## Review approach
-
-The review traced each of the seven Phase 1 endpoints through request validation,
-authentication, durable authority, persistence, response/cookie behavior, and
-frontend consumers. It inspected forced-password-change restrictions, access-token
-claim validation, refresh rotation and replay-family revocation, logout and
-password-change invalidation, transaction/concurrency behavior, Redis fail-closed
-rate limits, exact Origin enforcement, CORS, data/role boundaries, generated
-OpenAPI drift, container exposure, cleanup ownership, source/digest enforcement,
-and backend/frontend mutation scope and verdict handling.
-
-Focused controls executed during review were limited to non-final diagnostics:
-
-- `tools/source_state.sh --review-digest` matched the expected digest.
-- The source-manifest, infrastructure-lifecycle, mutation-verdict, and candidate-
-  contract self-tests passed.
-- `uv lock --check` resolved 111 packages and found the Python lock current.
-- `pip-audit` found no known third-party Python vulnerabilities and skipped only
-  the local non-PyPI `verboflex` project.
-- `npm audit --omit=dev --audit-level=low` found zero runtime vulnerabilities.
-- The full npm audit reported the development-only records described in
-  `VF-SEC-007`.
-
-These focused results are not a substitute for
-`tools/gauntlet.sh --post-fix-candidate`, which was not run by this reviewer.
+Review mode resolved 146 unique paths and 33,773 lines: 88 implementation entries,
+33 test entries, 18 configuration entries, 3 lockfiles, 4 migration entries, 9 verifier
+scripts, and the source-bound deployment contract. The review traced correctness,
+authentication and authorization, JWT and refresh-session lifecycle, rate limits,
+Origin/CORS behavior, persistence and concurrency, frontend memory-only authority,
+generated API contracts, container/service boundaries, dependency locks, and verifier
+sensitivity. The review artifact itself is excluded from the review digest by design.
 
 ## OWASP ASVS 5.0.0 Level 1 mapping
 
-All 70 Level 1 requirements in the official
-[OWASP ASVS 5.0.0 release](https://github.com/OWASP/ASVS/tree/v5.0.0)
-were screened for applicability to the Phase 1 slice.
+All 70 Level 1 requirements from the official OWASP ASVS 5.0.0 release were screened
+for the Phase 1 slice.
 
-| ASVS L1 area | Phase 1 application | Review result |
+| Area | Applicable controls | Result |
 | --- | --- | --- |
-| `V1.2.1`-`V1.2.5`, `V1.3.1`-`V1.3.2` | Context-safe React rendering, JSON responses, ORM queries, no dynamic execution | PASS for the current inputs and output sinks |
-| `V1.5.1`, `V5.2.1`-`V5.3.2` | XML/file upload and file-path handling | Not applicable to the Phase 1 platform-foundation endpoints |
-| `V2.1.1`, `V2.2.1`-`V2.3.1` | Pydantic/service validation and ordered auth flows | PASS; security decisions are enforced server-side |
-| `V3.2.1`-`V3.2.2` | Browser response context and text rendering | PASS for current JSON/static-text surfaces; external-edge hardening remains coupled to `VF-SEC-006` |
-| `V3.3.1` | Secure cookie naming and attributes | PARTIAL: Secure/HttpOnly/SameSite/path are enforced, but the mandatory prefix is missing (`VF-SEC-008`) |
-| `V3.4.1`-`V3.5.3` | HSTS, CORS, CSRF/origin, and safe HTTP methods | CORS/origin/method controls PASS; HSTS evidence remains OPEN (`VF-SEC-006`) |
-| `V4.1.1` | Correct API media types and contract drift | PASS; deterministic OpenAPI negative control is source-changing and restoration-checked |
-| `V4.4.1` | WebSocket TLS | Not applicable; no WebSocket surface exists |
-| `V6.1.1`, `V6.2.1`-`V6.4.2` | Password policy/change, exact verification, masking, anti-automation, account defaults | PASS against the approved Phase 1 password/rate-limit contract; no registration, hint, activation-code, or secret-question flow exists |
-| `V7.2.1`-`V7.4.2` | Backend session verification, rotation, expiry, replay, and termination | PASS; durable token-version and refresh-family invalidation are backend-authoritative |
-| `V8.1.1`-`V8.3.1` | Function/data authorization | PASS for the current status/auth slice; role authority is resolved by the backend |
-| `V9.1.1`-`V9.2.1` | JWT signature, algorithm/key source, and time claims | PASS with strict claim and algorithm allowlisting |
-| `V10.4.1`-`V10.4.3` | Redirect URI and authorization-code behavior | Not applicable; Phase 1 has no redirect/code flow |
-| `V10.4.4` | Grant restriction | Documented design deviation: the approved Phase 1 SPEC mandates the first-party OAuth2 password-token flow; no broader authorization-server grant surface is exposed |
-| `V10.4.5` | Refresh replay mitigation | PASS; one-time rotation and family revocation are transactionally enforced and concurrency-tested |
-| `V11.3.1`-`V11.4.1` | Approved cryptography/hash primitives | PASS for Argon2, HMAC/JWT, SHA-256 token hashing, and CSPRNG tokens |
-| `V12.1.1`, `V12.2.1`-`V12.2.2` | TLS versions, HTTPS-only external service, trusted certificates | OPEN at the external ingress evidence boundary (`VF-SEC-006`) |
-| `V13.4.1` | Source-control metadata exposure | PASS for reviewed runtime images/configuration |
-| `V14.2.1`, `V14.3.1` | Secret transport and client-side auth-data clearing | PASS; tokens are not placed in URLs/Web Storage and client auth state clears on termination/failure |
-| `V15.1.1`-`V15.3.1` | Component remediation, current dependencies, response minimization | Runtime audits PASS; dev-tooling debt has the explicit `VF-SEC-007` disposition |
+| Input, output, and business-flow validation | `V1.2.1`-`V1.2.5`, `V1.3.2`, `V2.1.1`-`V2.3.1` | PASS for the current Pydantic/ORM/React/API surfaces; XML and file-handling controls are not yet applicable |
+| Browser and origin security | `V3.2.1`-`V3.5.3` | CORS, exact Origin checks, safe methods, and source-bound HSTS/TLS deployment obligations PASS; cookie hardening is PARTIAL because the tightened `__Host-` contract is unmet (`VF-SEC-008`) |
+| HTTP contracts | `V4.1.1` | PASS; bounded JSON schemas and deterministic generated-client drift controls are present |
+| Authentication | `V6.1.1`, `V6.2.1`-`V6.4.2` | Phase 1 password change, masking, exact verification, and rate limiting PASS the approved contract. `V6.2.4` common-password screening is not implemented and is not claimed as ASVS-conformant; it requires a future approved password-policy revision |
+| Session management | `V7.2.1`-`V7.4.2` | PASS; backend verification, CSPRNG refresh tokens, rotation/replay-family revocation, expiry, logout, reset, and token-version invalidation are durable |
+| Authorization | `V8.1.1`-`V8.3.1` | PASS for the current user/status slice; roles and active authority are server-derived |
+| Self-contained tokens | `V9.1.1`-`V9.2.1` | PASS; signature/MAC, fixed algorithm, configured key source, required claims, exact lifetime, and expiry are checked. No issuer/audience claim is asserted because ASVS L1 does not require one and the reviewed source does not implement one |
+| OAuth server behavior | `V10.4.1`-`V10.4.5` | Redirect/code controls are not applicable; refresh replay mitigation PASS. The approved first-party password grant remains an explicit design deviation from `V10.4.4`, not an ASVS-conformance claim |
+| Cryptography and transport | `V11.3.1`-`V11.4.1`, `V12.1.1`-`V12.2.2` | Approved primitives PASS; the source-bound edge contract requires TLS 1.2/1.3, trusted certificates, HTTPS redirect/unreachability, and one-year HSTS (`VF-SEC-006` resolved at the repository contract boundary) |
+| Data/component protection | `V13.4.1`, `V14.2.1`, `V14.3.1`, `V15.1.1`-`V15.3.1` | Runtime image, memory-only browser authority, response minimization, and runtime dependency audits PASS; `VF-SEC-007` remains explicit non-runtime dependency debt |
 
 ## Dependency audit
 
-- Backend direct dependencies are exact-pinned and `backend/uv.lock` carries
-  artifact hashes. `uv lock --check` passed and `pip-audit` reported no known
-  third-party vulnerability.
-- Frontend direct dependencies are exact-pinned and the package lock carries
-  resolved artifact integrity. The runtime-only audit reported zero
-  vulnerabilities.
-- The full npm audit reports GHSA-q8mj-m7cp-5q26 through development-only
-  `@stryker-mutator/core@10.0.0 -> typed-rest-client@2.3.1 -> qs@6.15.1`.
-  It is not shipped in the SPA runtime; its disposition is recorded below.
-- The gauntlet rejects high/critical npm advisories and audits Python packages;
-  the present low-threshold dev-tool record does not satisfy the gate's blocking
-  threshold.
+- `uv lock --check` resolved 111 packages, and `pip-audit` reported no known
+  third-party Python vulnerabilities; only the local non-PyPI `verboflex` package was
+  skipped.
+- `npm audit --omit=dev --audit-level=low` reported zero runtime vulnerabilities.
+- The full npm audit reports two moderate development-only paths for
+  GHSA-q8mj-m7cp-5q26 through `typed-rest-client -> qs`. This is the existing
+  `VF-SEC-007` low, non-blocking debt; it is neither resolved nor waived.
 
 ## Findings and dispositions
 
 | ID | Severity | Status | Disposition |
 | --- | --- | --- | --- |
-| `VF-SEC-001` | high | RESOLVED | Explicit Git-compatible frontend rules plus per-rule nonempty enforcement cover production and unit-test paths |
-| `VF-SEC-002` | high | RESOLVED | Normal and candidate gauntlets enforce exact, duplicate-safe review metadata and current digest binding |
-| `VF-SEC-003` | high | RESOLVED | OpenAPI negative control mutates an existing symbol, proves byte change/drift reason, and proves restoration |
-| `VF-SEC-004` | high | RESOLVED | The real-smoke harness owns the stack and invokes adversarial auth exactly once; wrapper status propagation is tested |
-| `VF-SEC-005` | medium | RESOLVED | Backend mutation scope covers handwritten stateful auth/session modules and frontend Stryker covers session state at 100% |
-| `VF-SEC-006` | medium | OPEN | Plaintext services are loopback-bound, but TLS/HSTS proof is not bound into the reviewed source digest |
-| `VF-SEC-007` | low | OPEN, NON-BLOCKING | Dev-tool-only advisory; remediation is required before milestone shipping, with no waiver implied |
-| `VF-SEC-008` | medium | OPEN | Refresh cookie lacks the ASVS-required `__Secure-` or `__Host-` name prefix |
+| `VF-SEC-001` | high | RESOLVED | Git-compatible manifest rules and per-rule nonempty checks cover frontend production/test paths |
+| `VF-SEC-002` | high | RESOLVED | Exact duplicate-safe final/candidate metadata and digest binding fail closed |
+| `VF-SEC-003` | high | RESOLVED | OpenAPI negative control mutates a real symbol, proves drift, and proves restoration |
+| `VF-SEC-004` | high | RESOLVED | Real smoke owns one isolated stack and invokes adversarial auth once with propagated status |
+| `VF-SEC-005` | medium | RESOLVED | Backend auth/session mutation scope is complete and frontend session mutation breaks below 100% |
+| `VF-SEC-006` | medium | RESOLVED | Deployment contract is category-required and source-bound; negative control proves changes invalidate the digest; services are loopback-only and edge TLS/HSTS obligations are explicit |
+| `VF-SEC-007` | low | OPEN, NON-BLOCKING | Development-only advisory must be remediated or explicitly time-bounded and re-reviewed before ship; no waiver is implied |
+| `VF-SEC-008` | medium | OPEN | Current cookie remains `__Secure-verboflex_refresh` with `Path=/api/v1/auth`; the tightened canonical contract requires `__Host-verboflex_refresh`, `Secure`, `Path=/`, and no `Domain` |
 
-### VF-SEC-001 resolution verification
+### Resolution evidence for VF-SEC-001 through VF-SEC-005
 
-`tools/source_manifest.txt:6-12` now uses separate Git-compatible `.ts`, `.tsx`,
-`.css`, `.test.ts`, and `.test.tsx` rules. `tools/source_state.sh:76-82` fails each
-individual empty include rule, and `tools/tests/test_source_state.sh:16-22`
-replays that assertion against the real manifest. Review mode resolved the current
-frontend tree, including handwritten session code, generated client code, unit
-tests, and E2E tests. The previous frontend omission is closed.
+- `VF-SEC-001`: the canonical manifest resolves the full frontend TypeScript, TSX,
+  CSS, unit-test, and E2E tree, while `source_state.sh` rejects each empty include.
+- `VF-SEC-002`: final mode requires exactly `CLOSED/0/current-digest`; candidate mode
+  requires exactly `OPEN/0/PENDING/current-digest`. Duplicate, missing, stale, and
+  false-state controls are rejected.
+- `VF-SEC-003`: the OpenAPI control changes the existing health handler, confirms a
+  byte change and a generated diff, then validates source/client restoration.
+- `VF-SEC-004`: `real_smoke.sh` owns unique loopback ports, stack lifecycle, and
+  cleanup, and calls the adversarial harness against the running stack exactly once.
+- `VF-SEC-005`: mutmut covers all handwritten auth/session modules and rejects any
+  nonempty surviving-mutant verdict; its negative control injects a survivor. Stryker
+  mutates the frontend session provider with `related: false` and `break: 100`.
+  Actual zero-survivor execution remains part of the pending candidate gauntlet and is
+  not claimed by this review.
 
-### VF-SEC-002 resolution verification
+### VF-SEC-006 resolution verification
 
-`tools/source_state.sh:188-235` requires exactly one value for status/count/digest,
-enforces `CLOSED/0/current-digest` for the final path and
-`OPEN/0/PENDING/current-digest` for the candidate path. Its negative fixtures cover
-OPEN, nonzero, duplicate, missing, stale, and false candidate metadata.
-`tools/gauntlet.sh:510-524` calls these contracts before recording the source digest,
-and both normal and candidate workflows recheck the final source state. The review
-gate now fails closed.
+`tools/source_manifest.txt` now has a required `deployment-contract` category bound to
+`docs/phase-01-smoke.md`; `source_state.sh` requires the category in review/final mode.
+`tools/tests/test_source_state.sh` mutates the TLS runbook and proves the review digest
+fails for the intended dirty-source reason. Staging and production inherit backend and
+frontend host publication on `127.0.0.1`, preventing direct remote plaintext bypass.
+The source-bound runbook requires a same-host edge with trusted certificates, TLS 1.2
+or 1.3, HTTP redirect/unreachability, `Strict-Transport-Security` for at least one year,
+and forwarding only to loopback. Environment-specific certificate/HSTS observation is
+still an operator deployment obligation; the repository does not claim to have run it.
 
-### VF-SEC-003 resolution verification
+### VF-SEC-007 non-blocking disposition
 
-`tools/gauntlet.sh:404-430` changes the existing `read_health` handler name, asserts
-the subject hash changed, requires `api:check` to fail on an actual generated diff,
-restores both source and generated outputs under a trap, and asserts all restoration
-hash/diff checks. The focused OpenAPI negative-control self-test is wired by
-`tools/tests/test_gauntlet.sh:18-19`. The formerly nonexistent mutation target is
-closed.
+`VF-SEC-007` remains **OPEN, NON-BLOCKING**, not resolved and not waived. The advisory
+is confined to the development mutation toolchain and the shipped SPA runtime audit is
+clean. Before milestone shipping, the dependency must be upgraded/overridden to a
+compatible fixed version or receive a dated owner/risk decision followed by review.
+Until then it stays visible debt.
 
-### VF-SEC-004 resolution verification
+### VF-SEC-008 open medium finding
 
-`tools/gauntlet.sh:478-507` runs only `real_smoke.sh`, exactly once, and proves both
-single execution and failure-code propagation. `tools/real_smoke.sh:384-396`
-invokes `adversarial_auth.sh --against-running-stack` while its uniquely named
-Compose stack is alive. The invalid second direct invocation was removed. Stack and
-container names/ports are per-run and loopback-bound; cleanup targets only owned
-resources. The previous deterministic harness failure is closed.
+- **Evidence:** `backend/src/verboflex/api/v1/routes/auth.py` consistently reads, sets,
+  and deletes `__Secure-verboflex_refresh`; staging/production add `Secure`, and the
+  cookie uses `HttpOnly`, `SameSite=Lax`, and `Path=/api/v1/auth`. OpenAPI, backend
+  tests, real smoke, adversarial smoke, and the deployment runbook use that same name.
+  The unprefixed `verboflex_refresh` legacy name is not emitted.
+- **Gap:** the canonical contract now requires `__Host-verboflex_refresh`, `Secure`,
+  `Path=/`, and no `Domain`. `__Host-` cannot be combined with the current narrow path,
+  so the otherwise coherent `__Secure-` remediation does not satisfy the new contract.
+- **Impact:** the stronger browser-enforced host-only invariant is absent and the
+  implementation is contract-incompatible. Existing prefix, Secure deployment mode,
+  origin checks, loopback binding, and rotation reduce exploitability, so severity
+  remains medium rather than high.
+- **Required resolution:** rename the cookie to `__Host-verboflex_refresh`, make
+  `Secure` unconditional for every emission/deletion, set `Path=/`, omit `Domain`, and
+  update schema, backend tests, browser/smoke/adversarial checks, and negative controls
+  to prove neither the unprefixed nor prior `__Secure-` name is emitted. This source
+  change invalidates the digest and requires a new fresh review and full candidate
+  gauntlet.
 
-### VF-SEC-005 resolution verification
+## Final status
 
-`backend/pyproject.toml:73-101` now mutates access-token, identity, login, origin,
-password-change, password, principal, rate-limit, and refresh-session modules and
-selects logout, refresh, concurrency, password-change, login, principal, and config
-tests. `frontend/stryker.config.mjs:4-22` mutates the handwritten session provider
-with `related: false` and a 100% break threshold. `tools/gauntlet.sh:373-393`
-rejects any nonempty surviving-mutant verdict and reruns property tests. The prior
-scope omission is closed; the actual candidate mutation run remains part of the
-pending full candidate gauntlet.
-
-### VF-SEC-006 — TLS/HSTS evidence remains source-unbound
-
-- **Severity:** medium
-- **Controls:** ASVS `V3.4.1`, `V12.1.1`, `V12.2.1`, `V12.2.2`; Phase 1 TLS
-  termination boundary
-- **Evidence:** `docker-compose.yml:55-60` and `:88-101` now publish backend and
-  frontend only on `127.0.0.1`, so the earlier direct public-plaintext exposure is
-  materially mitigated. Staging/production configure Secure cookies and HTTPS API
-  origins. However, `docker/frontend.nginx.conf:1-11` still serves HTTP without
-  HSTS, so TLS/HSTS must be supplied by an external ingress. The only automated
-  ingress-contract assertion in `tools/tests/test_real_smoke.sh:27` is a textual
-  grep for `TLS termination boundary` in `docs/phase-01-smoke.md`; that document is
-  absent from `tools/source_manifest.txt` and therefore absent from this review
-  digest. It can change independently of the reviewed source and does not
-  demonstrate TLS versions, certificate trust, HTTP rejection/redirect, or HSTS.
-- **Impact:** an operator can satisfy the source-bound candidate checks while the
-  external edge contract is stale, removed, or not deployed. Loopback binding keeps
-  this below high severity, but ASVS TLS/HSTS evidence is not yet auditable against
-  the candidate identity.
-- **Required resolution:** bind a concrete ingress/deployment contract and its
-  verifier into `tools/source_manifest.txt`, then test externally that plaintext is
-  unreachable or redirected, TLS 1.2/1.3 with a trusted certificate is used, and
-  browser responses contain an HSTS policy of at least one year. Any fix changes
-  the source digest and requires a new fresh-context review.
-
-### VF-SEC-007 — explicit dev-tool advisory disposition
-
-- **Severity:** low
-- **Status:** OPEN, NON-BLOCKING; **not accepted as resolved and not waived**.
-- **Scope:** GHSA-q8mj-m7cp-5q26 is reachable only through the development mutation
-  tool chain. `npm audit --omit=dev --audit-level=low` is clean, so the affected
-  package is not in the shipped SPA runtime.
-- **Disposition:** this does not increment `Open-critical-high` and does not by
-  itself prevent candidate validation. It **must** be upgraded/overridden to a
-  compatible fixed dependency, or re-reviewed with a dated owner/risk acceptance,
-  before milestone shipping. Until then it remains an open low finding; no silent
-  acceptance or closure is claimed.
-- **Verification:** rerun the low-threshold full npm audit and dependency
-  attribution after updating the lockfile, while retaining high/critical gate
-  failure behavior.
-
-### VF-SEC-008 — refresh cookie lacks the ASVS security prefix
-
-- **Severity:** medium
-- **Control:** ASVS 5.0.0 `V3.3.1`
-- **Evidence:** `backend/src/verboflex/api/v1/routes/auth.py:42`, `:49`, and `:62`
-  read, set, and delete `verboflex_refresh`. The cookie correctly uses Secure in
-  staging/production, HttpOnly, SameSite=Lax, and the narrow `/api/v1/auth` path,
-  but its name has neither the required `__Secure-` nor `__Host-` prefix.
-- **Impact:** the browser-enforced prefix invariant that prevents an insecure
-  origin from setting a security-labelled cookie is absent. Existing attributes
-  and loopback deployment reduce exploitability, so this is medium rather than
-  high.
-- **Required resolution:** consistently rename the cookie to a `__Secure-` name
-  (compatible with the required narrow path), update set/read/delete behavior and
-  all backend, browser, smoke, OpenAPI-adjacent fixtures, and add a negative test
-  that staging/production cannot emit the legacy unprefixed name. A `__Host-` name
-  is not compatible with the current `/api/v1/auth` path because that prefix
-  requires `Path=/`.
-- **Verification:** focused login/refresh/logout/password-change tests must assert
-  the exact prefixed name and attributes, adversarial/browser smoke must rotate and
-  clear it correctly, and the post-fix digest must trigger another fresh review.
-
-## Positive boundary observations
-
-- Access tokens are short-lived and strictly validate signature, configured
-  algorithm, issuer, audience, type, subject, time claims, and durable token
-  version; frontend memory is the only bearer-token store.
-- Refresh tokens are opaque CSPRNG values stored only as hashes, rotate
-  transactionally, and revoke their family on replay. Logout, password change, and
-  authority versioning enforce durable invalidation.
-- Redis-backed login/status limits and origin checks fail closed on authority-
-  changing flows, while error responses remain bounded and sanitized.
-- Role and data authority remain server-side; SQLAlchemy parameterization,
-  constraints, and transaction boundaries avoid frontend authority and direct
-  query construction.
-- Staging/production reject placeholder secrets/insecure cookie mode, and Compose
-  host publication is restricted to loopback.
-- The generated OpenAPI/client drift control, owned smoke lifecycle, candidate
-  metadata contract, source cleanliness checks, and backend/frontend mutation
-  scopes now address the prior high-risk verifier failures.
-
-## Gate conclusion
-
-The reviewed digest has zero open critical/high findings and is eligible only for
-the non-final post-fix candidate validation step. It is **not** a CLOSED review.
-The complete candidate gauntlet has not yet run, and no PASS evidence is claimed.
-`VF-SEC-006` and `VF-SEC-008` require source changes and therefore a new digest and
-new fresh-context review; `VF-SEC-007` remains an explicitly open, non-blocking low
-dependency debt until its shipping disposition is satisfied.
+Open findings are **0 critical, 0 high, 1 medium, and 1 low**. `VF-SEC-008` blocks
+review closure. `VF-SEC-007` is explicitly non-blocking for candidate validation but
+must be dispositioned before ship. The full candidate gauntlet has not been executed,
+and this review is not `CLOSED`.
