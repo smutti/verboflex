@@ -3,7 +3,7 @@
 - Review-status: OPEN
 - Open-critical-high: 0
 - Full-gauntlet-status: PENDING
-- Reviewed-source-digest: `0bf0ed1463184590d70e93407c420010e1487ec7166a9edb72a571de4282d79f`
+- Reviewed-source-digest: `6bbff02fa710c8fcd1fef51d72da712ab781862a7830bf9bfcfbd3a5a1f6ad29`
 - Review-date: 2026-08-25
 - Review-mode: fresh-context independent goal-backward and OWASP ASVS-aligned source review
 - Candidate-verdict: PASS_FOR_POST_FIX_GAUNTLET
@@ -49,7 +49,7 @@ The canonical manifest resolved 159 clean tracked paths:
 `bash tools/source_state.sh --review-digest` was executed twice consecutively
 immediately before this candidate artifact was written. Both runs exited zero
 and returned exactly
-`0bf0ed1463184590d70e93407c420010e1487ec7166a9edb72a571de4282d79f`.
+`6bbff02fa710c8fcd1fef51d72da712ab781862a7830bf9bfcfbd3a5a1f6ad29`.
 The review artifact is excluded only from review-mode digest computation and is
 included by the final source-set contract.
 
@@ -88,21 +88,29 @@ the gauntlet `PENDING` and verdict `PASS_FOR_POST_FIX_GAUNTLET`.
   `30728d19029d1db0c7f91841ba47d9a0f18543c58e57740c3185878844ffc302`,
   reached the real browser smoke but failed because a page-global Escape
   dispatch left the Navigation dialog visibly `data-state=open` for the full
-  five-second assertion window. The exact failure is preserved at
-  `/tmp/verboflex-phase01-round2.8TTofh/candidate-ts.log`; it remains historical
-  and is not represented as a full-gauntlet PASS. The human graded this as
-  behavioural Medium. A browser-only pre-fix rerun and a controlled pre-GREEN
-  stress probe covering four cycles at 768px plus four at 375px passed, which
-  localized the nondeterminism to the harness's global dispatch rather than a
-  reproducibly broken component. The current E2E sends Escape through the
-  dialog's actual focused control and, in every one of those eight cycles,
-  proves the dialog opened, exactly one visible control owns focus, the dialog
-  actually closes, and focus returns to the trigger. The controlled GREEN log
-  `/tmp/verboflex-phase01-round2.8TTofh/navigation-green-controlled.log` passed
-  all eight cycles and cleanup; lint and formatting also pass. This is a
-  semantic browser interaction correction, not test gaming: no assertion was
-  weakened, no production behavior was mocked, and no retry, wait, skip, or
-  timeout inflation was introduced.
+  five-second assertion window. The human graded this behavioural Medium as
+  VF-SEC-017. Commit `e6c88d9` then strengthened the existing RED to four cycles
+  at 768px and four at 375px and dispatched Escape through the dialog's sole
+  visible focused control, but made no production-source correction. That
+  harness-only attempt was insufficient: the exact candidate run preserved at
+  `/tmp/verboflex-phase01-round2.8TTofh/candidate-nav.log` failed again at the
+  768px second cycle, with the focused-control Escape dispatched and the sheet
+  still visibly `data-state=open` for the full five-second window. This was the
+  same unresolved VF-SEC-017, not a new finding, and neither failed candidate is
+  represented as a full-gauntlet PASS.
+- Commit `7f93715` is the production GREEN for VF-SEC-017. `AppShell` now owns
+  Sheet open state independently from Tooltip open state and forces the
+  icon-control tooltip closed whenever the Sheet opens, while retaining the
+  official tooltip for the icon-only trigger. The focused AppShell suite proves
+  two open/Escape cycles, absence of the tooltip inside the open Sheet, real
+  dialog closure, and trigger-focus restoration. The unchanged strengthened
+  E2E still performs all eight focused-control cycles. The browser-only staging
+  run at
+  `/tmp/verboflex-phase01-round2.8TTofh/navigation-green-component.log` passed
+  all eight cycles and scoped cleanup. This is not test gaming: the separate
+  `e6c88d9` candidate supplied the exact failing RED, no assertion was weakened,
+  no production behavior was mocked, and no retry, wait, skip, or timeout
+  inflation was introduced.
 - The reported cleanup/unbound concern was human-graded as a false positive.
   A production-identity execution of the real `changed_line_coverage` function
   exited zero, ran cleanup, and left no `verboflex-gauntlet-postgres-*` or
@@ -162,7 +170,7 @@ than being silently waived.
 | VF-SEC-014 | Medium | RESOLVED | Frontend production changed-line branch coverage now consumes normalized Cobertura rather than branch-permissive LCOV, binds exclusions to the exact four-row source-owned map, rejects non-canonical paths, vacuous/zero totals, extra handwritten exclusions, and a concrete 50%-branch divergent fixture. The production path passed at 100% for 152 frontend lines; backend changed-line coverage passed at 100% for 1003 lines. |
 | VF-SEC-015 | Medium | RESOLVED | Source-bound TDD additions moved nine accepted detect-secrets findings. The exact policy was updated only at those nine line coordinates; all 23 paths/plugins/fingerprints and classifications are preserved byte-for-byte, a fresh repository scan matches exactly, and true-key plus unreviewed-tuple controls still fail as required. |
 | VF-SEC-016 | Medium | RESOLVED | The candidate gauntlet exposed TS2345 for deferred `readSystemStatus` responses because bare `ReturnType` retained an over-broad generic result. The test-only fix specializes the generated call to `<false>`, exactly matching the production call site's SDK default. AppShell 11/11, `tsc --noEmit`, and the Vite production build pass with no broad cast and no production-source change. |
-| VF-SEC-017 | Medium | RESOLVED | Human-graded behavioural browser-harness nondeterminism: the candidate gauntlet observed a global Escape dispatch leave Navigation open for five seconds. The replacement dispatch targets the sole actual focused control inside the live dialog, which is the semantic keyboard origin. Four cycles at each of 768px and 375px prove focus presence, real closure, and trigger focus restoration without retries, waits, skips, weakened assertions, timeout changes, or production-source edits. The failed candidate remains historical; no full-gauntlet PASS is claimed. |
+| VF-SEC-017 | Medium | RESOLVED | Human-graded behavioural navigation-overlay failure. The first harness-only correction at `e6c88d9` strengthened the RED to four focused-control Escape cycles at each of 768px and 375px but failed again at the 768px second cycle, leaving the live Sheet `data-state=open` for five seconds; the finding therefore remained open. Production GREEN `7f93715` gives Sheet and Tooltip separate controlled authority and forces the tooltip closed as the Sheet opens while preserving the official icon tooltip. AppShell 11/11 proves two open/Escape cycles, no tooltip inside the open Sheet, real closure, and trigger-focus restoration; the browser-only staging component run passed the unchanged eight-cycle E2E and cleanup. No retry, wait, skip, weakened assertion, mock, or timeout change was introduced. The failed candidates remain historical; no full-gauntlet PASS is claimed. |
 
 ## Plan 01-15 fix revalidation
 
@@ -359,7 +367,7 @@ fresh repository scan matched the exact 23-row policy.
 
 | Check | Result |
 | --- | --- |
-| Canonical review digest, two consecutive immediate pre-write runs | PASS — exact `8a3e5bf647ed0be78dc5826001c98123b889ed0fc3a65ffd2df36eddf2bca46a` twice |
+| Canonical review digest, two consecutive immediate pre-write runs | PASS — exact `6bbff02fa710c8fcd1fef51d72da712ab781862a7830bf9bfcfbd3a5a1f6ad29` twice |
 | Canonical manifest resolution | PASS — 159 clean paths across every required review-mode category |
 | Manifest self-test | PASS |
 | Packaged gauntlet, real-smoke, and adversarial-auth self-tests | PASS |
@@ -370,10 +378,10 @@ fresh repository scan matched the exact 23-row policy.
 | Current PostgreSQL cookie/deactivation/logout selection | PASS — 23/23, including exact set/delete cookie scope, live user-global budget, four anonymous peer-bounded stale states, deactivation, family revocation, and idempotence |
 | Ruff lint and format | PASS — lint clean; 58 files already formatted |
 | Backend typing | PASS — mypy checked 36 source files |
-| Production changed-line coverage and cleanup | PASS — packaged Cobertura normalization, exact four-row exclusions, non-vacuity, and concrete partial-branch controls passed on the current source; the prior production-identity run passed backend 100% over 1003 lines and frontend 100% over 152 lines and left no gauntlet container or Celery worker. The current delta is E2E-only and supplies no RED evidence against cleanup, so the human-graded cleanup false positive is not reopened. |
+| Production changed-line coverage and cleanup | PASS — packaged Cobertura normalization, exact four-row exclusions, non-vacuity, and concrete partial-branch controls passed on the current source; the prior production-identity run passed backend 100% over 1003 lines and frontend 100% over 152 lines and left no gauntlet container or Celery worker. The current delta spans production `AppShell.tsx`, its unit coverage, and the strengthened E2E, and supplies no new RED evidence against cleanup, so the human-graded cleanup false positive is not reopened. |
 | Frontend AppShell unit focus | PASS — 11/11 on the current digest; the earlier complete 75/75 candidate unit run remains historical rather than a current full-gauntlet claim |
 | Frontend typecheck and production build | PASS — generated `ThrowOnError = false` result shape is accepted without broad casts; Vite transformed 1948 modules |
-| Responsive navigation regression | PASS — controlled GREEN browser smoke exercised four keyboard open/close cycles at each of 768px and 375px; every cycle proved one visible focused control, real dialog closure, and trigger focus restoration. No wait/retry/timeout inflation. |
+| Responsive navigation regression | PASS — the strengthened harness-only RED at `e6c88d9` reproduced VF-SEC-017 at the 768px second focused-control cycle. Production GREEN `7f93715` separates Sheet/Tooltip authority; AppShell 11/11 proves two reopen/Escape cycles and tooltip exclusion, and the browser-only staging component run exercised four cycles at each of 768px and 375px with one visible focused control, real dialog closure, and trigger focus restoration. No wait/retry/timeout inflation. |
 | Detect-secrets exact policy | PASS — 23/23 exact tuple match |
 | Detect-secrets true-key and unreviewed-tuple negative controls | PASS — both failed as required |
 | Backend dependency audit | PASS — no known vulnerability in published packages |
