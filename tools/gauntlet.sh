@@ -239,6 +239,26 @@ cleanup_test_infra() {
     set -e
     [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ] || die "Redis test cleanup failed"
   fi
+  TEST_POSTGRES_NAME=""
+  TEST_REDIS_NAME=""
+  TEST_WORKER_PID=""
+}
+
+run_lifecycle() {
+  local start_function=$1 cleanup_function=$2 body_function=$3 rc
+  "$start_function"
+  if "$body_function"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  "$cleanup_function"
+  return "$rc"
+}
+
+with_test_infra() {
+  local body_function=$1
+  run_lifecycle start_test_infra cleanup_test_infra "$body_function"
 }
 
 wait_for_container_command() {
@@ -302,13 +322,12 @@ start_test_infra() {
   die "Celery test worker readiness timed out"
 }
 
-backend_tests() {
-  start_test_infra
+backend_tests_body() {
   (cd "$BACKEND_ROOT" && uv run pytest --randomly-seed="$RANDOM_SEED" -q)
-  cleanup_test_infra
-  TEST_POSTGRES_NAME=""
-  TEST_REDIS_NAME=""
-  TEST_WORKER_PID=""
+}
+
+backend_tests() {
+  with_test_infra backend_tests_body
 }
 
 frontend_tests_browser() {
@@ -331,9 +350,13 @@ lint_format_complexity() {
   assert_complexity_below_c "$complexity_report"
 }
 
-changed_line_coverage() {
+backend_coverage_body() {
   (cd "$BACKEND_ROOT" && uv run pytest --randomly-seed="$RANDOM_SEED" -q \
     --cov=verboflex --cov-branch --cov-report="xml:$BACKEND_COVERAGE")
+}
+
+changed_line_coverage() {
+  with_test_infra backend_coverage_body
   (cd "$FRONTEND_ROOT" && npm run test:coverage -- --sequence.shuffle --sequence.seed="$RANDOM_SEED" \
     --coverage.provider=v8 --coverage.reporter=text --coverage.reporter=lcov \
     --coverage.reportsDirectory="$FRONTEND_COVERAGE_DIR")
@@ -347,22 +370,25 @@ changed_line_coverage() {
       'frontend/src/hooks/use-mobile.ts' 'frontend/src/main.tsx')
 }
 
-mutation_properties() {
+backend_mutation_body() {
   (cd "$BACKEND_ROOT" && uv run mutmut run)
   (cd "$BACKEND_ROOT" && uv run mutmut results)
   (cd "$BACKEND_ROOT" && uv run pytest -q tests/auth/test_access_tokens.py \
     tests/auth/test_passwords.py tests/core/test_config.py)
+}
+
+mutation_properties() {
+  with_test_infra backend_mutation_body
   (cd "$FRONTEND_ROOT" && npm run test:mutation)
   (cd "$FRONTEND_ROOT" && npm run test -- --run src/features/auth/session.property.test.ts)
 }
 
-migration_rehearsal() {
-  start_test_infra
+migration_rehearsal_body() {
   (cd "$BACKEND_ROOT" && uv run pytest -q tests/integration/test_migrations.py)
-  cleanup_test_infra
-  TEST_POSTGRES_NAME=""
-  TEST_REDIS_NAME=""
-  TEST_WORKER_PID=""
+}
+
+migration_rehearsal() {
+  with_test_infra migration_rehearsal_body
 }
 
 openapi_negative_control() (
@@ -546,11 +572,35 @@ self_test_candidate_contract() {
   printf 'post-fix candidate contract: PASS\n'
 }
 
+self_test_infra_lifecycle() (
+  local fixture log rc
+  fixture=$(mktemp -d)
+  log="$fixture/lifecycle.log"
+  trap 'rm -rf "$fixture"' EXIT INT TERM
+  lifecycle_start() { printf 'start\n' >>"$log"; }
+  lifecycle_cleanup() { printf 'cleanup\n' >>"$log"; }
+  lifecycle_success() { printf 'body\n' >>"$log"; }
+  lifecycle_failure() { printf 'body\n' >>"$log"; return 42; }
+  run_lifecycle lifecycle_start lifecycle_cleanup lifecycle_success
+  printf '%s\n' start body cleanup | diff -u - "$log" >/dev/null \
+    || die "success lifecycle order drifted"
+  : >"$log"
+  set +e
+  run_lifecycle lifecycle_start lifecycle_cleanup lifecycle_failure
+  rc=$?
+  set -e
+  [ "$rc" -eq 42 ] || die "failure lifecycle status was not propagated"
+  printf '%s\n' start body cleanup | diff -u - "$log" >/dev/null \
+    || die "failure lifecycle omitted cleanup"
+  printf 'test infrastructure lifecycle: PASS\n'
+)
+
 case "${1:-}" in
   --preflight) checker_preflight ;;
   --self-test-openapi-control) openapi_negative_control ;;
   --self-test-staging-layer) self_test_staging_layer ;;
   --self-test-candidate-contract) self_test_candidate_contract ;;
+  --self-test-infra-lifecycle) self_test_infra_lifecycle ;;
   --post-fix-candidate) run_post_fix_candidate ;;
   -h|--help)
     printf 'usage: tools/gauntlet.sh [--preflight|--post-fix-candidate]\n'
