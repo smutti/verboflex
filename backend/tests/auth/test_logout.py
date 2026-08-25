@@ -7,6 +7,7 @@ import asyncio
 import httpx
 import pytest
 from redis.exceptions import ConnectionError as RedisConnectionError
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from tests.auth.test_refresh import (
@@ -19,6 +20,7 @@ from tests.auth.test_refresh import (
     refresh_settings,
 )
 from verboflex.auth.access_tokens import issue_access_token
+from verboflex.auth.refresh_sessions import rotate_refresh_session
 from verboflex.models.auth_session import AuthSession
 
 __all__ = ["refresh_session_factory"]
@@ -92,6 +94,39 @@ def test_valid_logout_revokes_current_session_and_clears_cookie(
     protected_response = asyncio.run(get_me(access_token))
     assert protected_response.status_code == 401
     assert protected_response.json() == {"detail": "Invalid access token"}
+
+
+def test_logout_after_rotation_invalidates_every_access_token_in_the_family(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Terminate both pre-rotation and successor bearer authority on logout."""
+    predecessor = create_refresh_authority(refresh_session_factory)
+    predecessor_access = issue_access_token(
+        user_id=predecessor.user_id,
+        session_id=predecessor.id,
+        token_version=0,
+        purpose="access",
+        settings=refresh_settings(),
+    )
+    with refresh_session_factory() as session:
+        successor = rotate_refresh_session(
+            session,
+            REFRESH_TOKEN,
+            settings=refresh_settings(),
+        )
+    configure_dependencies(refresh_session_factory, FakeRedis(result=[1, 60]))
+
+    response = asyncio.run(post_logout(successor.refresh_token))
+
+    assert response.status_code == 204
+    with refresh_session_factory() as session:
+        family = session.execute(select(AuthSession)).scalars().all()
+    assert len(family) == 2
+    assert all(member.revoked_at is not None for member in family)
+    for access_token in (predecessor_access, successor.access_token):
+        protected_response = asyncio.run(get_me(access_token))
+        assert protected_response.status_code == 401
+        assert protected_response.json() == {"detail": "Invalid access token"}
 
 
 def assert_cookie_is_cleared(response: httpx.Response) -> None:
