@@ -53,6 +53,9 @@ grep -Fq 'test infrastructure lifecycle: PASS' "$output_file"
 "$repo_root/tools/gauntlet.sh" --self-test-mutation-verdict >"$output_file" 2>&1
 grep -Fq 'mutation verdict negative control: PASS' "$output_file"
 
+"$repo_root/tools/gauntlet.sh" --self-test-mutation-freshness >"$output_file" 2>&1
+grep -Fq 'mutation freshness negative control: PASS' "$output_file"
+
 "$repo_root/tools/gauntlet.sh" --self-test-check-sequence >"$output_file" 2>&1
 grep -Fq 'required check sequence negative control: PASS' "$output_file"
 
