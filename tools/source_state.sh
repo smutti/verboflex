@@ -59,7 +59,7 @@ resolve_manifest() {
   local manifest_path=$2
   local mode=$3
   local destination=$4
-  local scratch include_rules exclude_rules included_candidates excluded_paths
+  local scratch include_rules exclude_rules included_candidates excluded_paths rule_matches
   local category pathspec path required
 
   scratch=$(mktemp -d)
@@ -67,15 +67,18 @@ resolve_manifest() {
   exclude_rules="$scratch/exclude-rules"
   included_candidates="$scratch/included-candidates"
   excluded_paths="$scratch/excluded-paths"
+  rule_matches="$scratch/rule-matches"
   parse_manifest "$root" "$manifest_path" "$include_rules" "$exclude_rules"
   git -C "$root" rev-parse --is-inside-work-tree >/dev/null || die "root is not a Git work tree: $root"
   : >"$included_candidates"
   : >"$excluded_paths"
 
   while IFS='|' read -r category pathspec; do
+    git -C "$root" ls-files --cached --others --exclude-standard -- "$pathspec" >"$rule_matches"
+    [ -s "$rule_matches" ] || die "include rule is empty: $category ($pathspec)"
     while IFS= read -r path; do
       [ -n "$path" ] && printf '%s|%s\n' "$category" "$path" >>"$included_candidates"
-    done < <(git -C "$root" ls-files --cached --others --exclude-standard -- "$pathspec")
+    done <"$rule_matches"
   done <"$include_rules"
 
   while IFS= read -r pathspec; do
@@ -273,7 +276,7 @@ self_test_manifest() {
   sed 's#:(glob)tests/\*\*#:(glob)missing-tests/**#' "$manifest" >"$fixture/config/empty-manifest.txt"
   git -C "$fixture" add config/empty-manifest.txt
   git -C "$fixture" commit -qm empty-category-fixture
-  expect_failure 'required category is empty: tests' \
+  expect_failure 'include rule is empty: tests' \
     compute_digest "$fixture" config/empty-manifest.txt final
 
   printf 'unknown|implementation|app/main.txt\n' >"$fixture/config/bad-manifest.txt"

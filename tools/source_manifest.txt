@@ -3,9 +3,12 @@
 #         exclude|artifact|git-pathspec|auditable reason
 
 include|implementation|:(glob)backend/src/**/*.py
-include|implementation|:(glob)frontend/src/**/*.{ts,tsx,css}
+include|implementation|:(glob)frontend/src/**/*.ts
+include|implementation|:(glob)frontend/src/**/*.tsx
+include|implementation|:(glob)frontend/src/**/*.css
 include|tests|:(glob)backend/tests/**/*.py
-include|tests|:(glob)frontend/src/**/*.test.{ts,tsx}
+include|tests|:(glob)frontend/src/**/*.test.ts
+include|tests|:(glob)frontend/src/**/*.test.tsx
 include|tests|:(glob)frontend/e2e/**/*.ts
 include|config|.env.example
 include|config|backend/pyproject.toml
