@@ -58,9 +58,9 @@ def authenticate_login(
         normalized_email = normalize_email(email)
     except ValueError:
         normalized_email = email.strip(ASCII_WHITESPACE).lower()
-        valid_identifier = False
+        user_query = None
     else:
-        valid_identifier = True
+        user_query = select(User).where(User.email == normalized_email)
 
     limit = enforce_login_rate_limit(
         redis_client,
@@ -70,11 +70,7 @@ def authenticate_login(
     if not limit.allowed:
         raise LoginRateLimited(limit.retry_after)
 
-    user = (
-        session.execute(select(User).where(User.email == normalized_email)).scalar_one_or_none()
-        if valid_identifier
-        else None
-    )
+    user = session.execute(user_query).scalar_one_or_none() if user_query is not None else None
     password_hash = user.hashed_password if user is not None else _dummy_password_hash()
     password_matches = verify_password(password, password_hash)
     if user is None or not password_matches or not user.is_active:
