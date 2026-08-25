@@ -218,30 +218,6 @@ def test_valid_refresh_rotates_once_and_returns_new_authority(
     assert "Secure" in response.headers["set-cookie"]
     assert "; Path=/;" in response.headers["set-cookie"]
     assert "Domain=" not in response.headers["set-cookie"]
-
-
-def test_refresh_rate_limit_key_is_stable_for_family_and_bounded_for_invalid_tokens(
-    refresh_session_factory: sessionmaker[Session],
-) -> None:
-    """Prevent rotation or arbitrary cookie values from resetting the 30/min window."""
-    create_refresh_authority(refresh_session_factory)
-    redis_client = configure_dependencies(refresh_session_factory)
-
-    first = asyncio.run(post_refresh())
-    second = asyncio.run(
-        post_refresh(first.cookies["__Host-verboflex_refresh"])
-    )
-    invalid_first = asyncio.run(post_refresh("B" * 43))
-    invalid_second = asyncio.run(post_refresh("C" * 43))
-
-    assert first.status_code == 200
-    assert second.status_code == 200
-    assert invalid_first.status_code == 401
-    assert invalid_second.status_code == 401
-    redis_keys = [str(call[2][0]) for call in redis_client.calls]
-    assert redis_keys[0] == redis_keys[1]
-    assert redis_keys[2] == redis_keys[3]
-    assert redis_keys[0] != redis_keys[2]
     assert "Path=/api/v1/auth" not in response.headers["set-cookie"]
 
     with refresh_session_factory() as session:
@@ -264,6 +240,28 @@ def test_refresh_rate_limit_key_is_stable_for_family_and_bounded_for_invalid_tok
     claims = decode_access_token(response.json()["access_token"], settings=refresh_settings())
     assert claims.session_id == successor.id
     assert claims.user_id == USER_ID
+
+
+def test_refresh_rate_limit_key_is_stable_for_family_and_bounded_for_invalid_tokens(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Prevent rotation or arbitrary cookie values from resetting the 30/min window."""
+    create_refresh_authority(refresh_session_factory)
+    redis_client = configure_dependencies(refresh_session_factory)
+
+    first = asyncio.run(post_refresh())
+    second = asyncio.run(post_refresh(first.cookies["__Host-verboflex_refresh"]))
+    invalid_first = asyncio.run(post_refresh("B" * 43))
+    invalid_second = asyncio.run(post_refresh("C" * 43))
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert invalid_first.status_code == 401
+    assert invalid_second.status_code == 401
+    redis_keys = [str(call[2][0]) for call in redis_client.calls]
+    assert redis_keys[0] == redis_keys[1]
+    assert redis_keys[2] == redis_keys[3]
+    assert redis_keys[0] != redis_keys[2]
 
 
 def test_refresh_successor_uses_the_exact_rotation_timeline(

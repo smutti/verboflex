@@ -19,6 +19,7 @@ REFRESH_TOKEN_ALPHABET = frozenset(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 )
 INVALID_REFRESH_SESSION_MESSAGE = "invalid refresh session"
+INVALID_REFRESH_RATE_IDENTITY = "invalid-refresh-session"
 
 
 class InvalidRefreshSession(PermissionError):
@@ -56,6 +57,22 @@ def _load_predecessor(session: Session, refresh_token: str) -> AuthSession:
     if predecessor is None:
         raise InvalidRefreshSession(INVALID_REFRESH_SESSION_MESSAGE)
     return predecessor
+
+
+def refresh_rate_limit_identity(session: Session, refresh_token: str | None) -> str:
+    """Return one stable family identity, collapsing all invalid tokens per peer."""
+    if not _is_well_formed_refresh_token(refresh_token):
+        return INVALID_REFRESH_RATE_IDENTITY
+    assert refresh_token is not None
+    with session.begin():
+        family_id = session.execute(
+            select(AuthSession.family_id).where(
+                AuthSession.token_hash == hash_refresh_token(refresh_token)
+            )
+        ).scalar_one_or_none()
+    if family_id is None:
+        return INVALID_REFRESH_RATE_IDENTITY
+    return str(family_id)
 
 
 def _revoke_replayed_family(

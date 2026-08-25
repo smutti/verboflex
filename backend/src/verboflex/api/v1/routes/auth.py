@@ -27,6 +27,7 @@ from verboflex.auth.rate_limits import (
 )
 from verboflex.auth.refresh_sessions import (
     InvalidRefreshSession,
+    refresh_rate_limit_identity,
     revoke_refresh_session,
     rotate_refresh_session,
 )
@@ -153,7 +154,7 @@ async def refresh_access_token(
         limit = enforce_auth_action_rate_limit(
             redis_client,
             action="refresh",
-            identity=refresh_cookie or "missing",
+            identity=refresh_rate_limit_identity(session, refresh_cookie),
             client_ip=validated_client_ip(request),
             limit=REFRESH_LIMIT,
         )
