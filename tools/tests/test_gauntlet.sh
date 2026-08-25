@@ -17,3 +17,6 @@ grep -Fq '"$SOURCE_STATE" --verify-review-source' "$repo_root/tools/gauntlet.sh"
 
 "$repo_root/tools/gauntlet.sh" --self-test-openapi-control >"$output_file" 2>&1
 grep -Fq 'OpenAPI drift negative control: PASS' "$output_file"
+
+"$repo_root/tools/gauntlet.sh" --self-test-staging-layer >"$output_file" 2>&1
+grep -Fq 'staging/adversarial layer contract: PASS' "$output_file"
