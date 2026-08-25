@@ -913,6 +913,7 @@ self_test_check_sequence() (
 self_test_frontend_coverage() (
   local fixture source normalized valid_report vacuous_report valid_map invalid_map patterns
   local partial_coverage partial_diff partial_report partial_rc
+  local positive_diff positive_report positive_rc
   fixture=$(mktemp -d)
   source="$fixture/source.lcov"
   normalized="$fixture/normalized.lcov"
@@ -924,6 +925,8 @@ self_test_frontend_coverage() (
   partial_coverage="$fixture/partial-coverage.xml"
   partial_diff="$fixture/partial.diff"
   partial_report="$fixture/partial-report"
+  positive_diff="$fixture/positive.diff"
+  positive_report="$fixture/positive-report"
   trap 'rm -rf "$fixture"' EXIT INT TERM
 
   printf '%s\n' \
@@ -936,6 +939,24 @@ self_test_frontend_coverage() (
   normalize_frontend_cobertura "$source" "$normalized"
   grep -Fq 'filename="frontend/src/features/auth/session.tsx"' "$normalized" \
     || die "frontend Cobertura path normalization drifted"
+  printf '%s\n' \
+    'diff --git a/frontend/src/features/auth/session.tsx b/frontend/src/features/auth/session.tsx' \
+    'new file mode 100644' \
+    'index 0000000..1111111' \
+    '--- /dev/null' \
+    '+++ b/frontend/src/features/auth/session.tsx' \
+    '@@ -0,0 +1 @@' \
+    '+coveredLine()' >"$positive_diff"
+  set +e
+  (cd "$REPO_ROOT" && "$BACKEND_ROOT/.venv/bin/diff-cover" "$normalized" \
+    --diff-file "$positive_diff" --branch-coverage --fail-under 100) \
+    >"$positive_report" 2>&1
+  positive_rc=$?
+  set -e
+  if [ "$positive_rc" -ne 0 ]; then
+    sed -n '1,80p' "$positive_report" >&2
+    die "normalized frontend Cobertura could not be consumed by production diff-cover"
+  fi
 
   printf '%s\n' 'Diff Coverage' 'Total: 1 lines' 'Missing: 0 lines' 'Coverage: 100%' \
     >"$valid_report"
