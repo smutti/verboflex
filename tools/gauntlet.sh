@@ -16,6 +16,7 @@ readonly SECRET_SCAN="/tmp/verboflex-phase01-secrets.json"
 readonly BACKEND_PROPERTY_MUTATION_CONFIG="$GAUNTLET_DIR/mutmut-property.toml"
 
 readonly EXPECTED_LAYERS="source-state
+checker-self-tests
 backend-tests
 frontend-tests-browser
 types
@@ -29,6 +30,7 @@ staging-adversarial-smoke
 final-source-state"
 
 readonly EXPECTED_CANDIDATE_LAYERS="source-state-candidate
+checker-self-tests
 backend-tests
 frontend-tests-browser
 types
@@ -260,6 +262,18 @@ checker_preflight() {
     "$GAUNTLET_DIR/source_manifest.txt" || die "review artifact is absent from source manifest"
   printf '%s\n' "$EXPECTED_LAYERS" >"$LAYER_RECORD"
   printf 'gauntlet preflight: PASS\n'
+}
+
+packaged_checker_self_tests() {
+  local checker
+  for checker in \
+    "$GAUNTLET_DIR/tests/test_source_state.sh" \
+    "$GAUNTLET_DIR/tests/test_gauntlet.sh" \
+    "$GAUNTLET_DIR/tests/test_real_smoke.sh" \
+    "$GAUNTLET_DIR/tests/test_adversarial_auth.sh"; do
+    [ -x "$checker" ] || die "packaged checker self-test is not executable: $checker"
+    "$checker"
+  done
 }
 
 cleanup_test_infra() {
@@ -686,6 +700,7 @@ run_full_gauntlet() {
   : >"$LAYER_RECORD"
   trap cleanup_test_infra EXIT INT TERM
   run_layer source-state source_state_layer
+  run_layer checker-self-tests packaged_checker_self_tests
   run_layer backend-tests backend_tests
   run_layer frontend-tests-browser frontend_tests_browser
   run_layer types types
@@ -707,6 +722,7 @@ run_post_fix_candidate() {
   : >"$LAYER_RECORD"
   trap cleanup_test_infra EXIT INT TERM
   run_layer source-state-candidate candidate_source_state_layer
+  run_layer checker-self-tests packaged_checker_self_tests
   run_layer backend-tests backend_tests
   run_layer frontend-tests-browser frontend_tests_browser
   run_layer types types
