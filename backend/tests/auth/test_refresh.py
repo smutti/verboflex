@@ -248,6 +248,14 @@ def test_refresh_rate_limit_key_is_stable_for_family_and_bounded_for_invalid_tok
     """Prevent rotation or arbitrary cookie values from resetting the 30/min window."""
     create_refresh_authority(refresh_session_factory)
     redis_client = configure_dependencies(refresh_session_factory)
+    with refresh_session_factory() as session:
+        assert refresh_service.refresh_rate_limit_identity(session, REFRESH_TOKEN) == str(
+            FAMILY_ID
+        )
+        assert (
+            refresh_service.refresh_rate_limit_identity(session, "B" * 43)
+            == refresh_service.INVALID_REFRESH_RATE_IDENTITY
+        )
 
     first = asyncio.run(post_refresh())
     second = asyncio.run(post_refresh(first.cookies["__Host-verboflex_refresh"]))
