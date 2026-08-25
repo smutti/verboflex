@@ -14,6 +14,8 @@ readonly BACKEND_COVERAGE="/tmp/verboflex-phase01-backend-coverage.xml"
 readonly FRONTEND_COVERAGE_DIR="/tmp/verboflex-phase01-frontend-coverage"
 readonly SECRET_SCAN="/tmp/verboflex-phase01-secrets.json"
 readonly BACKEND_PROPERTY_MUTATION_CONFIG="$GAUNTLET_DIR/mutmut-property.toml"
+readonly BACKEND_EQUIVALENT_MUTANT_MAP="$GAUNTLET_DIR/equivalent_mutants.txt"
+readonly BACKEND_EQUIVALENT_MUTANT_PROOF="$GAUNTLET_DIR/verify_equivalent_mutants.py"
 readonly FRONTEND_COVERAGE_EXCLUSION_MAP="$GAUNTLET_DIR/frontend_coverage_exclusions.txt"
 
 readonly EXPECTED_LAYERS="source-state
@@ -296,6 +298,10 @@ checker_preflight() {
     || die "mutmut complete import tree is missing"
   grep -Fq 'include|review|docs/reviews/phase-01-code-security.md' \
     "$GAUNTLET_DIR/source_manifest.txt" || die "review artifact is absent from source manifest"
+  [ -f "$BACKEND_EQUIVALENT_MUTANT_MAP" ] \
+    || die "exact equivalent mutant mapping is missing"
+  [ -x "$BACKEND_EQUIVALENT_MUTANT_PROOF" ] \
+    || die "equivalent mutant proof is not executable"
   printf '%s\n' "$EXPECTED_LAYERS" >"$LAYER_RECORD"
   printf 'gauntlet preflight: PASS\n'
 }
@@ -560,6 +566,79 @@ EOF
   [ "$invalid" -eq 0 ] || die "fresh mutation run contains a non-killed verdict"
 }
 
+expected_equivalent_mutation_results() {
+  printf '%s\n' \
+    'verboflex.auth.refresh_sessions.x_logout_rate_limit_user_id__mutmut_18: survived' \
+    'verboflex.auth.refresh_sessions.x_logout_rate_limit_user_id__mutmut_20: survived'
+}
+
+assert_exact_equivalent_mutation_results() {
+  local mutation_results=$1 actual expected
+  actual=$(printf '%s\n' "$mutation_results" | sed '/^[[:space:]]*$/d; s/^[[:space:]]*//' | sort)
+  expected=$(expected_equivalent_mutation_results | sort)
+  if [ "$actual" != "$expected" ]; then
+    printf 'expected exact equivalent mutation results:\n%s\n' "$expected" >&2
+    printf 'actual mutation results:\n%s\n' "$actual" >&2
+    die "equivalent mutation verdict set drifted"
+  fi
+}
+
+assert_full_mutation_stats_fresh() {
+  local stats_file=$1 totals total killed survived invalid
+  [ -f "$stats_file" ] || die "mutation statistics are missing"
+  totals=$("$BACKEND_ROOT/.venv/bin/python" -c '
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+keys = ("no_tests", "skipped", "suspicious", "timeout", "check_was_interrupted_by_user", "segfault")
+print(data.get("total", 0), data.get("killed", 0), data.get("survived", 0), sum(data.get(key, 0) for key in keys))
+' "$stats_file") || die "mutation statistics could not be parsed"
+  read -r total killed survived invalid <<EOF
+$totals
+EOF
+  [ "$total" -eq 893 ] || die "complete mutation total drifted from the reviewed source set"
+  [ "$killed" -eq 891 ] || die "not every non-equivalent mutant was killed"
+  [ "$survived" -eq 2 ] || die "equivalent mutation count drifted"
+  [ $((killed + survived)) -eq "$total" ] \
+    || die "fresh mutation run contains an unclassified verdict"
+  [ "$invalid" -eq 0 ] || die "fresh mutation run contains a forbidden verdict"
+}
+
+assert_equivalent_mutant_show() {
+  local mutant_name=$1 mutant_show=$2 expected_added actual_changes expected_changes
+  case "$mutant_name" in
+    verboflex.auth.refresh_sessions.x_logout_rate_limit_user_id__mutmut_18)
+      expected_added='+            .join(User, None)'
+      ;;
+    verboflex.auth.refresh_sessions.x_logout_rate_limit_user_id__mutmut_20)
+      expected_added='+            .join(User, )'
+      ;;
+    *) die "unregistered equivalent mutant requested for diff proof" ;;
+  esac
+  printf '%s\n' "$mutant_show" \
+    | grep -Fq "# $mutant_name: survived" \
+    || die "equivalent mutant is not a current survivor"
+  actual_changes=$(printf '%s\n' "$mutant_show" \
+    | sed -n '/^[-+]/ { /^---/d; /^+++/d; p; }')
+  expected_changes=$(printf '%s\n' \
+    '-            .join(User, User.id == AuthSession.user_id)' \
+    "$expected_added")
+  [ "$actual_changes" = "$expected_changes" ] \
+    || die "equivalent mutant diff drifted outside the reviewed join transformation"
+}
+
+prove_exact_equivalent_mutants() {
+  local mutation_backend=$1 mutant_name mutant_show
+  "$BACKEND_ROOT/.venv/bin/python" "$BACKEND_EQUIVALENT_MUTANT_PROOF" \
+    --mapping "$BACKEND_EQUIVALENT_MUTANT_MAP" --backend-root "$mutation_backend"
+  for mutant_name in \
+    verboflex.auth.refresh_sessions.x_logout_rate_limit_user_id__mutmut_18 \
+    verboflex.auth.refresh_sessions.x_logout_rate_limit_user_id__mutmut_20; do
+    mutant_show=$(cd "$mutation_backend" && "$BACKEND_ROOT/.venv/bin/mutmut" show "$mutant_name") \
+      || die "equivalent mutant diff could not be inspected"
+    assert_equivalent_mutant_show "$mutant_name" "$mutant_show"
+  done
+}
+
 backend_mutation_body() (
   local workspace mutation_backend mutation_results mutation_stats
   workspace=$(create_fresh_backend_workspace)
@@ -569,8 +648,9 @@ backend_mutation_body() (
   (cd "$mutation_backend" && "$BACKEND_ROOT/.venv/bin/mutmut" run)
   (cd "$mutation_backend" && "$BACKEND_ROOT/.venv/bin/mutmut" export-cicd-stats)
   mutation_results=$(cd "$mutation_backend" && "$BACKEND_ROOT/.venv/bin/mutmut" results)
-  assert_no_surviving_mutants "$mutation_results"
-  assert_mutation_stats_fresh "$mutation_stats"
+  assert_exact_equivalent_mutation_results "$mutation_results"
+  assert_full_mutation_stats_fresh "$mutation_stats"
+  prove_exact_equivalent_mutants "$mutation_backend"
 )
 
 backend_property_mutation() (
@@ -857,6 +937,68 @@ self_test_mutation_verdict() {
   printf 'mutation verdict negative control: PASS\n'
 }
 
+self_test_equivalent_mutants() (
+  local fixture mapping valid_stats invalid_stats valid_results valid_show invalid_show
+  fixture=$(mktemp -d)
+  mapping="$fixture/equivalent-mutants.txt"
+  valid_stats="$fixture/valid-stats.json"
+  invalid_stats="$fixture/invalid-stats.json"
+  trap 'rm -rf "$fixture"' EXIT INT TERM
+
+  valid_results=$(expected_equivalent_mutation_results)
+  assert_exact_equivalent_mutation_results "$valid_results"
+  expect_control_failure equivalent-mutant-extra 'equivalent mutation verdict set drifted' \
+    assert_exact_equivalent_mutation_results \
+    "$valid_results
+example.module.x_unreviewed__mutmut_1: survived"
+  expect_control_failure equivalent-mutant-missing 'equivalent mutation verdict set drifted' \
+    assert_exact_equivalent_mutation_results \
+    'verboflex.auth.refresh_sessions.x_logout_rate_limit_user_id__mutmut_18: survived'
+
+  printf '%s\n' \
+    '{"killed": 891, "survived": 2, "total": 893, "no_tests": 0, "skipped": 0, "suspicious": 0, "timeout": 0, "check_was_interrupted_by_user": 0, "segfault": 0}' \
+    >"$valid_stats"
+  printf '%s\n' \
+    '{"killed": 890, "survived": 3, "total": 893, "no_tests": 0, "skipped": 0, "suspicious": 0, "timeout": 0, "check_was_interrupted_by_user": 0, "segfault": 0}' \
+    >"$invalid_stats"
+  assert_full_mutation_stats_fresh "$valid_stats"
+  expect_control_failure equivalent-mutant-count 'not every non-equivalent mutant was killed' \
+    assert_full_mutation_stats_fresh "$invalid_stats"
+
+  "$BACKEND_ROOT/.venv/bin/python" "$BACKEND_EQUIVALENT_MUTANT_PROOF" \
+    --mapping "$BACKEND_EQUIVALENT_MUTANT_MAP" \
+    --backend-root "$BACKEND_ROOT" --self-test
+  cp "$BACKEND_EQUIVALENT_MUTANT_MAP" "$mapping"
+  printf '%s\n' \
+    'example.module.x_unreviewed__mutmut_1|unreviewed|forbidden broadening' >>"$mapping"
+  expect_control_failure equivalent-mutant-mapping 'equivalent mutant mapping drifted' \
+    "$BACKEND_ROOT/.venv/bin/python" "$BACKEND_EQUIVALENT_MUTANT_PROOF" \
+    --mapping "$mapping" \
+    --backend-root "$BACKEND_ROOT"
+
+  valid_show=$(printf '%s\n' \
+    '# verboflex.auth.refresh_sessions.x_logout_rate_limit_user_id__mutmut_18: survived' \
+    '--- src/verboflex/auth/refresh_sessions.py' \
+    '+++ src/verboflex/auth/refresh_sessions.py' \
+    '-            .join(User, User.id == AuthSession.user_id)' \
+    '+            .join(User, None)')
+  assert_equivalent_mutant_show \
+    verboflex.auth.refresh_sessions.x_logout_rate_limit_user_id__mutmut_18 \
+    "$valid_show"
+  invalid_show=$(printf '%s\n' \
+    '# verboflex.auth.refresh_sessions.x_logout_rate_limit_user_id__mutmut_18: survived' \
+    '--- src/verboflex/auth/refresh_sessions.py' \
+    '+++ src/verboflex/auth/refresh_sessions.py' \
+    '-            .join(User, User.id == AuthSession.user_id)' \
+    '+            .join(User, true())')
+  expect_control_failure equivalent-mutant-diff \
+    'equivalent mutant diff drifted outside the reviewed join transformation' \
+    assert_equivalent_mutant_show \
+    verboflex.auth.refresh_sessions.x_logout_rate_limit_user_id__mutmut_18 \
+    "$invalid_show"
+  printf 'exact equivalent mutation controls: PASS\n'
+)
+
 self_test_mutation_freshness() (
   local fixture fresh_stats stale_stats
   fixture=$(mktemp -d)
@@ -1043,6 +1185,7 @@ case "${1:-}" in
   --self-test-candidate-contract) self_test_candidate_contract ;;
   --self-test-infra-lifecycle) self_test_infra_lifecycle ;;
   --self-test-mutation-verdict) self_test_mutation_verdict ;;
+  --self-test-equivalent-mutants) self_test_equivalent_mutants ;;
   --self-test-mutation-freshness) self_test_mutation_freshness ;;
   --self-test-property-mutation) self_test_property_mutation ;;
   --self-test-check-sequence) self_test_check_sequence ;;

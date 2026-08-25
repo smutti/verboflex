@@ -1,0 +1,3 @@
+# Exact Phase 1 equivalent-mutant register. Format: name|variant|rationale
+verboflex.auth.refresh_sessions.x_logout_rate_limit_user_id__mutmut_18|join(User, None)|SQLAlchemy 2.0.52 infers the AuthSession.user_id foreign-key join and compiles byte-identical PostgreSQL SQL.
+verboflex.auth.refresh_sessions.x_logout_rate_limit_user_id__mutmut_20|join(User)|SQLAlchemy 2.0.52 infers the AuthSession.user_id foreign-key join and compiles byte-identical PostgreSQL SQL.
