@@ -56,6 +56,9 @@ grep -Fq 'mutation verdict negative control: PASS' "$output_file"
 "$repo_root/tools/gauntlet.sh" --self-test-mutation-freshness >"$output_file" 2>&1
 grep -Fq 'mutation freshness negative control: PASS' "$output_file"
 
+"$repo_root/tools/gauntlet.sh" --self-test-property-mutation >"$output_file" 2>&1
+grep -Fq 'property mutation attribution contract: PASS' "$output_file"
+
 "$repo_root/tools/gauntlet.sh" --self-test-check-sequence >"$output_file" 2>&1
 grep -Fq 'required check sequence negative control: PASS' "$output_file"
 
