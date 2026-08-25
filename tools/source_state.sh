@@ -232,6 +232,13 @@ self_test_manifest() {
   baseline=$(compute_digest "$fixture" tools/source_manifest.txt final)
   [ "${#baseline}" -eq 64 ] || die "positive control did not produce a SHA-256 digest"
 
+  sed 's#:(glob)reports/\*\*#:(glob)absent-artifacts/**#' \
+    "$manifest" >"$fixture/config/empty-exclusion-manifest.txt"
+  git -C "$fixture" add config/empty-exclusion-manifest.txt
+  git -C "$fixture" commit -qm empty-exclusion-fixture
+  digest=$(compute_digest "$fixture" config/empty-exclusion-manifest.txt final)
+  [ "${#digest}" -eq 64 ] || die "empty exclusion set removed included source"
+
   for path in app/main.txt tests/test.txt config/app.conf locks/deps.lock migrations/001.sql \
     tools/source_manifest.txt docs/reviews/phase-01-code-security.md; do
     if [ "$path" = "tools/source_manifest.txt" ]; then
