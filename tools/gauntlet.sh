@@ -960,7 +960,7 @@ self_test_frontend_coverage() (
     die "normalized frontend Cobertura could not be consumed by production diff-cover"
   fi
 
-  printf '%s\n' 'Diff Coverage' 'Total: 1 lines' 'Missing: 0 lines' 'Coverage: 100%' \
+  printf '%s\n' 'Diff Coverage' 'Total:   152 lines' 'Missing: 0 lines' 'Coverage: 100%' \
     >"$valid_report"
   assert_diff_coverage_nonempty "$valid_report"
 
