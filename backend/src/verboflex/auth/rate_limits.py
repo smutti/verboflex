@@ -54,6 +54,11 @@ end
 local ttl = redis.call('TTL', KEYS[1])
 return {current, ttl}
 """
+MAX_KEYS_ERROR_MESSAGE = "max_keys must be positive"
+RATE_POLICY_ERROR_MESSAGE = "rate policy values must be positive"
+RATE_LIMIT_DETAIL = "Rate limit exceeded"
+LOGIN_LIMIT_INVALID_MESSAGE = "login rate limiter returned invalid state"
+LOGIN_LIMIT_UNAVAILABLE_MESSAGE = "login rate limiter is unavailable"
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,7 +79,7 @@ class BoundedLocalRateLimiter:
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if max_keys < 1:
-            raise ValueError("max_keys must be positive")
+            raise ValueError(MAX_KEYS_ERROR_MESSAGE)
         self._max_keys = max_keys
         self._clock = clock
         self._windows: OrderedDict[str, _LocalWindow] = OrderedDict()
@@ -83,7 +88,7 @@ class BoundedLocalRateLimiter:
     def check(self, key: str, *, limit: int, window_seconds: int) -> LoginRateLimit:
         """Count one request without allowing unbounded process memory growth."""
         if limit < 1 or window_seconds < 1:
-            raise ValueError("rate policy values must be positive")
+            raise ValueError(RATE_POLICY_ERROR_MESSAGE)
         now = self._clock()
         with self._lock:
             current = self._windows.get(key)
@@ -128,7 +133,7 @@ def raise_rate_limited(result: LoginRateLimit) -> None:
     """Raise the one stable Phase 1 exhaustion response."""
     raise HTTPException(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        detail="Rate limit exceeded",
+        detail=RATE_LIMIT_DETAIL,
         headers={
             "Retry-After": str(result.retry_after),
             "X-RateLimit-Remaining": "0",
@@ -179,11 +184,11 @@ def enforce_login_rate_limit(
             str(LOGIN_WINDOW_SECONDS),
         )
         if not isinstance(raw_result, (list, tuple)) or len(raw_result) != 2:
-            raise RateLimitUnavailable("login rate limiter returned invalid state")
+            raise RateLimitUnavailable(LOGIN_LIMIT_INVALID_MESSAGE)
         attempts = int(raw_result[0])
         ttl = int(raw_result[1])
     except (RedisError, TypeError, ValueError) as error:
-        raise RateLimitUnavailable("login rate limiter is unavailable") from error
+        raise RateLimitUnavailable(LOGIN_LIMIT_UNAVAILABLE_MESSAGE) from error
 
     retry_after = max(ttl, 1)
     return LoginRateLimit(

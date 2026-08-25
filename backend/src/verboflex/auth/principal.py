@@ -22,6 +22,14 @@ from verboflex.models.auth_session import AuthSession
 from verboflex.models.user import User
 from verboflex.schemas.users import RoleName
 
+INVALID_PRINCIPAL_MESSAGE = "invalid access token"
+MISSING_ACCESS_TOKEN_MESSAGE = "missing access token"
+INVALID_ROLE_STATE_MESSAGE = "invalid role state"
+PASSWORD_CHANGE_REQUIRED_MESSAGE = "password change required"
+PASSWORD_CHANGE_REQUIRED_DETAIL = "Password change required"
+INVALID_ACCESS_TOKEN_DETAIL = "Invalid access token"
+BEARER_CHALLENGE = {"WWW-Authenticate": "Bearer"}
+
 
 class InvalidPrincipal(PermissionError):
     """Raised when signed claims disagree with current durable authority."""
@@ -40,7 +48,7 @@ class Principal:
 
 def _require_current_user(user: User | None, *, token_version: int) -> User:
     if user is None or not user.is_active or user.token_version != token_version:
-        raise InvalidPrincipal("invalid access token")
+        raise InvalidPrincipal(INVALID_PRINCIPAL_MESSAGE)
     return user
 
 
@@ -48,11 +56,11 @@ def _require_current_session(
     auth_session: AuthSession | None, *, user_id: UUID, now: datetime
 ) -> None:
     if auth_session is None:
-        raise InvalidPrincipal("invalid access token")
+        raise InvalidPrincipal(INVALID_PRINCIPAL_MESSAGE)
     if auth_session.user_id != user_id:
-        raise InvalidPrincipal("invalid access token")
+        raise InvalidPrincipal(INVALID_PRINCIPAL_MESSAGE)
     if auth_session.revoked_at is not None or auth_session.expires_at <= now:
-        raise InvalidPrincipal("invalid access token")
+        raise InvalidPrincipal(INVALID_PRINCIPAL_MESSAGE)
 
 
 def load_principal(
@@ -63,11 +71,11 @@ def load_principal(
 ) -> Principal:
     """Resolve verified bearer authority against current PostgreSQL state."""
     if access_token is None:
-        raise InvalidPrincipal("missing access token")
+        raise InvalidPrincipal(MISSING_ACCESS_TOKEN_MESSAGE)
     try:
         claims = decode_access_token(access_token, settings=settings)
     except InvalidAccessToken as error:
-        raise InvalidPrincipal("invalid access token") from error
+        raise InvalidPrincipal(INVALID_PRINCIPAL_MESSAGE) from error
 
     user = _require_current_user(
         session.execute(select(User).where(User.id == claims.user_id)).scalar_one_or_none(),
@@ -78,12 +86,12 @@ def load_principal(
     )
     _require_current_session(auth_session, user_id=user.id, now=datetime.now(UTC))
     if user.must_change_password:
-        raise PasswordChangeRequired("password change required")
+        raise PasswordChangeRequired(PASSWORD_CHANGE_REQUIRED_MESSAGE)
 
     try:
         roles = tuple(sorted(RoleName(role.name) for role in user.roles))
     except ValueError as error:
-        raise InvalidPrincipal("invalid role state") from error
+        raise InvalidPrincipal(INVALID_ROLE_STATE_MESSAGE) from error
     return Principal(
         user_id=user.id,
         email=user.email,
@@ -104,13 +112,13 @@ def get_current_principal(
     except PasswordChangeRequired as error:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Password change required",
+            detail=PASSWORD_CHANGE_REQUIRED_DETAIL,
         ) from error
     except InvalidPrincipal as error:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid access token",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail=INVALID_ACCESS_TOKEN_DETAIL,
+            headers=BEARER_CHALLENGE,
         ) from error
 
 

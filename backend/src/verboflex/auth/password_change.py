@@ -22,6 +22,9 @@ from verboflex.core.config import Settings
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.user import User
 
+INVALID_PASSWORD_CHANGE_PRINCIPAL_MESSAGE = "invalid access token"
+INCORRECT_CURRENT_PASSWORD_MESSAGE = "current password is incorrect"
+
 
 class InvalidPasswordChangePrincipal(PermissionError):
     """Raised when bearer claims lack current durable password-change authority."""
@@ -60,7 +63,7 @@ def decode_password_change_candidate(
 ) -> PasswordChangeCandidate:
     """Accept ordinary or restricted bearer purpose only at this endpoint."""
     if access_token is None:
-        raise InvalidPasswordChangePrincipal("invalid access token")
+        raise InvalidPasswordChangePrincipal(INVALID_PASSWORD_CHANGE_PRINCIPAL_MESSAGE)
     try:
         try:
             claims = decode_access_token(access_token, settings=settings)
@@ -71,7 +74,7 @@ def decode_password_change_candidate(
                 expected_purpose="password_change",
             )
     except (InvalidAccessToken, PasswordChangeRequired) as error:
-        raise InvalidPasswordChangePrincipal("invalid access token") from error
+        raise InvalidPasswordChangePrincipal(INVALID_PASSWORD_CHANGE_PRINCIPAL_MESSAGE) from error
     return PasswordChangeCandidate(claims=claims)
 
 
@@ -80,9 +83,9 @@ def _load_password_change_user(session: Session, claims: AccessTokenClaims) -> U
         select(User).where(User.id == claims.user_id).with_for_update()
     ).scalar_one_or_none()
     if user is None or not user.is_active or user.token_version != claims.token_version:
-        raise InvalidPasswordChangePrincipal("invalid access token")
+        raise InvalidPasswordChangePrincipal(INVALID_PASSWORD_CHANGE_PRINCIPAL_MESSAGE)
     if claims.purpose == "password_change" and not user.must_change_password:
-        raise InvalidPasswordChangePrincipal("invalid access token")
+        raise InvalidPasswordChangePrincipal(INVALID_PASSWORD_CHANGE_PRINCIPAL_MESSAGE)
     return user
 
 
@@ -103,14 +106,14 @@ def _require_access_session(
         else None
     )
     if auth_session is None or auth_session.user_id != user_id:
-        raise InvalidPasswordChangePrincipal("invalid access token")
+        raise InvalidPasswordChangePrincipal(INVALID_PASSWORD_CHANGE_PRINCIPAL_MESSAGE)
     if auth_session.revoked_at is not None or auth_session.expires_at <= changed_at:
-        raise InvalidPasswordChangePrincipal("invalid access token")
+        raise InvalidPasswordChangePrincipal(INVALID_PASSWORD_CHANGE_PRINCIPAL_MESSAGE)
 
 
 def _validate_new_password(user: User, current_password: str, new_password: str) -> None:
     if not verify_password(current_password, user.hashed_password):
-        raise IncorrectCurrentPassword("current password is incorrect")
+        raise IncorrectCurrentPassword(INCORRECT_CURRENT_PASSWORD_MESSAGE)
     try:
         validate_password_for_user(
             new_password,

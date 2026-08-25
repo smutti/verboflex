@@ -18,6 +18,9 @@ from verboflex.core.config import Settings
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.user import User
 
+LOGIN_RATE_LIMITED_MESSAGE = "login rate limit exceeded"
+INVALID_CREDENTIALS_MESSAGE = "invalid credentials"
+
 
 class InvalidCredentials(PermissionError):
     """Raised for every invalid, unknown, or inactive credential combination."""
@@ -27,7 +30,7 @@ class LoginRateLimited(RuntimeError):
     """Raised before password verification after the fixed-window limit."""
 
     def __init__(self, retry_after: int) -> None:
-        super().__init__("login rate limit exceeded")
+        super().__init__(LOGIN_RATE_LIMITED_MESSAGE)
         self.retry_after = retry_after
 
 
@@ -75,7 +78,7 @@ def authenticate_login(
     password_hash = user.hashed_password if user is not None else _dummy_password_hash()
     password_matches = verify_password(password, password_hash)
     if user is None or not password_matches or not user.is_active:
-        raise InvalidCredentials("invalid credentials")
+        raise InvalidCredentials(INVALID_CREDENTIALS_MESSAGE)
     if user.must_change_password:
         access_token = issue_access_token(
             user_id=user.id,

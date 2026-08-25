@@ -19,6 +19,7 @@ REFRESH_TOKEN_LENGTH = 43
 REFRESH_TOKEN_ALPHABET = frozenset(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 )
+INVALID_REFRESH_SESSION_MESSAGE = "invalid refresh session"
 
 
 class InvalidRefreshSession(PermissionError):
@@ -54,7 +55,7 @@ def _load_predecessor(session: Session, refresh_token: str) -> AuthSession:
         .with_for_update()
     ).scalar_one_or_none()
     if predecessor is None:
-        raise InvalidRefreshSession("invalid refresh session")
+        raise InvalidRefreshSession(INVALID_REFRESH_SESSION_MESSAGE)
     return predecessor
 
 
@@ -75,10 +76,10 @@ def _require_refresh_user(
     session: Session, predecessor: AuthSession, *, rotated_at: datetime
 ) -> User:
     if predecessor.revoked_at is not None or predecessor.expires_at <= rotated_at:
-        raise InvalidRefreshSession("invalid refresh session")
+        raise InvalidRefreshSession(INVALID_REFRESH_SESSION_MESSAGE)
     user = session.get(User, predecessor.user_id)
     if user is None or not user.is_active or user.must_change_password:
-        raise InvalidRefreshSession("invalid refresh session")
+        raise InvalidRefreshSession(INVALID_REFRESH_SESSION_MESSAGE)
     return user
 
 
@@ -125,7 +126,7 @@ def rotate_refresh_session(
 ) -> RefreshAuthority:
     """Atomically consume one refresh token and create exactly one successor."""
     if not _is_well_formed_refresh_token(refresh_token):
-        raise InvalidRefreshSession("invalid refresh session")
+        raise InvalidRefreshSession(INVALID_REFRESH_SESSION_MESSAGE)
     assert refresh_token is not None
     rotated_at = now or datetime.now(UTC)
     replay_detected = False
@@ -145,7 +146,7 @@ def rotate_refresh_session(
             )
 
     if replay_detected or authority is None:
-        raise InvalidRefreshSession("invalid refresh session")
+        raise InvalidRefreshSession(INVALID_REFRESH_SESSION_MESSAGE)
     return authority
 
 
