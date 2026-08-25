@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -231,6 +234,37 @@ def test_logout_request_eleven_is_limited_before_revocation(
     with refresh_session_factory() as session:
         persisted = session.get_one(AuthSession, SESSION_ID)
     assert persisted.revoked_at is None
+
+
+def test_distinct_sessions_for_one_user_share_the_logout_rate_budget(
+    refresh_session_factory: sessionmaker[Session],
+) -> None:
+    """Key the authenticated actor by durable user identity, never by cookie credential."""
+    first = create_refresh_authority(refresh_session_factory)
+    second_token = "B" * 43
+    with refresh_session_factory.begin() as session:
+        session.add(
+            AuthSession(
+                user_id=first.user_id,
+                family_id=uuid4(),
+                token_hash=hashlib.sha256(second_token.encode()).hexdigest(),
+                expires_at=datetime.now(UTC) + timedelta(days=7),
+            )
+        )
+    redis_client = configure_dependencies(
+        refresh_session_factory,
+        FakeRedis(result=[1, 60]),
+    )
+
+    first_response = asyncio.run(post_logout(REFRESH_TOKEN))
+    second_response = asyncio.run(post_logout(second_token))
+
+    assert first_response.status_code == second_response.status_code == 204
+    redis_keys = [call[2][0] for call in redis_client.calls]
+    assert len(redis_keys) == 2
+    assert redis_keys[0] == redis_keys[1]
+    assert REFRESH_TOKEN not in redis_keys[0]
+    assert second_token not in redis_keys[0]
 
 
 def test_logout_remains_available_when_redis_is_unavailable(
