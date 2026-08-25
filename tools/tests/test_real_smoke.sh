@@ -26,3 +26,5 @@ done
 
 grep -Fq 'TLS termination boundary' "$repo_root/docs/phase-01-smoke.md"
 grep -Fq '__Host-verboflex_refresh' "$repo_root/tools/real_smoke.sh"
+grep -Fq 'pre-rotation-revoked-access' "$repo_root/tools/real_smoke.sh"
+grep -Fq 'successor-revoked-access' "$repo_root/tools/real_smoke.sh"
