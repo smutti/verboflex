@@ -29,7 +29,9 @@ async function expectNoAuthInWebStorage(page: Page) {
 async function expectBoundedLayout(page: Page) {
   const layout = await page.evaluate(() => {
     const visibleElements = Array.from(document.querySelectorAll("*"))
-      .filter((element): element is HTMLElement => element instanceof HTMLElement)
+      .filter(
+        (element): element is HTMLElement => element instanceof HTMLElement,
+      )
       .filter((element) => {
         const style = getComputedStyle(element);
         const rect = element.getBoundingClientRect();
@@ -79,9 +81,13 @@ async function expectWorkspaceCopy(page: Page) {
   ).toBeVisible();
   await expect(page.getByText(emptyStateCopy, { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /product/i })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /repository/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /repository/i })).toHaveCount(
+    0,
+  );
   await expect(page.getByRole("button", { name: /review/i })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /pull request/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /pull request/i })).toHaveCount(
+    0,
+  );
 }
 
 test("auth shell completes forced change, refresh, responsive navigation, and logout", async ({
@@ -144,9 +150,15 @@ test("auth shell completes forced change, refresh, responsive navigation, and lo
   await expect(page.getByText("Administrator", { exact: true })).toBeVisible();
   await expectWorkspaceCopy(page);
   await expect(page.getByText("API online", { exact: true })).toBeVisible();
-  await expect(page.getByText(/^Database (?:online|unavailable|pending)$/)).toBeVisible();
-  await expect(page.getByText(/^Redis (?:online|unavailable|pending)$/)).toBeVisible();
-  await expect(page.getByText(/^Worker (?:online|unavailable|pending)$/)).toBeVisible();
+  await expect(
+    page.getByText(/^Database (?:online|unavailable|pending)$/),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/^Redis (?:online|unavailable|pending)$/),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/^Worker (?:online|unavailable|pending)$/),
+  ).toBeVisible();
   await expectNoAuthInWebStorage(page);
 
   await page.reload();
@@ -171,9 +183,12 @@ test("auth shell completes forced change, refresh, responsive navigation, and lo
       ).toBeVisible();
     } else {
       await expect(navigationTrigger).toBeVisible();
-      await navigationTrigger.click();
+      await navigationTrigger.focus();
+      await expect(navigationTrigger).toBeFocused();
+      await page.keyboard.press("Enter");
       const sheet = page.getByRole("dialog", { name: "Navigation" });
       await expect(sheet).toBeVisible();
+      await expect(sheet.locator(":focus")).toHaveCount(1);
       await expect(
         sheet.getByRole("button", { name: "Workspace overview" }),
       ).toHaveAttribute("aria-current", "page");
@@ -182,9 +197,7 @@ test("auth shell completes forced change, refresh, responsive navigation, and lo
     }
   }
 
-  await page
-    .getByRole("button", { name: "Sign out of VerboFlex" })
-    .click();
+  await page.getByRole("button", { name: "Sign out of VerboFlex" }).click();
   await expect(page).toHaveURL(/\/login$/);
   await expectNoAuthInWebStorage(page);
 });
