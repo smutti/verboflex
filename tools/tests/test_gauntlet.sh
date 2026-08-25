@@ -74,6 +74,11 @@ grep -Fq 'required check sequence negative control: PASS' "$output_file"
 grep -Fq 'frontend changed-line coverage negative controls: PASS' "$output_file"
 grep -Fq 'frontend coverage exclusion mapping negative control: PASS' "$output_file"
 grep -Fq 'frontend Cobertura partial-branch negative control: PASS' "$output_file"
+grep -Fq -- '--coverage.reporter=cobertura' "$repo_root/tools/gauntlet.sh"
+if grep -Fq -- '--coverage.reporter=lcov' "$repo_root/tools/gauntlet.sh"; then
+  printf 'frontend coverage gate must not use branch-permissive LCOV input\n' >&2
+  exit 1
+fi
 
 "$repo_root/tools/gauntlet.sh" --self-test-secret-audit-policy >"$output_file" 2>&1
 grep -Fq 'secret audit exact-policy negative control: PASS' "$output_file"

@@ -142,29 +142,34 @@ assert_complexity_below_c() {
   [ ! -s "$report" ] || die "complexity grade C or worse detected"
 }
 
-normalize_frontend_lcov() {
+normalize_frontend_cobertura() {
   local input=$1 output=$2
-  [ -f "$input" ] || die "frontend LCOV input is missing"
-  if ! awk '
-    BEGIN { seen = 0; valid = 1 }
-    /^SF:/ {
-      path = substr($0, 4)
-      if (path ~ /^\// || path ~ /(^|\/)\.\.(\/|$)/) {
-        valid = 0
-      } else if (path ~ /^src\//) {
-        $0 = "SF:frontend/" path
-        seen++
-      } else if (path ~ /^frontend\/src\//) {
-        seen++
-      } else {
-        valid = 0
-      }
-    }
-    { print }
-    END { if (!valid || seen == 0) exit 1 }
-  ' "$input" >"$output"; then
+  [ -f "$input" ] || die "frontend Cobertura input is missing"
+  if ! "$BACKEND_ROOT/.venv/bin/python" -c '
+from pathlib import PurePosixPath
+import sys
+import xml.etree.ElementTree as ET
+
+source_path, output_path, expected_frontend = sys.argv[1:]
+tree = ET.parse(source_path)
+root = tree.getroot()
+sources = root.findall("./sources/source")
+classes = root.findall(".//class")
+if len(sources) != 1 or (sources[0].text or "").rstrip("/") != expected_frontend:
+    raise SystemExit(1)
+if not classes:
+    raise SystemExit(1)
+sources[0].text = "."
+for covered_class in classes:
+    filename = covered_class.get("filename", "")
+    path = PurePosixPath(filename)
+    if path.is_absolute() or ".." in path.parts or not filename.startswith("src/"):
+        raise SystemExit(1)
+    covered_class.set("filename", f"frontend/{filename}")
+tree.write(output_path, encoding="utf-8", xml_declaration=True)
+' "$input" "$output" "$FRONTEND_ROOT"; then
     rm -f "$output"
-    die "frontend LCOV contains missing or non-canonical source paths"
+    die "frontend Cobertura contains missing or non-canonical source paths"
   fi
 }
 
@@ -493,24 +498,25 @@ backend_coverage_body() {
 }
 
 changed_line_coverage() {
-  local normalized_frontend_lcov frontend_diff_report frontend_diff_rc
+  local normalized_frontend_coverage frontend_diff_report frontend_diff_rc
   local -a frontend_excludes
   with_test_infra backend_coverage_body
   (cd "$FRONTEND_ROOT" && npm run test:coverage -- --sequence.shuffle --sequence.seed="$RANDOM_SEED" \
-    --coverage.provider=v8 --coverage.reporter=text --coverage.reporter=lcov \
+    --coverage.provider=v8 --coverage.reporter=text --coverage.reporter=cobertura \
     --coverage.reportsDirectory="$FRONTEND_COVERAGE_DIR")
   (cd "$BACKEND_ROOT" && uv run diff-cover "$BACKEND_COVERAGE" \
     --compare-branch "$PHASE_BASE_COMMIT" --branch-coverage --fail-under 100 \
     --exclude 'backend/alembic/**' 'backend/src/verboflex/main.py' \
       'backend/src/verboflex/scripts/export_openapi.py')
-  normalized_frontend_lcov=$(mktemp)
+  normalized_frontend_coverage=$(mktemp)
   frontend_diff_report=$(mktemp)
-  normalize_frontend_lcov "$FRONTEND_COVERAGE_DIR/lcov.info" "$normalized_frontend_lcov"
+  normalize_frontend_cobertura \
+    "$FRONTEND_COVERAGE_DIR/cobertura-coverage.xml" "$normalized_frontend_coverage"
   while IFS= read -r exclusion; do
     frontend_excludes+=("$exclusion")
   done < <(frontend_coverage_exclude_patterns)
   set +e
-  (cd "$BACKEND_ROOT" && uv run diff-cover "$normalized_frontend_lcov" \
+  (cd "$REPO_ROOT" && "$BACKEND_ROOT/.venv/bin/diff-cover" "$normalized_frontend_coverage" \
     --compare-branch "$PHASE_BASE_COMMIT" --branch-coverage --fail-under 100 \
     --exclude "${frontend_excludes[@]}") >"$frontend_diff_report" 2>&1
   frontend_diff_rc=$?
@@ -518,7 +524,7 @@ changed_line_coverage() {
   sed -n '1,240p' "$frontend_diff_report"
   [ "$frontend_diff_rc" -eq 0 ] || die "frontend changed-line coverage failed"
   assert_diff_coverage_nonempty "$frontend_diff_report"
-  rm -f "$normalized_frontend_lcov" "$frontend_diff_report"
+  rm -f "$normalized_frontend_coverage" "$frontend_diff_report"
 }
 
 create_fresh_backend_workspace() {
@@ -906,6 +912,7 @@ self_test_check_sequence() (
 
 self_test_frontend_coverage() (
   local fixture source normalized valid_report vacuous_report valid_map invalid_map patterns
+  local partial_coverage partial_diff partial_report partial_rc
   fixture=$(mktemp -d)
   source="$fixture/source.lcov"
   normalized="$fixture/normalized.lcov"
@@ -914,12 +921,21 @@ self_test_frontend_coverage() (
   valid_map="$fixture/frontend-coverage-exclusions"
   invalid_map="$fixture/frontend-coverage-exclusions-invalid"
   patterns="$fixture/frontend-coverage-patterns"
+  partial_coverage="$fixture/partial-coverage.xml"
+  partial_diff="$fixture/partial.diff"
+  partial_report="$fixture/partial-report"
   trap 'rm -rf "$fixture"' EXIT INT TERM
 
-  printf '%s\n' 'TN:' 'SF:src/features/auth/session.tsx' 'DA:1,1' 'end_of_record' >"$source"
-  normalize_frontend_lcov "$source" "$normalized"
-  grep -Fq 'SF:frontend/src/features/auth/session.tsx' "$normalized" \
-    || die "frontend LCOV path normalization drifted"
+  printf '%s\n' \
+    '<?xml version="1.0"?>' \
+    '<coverage><sources>' \
+    "<source>$FRONTEND_ROOT</source>" \
+    '</sources><packages><package><classes>' \
+    '<class filename="src/features/auth/session.tsx"><lines><line number="1" hits="1"/></lines></class>' \
+    '</classes></package></packages></coverage>' >"$source"
+  normalize_frontend_cobertura "$source" "$normalized"
+  grep -Fq 'filename="frontend/src/features/auth/session.tsx"' "$normalized" \
+    || die "frontend Cobertura path normalization drifted"
 
   printf '%s\n' 'Diff Coverage' 'Total: 1 lines' 'Missing: 0 lines' 'Coverage: 100%' \
     >"$valid_report"
@@ -931,10 +947,14 @@ self_test_frontend_coverage() (
     'changed-line coverage matched no coverable frontend lines' \
     assert_diff_coverage_nonempty "$vacuous_report"
 
-  printf '%s\n' 'TN:' 'SF:/absolute/session.tsx' 'DA:1,1' 'end_of_record' >"$source"
-  expect_control_failure frontend-lcov-path \
-    'frontend LCOV contains missing or non-canonical source paths' \
-    normalize_frontend_lcov "$source" "$normalized"
+  printf '%s\n' \
+    '<?xml version="1.0"?>' \
+    '<coverage><sources><source>/unexpected/frontend</source></sources><packages><package><classes>' \
+    '<class filename="/absolute/session.tsx"><lines><line number="1" hits="1"/></lines></class>' \
+    '</classes></package></packages></coverage>' >"$source"
+  expect_control_failure frontend-cobertura-path \
+    'frontend Cobertura contains missing or non-canonical source paths' \
+    normalize_frontend_cobertura "$source" "$normalized"
 
   write_expected_frontend_coverage_exclusion_map >"$valid_map"
   assert_frontend_coverage_exclusion_map "$valid_map"
@@ -949,6 +969,32 @@ self_test_frontend_coverage() (
     'frontend coverage exclusion mapping drifted outside the approved SPEC scope' \
     assert_frontend_coverage_exclusion_map "$invalid_map"
   printf 'frontend coverage exclusion mapping negative control: PASS\n'
+
+  printf '%s\n' \
+    '<?xml version="1.0"?>' \
+    '<coverage><sources><source>.</source></sources><packages><package><classes>' \
+    '<class filename="frontend/src/partial.ts"><lines>' \
+    '<line number="1" hits="1" branch="true" condition-coverage="50% (1/2)"/>' \
+    '</lines></class></classes></package></packages></coverage>' >"$partial_coverage"
+  printf '%s\n' \
+    'diff --git a/frontend/src/partial.ts b/frontend/src/partial.ts' \
+    'new file mode 100644' \
+    'index 0000000..1111111' \
+    '--- /dev/null' \
+    '+++ b/frontend/src/partial.ts' \
+    '@@ -0,0 +1 @@' \
+    '+condition ? left() : right()' >"$partial_diff"
+  set +e
+  (cd "$REPO_ROOT" && "$BACKEND_ROOT/.venv/bin/diff-cover" "$partial_coverage" \
+    --diff-file "$partial_diff" --branch-coverage --fail-under 100) \
+    >"$partial_report" 2>&1
+  partial_rc=$?
+  set -e
+  [ "$partial_rc" -ne 0 ] \
+    || die "frontend Cobertura partial branch escaped the changed-line gate"
+  grep -Fq 'Coverage is below 100%' "$partial_report" \
+    || die "frontend Cobertura partial-branch control did not reach diff-cover"
+  printf 'frontend Cobertura partial-branch negative control: PASS\n'
   printf 'frontend changed-line coverage negative controls: PASS\n'
 )
 
