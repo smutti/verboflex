@@ -18,6 +18,7 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
+from verboflex import cli as cli_module
 from verboflex.auth.passwords import PasswordPolicyError, verify_password
 from verboflex.cli import (
     BootstrapAdminError,
@@ -415,13 +416,120 @@ def test_reset_unknown_account_is_non_mutating_and_non_enumerating(
         assert session.scalar(select(func.count()).select_from(Role)) == 4
 
 
-def test_cli_exposes_only_non_secret_bootstrap_and_reset_arguments() -> None:
+def test_admin_deactivation_revokes_all_authority_on_the_active_transition(
+    auth_session_factory: sessionmaker[Session],
+) -> None:
+    """Deactivation bumps durable authority and revokes only the target's live sessions."""
+    with auth_session_factory() as session:
+        target = bootstrap_first_admin(
+            session,
+            email="admin@example.com",
+            display_name="Admin",
+            password="first admin phrase!",
+        )
+        target_id = target.id
+
+    deactivated_at = datetime(2026, 8, 25, 12, 0, tzinfo=UTC)
+    previous_revocation = datetime(2026, 1, 1, tzinfo=UTC)
+    with auth_session_factory.begin() as session:
+        target = session.get_one(User, target_id)
+        target.must_change_password = False
+        target.token_version = 4
+        other = User(
+            email="other@example.com",
+            display_name="Other User",
+            hashed_password=target.hashed_password,
+            must_change_password=False,
+        )
+        session.add(other)
+        session.flush()
+        other_id = other.id
+        session.add_all(
+            [
+                AuthSession(
+                    user_id=target_id,
+                    family_id=uuid4(),
+                    token_hash="f" * 64,
+                    expires_at=deactivated_at + timedelta(days=7),
+                ),
+                AuthSession(
+                    user_id=target_id,
+                    family_id=uuid4(),
+                    token_hash="1" * 64,
+                    revoked_at=previous_revocation,
+                    expires_at=deactivated_at + timedelta(days=7),
+                ),
+                AuthSession(
+                    user_id=other_id,
+                    family_id=uuid4(),
+                    token_hash="2" * 64,
+                    expires_at=deactivated_at + timedelta(days=7),
+                ),
+            ]
+        )
+
+    with auth_session_factory() as session:
+        cli_module.deactivate_user(
+            session,
+            email=" ADMIN@EXAMPLE.COM ",
+            now=deactivated_at,
+        )
+
+    with auth_session_factory() as session:
+        target = session.get_one(User, target_id)
+        sessions = session.execute(select(AuthSession)).scalars().all()
+        target_sessions = [item for item in sessions if item.user_id == target_id]
+        other_session = next(item for item in sessions if item.user_id == other_id)
+        assert target.is_active is False
+        assert target.token_version == 5
+        assert sorted(item.revoked_at for item in target_sessions) == sorted(
+            [previous_revocation, deactivated_at]
+        )
+        assert other_session.revoked_at is None
+
+
+def test_admin_deactivation_refuses_unknown_or_inactive_accounts_without_mutation(
+    auth_session_factory: sessionmaker[Session],
+) -> None:
+    """The active-to-inactive transition is single-use and non-enumerating."""
+    with auth_session_factory() as session:
+        user = bootstrap_first_admin(
+            session,
+            email="admin@example.com",
+            display_name="Admin",
+            password="first admin phrase!",
+        )
+        user_id = user.id
+
+    with auth_session_factory.begin() as session:
+        user = session.get_one(User, user_id)
+        user.is_active = False
+        previous_version = user.token_version
+
+    for email in ("admin@example.com", "unknown@example.com"):
+        with (
+            auth_session_factory() as session,
+            pytest.raises(cli_module.DeactivateUserError, match="account unavailable"),
+        ):
+            cli_module.deactivate_user(session, email=email)
+
+    with auth_session_factory() as session:
+        user = session.get_one(User, user_id)
+        assert user.is_active is False
+        assert user.token_version == previous_version
+
+
+def test_cli_exposes_only_non_secret_bootstrap_reset_and_deactivation_arguments() -> None:
     """Passwords have no normal argument, default, or parsed namespace field."""
     parser = build_parser()
     subparsers = next(
         action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
     )
-    assert set(subparsers.choices) == {"bootstrap-admin", "reset-password"}
+    assert set(subparsers.choices) == {
+        "bootstrap-admin",
+        "deactivate-user",
+        "reset-password",
+    }
 
     bootstrap = parser.parse_args(
         [
@@ -433,8 +541,41 @@ def test_cli_exposes_only_non_secret_bootstrap_and_reset_arguments() -> None:
         ]
     )
     reset = parser.parse_args(["reset-password", "--email", "admin@example.com"])
+    deactivate = parser.parse_args(["deactivate-user", "--email", "admin@example.com"])
     assert "password" not in vars(bootstrap)
     assert "password" not in vars(reset)
+    assert "password" not in vars(deactivate)
+
+
+def test_cli_deactivation_never_reads_a_password(
+    auth_session_factory: sessionmaker[Session],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A non-secret incident-control command does not touch the credential reader."""
+    with auth_session_factory() as session:
+        user = bootstrap_first_admin(
+            session,
+            email="admin@example.com",
+            display_name="Admin",
+            password="first admin phrase!",
+        )
+        user_id = user.id
+
+    def forbidden_password_reader(_prompt: str) -> str:
+        raise AssertionError("deactivation must not read a password")
+
+    exit_code = main(
+        ["deactivate-user", "--email", "admin@example.com"],
+        password_reader=forbidden_password_reader,
+        session_provider=auth_session_factory,
+    )
+
+    output = capsys.readouterr()
+    assert exit_code == 0
+    assert output.out.strip() == "Account deactivated; all sessions revoked."
+    assert output.err == ""
+    with auth_session_factory() as session:
+        assert session.get_one(User, user_id).is_active is False
 
 
 def test_cli_bootstrap_reads_secret_outside_argv_and_never_echoes_it(
