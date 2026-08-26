@@ -1,13 +1,13 @@
 # Phase 1 Fresh-Context Code and Security Review
 
-- Review-status: CLOSED
+- Review-status: OPEN
 - Open-critical-high: 0
-- Full-gauntlet-status: PASS
-- Reviewed-source-digest: `d6a37b36642dfbe05f7dbc8eef2058aecaa1a46c84623d2656c0f19b2930303a`
-- Review-date: 2026-08-25
+- Full-gauntlet-status: PENDING
+- Reviewed-source-digest: `3b398c710022e9b5dd85828e6c8f5f296fea9796e32e1185bd8d9c7a1de8084f`
+- Review-date: 2026-08-26
 - Review-mode: fresh-context independent goal-backward and OWASP ASVS-aligned source review
 - Candidate-verdict: PASS_FOR_POST_FIX_GAUNTLET
-- Closure-verdict: PASS
+- Closure-verdict: PENDING
 - Critical: 0
 - High: 0
 - Medium: 0
@@ -21,19 +21,12 @@ VF-SEC-008 through VF-SEC-018 are resolved. VF-SEC-007 remains the sole open
 Low finding: a development-only transitive `qs` advisory with no production
 dependency path.
 
-This fresh source-bound review records the candidate verdict
-**PASS_FOR_POST_FIX_GAUNTLET**. Every prior `CLOSED/PASS` or candidate state is
-historical. Later exact runs exposed first the human-graded behavioural Medium
-responsive Escape defect and then the human-graded behavioural Medium checker
-cleanup defect; neither failed run contributes a PASS. Commit `389bb58` removes
-the TooltipContent layer while the responsive Sheet owns focus, and the
-`596b32c` RED -> `cf98c3a` GREEN cleanup cycle makes the tracked process the
-actual Celery worker and proves forced later-layer failure leaves zero worker,
-PostgreSQL, or Redis infrastructure. The complete post-fix candidate gauntlet
-then passed against that unchanged OPEN/PENDING source, and this same
-fresh-context reviewer independently reconciled its external log, exact layer
-record, digest records, current source state, and cleanup. The review is
-therefore **CLOSED/PASS**.
+This fresh source-bound review records the current candidate verdict
+**PASS_FOR_POST_FIX_GAUNTLET** at the Round 3 digest above. Every prior
+`CLOSED/PASS` or candidate state is historical and remains preserved below for
+its exact earlier source state. The current source has no open Critical, High,
+or Medium finding, but it has not yet completed the source-bound post-fix
+gauntlet; the authoritative current disposition is therefore **OPEN/PENDING**.
 
 ## Scope and source identity
 
@@ -682,3 +675,104 @@ open as the sole Low development-only debt.
 This closure applies only to the exact reviewed source digest above. It does not
 close VF-SEC-007 or substitute for the release process's future live
 deployment/TLS and ship-time dependency evidence.
+
+## Round 3 fresh-context candidate — F-R2 remediation review
+
+This section is the authoritative current-state continuation of the review and
+supersedes every preceding closure only as current evidence. Historical
+findings, failed runs, remediations, and exact earlier source dispositions above
+remain append-only evidence for their own source states.
+
+### Reviewer identity and freshness
+
+- Host: OpenAI Codex workspace runner at
+  `/Users/smutti/Documents/personal/verboflex`.
+- Model family: GPT-5 Codex.
+- Fresh-context status: **YES**. The reviewer received no builder conversation,
+  raw gauntlet logs, or draft EVIDENCE artifact.
+- Candidate branch and exact HEAD:
+  `codex/phase-1-platform-foundation` at
+  `4d4b171f8e3d4c8ef88d1e82689c353d20dbb8bf`.
+- Blind review input: the approved Phase 1 SPEC, canonical source manifest,
+  source-state verifier, single gauntlet entry point, tracked historical review,
+  and the complete manifest-selected review-mode source state.
+
+### Scope, attacks, and observed numbers
+
+The reviewer read the 535-line approved SPEC, 54-line manifest, 421-line
+source-state verifier, 1,269-line gauntlet entry point, and 684-line tracked
+review before candidate editing. The manifest resolution contained 162
+category/path rows and 152 unique review-mode paths across implementation,
+tests, configuration, lockfiles, migrations, verifier scripts, and the
+deployment contract. The review independently attacked the current Round 2
+changes and regression surface rather than inheriting the historical verdict.
+
+The completed source-bound probes were:
+
+- exact branch/HEAD and clean included-source identity, with the unrelated
+  untracked `.planning/milestone.lock` preserved unchanged;
+- two consecutive pre-write `tools/source_state.sh --review-digest` runs,
+  both exactly
+  `3b398c710022e9b5dd85828e6c8f5f296fea9796e32e1185bd8d9c7a1de8084f`;
+- direct differential and call-site inspection from the preceding JWT-tamper
+  candidate through the exact Round 3 HEAD;
+- independent inspection of the inclusive rate-limit implementations, exact
+  second-over-limit assertions, private manual mutant construction, exact
+  failure-node attribution, baseline/mutant count contract, and mandatory
+  gauntlet wiring;
+- independent inspection of typed Secure-only configuration, environment
+  string parsing, local/staging/production rejection coverage, example and
+  Compose values, and removal of obsolete insecure test configuration;
+- left-to-right and right-to-left audit of the normative SPEC remediation map
+  against named scenarios, failure rows, Must-NOT rules, tests, checkers, and
+  historical finding dispositions;
+- regression review against authentication, refresh/logout, JWT tamper,
+  mutation freshness/equivalence, frontend coverage, secret-policy, responsive
+  focus, and infrastructure-cleanup findings already preserved above.
+
+No full gauntlet result is credited by this review step. The candidate remains
+`PENDING` until the complete exact source-bound post-fix candidate gauntlet
+finishes.
+
+### Round 2 remediation disposition
+
+- **F-R2-01 — PASS.** All three production decision nodes retain the inclusive
+  `attempts <= limit` contract. Boundary, first-over-limit, and
+  second-over-limit cases are present. `tools/verify_rate_limit_boundary_mutant.py`
+  copies production and attributed tests into a private workspace, requires the
+  exact eight-test clean baseline, applies `attempts != limit + 1` exactly once
+  at each of the three reviewed nodes, and accepts only the three exact
+  divergent failures with `3 failed, 5 passed`. Missing, broadened, or already
+  mutated subjects fail closed, and the proof is mandatory before the complete
+  mutation layer.
+- **F-R2-02 — PASS.** The approved decision/remediation table is normative in
+  both directions and traces the human-approved findings and assurance
+  decisions to concrete falsifiers and back to Phase 1 scenarios, failure
+  modes, gauntlet layers, and prohibitions. No orphan checker, broadened waiver,
+  or unmapped approved remediation was found.
+- **F-R2-03 — PASS.** `refresh_cookie_secure` defaults to true and has a
+  field-level true-only validator, so `false` is rejected before any
+  environment-specific model branch. Local, staging, and production tests all
+  reject false; the environment string `true` remains accepted through typed
+  settings; `.env.example` and base/staging/production Compose configuration
+  are Secure-only; obsolete local insecure overrides were removed.
+- **Round 3 authorization — PASS.** The SPEC records the user's explicit third
+  and final fresh-context round authorization after Round 2 remediation. This
+  review consumes that single exception and does not imply a fourth round.
+
+### Round 3 finding and candidate disposition
+
+No new material or disputed Critical, High, Medium, or Low finding was found.
+VF-SEC-007 remains unchanged as the sole open Low development-only dependency
+debt, with its existing mandatory ship-time disposition.
+
+- Critical / High / Medium / Low: **0 / 0 / 0 / 1**
+- Open Critical/High: **0**
+- Candidate verdict: **PASS_FOR_POST_FIX_GAUNTLET**
+- Closure verdict: **PENDING**
+- Full-gauntlet status: **PENDING**
+- Review status: **OPEN**
+
+This candidate is bound only to review-mode digest
+`3b398c710022e9b5dd85828e6c8f5f296fea9796e32e1185bd8d9c7a1de8084f`.
+No current full-gauntlet or closure PASS is claimed.
