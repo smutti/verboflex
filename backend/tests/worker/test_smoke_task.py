@@ -27,7 +27,6 @@ def test_add_task_executes_through_redis_and_a_distinct_worker_process() -> None
     producer = create_celery_app(
         Settings(
             redis_url=RedisDsn(TEST_REDIS_URL),
-            refresh_cookie_secure=False,
             service_probe_timeout_seconds=1.0,
         )
     )
@@ -43,7 +42,6 @@ def test_live_worker_probe_projects_only_online_state() -> None:
     producer = create_celery_app(
         Settings(
             redis_url=RedisDsn(TEST_REDIS_URL),
-            refresh_cookie_secure=False,
             service_probe_timeout_seconds=1.0,
         )
     )

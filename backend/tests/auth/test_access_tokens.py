@@ -37,7 +37,6 @@ def token_settings() -> Settings:
     """Return explicit local signing settings without consulting ambient env."""
     return Settings(
         jwt_secret_key=SecretStr(SIGNING_SECRET),
-        refresh_cookie_secure=False,
     )
 
 
@@ -236,7 +235,7 @@ def test_non_string_subject_is_rejected_before_uuid_coercion() -> None:
 
 def test_issuer_and_decoder_fail_closed_without_a_signing_secret() -> None:
     """Never mint or trust bearer authority when signing material is absent."""
-    unsigned_settings = Settings(jwt_secret_key=None, refresh_cookie_secure=False)
+    unsigned_settings = Settings(jwt_secret_key=None)
 
     with pytest.raises(RuntimeError, match="JWT signing secret is not configured"):
         issue_access_token(

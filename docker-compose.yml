@@ -17,7 +17,7 @@ x-backend-common: &backend-common
     VERBOFLEX_PASSWORD_CHANGE_TOKEN_EXPIRE_MINUTES: "5"
     VERBOFLEX_REFRESH_TOKEN_EXPIRE_DAYS: "7"
     VERBOFLEX_SERVICE_PROBE_TIMEOUT_SECONDS: "2"
-    VERBOFLEX_REFRESH_COOKIE_SECURE: "false"
+    VERBOFLEX_REFRESH_COOKIE_SECURE: "true"
   depends_on:
     postgres:
       condition: service_healthy

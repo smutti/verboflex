@@ -68,7 +68,6 @@ def principal_settings() -> Settings:
     """Return explicit signing settings independent from ambient env."""
     return Settings(
         jwt_secret_key=SecretStr(SIGNING_SECRET),
-        refresh_cookie_secure=False,
     )
 
 

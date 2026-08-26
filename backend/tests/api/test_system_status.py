@@ -177,7 +177,6 @@ def test_default_status_service_obtains_worker_state_through_bounded_probe(
     )
     settings = Settings(
         service_probe_timeout_seconds=0.25,
-        refresh_cookie_secure=False,
     )
     service = get_system_status_service(
         cast(Session, AvailableSession()),
@@ -233,7 +232,6 @@ def test_password_change_authority_is_rejected_before_any_service_probe() -> Non
     """Keep restricted credentials out of the ordinary status resource."""
     settings = Settings(
         jwt_secret_key=SecretStr("0123456789abcdef" * 2),
-        refresh_cookie_secure=False,
     )
     restricted = issue_access_token(
         user_id=UUID("00000000-0000-4000-8000-000000000812"),
@@ -264,7 +262,6 @@ def test_redis_client_enforces_configured_connect_and_command_timeouts(
     monkeypatch.setattr(Redis, "from_url", staticmethod(capture_client))
     settings = Settings(
         service_probe_timeout_seconds=0.25,
-        refresh_cookie_secure=False,
     )
 
     client = get_redis_client(settings)

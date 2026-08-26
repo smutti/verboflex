@@ -326,7 +326,7 @@ def test_login_uses_only_a_validated_server_observed_client_ip(
     monkeypatch.setattr(auth_routes, "authenticate_login", observe_authentication)
     app.dependency_overrides[get_db_session] = lambda: cast(Session, object())
     app.dependency_overrides[get_redis_client] = lambda: CountingRedis()
-    app.dependency_overrides[get_settings] = lambda: Settings(refresh_cookie_secure=False)
+    app.dependency_overrides[get_settings] = lambda: Settings()
 
     response = asyncio.run(_login_from_unvalidated_peer())
 
@@ -403,7 +403,7 @@ def test_redis_client_applies_both_bounded_socket_timeouts(
         return sentinel
 
     monkeypatch.setattr(rate_limits.Redis, "from_url", staticmethod(observe_from_url))
-    settings = Settings(refresh_cookie_secure=False, service_probe_timeout_seconds=0.75)
+    settings = Settings(service_probe_timeout_seconds=0.75)
 
     result = get_redis_client(settings)
 

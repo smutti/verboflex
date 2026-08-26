@@ -96,7 +96,6 @@ def login_settings() -> Settings:
     """Return explicit local auth settings independent from ambient env."""
     return Settings(
         jwt_secret_key=SecretStr(SIGNING_SECRET),
-        refresh_cookie_secure=False,
     )
 
 
@@ -502,7 +501,6 @@ def test_redis_dependency_uses_the_configured_database_url() -> None:
     settings = Settings(
         jwt_secret_key=SecretStr(SIGNING_SECRET),
         redis_url=RedisDsn("redis://127.0.0.1:6380/4"),
-        refresh_cookie_secure=False,
     )
 
     client = get_redis_client(settings)

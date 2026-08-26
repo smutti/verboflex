@@ -58,6 +58,14 @@ class Settings(BaseSettings):
             raise ValueError("redis_url must use a non-negative numeric database")
         return redis_url
 
+    @field_validator("refresh_cookie_secure")
+    @classmethod
+    def require_secure_refresh_cookie(cls, secure: bool) -> bool:
+        """Reject every attempt to disable the approved Secure-only cookie."""
+        if not secure:
+            raise ValueError("refresh cookie must always be Secure")
+        return secure
+
     @field_validator("cors_origins")
     @classmethod
     def require_cors_origin(cls, origins: tuple[AnyHttpUrl, ...]) -> tuple[AnyHttpUrl, ...]:
@@ -91,8 +99,6 @@ class Settings(BaseSettings):
             raise ValueError("JWT signing secret must not use a placeholder value")
         if len(secret.encode("utf-8")) < 32:
             raise ValueError("JWT signing secret must contain at least 32 bytes")
-        if not self.refresh_cookie_secure:
-            raise ValueError("refresh cookie must be Secure in staging and production")
         return self
 
 

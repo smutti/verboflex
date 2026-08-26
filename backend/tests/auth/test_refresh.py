@@ -105,7 +105,6 @@ def refresh_settings() -> Settings:
     """Return explicit local settings with one exact allowed browser origin."""
     return Settings(
         jwt_secret_key=SecretStr(SIGNING_SECRET),
-        refresh_cookie_secure=False,
         cors_origins=(AnyHttpUrl("https://app.verboflex.example"),),
     )
 
