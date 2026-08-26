@@ -85,18 +85,88 @@ Plans:
   7. Guided shadcn admin screens provide actionable user, repository, mapping, OAuth, validation, and background-job states.
   8. Phase quality gate passes with RED→GREEN TDD evidence, code review, and backend/frontend/worker/deploy smoke verification.
 
-**Plans**: 8 plans
+**Plans**: 20 plans
 
 Plans:
+**Wave 1**
 
-- [ ] 02-01: User and role administration
-- [ ] 02-02: Product revisions and reusable repository configuration
-- [ ] 02-03: Organizational Bitbucket OAuth authority
-- [ ] 02-04: Read-only repository, branch, and source discovery
-- [ ] 02-05: One-format mapping and PR behavior configuration
-- [ ] 02-06: Four-format preview detectors and background validation
-- [ ] 02-07: shadcn-based guided admin UX and validation states
-- [ ] 02-08: Phase quality gate - tests, code review, and deploy/build verification
+- [ ] 02-01-PLAN.md — Internal-user and additive-role administration
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 02-02-PLAN.md — Product identity, immutable revisions, and candidate APIs
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 02-03-PLAN.md — Global reusable repository registry and APIs
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 02-04-PLAN.md — Encrypted organizational OAuth connection foundation
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 02-05-PLAN.md — OAuth refresh, reconnect, local revoke, and API lifecycle
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 02-06-PLAN.md — Generation-bound read-only Bitbucket HTTP adapter
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 02-07-PLAN.md — Live branch, commit, tree, and raw-source discovery
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [ ] 02-08-PLAN.md — Direct revision-owned mapping persistence and APIs
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [ ] 02-09-PLAN.md — Separate topology and fixed repository-target grouping
+
+**Wave 10** *(blocked on Wave 9 completion)*
+
+- [ ] 02-10-PLAN.md — Atomic product publication lifecycle
+
+**Wave 11** *(blocked on Wave 10 completion)*
+
+- [ ] 02-11-PLAN.md — Durable PostgreSQL/Celery preview-job boundary
+
+**Wave 12** *(blocked on Wave 11 completion)*
+
+- [ ] 02-12-PLAN.md — Strict Android XML preview detector
+
+**Wave 13** *(blocked on Wave 12 completion)*
+
+- [ ] 02-13-PLAN.md — Strict Qt TS, JSON, and iOS strings detectors
+
+**Wave 14** *(blocked on Wave 13 completion)*
+
+- [ ] 02-14-PLAN.md — Stale-safe confirmation and publication integration
+
+**Wave 15** *(blocked on Wave 14 completion)*
+
+- [ ] 02-15-PLAN.md — Canonical generated TypeScript admin client
+
+**Wave 16** *(blocked on Wave 15 completion)*
+
+- [ ] 02-16-PLAN.md — Responsive guarded administrator routing and shell
+
+**Wave 17** *(blocked on Wave 16 completion)*
+
+- [ ] 02-17-PLAN.md — Secret-safe internal-user administration UI
+
+**Wave 18** *(blocked on Wave 17 completion)*
+
+- [ ] 02-18-PLAN.md — Product, repository, and mapping administration UI
+
+**Wave 19** *(blocked on Wave 18 completion)*
+
+- [ ] 02-19-PLAN.md — OAuth, preview, publication, and responsive E2E UI
+
+**Wave 20** *(blocked on Wave 19 completion)*
+
+- [ ] 02-20-PLAN.md — Phase quality gate, review, mutations, and deploy smoke
 
 ### Phase 3: Bitbucket Import Integration
 
@@ -285,7 +355,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Platform Foundation | 15/15 | Complete    | 2026-08-26 |
-| 2. Admin Configuration | 0/8 | Not started | - |
+| 2. Admin Configuration | 0/20 | Not started | - |
 | 3. Bitbucket Import Integration | 0/4 | Not started | - |
 | 4. Localization Parser Foundation | 0/7 | Not started | - |
 | 5. Import, Search, and Constraints | 0/6 | Not started | - |
