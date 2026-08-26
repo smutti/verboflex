@@ -2,6 +2,7 @@
 
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.product import Product, ProductRevision
+from verboflex.models.repository import Repository
 from verboflex.models.role import Role, user_roles_table
 from verboflex.models.user import User
 
@@ -9,6 +10,7 @@ __all__ = [
     "AuthSession",
     "Product",
     "ProductRevision",
+    "Repository",
     "Role",
     "User",
     "user_roles_table",
