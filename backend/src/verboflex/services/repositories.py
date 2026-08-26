@@ -73,6 +73,27 @@ def _record(repository: Repository) -> RepositoryRecord:
     )
 
 
+def _repository_from_input(
+    *,
+    workspace: str,
+    repository_slug: str,
+    descriptive_name: str | None,
+) -> Repository:
+    """Validate transport-independent input before opening a write transaction."""
+    normalized_workspace, normalized_slug = normalize_repository_identity(
+        workspace,
+        repository_slug,
+    )
+    normalized_name, descriptive_name_key = _normalize_descriptive_name(descriptive_name)
+    return Repository(
+        id=uuid4(),
+        workspace=normalized_workspace,
+        repository_slug=normalized_slug,
+        descriptive_name=normalized_name,
+        descriptive_name_key=descriptive_name_key,
+    )
+
+
 def register_repository(
     session: Session,
     *,
@@ -81,17 +102,10 @@ def register_repository(
     descriptive_name: str | None = None,
 ) -> RepositoryRecord:
     """Create one repository or raise a bounded conflict for equal identity."""
-    normalized_workspace, normalized_slug = normalize_repository_identity(
-        workspace,
-        repository_slug,
-    )
-    normalized_name, descriptive_name_key = _normalize_descriptive_name(descriptive_name)
-    repository = Repository(
-        id=uuid4(),
-        workspace=normalized_workspace,
-        repository_slug=normalized_slug,
-        descriptive_name=normalized_name,
-        descriptive_name_key=descriptive_name_key,
+    repository = _repository_from_input(
+        workspace=workspace,
+        repository_slug=repository_slug,
+        descriptive_name=descriptive_name,
     )
     try:
         with session.begin():
