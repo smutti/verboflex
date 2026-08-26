@@ -10,8 +10,8 @@ from pydantic import AnyHttpUrl, PostgresDsn, RedisDsn, ValidationError
 from verboflex.core.config import Settings, get_settings
 
 
-def test_local_settings_are_typed_and_allow_explicit_insecure_cookie() -> None:
-    """Local HTTP can opt out of Secure while every operational value is typed."""
+def test_local_settings_are_typed_and_enforce_secure_cookie() -> None:
+    """Every operational setting is typed and the refresh cookie stays Secure."""
     settings = Settings(
         app_env="local",
         database_url=PostgresDsn("postgresql+psycopg://verboflex@postgres:5432/verboflex"),
@@ -21,7 +21,6 @@ def test_local_settings_are_typed_and_allow_explicit_insecure_cookie() -> None:
         password_change_token_expire_minutes=5,
         refresh_token_expire_days=7,
         service_probe_timeout_seconds=2.0,
-        refresh_cookie_secure=False,
     )
 
     assert settings.app_env == "local"
@@ -32,7 +31,7 @@ def test_local_settings_are_typed_and_allow_explicit_insecure_cookie() -> None:
     assert settings.password_change_token_expire_minutes == 5
     assert settings.refresh_token_expire_days == 7
     assert settings.service_probe_timeout_seconds == 2.0
-    assert settings.refresh_cookie_secure is False
+    assert settings.refresh_cookie_secure is True
 
 
 def test_cors_requires_at_least_one_exact_http_origin() -> None:
@@ -143,12 +142,12 @@ def test_production_rejects_every_generated_ascii_secret_shorter_than_32_bytes(
         )
 
 
-@pytest.mark.parametrize("app_env", ["staging", "production"])
-def test_deployed_environments_reject_insecure_refresh_cookies(
-    app_env: Literal["staging", "production"],
+@pytest.mark.parametrize("app_env", ["local", "staging", "production"])
+def test_every_environment_rejects_insecure_refresh_cookies(
+    app_env: Literal["local", "staging", "production"],
 ) -> None:
-    """Only an explicit local HTTP environment may disable the Secure attribute."""
-    with pytest.raises(ValidationError, match="refresh cookie must be Secure"):
+    """No environment can disable the approved Secure-only cookie contract."""
+    with pytest.raises(ValidationError):
         Settings.model_validate(
             {
                 "app_env": app_env,
