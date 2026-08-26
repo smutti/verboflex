@@ -19,6 +19,26 @@ FRONTEND_SOURCE = REPOSITORY_ROOT / "frontend" / "src"
 GENERATED_CLIENT = FRONTEND_SOURCE / "api" / "client"
 
 EXPECTED_OPERATIONS = {
+    ("/api/v1/admin/products", "get"): (
+        "list_admin_products",
+        {"200", "401", "403", "422"},
+        True,
+    ),
+    ("/api/v1/admin/products", "post"): (
+        "create_admin_product",
+        {"201", "401", "403", "409", "422"},
+        True,
+    ),
+    ("/api/v1/admin/products/{product_id}", "get"): (
+        "get_admin_product",
+        {"200", "401", "403", "404", "422"},
+        True,
+    ),
+    ("/api/v1/admin/products/{product_id}", "patch"): (
+        "update_admin_product_candidate",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
     ("/api/v1/admin/users", "get"): (
         "list_admin_users",
         {"200", "401", "403", "422"},
@@ -118,6 +138,15 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
         )
 
     error_response_codes = {
+        ("/api/v1/admin/products", "get"): {"401", "403", "422"},
+        ("/api/v1/admin/products", "post"): {"401", "403", "422"},
+        ("/api/v1/admin/products/{product_id}", "get"): {"401", "403", "404", "422"},
+        ("/api/v1/admin/products/{product_id}", "patch"): {
+            "401",
+            "403",
+            "404",
+            "422",
+        },
         ("/api/v1/admin/users", "get"): {"401", "403", "422"},
         ("/api/v1/admin/users", "post"): {"401", "403", "409", "422"},
         ("/api/v1/admin/users/{user_id}", "patch"): {
@@ -173,6 +202,41 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
             "type": "oauth2",
         }
     }
+
+    assert _response_schema(operations[("/api/v1/admin/products", "post")], "409") == (
+        "#/components/schemas/AdminProductConflictResponse"
+    )
+    assert _response_schema(
+        operations[("/api/v1/admin/products/{product_id}", "patch")], "409"
+    ) == "#/components/schemas/AdminProductConflictResponse"
+
+
+def test_admin_product_openapi_is_closed_and_exposes_no_publication_shortcut() -> None:
+    """Keep internal keys and generic revision mutation outside this product slice."""
+    schema = app.openapi()
+    product = schema["components"]["schemas"]["AdminProductResponse"]
+    revision = schema["components"]["schemas"]["AdminProductRevisionSummary"]
+    conflict = schema["components"]["schemas"]["AdminProductConflictResponse"]
+
+    assert product["additionalProperties"] is False
+    assert set(product["properties"]) == {
+        "id",
+        "name",
+        "is_active",
+        "active_revision",
+        "candidate_revision",
+    }
+    assert revision["additionalProperties"] is False
+    assert set(revision["properties"]) == {
+        "id",
+        "version",
+        "description",
+        "is_published",
+    }
+    assert conflict["additionalProperties"] is False
+    assert set(conflict["properties"]) == {"detail", "field"}
+    assert all("publish" not in path for path in schema["paths"])
+    assert all("revisions" not in path for path in schema["paths"])
 
 
 def test_export_is_canonical_and_matches_the_checked_in_schema() -> None:
