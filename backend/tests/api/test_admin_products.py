@@ -604,7 +604,7 @@ def test_product_mutation_cors_preflight_allows_the_registered_patch_contract(
             access_token=None,
             path=f"{ADMIN_PRODUCTS_PATH}/{uuid4()}",
             headers={
-                "Origin": "http://localhost:8080",
+                "Origin": "http://localhost:5173",
                 "Access-Control-Request-Method": "PATCH",
                 "Access-Control-Request-Headers": "authorization,content-type",
             },
