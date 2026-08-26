@@ -107,14 +107,13 @@ COMMON_RESPONSES: dict[int | str, dict[str, Any]] = {
     },
 )
 async def list_admin_product_collection(
-    principal: AdminPrincipal,
+    _principal: AdminPrincipal,
     session: AdminSession,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     cursor: str | None = None,
     status_filter: Annotated[AdminProductStatus | None, Query(alias="status")] = None,
 ) -> AdminProductListResponse:
     """List products in stable server-owned identity order."""
-    del principal
     try:
         page = list_products(
             session,
@@ -142,11 +141,10 @@ async def list_admin_product_collection(
 )
 async def create_admin_product(
     payload: AdminProductCreateRequest,
-    principal: AdminPrincipal,
+    _principal: AdminPrincipal,
     session: AdminSession,
 ) -> AdminProductResponse | JSONResponse:
     """Create one stable UUID with an unpublished candidate revision."""
-    del principal
     try:
         product = create_product(
             session,
@@ -156,7 +154,7 @@ async def create_admin_product(
         record = get_product(session, product_id=product.id)
     except ProductNameConflict:
         return _name_conflict_response()
-    except Exception as error:
+    except (ProductNotFound, ProductVersionConflict, ValueError) as error:
         _raise_product_error(error)
     return _response(record)
 
@@ -169,14 +167,13 @@ async def create_admin_product(
 )
 async def get_admin_product_detail(
     product_id: UUID,
-    principal: AdminPrincipal,
+    _principal: AdminPrincipal,
     session: AdminSession,
 ) -> AdminProductResponse:
     """Return explicitly separate active and candidate summaries."""
-    del principal
     try:
         record = get_product(session, product_id=product_id)
-    except Exception as error:
+    except ProductNotFound as error:
         _raise_product_error(error)
     return _response(record)
 
@@ -190,11 +187,10 @@ async def get_admin_product_detail(
 async def update_admin_product_candidate(
     product_id: UUID,
     payload: AdminProductUpdateRequest,
-    principal: AdminPrincipal,
+    _principal: AdminPrincipal,
     session: AdminSession,
 ) -> AdminProductResponse | JSONResponse:
     """Compare and save one candidate without exposing publication mechanics."""
-    del principal
     try:
         save_product_candidate(
             session,
@@ -206,6 +202,6 @@ async def update_admin_product_candidate(
         record = get_product(session, product_id=product_id)
     except ProductNameConflict:
         return _name_conflict_response()
-    except Exception as error:
+    except (ProductNotFound, ProductVersionConflict, ValueError) as error:
         _raise_product_error(error)
     return _response(record)

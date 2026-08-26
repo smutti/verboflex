@@ -15,7 +15,7 @@ import pytest
 from alembic.config import Config
 from psycopg import connect, sql
 from pydantic import SecretStr
-from sqlalchemy import create_engine, delete, func, select, text
+from sqlalchemy import create_engine, delete, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
@@ -256,9 +256,7 @@ def test_admin_create_and_detail_return_closed_active_and_candidate_summaries(
         assert candidate.is_published is False
 
     product_paths = {
-        path
-        for path in app.openapi()["paths"]
-        if path.startswith(ADMIN_PRODUCTS_PATH)
+        path for path in app.openapi()["paths"] if path.startswith(ADMIN_PRODUCTS_PATH)
     }
     assert product_paths == {
         ADMIN_PRODUCTS_PATH,
@@ -588,9 +586,12 @@ def test_product_collection_is_bounded_filtered_opaque_and_server_ordered(
     )
     assert over_limit.status_code == 422
     assert invalid.status_code == oversized.status_code == wrong_filter_cursor.status_code == 422
-    assert invalid.json() == oversized.json() == wrong_filter_cursor.json() == {
-        "detail": "Invalid cursor"
-    }
+    assert (
+        invalid.json()
+        == oversized.json()
+        == wrong_filter_cursor.json()
+        == {"detail": "Invalid cursor"}
+    )
 
 
 def test_product_mutation_cors_preflight_allows_the_registered_patch_contract(
