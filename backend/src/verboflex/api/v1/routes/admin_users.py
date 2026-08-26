@@ -118,7 +118,7 @@ async def create_user(
             status_code=status.HTTP_409_CONFLICT,
             detail="User could not be created",
         ) from error
-    except (AdminUserInputError, ValueError) as error:
+    except AdminUserInputError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Invalid user input",

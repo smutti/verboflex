@@ -99,7 +99,11 @@ def _load_current_admin(session: Session, actor_id: UUID, *, lock: bool) -> User
     actor = session.execute(statement).scalar_one_or_none()
     if actor is None or not actor.is_active:
         raise AdminUserAuthorityError("administrator authority unavailable")
-    if RoleName.ADMIN not in _ordered_roles(actor.roles):
+    try:
+        roles = _ordered_roles(actor.roles)
+    except ValueError as error:
+        raise AdminUserAuthorityError("administrator authority unavailable") from error
+    if RoleName.ADMIN not in roles:
         raise AdminUserAuthorityError("administrator authority unavailable")
     return actor
 
@@ -109,6 +113,13 @@ def _normalize_display_name(display_name: str) -> str:
     if not normalized:
         raise AdminUserInputError("display name is required")
     return normalized
+
+
+def _normalize_admin_email(email: str) -> str:
+    try:
+        return normalize_email(email)
+    except ValueError as error:
+        raise AdminUserInputError("invalid email address") from error
 
 
 def _load_requested_roles(session: Session, roles: frozenset[RoleName]) -> list[Role]:
@@ -132,7 +143,7 @@ def create_admin_user(
     roles: frozenset[RoleName],
 ) -> CreatedAdminUser:
     """Create one user under current database admin authority and return plaintext once."""
-    normalized_email = normalize_email(email)
+    normalized_email = _normalize_admin_email(email)
     normalized_display_name = _normalize_display_name(display_name)
     try:
         with session.begin():
@@ -171,9 +182,9 @@ def create_admin_user(
     return result
 
 
-def _encode_cursor(record: AdminUserRecord) -> str:
+def _encode_cursor_position(email: str, user_id: UUID) -> str:
     payload = json.dumps(
-        {"email": record.email, "id": str(record.id), "version": _CURSOR_VERSION},
+        {"email": email, "id": str(user_id), "version": _CURSOR_VERSION},
         ensure_ascii=True,
         separators=(",", ":"),
         sort_keys=True,
@@ -204,16 +215,7 @@ def _decode_cursor(cursor: str) -> _CursorPosition:
         TypeError,
     ) as error:
         raise InvalidAdminUserCursor("invalid cursor") from error
-    canonical = _encode_cursor(
-        AdminUserRecord(
-            id=position.user_id,
-            email=position.email,
-            display_name="",
-            roles=(),
-            is_active=False,
-            must_change_password=False,
-        )
-    )
+    canonical = _encode_cursor_position(position.email, position.user_id)
     if canonical != cursor:
         raise InvalidAdminUserCursor("invalid cursor")
     return position
@@ -244,5 +246,9 @@ def list_admin_users(
             session.execute(statement.order_by(User.email, User.id).limit(limit + 1)).scalars()
         )
         records = tuple(_to_record(user) for user in users[:limit])
-        next_cursor = _encode_cursor(records[-1]) if len(users) > limit else None
+        next_cursor = (
+            _encode_cursor_position(records[-1].email, records[-1].id)
+            if len(users) > limit
+            else None
+        )
     return AdminUserPage(items=records, next_cursor=next_cursor)
