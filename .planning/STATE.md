@@ -1,18 +1,18 @@
 ---
 gsd_state_version: 1.0
 current_phase: 02
-current_phase_name: admin-configuration
-status: "Ready to execute"
-stopped_at: Phase 02 planned — ready to execute
-last_updated: "2026-08-26T19:33:26Z"
+current_phase_name: Admin Configuration
+status: executing
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-08-26T20:30:10.010Z"
 last_activity: 2026-08-26
-last_activity_desc: Phase 02 planning complete
-state_head: 14f827b6264dd9a2f62035525956c9e9a2f42e20
+last_activity_desc: Phase 02 execution started
+state_head: 7dcc02ba0991cfd8e36194ffffe0c4fdd3336533
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 35
-  completed_plans: 15
+  completed_plans: 16
   percent: 11
 ---
 
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 
 ## Current Position
 
-Phase: 02 (admin-configuration) — READY TO EXECUTE
-Plan: 0 of 20
-Status: Ready to execute
-Last activity: 2026-08-26 — Phase 02 planning complete
+Phase: 02 (Admin Configuration) — EXECUTING
+Plan: 2 of 20
+Status: Executing Phase 02
+Last activity: 2026-08-26 — Phase 02 execution started
 
 Progress: [█░░░░░░░░░] 11%
 
@@ -73,6 +73,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 01 P13 | 35min | 2 tasks | 18 files |
 | Phase 01 P14 | 4h45min | 3 tasks | 64 files |
 | Phase 01 P15 | 18h56min | 2 tasks | 35 files |
+| Phase 02 P01 | 35min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -140,6 +141,10 @@ Recent decisions affecting current work:
 - [Phase 01]: Human-grade every material blind finding; behavioural remediation requires TDD, a new digest, the full gauntlet, and fresh verification.
 - [Phase 01]: Accept exactly two equivalent backend join mutants only through exact mapping and identical PostgreSQL SQL proof; kill all 891 non-equivalent mutants.
 - [Phase 01]: Use the explicitly authorized Round 3 exception after Round 2 remediation; no further verifier round is authorized.
+- [Phase 02]: Keep the Phase 1 User UUID as the sole identity while roles remain additive many-to-many authority memberships. — Role changes must not create another identity or email-role anchor.
+- [Phase 02]: Serialize administrative authority mutations with the existing global advisory lock and locked actor/target revalidation. — Self-admin and last-active-admin invariants must survive concurrent requests.
+- [Phase 02]: Treat normalized identical display-name and role updates as true non-mutating no-ops. — No-op submissions must not advance token_version, revoke sessions, or rewrite role relationships.
+- [Phase 02]: Keep existing CLI entry points as wrappers over the shared admin-user service. — This preserves verboflex.cli compatibility while giving HTTP and CLI one transaction authority.
 
 ### Pending Todos
 
@@ -172,6 +177,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-26T19:33:26Z
-Stopped at: Phase 02 planned — ready to execute
-Resume file: .planning/phases/02-admin-configuration/02-01-PLAN.md
+Last session: 2026-08-26T20:30:09.980Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: None
