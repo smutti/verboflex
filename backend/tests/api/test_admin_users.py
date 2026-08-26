@@ -14,12 +14,14 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from alembic.config import Config
+from fastapi import HTTPException
 from psycopg import connect, sql
 from pydantic import SecretStr
 from sqlalchemy import create_engine, delete, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
+from verboflex.api.v1.routes import admin_users as admin_user_routes
 from verboflex.auth.access_tokens import issue_access_token
 from verboflex.auth.passwords import hash_password, verify_password
 from verboflex.core.config import Settings, get_settings
@@ -28,6 +30,7 @@ from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.role import Role
 from verboflex.models.user import User
+from verboflex.services.admin_users import AdminUserAuthorityError
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 ADMIN_DATABASE_URL = os.environ.get(
@@ -735,8 +738,100 @@ def test_invalid_lifecycle_transitions_and_unknown_users_are_bounded_and_non_mut
             path=f"{ADMIN_USERS_PATH}/{uuid4()}/reset-password",
         )
     )
+    inactive_reset = asyncio.run(
+        admin_request(
+            "POST",
+            access_token=admin_token,
+            path=f"{ADMIN_USERS_PATH}/{target_id}/reset-password",
+        )
+    )
     assert repeated_deactivation.status_code == 409
+    assert inactive_reset.status_code == 409
     assert unknown.status_code == 404
     assert "temporary_password" not in repeated_deactivation.text
+    assert "temporary_password" not in inactive_reset.text
     assert "temporary_password" not in unknown.text
     assert _authority_snapshot(admin_session_factory) == after_first
+
+
+def test_lifecycle_service_authority_race_maps_to_forbidden_without_mutation(
+    admin_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A principal revoked after dependency resolution still fails at the service boundary."""
+    _admin_id, admin_token = create_authority(
+        admin_session_factory,
+        email="admin@example.com",
+        roles=("admin",),
+    )
+    target_id, _target_token = create_authority(
+        admin_session_factory,
+        email="target@example.com",
+        roles=("viewer",),
+    )
+    configure_admin_dependencies(admin_session_factory)
+    before = _authority_snapshot(admin_session_factory)
+
+    def refuse_authority(*_args: object, **_kwargs: object) -> None:
+        raise AdminUserAuthorityError("administrator authority unavailable")
+
+    monkeypatch.setattr(admin_user_routes, "update_admin_user_service", refuse_authority)
+    response = asyncio.run(
+        admin_request(
+            "PATCH",
+            access_token=admin_token,
+            path=f"{ADMIN_USERS_PATH}/{target_id}",
+            json_body={"display_name": "Target", "roles": ["viewer"]},
+        )
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Insufficient permissions"}
+    assert _authority_snapshot(admin_session_factory) == before
+
+
+def test_blank_normalized_display_name_maps_to_bounded_input_error(
+    admin_session_factory: sessionmaker[Session],
+) -> None:
+    """A transport-valid whitespace value is rejected by normalized domain validation."""
+    _admin_id, admin_token = create_authority(
+        admin_session_factory,
+        email="admin@example.com",
+        roles=("admin",),
+    )
+    target_id, _target_token = create_authority(
+        admin_session_factory,
+        email="target@example.com",
+        roles=("viewer",),
+    )
+    configure_admin_dependencies(admin_session_factory)
+    before = _authority_snapshot(admin_session_factory)
+
+    response = asyncio.run(
+        admin_request(
+            "PATCH",
+            access_token=admin_token,
+            path=f"{ADMIN_USERS_PATH}/{target_id}",
+            json_body={"display_name": "   ", "roles": ["viewer"]},
+        )
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Invalid user input"}
+    assert _authority_snapshot(admin_session_factory) == before
+
+
+def test_lifecycle_error_mapper_rethrows_unexpected_failures() -> None:
+    """Unexpected bugs cannot be silently collapsed into an expected lifecycle denial."""
+    with pytest.raises(RuntimeError, match="unexpected failure"):
+        admin_user_routes._raise_lifecycle_error(RuntimeError("unexpected failure"))
+
+
+def test_lifecycle_error_mapper_uses_http_exceptions_for_expected_failures() -> None:
+    """The direct mapper remains a fail-closed HTTP boundary."""
+    with pytest.raises(HTTPException) as captured:
+        admin_user_routes._raise_lifecycle_error(
+            AdminUserAuthorityError("administrator authority unavailable")
+        )
+
+    assert captured.value.status_code == 403
