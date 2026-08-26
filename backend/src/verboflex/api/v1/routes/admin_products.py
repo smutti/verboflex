@@ -87,9 +87,22 @@ def _raise_product_error(error: Exception) -> NoReturn:
     raise error
 
 
-COMMON_RESPONSES: dict[int | str, dict[str, Any]] = {
+AUTH_RESPONSES: dict[int | str, dict[str, Any]] = {
     status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
     status.HTTP_403_FORBIDDEN: {"model": ErrorResponse},
+}
+CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **AUTH_RESPONSES,
+    status.HTTP_409_CONFLICT: {"model": AdminProductConflictResponse},
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
+}
+DETAIL_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **AUTH_RESPONSES,
+    status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
+}
+UPDATE_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **AUTH_RESPONSES,
     status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
     status.HTTP_409_CONFLICT: {"model": AdminProductConflictResponse},
     status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
@@ -137,7 +150,7 @@ async def list_admin_product_collection(
     operation_id="create_admin_product",
     status_code=status.HTTP_201_CREATED,
     response_model=AdminProductResponse,
-    responses=COMMON_RESPONSES,
+    responses=CREATE_RESPONSES,
 )
 async def create_admin_product(
     payload: AdminProductCreateRequest,
@@ -163,7 +176,7 @@ async def create_admin_product(
     "/{product_id}",
     operation_id="get_admin_product",
     response_model=AdminProductResponse,
-    responses=COMMON_RESPONSES,
+    responses=DETAIL_RESPONSES,
 )
 async def get_admin_product_detail(
     product_id: UUID,
@@ -182,7 +195,7 @@ async def get_admin_product_detail(
     "/{product_id}",
     operation_id="update_admin_product_candidate",
     response_model=AdminProductResponse,
-    responses=COMMON_RESPONSES,
+    responses=UPDATE_RESPONSES,
 )
 async def update_admin_product_candidate(
     product_id: UUID,
