@@ -8,6 +8,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from verboflex.schemas.users import RoleName
 
 
+def _ordered_unique_roles(roles: list[RoleName]) -> list[RoleName]:
+    selected = frozenset(roles)
+    return [role for role in RoleName if role in selected]
+
+
 class AdminUserCreateRequest(BaseModel):
     """Create one immutable corporate-email identity with additive roles."""
 
@@ -21,8 +26,7 @@ class AdminUserCreateRequest(BaseModel):
     @classmethod
     def collapse_duplicate_roles(cls, roles: list[RoleName]) -> list[RoleName]:
         """Treat submitted role names as a set while preserving fixed enum order."""
-        selected = frozenset(roles)
-        return [role for role in RoleName if role in selected]
+        return _ordered_unique_roles(roles)
 
 
 class AdminUserUpdateRequest(BaseModel):
@@ -37,8 +41,7 @@ class AdminUserUpdateRequest(BaseModel):
     @classmethod
     def collapse_duplicate_roles(cls, roles: list[RoleName]) -> list[RoleName]:
         """Treat duplicate authority names as one fixed-order set member."""
-        selected = frozenset(roles)
-        return [role for role in RoleName if role in selected]
+        return _ordered_unique_roles(roles)
 
 
 class AdminUserResponse(BaseModel):

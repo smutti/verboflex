@@ -1,6 +1,6 @@
 """Administrator-only internal-user lifecycle routes."""
 
-from typing import Annotated, Any
+from typing import Annotated, Any, NoReturn
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -70,7 +70,7 @@ def _credential_response(created: CreatedAdminUser) -> AdminUserCredentialRespon
     )
 
 
-def _raise_lifecycle_error(error: Exception) -> None:
+def _raise_lifecycle_error(error: Exception) -> NoReturn:
     if isinstance(error, AdminUserAuthorityError):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -227,7 +227,6 @@ async def update_user(
         AdminUserInputError,
     ) as error:
         _raise_lifecycle_error(error)
-        raise AssertionError("unreachable") from error
     return _response(record)
 
 
@@ -257,7 +256,6 @@ async def reset_password(
         AdminUserInputError,
     ) as error:
         _raise_lifecycle_error(error)
-        raise AssertionError("unreachable") from error
     response.headers["Cache-Control"] = "no-store"
     return _credential_response(result)
 
@@ -287,7 +285,6 @@ async def deactivate_user(
         AdminUserInputError,
     ) as error:
         _raise_lifecycle_error(error)
-        raise AssertionError("unreachable") from error
     return _response(record)
 
 
@@ -317,6 +314,5 @@ async def reactivate_user(
         AdminUserInputError,
     ) as error:
         _raise_lifecycle_error(error)
-        raise AssertionError("unreachable") from error
     response.headers["Cache-Control"] = "no-store"
     return _credential_response(result)
