@@ -206,9 +206,10 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
     assert _response_schema(operations[("/api/v1/admin/products", "post")], "409") == (
         "#/components/schemas/AdminProductConflictResponse"
     )
-    assert _response_schema(
-        operations[("/api/v1/admin/products/{product_id}", "patch")], "409"
-    ) == "#/components/schemas/AdminProductConflictResponse"
+    assert (
+        _response_schema(operations[("/api/v1/admin/products/{product_id}", "patch")], "409")
+        == "#/components/schemas/AdminProductConflictResponse"
+    )
 
 
 def test_admin_product_openapi_is_closed_and_exposes_no_publication_shortcut() -> None:
