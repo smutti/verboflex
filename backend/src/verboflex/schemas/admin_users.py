@@ -25,6 +25,22 @@ class AdminUserCreateRequest(BaseModel):
         return [role for role in RoleName if role in selected]
 
 
+class AdminUserUpdateRequest(BaseModel):
+    """The only ordinary fields an administrator may change."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: Annotated[str, Field(min_length=1, max_length=200)]
+    roles: Annotated[list[RoleName], Field(min_length=1, max_length=4)]
+
+    @field_validator("roles")
+    @classmethod
+    def collapse_duplicate_roles(cls, roles: list[RoleName]) -> list[RoleName]:
+        """Treat duplicate authority names as one fixed-order set member."""
+        selected = frozenset(roles)
+        return [role for role in RoleName if role in selected]
+
+
 class AdminUserResponse(BaseModel):
     """Ordinary internal-user projection with no credential material."""
 

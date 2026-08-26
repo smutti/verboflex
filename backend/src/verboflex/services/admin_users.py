@@ -7,14 +7,16 @@ import binascii
 import json
 import secrets
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import and_, or_, select, text
+from sqlalchemy import and_, func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from verboflex.auth.identity import ASCII_WHITESPACE, normalize_email
 from verboflex.auth.passwords import hash_password, validate_password_for_user
+from verboflex.models.auth_session import AuthSession
 from verboflex.models.role import Role
 from verboflex.models.user import User
 from verboflex.schemas.users import RoleName
@@ -36,6 +38,18 @@ class AdminUserConflict(ValueError):
 
 class AdminUserInputError(ValueError):
     """Raised when normalized input cannot form a valid user."""
+
+
+class AdminUserNotFound(LookupError):
+    """Raised when an administrator-selected UUID has no durable user."""
+
+
+class ResetPasswordError(RuntimeError):
+    """Raised when the privileged CLI reset cannot identify its account."""
+
+
+class DeactivateUserError(RuntimeError):
+    """Raised when the privileged CLI cannot deactivate its selected account."""
 
 
 class InvalidAdminUserCursor(ValueError):
@@ -108,6 +122,15 @@ def _load_current_admin(session: Session, actor_id: UUID, *, lock: bool) -> User
     return actor
 
 
+def _load_target_user(session: Session, target_id: UUID) -> User:
+    target = session.execute(
+        select(User).where(User.id == target_id).options(selectinload(User.roles)).with_for_update()
+    ).scalar_one_or_none()
+    if target is None:
+        raise AdminUserNotFound("user unavailable")
+    return target
+
+
 def _normalize_display_name(display_name: str) -> str:
     normalized = display_name.strip(ASCII_WHITESPACE)
     if not normalized:
@@ -134,6 +157,83 @@ def _load_requested_roles(session: Session, roles: frozenset[RoleName]) -> list[
     return [by_name[role] for role in _FIXED_ROLE_ORDER if role in by_name]
 
 
+def _lock_admin_authority(session: Session) -> None:
+    session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_key)"),
+        {"lock_key": ADMIN_AUTHORITY_LOCK_KEY},
+    )
+
+
+def _active_admin_count(session: Session) -> int:
+    count = session.scalar(
+        select(func.count(func.distinct(User.id)))
+        .select_from(User)
+        .join(User.roles)
+        .where(User.is_active.is_(True), Role.name == RoleName.ADMIN.value)
+    )
+    return int(count or 0)
+
+
+def _require_admin_survivor(
+    session: Session,
+    target: User,
+    *,
+    prospective_roles: frozenset[RoleName],
+    prospective_active: bool,
+) -> None:
+    current_roles = frozenset(_ordered_roles(target.roles))
+    removes_active_admin = (
+        target.is_active
+        and RoleName.ADMIN in current_roles
+        and (not prospective_active or RoleName.ADMIN not in prospective_roles)
+    )
+    if removes_active_admin and _active_admin_count(session) <= 1:
+        raise AdminUserConflict("user lifecycle conflict")
+
+
+def _revoke_live_sessions(
+    session: Session,
+    user_id: UUID,
+    *,
+    revoked_at: datetime,
+) -> None:
+    session.execute(
+        update(AuthSession)
+        .where(AuthSession.user_id == user_id, AuthSession.revoked_at.is_(None))
+        .values(revoked_at=revoked_at)
+    )
+
+
+def _replace_password_authority(
+    session: Session,
+    user: User,
+    *,
+    password: str,
+    revoked_at: datetime,
+) -> None:
+    validate_password_for_user(
+        password,
+        normalized_email=user.email,
+        current_password_hash=user.hashed_password,
+    )
+    user.hashed_password = hash_password(password)
+    user.must_change_password = True
+    user.token_version += 1
+    _revoke_live_sessions(session, user.id, revoked_at=revoked_at)
+
+
+def _generate_temporary_credential(session: Session, user: User) -> CreatedAdminUser:
+    temporary_password = secrets.token_urlsafe(24)
+    _replace_password_authority(
+        session,
+        user,
+        password=temporary_password,
+        revoked_at=datetime.now(UTC),
+    )
+    session.flush()
+    return CreatedAdminUser(user=_to_record(user), temporary_password=temporary_password)
+
+
 def create_admin_user(
     session: Session,
     *,
@@ -147,10 +247,7 @@ def create_admin_user(
     normalized_display_name = _normalize_display_name(display_name)
     try:
         with session.begin():
-            session.execute(
-                text("SELECT pg_advisory_xact_lock(:lock_key)"),
-                {"lock_key": ADMIN_AUTHORITY_LOCK_KEY},
-            )
+            _lock_admin_authority(session)
             _load_current_admin(session, actor_id, lock=True)
             if session.scalar(select(User.id).where(User.email == normalized_email)) is not None:
                 raise AdminUserConflict("user could not be created")
@@ -180,6 +277,158 @@ def create_admin_user(
     except IntegrityError as error:
         raise AdminUserConflict("user could not be created") from error
     return result
+
+
+def update_admin_user(
+    session: Session,
+    *,
+    actor_id: UUID,
+    target_id: UUID,
+    display_name: str,
+    roles: frozenset[RoleName],
+) -> AdminUserRecord:
+    """Update the approved mutable fields while preserving global authority invariants."""
+    normalized_display_name = _normalize_display_name(display_name)
+    with session.begin():
+        _lock_admin_authority(session)
+        actor = _load_current_admin(session, actor_id, lock=True)
+        target = _load_target_user(session, target_id)
+        durable_roles = _load_requested_roles(session, roles)
+        current_roles = frozenset(_ordered_roles(target.roles))
+        if (
+            actor.id == target.id
+            and RoleName.ADMIN in current_roles
+            and RoleName.ADMIN not in roles
+        ):
+            raise AdminUserConflict("user lifecycle conflict")
+        _require_admin_survivor(
+            session,
+            target,
+            prospective_roles=roles,
+            prospective_active=target.is_active,
+        )
+
+        roles_changed = current_roles != roles
+        display_changed = target.display_name != normalized_display_name
+        if roles_changed:
+            target.roles = durable_roles
+            target.token_version += 1
+            _revoke_live_sessions(session, target.id, revoked_at=datetime.now(UTC))
+        if display_changed:
+            target.display_name = normalized_display_name
+        if roles_changed or display_changed:
+            session.flush()
+        result = _to_record(target)
+    return result
+
+
+def reset_admin_user_password(
+    session: Session,
+    *,
+    actor_id: UUID,
+    target_id: UUID,
+) -> CreatedAdminUser:
+    """Replace one active user's password authority and reveal the new secret once."""
+    with session.begin():
+        _lock_admin_authority(session)
+        _load_current_admin(session, actor_id, lock=True)
+        target = _load_target_user(session, target_id)
+        if not target.is_active:
+            raise AdminUserConflict("user lifecycle conflict")
+        result = _generate_temporary_credential(session, target)
+    return result
+
+
+def deactivate_admin_user(
+    session: Session,
+    *,
+    actor_id: UUID,
+    target_id: UUID,
+    now: datetime | None = None,
+) -> AdminUserRecord:
+    """Deactivate one user and revoke its durable authority exactly once."""
+    deactivated_at = now or datetime.now(UTC)
+    with session.begin():
+        _lock_admin_authority(session)
+        _load_current_admin(session, actor_id, lock=True)
+        target = _load_target_user(session, target_id)
+        if not target.is_active:
+            raise AdminUserConflict("user lifecycle conflict")
+        current_roles = frozenset(_ordered_roles(target.roles))
+        _require_admin_survivor(
+            session,
+            target,
+            prospective_roles=current_roles,
+            prospective_active=False,
+        )
+        target.is_active = False
+        target.token_version += 1
+        _revoke_live_sessions(session, target.id, revoked_at=deactivated_at)
+        session.flush()
+        result = _to_record(target)
+    return result
+
+
+def reactivate_admin_user(
+    session: Session,
+    *,
+    actor_id: UUID,
+    target_id: UUID,
+) -> CreatedAdminUser:
+    """Reactivate one user with newly generated password authority."""
+    with session.begin():
+        _lock_admin_authority(session)
+        _load_current_admin(session, actor_id, lock=True)
+        target = _load_target_user(session, target_id)
+        if target.is_active:
+            raise AdminUserConflict("user lifecycle conflict")
+        target.is_active = True
+        result = _generate_temporary_credential(session, target)
+    return result
+
+
+def replace_user_password(
+    session: Session,
+    *,
+    email: str,
+    password: str,
+) -> None:
+    """Retain the privileged Phase 1 CLI reset through the shared password authority."""
+    normalized_email = normalize_email(email)
+    with session.begin():
+        user = session.execute(
+            select(User).where(User.email == normalized_email).with_for_update()
+        ).scalar_one_or_none()
+        if user is None:
+            raise ResetPasswordError("reset refused: account unavailable")
+        _replace_password_authority(
+            session,
+            user,
+            password=password,
+            revoked_at=datetime.now(UTC),
+        )
+        session.flush()
+
+
+def deactivate_user_by_email(
+    session: Session,
+    *,
+    email: str,
+    now: datetime | None = None,
+) -> None:
+    """Retain the privileged Phase 1 CLI deactivation through shared revocation mechanics."""
+    normalized_email = normalize_email(email)
+    deactivated_at = now or datetime.now(UTC)
+    with session.begin():
+        user = session.execute(
+            select(User).where(User.email == normalized_email).with_for_update()
+        ).scalar_one_or_none()
+        if user is None or not user.is_active:
+            raise DeactivateUserError("deactivation refused: account unavailable")
+        user.is_active = False
+        user.token_version += 1
+        _revoke_live_sessions(session, user.id, revoked_at=deactivated_at)
+        session.flush()
 
 
 def _encode_cursor_position(email: str, user_id: UUID) -> str:
