@@ -217,8 +217,9 @@ def test_empty_roles_and_self_admin_removal_fail_without_mutation(
         before = (actor.display_name, tuple(role.name for role in actor.roles), actor.token_version)
 
     for roles in (frozenset(), frozenset((RoleName.VIEWER,))):
-        with service_session_factory() as session, pytest.raises(
-            (admin_users.AdminUserInputError, admin_users.AdminUserConflict)
+        with (
+            service_session_factory() as session,
+            pytest.raises((admin_users.AdminUserInputError, admin_users.AdminUserConflict)),
         ):
             update_user(
                 session,

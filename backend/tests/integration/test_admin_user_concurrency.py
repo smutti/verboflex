@@ -120,7 +120,7 @@ def test_concurrent_cross_deactivation_cannot_remove_the_last_active_admin(
         try:
             with concurrency_session_factory() as session:
                 deactivate(session, actor_id=actor_id, target_id=target_id)
-        except (admin_users.AdminUserAuthorityError, admin_users.AdminUserConflict):
+        except admin_users.AdminUserAuthorityError, admin_users.AdminUserConflict:
             return "refused"
         return "deactivated"
 
@@ -165,7 +165,7 @@ def test_concurrent_cross_role_removal_cannot_remove_the_last_active_admin(
                     display_name="Role target",
                     roles=frozenset((RoleName.VIEWER,)),
                 )
-        except (admin_users.AdminUserAuthorityError, admin_users.AdminUserConflict):
+        except admin_users.AdminUserAuthorityError, admin_users.AdminUserConflict:
             return "refused"
         return "updated"
 
