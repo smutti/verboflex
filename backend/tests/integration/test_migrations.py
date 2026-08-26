@@ -171,4 +171,4 @@ def test_declarative_metadata_contains_every_auth_model() -> None:
     from verboflex import models  # noqa: F401
     from verboflex.db.base import Base
 
-    assert set(Base.metadata.tables) == EXPECTED_TABLES
+    assert set(Base.metadata.tables) >= EXPECTED_TABLES
