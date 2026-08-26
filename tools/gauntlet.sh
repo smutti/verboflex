@@ -16,6 +16,7 @@ readonly SECRET_SCAN="/tmp/verboflex-phase01-secrets.json"
 readonly BACKEND_PROPERTY_MUTATION_CONFIG="$GAUNTLET_DIR/mutmut-property.toml"
 readonly BACKEND_EQUIVALENT_MUTANT_MAP="$GAUNTLET_DIR/equivalent_mutants.txt"
 readonly BACKEND_EQUIVALENT_MUTANT_PROOF="$GAUNTLET_DIR/verify_equivalent_mutants.py"
+readonly BACKEND_RATE_LIMIT_MUTANT_PROOF="$GAUNTLET_DIR/verify_rate_limit_boundary_mutant.py"
 readonly FRONTEND_COVERAGE_EXCLUSION_MAP="$GAUNTLET_DIR/frontend_coverage_exclusions.txt"
 
 readonly EXPECTED_LAYERS="source-state
@@ -303,6 +304,8 @@ checker_preflight() {
     || die "exact equivalent mutant mapping is missing"
   [ -x "$BACKEND_EQUIVALENT_MUTANT_PROOF" ] \
     || die "equivalent mutant proof is not executable"
+  [ -x "$BACKEND_RATE_LIMIT_MUTANT_PROOF" ] \
+    || die "rate limit boundary mutant proof is not executable"
   printf '%s\n' "$EXPECTED_LAYERS" >"$LAYER_RECORD"
   printf 'gauntlet preflight: PASS\n'
 }
@@ -692,6 +695,8 @@ assert_no_surviving_mutants() {
 }
 
 mutation_properties() {
+  "$BACKEND_ROOT/.venv/bin/python" "$BACKEND_RATE_LIMIT_MUTANT_PROOF" \
+    --backend-root "$BACKEND_ROOT"
   with_test_infra backend_mutation_body
   backend_property_mutation
   (cd "$FRONTEND_ROOT" && npm run test:mutation)
@@ -1092,6 +1097,11 @@ self_test_property_mutation() {
   printf 'property mutation attribution contract: PASS\n'
 }
 
+self_test_rate_limit_mutant() {
+  "$BACKEND_ROOT/.venv/bin/python" "$BACKEND_RATE_LIMIT_MUTANT_PROOF" \
+    --backend-root "$BACKEND_ROOT" --self-test
+}
+
 self_test_check_sequence() (
   local fixture log rc
   fixture=$(mktemp -d)
@@ -1245,6 +1255,7 @@ case "${1:-}" in
   --self-test-equivalent-mutants) self_test_equivalent_mutants ;;
   --self-test-mutation-freshness) self_test_mutation_freshness ;;
   --self-test-property-mutation) self_test_property_mutation ;;
+  --self-test-rate-limit-mutant) self_test_rate_limit_mutant ;;
   --self-test-check-sequence) self_test_check_sequence ;;
   --self-test-packaged-checker-isolation) self_test_packaged_checker_isolation ;;
   --self-test-frontend-coverage) self_test_frontend_coverage ;;
