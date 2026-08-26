@@ -79,12 +79,10 @@ def _raise_product_error(error: Exception) -> NoReturn:
             status_code=status.HTTP_409_CONFLICT,
             detail="Product candidate conflict",
         ) from error
-    if isinstance(error, ValueError):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Invalid product input",
-        ) from error
-    raise error
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail="Invalid product input",
+    ) from error
 
 
 AUTH_RESPONSES: dict[int | str, dict[str, Any]] = {
