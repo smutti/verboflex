@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import unicodedata
+from dataclasses import dataclass
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import Select, and_, or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from verboflex.models.product import Product, ProductRevision
 
@@ -22,6 +26,52 @@ class ProductVersionConflict(ValueError):
 
 class ProductNotFound(LookupError):
     """Raised when an administrator-selected UUID has no durable product."""
+
+
+class InvalidProductCursor(ValueError):
+    """Raised when a collection cursor is invalid or belongs to another filter."""
+
+
+DEFAULT_PRODUCT_PAGE_SIZE = 50
+MAX_PRODUCT_PAGE_SIZE = 100
+_CURSOR_VERSION = 1
+_STATUS_VALUES = frozenset({"active", "inactive"})
+
+
+@dataclass(frozen=True, slots=True)
+class ProductRevisionRecord:
+    """Safe closed projection of one active or candidate revision."""
+
+    id: UUID
+    version: int
+    description: str | None
+    is_published: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ProductRecord:
+    """Safe product projection shared by detail, mutation, and collection APIs."""
+
+    id: UUID
+    name: str
+    is_active: bool
+    active_revision: ProductRevisionRecord | None
+    candidate_revision: ProductRevisionRecord | None
+
+
+@dataclass(frozen=True, slots=True)
+class ProductPage:
+    """One stable keyset page."""
+
+    items: tuple[ProductRecord, ...]
+    next_cursor: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _CursorPosition:
+    name_key: str
+    product_id: UUID
+    status: str | None
 
 
 def normalize_product_name(raw_name: str) -> tuple[str, str]:
@@ -170,3 +220,143 @@ def save_product_candidate(
             return product
     except IntegrityError as error:
         raise ProductNameConflict("product name is unavailable") from error
+
+
+def _revision_record(revision: ProductRevision | None) -> ProductRevisionRecord | None:
+    if revision is None:
+        return None
+    return ProductRevisionRecord(
+        id=revision.id,
+        version=revision.version,
+        description=revision.description,
+        is_published=revision.is_published,
+    )
+
+
+def _product_record(product: Product) -> ProductRecord:
+    return ProductRecord(
+        id=product.id,
+        name=product.display_name,
+        is_active=product.is_active,
+        active_revision=_revision_record(product.active_revision),
+        candidate_revision=_revision_record(product.candidate_revision),
+    )
+
+
+def _product_projection_statement() -> Select[tuple[Product]]:
+    return select(Product).options(
+        selectinload(Product.active_revision),
+        selectinload(Product.candidate_revision),
+    )
+
+
+def get_product(session: Session, *, product_id: UUID) -> ProductRecord:
+    """Return one product through the closed active/candidate projection."""
+    with session.begin():
+        product = session.execute(
+            _product_projection_statement().where(Product.id == product_id)
+        ).scalar_one_or_none()
+        if product is None:
+            raise ProductNotFound("product unavailable")
+        return _product_record(product)
+
+
+def _encode_cursor(position: _CursorPosition) -> str:
+    payload = json.dumps(
+        {
+            "id": str(position.product_id),
+            "name_key": position.name_key,
+            "status": position.status,
+            "version": _CURSOR_VERSION,
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+    return base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
+
+
+def _decode_cursor(cursor: str, *, status: str | None) -> _CursorPosition:
+    if not cursor or len(cursor) > 1024:
+        raise InvalidProductCursor("invalid cursor")
+    try:
+        padding = "=" * (-len(cursor) % 4)
+        raw = base64.b64decode(cursor + padding, altchars=b"-_", validate=True)
+        payload = json.loads(raw)
+        if not isinstance(payload, dict) or set(payload) != {
+            "id",
+            "name_key",
+            "status",
+            "version",
+        }:
+            raise ValueError
+        if (
+            payload["version"] != _CURSOR_VERSION
+            or not isinstance(payload["name_key"], str)
+            or payload["status"] not in {None, "active", "inactive"}
+            or payload["status"] != status
+        ):
+            raise ValueError
+        position = _CursorPosition(
+            name_key=payload["name_key"],
+            product_id=UUID(payload["id"]),
+            status=payload["status"],
+        )
+    except (
+        binascii.Error,
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+        ValueError,
+        TypeError,
+    ) as error:
+        raise InvalidProductCursor("invalid cursor") from error
+    if _encode_cursor(position) != cursor:
+        raise InvalidProductCursor("invalid cursor")
+    return position
+
+
+def list_products(
+    session: Session,
+    *,
+    limit: int = DEFAULT_PRODUCT_PAGE_SIZE,
+    cursor: str | None = None,
+    status: str | None = None,
+) -> ProductPage:
+    """Return products in database-owned name-key and UUID order."""
+    if not 1 <= limit <= MAX_PRODUCT_PAGE_SIZE:
+        raise ValueError("invalid page size")
+    if status is not None and status not in _STATUS_VALUES:
+        raise ValueError("invalid status")
+    position = _decode_cursor(cursor, status=status) if cursor is not None else None
+    with session.begin():
+        statement = _product_projection_statement()
+        if status is not None:
+            statement = statement.where(Product.is_active.is_(status == "active"))
+        if position is not None:
+            statement = statement.where(
+                or_(
+                    Product.name_key > position.name_key,
+                    and_(
+                        Product.name_key == position.name_key,
+                        Product.id > position.product_id,
+                    ),
+                )
+            )
+        products = list(
+            session.execute(
+                statement.order_by(Product.name_key, Product.id).limit(limit + 1)
+            ).scalars()
+        )
+        records = tuple(_product_record(product) for product in products[:limit])
+        next_cursor = (
+            _encode_cursor(
+                _CursorPosition(
+                    name_key=products[limit - 1].name_key,
+                    product_id=products[limit - 1].id,
+                    status=status,
+                )
+            )
+            if len(products) > limit
+            else None
+        )
+    return ProductPage(items=records, next_cursor=next_cursor)
