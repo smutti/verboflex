@@ -85,7 +85,7 @@ Plans:
   7. Guided shadcn admin screens provide actionable user, repository, mapping, OAuth, validation, and background-job states.
   8. Phase quality gate passes with RED→GREEN TDD evidence, code review, and backend/frontend/worker/deploy smoke verification.
 
-**Plans**: 1/20 plans executed
+**Plans**: 2/20 plans executed
 
 Plans:
 **Wave 1**
@@ -94,7 +94,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-02-PLAN.md — Product identity, immutable revisions, and candidate APIs
+- [x] 02-02-PLAN.md — Product identity, immutable revisions, and candidate APIs
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -355,7 +355,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Platform Foundation | 15/15 | Complete    | 2026-08-26 |
-| 2. Admin Configuration | 1/20 | In Progress | - |
+| 2. Admin Configuration | 2/20 | In Progress | - |
 | 3. Bitbucket Import Integration | 0/4 | Not started | - |
 | 4. Localization Parser Foundation | 0/7 | Not started | - |
 | 5. Import, Search, and Constraints | 0/6 | Not started | - |

@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-08-26T20:30:10.010Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-08-26T21:22:53.856Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 02 execution started
-state_head: 7dcc02ba0991cfd8e36194ffffe0c4fdd3336533
+state_head: 76b5cdd7fd8dcdbecd49844fc626495db9133a06
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 35
-  completed_plans: 16
+  completed_plans: 17
   percent: 11
 ---
 
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 2 of 20
-Status: Executing Phase 02
+Plan: 3 of 20
+Status: Ready to execute
 Last activity: 2026-08-26 — Phase 02 execution started
 
 Progress: [█░░░░░░░░░] 11%
@@ -74,6 +74,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 01 P14 | 4h45min | 3 tasks | 64 files |
 | Phase 01 P15 | 18h56min | 2 tasks | 35 files |
 | Phase 02 P01 | 35min | 2 tasks | 11 files |
+| Phase 02 P02 | 42min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -145,6 +146,10 @@ Recent decisions affecting current work:
 - [Phase 02]: Serialize administrative authority mutations with the existing global advisory lock and locked actor/target revalidation. — Self-admin and last-active-admin invariants must survive concurrent requests.
 - [Phase 02]: Treat normalized identical display-name and role updates as true non-mutating no-ops. — No-op submissions must not advance token_version, revoke sessions, or rewrite role relationships.
 - [Phase 02]: Keep existing CLI entry points as wrappers over the shared admin-user service. — This preserves verboflex.cli compatibility while giving HTTP and CLI one transaction authority.
+- [Phase 02]: Apply A-01 in application code and persist its name_key so global product identity never depends on locale-sensitive database collation. — Keeps equality deterministic across PostgreSQL locales and every API consumer.
+- [Phase 02]: Keep an immutable active product revision and a distinct editable candidate revision. — Candidate failures and partial work cannot mutate live configuration.
+- [Phase 02]: Require expected candidate version and preserve revision identity for semantic no-ops. — Makes concurrent edits explicit while identical saves stay truly non-mutating.
+- [Phase 02]: Bind opaque product cursors to the status filter and order by name_key then Product UUID. — Keeps pagination stable, canonical, and independent of client-side sorting.
 
 ### Pending Todos
 
@@ -177,6 +182,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-26T20:30:09.980Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-08-26T21:22:53.825Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
