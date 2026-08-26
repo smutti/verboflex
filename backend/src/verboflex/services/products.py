@@ -91,6 +91,26 @@ def _locked_revision(session: Session, revision_id: UUID) -> ProductRevision:
     ).scalar_one()
 
 
+def _matches_revision_input(
+    product: Product,
+    revision: ProductRevision,
+    *,
+    display_name: str,
+    name_key: str,
+    description: str | None,
+) -> bool:
+    return (
+        product.display_name == display_name
+        and product.name_key == name_key
+        and revision.description == description
+    )
+
+
+def _set_product_identity(product: Product, *, display_name: str, name_key: str) -> None:
+    product.display_name = display_name
+    product.name_key = name_key
+
+
 def save_product_candidate(
     session: Session,
     *,
@@ -108,14 +128,15 @@ def save_product_candidate(
                 candidate = _locked_revision(session, product.candidate_revision_id)
                 if candidate.is_published or candidate.version != expected_version:
                     raise ProductVersionConflict("candidate version conflict")
-                if (
-                    product.display_name == display_name
-                    and product.name_key == name_key
-                    and candidate.description == description
+                if _matches_revision_input(
+                    product,
+                    candidate,
+                    display_name=display_name,
+                    name_key=name_key,
+                    description=description,
                 ):
                     return product
-                product.display_name = display_name
-                product.name_key = name_key
+                _set_product_identity(product, display_name=display_name, name_key=name_key)
                 candidate.description = description
                 candidate.version += 1
                 session.flush()
@@ -126,10 +147,12 @@ def save_product_candidate(
             active = _locked_revision(session, product.active_revision_id)
             if not active.is_published or active.version != expected_version:
                 raise ProductVersionConflict("candidate version conflict")
-            if (
-                product.display_name == display_name
-                and product.name_key == name_key
-                and active.description == description
+            if _matches_revision_input(
+                product,
+                active,
+                display_name=display_name,
+                name_key=name_key,
+                description=description,
             ):
                 return product
 
@@ -141,8 +164,7 @@ def save_product_candidate(
             )
             session.add(candidate)
             session.flush()
-            product.display_name = display_name
-            product.name_key = name_key
+            _set_product_identity(product, display_name=display_name, name_key=name_key)
             product.candidate_revision_id = candidate.id
             session.flush()
             return product
