@@ -11,7 +11,7 @@ VerboFlex v1 builds the repository-backed localization workflow from the foundat
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Platform Foundation** - Establish separated frontend/backend apps, OAuth2 base, Postgres/Alembic schema, Redis/Celery, and shadcn/ui.
+- [x] **Phase 1: Platform Foundation** - Establish separated frontend/backend apps, OAuth2 base, Postgres/Alembic schema, Redis/Celery, and shadcn/ui. (completed 2026-08-26)
 - [ ] **Phase 2: Admin Configuration** - Build internal user, role, product, repository, branch, mapping, and PR behavior configuration.
 - [ ] **Phase 3: Bitbucket Read Integration** - Connect to Bitbucket Cloud, validate permissions, list branches, read configured files, and record import baselines.
 - [ ] **Phase 4: Localization Parser Foundation** - Parse Android XML, Qt `.ts`, JSON, and iOS `.strings` into canonical translation records.
@@ -48,7 +48,7 @@ Every phase must complete these checks before it can be marked complete:
   5. Frontend uses React/Vite/TypeScript with shadcn/ui primitives available.
   6. Phase quality gate passes with tests, code review, and deploy/build smoke verification.
 
-**Plans**: 14/15 plans executed
+**Plans**: 15/15 plans executed
 
 Plans:
 
@@ -66,7 +66,7 @@ Plans:
 - [x] 01-12-PLAN.md — Login/change-password routing and forms through TDD
 - [x] 01-13-PLAN.md — Neutral dashboard, service status, responsive shell, and E2E
 - [x] 01-14-PLAN.md — Fail-closed gauntlet/smoke plus fresh-context code and ASVS L1 review gate
-- [ ] 01-15-PLAN.md — Final immutable-source gauntlet, evidence, and independent-verifier handoff
+- [x] 01-15-PLAN.md — Final immutable-source gauntlet, evidence, and independent-verifier handoff
 
 ### Phase 2: Admin Configuration
 
@@ -280,7 +280,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Platform Foundation | 14/15 | In Progress|  |
+| 1. Platform Foundation | 15/15 | Complete    | 2026-08-26 |
 | 2. Admin Configuration | 0/6 | Not started | - |
 | 3. Bitbucket Read Integration | 0/5 | Not started | - |
 | 4. Localization Parser Foundation | 0/6 | Not started | - |
