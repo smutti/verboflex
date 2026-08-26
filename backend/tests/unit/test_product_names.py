@@ -64,9 +64,11 @@ def clean_products(product_database: tuple[sessionmaker[Session], Engine]) -> It
     factory, engine = product_database
     if {"products", "product_revisions"} <= set(inspect(engine).get_table_names()):
         with factory.begin() as session:
-            session.execute(text("DELETE FROM product_revisions"))
-            session.execute(text("DELETE FROM products"))
+            session.execute(text("TRUNCATE products CASCADE"))
     yield
+    if {"products", "product_revisions"} <= set(inspect(engine).get_table_names()):
+        with factory.begin() as session:
+            session.execute(text("TRUNCATE products CASCADE"))
 
 
 @pytest.mark.parametrize(
