@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 import os
 import unicodedata
 from collections.abc import Generator, Iterator, Sequence
@@ -205,6 +207,12 @@ def _product_graph(factory: sessionmaker[Session]) -> tuple[object, ...]:
 
 def _a01_key(name: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", name).split()).casefold()
+
+
+def _cursor_from_json(payload: object, *, compact: bool) -> str:
+    separators = (",", ":") if compact else None
+    encoded = json.dumps(payload, separators=separators).encode()
+    return base64.urlsafe_b64encode(encoded).rstrip(b"=").decode("ascii")
 
 
 def test_admin_create_and_detail_return_closed_active_and_candidate_summaries(
@@ -817,11 +825,23 @@ def test_product_collection_is_bounded_filtered_opaque_and_server_ordered(
             path=f"{ADMIN_PRODUCTS_PATH}?cursor={'x' * 1025}",
         )
     )
+    first_padding = "=" * (-len(first_cursor) % 4)
+    first_payload = json.loads(base64.urlsafe_b64decode(first_cursor + first_padding))
+    noncanonical_cursor = _cursor_from_json(first_payload, compact=False)
+    assert noncanonical_cursor != first_cursor
+    wrong_shape_cursor = _cursor_from_json({}, compact=True)
     noncanonical = asyncio.run(
         product_request(
             "GET",
             access_token=admin_token,
-            path=f"{ADMIN_PRODUCTS_PATH}?cursor={first_cursor}=",
+            path=f"{ADMIN_PRODUCTS_PATH}?cursor={noncanonical_cursor}",
+        )
+    )
+    wrong_shape = asyncio.run(
+        product_request(
+            "GET",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}?cursor={wrong_shape_cursor}",
         )
     )
     assert over_limit.status_code == 422
@@ -829,6 +849,7 @@ def test_product_collection_is_bounded_filtered_opaque_and_server_ordered(
         invalid.status_code
         == oversized.status_code
         == noncanonical.status_code
+        == wrong_shape.status_code
         == wrong_filter_cursor.status_code
         == 422
     )
@@ -836,6 +857,7 @@ def test_product_collection_is_bounded_filtered_opaque_and_server_ordered(
         invalid.json()
         == oversized.json()
         == noncanonical.json()
+        == wrong_shape.json()
         == wrong_filter_cursor.json()
         == {"detail": "Invalid cursor"}
     )
