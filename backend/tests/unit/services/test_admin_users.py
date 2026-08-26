@@ -90,7 +90,9 @@ def _seed_user(
     user_id = uuid4()
     with factory.begin() as session:
         durable_roles = list(
-            session.execute(select(Role).where(Role.name.in_(role.value for role in roles))).scalars()
+            session.execute(
+                select(Role).where(Role.name.in_(role.value for role in roles))
+            ).scalars()
         )
         session.add(
             User(
@@ -228,7 +230,11 @@ def test_empty_roles_and_self_admin_removal_fail_without_mutation(
 
     with service_session_factory() as session:
         actor = session.get_one(User, actor_id)
-        assert (actor.display_name, tuple(role.name for role in actor.roles), actor.token_version) == before
+        assert (
+            actor.display_name,
+            tuple(role.name for role in actor.roles),
+            actor.token_version,
+        ) == before
 
 
 def test_reset_and_reactivation_always_issue_fresh_credentials_and_revoke_authority(
@@ -283,8 +289,12 @@ def test_reset_and_reactivation_always_issue_fresh_credentials_and_revoke_author
         target = session.get_one(User, target_id)
         assert target.is_active is True
         assert target.must_change_password is True
-        assert verify_password(second_reactivation.temporary_password, target.hashed_password) is True
-        assert verify_password(first_reactivation.temporary_password, target.hashed_password) is False
+        assert (
+            verify_password(second_reactivation.temporary_password, target.hashed_password) is True
+        )
+        assert (
+            verify_password(first_reactivation.temporary_password, target.hashed_password) is False
+        )
         assert verify_password(second_reset.temporary_password, target.hashed_password) is False
         assert target.token_version == 10
         assert session.get_one(AuthSession, third_session_id).revoked_at is not None

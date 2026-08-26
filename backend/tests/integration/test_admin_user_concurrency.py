@@ -81,7 +81,9 @@ def _seed_user(
     user_id = uuid4()
     with factory.begin() as session:
         durable_roles = list(
-            session.execute(select(Role).where(Role.name.in_(role.value for role in roles))).scalars()
+            session.execute(
+                select(Role).where(Role.name.in_(role.value for role in roles))
+            ).scalars()
         )
         session.add(
             User(
