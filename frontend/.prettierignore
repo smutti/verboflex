@@ -1,0 +1,8 @@
+coverage/
+dist/
+node_modules/
+playwright-report/
+reports/
+test-results/
+openapi.json
+src/api/client/

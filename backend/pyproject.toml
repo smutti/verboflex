@@ -1,0 +1,104 @@
+[build-system]
+requires = ["uv_build>=0.11.12,<0.12.0"]
+build-backend = "uv_build"
+
+[project]
+name = "verboflex"
+version = "0.1.0"
+description = "Backend API for the VerboFlex localization review platform"
+requires-python = ">=3.14.7,<3.15"
+dependencies = [
+  "alembic==1.19.1",
+  "celery[redis]==5.6.3",
+  "email-validator==2.3.0",
+  "fastapi==0.141.1",
+  "psycopg[binary]==3.3.4",
+  "pydantic-settings==2.15.0",
+  "pwdlib[argon2]==0.3.1",
+  "PyJWT==2.13.0",
+  "python-multipart==0.0.32",
+  "redis==6.4.0",
+  "sqlalchemy==2.0.52",
+  "uvicorn[standard]==0.52.4",
+]
+
+[dependency-groups]
+build = [
+  "uv-build==0.11.12",
+]
+dev = [
+  "detect-secrets==1.5.0",
+  "diff-cover==10.5.1",
+  "httpx==0.28.1",
+  "hypothesis==6.165.10",
+  "mutmut==3.7.0",
+  "mypy==2.3.1",
+  "pip-audit==2.10.1",
+  "pip-licenses==5.5.5",
+  "pytest==9.1.1",
+  "pytest-cov==7.1.0",
+  "pytest-randomly==4.1.0",
+  "radon==6.0.1",
+  "ruff==0.16.4",
+]
+
+[tool.pytest.ini_options]
+addopts = ["--strict-config", "--strict-markers", "-ra"]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["verboflex"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+skip_covered = false
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+packages = ["verboflex"]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mutmut]
+source_paths = ["src"]
+also_copy = ["alembic", "alembic.ini"]
+only_mutate = [
+  "src/verboflex/auth/access_tokens.py",
+  "src/verboflex/auth/identity.py",
+  "src/verboflex/auth/login.py",
+  "src/verboflex/auth/origin.py",
+  "src/verboflex/auth/password_change.py",
+  "src/verboflex/auth/passwords.py",
+  "src/verboflex/auth/principal.py",
+  "src/verboflex/auth/rate_limits.py",
+  "src/verboflex/auth/refresh_sessions.py",
+]
+pytest_add_cli_args_test_selection = [
+  "tests/auth/test_access_tokens.py",
+  "tests/auth/test_login.py",
+  "tests/auth/test_logout.py",
+  "tests/auth/test_password_change.py",
+  "tests/auth/test_passwords.py",
+  "tests/auth/test_refresh.py",
+  "tests/api/test_me.py",
+  "tests/core/test_config.py",
+  "tests/api/test_rate_limits.py",
+  "tests/integration/test_refresh_concurrency.py",
+]
+mutate_only_covered_lines = true
+use_git_change_detection = false
+on_dependency_change = "rerun"
+
+[tool.pip-licenses]
+from = "mixed"

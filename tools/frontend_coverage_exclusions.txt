@@ -1,0 +1,4 @@
+frontend/src/api/client/**|OpenAPI-generated internals; drift is enforced separately
+frontend/src/components/ui/**|official project-owned shadcn registry source
+frontend/src/hooks/use-mobile.ts|official shadcn registry support source
+frontend/src/main.tsx|entrypoint-only application wiring

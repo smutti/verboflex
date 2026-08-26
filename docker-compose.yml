@@ -1,0 +1,110 @@
+name: verboflex
+
+x-backend-common: &backend-common
+  build:
+    context: .
+    dockerfile: docker/backend.Dockerfile
+    target: runtime
+  image: verboflex-backend:${VERBOFLEX_IMAGE_TAG:-local}
+  environment: &backend-environment
+    VERBOFLEX_APP_ENV: local
+    VERBOFLEX_DATABASE_URL: postgresql+psycopg://verboflex@postgres:5432/verboflex
+    VERBOFLEX_REDIS_URL: redis://redis:6379/0
+    VERBOFLEX_JWT_SECRET_KEY: replace-me-with-at-least-32-random-bytes
+    VERBOFLEX_JWT_ALGORITHM: HS256
+    VERBOFLEX_CORS_ORIGINS: '["http://localhost:8080"]'
+    VERBOFLEX_ACCESS_TOKEN_EXPIRE_MINUTES: "15"
+    VERBOFLEX_PASSWORD_CHANGE_TOKEN_EXPIRE_MINUTES: "5"
+    VERBOFLEX_REFRESH_TOKEN_EXPIRE_DAYS: "7"
+    VERBOFLEX_SERVICE_PROBE_TIMEOUT_SECONDS: "2"
+    VERBOFLEX_REFRESH_COOKIE_SECURE: "true"
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: verboflex
+      POSTGRES_USER: verboflex
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  backend:
+    <<: *backend-common
+    command: ["uvicorn", "verboflex.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:${VERBOFLEX_BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=2).read()",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  worker:
+    <<: *backend-common
+    command:
+      ["celery", "-A", "verboflex.worker.celery_app", "worker", "--loglevel=INFO"]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "celery -A verboflex.worker.celery_app inspect ping --destination celery@$${HOSTNAME} --timeout 5",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      target: runtime
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    image: verboflex-frontend:${VERBOFLEX_IMAGE_TAG:-local}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${VERBOFLEX_FRONTEND_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  postgres_data:
+  redis_data:

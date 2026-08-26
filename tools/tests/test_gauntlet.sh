@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root=$(git rev-parse --show-toplevel)
+output_file=$(mktemp)
+trap 'rm -f "$output_file"' EXIT
+
+if ! "$repo_root/tools/gauntlet.sh" --preflight >"$output_file" 2>&1; then
+  printf 'expected gauntlet preflight to pass; output follows:\n' >&2
+  sed -n '1,120p' "$output_file" >&2
+  exit 1
+fi
+
+grep -Fq 'gauntlet preflight: PASS' "$output_file"
+grep -Fq '"$SOURCE_STATE" --verify-review-closed' "$repo_root/tools/gauntlet.sh"
+grep -Fq '"$SOURCE_STATE" --verify-review-source' "$repo_root/tools/gauntlet.sh"
+grep -Fq 'run_layer checker-self-tests packaged_checker_self_tests' \
+  "$repo_root/tools/gauntlet.sh"
+
+if [ "${VERBOFLEX_CHECKER_ISOLATION_NESTED:-0}" != "1" ]; then
+  "$repo_root/tools/gauntlet.sh" --self-test-packaged-checker-isolation \
+    >"$output_file" 2>&1
+  grep -Fq 'packaged checker layer isolation: PASS' "$output_file"
+fi
+
+"$repo_root/tools/gauntlet.sh" --self-test-openapi-control >"$output_file" 2>&1
+grep -Fq 'OpenAPI drift negative control: PASS' "$output_file"
+
+"$repo_root/tools/gauntlet.sh" --self-test-staging-layer >"$output_file" 2>&1
+grep -Fq 'staging/adversarial layer contract: PASS' "$output_file"
+
+for required_path in \
+  src/verboflex/auth/login.py \
+  src/verboflex/auth/password_change.py \
+  src/verboflex/auth/principal.py \
+  src/verboflex/auth/refresh_sessions.py; do
+  grep -Fq "\"$required_path\"" "$repo_root/backend/pyproject.toml"
+done
+
+for required_suite in \
+  tests/auth/test_login.py \
+  tests/auth/test_password_change.py \
+  tests/auth/test_refresh.py \
+  tests/auth/test_logout.py \
+  tests/api/test_me.py \
+  tests/integration/test_refresh_concurrency.py; do
+  grep -Fq "\"$required_suite\"" "$repo_root/backend/pyproject.toml"
+done
+grep -Fq 'on_dependency_change = "rerun"' "$repo_root/backend/pyproject.toml"
+grep -Fq 'source_paths = ["src"]' "$repo_root/backend/pyproject.toml"
+grep -Fq 'also_copy = ["alembic", "alembic.ini"]' "$repo_root/backend/pyproject.toml"
+grep -Fq 'related: false' "$repo_root/frontend/stryker.config.mjs"
+
+"$repo_root/tools/gauntlet.sh" --self-test-candidate-contract >"$output_file" 2>&1
+grep -Fq 'post-fix candidate contract: PASS' "$output_file"
+grep -Fq -- '--post-fix-candidate' "$repo_root/tools/gauntlet.sh"
+
+"$repo_root/tools/gauntlet.sh" --self-test-infra-lifecycle >"$output_file" 2>&1
+grep -Fq 'test infrastructure lifecycle: PASS' "$output_file"
+
+"$repo_root/tools/gauntlet.sh" --self-test-infra-failure-cleanup \
+  >"$output_file" 2>&1
+grep -Fq 'test infrastructure failure cleanup: PASS' "$output_file"
+
+"$repo_root/tools/gauntlet.sh" --self-test-mutation-verdict >"$output_file" 2>&1
+grep -Fq 'mutation verdict negative control: PASS' "$output_file"
+
+"$repo_root/tools/gauntlet.sh" --self-test-equivalent-mutants >"$output_file" 2>&1
+grep -Fq 'exact equivalent mutation controls: PASS' "$output_file"
+
+"$repo_root/tools/gauntlet.sh" --self-test-mutation-freshness >"$output_file" 2>&1
+grep -Fq 'mutation freshness negative control: PASS' "$output_file"
+
+"$repo_root/tools/gauntlet.sh" --self-test-property-mutation >"$output_file" 2>&1
+grep -Fq 'property mutation attribution contract: PASS' "$output_file"
+
+"$repo_root/tools/gauntlet.sh" --self-test-rate-limit-mutant >"$output_file" 2>&1
+grep -Fq 'rate limit boundary mutant controls: PASS' "$output_file"
+
+"$repo_root/tools/gauntlet.sh" --self-test-check-sequence >"$output_file" 2>&1
+grep -Fq 'required check sequence negative control: PASS' "$output_file"
+
+"$repo_root/tools/gauntlet.sh" --self-test-frontend-coverage >"$output_file" 2>&1
+grep -Fq 'frontend changed-line coverage negative controls: PASS' "$output_file"
+grep -Fq 'frontend coverage exclusion mapping negative control: PASS' "$output_file"
+grep -Fq 'frontend Cobertura partial-branch negative control: PASS' "$output_file"
+grep -Fq -- '--coverage.reporter=cobertura' "$repo_root/tools/gauntlet.sh"
+if grep -Fq -- '--coverage.reporter=lcov' "$repo_root/tools/gauntlet.sh"; then
+  printf 'frontend coverage gate must not use branch-permissive LCOV input\n' >&2
+  exit 1
+fi
+
+"$repo_root/tools/gauntlet.sh" --self-test-secret-audit-policy >"$output_file" 2>&1
+grep -Fq 'secret audit exact-policy negative control: PASS' "$output_file"
