@@ -4,9 +4,9 @@ current_phase: 2
 current_phase_name: Admin Configuration
 status: "Phase 01 shipped — PR #1"
 stopped_at: Phase 2 context gathered
-last_updated: "2026-08-26T11:33:10.478Z"
+last_updated: "2026-08-26T16:52:23.913Z"
 last_activity: 2026-08-26
-state_head: 835a0a0546a19cb6cc51b0d8c32be6d3696b139e
+state_head: 422686d4ed1e1f04cf599b34b1c049c9520f1014
 progress:
   total_phases: 9
   completed_phases: 1
@@ -146,9 +146,16 @@ None yet.
 
 ### Blockers/Concerns
 
-- Phase 3 must decide Bitbucket Cloud credential type and least-privilege scope model.
-- Phase 4 must clarify JSON shape conventions and Qt `.ts` edit scope.
-- Phase 8 must define exact allowed product-specific PR grouping options.
+- Phase 2 planning must resolve SPEC assumptions A-01 (product-name normalization/uniqueness), A-02 (preview encodings and JSON shapes), and A-03 (bounded scan/sample/job limits) before the affected implementation tasks are approved.
+- Phase 3 must define import-grade capability checks and recovery behavior without silently expanding the Phase 2 read-only OAuth scope.
+- Phase 7 must define the exact Qt `.ts` and other format-preserving edit contract while extending, not duplicating, the Phase 4 golden parser corpus.
+
+### Roadmap Evolution
+
+- Phase 7 edited: moved parser fixtures to Phase 4 and retained write-back fixtures
+- Phase 4 edited: added complete golden parser fixtures and stable canonical identity
+- Phase 3 edited: narrowed to import-grade capability validation, durable source references, and errors
+- Phase 2 edited: expanded admin scope with organizational OAuth, read-only discovery, and preview
 
 ## Deferred Items
 

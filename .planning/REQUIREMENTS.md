@@ -1,6 +1,7 @@
 # Requirements: VerboFlex
 
 **Defined:** 2026-05-04
+**Reconciled:** 2026-08-26 after Phase 2 specification
 **Core Value:** Product teams can quickly find, review, constrain, modify, comment on, and approve translations, then send approved changes back through the standard Bitbucket Cloud pull request workflow.
 
 ## v1 Requirements
@@ -38,8 +39,8 @@
 
 ### Bitbucket Cloud Integration
 
-- [ ] **BITB-01**: Admin can configure Bitbucket Cloud credentials or tokens for repository access.
-- [ ] **BITB-02**: System validates Bitbucket Cloud read, write, branch, and pull request permissions during setup.
+- [ ] **BITB-01**: Admin can connect, reconnect, revoke, and view bounded status for the single organization-wide Bitbucket Cloud OAuth 2.0 connection used for repository access.
+- [ ] **BITB-02**: System validates and reports Bitbucket Cloud capabilities required by configured read/import operations and the later write/pull-request profile without silently expanding OAuth scopes.
 - [ ] **BITB-03**: System can list configured repository branches from Bitbucket Cloud.
 - [ ] **BITB-04**: System can read configured localization files from the configured Bitbucket Cloud source branch.
 - [ ] **BITB-05**: System stores the source commit hash and file reference used for each import.
@@ -194,10 +195,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROD-07 | Phase 2 | Pending |
 | PROD-08 | Phase 2 | Pending |
 | PROD-09 | Phase 2 | Pending |
-| BITB-01 | Phase 3 | Pending |
+| BITB-01 | Phase 2 | Pending |
 | BITB-02 | Phase 3 | Pending |
-| BITB-03 | Phase 3 | Pending |
-| BITB-04 | Phase 3 | Pending |
+| BITB-03 | Phase 2 | Pending |
+| BITB-04 | Phase 2 | Pending |
 | BITB-05 | Phase 3 | Pending |
 | BITB-06 | Phase 3 | Pending |
 | FMT-01 | Phase 4 | Pending |
@@ -205,7 +206,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FMT-03 | Phase 4 | Pending |
 | FMT-04 | Phase 4 | Pending |
 | FMT-05 | Phase 7 | Pending |
-| FMT-06 | Phase 7 | Pending |
+| FMT-06 | Phase 4 | Pending |
 | FMT-07 | Phase 4 | Pending |
 | FMT-08 | Phase 5 | Pending |
 | SRCH-01 | Phase 5 | Pending |
@@ -258,4 +259,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-05-04*
-*Last updated: 2026-05-04 after roadmap traceability*
+*Last updated: 2026-08-26 after Phase 2–4 boundary reconciliation*

@@ -2,7 +2,7 @@
 
 ## Overview
 
-VerboFlex v1 builds the repository-backed localization workflow from the foundation upward: first the separated frontend/backend platform and data model, then admin configuration, Bitbucket read integration, parser/import support, search and review workflows, safe write-back, pull request automation, and final hardening. The roadmap keeps Bitbucket Cloud as the source of truth while giving product managers a dense shadcn/ui-based portal for finding, reviewing, commenting on, approving, and submitting translation changes. Every phase closes with a quality gate covering targeted tests, code review, and deploy/build smoke verification for the current app slice.
+VerboFlex v1 builds the repository-backed localization workflow from the foundation upward: first the separated frontend/backend platform and data model, then admin configuration with read-only Bitbucket discovery, import-grade Bitbucket integration, canonical parser/import support, search and review workflows, safe write-back, pull request automation, and final hardening. The roadmap keeps Bitbucket Cloud as the source of truth while giving product managers a dense shadcn/ui-based portal for finding, reviewing, commenting on, approving, and submitting translation changes. Every phase closes with a quality gate covering targeted tests, code review, and deploy/build smoke verification for the current app slice.
 
 ## Phases
 
@@ -12,12 +12,12 @@ VerboFlex v1 builds the repository-backed localization workflow from the foundat
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Platform Foundation** - Establish separated frontend/backend apps, OAuth2 base, Postgres/Alembic schema, Redis/Celery, and shadcn/ui. (completed 2026-08-26)
-- [ ] **Phase 2: Admin Configuration** - Build internal user, role, product, repository, branch, mapping, and PR behavior configuration.
-- [ ] **Phase 3: Bitbucket Read Integration** - Connect to Bitbucket Cloud, validate permissions, list branches, read configured files, and record import baselines.
-- [ ] **Phase 4: Localization Parser Foundation** - Parse Android XML, Qt `.ts`, JSON, and iOS `.strings` into canonical translation records.
+- [ ] **Phase 2: Admin Configuration** - Build the admin control plane, organizational Bitbucket OAuth connection, live repository discovery, and read-only localization preview.
+- [ ] **Phase 3: Bitbucket Import Integration** - Harden Bitbucket access for imports with capability validation, durable source references, resilience, and actionable errors.
+- [ ] **Phase 4: Localization Parser Foundation** - Parse Android XML, Qt `.ts`, JSON, and iOS `.strings` into canonical translation records verified by complete golden fixtures.
 - [ ] **Phase 5: Import, Search, and Constraints** - Import translations, preserve review context, expose search/filter APIs, and calculate max-length violations.
 - [ ] **Phase 6: Review Workspace and Comments** - Deliver the task-focused translation review UI with editing, state changes, comments, and pending-change visibility.
-- [ ] **Phase 7: Format-Safe Write-Back** - Prove file-location metadata, golden fixtures, stale-source detection, and safe writer behavior before PR automation.
+- [ ] **Phase 7: Format-Safe Write-Back** - Prove file-location metadata, stale-source detection, and format-preserving writer behavior before PR automation.
 - [ ] **Phase 8: Change Sets and Pull Requests** - Submit grouped changes through Celery jobs that create Bitbucket branches, commits, and pull requests.
 - [ ] **Phase 9: Verification and Hardening** - Audit role enforcement, mutation audit metadata, UI permissions, error handling, and end-to-end readiness.
 
@@ -70,60 +70,62 @@ Plans:
 
 ### Phase 2: Admin Configuration
 
-**Goal**: Let admins configure users, roles, products, Bitbucket repositories, branches, localization layouts, and PR behavior.
+**Goal**: Deliver an administrator-only control plane for internal users, versioned products, reusable repositories, one-format mappings, a single organizational Bitbucket OAuth connection, and live read-only validation previews.
 **Depends on**: Phase 1
-**Requirements**: [AUTH-02, AUTH-03, PROD-01, PROD-02, PROD-03, PROD-04, PROD-05, PROD-06, PROD-07, PROD-08, PROD-09, UI-03]
+**Requirements**: [AUTH-02, AUTH-03, PROD-01, PROD-02, PROD-03, PROD-04, PROD-05, PROD-06, PROD-07, PROD-08, PROD-09, BITB-01, BITB-03, BITB-04, UI-03]
 **UI hint**: yes
 **Success Criteria** (what must be TRUE):
 
-  1. Admin can manage internal users and assign multiple roles.
-  2. Admin can create products and configure one or more Bitbucket Cloud repositories.
-  3. Admin can configure source branches, allowed target branches, localization formats, and PR grouping behavior.
-  4. Admin can define direct-repository and cross-repository key/translation mappings.
-  5. Admin sees validation feedback and mapping previews before enabling imports.
-  6. Phase quality gate passes with tests, code review, and deploy/build smoke verification.
+  1. Admin can manage the complete reversible internal-user lifecycle with multiple roles, one-time temporary credentials, and last-active-admin invariants.
+  2. Admin can create products whose candidate configuration remains isolated from the active revision until explicit atomic publication.
+  3. Admin can reuse globally unique Bitbucket Cloud repositories while keeping product-specific branches, mappings, and preview state isolated.
+  4. One organization-wide Bitbucket OAuth connection uses read-only `repository` scope to list branches and read source content for configuration preview.
+  5. Each direct or separate mapping represents exactly one detected format/layout, one source branch, allowed targets, a default target, and the fixed repository+target PR grouping rule.
+  6. Preview detects Android XML, Qt `.ts`, JSON, and iOS `.strings`, surfaces bounded samples, and fails closed on empty, invalid, ambiguous, stale, or disconnected state.
+  7. Guided shadcn admin screens provide actionable user, repository, mapping, OAuth, validation, and background-job states.
+  8. Phase quality gate passes with RED→GREEN TDD evidence, code review, and backend/frontend/worker/deploy smoke verification.
 
-**Plans**: 6 plans
+**Plans**: 8 plans
 
 Plans:
 
 - [ ] 02-01: User and role administration
-- [ ] 02-02: Product and repository configuration model/API
-- [ ] 02-03: Branch, format, and PR behavior configuration
-- [ ] 02-04: Cross-repository mapping configuration and validation preview
-- [ ] 02-05: shadcn-based admin UX and validation states
-- [ ] 02-06: Phase quality gate - tests, code review, and deploy/build verification
+- [ ] 02-02: Product revisions and reusable repository configuration
+- [ ] 02-03: Organizational Bitbucket OAuth authority
+- [ ] 02-04: Read-only repository, branch, and source discovery
+- [ ] 02-05: One-format mapping and PR behavior configuration
+- [ ] 02-06: Four-format preview detectors and background validation
+- [ ] 02-07: shadcn-based guided admin UX and validation states
+- [ ] 02-08: Phase quality gate - tests, code review, and deploy/build verification
 
-### Phase 3: Bitbucket Read Integration
+### Phase 3: Bitbucket Import Integration
 
-**Goal**: Read configured Bitbucket Cloud repository data safely and expose actionable setup/import errors.
+**Goal**: Turn the Phase 2 read-only Bitbucket boundary into an import-grade integration with capability validation, durable source references, resilient reads, and actionable operational errors.
 **Depends on**: Phase 2
-**Requirements**: [BITB-01, BITB-02, BITB-03, BITB-04, BITB-05, BITB-06]
+**Requirements**: [BITB-02, BITB-05, BITB-06]
 **UI hint**: yes
 **Success Criteria** (what must be TRUE):
 
-  1. Admin can store Bitbucket Cloud credentials or tokens for configured repositories.
-  2. System validates read, write, branch, and pull request capabilities during setup.
-  3. System can list configured repository branches.
-  4. System can read configured localization files from the selected source branch.
-  5. System stores source commit/file references and surfaces actionable connection or permission failures.
-  6. Phase quality gate passes with tests, code review, and deploy/build smoke verification.
+  1. System validates the capabilities required by configured read/import operations and reports the later write/PR capability profile without silently expanding OAuth scopes.
+  2. Import-oriented reads use bounded retry, pagination, rate-limit, and provider-error handling on top of the Phase 2 OAuth/source boundary.
+  3. System stores the exact source commit hash and file reference used by each import attempt.
+  4. Admin receives actionable, sanitized connection, permission, rate-limit, missing-source, and import errors with safe retry guidance.
+  5. Phase quality gate passes with integration tests, code review, and backend/worker/deploy smoke verification.
 
-**Plans**: 5 plans
+**Plans**: 4 plans
 
 Plans:
 
-- [ ] 03-01: Bitbucket credential storage and secure backend client
-- [ ] 03-02: Permission and capability validation
-- [ ] 03-03: Branch listing and file read APIs
-- [ ] 03-04: Import baseline records and admin-facing errors
-- [ ] 03-05: Phase quality gate - tests, code review, and deploy/build verification
+- [ ] 03-01: Import-grade capability validation and resilient Bitbucket client
+- [ ] 03-02: Durable source commit/file references and import baselines
+- [ ] 03-03: Actionable admin errors, recovery, and retry behavior
+- [ ] 03-04: Phase quality gate - integration tests, code review, and deploy/build verification
 
 ### Phase 4: Localization Parser Foundation
 
-**Goal**: Convert supported localization files into canonical translation records.
+**Goal**: Convert supported localization files into stable canonical translation records and prove all four parser contracts with complete golden fixtures.
 **Depends on**: Phase 3
-**Requirements**: [FMT-01, FMT-02, FMT-03, FMT-04, FMT-07]
+**Requirements**: [FMT-01, FMT-02, FMT-03, FMT-04, FMT-06, FMT-07]
 **UI hint**: no
 **Success Criteria** (what must be TRUE):
 
@@ -131,10 +133,11 @@ Plans:
   2. System parses Qt `.ts` translations into canonical records.
   3. System parses JSON localization files into canonical records.
   4. System parses iOS `.strings` files into canonical records.
-  5. Canonical records include product, repository, branch, file path, format, key, language, text, state, and locator metadata.
-  6. Phase quality gate passes with parser tests, code review, and backend deploy/build smoke verification.
+  5. Canonical records include product, repository, branch, file path, format, stable key identity, language, text, state, and locator metadata.
+  6. Complete golden fixtures cover valid, empty, malformed, escaped, Unicode, and format-specific boundary cases for every supported parser.
+  7. Phase quality gate passes with parser tests, code review, and backend deploy/build smoke verification.
 
-**Plans**: 6 plans
+**Plans**: 7 plans
 
 Plans:
 
@@ -143,7 +146,8 @@ Plans:
 - [ ] 04-03: Qt `.ts` parser
 - [ ] 04-04: JSON parser
 - [ ] 04-05: iOS `.strings` parser
-- [ ] 04-06: Phase quality gate - parser tests, code review, and deploy/build verification
+- [ ] 04-06: Cross-format golden fixtures and canonical conformance
+- [ ] 04-07: Phase quality gate - parser tests, code review, and deploy/build verification
 
 ### Phase 5: Import, Search, and Constraints
 
@@ -201,12 +205,12 @@ Plans:
 
 **Goal**: Make file write-back safe enough to trust before creating Bitbucket pull requests.
 **Depends on**: Phase 6
-**Requirements**: [FMT-05, FMT-06, PR-04]
+**Requirements**: [FMT-05, PR-04]
 **UI hint**: no
 **Success Criteria** (what must be TRUE):
 
   1. System preserves file location metadata needed to write changed translations back to original files.
-  2. Golden fixtures verify parse/write behavior for Android XML, Qt `.ts`, JSON, and iOS `.strings`.
+  2. Writer fixtures extend the Phase 4 parser corpus to verify format-preserving edits for Android XML, Qt `.ts`, JSON, and iOS `.strings`.
   3. System detects source branch or file changes since import before writing.
   4. Writer output avoids broad unrelated diffs for simple translation edits.
   5. Stale source state blocks write-back with an actionable error.
@@ -281,9 +285,9 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Platform Foundation | 15/15 | Complete    | 2026-08-26 |
-| 2. Admin Configuration | 0/6 | Not started | - |
-| 3. Bitbucket Read Integration | 0/5 | Not started | - |
-| 4. Localization Parser Foundation | 0/6 | Not started | - |
+| 2. Admin Configuration | 0/8 | Not started | - |
+| 3. Bitbucket Import Integration | 0/4 | Not started | - |
+| 4. Localization Parser Foundation | 0/7 | Not started | - |
 | 5. Import, Search, and Constraints | 0/6 | Not started | - |
 | 6. Review Workspace and Comments | 0/6 | Not started | - |
 | 7. Format-Safe Write-Back | 0/5 | Not started | - |
