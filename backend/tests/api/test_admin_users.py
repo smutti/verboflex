@@ -463,3 +463,280 @@ def test_user_list_has_stable_opaque_default_and_maximum_pagination(
     assert over_limit.status_code == 422
     assert invalid_cursor.status_code == 422
     assert invalid_cursor.json() == {"detail": "Invalid cursor"}
+
+
+def _authority_snapshot(factory: sessionmaker[Session]) -> list[tuple[object, ...]]:
+    """Capture every mutable user authority field for rejection assertions."""
+    with factory() as session:
+        users = list(session.execute(select(User).order_by(User.email)).scalars())
+        return [
+            (
+                user.id,
+                user.email,
+                user.display_name,
+                tuple(role.name for role in user.roles),
+                user.is_active,
+                user.must_change_password,
+                user.token_version,
+                user.hashed_password,
+            )
+            for user in users
+        ]
+
+
+def test_every_admin_user_endpoint_uses_the_same_bearer_and_admin_guard_without_mutation(
+    admin_session_factory: sessionmaker[Session],
+) -> None:
+    """List, create, update, reset, deactivate, and reactivate all fail closed."""
+    _admin_id, _admin_token = create_authority(
+        admin_session_factory,
+        email="admin@example.com",
+        roles=("admin",),
+    )
+    _viewer_id, viewer_token = create_authority(
+        admin_session_factory,
+        email="viewer@example.com",
+        roles=("viewer",),
+    )
+    target_id, _target_token = create_authority(
+        admin_session_factory,
+        email="target@example.com",
+        roles=("translator",),
+    )
+    configure_admin_dependencies(admin_session_factory)
+    before = _authority_snapshot(admin_session_factory)
+    operations = (
+        ("GET", ADMIN_USERS_PATH, None),
+        ("POST", ADMIN_USERS_PATH, create_payload(email="new@example.com")),
+        (
+            "PATCH",
+            f"{ADMIN_USERS_PATH}/{target_id}",
+            {"display_name": "Changed", "roles": ["viewer"]},
+        ),
+        ("POST", f"{ADMIN_USERS_PATH}/{target_id}/reset-password", None),
+        ("POST", f"{ADMIN_USERS_PATH}/{target_id}/deactivate", None),
+        ("POST", f"{ADMIN_USERS_PATH}/{target_id}/reactivate", None),
+    )
+
+    for method, path, body in operations:
+        for token, expected_status in ((None, 401), ("invalid-token", 401), (viewer_token, 403)):
+            response = asyncio.run(
+                admin_request(
+                    method,
+                    access_token=token,
+                    path=path,
+                    json_body=body,
+                )
+            )
+            assert response.status_code == expected_status
+            assert "temporary_password" not in response.text
+
+    assert _authority_snapshot(admin_session_factory) == before
+
+
+def test_admin_updates_roles_then_resets_deactivates_and_reactivates_one_identity(
+    admin_session_factory: sessionmaker[Session],
+) -> None:
+    """The complete lifecycle preserves UUID and reveals secrets only on reset/reactivate."""
+    _admin_id, admin_token = create_authority(
+        admin_session_factory,
+        email="admin@example.com",
+        roles=("admin",),
+    )
+    target_id, _target_token = create_authority(
+        admin_session_factory,
+        email="target@example.com",
+        roles=("viewer",),
+    )
+    configure_admin_dependencies(admin_session_factory)
+
+    updated = asyncio.run(
+        admin_request(
+            "PATCH",
+            access_token=admin_token,
+            path=f"{ADMIN_USERS_PATH}/{target_id}",
+            json_body={
+                "display_name": "  Target Person  ",
+                "roles": ["viewer", "translator", "viewer"],
+            },
+        )
+    )
+    assert updated.status_code == 200
+    assert updated.json() == {
+        "id": str(target_id),
+        "email": "target@example.com",
+        "display_name": "Target Person",
+        "roles": ["translator", "viewer"],
+        "is_active": True,
+        "must_change_password": False,
+    }
+    assert "temporary_password" not in updated.text
+
+    reset = asyncio.run(
+        admin_request(
+            "POST",
+            access_token=admin_token,
+            path=f"{ADMIN_USERS_PATH}/{target_id}/reset-password",
+        )
+    )
+    assert reset.status_code == 200
+    assert reset.headers["cache-control"] == "no-store"
+    reset_secret = reset.json()["temporary_password"]
+
+    deactivated = asyncio.run(
+        admin_request(
+            "POST",
+            access_token=admin_token,
+            path=f"{ADMIN_USERS_PATH}/{target_id}/deactivate",
+        )
+    )
+    assert deactivated.status_code == 200
+    assert deactivated.json()["id"] == str(target_id)
+    assert deactivated.json()["is_active"] is False
+    assert "temporary_password" not in deactivated.text
+
+    reactivated = asyncio.run(
+        admin_request(
+            "POST",
+            access_token=admin_token,
+            path=f"{ADMIN_USERS_PATH}/{target_id}/reactivate",
+        )
+    )
+    assert reactivated.status_code == 200
+    assert reactivated.headers["cache-control"] == "no-store"
+    reactivation_secret = reactivated.json()["temporary_password"]
+    assert reactivation_secret != reset_secret
+    assert reactivated.json()["id"] == str(target_id)
+    assert reactivated.json()["is_active"] is True
+    assert reactivated.json()["must_change_password"] is True
+
+    listed = asyncio.run(admin_request("GET", access_token=admin_token))
+    serialized = listed.text
+    assert reset_secret not in serialized
+    assert reactivation_secret not in serialized
+    with admin_session_factory() as session:
+        target = session.get_one(User, target_id)
+        assert target.id == target_id
+        assert target.email == "target@example.com"
+        assert target.token_version == 4
+        assert verify_password(reactivation_secret, target.hashed_password) is True
+        assert verify_password(reset_secret, target.hashed_password) is False
+        assert all(
+            item.revoked_at is not None
+            for item in session.execute(
+                select(AuthSession).where(AuthSession.user_id == target_id)
+            ).scalars()
+        )
+
+
+def test_user_update_rejects_email_changes_empty_roles_and_self_admin_removal(
+    admin_session_factory: sessionmaker[Session],
+) -> None:
+    """The PATCH surface exposes only mutable fields and preserves admin invariants."""
+    admin_id, admin_token = create_authority(
+        admin_session_factory,
+        email="admin@example.com",
+        roles=("admin", "viewer"),
+    )
+    configure_admin_dependencies(admin_session_factory)
+    before = _authority_snapshot(admin_session_factory)
+
+    email_change = asyncio.run(
+        admin_request(
+            "PATCH",
+            access_token=admin_token,
+            path=f"{ADMIN_USERS_PATH}/{admin_id}",
+            json_body={
+                "email": "changed@example.com",
+                "display_name": "Admin",
+                "roles": ["admin"],
+            },
+        )
+    )
+    empty_roles = asyncio.run(
+        admin_request(
+            "PATCH",
+            access_token=admin_token,
+            path=f"{ADMIN_USERS_PATH}/{admin_id}",
+            json_body={"display_name": "Admin", "roles": []},
+        )
+    )
+    self_removal = asyncio.run(
+        admin_request(
+            "PATCH",
+            access_token=admin_token,
+            path=f"{ADMIN_USERS_PATH}/{admin_id}",
+            json_body={"display_name": "Admin", "roles": ["viewer"]},
+        )
+    )
+    self_deactivation = asyncio.run(
+        admin_request(
+            "POST",
+            access_token=admin_token,
+            path=f"{ADMIN_USERS_PATH}/{admin_id}/deactivate",
+        )
+    )
+
+    assert email_change.status_code == 422
+    assert empty_roles.status_code == 422
+    assert self_removal.status_code == 409
+    assert self_deactivation.status_code == 409
+    for response in (email_change, empty_roles, self_removal, self_deactivation):
+        assert "temporary_password" not in response.text
+    assert _authority_snapshot(admin_session_factory) == before
+
+
+def test_invalid_lifecycle_transitions_and_unknown_users_are_bounded_and_non_mutating(
+    admin_session_factory: sessionmaker[Session],
+) -> None:
+    """Active reactivate, repeated deactivate, and unknown UUIDs return bounded conflicts."""
+    _admin_id, admin_token = create_authority(
+        admin_session_factory,
+        email="admin@example.com",
+        roles=("admin",),
+    )
+    target_id, _target_token = create_authority(
+        admin_session_factory,
+        email="target@example.com",
+        roles=("viewer",),
+    )
+    configure_admin_dependencies(admin_session_factory)
+
+    active_reactivation = asyncio.run(
+        admin_request(
+            "POST",
+            access_token=admin_token,
+            path=f"{ADMIN_USERS_PATH}/{target_id}/reactivate",
+        )
+    )
+    assert active_reactivation.status_code == 409
+    assert "temporary_password" not in active_reactivation.text
+
+    first_deactivation = asyncio.run(
+        admin_request(
+            "POST",
+            access_token=admin_token,
+            path=f"{ADMIN_USERS_PATH}/{target_id}/deactivate",
+        )
+    )
+    assert first_deactivation.status_code == 200
+    after_first = _authority_snapshot(admin_session_factory)
+    repeated_deactivation = asyncio.run(
+        admin_request(
+            "POST",
+            access_token=admin_token,
+            path=f"{ADMIN_USERS_PATH}/{target_id}/deactivate",
+        )
+    )
+    unknown = asyncio.run(
+        admin_request(
+            "POST",
+            access_token=admin_token,
+            path=f"{ADMIN_USERS_PATH}/{uuid4()}/reset-password",
+        )
+    )
+    assert repeated_deactivation.status_code == 409
+    assert unknown.status_code == 404
+    assert "temporary_password" not in repeated_deactivation.text
+    assert "temporary_password" not in unknown.text
+    assert _authority_snapshot(admin_session_factory) == after_first

@@ -19,6 +19,36 @@ FRONTEND_SOURCE = REPOSITORY_ROOT / "frontend" / "src"
 GENERATED_CLIENT = FRONTEND_SOURCE / "api" / "client"
 
 EXPECTED_OPERATIONS = {
+    ("/api/v1/admin/users", "get"): (
+        "list_admin_users",
+        {"200", "401", "403", "422"},
+        True,
+    ),
+    ("/api/v1/admin/users", "post"): (
+        "create_admin_user",
+        {"201", "401", "403", "409", "422"},
+        True,
+    ),
+    ("/api/v1/admin/users/{user_id}", "patch"): (
+        "update_admin_user",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
+    ("/api/v1/admin/users/{user_id}/deactivate", "post"): (
+        "deactivate_admin_user",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
+    ("/api/v1/admin/users/{user_id}/reactivate", "post"): (
+        "reactivate_admin_user",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
+    ("/api/v1/admin/users/{user_id}/reset-password", "post"): (
+        "reset_admin_user_password",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
     ("/api/v1/auth/change-password", "post"): (
         "change_password",
         {"204", "400", "401", "422", "429", "503"},
@@ -88,6 +118,36 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
         )
 
     error_response_codes = {
+        ("/api/v1/admin/users", "get"): {"401", "403", "422"},
+        ("/api/v1/admin/users", "post"): {"401", "403", "409", "422"},
+        ("/api/v1/admin/users/{user_id}", "patch"): {
+            "401",
+            "403",
+            "404",
+            "409",
+            "422",
+        },
+        ("/api/v1/admin/users/{user_id}/deactivate", "post"): {
+            "401",
+            "403",
+            "404",
+            "409",
+            "422",
+        },
+        ("/api/v1/admin/users/{user_id}/reactivate", "post"): {
+            "401",
+            "403",
+            "404",
+            "409",
+            "422",
+        },
+        ("/api/v1/admin/users/{user_id}/reset-password", "post"): {
+            "401",
+            "403",
+            "404",
+            "409",
+            "422",
+        },
         ("/api/v1/auth/change-password", "post"): {"400", "401", "422", "429", "503"},
         ("/api/v1/auth/logout", "post"): {"403", "429"},
         ("/api/v1/auth/refresh", "post"): {"401", "403", "429", "503"},
@@ -174,6 +234,37 @@ def test_authentication_credential_fields_have_explicit_maximum_lengths() -> Non
     assert login_fields["password"]["maxLength"] == 128
     assert change_fields["current_password"]["maxLength"] == 128
     assert change_fields["new_password"]["maxLength"] == 128
+
+
+def test_admin_user_openapi_keeps_temporary_credentials_on_one_time_responses_only() -> None:
+    """Ordinary list/update/deactivate contracts cannot project credential material."""
+    schema = app.openapi()
+    schemas = schema["components"]["schemas"]
+    ordinary = schemas["AdminUserResponse"]["properties"]
+    listed = schemas["AdminUserListResponse"]["properties"]
+    credential = schemas["AdminUserCredentialResponse"]["properties"]
+
+    assert "temporary_password" not in ordinary
+    assert "temporary_password" not in listed
+    assert "temporary_password" in credential
+    assert "hashed_password" not in json.dumps(schemas)
+
+    operations = _operation_entries(schema)
+    credential_paths = {
+        ("/api/v1/admin/users", "post"),
+        ("/api/v1/admin/users/{user_id}/reactivate", "post"),
+        ("/api/v1/admin/users/{user_id}/reset-password", "post"),
+    }
+    for key, operation in operations.items():
+        success_code = "201" if key == ("/api/v1/admin/users", "post") else "200"
+        reference = _response_schema(operation, success_code)
+        if key in credential_paths:
+            assert reference == "#/components/schemas/AdminUserCredentialResponse"
+        elif key[0].startswith("/api/v1/admin/users") and key != (
+            "/api/v1/admin/users",
+            "get",
+        ):
+            assert reference == "#/components/schemas/AdminUserResponse"
 
 
 def _handwritten_api_type_declarations(source: str) -> set[str]:
