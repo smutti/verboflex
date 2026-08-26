@@ -6,8 +6,11 @@ import asyncio
 import os
 import unicodedata
 from collections.abc import Generator, Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from threading import Barrier
+from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
@@ -15,8 +18,9 @@ import pytest
 from alembic.config import Config
 from psycopg import connect, sql
 from pydantic import SecretStr
-from sqlalchemy import create_engine, delete, select, text
+from sqlalchemy import create_engine, delete, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.sql import Executable
 
 from alembic import command
 from verboflex.auth.access_tokens import issue_access_token
@@ -28,6 +32,7 @@ from verboflex.models.auth_session import AuthSession
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.role import Role
 from verboflex.models.user import User
+from verboflex.services.products import list_products, normalize_product_name
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 ADMIN_DATABASE_URL = os.environ.get(
@@ -292,7 +297,7 @@ def test_every_product_route_reuses_bearer_admin_authority_and_denials_do_not_mu
     assert created.status_code == 201
     product_id = created.json()["id"]
     before = _product_graph(product_session_factory)
-    calls = (
+    calls: tuple[tuple[str, str, dict[str, object] | None], ...] = (
         ("GET", ADMIN_PRODUCTS_PATH, None),
         ("POST", ADMIN_PRODUCTS_PATH, create_payload(name="Forbidden Product")),
         ("GET", f"{ADMIN_PRODUCTS_PATH}/{product_id}", None),
@@ -347,6 +352,29 @@ def test_expected_version_conflicts_duplicate_name_and_identical_save_are_atomic
     assert first.status_code == second.status_code == 201
     first_id = first.json()["id"]
     candidate_before = first.json()["candidate_revision"]
+
+    duplicate_create = asyncio.run(
+        product_request(
+            "POST",
+            access_token=admin_token,
+            json_body=create_payload(name="  beta\tproduct ", description="duplicate"),
+        )
+    )
+    assert duplicate_create.status_code == 409
+    assert duplicate_create.json() == {
+        "detail": "Product name is unavailable",
+        "field": "name",
+    }
+
+    invalid_name = asyncio.run(
+        product_request(
+            "POST",
+            access_token=admin_token,
+            json_body=create_payload(name=" \t ", description=None),
+        )
+    )
+    assert invalid_name.status_code == 422
+    assert invalid_name.json() == {"detail": "Invalid product input"}
 
     missing_version = asyncio.run(
         product_request(
@@ -428,6 +456,211 @@ def test_expected_version_conflicts_duplicate_name_and_identical_save_are_atomic
         "field": "name",
     }
     assert _product_graph(product_session_factory) == before_conflicts
+
+    unknown_id = uuid4()
+    unknown_detail = asyncio.run(
+        product_request(
+            "GET",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{unknown_id}",
+        )
+    )
+    unknown_update = asyncio.run(
+        product_request(
+            "PATCH",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{unknown_id}",
+            json_body={
+                "name": "Unknown",
+                "description": None,
+                "expected_candidate_version": 1,
+            },
+        )
+    )
+    assert unknown_detail.status_code == unknown_update.status_code == 404
+    assert unknown_detail.json() == unknown_update.json() == {"detail": "Product unavailable"}
+    assert _product_graph(product_session_factory) == before_conflicts
+
+
+def test_racing_duplicate_create_has_one_winner_and_one_field_scoped_conflict(
+    product_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Database uniqueness closes the race after both requests pass their precheck."""
+    _admin_id, admin_token = create_authority(
+        product_session_factory,
+        email="admin@example.com",
+        roles=("admin",),
+    )
+    configure_dependencies(product_session_factory)
+    barrier = Barrier(2)
+    original_scalar = Session.scalar
+
+    def synchronized_scalar(
+        self: Session,
+        statement: Executable,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        result = original_scalar(self, statement, *args, **kwargs)
+        if "products.name_key" in str(statement):
+            barrier.wait(timeout=5)
+        return result
+
+    monkeypatch.setattr(Session, "scalar", synchronized_scalar)
+
+    def create_duplicate() -> httpx.Response:
+        return asyncio.run(
+            product_request(
+                "POST",
+                access_token=admin_token,
+                json_body=create_payload(name="Concurrent Product"),
+            )
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(lambda _index: create_duplicate(), range(2)))
+
+    assert sorted(response.status_code for response in responses) == [201, 409]
+    conflict = next(response for response in responses if response.status_code == 409)
+    assert conflict.json() == {"detail": "Product name is unavailable", "field": "name"}
+    with product_session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(Product)) == 1
+
+
+def _seed_active_product(
+    factory: sessionmaker[Session],
+    *,
+    name: str,
+    description: str | None,
+) -> tuple[UUID, UUID]:
+    product_id = uuid4()
+    revision_id = uuid4()
+    with factory.begin() as session:
+        product = Product(
+            id=product_id,
+            display_name=name,
+            name_key=_a01_key(name),
+            is_active=True,
+        )
+        session.add(product)
+        session.flush()
+        session.add(
+            ProductRevision(
+                id=revision_id,
+                product_id=product_id,
+                description=description,
+                version=1,
+                is_published=True,
+                published_at=datetime.now(UTC),
+            )
+        )
+        session.flush()
+        product.active_revision_id = revision_id
+        session.flush()
+    return product_id, revision_id
+
+
+def test_published_product_noop_and_candidate_creation_keep_active_summary_immutable(
+    product_session_factory: sessionmaker[Session],
+) -> None:
+    """Editing an active product either does nothing or creates a separate candidate."""
+    _admin_id, admin_token = create_authority(
+        product_session_factory,
+        email="admin@example.com",
+        roles=("admin",),
+    )
+    product_id, active_id = _seed_active_product(
+        product_session_factory,
+        name="Published Product",
+        description="published",
+    )
+    configure_dependencies(product_session_factory)
+
+    stale = asyncio.run(
+        product_request(
+            "PATCH",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{product_id}",
+            json_body={
+                "name": "Published Product",
+                "description": "published",
+                "expected_candidate_version": 2,
+            },
+        )
+    )
+    assert stale.status_code == 409
+
+    no_op = asyncio.run(
+        product_request(
+            "PATCH",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{product_id}",
+            json_body={
+                "name": "  Published\tProduct ",
+                "description": "published",
+                "expected_candidate_version": 1,
+            },
+        )
+    )
+    assert no_op.status_code == 200
+    assert no_op.json()["active_revision"]["id"] == str(active_id)
+    assert no_op.json()["candidate_revision"] is None
+
+    changed = asyncio.run(
+        product_request(
+            "PATCH",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{product_id}",
+            json_body={
+                "name": "Published Product",
+                "description": "candidate",
+                "expected_candidate_version": 1,
+            },
+        )
+    )
+    assert changed.status_code == 200
+    assert changed.json()["active_revision"] == no_op.json()["active_revision"]
+    assert changed.json()["candidate_revision"]["id"] != str(active_id)
+    assert changed.json()["candidate_revision"]["version"] == 2
+    assert changed.json()["candidate_revision"]["description"] == "candidate"
+
+    with product_session_factory.begin() as session:
+        broken_id = uuid4()
+        session.add(
+            Product(
+                id=broken_id,
+                display_name="Pointerless Product",
+                name_key="pointerless product",
+                is_active=False,
+            )
+        )
+    pointerless = asyncio.run(
+        product_request(
+            "PATCH",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{broken_id}",
+            json_body={
+                "name": "Pointerless Product",
+                "description": None,
+                "expected_candidate_version": 1,
+            },
+        )
+    )
+    assert pointerless.status_code == 409
+    assert pointerless.json() == {"detail": "Product candidate conflict"}
+
+
+def test_service_input_guards_reject_non_string_names_and_invalid_collection_options(
+    product_session_factory: sessionmaker[Session],
+) -> None:
+    """Direct service callers receive the same bounded validation contract."""
+    with pytest.raises(ValueError, match="must be a string"):
+        normalize_product_name(42)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="page size"):
+        list_products(product_session_factory(), limit=0)
+    with pytest.raises(ValueError, match="status"):
+        list_products(product_session_factory(), status="archived")
 
 
 def _seed_products(factory: sessionmaker[Session], count: int) -> None:
@@ -584,11 +817,25 @@ def test_product_collection_is_bounded_filtered_opaque_and_server_ordered(
             path=f"{ADMIN_PRODUCTS_PATH}?cursor={'x' * 1025}",
         )
     )
+    noncanonical = asyncio.run(
+        product_request(
+            "GET",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}?cursor={first_cursor}=",
+        )
+    )
     assert over_limit.status_code == 422
-    assert invalid.status_code == oversized.status_code == wrong_filter_cursor.status_code == 422
+    assert (
+        invalid.status_code
+        == oversized.status_code
+        == noncanonical.status_code
+        == wrong_filter_cursor.status_code
+        == 422
+    )
     assert (
         invalid.json()
         == oversized.json()
+        == noncanonical.json()
         == wrong_filter_cursor.json()
         == {"detail": "Invalid cursor"}
     )
