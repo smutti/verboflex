@@ -49,7 +49,7 @@ The original roadmap placed Bitbucket credentials and live reads in Phase 3 and 
 7. **One-format localization mapping**: Each product mapping represents exactly one automatically detected localization format/layout, supports either `direct` or `separate` key-and-translation topology, and stores one source branch, one or more allowed target branches, and exactly one default target from that set.
    - Current: No mapping model or mapping validation exists.
    - Target: `direct` mappings use one repository side; `separate` mappings explicitly link key and translation repository sides. Administrators select from detected layouts but do not maintain globs, file lists, or language extraction templates.
-   - Acceptance: Schema and service tests reject missing sides, extra sides, zero target branches, default targets outside the allowed set, duplicate targets, duplicate mapping identity, mixed formats/layouts within one mapping, and branches absent from the live provider result.
+   - Acceptance: Schema and service tests reject missing sides, extra sides, malformed or empty required target sets, default targets outside the normalized allowed set, duplicate mapping identity, mixed formats/layouts within one mapping, and branches absent from the live provider result. Duplicate allowed-target inputs normalize and collapse deterministically to one set member; the default must be a member after normalization, and repeating the identical normalized mapping configuration is a non-mutating no-op.
 
 8. **Fixed PR grouping contract**: Pull-request behavior is fixed to group compatible future translation changes by repository and target branch.
    - Current: PROD-05 requires configurable PR behavior, but no option has been implemented or locked.
@@ -189,11 +189,11 @@ The original roadmap placed Bitbucket credentials and live reads in Phase 3 and 
 | ordering | R6 | ✅ covered | Repository lists sort by descriptive name fallback then workspace/slug. |
 | idempotency | R6 | ✅ covered | Repeated registration cannot create another row. |
 | concurrency | R6 | ✅ covered | Database composite uniqueness closes racing registrations. |
-| adjacency | R7 | ✅ covered | Duplicate target branches collapse to set semantics; duplicate mapping identity is rejected. |
+| adjacency | R7 | ✅ covered | Duplicate allowed-target inputs normalize and collapse deterministically to one set member; the default must belong to that normalized set, while duplicate mapping identity is rejected. |
 | empty | R7 | ✅ covered | Missing required repository side or target set is rejected. |
 | encoding | R7 | ✅ covered | Provider branch names remain exact opaque provider values; format/topology are fixed enums. |
 | ordering | R7 | ⛔ dismissed | Allowed targets are a set and default is explicit; input order has no semantic meaning. |
-| idempotency | R7 | ✅ covered | Repeating identical mapping configuration is non-mutating. |
+| idempotency | R7 | ✅ covered | Repeating the identical normalized mapping configuration is a non-mutating no-op. |
 | concurrency | R7 | ✅ covered | Candidate revision conflicts prevent silent last-writer overwrite. |
 | adjacency | R8 | ✅ covered | Exact repository+target equality joins; either difference splits. |
 | empty | R8 | ✅ covered | Empty future change input produces no group. |
