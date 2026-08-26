@@ -515,7 +515,12 @@ def test_redis_dependency_uses_the_configured_database_url() -> None:
 
 @pytest.mark.parametrize(
     ("raw_state", "expected_allowed", "expected_remaining", "expected_retry_after"),
-    [([3, 42], True, 2, 42), ([6, 0], False, 0, 1)],
+    [
+        ([3, 42], True, 2, 42),
+        ([5, 42], True, 0, 42),
+        ([6, 0], False, 0, 1),
+        ([7, 42], False, 0, 42),
+    ],
 )
 def test_rate_limiter_uses_one_exact_atomic_redis_contract(
     raw_state: list[int],

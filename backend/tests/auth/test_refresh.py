@@ -126,9 +126,16 @@ def configure_dependencies(
     return client
 
 
-def test_sensitive_action_limiter_hashes_authority_and_preserves_exact_window_state() -> None:
+@pytest.mark.parametrize(
+    ("attempts", "expected_allowed"),
+    [(30, True), (31, False), (32, False)],
+)
+def test_sensitive_action_limiter_hashes_authority_and_preserves_exact_window_state(
+    attempts: int,
+    expected_allowed: bool,
+) -> None:
     """Prove the Redis key, script arguments, inclusive limit, and TTL floor."""
-    redis_client = FakeRedis(result=[30, 0])
+    redis_client = FakeRedis(result=[attempts, 0])
 
     result = enforce_auth_action_rate_limit(
         redis_client,
@@ -150,7 +157,7 @@ def test_sensitive_action_limiter_hashes_authority_and_preserves_exact_window_st
     assert isinstance(redis_key, str)
     assert REFRESH_TOKEN not in redis_key
     assert "192.0.2.10" not in redis_key
-    assert result.allowed is True
+    assert result.allowed is expected_allowed
     assert result.remaining == 0
     assert result.retry_after == 1
 

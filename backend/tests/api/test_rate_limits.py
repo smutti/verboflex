@@ -344,10 +344,12 @@ def test_local_limiter_accepts_exact_minima_and_reports_exact_window_state() -> 
     second = limiter.check("actor", limit=2, window_seconds=1)
     clock.now += 0.25
     third = limiter.check("actor", limit=2, window_seconds=1)
+    fourth = limiter.check("actor", limit=2, window_seconds=1)
 
     assert first == LoginRateLimit(allowed=True, remaining=1, retry_after=1)
     assert second == LoginRateLimit(allowed=True, remaining=0, retry_after=1)
     assert third == LoginRateLimit(allowed=False, remaining=0, retry_after=1)
+    assert fourth == LoginRateLimit(allowed=False, remaining=0, retry_after=1)
 
     long_window = BoundedLocalRateLimiter(clock=FakeClock())
     assert long_window.check("actor", limit=1, window_seconds=10).retry_after == 10
