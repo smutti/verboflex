@@ -256,14 +256,13 @@ def test_admin_user_openapi_keeps_temporary_credentials_on_one_time_responses_on
         ("/api/v1/admin/users/{user_id}/reset-password", "post"),
     }
     for key, operation in operations.items():
+        if not key[0].startswith("/api/v1/admin/users"):
+            continue
         success_code = "201" if key == ("/api/v1/admin/users", "post") else "200"
         reference = _response_schema(operation, success_code)
         if key in credential_paths:
             assert reference == "#/components/schemas/AdminUserCredentialResponse"
-        elif key[0].startswith("/api/v1/admin/users") and key != (
-            "/api/v1/admin/users",
-            "get",
-        ):
+        elif key != ("/api/v1/admin/users", "get"):
             assert reference == "#/components/schemas/AdminUserResponse"
 
 
