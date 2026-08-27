@@ -313,6 +313,18 @@ def test_product_lock_linearizes_publish_equal_retry_and_stale_writer(
         publication.publish_product_candidate(
             session,
             product_id=product_id,
+            candidate_revision_id=candidate_id,
+            expected_candidate_version=6,
+            confirmation_predicate=_always_confirmed,
+        )
+    assert _graph_snapshot(publication_session_factory, product_id=product_id) == winner_snapshot
+    with (
+        publication_session_factory() as session,
+        pytest.raises(publication.PublicationConflict, match="revision conflict"),
+    ):
+        publication.publish_product_candidate(
+            session,
+            product_id=product_id,
             candidate_revision_id=old_active_id,
             expected_candidate_version=6,
             confirmation_predicate=_always_confirmed,
@@ -414,3 +426,60 @@ def test_deactivate_retains_configuration_and_reactivate_reuses_publication_pred
     assert after_reactivate[0][1] is True
     assert after_reactivate[0][2:] == before[0][2:]
     assert after_reactivate[1:] == before[1:]
+
+    with (
+        publication_session_factory() as session,
+        pytest.raises(publication.PublicationConflict, match="revision conflict"),
+    ):
+        publication.reactivate_product(
+            session,
+            product_id=product_id,
+            active_revision_id=uuid4(),
+            expected_active_version=6,
+            confirmation_predicate=_always_confirmed,
+        )
+    assert _graph_snapshot(publication_session_factory, product_id=product_id) == after_reactivate
+
+
+def test_publication_closed_structure_and_corruption_guards(
+    publication_session_factory: sessionmaker[Session],
+) -> None:
+    """Malformed durable topology and missing revision identities fail closed."""
+    publication = _publication_module()
+    with (
+        publication_session_factory() as session,
+        pytest.raises(publication.PublicationConflict, match="revision conflict"),
+    ):
+        publication._locked_revision(session, uuid4())
+
+    keys_repository_id = uuid4()
+    translations_repository_id = uuid4()
+
+    def separate_mapping(*, roles: tuple[str, ...], same_repository: bool = False) -> Any:
+        mapping = ProductRepositoryMapping(
+            revision_id=uuid4(),
+            topology="separate",
+            identity_key=f"separate-{uuid4()}",
+        )
+        mapping.sides = [
+            ProductMappingRepositorySide(
+                role=role,
+                repository_id=(
+                    keys_repository_id
+                    if same_repository or role == "keys"
+                    else translations_repository_id
+                ),
+                source_branch="main",
+            )
+            for role in roles
+        ]
+        return mapping
+
+    assert publication._mapping_structure_is_valid(separate_mapping(roles=("keys", "translations")))
+    assert not publication._mapping_structure_is_valid(
+        separate_mapping(roles=("keys", "translations"), same_repository=True)
+    )
+    assert not publication._mapping_structure_is_valid(separate_mapping(roles=("keys",)))
+    unsupported = separate_mapping(roles=("keys", "translations"))
+    unsupported.topology = "unsupported"
+    assert not publication._mapping_structure_is_valid(unsupported)
