@@ -19,6 +19,21 @@ FRONTEND_SOURCE = REPOSITORY_ROOT / "frontend" / "src"
 GENERATED_CLIENT = FRONTEND_SOURCE / "api" / "client"
 
 EXPECTED_OPERATIONS = {
+    ("/api/v1/admin/repositories", "get"): (
+        "list_admin_repositories",
+        {"200", "401", "403", "422"},
+        True,
+    ),
+    ("/api/v1/admin/repositories", "post"): (
+        "create_admin_repository",
+        {"201", "401", "403", "409", "422"},
+        True,
+    ),
+    ("/api/v1/admin/repositories/{repository_id}", "get"): (
+        "get_admin_repository",
+        {"200", "401", "403", "404", "422"},
+        True,
+    ),
     ("/api/v1/admin/products", "get"): (
         "list_admin_products",
         {"200", "401", "403", "422"},
@@ -138,6 +153,14 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
         )
 
     error_response_codes = {
+        ("/api/v1/admin/repositories", "get"): {"401", "403", "422"},
+        ("/api/v1/admin/repositories", "post"): {"401", "403", "409", "422"},
+        ("/api/v1/admin/repositories/{repository_id}", "get"): {
+            "401",
+            "403",
+            "404",
+            "422",
+        },
         ("/api/v1/admin/products", "get"): {"401", "403", "422"},
         ("/api/v1/admin/products", "post"): {"401", "403", "422"},
         ("/api/v1/admin/products/{product_id}", "get"): {"401", "403", "404", "422"},
