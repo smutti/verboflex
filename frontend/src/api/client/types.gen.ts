@@ -175,7 +175,7 @@ export type AdminMappingConflictResponse = {
     /**
      * Field
      */
-    field: 'mapping_identity' | 'candidate_version' | 'source_branch' | 'allowed_target_branches';
+    field: 'mapping_identity' | 'candidate_version' | 'source_branch' | 'keys_source_branch' | 'translations_source_branch' | 'allowed_target_branches';
 };
 
 /**
@@ -418,6 +418,57 @@ export type AdminRepositoryResponse = {
      * Workspace
      */
     workspace: string;
+};
+
+/**
+ * AdminSeparateMappingSideWriteRequest
+ *
+ * One closed explicit side of a separate mapping.
+ */
+export type AdminSeparateMappingSideWriteRequest = {
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Role
+     */
+    role: 'keys' | 'translations';
+    /**
+     * Source Branch
+     */
+    source_branch: string;
+};
+
+/**
+ * AdminSeparateMappingWriteRequest
+ *
+ * Create or replace one mapping with exact Keys and Translations sides.
+ */
+export type AdminSeparateMappingWriteRequest = {
+    /**
+     * Allowed Target Branches
+     */
+    allowed_target_branches: Array<string>;
+    /**
+     * Default Target Branch
+     */
+    default_target_branch: string;
+    /**
+     * Expected Candidate Version
+     */
+    expected_candidate_version: number;
+    /**
+     * Sides
+     */
+    sides: [
+        AdminSeparateMappingSideWriteRequest,
+        AdminSeparateMappingSideWriteRequest
+    ];
+    /**
+     * Topology
+     */
+    topology: 'separate';
 };
 
 /**
@@ -1131,7 +1182,14 @@ export type ListAdminCandidateMappingsResponses = {
 export type ListAdminCandidateMappingsResponse = ListAdminCandidateMappingsResponses[keyof ListAdminCandidateMappingsResponses];
 
 export type CreateAdminCandidateMappingData = {
-    body: AdminDirectMappingWriteRequest;
+    /**
+     * Payload
+     */
+    body: ({
+        topology: 'direct';
+    } & AdminDirectMappingWriteRequest) | ({
+        topology: 'separate';
+    } & AdminSeparateMappingWriteRequest);
     path: {
         /**
          * Product Id
@@ -1181,7 +1239,14 @@ export type CreateAdminCandidateMappingResponses = {
 export type CreateAdminCandidateMappingResponse = CreateAdminCandidateMappingResponses[keyof CreateAdminCandidateMappingResponses];
 
 export type UpdateAdminCandidateMappingData = {
-    body: AdminDirectMappingWriteRequest;
+    /**
+     * Payload
+     */
+    body: ({
+        topology: 'direct';
+    } & AdminDirectMappingWriteRequest) | ({
+        topology: 'separate';
+    } & AdminSeparateMappingWriteRequest);
     path: {
         /**
          * Product Id
