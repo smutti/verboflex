@@ -12,12 +12,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from uuid import UUID
 
-from cryptography.fernet import Fernet, MultiFernet
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from verboflex.core.config import Settings
 from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.security.secret_box import SecretBox, SecretBoxConfigurationError
 
 OAUTH_STATE_BYTES = 32
 OAUTH_STATE_TTL_SECONDS = 600
@@ -100,10 +100,10 @@ class BitbucketOAuthService:
         self._redis = redis_client
         self._token_exchange = token_exchange
         self._random_bytes = random_bytes
-        self._client_id, self._client_secret, self._callback_uri = (
-            self._require_oauth_settings(settings)
+        self._client_id, self._client_secret, self._callback_uri = self._require_oauth_settings(
+            settings
         )
-        self._cipher = self._build_cipher(settings)
+        self._secret_box = self._build_secret_box(settings)
 
     @staticmethod
     def _require_oauth_settings(settings: Settings) -> tuple[str, str, str]:
@@ -119,16 +119,13 @@ class BitbucketOAuthService:
         return normalized_client_id, normalized_client_secret, str(callback_uri)
 
     @staticmethod
-    def _build_cipher(settings: Settings) -> MultiFernet:
+    def _build_secret_box(settings: Settings) -> SecretBox:
         keyring = settings.bitbucket_token_encryption_keyring
         if keyring is None:
             raise ValueError(SETTINGS_REQUIRED_MESSAGE)
-        raw_keys = keyring.get_secret_value().split(",")
-        if not raw_keys or any(not key for key in raw_keys):
-            raise ValueError(INVALID_KEYRING_MESSAGE)
         try:
-            return MultiFernet([Fernet(key.encode()) for key in raw_keys])
-        except (TypeError, ValueError) as error:
+            return SecretBox.from_keyring(keyring.get_secret_value())
+        except SecretBoxConfigurationError as error:
             raise ValueError(INVALID_KEYRING_MESSAGE) from error
 
     @staticmethod
@@ -193,17 +190,11 @@ class BitbucketOAuthService:
             if connection.generation != binding.expected_generation:
                 raise OAuthCallbackRejected(CALLBACK_REJECTED_MESSAGE)
             token_response = self._exchange(code)
-            access_token, refresh_token, expires_in = self._require_token_response(
-                token_response
-            )
+            access_token, refresh_token, expires_in = self._require_token_response(token_response)
             connected_at = datetime.now(UTC)
             connection.generation += 1
-            connection.access_token_ciphertext = self._cipher.encrypt(
-                access_token.encode()
-            ).decode()
-            connection.refresh_token_ciphertext = self._cipher.encrypt(
-                refresh_token.encode()
-            ).decode()
+            connection.access_token_ciphertext = self._secret_box.encrypt(access_token)
+            connection.refresh_token_ciphertext = self._secret_box.encrypt(refresh_token)
             connection.scope_profile = REPOSITORY_SCOPE
             connection.provider_expires_at = connected_at + timedelta(seconds=expires_in)
             connection.connected_at = connected_at
