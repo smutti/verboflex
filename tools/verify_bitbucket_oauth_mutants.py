@@ -14,7 +14,12 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = REPOSITORY_ROOT / "backend"
-TEST_SELECTION = ("tests/integration/test_bitbucket_oauth.py",)
+TEST_SELECTION = (
+    "tests/integration/test_bitbucket_oauth.py",
+    "tests/api/test_admin_bitbucket.py",
+    "tests/api/test_openapi_contract.py::test_openapi_surface_is_exact_and_security_is_not_accidental",
+    "tests/api/test_openapi_contract.py::test_admin_bitbucket_openapi_is_closed_bounded_and_secret_free",
+)
 
 
 class MutationProofError(RuntimeError):
@@ -53,14 +58,62 @@ MUTATIONS = (
     Mutation(
         "access-token-persisted-in-plaintext",
         "src/verboflex/services/bitbucket_oauth.py",
-        "connection.access_token_ciphertext = self._secret_box.encrypt(access_token)",
-        "connection.access_token_ciphertext = access_token",
+        "connection.access_token_ciphertext = self._secret_box.encrypt(access_token)\n"
+        "            connection.refresh_token_ciphertext = "
+        "self._secret_box.encrypt(refresh_token)",
+        "connection.access_token_ciphertext = access_token\n"
+        "            connection.refresh_token_ciphertext = "
+        "self._secret_box.encrypt(refresh_token)",
     ),
     Mutation(
         "invalid-token-authentication-failure-escapes",
         "src/verboflex/security/secret_box.py",
         "except AttributeError, InvalidToken, TypeError, UnicodeDecodeError, UnicodeEncodeError:",
         "except AttributeError, TypeError, UnicodeDecodeError, UnicodeEncodeError:",
+    ),
+    Mutation(
+        "admin-guard-to-viewer",
+        "src/verboflex/api/v1/routes/admin_bitbucket.py",
+        "AdminPrincipal = Annotated[Principal, Depends(require_roles(RoleName.ADMIN))]",
+        "AdminPrincipal = Annotated[Principal, Depends(require_roles(RoleName.VIEWER))]",
+    ),
+    Mutation(
+        "callback-requires-ambient-admin-bearer",
+        "src/verboflex/api/v1/routes/admin_bitbucket.py",
+        "async def complete_admin_bitbucket_oauth_callback(\n    session: AdminSession,",
+        "async def complete_admin_bitbucket_oauth_callback(\n"
+        "    _principal: AdminPrincipal,\n"
+        "    session: AdminSession,",
+    ),
+    Mutation(
+        "repository-write-scope-expanded",
+        "src/verboflex/services/bitbucket_oauth.py",
+        '                "response_type": "code",\n                "state": state,',
+        '                "response_type": "code",\n'
+        '                "scope": "repository:write",\n'
+        '                "state": state,',
+    ),
+    Mutation(
+        "callback-redirects-to-attacker-path",
+        "src/verboflex/api/v1/routes/admin_bitbucket.py",
+        "post_callback_path=settings.bitbucket_oauth_post_callback_path,",
+        'post_callback_path="/attacker",',
+    ),
+    Mutation(
+        "local-revoke-skipped",
+        "src/verboflex/api/v1/routes/admin_bitbucket.py",
+        "configured.revoke_current(session, actor_id=principal.user_id)",
+        "configured.public_status(session)",
+    ),
+    Mutation(
+        "authorization-response-allows-extra-fields",
+        "src/verboflex/schemas/admin_bitbucket.py",
+        "class AdminBitbucketAuthorizationResponse(BaseModel):\n"
+        '    """One short-lived authorization destination without provider credentials."""\n\n'
+        '    model_config = ConfigDict(extra="forbid")',
+        "class AdminBitbucketAuthorizationResponse(BaseModel):\n"
+        '    """One short-lived authorization destination without provider credentials."""\n\n'
+        '    model_config = ConfigDict(extra="ignore")',
     ),
 )
 
@@ -89,9 +142,13 @@ def copy_backend(destination: Path) -> Path:
         ".venv",
         "__pycache__",
         "coverage.xml",
+        "coverage-02-05.xml",
         "mutants",
     )
     shutil.copytree(BACKEND_ROOT, target, ignore=ignored)
+    frontend_target = destination / "frontend"
+    frontend_target.mkdir()
+    shutil.copy2(REPOSITORY_ROOT / "frontend/openapi.json", frontend_target)
     return target
 
 
@@ -148,7 +205,9 @@ def prove_mutations() -> None:
 
 def self_test() -> None:
     """Prove source drift reaches the checker's failure path."""
-    with tempfile.TemporaryDirectory(prefix="verboflex-oauth-mutant-control-") as temp_dir:
+    with tempfile.TemporaryDirectory(
+        prefix="verboflex-oauth-mutant-control-"
+    ) as temp_dir:
         control = Path(temp_dir) / "control.py"
         control.write_text("approved = True\n")
         try:
