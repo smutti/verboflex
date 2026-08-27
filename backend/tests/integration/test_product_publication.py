@@ -730,6 +730,7 @@ def test_every_mapping_requires_one_current_exact_confirmation(
         "branch",
         "new_commit",
         "job_failed",
+        "result",
         "digest",
         "layout",
         "detector_version",
@@ -814,6 +815,13 @@ def test_stale_confirmation_identity_preserves_the_prior_active_graph(
                 )
             elif mutation == "digest":
                 mapping.confirmed_preview_digest = "f" * 64
+            elif mutation == "result":
+                job = session.get_one(PreviewJob, confirmed_job_id)
+                job.result = {
+                    "detector_version": PREVIEW_DETECTOR_VERSION,
+                    "digest": job.input_digest,
+                    "layout_candidates": [{}],
+                }
             else:
                 mapping.selected_layout_candidate_id = uuid4()
 

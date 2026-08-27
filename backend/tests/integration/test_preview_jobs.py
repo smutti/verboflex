@@ -50,12 +50,15 @@ from verboflex.models.user import User
 from verboflex.services.preview_jobs import (
     PreviewJobConflict,
     PreviewJobNotFound,
+    _closed_result,
     _complete_sides,
     _current_failure_code,
     _finish_preview_job,
+    _identity,
     _matches_started_identity,
     _record,
     _start_preview_job,
+    confirm_preview_job,
     create_or_reuse_preview_job,
     execute_preview_job,
     get_preview_job,
@@ -1522,3 +1525,72 @@ def test_nonconfirmable_preview_states_expose_no_confirmation_action(
         assert mapping is not None
         assert mapping.selected_layout_candidate_id is None
         assert mapping.confirmed_preview_job_id is None
+
+
+def test_confirmation_rejects_missing_candidate_and_wrong_repository_side(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Closed confirmation authority rejects unavailable and cross-side identities."""
+    actor_id = uuid4()
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobNotFound, match="preview job unavailable"),
+    ):
+        confirm_preview_job(
+            session,
+            job_id=uuid4(),
+            preview_digest="f" * 64,
+            layout_candidate_id=uuid4(),
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
+
+    _product_id, _candidate_id, _mapping_id, completed, result = _complete_confirmable_preview(
+        preview_session_factory
+    )
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="preview confirmation unavailable"),
+    ):
+        confirm_preview_job(
+            session,
+            job_id=completed.id,
+            preview_digest=str(result["digest"]),
+            layout_candidate_id=uuid4(),
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
+
+    _product_id, _candidate_id, _mapping_id, completed, _result = _complete_confirmable_preview(
+        preview_session_factory
+    )
+    with preview_session_factory.begin() as session:
+        row = session.get_one(PreviewJob, completed.id)
+        candidate = build_layout_candidate(
+            repository_side="translations",
+            format="android_xml",
+            layout_identity="mobile/src/main/res",
+            files=("mobile/src/main/res/values/strings.xml",),
+            values={"default": {"hello": "Hello"}},
+        ).to_mapping()
+        row.result = _closed_result(
+            _identity(row),
+            {
+                "detector_version": row.detector_version,
+                "digest": row.input_digest,
+                "layout_candidates": [candidate],
+            },
+        )
+        rejected_digest = str(row.result["digest"])
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="preview confirmation unavailable"),
+    ):
+        confirm_preview_job(
+            session,
+            job_id=completed.id,
+            preview_digest=rejected_digest,
+            layout_candidate_id=UUID(str(candidate["id"])),
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
