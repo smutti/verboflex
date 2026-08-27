@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 0
 waived_count: 0
-fixed_count: 22
-total_count: 22
-last_updated: 2026-08-27T19:11:19.702Z
+fixed_count: 24
+total_count: 24
+last_updated: 2026-08-27T19:53:48.740Z
 ---
 
 # Broken Windows Ledger
@@ -37,6 +37,8 @@ last_updated: 2026-08-27T19:11:19.702Z
 | 20 | 02 | deviation | backend/src/verboflex/localization/preview/android_xml.py |  | Reduced changed detector and core complexity below grade C | fixed |  | 2026-08-27T19:10:58.394Z | 2026-08-27T19:11:19.579Z |
 | 21 | 02 | deviation | frontend/openapi.json |  | Synchronized the expanded browser-facing preview contract | fixed |  | 2026-08-27T19:10:58.457Z | 2026-08-27T19:11:19.640Z |
 | 22 | 02 | deviation | backend/tests/integration/test_preview_jobs.py |  | Applied repository formatting to the tracer integration file | fixed |  | 2026-08-27T19:10:58.518Z | 2026-08-27T19:11:19.702Z |
+| 23 | 02 | deviation | tools/verify_ios_preview_mutants.py |  | Added a drift-checked iOS parser and registry mutation proof after the planned gauntlet lacked format-specific mutation evidence. | fixed |  | 2026-08-27T19:53:44.141Z | 2026-08-27T19:53:48.678Z |
+| 24 | 02 | deviation | backend/tests/unit/localization/preview/test_ios_strings.py |  | Closed detector and worker branch-coverage gaps and removed unreachable guards after the first changed-line gate reported 87 percent. | fixed |  | 2026-08-27T19:53:44.204Z | 2026-08-27T19:53:48.740Z |
 
 ````json
 [
@@ -303,6 +305,30 @@ last_updated: 2026-08-27T19:11:19.702Z
     "reason": "",
     "recorded_at": "2026-08-27T19:10:58.518Z",
     "resolved_at": "2026-08-27T19:11:19.702Z"
+  },
+  {
+    "id": 23,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "tools/verify_ios_preview_mutants.py",
+    "line": null,
+    "description": "Added a drift-checked iOS parser and registry mutation proof after the planned gauntlet lacked format-specific mutation evidence.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-27T19:53:44.141Z",
+    "resolved_at": "2026-08-27T19:53:48.678Z"
+  },
+  {
+    "id": 24,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "backend/tests/unit/localization/preview/test_ios_strings.py",
+    "line": null,
+    "description": "Closed detector and worker branch-coverage gaps and removed unreachable guards after the first changed-line gate reported 87 percent.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-27T19:53:44.204Z",
+    "resolved_at": "2026-08-27T19:53:48.740Z"
   }
 ]
 ````
