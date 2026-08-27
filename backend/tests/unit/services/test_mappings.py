@@ -896,6 +896,55 @@ def test_topology_change_preserves_mapping_identity_and_invalidates_layout(
     )
 
 
+def test_mapping_grouping_preview_uses_only_the_writable_side_and_configured_targets() -> None:
+    """Direct writes its side; Separate writes Translations, with exact configured targets."""
+    module = _mapping_module()
+    repository_id = uuid4()
+    translations_repository_id = uuid4()
+    mapping_id = uuid4()
+    revision_id = uuid4()
+
+    direct = module.MappingRecord(
+        id=mapping_id,
+        revision_id=revision_id,
+        topology="direct",
+        primary_repository_id=repository_id,
+        primary_source_branch="main",
+        translations_repository_id=None,
+        translations_source_branch=None,
+        allowed_target_branches=("Release/1", "release/1"),
+        default_target_branch="release/1",
+        selected_layout_candidate_id=None,
+        selected_layout_version=None,
+        candidate_version=5,
+    )
+    separate = module.MappingRecord(
+        id=mapping_id,
+        revision_id=revision_id,
+        topology="separate",
+        primary_repository_id=repository_id,
+        primary_source_branch="keys/main",
+        translations_repository_id=translations_repository_id,
+        translations_source_branch="translations/main",
+        allowed_target_branches=("release/1", "release/2"),
+        default_target_branch="release/2",
+        selected_layout_candidate_id=None,
+        selected_layout_version=None,
+        candidate_version=5,
+    )
+
+    direct_preview = module.pr_grouping_preview(direct)
+    separate_preview = module.pr_grouping_preview(separate)
+
+    assert direct_preview.repository_id == repository_id
+    assert direct_preview.allowed_target_branches == ("Release/1", "release/1")
+    assert direct_preview.default_target_branch == "release/1"
+    assert separate_preview.repository_id == translations_repository_id
+    assert separate_preview.allowed_target_branches == ("release/1", "release/2")
+    assert separate_preview.default_target_branch == "release/2"
+    assert separate_preview.default_key == separate_preview.key_for_target("release/2")
+
+
 def test_schema_is_reversible_revision_owned_and_has_no_manual_or_lifecycle_controls(
     mapping_database: tuple[Config, sessionmaker[Session]],
 ) -> None:
