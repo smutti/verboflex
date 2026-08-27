@@ -11,7 +11,7 @@ from verboflex.auth.rate_limits import get_redis_client
 from verboflex.core.config import get_settings
 from verboflex.db.session import SessionFactory
 from verboflex.integrations.bitbucket.client import BitbucketHttpAdapter
-from verboflex.localization.preview.android_xml import detect_android_layouts
+from verboflex.localization.preview.registry import detect_preview_layouts
 from verboflex.services.bitbucket_oauth import (
     BitbucketOAuthService,
     BitbucketOAuthTokenExchange,
@@ -31,7 +31,7 @@ from verboflex.services.repository_discovery import (
 from verboflex.worker.celery_app import app
 
 
-async def _process_android_preview(
+async def _process_preview(
     identity: PreviewJobIdentity,
     *,
     factory: sessionmaker[Session],
@@ -49,7 +49,7 @@ async def _process_android_preview(
         if snapshot.commit_hash != side.commit_hash:
             raise ValueError("preview commit changed during discovery")
         candidates.extend(
-            detect_android_layouts(
+            detect_preview_layouts(
                 snapshot.files,
                 repository_side=side.role,
             ).to_mappings()
@@ -69,15 +69,15 @@ async def _process_android_preview(
     }
 
 
-def process_android_preview(
+def process_preview(
     identity: PreviewJobIdentity,
     *,
     factory: sessionmaker[Session],
     adapter: SourceDiscoveryAdapter,
 ) -> Mapping[str, object]:
-    """Resolve exact commits, read bounded source bytes, and detect Android layouts."""
+    """Resolve exact commits and detect every strict read-only preview format."""
     return asyncio.run(
-        _process_android_preview(
+        _process_preview(
             identity,
             factory=factory,
             adapter=adapter,
@@ -85,7 +85,17 @@ def process_android_preview(
     )
 
 
-async def _production_android_preview(identity: PreviewJobIdentity) -> dict[str, object]:
+def process_android_preview(
+    identity: PreviewJobIdentity,
+    *,
+    factory: sessionmaker[Session],
+    adapter: SourceDiscoveryAdapter,
+) -> Mapping[str, object]:
+    """Retain the Plan 12 call seam while delegating to the complete registry."""
+    return process_preview(identity, factory=factory, adapter=adapter)
+
+
+async def _production_preview(identity: PreviewJobIdentity) -> dict[str, object]:
     settings = get_settings()
     oauth_service = BitbucketOAuthService(
         settings=settings,
@@ -97,7 +107,7 @@ async def _production_android_preview(identity: PreviewJobIdentity) -> dict[str,
         credential_leases=oauth_service,
     )
     try:
-        return await _process_android_preview(
+        return await _process_preview(
             identity,
             factory=SessionFactory,
             adapter=adapter,
@@ -108,7 +118,7 @@ async def _production_android_preview(identity: PreviewJobIdentity) -> dict[str,
 
 def production_preview_processor(identity: PreviewJobIdentity) -> Mapping[str, object]:
     """Own one bounded provider client for a durable worker execution."""
-    return asyncio.run(_production_android_preview(identity))
+    return asyncio.run(_production_preview(identity))
 
 
 preview_processor: PreviewProcessor = production_preview_processor

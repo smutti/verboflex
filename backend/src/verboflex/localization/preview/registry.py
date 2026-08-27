@@ -11,6 +11,7 @@ from verboflex.localization.preview.core import (
     PreviewLayoutCandidate,
     RepositorySide,
 )
+from verboflex.localization.preview.ios_strings import detect_ios_strings_layouts
 from verboflex.localization.preview.json import detect_json_layouts
 from verboflex.localization.preview.qt_ts import detect_qt_ts_layouts
 from verboflex.services.repository_discovery import RepositorySourceFile
@@ -27,6 +28,9 @@ def detect_preview_layouts(
         *detect_android_layouts(bounded_files, repository_side=repository_side).candidates,
         *detect_qt_ts_layouts(bounded_files, repository_side=repository_side).candidates,
         *detect_json_layouts(bounded_files, repository_side=repository_side).candidates,
+        *detect_ios_strings_layouts(
+            bounded_files, repository_side=repository_side
+        ).candidates,
     )
     file_claims = Counter(path for candidate in detected for path in candidate.files)
     candidate_ids = Counter(candidate.id for candidate in detected)
