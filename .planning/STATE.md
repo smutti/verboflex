@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-07-PLAN.md
-last_updated: "2026-08-27T11:29:38.830Z"
+stopped_at: Completed 02-08-PLAN.md
+last_updated: "2026-08-27T12:47:55.959Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 02 execution started
-state_head: 0afdfdc223ddf7c0ad60e589e80c124cfdfc5bb7
+state_head: f3ef5049c9276e940372311a1813f4f3e659fddc
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 35
-  completed_plans: 22
+  completed_plans: 23
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 8 of 20
+Plan: 9 of 20
 Status: Ready to execute
 Last activity: 2026-08-26 — Phase 02 execution started
 
@@ -80,6 +80,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P05 | 26min | 2 tasks | 15 files |
 | Phase 02 P06 | 20min | 2 tasks | 11 files |
 | Phase 02 P07 | 37min | 2 tasks | 18 files |
+| Phase 02 P08 | 65min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -173,6 +174,10 @@ Recent decisions affecting current work:
 - [Phase 02]: Resolve branch authority once, then use only the immutable commit hash for every source tree and raw read.
 - [Phase 02]: Treat every A-03 budget, continuation, encoding, redirect, or generation violation as a typed blocking failure rather than returning partial data.
 - [Phase 02]: Keep raw provider source bytes backend-only; public discovery responses expose only commit, path, size, and aggregate byte metadata.
+- [Phase 02]: Retain D-12: one ProductRepositoryMapping identity has exactly one explicit direct or separate topology.
+- [Phase 02]: Store branch, target, default, and selected-layout configuration on the candidate mapping; global Repository reuse shares none of it.
+- [Phase 02]: Expose only guarded mapping list/create/update in Plan 08; Separate writes remain Plan 09 and no mapping delete lifecycle exists.
+- [Phase 02]: Bind canonical mapping cursors to the candidate revision and exact topology/repository/C-collated branch/NULLS-LAST/UUID tuple.
 
 ### Pending Todos
 
@@ -205,6 +210,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-27T11:29:38.792Z
-Stopped at: Completed 02-07-PLAN.md
+Last session: 2026-08-27T12:47:55.923Z
+Stopped at: Completed 02-08-PLAN.md
 Resume file: None

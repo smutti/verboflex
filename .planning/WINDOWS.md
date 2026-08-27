@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 0
 waived_count: 0
-fixed_count: 14
-total_count: 14
-last_updated: 2026-08-27T11:26:35.292Z
+fixed_count: 18
+total_count: 18
+last_updated: 2026-08-27T12:47:24.709Z
 ---
 
 # Broken Windows Ledger
@@ -29,6 +29,10 @@ last_updated: 2026-08-27T11:26:35.292Z
 | 12 | 02 | deviation | frontend/src/api/client/index.ts |  | Regenerated the checked-in TypeScript client after canonical discovery operations changed. | fixed |  | 2026-08-27T11:26:24.852Z | 2026-08-27T11:26:35.171Z |
 | 13 | 02 | deviation | tools/verify_bitbucket_http_adapter_mutants.py |  | Realigned the prior HTTP mutation subject with the new streamed response implementation. | fixed |  | 2026-08-27T11:26:24.911Z | 2026-08-27T11:26:35.233Z |
 | 14 | 02 | deviation | backend/tests/api/test_admin_repositories.py |  | Expanded the repository surface regression after full randomized tests exposed the approved read-only subresources. | fixed |  | 2026-08-27T11:26:24.970Z | 2026-08-27T11:26:35.292Z |
+| 15 | 02 | deviation | backend/tests/unit/services/test_mappings.py |  | Preserved complete reusable repository fixture identity | fixed |  | 2026-08-27T12:46:58.050Z | 2026-08-27T12:47:24.532Z |
+| 16 | 02 | deviation | frontend/openapi.json |  | Synchronized canonical OpenAPI and generated TypeScript client | fixed |  | 2026-08-27T12:46:58.120Z | 2026-08-27T12:47:24.591Z |
+| 17 | 02 | deviation | backend/tests/api/test_admin_products.py |  | Admitted approved mapping subresources in product surface assertion | fixed |  | 2026-08-27T12:46:58.186Z | 2026-08-27T12:47:24.651Z |
+| 18 | 02 | deviation | tools/verify_mapping_api_mutants.py |  | Closed candidate cursor dependency and corruption evidence gaps | fixed |  | 2026-08-27T12:46:58.248Z | 2026-08-27T12:47:24.709Z |
 
 ````json
 [
@@ -199,6 +203,54 @@ last_updated: 2026-08-27T11:26:35.292Z
     "reason": "",
     "recorded_at": "2026-08-27T11:26:24.970Z",
     "resolved_at": "2026-08-27T11:26:35.292Z"
+  },
+  {
+    "id": 15,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "backend/tests/unit/services/test_mappings.py",
+    "line": null,
+    "description": "Preserved complete reusable repository fixture identity",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-27T12:46:58.050Z",
+    "resolved_at": "2026-08-27T12:47:24.532Z"
+  },
+  {
+    "id": 16,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "frontend/openapi.json",
+    "line": null,
+    "description": "Synchronized canonical OpenAPI and generated TypeScript client",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-27T12:46:58.120Z",
+    "resolved_at": "2026-08-27T12:47:24.591Z"
+  },
+  {
+    "id": 17,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "backend/tests/api/test_admin_products.py",
+    "line": null,
+    "description": "Admitted approved mapping subresources in product surface assertion",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-27T12:46:58.186Z",
+    "resolved_at": "2026-08-27T12:47:24.651Z"
+  },
+  {
+    "id": 18,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "tools/verify_mapping_api_mutants.py",
+    "line": null,
+    "description": "Closed candidate cursor dependency and corruption evidence gaps",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-27T12:46:58.248Z",
+    "resolved_at": "2026-08-27T12:47:24.709Z"
   }
 ]
 ````
