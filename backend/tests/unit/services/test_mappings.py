@@ -271,12 +271,12 @@ def test_mapping_cursor_is_canonical_closed_and_candidate_bound() -> None:
     )
     encoded = module._encode_cursor(position)
     assert module._decode_cursor(encoded) == position
-    decoded_payload = json.loads(
-        base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+    decoded_payload = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+    noncanonical = (
+        base64.urlsafe_b64encode(json.dumps(decoded_payload, indent=1).encode())
+        .rstrip(b"=")
+        .decode("ascii")
     )
-    noncanonical = base64.urlsafe_b64encode(
-        json.dumps(decoded_payload, indent=1).encode()
-    ).rstrip(b"=").decode("ascii")
     assert noncanonical != encoded
 
     malformed = (
