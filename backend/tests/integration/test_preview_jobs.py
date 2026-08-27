@@ -28,6 +28,11 @@ from verboflex.auth.access_tokens import issue_access_token
 from verboflex.auth.passwords import hash_password
 from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
+from verboflex.integrations.bitbucket.client import (
+    BitbucketBranch,
+    BitbucketSourceEntry,
+    BitbucketSourcePage,
+)
 from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.bitbucket_connection import BitbucketConnection
@@ -261,6 +266,61 @@ class PersistedUuidEnqueuer:
         self.payloads.append((str(job_id),))
 
 
+@dataclass
+class ReadOnlyAndroidSourceAdapter:
+    """Provider mock exposing only the Plan 07 read boundary."""
+
+    files: dict[str, bytes]
+    events: list[tuple[str, str]] = field(default_factory=list)
+
+    async def resolve_repository_branch(
+        self,
+        _session: Session,
+        *,
+        workspace: str,
+        repository_slug: str,
+        branch: str,
+    ) -> BitbucketBranch:
+        self.events.append(("resolve", f"{workspace}/{repository_slug}:{branch}"))
+        return BitbucketBranch(name=branch, commit_hash=COMMIT_HASH)
+
+    async def list_repository_source_page(
+        self,
+        _session: Session,
+        *,
+        workspace: str,
+        repository_slug: str,
+        commit_hash: str,
+        directory_path: str | None,
+        next_url: str | None = None,
+    ) -> BitbucketSourcePage:
+        assert directory_path is None
+        assert next_url is None
+        self.events.append(("list", f"{workspace}/{repository_slug}@{commit_hash}"))
+        return BitbucketSourcePage(
+            entries=tuple(
+                BitbucketSourceEntry(path=path, kind="file", size=len(content))
+                for path, content in reversed(tuple(self.files.items()))
+            ),
+            next_url=None,
+        )
+
+    async def read_repository_source_file(
+        self,
+        _session: Session,
+        *,
+        workspace: str,
+        repository_slug: str,
+        commit_hash: str,
+        path: str,
+        max_bytes: int,
+    ) -> bytes:
+        content = self.files[path]
+        assert len(content) <= max_bytes
+        self.events.append(("read", f"{workspace}/{repository_slug}@{commit_hash}:{path}"))
+        return content
+
+
 async def _request(
     method: str,
     path: str,
@@ -278,6 +338,143 @@ async def _request(
             headers={"Authorization": f"Bearer {access_token}"},
             json=json,
         )
+
+
+def test_android_preview_completes_read_only(
+    preview_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Run commit-bound Android discovery through the durable worker and API."""
+    _configure_dependencies(preview_session_factory)
+    admin_token = _create_authority(preview_session_factory, role_name="admin")
+    product_id, _active_id, candidate_id, mapping_id = _seed_preview_graph(
+        preview_session_factory
+    )
+    enqueuer = PersistedUuidEnqueuer(preview_session_factory)
+    app.state.preview_job_enqueuer = enqueuer
+    adapter = ReadOnlyAndroidSourceAdapter(
+        files={
+            "mobile/src/main/res/values-it/strings.xml": (
+                b'<resources><string name="welcome.title">Benvenuto</string>'
+                b'<string name="button.ok">Va bene</string></resources>'
+            ),
+            "mobile/src/main/res/values/strings.xml": (
+                b'<resources><string name="welcome.title">Welcome</string>'
+                b'<string name="button.ok">OK</string></resources>'
+            ),
+        }
+    )
+    path = f"/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs"
+
+    created = asyncio.run(
+        _request(
+            "POST",
+            path,
+            access_token=admin_token,
+            json={
+                "expected_candidate_version": 4,
+                "commits": [{"role": "direct", "commit_hash": COMMIT_HASH}],
+            },
+        )
+    )
+    assert created.status_code == 202
+    created_body = created.json()
+    assert created_body["candidate_revision_id"] == str(candidate_id)
+
+    preview_tasks = importlib.import_module("verboflex.worker.preview_tasks")
+    process_android_preview = getattr(preview_tasks, "process_android_preview")
+    monkeypatch.setattr(preview_tasks, "SessionFactory", preview_session_factory)
+    monkeypatch.setattr(
+        preview_tasks,
+        "preview_processor",
+        lambda identity: process_android_preview(
+            identity,
+            factory=preview_session_factory,
+            adapter=adapter,
+        ),
+    )
+    test_celery = Celery(
+        "verboflex-android-preview-integration",
+        broker="memory://",
+        backend="cache+memory://",
+    )
+    test_celery.task(
+        name="verboflex.preview.run",
+        serializer="json",
+        ignore_result=True,
+    )(preview_tasks.run_preview_job.run)
+    from celery.contrib.testing.worker import start_worker
+
+    with start_worker(
+        test_celery,
+        pool="solo",
+        perform_ping_check=False,
+        loglevel="ERROR",
+    ):
+        test_celery.send_task("verboflex.preview.run", args=list(enqueuer.payloads[0]))
+        deadline = time.monotonic() + 5
+        status_body: dict[str, Any] | None = None
+        while time.monotonic() < deadline:
+            response = asyncio.run(
+                _request(
+                    "GET",
+                    f"/api/v1/admin/preview-jobs/{created_body['id']}",
+                    access_token=admin_token,
+                )
+            )
+            assert response.status_code == 200
+            status_body = response.json()
+            if status_body["state"] in {"succeeded", "failed", "timed_out"}:
+                break
+            time.sleep(0.02)
+    test_celery.close()
+
+    assert status_body is not None
+    assert status_body["state"] == "succeeded"
+    result = status_body["result"]
+    assert result["digest"] == created_body["input_digest"]
+    assert len(result["layout_candidates"]) == 1
+    layout = result["layout_candidates"][0]
+    UUID(layout["id"])
+    assert layout == {
+        "id": layout["id"],
+        "version": 1,
+        "repository_side": "direct",
+        "format": "android_xml",
+        "layout_identity": "mobile/src/main/res",
+        "confidence": 1.0,
+        "files": [
+            "mobile/src/main/res/values-it/strings.xml",
+            "mobile/src/main/res/values/strings.xml",
+        ],
+        "languages": ["default", "it"],
+        "keys": ["button.ok", "welcome.title"],
+        "samples": [
+            {"language": "default", "key": "button.ok", "translation": "OK"},
+            {
+                "language": "default",
+                "key": "welcome.title",
+                "translation": "Welcome",
+            },
+            {"language": "it", "key": "button.ok", "translation": "Va bene"},
+            {
+                "language": "it",
+                "key": "welcome.title",
+                "translation": "Benvenuto",
+            },
+        ],
+        "samples_are_partial": True,
+    }
+    assert [event[0] for event in adapter.events] == ["resolve", "list", "read", "read"]
+    assert all(
+        COMMIT_HASH in detail or operation == "resolve"
+        for operation, detail in adapter.events
+    )
+    with preview_session_factory() as session:
+        assert session.scalar(text("SELECT count(*) FROM preview_jobs")) == 1
+        product = session.get(Product, product_id)
+        assert product is not None
+        assert product.candidate_revision_id == candidate_id
 
 
 def test_admin_job_runs_api_to_distinct_worker_and_persists_terminal_state(
