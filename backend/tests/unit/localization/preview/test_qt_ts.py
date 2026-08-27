@@ -224,3 +224,121 @@ def test_qt_arbitrary_bytes_are_always_bounded_and_never_raise(content: bytes) -
     )
 
     assert isinstance(result.candidates, tuple)
+
+
+@pytest.mark.parametrize(
+    "content",
+    (
+        b"<?xml broken?><TS version='2.1' language='en'/>",
+        b"<Other version='2.1' language='en'><context/></Other>",
+        b"<TS version='2.1' language='en' extra='x'><context/></TS>",
+        (
+            b"<TS version='2.1' language='en'><context extra='x'><name>Main</name>"
+            b"<message><source>Hello</source><translation>Hello</translation></message>"
+            b"</context></TS>"
+        ),
+        (
+            b"<TS version='2.1' language='en'><context>text<name>Main</name>"
+            b"<message><source>Hello</source><translation>Hello</translation></message>"
+            b"</context></TS>"
+        ),
+        (
+            b"<TS version='2.1' language='en'><context><source>Main</source>"
+            b"<message><source>Hello</source><translation>Hello</translation></message>"
+            b"</context></TS>"
+        ),
+        (
+            b"<TS version='2.1' language='en'><context><name>Main</name>"
+            b"<message>text<source>Hello</source><translation>Hello</translation></message>"
+            b"</context></TS>"
+        ),
+        (
+            b"<TS version='2.1' language='en'><context><name>Main</name>"
+            b"<message><translation>Hello</translation><source>Hello</source></message>"
+            b"</context></TS>"
+        ),
+        (
+            b"<TS version='2.1' language='en'><context><name>Main</name>"
+            b"<message><source></source><translation>Hello</translation></message>"
+            b"</context></TS>"
+        ),
+        (
+            b"<TS version='2.1' language='en'><other><name>Main</name>"
+            b"<message><source>Hello</source><translation>Hello</translation></message>"
+            b"</other></TS>"
+        ),
+        (
+            b"<TS version='2.1' language='en'><context><name>One</name>"
+            b"<message><source>Hello</source><translation>One</translation></message>"
+            b"</context><context><name>Two</name><message><source>Hello</source>"
+            b"<translation>Two</translation></message></context></TS>"
+        ),
+    ),
+)
+def test_qt_rejects_every_structural_escape_from_the_minimal_tree(content: bytes) -> None:
+    assert _candidate_count(_source("translations/app_en.ts", content)) == 0
+
+
+def test_qt_duplicate_canonical_language_and_invalid_peer_block_the_layout() -> None:
+    detector = _detector_module()
+    duplicate_language = detector.detect_qt_ts_layouts(
+        (
+            _source("translations/product_en.ts", _qt_document(language="en")),
+            _source("translations/product_EN.ts", _qt_document(language="EN")),
+        ),
+        repository_side="direct",
+    )
+    invalid_peer = detector.detect_qt_ts_layouts(
+        (
+            _source("translations/product_en.ts", _qt_document(language="en")),
+            _source("translations/product_it.ts", b"<TS"),
+        ),
+        repository_side="direct",
+    )
+
+    assert duplicate_language.candidates == ()
+    assert invalid_peer.candidates == ()
+
+
+def test_qt_collection_limits_and_candidate_language_limit_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    detector = _detector_module()
+    budget = detector.SOURCE_DISCOVERY_BUDGET
+    monkeypatch.setattr(
+        detector,
+        "SOURCE_DISCOVERY_BUDGET",
+        type(budget)(
+            max_pages=budget.max_pages,
+            max_entries=budget.max_entries,
+            max_depth=budget.max_depth,
+            max_candidate_files=budget.max_candidate_files,
+            max_file_bytes=200,
+            max_total_bytes=250,
+        ),
+    )
+    one = _source("translations/product_en.ts", _qt_document(language="en"))
+    oversized = _source("translations/product_it.ts", b" " * 201)
+
+    assert detector.detect_qt_ts_layouts((one, one), repository_side="direct").candidates == ()
+    assert (
+        detector.detect_qt_ts_layouts((one, oversized), repository_side="direct").candidates == ()
+    )
+    assert (
+        detector.detect_qt_ts_layouts(
+            (_source("translations/ambiguous.ts", b" " * 201),),
+            repository_side="direct",
+        ).candidates
+        == ()
+    )
+
+    monkeypatch.setattr(detector, "SOURCE_DISCOVERY_BUDGET", budget)
+    locales = [f"{first}{second}" for first in "abcdef" for second in "ghijkl"][:33]
+    files = tuple(
+        _source(
+            f"translations/app_{locale}.ts",
+            _qt_document(language=locale),
+        )
+        for locale in locales
+    )
+    assert detector.detect_qt_ts_layouts(files, repository_side="direct").candidates == ()

@@ -287,3 +287,78 @@ def test_json_invalid_utf8_prefixes_are_always_bounded_and_never_raise(content: 
     )
 
     assert result.candidates == ()
+
+
+def test_locale_and_path_helpers_reject_non_strings_and_unsafe_or_conflicting_paths() -> None:
+    core = _core_module()
+
+    assert core.normalize_preview_locale(42) is None
+    for path in ("", "/en.json", "en//messages.json", "en/../messages.json", "en.txt"):
+        assert core.extract_preview_locale_path(path, suffix=".json") is None
+    assert (
+        core.extract_preview_locale_path(
+            "en/app_it.ts",
+            suffix=".ts",
+            allow_prefixed_stem=True,
+            expected_locale="it",
+        )
+        is None
+    )
+
+
+def test_json_duplicate_language_invalid_peer_and_limits_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    detector = _detector_module()
+    duplicate_language = detector.detect_json_layouts(
+        (
+            _source("locales/en.json", b'{"hello":"Hello"}'),
+            _source("locales/EN.json", b'{"hello":"Again"}'),
+        ),
+        repository_side="direct",
+    )
+    invalid_peer = detector.detect_json_layouts(
+        (
+            _source("locales/en.json", b'{"hello":"Hello"}'),
+            _source("locales/it.json", b"{"),
+        ),
+        repository_side="direct",
+    )
+    assert duplicate_language.candidates == ()
+    assert invalid_peer.candidates == ()
+
+    budget = detector.SOURCE_DISCOVERY_BUDGET
+    monkeypatch.setattr(
+        detector,
+        "SOURCE_DISCOVERY_BUDGET",
+        type(budget)(
+            max_pages=budget.max_pages,
+            max_entries=budget.max_entries,
+            max_depth=budget.max_depth,
+            max_candidate_files=budget.max_candidate_files,
+            max_file_bytes=20,
+            max_total_bytes=30,
+        ),
+    )
+    one = _source("locales/en.json", b'{"hello":"Hello"}')
+    assert detector.detect_json_layouts((one, one), repository_side="direct").candidates == ()
+    assert (
+        detector.detect_json_layouts(
+            (one, _source("locales/it.json", b" " * 21)),
+            repository_side="direct",
+        ).candidates
+        == ()
+    )
+    assert (
+        detector.detect_json_layouts(
+            (_source("catalog.json", b" " * 21),),
+            repository_side="direct",
+        ).candidates
+        == ()
+    )
+
+    monkeypatch.setattr(detector, "SOURCE_DISCOVERY_BUDGET", budget)
+    locales = [f"{first}{second}" for first in "abcdef" for second in "ghijkl"][:33]
+    rooted = {locale: {"hello": locale} for locale in locales}
+    content = __import__("json").dumps(rooted).encode()
+    assert _candidate_count("catalog.json", content) == 0

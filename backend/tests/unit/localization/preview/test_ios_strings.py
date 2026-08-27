@@ -218,3 +218,67 @@ def test_ios_arbitrary_bytes_are_bounded_and_never_raise(content: bytes) -> None
     )
 
     assert isinstance(result.candidates, tuple)
+
+
+@pytest.mark.parametrize(
+    "content",
+    (
+        b'"hello"="Hello"; /',
+        b'"unterminated',
+        b'"hello"="unterminated\\',
+        b'"hello"="bad\\UD83D\\U0041";',
+    ),
+)
+def test_ios_rejects_lone_comment_markers_and_unterminated_lexer_states(content: bytes) -> None:
+    assert _candidate_count(content) == 0
+
+
+def test_ios_duplicate_language_and_collection_limits_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    detector = _module()
+    one = _source("mobile/en.lproj/Localizable.strings", b'"hello"="Hello";')
+    canonical_duplicate = _source("mobile/EN.lproj/Localizable.strings", b'"hello"="Again";')
+    assert (
+        detector.detect_ios_strings_layouts(
+            (one, canonical_duplicate), repository_side="direct"
+        ).candidates
+        == ()
+    )
+    assert (
+        detector.detect_ios_strings_layouts((one, one), repository_side="direct").candidates == ()
+    )
+
+    budget = detector.SOURCE_DISCOVERY_BUDGET
+    monkeypatch.setattr(
+        detector,
+        "SOURCE_DISCOVERY_BUDGET",
+        type(budget)(
+            max_pages=budget.max_pages,
+            max_entries=budget.max_entries,
+            max_depth=budget.max_depth,
+            max_candidate_files=budget.max_candidate_files,
+            max_file_bytes=25,
+            max_total_bytes=30,
+        ),
+    )
+    oversized = _source("mobile/it.lproj/Localizable.strings", b" " * 26)
+    assert (
+        detector.detect_ios_strings_layouts((one, oversized), repository_side="direct").candidates
+        == ()
+    )
+    assert (
+        detector.detect_ios_strings_layouts(
+            (_source("Localizable.strings", b" " * 26),),
+            repository_side="direct",
+        ).candidates
+        == ()
+    )
+
+    monkeypatch.setattr(detector, "SOURCE_DISCOVERY_BUDGET", budget)
+    locales = [f"{first}{second}" for first in "abcdef" for second in "ghijkl"][:33]
+    files = tuple(
+        _source(f"mobile/{locale}.lproj/Localizable.strings", b'"hello"="Hello";')
+        for locale in locales
+    )
+    assert detector.detect_ios_strings_layouts(files, repository_side="direct").candidates == ()

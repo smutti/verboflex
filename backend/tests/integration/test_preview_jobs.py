@@ -556,6 +556,45 @@ def test_all_four_formats_return_separate_exact_layout_candidates(
     ]
 
 
+def test_production_preview_processor_closes_its_registry_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The production wrapper delegates once and always closes provider resources."""
+    preview_tasks = importlib.import_module("verboflex.worker.preview_tasks")
+    closed: list[bool] = []
+    sentinel_identity = object()
+
+    class ClosableAdapter:
+        async def aclose(self) -> None:
+            closed.append(True)
+
+    adapter = ClosableAdapter()
+
+    async def fake_process(
+        identity: object, *, factory: object, adapter: object
+    ) -> dict[str, object]:
+        assert identity is sentinel_identity
+        assert factory is preview_tasks.SessionFactory
+        assert adapter is not None
+        return {"layout_candidates": []}
+
+    monkeypatch.setattr(preview_tasks, "get_settings", lambda: object())
+    monkeypatch.setattr(preview_tasks, "get_redis_client", lambda _settings: object())
+    monkeypatch.setattr(preview_tasks, "BitbucketOAuthTokenExchange", lambda: object())
+    monkeypatch.setattr(
+        preview_tasks,
+        "BitbucketOAuthService",
+        lambda **_kwargs: object(),
+    )
+    monkeypatch.setattr(preview_tasks, "BitbucketHttpAdapter", lambda **_kwargs: adapter)
+    monkeypatch.setattr(preview_tasks, "_process_preview", fake_process)
+
+    result = preview_tasks.production_preview_processor(sentinel_identity)
+
+    assert result == {"layout_candidates": []}
+    assert closed == [True]
+
+
 def test_admin_job_runs_api_to_distinct_worker_and_persists_terminal_state(
     preview_session_factory: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,
