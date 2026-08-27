@@ -263,6 +263,62 @@ export type AdminPreviewCommitRequest = {
 };
 
 /**
+ * AdminPreviewConfirmationRequest
+ *
+ * Exact compare values for one explicit current layout assignment.
+ */
+export type AdminPreviewConfirmationRequest = {
+    /**
+     * Layout Candidate Id
+     */
+    layout_candidate_id: string;
+    /**
+     * Layout Candidate Version
+     */
+    layout_candidate_version: 1;
+    /**
+     * Preview Digest
+     */
+    preview_digest: string;
+};
+
+/**
+ * AdminPreviewConfirmationResponse
+ *
+ * Bounded actor/time evidence for one confirmed preview layout.
+ */
+export type AdminPreviewConfirmationResponse = {
+    /**
+     * Confirmed At
+     */
+    confirmed_at: string;
+    /**
+     * Confirmed By
+     */
+    confirmed_by: string;
+    /**
+     * Job Id
+     */
+    job_id: string;
+    /**
+     * Layout Candidate Id
+     */
+    layout_candidate_id: string;
+    /**
+     * Layout Candidate Version
+     */
+    layout_candidate_version: 1;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Preview Digest
+     */
+    preview_digest: string;
+};
+
+/**
  * AdminPreviewJobCreateRequest
  *
  * Candidate compare value plus exact resolved commits, with no source bytes.
@@ -1277,6 +1333,56 @@ export type GetAdminPreviewJobResponses = {
 };
 
 export type GetAdminPreviewJobResponse = GetAdminPreviewJobResponses[keyof GetAdminPreviewJobResponses];
+
+export type ConfirmAdminPreviewJobData = {
+    body: AdminPreviewConfirmationRequest;
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/preview-jobs/{job_id}/confirmation';
+};
+
+export type ConfirmAdminPreviewJobErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type ConfirmAdminPreviewJobError = ConfirmAdminPreviewJobErrors[keyof ConfirmAdminPreviewJobErrors];
+
+export type ConfirmAdminPreviewJobResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPreviewConfirmationResponse;
+};
+
+export type ConfirmAdminPreviewJobResponse = ConfirmAdminPreviewJobResponses[keyof ConfirmAdminPreviewJobResponses];
 
 export type ListAdminProductsData = {
     body?: never;
