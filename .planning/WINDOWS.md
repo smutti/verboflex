@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 0
+open_count: 1
 waived_count: 0
 fixed_count: 9
-total_count: 9
-last_updated: 2026-08-27T06:03:19.935Z
+total_count: 10
+last_updated: 2026-08-27T07:45:12.335Z
 ---
 
 # Broken Windows Ledger
@@ -24,6 +24,7 @@ last_updated: 2026-08-27T06:03:19.935Z
 | 7 | 01 | stub | docker-compose.yml | 76 | Compose worker command and healthcheck target the Celery app intentionally deferred to Plan 01-08 | fixed |  | 2026-08-24T15:36:10.327Z | 2026-08-26T08:13:30.166Z |
 | 8 | 02 | deviation | backend/tests/api/test_admin_repositories.py |  | Closed repository validation branches and added reproducible mutation proof after the first coverage gate reported 93.36%. | fixed |  | 2026-08-27T06:02:12.251Z | 2026-08-27T06:03:19.868Z |
 | 9 | 02 | deviation | backend/tests/api/test_openapi_contract.py |  | Added exact repository operations and regenerated canonical OpenAPI after full regression exposed contract drift. | fixed |  | 2026-08-27T06:02:12.311Z | 2026-08-27T06:03:19.935Z |
+| 10 | 02 | deviation | backend/tests/unit/services/test_admin_users.py | 159 | Randomized parameter order can expose nondeterministic persisted role ordering; isolated and deterministic full runs pass. | open |  | 2026-08-27T07:45:12.335Z |  |
 
 ````json
 [
@@ -134,6 +135,18 @@ last_updated: 2026-08-27T06:03:19.935Z
     "reason": "",
     "recorded_at": "2026-08-27T06:02:12.311Z",
     "resolved_at": "2026-08-27T06:03:19.935Z"
+  },
+  {
+    "id": 10,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "backend/tests/unit/services/test_admin_users.py",
+    "line": 159,
+    "description": "Randomized parameter order can expose nondeterministic persisted role ordering; isolated and deterministic full runs pass.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-27T07:45:12.335Z",
+    "resolved_at": null
   }
 ]
 ````

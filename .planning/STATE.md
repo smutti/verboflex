@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-08-27T06:03:42.168Z"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-08-27T07:45:27.017Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 02 execution started
-state_head: d3340e367b0c07398cc45753c2df82702293a430
+state_head: b114db6d9953f5df97713fbcb3ef0abb44f59f0b
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 35
-  completed_plans: 18
+  completed_plans: 19
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 4 of 20
+Plan: 5 of 20
 Status: Ready to execute
 Last activity: 2026-08-26 — Phase 02 execution started
 
@@ -76,6 +76,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P01 | 35min | 2 tasks | 11 files |
 | Phase 02 P02 | 42min | 3 tasks | 14 files |
 | Phase 02 P03 | 15min | 3 tasks | 12 files |
+| Phase 02 P04 | 32min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -155,6 +156,10 @@ Recent decisions affecting current work:
 - [Phase 02]: Keep duplicate repository registration as a bounded conflict; get-by-UUID and list are the separate reuse paths.
 - [Phase 02]: Order repository collections by normalized descriptive-name key with workspace/slug fallback, then workspace, slug, and Repository UUID.
 - [Phase 02]: Exclude provider reads, tokens, credentials, branches, and product mapping state from the repository registry boundary.
+- [Phase 02]: Use one locked id=1 Bitbucket connection row with monotonic generation as downstream stale-work authority.
+- [Phase 02]: Encrypt provider tokens only behind a MultiFernet SecretBox with first-key writes, rotation-key reads, and bounded failures.
+- [Phase 02]: Store OAuth state only as an atomic single-use SHA-256 digest bound to admin, session, generation, callback, and fixed SPA destination.
+- [Phase 02]: Require exact Bitbucket repository scope; any later capability expansion needs an explicit plan decision.
 
 ### Pending Todos
 
@@ -187,6 +192,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-27T06:03:42.133Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-08-27T07:45:26.979Z
+Stopped at: Completed 02-04-PLAN.md
 Resume file: None

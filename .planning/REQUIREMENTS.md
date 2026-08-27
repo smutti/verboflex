@@ -39,7 +39,7 @@
 
 ### Bitbucket Cloud Integration
 
-- [ ] **BITB-01**: Admin can connect, reconnect, revoke, and view bounded status for the single organization-wide Bitbucket Cloud OAuth 2.0 connection used for repository access.
+- [x] **BITB-01**: Admin can connect, reconnect, revoke, and view bounded status for the single organization-wide Bitbucket Cloud OAuth 2.0 connection used for repository access.
 - [ ] **BITB-02**: System validates and reports Bitbucket Cloud capabilities required by configured read/import operations and the later write/pull-request profile without silently expanding OAuth scopes.
 - [ ] **BITB-03**: System can list configured repository branches from Bitbucket Cloud.
 - [ ] **BITB-04**: System can read configured localization files from the configured Bitbucket Cloud source branch.
@@ -195,7 +195,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROD-07 | Phase 2 | Pending |
 | PROD-08 | Phase 2 | Pending |
 | PROD-09 | Phase 2 | Pending |
-| BITB-01 | Phase 2 | Pending |
+| BITB-01 | Phase 2 | Complete |
 | BITB-02 | Phase 3 | Pending |
 | BITB-03 | Phase 2 | Pending |
 | BITB-04 | Phase 2 | Pending |
