@@ -5,12 +5,16 @@ from __future__ import annotations
 import asyncio
 import base64
 import os
+from email.message import Message
+from io import BytesIO
 from collections.abc import Generator, Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+from urllib.error import URLError
 from urllib.parse import parse_qs, urlparse
+from urllib.request import OpenerDirector, Request
 from uuid import UUID, uuid4
 
 import httpx
@@ -22,7 +26,12 @@ from sqlalchemy import create_engine, delete, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
-from verboflex.api.v1.routes.admin_bitbucket import get_bitbucket_oauth_service
+from fastapi import HTTPException
+
+from verboflex.api.v1.routes.admin_bitbucket import (
+    _session_id,
+    get_bitbucket_oauth_service,
+)
 from verboflex.auth.access_tokens import issue_access_token
 from verboflex.auth.passwords import hash_password
 from verboflex.core.config import Settings, get_settings
@@ -32,7 +41,17 @@ from verboflex.models.auth_session import AuthSession
 from verboflex.models.bitbucket_connection import BitbucketConnection
 from verboflex.models.role import Role
 from verboflex.models.user import User
-from verboflex.services.bitbucket_oauth import BitbucketOAuthService
+from verboflex.schemas.users import RoleName
+from verboflex.services.bitbucket_oauth import (
+    MAX_TOKEN_RESPONSE_BYTES,
+    TOKEN_EXCHANGE_TIMEOUT_SECONDS,
+    BitbucketOAuthService,
+    BitbucketOAuthTokenExchange,
+    OAuthCallbackRejected,
+    OAuthConnectionUnavailable,
+    _RejectRedirects,
+)
+from verboflex.auth.principal import Principal
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 ADMIN_DATABASE_URL = os.environ.get(
@@ -66,6 +85,7 @@ class FakeTokenExchange:
     """Exact-scope provider mock with no revoke capability."""
 
     calls: list[dict[str, str]] = field(default_factory=list)
+    error: Exception | None = None
 
     def exchange_authorization_code(
         self,
@@ -83,6 +103,8 @@ class FakeTokenExchange:
                 "client_secret": client_secret,
             }
         )
+        if self.error is not None:
+            raise self.error
         return {
             "access_token": "api-access-secret",  # pragma: allowlist secret
             "refresh_token": "api-refresh-secret",  # pragma: allowlist secret
@@ -98,12 +120,44 @@ class FakeTokenExchange:
         client_id: str,
         client_secret: str,
     ) -> dict[str, object]:
+        if self.error is not None:
+            raise self.error
         return {
             "access_token": "rotated-api-access-secret",  # pragma: allowlist secret
             "refresh_token": "rotated-api-refresh-secret",  # pragma: allowlist secret
             "scope": "repository",
             "expires_in": 3600,
         }
+
+
+@dataclass
+class FakeHTTPResponse:
+    payload: bytes
+    read_limits: list[int] = field(default_factory=list)
+
+    def __enter__(self) -> FakeHTTPResponse:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def read(self, limit: int) -> bytes:
+        self.read_limits.append(limit)
+        return self.payload
+
+
+@dataclass
+class FakeOpener:
+    response: FakeHTTPResponse | None = None
+    error: Exception | None = None
+    calls: list[tuple[Request, int]] = field(default_factory=list)
+
+    def open(self, request: Request, *, timeout: int) -> FakeHTTPResponse:
+        self.calls.append((request, timeout))
+        if self.error is not None:
+            raise self.error
+        assert self.response is not None
+        return self.response
 
 
 @pytest.fixture(scope="module")
@@ -144,14 +198,17 @@ def clean_bitbucket_api_database(
     with bitbucket_api_session_factory.begin() as session:
         session.execute(delete(AuthSession))
         session.execute(delete(User))
-        session.execute(
-            text(
-                "UPDATE bitbucket_connections SET generation = 0, "
-                "access_token_ciphertext = NULL, refresh_token_ciphertext = NULL, "
-                "scope_profile = NULL, provider_expires_at = NULL, connected_at = NULL, "
-                "revoked_at = NULL"
-            )
-        )
+        connection = session.get(BitbucketConnection, 1)
+        if connection is None:
+            session.add(BitbucketConnection(id=1))
+        else:
+            connection.generation = 0
+            connection.access_token_ciphertext = None
+            connection.refresh_token_ciphertext = None
+            connection.scope_profile = None
+            connection.provider_expires_at = None
+            connection.connected_at = None
+            connection.revoked_at = None
     yield
     app.dependency_overrides.clear()
 
@@ -444,3 +501,193 @@ def test_callback_rejects_hostile_state_without_bearer_or_provider_diagnostics(
     assert exchange.calls == []
     assert "provider" not in rejected.text.casefold()
 
+
+def test_missing_configuration_and_missing_principal_session_fail_closed(
+    bitbucket_api_session_factory: sessionmaker[Session],
+) -> None:
+    """Project bounded unavailable state instead of constructing partial authority."""
+    _admin_id, _admin_session_id, admin_token = create_authority(
+        bitbucket_api_session_factory,
+        email="admin@example.com",
+        roles=("admin",),
+    )
+
+    def override_session() -> Generator[Session]:
+        with bitbucket_api_session_factory() as session:
+            yield session
+
+    incomplete = Settings(jwt_secret_key=SecretStr(SIGNING_SECRET))
+    app.dependency_overrides[get_db_session] = override_session
+    app.dependency_overrides[get_settings] = lambda: incomplete
+
+    unavailable = asyncio.run(
+        bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token)
+    )
+    assert unavailable.status_code == 200
+    assert unavailable.json()["status"] == "Unavailable"
+    assert unavailable.headers["cache-control"] == "no-store"
+
+    rejected_start = asyncio.run(
+        bitbucket_request(
+            "POST",
+            path=f"{BITBUCKET_PATH}/oauth/start",
+            access_token=admin_token,
+        )
+    )
+    assert rejected_start.status_code == 503
+    assert rejected_start.json() == {"detail": "Bitbucket connection unavailable"}
+
+    principal_without_session = Principal(
+        user_id=uuid4(),
+        email="admin@example.com",
+        display_name="Admin",
+        roles=(RoleName.ADMIN,),
+        must_change_password=False,
+    )
+    with pytest.raises(HTTPException) as missing_session:
+        _session_id(principal_without_session)
+    assert missing_session.value.status_code == 503
+
+
+def test_missing_singleton_and_wrong_callback_destination_are_bounded(
+    bitbucket_api_session_factory: sessionmaker[Session],
+) -> None:
+    """Reject missing durable authority and fixed-destination drift without exchange."""
+    admin_id, admin_session_id, admin_token = create_authority(
+        bitbucket_api_session_factory,
+        email="admin@example.com",
+        roles=("admin",),
+    )
+    exchange = FakeTokenExchange()
+    service = BitbucketOAuthService(
+        settings=oauth_settings(), redis_client=FakeRedis(), token_exchange=exchange
+    )
+    configure_dependencies(bitbucket_api_session_factory, service)
+    state = service.start(
+        admin_id=admin_id,
+        session_id=admin_session_id,
+        expected_generation=0,
+    )
+    with bitbucket_api_session_factory.begin() as session:
+        session.execute(text("DELETE FROM bitbucket_connections"))
+
+    with bitbucket_api_session_factory() as session:
+        assert service.public_status(session).state == "unavailable"
+    with bitbucket_api_session_factory() as session:
+        with pytest.raises(OAuthConnectionUnavailable):
+            service.start_current(
+                session,
+                admin_id=admin_id,
+                session_id=admin_session_id,
+            )
+
+    missing_callback = asyncio.run(
+        bitbucket_request(
+            "GET",
+            path=f"{BITBUCKET_PATH}/oauth/callback",
+            params={"state": state, "code": "provider-code"},
+        )
+    )
+    assert missing_callback.status_code == 503
+    assert missing_callback.json() == {"detail": "Bitbucket connection unavailable"}
+    assert exchange.calls == []
+
+    with bitbucket_api_session_factory.begin() as session:
+        session.add(BitbucketConnection(id=1))
+    wrong_destination_state = service.start(
+        admin_id=admin_id,
+        session_id=admin_session_id,
+        expected_generation=0,
+    )
+    with bitbucket_api_session_factory() as session:
+        with pytest.raises(OAuthCallbackRejected, match="OAuth callback rejected"):
+            service.complete_callback_from_state(
+                session,
+                state=wrong_destination_state,
+                code="provider-code",
+                callback_uri=CALLBACK_URI,
+                post_callback_path="/attacker",
+            )
+    assert exchange.calls == []
+    assert asyncio.run(
+        bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token)
+    ).status_code == 200
+
+
+def test_standard_library_token_exchange_is_bounded_exact_and_redirect_free() -> None:
+    """Send credentials only to the fixed endpoint and bound every response read."""
+    response = FakeHTTPResponse(
+        b'{"access_token":"a","refresh_token":"r","scope":"repository","expires_in":1}'
+    )
+    opener = FakeOpener(response=response)
+    exchange = BitbucketOAuthTokenExchange(
+        opener=cast(OpenerDirector, opener)
+    )
+
+    authorization = exchange.exchange_authorization_code(
+        code="code",
+        callback_uri=CALLBACK_URI,
+        client_id="client",
+        client_secret="secret",
+    )
+    refreshed = exchange.refresh_tokens(
+        refresh_token="refresh",
+        client_id="client",
+        client_secret="secret",
+    )
+    assert authorization["scope"] == refreshed["scope"] == "repository"
+    assert response.read_limits == [MAX_TOKEN_RESPONSE_BYTES + 1] * 2
+    assert [timeout for _request, timeout in opener.calls] == [
+        TOKEN_EXCHANGE_TIMEOUT_SECONDS,
+        TOKEN_EXCHANGE_TIMEOUT_SECONDS,
+    ]
+    first_request, _timeout = opener.calls[0]
+    assert first_request.full_url == "https://bitbucket.org/site/oauth2/access_token"
+    assert first_request.method == "POST"
+    assert first_request.get_header("Authorization") == "Basic Y2xpZW50OnNlY3JldA=="
+    assert first_request.data == (
+        b"grant_type=authorization_code&code=code&redirect_uri="
+        b"https%3A%2F%2Fapi.verboflex.example%2Fapi%2Fv1%2Fadmin%2Fbitbucket%2Foauth%2Fcallback"
+    )
+
+    assert BitbucketOAuthTokenExchange()
+    redirect_handler = _RejectRedirects()
+    assert (
+        redirect_handler.redirect_request(
+            Request("https://bitbucket.org/original"),
+            BytesIO(),
+            302,
+            "Found",
+            cast(Any, Message()),
+            "https://attacker.example/redirect",
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    ("payload", "error"),
+    (
+        (b"x" * (MAX_TOKEN_RESPONSE_BYTES + 1), None),
+        (b"not-json", None),
+        (b"[]", None),
+        (b"", URLError("provider unavailable")),
+    ),
+)
+def test_standard_library_token_exchange_sanitizes_every_failure(
+    payload: bytes,
+    error: Exception | None,
+) -> None:
+    """Reject redirects, transport failures, invalid JSON, and oversized bodies alike."""
+    opener = FakeOpener(response=FakeHTTPResponse(payload), error=error)
+    exchange = BitbucketOAuthTokenExchange(opener=cast(OpenerDirector, opener))
+
+    with pytest.raises(OAuthCallbackRejected) as rejected:
+        exchange.exchange_authorization_code(
+            code="code",
+            callback_uri=CALLBACK_URI,
+            client_id="client",
+            client_secret="secret",
+        )
+    assert str(rejected.value) == "OAuth callback rejected"
+    assert "provider unavailable" not in str(rejected.value)
