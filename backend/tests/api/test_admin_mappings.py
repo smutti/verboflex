@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from alembic.config import Config
+from fastapi import HTTPException
 from psycopg import connect, sql
 from pydantic import SecretStr
 from sqlalchemy import create_engine, delete, select, text
@@ -833,3 +834,77 @@ def test_route_table_and_openapi_expose_no_mapping_delete_operation(
         "update_admin_candidate_mapping",
     }
     assert all("delete" not in operation.casefold() for operation in operations)
+
+
+def test_mapping_transport_projects_unavailable_resources_and_dependencies(
+    mapping_session_factory: sessionmaker[Session],
+) -> None:
+    """Missing candidate resources are 404 and unavailable discovery is 503."""
+    repository_id = _seed_repository(mapping_session_factory)
+    adapter = BranchAdapter(("main", "release/1"))
+    _configure_dependencies(mapping_session_factory, adapter)
+    admin_token = _create_authority(
+        mapping_session_factory,
+        email="unavailable-admin@example.com",
+        roles=("admin",),
+    )
+    missing_product = uuid4()
+    for method, path in (
+        ("GET", _mapping_path(missing_product)),
+        ("POST", _mapping_path(missing_product)),
+        ("PATCH", _mapping_path(missing_product, uuid4())),
+    ):
+        response = asyncio.run(
+            _request(
+                method,
+                path=path,
+                access_token=admin_token,
+                json_body=(
+                    None
+                    if method == "GET"
+                    else _direct_payload(
+                        repository_id,
+                        allowed_targets=("release/1",),
+                    )
+                ),
+            )
+        )
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Mapping candidate unavailable"}
+
+    product_id, _active_id, _candidate_id = _seed_candidate(mapping_session_factory)
+    app.dependency_overrides[get_bitbucket_discovery_adapter] = lambda: None
+    for method, path in (
+        ("POST", _mapping_path(product_id)),
+        ("PATCH", _mapping_path(product_id, uuid4())),
+    ):
+        response = asyncio.run(
+            _request(
+                method,
+                path=path,
+                access_token=admin_token,
+                json_body=_direct_payload(repository_id),
+            )
+        )
+        assert response.status_code == 503
+        assert response.json() == {"detail": "Mapping branch discovery unavailable"}
+
+
+def test_mapping_error_projection_is_closed_and_reraises_unknown_failures() -> None:
+    """Only named domain errors cross the mapping transport boundary."""
+    from verboflex.api.v1.routes import admin_mappings
+    from verboflex.services.mappings import InvalidMappingInput, MappingNotFound
+
+    for error, expected_status, expected_detail in (
+        (MappingNotFound("missing"), 404, "Mapping candidate unavailable"),
+        (InvalidMappingInput("invalid"), 422, "Invalid mapping input"),
+    ):
+        with pytest.raises(HTTPException) as raised:
+            admin_mappings._raise_mapping_error(error)
+        assert raised.value.status_code == expected_status
+        assert raised.value.detail == expected_detail
+
+    unexpected = RuntimeError("unexpected")
+    with pytest.raises(RuntimeError) as raised:
+        admin_mappings._raise_mapping_error(unexpected)
+    assert raised.value is unexpected

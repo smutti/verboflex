@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import importlib
+import json
 import os
 from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime
@@ -232,6 +234,105 @@ def _update_direct(
                 adapter=adapter,
             )
         )
+
+
+def _opaque_cursor_payload(**overrides: object) -> str:
+    payload: dict[str, object] = {
+        "mapping_id": str(uuid4()),
+        "primary_repository_id": str(uuid4()),
+        "primary_source_branch": "main",
+        "revision_id": str(uuid4()),
+        "topology_rank": 0,
+        "translations_repository_id": None,
+        "translations_source_branch": None,
+        "version": 1,
+    }
+    payload.update(overrides)
+    raw = json.dumps(
+        payload,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def test_mapping_cursor_is_canonical_closed_and_candidate_bound() -> None:
+    """Opaque cursors reject alternate encodings, shapes, and scalar types."""
+    module = _mapping_module()
+    position = module._MappingCursor(
+        revision_id=uuid4(),
+        topology_rank=1,
+        primary_repository_id=uuid4(),
+        primary_source_branch="keys",
+        translations_repository_id=uuid4(),
+        translations_source_branch="translations",
+        mapping_id=uuid4(),
+    )
+    encoded = module._encode_cursor(position)
+    assert module._decode_cursor(encoded) == position
+    decoded_payload = json.loads(
+        base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+    )
+    noncanonical = base64.urlsafe_b64encode(
+        json.dumps(decoded_payload, indent=1).encode()
+    ).rstrip(b"=").decode("ascii")
+    assert noncanonical != encoded
+
+    malformed = (
+        None,
+        "",
+        "x" * 2049,
+        "not-base64!",
+        base64.urlsafe_b64encode(b"[]").rstrip(b"=").decode("ascii"),
+        _opaque_cursor_payload(unexpected="field"),
+        _opaque_cursor_payload(topology_rank=True),
+        _opaque_cursor_payload(
+            translations_repository_id=str(uuid4()),
+            translations_source_branch=None,
+        ),
+        _opaque_cursor_payload(mapping_id=None),
+        noncanonical,
+    )
+    for cursor in malformed:
+        with pytest.raises(module.InvalidMappingCursor):
+            module._decode_cursor(cursor)
+
+
+def test_mapping_list_rejects_unbounded_or_unavailable_candidates(
+    mapping_database: tuple[Config, sessionmaker[Session]],
+) -> None:
+    """Service callers cannot bypass page bounds or address missing candidates."""
+    _config, factory = mapping_database
+    module = _mapping_module()
+    with factory() as session:
+        for limit in (0, 101):
+            with pytest.raises(ValueError, match="invalid page size"):
+                module.list_candidate_mappings(session, product_id=uuid4(), limit=limit)
+        with pytest.raises(module.MappingNotFound):
+            module.list_candidate_mappings(session, product_id=uuid4())
+
+    product_id, _active_id, candidate_id, _repository_id = _seed_candidate_graph(factory)
+    with factory.begin() as session:
+        candidate = session.get_one(ProductRevision, candidate_id)
+        candidate.is_published = True
+        candidate.published_at = datetime.now(UTC)
+    with factory() as session, pytest.raises(module.MappingNotFound):
+        module.list_candidate_mappings(session, product_id=product_id)
+
+
+def test_mapping_projection_rejects_unknown_persisted_topology() -> None:
+    """Corrupt stored topology values never escape through the closed projection."""
+    module = _mapping_module()
+    models = _mapping_models()
+    mapping = models.ProductRepositoryMapping(
+        id=uuid4(),
+        revision_id=uuid4(),
+        topology="manual",
+        identity_key="invalid",
+    )
+    with pytest.raises(module.InvalidMappingInput, match="invalid persisted mapping"):
+        module._record(mapping, candidate_version=1)
 
 
 def test_direct_mapping_is_revision_owned_and_has_one_exact_repository_side(
