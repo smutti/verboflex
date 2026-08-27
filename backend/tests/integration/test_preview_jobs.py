@@ -382,7 +382,7 @@ def test_android_preview_completes_read_only(
     assert created_body["candidate_revision_id"] == str(candidate_id)
 
     preview_tasks = importlib.import_module("verboflex.worker.preview_tasks")
-    process_android_preview = getattr(preview_tasks, "process_android_preview")
+    process_android_preview = preview_tasks.process_android_preview
     monkeypatch.setattr(preview_tasks, "SessionFactory", preview_session_factory)
     monkeypatch.setattr(
         preview_tasks,
