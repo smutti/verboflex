@@ -17,6 +17,7 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from alembic.config import Config
+from celery import Celery
 from psycopg import connect, sql
 from pydantic import SecretStr
 from sqlalchemy import create_engine, select, text
@@ -314,7 +315,6 @@ def test_admin_job_runs_api_to_distinct_worker_and_persists_terminal_state(
     assert enqueuer.payloads == [(created_body["id"],)]
 
     preview_tasks = importlib.import_module("verboflex.worker.preview_tasks")
-    celery_app = importlib.import_module("verboflex.worker.celery_app").app
     monkeypatch.setattr(preview_tasks, "SessionFactory", preview_session_factory)
     monkeypatch.setattr(
         preview_tasks,
@@ -325,20 +325,25 @@ def test_admin_job_runs_api_to_distinct_worker_and_persists_terminal_state(
             "layout_candidates": [],
         },
     )
-    celery_app.close()
-    monkeypatch.setitem(celery_app.conf, "broker_url", "memory://")
-    monkeypatch.setitem(celery_app.conf, "result_backend", "cache+memory://")
-    monkeypatch.setitem(celery_app.conf, "task_always_eager", False)
-    monkeypatch.setitem(celery_app.conf, "task_ignore_result", True)
+    test_celery = Celery(
+        "verboflex-preview-integration",
+        broker="memory://",
+        backend="cache+memory://",
+    )
+    test_celery.task(
+        name="verboflex.preview.run",
+        serializer="json",
+        ignore_result=True,
+    )(preview_tasks.run_preview_job.run)
     from celery.contrib.testing.worker import start_worker
 
     with start_worker(
-        celery_app,
+        test_celery,
         pool="solo",
         perform_ping_check=False,
         loglevel="ERROR",
     ):
-        celery_app.send_task("verboflex.preview.run", args=list(enqueuer.payloads[0]))
+        test_celery.send_task("verboflex.preview.run", args=list(enqueuer.payloads[0]))
         deadline = time.monotonic() + 5
         status_body: dict[str, Any] | None = None
         while time.monotonic() < deadline:
@@ -354,7 +359,7 @@ def test_admin_job_runs_api_to_distinct_worker_and_persists_terminal_state(
             if status_body["state"] == "succeeded":
                 break
             time.sleep(0.02)
-    celery_app.close()
+    test_celery.close()
 
     assert status_body is not None
     assert status_body["state"] == "succeeded"
