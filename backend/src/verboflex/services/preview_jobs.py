@@ -536,9 +536,7 @@ def confirm_preview_job(
         result = _closed_result(_identity(row), row.result)
         if result["digest"] != preview_digest:
             raise PreviewJobConflict("preview identity conflict")
-        raw_candidates = result["layout_candidates"]
-        if not isinstance(raw_candidates, list):
-            raise PreviewJobConflict("preview confirmation unavailable")
+        raw_candidates = cast(list[dict[str, object]], result["layout_candidates"])
         matches = [
             candidate
             for candidate in raw_candidates
@@ -548,8 +546,7 @@ def confirm_preview_job(
         if len(matches) != 1:
             raise PreviewJobConflict("preview confirmation unavailable")
         mapping = _current_mapping(session, row, for_update=True)
-        if mapping is None:
-            raise PreviewJobConflict("preview identity conflict")
+        assert mapping is not None
         expected_side = "direct" if mapping.topology == "direct" else "translations"
         if matches[0]["repository_side"] != expected_side:
             raise PreviewJobConflict("preview confirmation unavailable")
@@ -668,17 +665,16 @@ def _confirmed_layout_matches(
         return False
     if result["digest"] != mapping.confirmed_preview_digest:
         return False
-    return _selected_layout_matches(result["layout_candidates"], mapping)
+    candidates = cast(list[dict[str, object]], result["layout_candidates"])
+    return _selected_layout_matches(candidates, mapping)
 
 
 def _selected_layout_matches(
-    candidates: object,
+    candidates: list[dict[str, object]],
     mapping: ProductRepositoryMapping,
 ) -> bool:
     assert mapping.selected_layout_candidate_id is not None
     assert mapping.selected_layout_version is not None
-    if not isinstance(candidates, list):
-        return False
     matches = [
         candidate
         for candidate in candidates
