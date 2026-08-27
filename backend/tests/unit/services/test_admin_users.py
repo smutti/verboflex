@@ -159,6 +159,14 @@ def test_every_non_empty_role_combination_round_trips_on_the_same_user_uuid(
         assert [RoleName(role.name) for role in target.roles] == list(updated.roles)
 
 
+def test_user_roles_relationship_declares_fixed_role_order() -> None:
+    """The ORM loader must not rely on PostgreSQL's unspecified row order."""
+    relationship_order = User.roles.property.order_by
+
+    assert relationship_order is not False
+    assert tuple(str(clause) for clause in relationship_order) == ("roles.name",)
+
+
 def test_identical_normalized_update_is_a_non_mutating_noop(
     service_session_factory: sessionmaker[Session],
 ) -> None:
