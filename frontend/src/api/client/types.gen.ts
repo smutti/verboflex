@@ -354,7 +354,7 @@ export type AdminPreviewJobResponse = {
 /**
  * AdminPreviewJobResultResponse
  *
- * Exact noncanonical skeleton result with no provider or source payload.
+ * Exact noncanonical preview result with no provider or source payload.
  */
 export type AdminPreviewJobResultResponse = {
     /**
@@ -374,10 +374,53 @@ export type AdminPreviewJobResultResponse = {
 /**
  * AdminPreviewLayoutCandidateResponse
  *
- * Closed empty pre-detector candidate shape expanded by the detector plans.
+ * One bounded noncanonical exact-layout preview candidate.
  */
 export type AdminPreviewLayoutCandidateResponse = {
-    [key: string]: never;
+    /**
+     * Confidence
+     */
+    confidence: number;
+    /**
+     * Files
+     */
+    files: Array<string>;
+    /**
+     * Format
+     */
+    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings';
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Keys
+     */
+    keys: Array<string>;
+    /**
+     * Languages
+     */
+    languages: Array<string>;
+    /**
+     * Layout Identity
+     */
+    layout_identity: string;
+    /**
+     * Repository Side
+     */
+    repository_side: 'direct' | 'keys' | 'translations';
+    /**
+     * Samples
+     */
+    samples: Array<AdminPreviewSampleResponse>;
+    /**
+     * Samples Are Partial
+     */
+    samples_are_partial: true;
+    /**
+     * Version
+     */
+    version: 1;
 };
 
 /**
@@ -402,6 +445,26 @@ export type AdminPreviewRepositorySideResponse = {
      * Source Branch
      */
     source_branch: string;
+};
+
+/**
+ * AdminPreviewSampleResponse
+ *
+ * One bounded read-only sample, not a canonical translation.
+ */
+export type AdminPreviewSampleResponse = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Translation
+     */
+    translation: string;
 };
 
 /**
