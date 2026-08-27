@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-13-PLAN.md
-last_updated: "2026-08-27T19:56:04.371Z"
+stopped_at: Completed 02-14-PLAN.md
+last_updated: "2026-08-27T21:12:57.774Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 02 execution started
-state_head: 285e39b52be705160dea953ecbb3d941d72ba114
+state_head: 5e9560fb9bdc1fbeb51f0499f7674b951020392d
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 35
-  completed_plans: 28
+  completed_plans: 29
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 14 of 20
+Plan: 15 of 20
 Status: Ready to execute
 Last activity: 2026-08-26 — Phase 02 execution started
 
@@ -86,6 +86,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P11 | 2h 14m | 2 tasks | 18 files |
 | Phase 02 P12 | 32min | 2 tasks | 16 files |
 | Phase 02 P13 | 35m | 2 tasks | 11 files |
+| Phase 02 P14 | 1h07m | 2 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -198,6 +199,9 @@ Recent decisions affecting current work:
 - [Phase 02]: iOS preview locale identity requires exactly one bounded locale.lproj directory component and stores a canonical locale plus locale path template. — This matches the platform layout while preventing missing or competing path locales from becoming confirmable.
 - [Phase 02]: The iOS adapter is a bounded strict decoder and state-machine lexer with immutable spans and no serialization interface. — Preview needs hostile-input detection and samples only; canonical parsing and format-preserving writes remain later-phase authority.
 - [Phase 02]: The durable preview worker invokes one four-format registry while the Plan 12 Android processor name remains a compatibility delegate. — All formats share one deterministic overlap-rejecting path without breaking the existing worker seam.
+- [Phase 02]: A confirmation is current only when its complete candidate, job, mapping, repository side, connection generation, commit, detector, layout, and result digest identity still matches. — Historical or partial preview evidence must never authorize publication.
+- [Phase 02]: The Product row lock remains the sole all-mapping publication and reactivation linearization point. — All candidate digests are rechecked before one atomic active-revision transition.
+- [Phase 02]: Reactivation of an unchanged published revision uses the same exact current-confirmation predicate. — A relaxed reactivation path would allow stale work to restore authority.
 
 ### Pending Todos
 
@@ -230,6 +234,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-27T19:56:04.332Z
-Stopped at: Completed 02-13-PLAN.md
+Last session: 2026-08-27T21:12:57.735Z
+Stopped at: Completed 02-14-PLAN.md
 Resume file: None
