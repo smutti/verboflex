@@ -31,6 +31,7 @@ from verboflex.models.auth_session import AuthSession
 from verboflex.models.repository import Repository
 from verboflex.models.role import Role
 from verboflex.models.user import User
+from verboflex.services.repositories import list_repositories, normalize_repository_identity
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 ADMIN_DATABASE_URL = os.environ.get(
@@ -504,3 +505,103 @@ def test_repository_api_is_closed_credential_free_and_provider_read_free(
     assert "access_token" not in production_source
     assert "refresh_token" not in production_source
     assert {"credential", "token"}.isdisjoint(Repository.__table__.columns.keys())
+
+
+def test_repository_service_and_cursor_rejection_branches_fail_closed(
+    repository_api_session_factory: sessionmaker[Session],
+) -> None:
+    """Direct callers and structurally plausible cursors cannot bypass validation."""
+    with pytest.raises(ValueError, match="invalid repository identity"):
+        normalize_repository_identity(42, "repository")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="invalid page size"):
+        list_repositories(repository_api_session_factory(), limit=0)
+    with pytest.raises(ValueError, match="invalid page size"):
+        list_repositories(repository_api_session_factory(), limit=101)
+
+    admin_token = create_authority(
+        repository_api_session_factory,
+        email="admin@example.com",
+        roles=("admin",),
+    )
+    configure_dependencies(repository_api_session_factory)
+    no_description = asyncio.run(
+        repository_request(
+            "POST",
+            access_token=admin_token,
+            json_body=repository_payload(descriptive_name=None),
+        )
+    )
+    assert no_description.status_code == 201
+
+    for descriptive_name in (42, " ", "x" * 121, "contains\x00nul", "contains\x07bell"):
+        with repository_api_session_factory() as session:
+            from verboflex.services.repositories import register_repository
+
+            with pytest.raises(ValueError, match="invalid repository description"):
+                register_repository(
+                    session,
+                    workspace="validation-team",
+                    repository_slug="validation-repository",
+                    descriptive_name=descriptive_name,  # type: ignore[arg-type]
+                )
+
+    valid_cursor_response = asyncio.run(
+        repository_request(
+            "GET",
+            access_token=admin_token,
+            path=f"{ADMIN_REPOSITORIES_PATH}?limit=1",
+        )
+    )
+    assert valid_cursor_response.status_code == 200
+
+    cursor_payloads = (
+        {
+            "id": str(UUID(int=1)),
+            "repository_slug": "repository",
+            "sort_key": "repository",
+            "version": 2,
+            "workspace": "workspace",
+        },
+        {
+            "id": str(UUID(int=1)),
+            "repository_slug": "repository",
+            "sort_key": 7,
+            "version": 1,
+            "workspace": "workspace",
+        },
+        {
+            "id": str(UUID(int=1)),
+            "repository_slug": "repository",
+            "sort_key": "repository",
+            "version": 1,
+            "workspace": 7,
+        },
+        {
+            "id": str(UUID(int=1)),
+            "repository_slug": 7,
+            "sort_key": "repository",
+            "version": 1,
+            "workspace": "workspace",
+        },
+        {
+            "id": "not-a-uuid",
+            "repository_slug": "repository",
+            "sort_key": "repository",
+            "version": 1,
+            "workspace": "workspace",
+        },
+    )
+    invalid_cursors = (
+        "",
+        *(_cursor_from_json(payload, compact=True) for payload in cursor_payloads),
+    )
+    for invalid_cursor in invalid_cursors:
+        response = asyncio.run(
+            repository_request(
+                "GET",
+                access_token=admin_token,
+                path=f"{ADMIN_REPOSITORIES_PATH}?cursor={invalid_cursor}",
+            )
+        )
+        assert response.status_code == 422
+        assert response.json() == {"detail": "Invalid cursor"}
