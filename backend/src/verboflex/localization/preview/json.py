@@ -103,11 +103,11 @@ def _classify_json_file(file: RepositorySourceFile) -> _JsonFile:
         raise ValueError("unsupported JSON shape")
 
     locales: dict[str, dict[str, str]] = {}
-    for raw_locale, translations in value.items():
+    for raw_locale, nested_value in value.items():
         locale = normalize_preview_locale(raw_locale)
         if locale is None or locale in locales:
             raise ValueError("unsupported JSON locale")
-        locales[locale] = _nonempty_string_map(translations)
+        locales[locale] = _nonempty_string_map(nested_value)
     return _JsonFile(
         path=file.path,
         layout_identity=f"json:locale-rooted:{file.path}",
@@ -145,6 +145,18 @@ def detect_json_layouts(
     repository_side: RepositorySide,
 ) -> PreviewDetectionResult:
     """Return independent exact flat-per-locale and locale-rooted candidates."""
+    grouped, invalid_layouts = _collect_json_files(files)
+    candidates = _json_candidates(
+        grouped=grouped,
+        invalid_layouts=invalid_layouts,
+        repository_side=repository_side,
+    )
+    return PreviewDetectionResult(candidates=candidates)
+
+
+def _collect_json_files(
+    files: Iterable[RepositorySourceFile],
+) -> tuple[dict[str, list[_JsonFile]], set[str]]:
     grouped: dict[str, list[_JsonFile]] = defaultdict(list)
     invalid_layouts: set[str] = set()
     seen_paths: set[str] = set()
@@ -173,7 +185,15 @@ def detect_json_layouts(
                 invalid_layouts.add(hinted_identity)
             continue
         grouped[source.layout_identity].append(source)
+    return grouped, invalid_layouts
 
+
+def _json_candidates(
+    *,
+    grouped: dict[str, list[_JsonFile]],
+    invalid_layouts: set[str],
+    repository_side: RepositorySide,
+) -> tuple[PreviewLayoutCandidate, ...]:
     candidates: list[PreviewLayoutCandidate] = []
     for layout_identity in sorted(grouped):
         if layout_identity in invalid_layouts:
@@ -185,4 +205,4 @@ def detect_json_layouts(
         )
         if candidate is not None:
             candidates.append(candidate)
-    return PreviewDetectionResult(candidates=tuple(candidates))
+    return tuple(candidates)

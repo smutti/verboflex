@@ -6,6 +6,7 @@ import re
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import cast
 from xml.etree.ElementTree import Element
 
 from defusedxml import ElementTree  # type: ignore[import-untyped]
@@ -71,10 +72,10 @@ def _plain_text(element: Element) -> str:
 
 
 def _message_values(context: Element) -> dict[str, str]:
-    if context.attrib or (context.text or "").strip() or not len(context):
+    if context.attrib or (context.text or "").strip():
         raise ValueError("unsupported Qt TS")
     children = list(context)
-    if children[0].tag != "name":
+    if not children or children[0].tag != "name":
         raise ValueError("unsupported Qt TS")
     _plain_text(children[0])
     if len(children) == 1:
@@ -82,26 +83,25 @@ def _message_values(context: Element) -> dict[str, str]:
 
     values: dict[str, str] = {}
     for message in children[1:]:
-        if (
-            message.tag != "message"
-            or message.attrib
-            or (message.text or "").strip()
-            or (message.tail or "").strip()
-        ):
-            raise ValueError("unsupported Qt TS")
-        message_children = list(message)
-        if [child.tag for child in message_children] != ["source", "translation"]:
-            raise ValueError("unsupported Qt TS")
-        source = _plain_text(message_children[0])
-        translation = _plain_text(message_children[1])
+        source, translation = _plain_message(message)
         if source in values:
             raise ValueError("unsupported Qt TS")
         values[source] = translation
     return values
 
 
-def _parse_qt_file(file: RepositorySourceFile) -> _QtFile:
-    text = _decode_xml(file.content)
+def _plain_message(message: Element) -> tuple[str, str]:
+    if message.tag != "message" or message.attrib:
+        raise ValueError("unsupported Qt TS")
+    if (message.text or "").strip() or (message.tail or "").strip():
+        raise ValueError("unsupported Qt TS")
+    children = list(message)
+    if [child.tag for child in children] != ["source", "translation"]:
+        raise ValueError("unsupported Qt TS")
+    return _plain_text(children[0]), _plain_text(children[1])
+
+
+def _qt_root(text: str) -> Element:
     try:
         root = ElementTree.fromstring(
             text,
@@ -111,27 +111,28 @@ def _parse_qt_file(file: RepositorySourceFile) -> _QtFile:
         )
     except (DefusedXmlException, ElementTree.ParseError) as error:
         raise ValueError("unsupported Qt TS") from error
-    if (
-        root.tag != "TS"
-        or set(root.attrib) != {"version", "language"}
-        or root.attrib["version"] != "2.1"
-        or (root.text or "").strip()
-        or not len(root)
-    ):
+    if root.tag != "TS" or set(root.attrib) != {"version", "language"}:
         raise ValueError("unsupported Qt TS")
-    language = normalize_preview_locale(root.attrib["language"])
-    if language is None:
-        raise ValueError("unsupported Qt TS locale")
+    if root.attrib["version"] != "2.1" or (root.text or "").strip() or not len(root):
+        raise ValueError("unsupported Qt TS")
+    return cast(Element, root)
 
+
+def _qt_layout_identity(path: str, *, language: str) -> str:
     path_layout = extract_preview_locale_path(
-        file.path,
+        path,
         suffix=".ts",
         allow_prefixed_stem=True,
         expected_locale=language,
     )
-    layout_identity = (
-        f"qt-ts:{path_layout[1]}" if path_layout is not None else f"qt-ts:{file.path}"
-    )
+    return f"qt-ts:{path_layout[1]}" if path_layout is not None else f"qt-ts:{path}"
+
+
+def _parse_qt_file(file: RepositorySourceFile) -> _QtFile:
+    root = _qt_root(_decode_xml(file.content))
+    language = normalize_preview_locale(root.attrib["language"])
+    if language is None:
+        raise ValueError("unsupported Qt TS locale")
 
     values: dict[str, str] = {}
     for context in root:
@@ -145,7 +146,7 @@ def _parse_qt_file(file: RepositorySourceFile) -> _QtFile:
         raise ValueError("unsupported Qt TS")
     return _QtFile(
         path=file.path,
-        layout_identity=layout_identity,
+        layout_identity=_qt_layout_identity(file.path, language=language),
         language=language,
         values=values,
     )
@@ -180,6 +181,18 @@ def detect_qt_ts_layouts(
     repository_side: RepositorySide,
 ) -> PreviewDetectionResult:
     """Return separate exact Qt TS path-convention candidates without guessing."""
+    grouped, invalid_layouts = _collect_qt_files(files)
+    candidates = _qt_candidates(
+        grouped=grouped,
+        invalid_layouts=invalid_layouts,
+        repository_side=repository_side,
+    )
+    return PreviewDetectionResult(candidates=candidates)
+
+
+def _collect_qt_files(
+    files: Iterable[RepositorySourceFile],
+) -> tuple[dict[str, list[_QtFile]], set[str]]:
     grouped: dict[str, list[_QtFile]] = defaultdict(list)
     invalid_layouts: set[str] = set()
     seen_paths: set[str] = set()
@@ -210,7 +223,15 @@ def detect_qt_ts_layouts(
                 invalid_layouts.add(hinted_identity)
             continue
         grouped[source.layout_identity].append(source)
+    return grouped, invalid_layouts
 
+
+def _qt_candidates(
+    *,
+    grouped: dict[str, list[_QtFile]],
+    invalid_layouts: set[str],
+    repository_side: RepositorySide,
+) -> tuple[PreviewLayoutCandidate, ...]:
     candidates: list[PreviewLayoutCandidate] = []
     for layout_identity in sorted(grouped):
         if layout_identity in invalid_layouts:
@@ -222,4 +243,4 @@ def detect_qt_ts_layouts(
         )
         if candidate is not None:
             candidates.append(candidate)
-    return PreviewDetectionResult(candidates=tuple(candidates))
+    return tuple(candidates)

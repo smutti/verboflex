@@ -127,6 +127,103 @@ def normalize_preview_locale(raw: str) -> str | None:
     return "-".join(parts)
 
 
+def _preview_path_parts(path: str, *, suffix: str) -> tuple[list[str], str] | None:
+    if not path or not suffix or not path.endswith(suffix) or path.startswith("/") or "//" in path:
+        return None
+    components = path.split("/")
+    if any(not component or component in {".", ".."} for component in components):
+        return None
+    return components, components[-1][: -len(suffix)]
+
+
+def _stem_locale_signals(
+    stem: str,
+    *,
+    suffix: str,
+    allow_prefixed_stem: bool,
+) -> list[tuple[str, str]]:
+    signals: list[tuple[str, str]] = []
+    stem_locale = normalize_preview_locale(stem)
+    if stem_locale is not None:
+        signals.append((stem_locale, f"{{locale}}{suffix}"))
+    if not allow_prefixed_stem:
+        return signals
+    for offset, character in enumerate(stem):
+        if character not in {"-", "_"}:
+            continue
+        possible = normalize_preview_locale(stem[offset + 1 :])
+        if possible is not None:
+            signals.append((possible, f"{stem[: offset + 1]}{{locale}}{suffix}"))
+    return signals
+
+
+def _select_stem_signal(
+    signals: list[tuple[str, str]],
+    *,
+    expected_locale: str | None,
+) -> tuple[str, str] | None:
+    matching = (
+        [signal for signal in signals if signal[0] == expected_locale]
+        if expected_locale is not None
+        else signals
+    )
+    if not matching or len({locale for locale, _ in matching}) != 1:
+        return None
+    return matching[0]
+
+
+def _directory_locale_signals(components: list[str]) -> list[tuple[int, str, str]]:
+    signals: list[tuple[int, str, str]] = []
+    for index, component in enumerate(components[:-1]):
+        locale = normalize_preview_locale(component)
+        if locale is not None:
+            signals.append((index, locale, "{locale}"))
+    return signals
+
+
+def _path_locale_signals(
+    components: list[str],
+    stem: str,
+    *,
+    suffix: str,
+    allow_prefixed_stem: bool,
+    expected_locale: str | None,
+) -> list[tuple[int, str, str]] | None:
+    signals = _directory_locale_signals(components)
+    directory_locales = {locale for _, locale, _ in signals}
+    if expected_locale is not None and directory_locales and directory_locales != {expected_locale}:
+        return None
+    stem_signal = _select_stem_signal(
+        _stem_locale_signals(
+            stem,
+            suffix=suffix,
+            allow_prefixed_stem=allow_prefixed_stem,
+        ),
+        expected_locale=expected_locale,
+    )
+    if stem_signal is not None:
+        signals.append((len(components) - 1, stem_signal[0], stem_signal[1]))
+    return signals
+
+
+def _render_locale_template(
+    components: list[str],
+    signals: list[tuple[int, str, str]],
+    *,
+    expected_locale: str | None,
+) -> tuple[str, str] | None:
+    locales = {locale for _, locale, _ in signals}
+    if not signals or len(locales) != 1:
+        return None
+    locale = signals[0][1]
+    if expected_locale is not None and locale != expected_locale:
+        return None
+    templated = list(components)
+    for index, _, replacement in signals:
+        templated[index] = replacement
+    return locale, "/".join(templated)
+
+
 def extract_preview_locale_path(
     path: str,
     *,
@@ -135,53 +232,24 @@ def extract_preview_locale_path(
     expected_locale: str | None = None,
 ) -> tuple[str, str] | None:
     """Return one unambiguous locale and its exact path template."""
-    if (
-        not path
-        or not suffix
-        or not path.endswith(suffix)
-        or path.startswith("/")
-        or "//" in path
-    ):
+    path_parts = _preview_path_parts(path, suffix=suffix)
+    if path_parts is None:
         return None
-    components = path.split("/")
-    if any(not component or component in {".", ".."} for component in components):
+    components, stem = path_parts
+    signals = _path_locale_signals(
+        components,
+        stem,
+        suffix=suffix,
+        allow_prefixed_stem=allow_prefixed_stem,
+        expected_locale=expected_locale,
+    )
+    if signals is None:
         return None
-    stem = components[-1][: -len(suffix)]
-    signals: list[tuple[int, str, str]] = []
-    for index, component in enumerate(components[:-1]):
-        locale = normalize_preview_locale(component)
-        if locale is not None:
-            signals.append((index, locale, "{locale}"))
-
-    stem_signals: list[tuple[str, str]] = []
-    stem_locale = normalize_preview_locale(stem)
-    if stem_locale is not None:
-        stem_signals.append((stem_locale, "{locale}"))
-    if allow_prefixed_stem:
-        for offset, character in enumerate(stem):
-            if character not in {"-", "_"}:
-                continue
-            possible = normalize_preview_locale(stem[offset + 1 :])
-            if possible is not None:
-                stem_signals.append((possible, f"{stem[: offset + 1]}{{locale}}"))
-    if expected_locale is not None:
-        directory_locales = {locale for index, locale, _ in signals if index < len(components) - 1}
-        if directory_locales and directory_locales != {expected_locale}:
-            return None
-        stem_signals = [signal for signal in stem_signals if signal[0] == expected_locale]
-    if stem_signals:
-        chosen_locale, stem_template = stem_signals[0]
-        signals.append((len(components) - 1, chosen_locale, f"{stem_template}{suffix}"))
-    if not signals or len({locale for _, locale, _ in signals}) != 1:
-        return None
-
-    templated = list(components)
-    for index, _, replacement in signals:
-        templated[index] = replacement
-    locale = signals[0][1]
-    if expected_locale is not None and locale != expected_locale:
-        return None
-    return locale, "/".join(templated)
+    return _render_locale_template(
+        components,
+        signals,
+        expected_locale=expected_locale,
+    )
 
 
 def _candidate_id(

@@ -91,8 +91,7 @@ def test_json_locale_directory_files_form_an_independent_exact_candidate() -> No
 def test_json_locale_rooted_map_forms_one_separate_candidate() -> None:
     detector = _detector_module()
     content = (
-        b'{"it_IT":{"welcome.title":"Benvenuto"},'
-        b'"en":{"welcome.title":"Welcome","button.ok":"OK"}}'
+        b'{"it_IT":{"welcome.title":"Benvenuto"},"en":{"welcome.title":"Welcome","button.ok":"OK"}}'
     )
 
     result = detector.detect_json_layouts(
@@ -118,7 +117,9 @@ def test_registry_keeps_flat_and_locale_rooted_interpretations_separate() -> Non
         repository_side="direct",
     )
 
-    json_candidates = tuple(candidate for candidate in result.candidates if candidate.format == "json")
+    json_candidates = tuple(
+        candidate for candidate in result.candidates if candidate.format == "json"
+    )
     assert len(json_candidates) == 2
     assert len({candidate.layout_identity for candidate in json_candidates}) == 2
     assert {candidate.files for candidate in json_candidates} == {
@@ -238,7 +239,7 @@ def test_json_unsupported_shapes_never_confirm(content: bytes) -> None:
     (
         '{"hello":"Hello"}'.encode("utf-16"),
         '{"hello":"Hello"}'.encode("utf-32"),
-        b"\xff{\"hello\":\"Hello\"}",
+        b'\xff{"hello":"Hello"}',
         b'{"hello":"Hel\xfflo"}',
         b'{"hello":"Hel\x00lo"}',
         b"",
@@ -286,4 +287,3 @@ def test_json_invalid_utf8_prefixes_are_always_bounded_and_never_raise(content: 
     )
 
     assert result.candidates == ()
-

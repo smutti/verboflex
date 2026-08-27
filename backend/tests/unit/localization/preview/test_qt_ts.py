@@ -73,9 +73,8 @@ def test_qt_plain_messages_produce_one_deterministic_exact_candidate() -> None:
 
 
 def test_qt_accepts_utf8_bom_and_case_insensitive_utf8_declaration() -> None:
-    content = (
-        b"\xef\xbb\xbf<?xml version='1.0' encoding='uTf-8'?>"
-        + _qt_document(language="sr_Latn_RS", translation="Zdravo")
+    content = b"\xef\xbb\xbf<?xml version='1.0' encoding='uTf-8'?>" + _qt_document(
+        language="sr_Latn_RS", translation="Zdravo"
     )
 
     detector = _detector_module()
@@ -212,9 +211,7 @@ def test_qt_uses_the_exact_canonical_locale_subset(locale: str, canonical: str) 
     ("e", "engl", "en-US-POSIX", "en-u-ca-gregory", "12", "en-1", "en-US-x-test"),
 )
 def test_qt_rejects_locale_variants_extensions_and_malformed_tags(locale: str) -> None:
-    assert (
-        _candidate_count(_source("translations/app.ts", _qt_document(language=locale))) == 0
-    )
+    assert _candidate_count(_source("translations/app.ts", _qt_document(language=locale))) == 0
 
 
 @settings(max_examples=50, deadline=None)
@@ -227,4 +224,3 @@ def test_qt_arbitrary_bytes_are_always_bounded_and_never_raise(content: bytes) -
     )
 
     assert isinstance(result.candidates, tuple)
-
