@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
@@ -14,8 +15,16 @@ from hypothesis import strategies as st
 
 from verboflex.core.config import Settings
 from verboflex.integrations.bitbucket.client import (
+    BitbucketBranch,
     BitbucketHttpAdapter,
     BitbucketProviderReadError,
+    BitbucketSourceEntry,
+    BitbucketSourcePage,
+)
+from verboflex.integrations.bitbucket.urls import (
+    repository_branch_url,
+    repository_source_url,
+    validate_bitbucket_api_url,
 )
 from verboflex.services.repositories import RepositoryRecord
 
@@ -141,6 +150,238 @@ def _repository() -> RepositoryRecord:
         repository_slug="mobile",
         descriptive_name="Mobile",
     )
+
+
+class ChunkStream(httpx.AsyncByteStream):
+    """Keep MockTransport responses unconsumed so raw stream accounting is exercised."""
+
+    def __init__(self, *chunks: bytes) -> None:
+        self._chunks = chunks
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        for chunk in self._chunks:
+            yield chunk
+
+
+def test_source_url_and_adapter_guards_reject_ambiguous_provider_coordinates() -> None:
+    """Malformed identifiers, branch drift and cross-resource next links stop before raw reads."""
+    commit_hash = "a" * 40
+    source_root = f"https://api.bitbucket.org/2.0/repositories/acme/mobile/src/{commit_hash}/"
+    with pytest.raises(ValueError):
+        repository_branch_url(workspace="acme", repository_slug="mobile", branch="")
+    with pytest.raises(ValueError):
+        repository_source_url(
+            workspace="acme",
+            repository_slug="mobile",
+            commit_hash="not-a-commit",
+        )
+    with pytest.raises(ValueError):
+        validate_bitbucket_api_url(f"{source_root}%2e%2e/secret.json")
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"name": "other", "target": {"hash": commit_hash}},
+            headers={"x-oauth-scopes": "repository"},
+            request=request,
+        )
+
+    adapter = BitbucketHttpAdapter(
+        settings=Settings(),
+        credential_leases=FakeCredentialLeaseAuthority(),
+        transport=httpx.MockTransport(provider),
+    )
+
+    async def exercise() -> None:
+        with pytest.raises(BitbucketProviderReadError) as mismatch:
+            await adapter.resolve_repository_branch(
+                object(),
+                workspace="acme",
+                repository_slug="mobile",
+                branch="main",
+            )
+        assert mismatch.value.kind == "invalid_source"
+        with pytest.raises(BitbucketProviderReadError) as continuation:
+            await adapter.list_repository_source_page(
+                object(),
+                workspace="acme",
+                repository_slug="mobile",
+                commit_hash=commit_hash,
+                directory_path=None,
+                next_url=f"{source_root}different?pagelen=100&page=2",
+            )
+        assert continuation.value.kind == "invalid_source"
+        with pytest.raises(BitbucketProviderReadError) as negative_limit:
+            await adapter.read_repository_source_file(
+                object(),
+                workspace="acme",
+                repository_slug="mobile",
+                commit_hash=commit_hash,
+                path="locale.json",
+                max_bytes=-1,
+            )
+        assert negative_limit.value.kind == "limit_exceeded"
+        await adapter.aclose()
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        {},
+        {"values": [None]},
+        {"values": [{"path": 1, "type": "commit_file", "size": 1}]},
+        {"values": [{"path": "dir", "type": "commit_directory", "size": 0}]},
+        {"values": [{"path": "file.json", "type": "commit_file", "size": None}]},
+        {"values": [{"path": "file.json", "type": "unknown", "size": 1}]},
+        {"values": [], "next": 1},
+    ],
+)
+def test_source_page_parser_rejects_every_open_or_incoherent_shape(
+    page: dict[str, object],
+) -> None:
+    with pytest.raises(BitbucketProviderReadError) as captured:
+        BitbucketHttpAdapter._parse_source_page(page)
+    assert captured.value.kind == "invalid_source"
+
+
+@pytest.mark.parametrize(
+    ("headers", "body", "expected_kind"),
+    [
+        ({"content-encoding": "br"}, b"x", "invalid_source"),
+        ({"content-type": "text/plain"}, b"{}", "invalid_source"),
+        (
+            {"content-type": "application/json", "content-length": "invalid"},
+            b"{}",
+            "invalid_source",
+        ),
+        ({"content-type": "application/json", "content-length": "-1"}, b"{}", "invalid_source"),
+    ],
+)
+def test_source_transport_rejects_unsafe_encoding_media_and_lengths(
+    headers: dict[str, str],
+    body: bytes,
+    expected_kind: str,
+) -> None:
+    def provider(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            stream=ChunkStream(body),
+            headers={"x-oauth-scopes": "repository", **headers},
+            request=request,
+        )
+
+    adapter = BitbucketHttpAdapter(
+        settings=Settings(),
+        credential_leases=FakeCredentialLeaseAuthority(),
+        transport=httpx.MockTransport(provider),
+    )
+
+    async def exercise() -> None:
+        with pytest.raises(BitbucketProviderReadError) as captured:
+            await adapter._read_bounded_bytes(
+                object(),
+                url="https://api.bitbucket.org/2.0/repositories/acme/mobile",
+                max_bytes=32,
+                expect_json=True,
+            )
+        assert captured.value.kind == expected_kind
+        await adapter.aclose()
+
+    asyncio.run(exercise())
+
+
+def test_source_json_and_raw_stream_accounting_are_closed_and_exact() -> None:
+    """Invalid JSON never escapes and unconsumed raw chunks are counted exactly once."""
+    responses = iter((b"{", b"[]", b"ab", b"cd"))
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        body = next(responses)
+        headers = {"x-oauth-scopes": "repository"}
+        if body in {b"{", b"[]"}:
+            headers["content-type"] = "application/json"
+        return httpx.Response(
+            200,
+            stream=ChunkStream(body),
+            headers=headers,
+            request=request,
+        )
+
+    adapter = BitbucketHttpAdapter(
+        settings=Settings(),
+        credential_leases=FakeCredentialLeaseAuthority(),
+        transport=httpx.MockTransport(provider),
+    )
+
+    async def exercise() -> None:
+        metadata_url = "https://api.bitbucket.org/2.0/repositories/acme/mobile"
+        for _ in range(2):
+            with pytest.raises(BitbucketProviderReadError) as captured:
+                await adapter._read_json(object(), url=metadata_url)
+            assert captured.value.kind == "invalid_source"
+        first = await adapter._read_bounded_bytes(
+            object(), url=metadata_url, max_bytes=2, expect_json=False
+        )
+        assert first == b"ab"
+        with pytest.raises(BitbucketProviderReadError) as oversized:
+            await adapter._read_bounded_bytes(
+                object(), url=metadata_url, max_bytes=1, expect_json=False
+            )
+        assert oversized.value.kind == "limit_exceeded"
+        await adapter.aclose()
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("scenario", "expected_kind"),
+    [
+        ("branch_mismatch", "invalid_source"),
+        ("duplicate", "invalid_source"),
+        ("missing_size", "invalid_source"),
+        ("oversized_read", "limit_exceeded"),
+    ],
+)
+def test_source_service_rejects_provider_inconsistency_after_each_boundary(
+    scenario: str,
+    expected_kind: str,
+) -> None:
+    from verboflex.services.repository_discovery import discover_repository_sources_for_record
+
+    commit_hash = "b" * 40
+
+    class IncoherentAdapter:
+        async def resolve_repository_branch(self, *_args: Any, **_kwargs: Any) -> BitbucketBranch:
+            name = "other" if scenario == "branch_mismatch" else "main"
+            return BitbucketBranch(name=name, commit_hash=commit_hash)
+
+        async def list_repository_source_page(
+            self, *_args: Any, **_kwargs: Any
+        ) -> BitbucketSourcePage:
+            if scenario == "duplicate":
+                entry = BitbucketSourceEntry(path="a.json", kind="file", size=1)
+                return BitbucketSourcePage(entries=(entry, entry), next_url=None)
+            size = None if scenario == "missing_size" else 0
+            return BitbucketSourcePage(
+                entries=(BitbucketSourceEntry(path="a.json", kind="file", size=size),),
+                next_url=None,
+            )
+
+        async def read_repository_source_file(self, *_args: Any, **_kwargs: Any) -> bytes:
+            return b"x" * 1_048_577
+
+    async def exercise() -> None:
+        with pytest.raises(BitbucketProviderReadError) as captured:
+            await discover_repository_sources_for_record(
+                object(),
+                repository=_repository(),
+                branch="main",
+                adapter=IncoherentAdapter(),
+            )
+        assert captured.value.kind == expected_kind
+
+    asyncio.run(exercise())
 
 
 def test_resolves_commit_then_streams_exact_bounded_source_candidates() -> None:

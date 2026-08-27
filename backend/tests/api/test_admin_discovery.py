@@ -23,7 +23,12 @@ from verboflex.auth.access_tokens import issue_access_token
 from verboflex.auth.passwords import hash_password
 from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
-from verboflex.integrations.bitbucket.client import BitbucketBranch
+from verboflex.integrations.bitbucket.client import (
+    BitbucketBranch,
+    BitbucketProviderReadError,
+    BitbucketSourceEntry,
+    BitbucketSourcePage,
+)
 from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.repository import Repository
@@ -160,6 +165,8 @@ class FakeDiscoveryAdapter:
     branches: tuple[FakeBranch, ...]
     failure_kind: str | None = None
     calls: list[tuple[str, str]] = field(default_factory=list)
+    source_bodies: dict[str, bytes] = field(default_factory=dict)
+    source_calls: list[str] = field(default_factory=list)
 
     async def list_repository_branches(
         self,
@@ -174,6 +181,45 @@ class FakeDiscoveryAdapter:
 
             raise BitbucketProviderReadError(kind=self.failure_kind)
         return self.branches
+
+    async def resolve_repository_branch(
+        self,
+        _session: Session,
+        *,
+        workspace: str,
+        repository_slug: str,
+        branch: str,
+    ) -> BitbucketBranch:
+        self.source_calls.append(f"resolve:{workspace}/{repository_slug}:{branch}")
+        if self.failure_kind is not None:
+            raise BitbucketProviderReadError(kind=self.failure_kind)
+        return BitbucketBranch(name=branch, commit_hash="a" * 40)
+
+    async def list_repository_source_page(
+        self,
+        _session: Session,
+        *,
+        directory_path: str | None,
+        **_kwargs: object,
+    ) -> BitbucketSourcePage:
+        self.source_calls.append(f"tree:{directory_path or '/'}")
+        return BitbucketSourcePage(
+            entries=tuple(
+                BitbucketSourceEntry(path=path, kind="file", size=len(body))
+                for path, body in self.source_bodies.items()
+            ),
+            next_url=None,
+        )
+
+    async def read_repository_source_file(
+        self,
+        _session: Session,
+        *,
+        path: str,
+        **_kwargs: object,
+    ) -> bytes:
+        self.source_calls.append(f"raw:{path}")
+        return self.source_bodies[path]
 
 
 @dataclass(frozen=True)
@@ -270,3 +316,58 @@ def test_provider_failures_are_typed_bounded_states(
         "state": state,
     }
     assert adapter.calls == [("acme", "mobile")]
+
+
+def test_admin_source_discovery_returns_metadata_only_and_maps_closed_failures(
+    discovery_session_factory: sessionmaker[Session],
+) -> None:
+    adapter = FakeDiscoveryAdapter(
+        branches=(),
+        source_bodies={"locales/en.json": b'{"hello":"Hello"}\n'},
+    )
+    _configure(discovery_session_factory, adapter)
+    token = _authority(discovery_session_factory, role="admin", email="source@example.com")
+    repository_id = _repository(discovery_session_factory)
+    path = f"{DISCOVERY_PATH}/{repository_id}/sources?branch=Main"
+
+    success = asyncio.run(_request(path, token=token))
+    assert success.status_code == 200
+    assert success.json() == {
+        "commit_hash": "a" * 40,
+        "files": [{"path": "locales/en.json", "size": 18}],
+        "total_bytes": 18,
+    }
+    assert "Hello" not in success.text
+    assert adapter.source_calls == [
+        "resolve:acme/mobile:Main",
+        "tree:/",
+        "raw:locales/en.json",
+    ]
+
+    adapter.failure_kind = "invalid_source"
+    failure = asyncio.run(_request(path, token=token))
+    assert failure.status_code == 422
+    assert failure.json() == {
+        "detail": "Bitbucket discovery unavailable",
+        "state": "invalid_source",
+    }
+
+
+def test_admin_source_discovery_handles_missing_adapter_and_repository_without_provider_calls(
+    discovery_session_factory: sessionmaker[Session],
+) -> None:
+    token = _authority(discovery_session_factory, role="admin", email="missing@example.com")
+    repository_id = _repository(discovery_session_factory)
+    _configure(discovery_session_factory, None)
+    unavailable = asyncio.run(
+        _request(f"{DISCOVERY_PATH}/{repository_id}/sources?branch=main", token=token)
+    )
+    assert unavailable.status_code == 503
+    assert unavailable.json()["state"] == "unavailable"
+
+    adapter = FakeDiscoveryAdapter(branches=())
+    _configure(discovery_session_factory, adapter)
+    missing = asyncio.run(_request(f"{DISCOVERY_PATH}/{uuid4()}/sources?branch=main", token=token))
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "Repository unavailable"}
+    assert adapter.source_calls == []
