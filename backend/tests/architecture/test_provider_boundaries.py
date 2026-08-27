@@ -88,6 +88,42 @@ def test_http_adapter_exports_only_current_read_capabilities_and_get_transport()
     }
 
 
+def test_http_adapter_pool_disables_redirects_proxies_and_retries() -> None:
+    """The pooled transport cannot regain ambient proxy, redirect, or retry behavior."""
+    tree = _client_tree()
+    calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)]
+
+    transport_call = next(
+        call
+        for call in calls
+        if isinstance(call.func, ast.Attribute)
+        and isinstance(call.func.value, ast.Name)
+        and call.func.value.id == "httpx"
+        and call.func.attr == "AsyncHTTPTransport"
+    )
+    assert {
+        keyword.arg: keyword.value.value
+        for keyword in transport_call.keywords
+        if isinstance(keyword.value, ast.Constant)
+    } == {"retries": 0}
+
+    client_call = next(
+        call
+        for call in calls
+        if isinstance(call.func, ast.Attribute)
+        and isinstance(call.func.value, ast.Name)
+        and call.func.value.id == "httpx"
+        and call.func.attr == "AsyncClient"
+    )
+    client_constants = {
+        keyword.arg: keyword.value.value
+        for keyword in client_call.keywords
+        if isinstance(keyword.value, ast.Constant)
+    }
+    assert client_constants["follow_redirects"] is False
+    assert client_constants["trust_env"] is False
+
+
 def test_http_adapter_has_no_excluded_provider_operation_names() -> None:
     """Provider opt-outs cannot appear as callable public adapter operations."""
     tree = _client_tree()
