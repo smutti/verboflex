@@ -186,6 +186,33 @@ def _separate_sides(raw_sides: object) -> tuple[MappingSideInput, MappingSideInp
     )
 
 
+def _side_rows(
+    sides: Iterable[tuple[str, UUID, str]],
+) -> list[ProductMappingRepositorySide]:
+    return [
+        ProductMappingRepositorySide(
+            role=role,
+            repository_id=repository_id,
+            source_branch=source_branch,
+        )
+        for role, repository_id, source_branch in sides
+    ]
+
+
+def _target_rows(
+    targets: Iterable[str],
+    *,
+    default_target: str,
+) -> list[ProductMappingAllowedTarget]:
+    return [
+        ProductMappingAllowedTarget(
+            branch=target,
+            is_default=target == default_target,
+        )
+        for target in targets
+    ]
+
+
 async def _validate_live_branches(
     session: Session,
     *,
@@ -552,20 +579,8 @@ async def create_direct_mapping(
                 revision_id=candidate.id,
                 topology="direct",
                 identity_key=identity_key,
-                sides=[
-                    ProductMappingRepositorySide(
-                        role="direct",
-                        repository_id=repository_id,
-                        source_branch=exact_source,
-                    )
-                ],
-                allowed_targets=[
-                    ProductMappingAllowedTarget(
-                        branch=target,
-                        is_default=target == default_target,
-                    )
-                    for target in targets
-                ],
+                sides=_side_rows((("direct", repository_id, exact_source),)),
+                allowed_targets=_target_rows(targets, default_target=default_target),
             )
             session.add(mapping)
             candidate.version += 1
@@ -639,20 +654,11 @@ async def update_direct_mapping(
             mapping.selected_layout_candidate_id = None
             mapping.selected_layout_version = None
             mapping.updated_at = datetime.now(UTC)
-            mapping.sides = [
-                ProductMappingRepositorySide(
-                    role="direct",
-                    repository_id=repository_id,
-                    source_branch=exact_source,
-                )
-            ]
-            mapping.allowed_targets = [
-                ProductMappingAllowedTarget(
-                    branch=target,
-                    is_default=target == default_target,
-                )
-                for target in targets
-            ]
+            mapping.sides = _side_rows((("direct", repository_id, exact_source),))
+            mapping.allowed_targets = _target_rows(
+                targets,
+                default_target=default_target,
+            )
             candidate.version += 1
             session.flush()
             return _record(mapping, candidate_version=candidate.version)
@@ -714,21 +720,11 @@ async def create_separate_mapping(
                 revision_id=candidate.id,
                 topology="separate",
                 identity_key=identity_key,
-                sides=[
-                    ProductMappingRepositorySide(
-                        role=side.role,
-                        repository_id=side.repository_id,
-                        source_branch=side.source_branch,
-                    )
+                sides=_side_rows(
+                    (side.role, side.repository_id, side.source_branch)
                     for side in (keys, translations)
-                ],
-                allowed_targets=[
-                    ProductMappingAllowedTarget(
-                        branch=target,
-                        is_default=target == default_target,
-                    )
-                    for target in targets
-                ],
+                ),
+                allowed_targets=_target_rows(targets, default_target=default_target),
             )
             session.add(mapping)
             candidate.version += 1
@@ -812,21 +808,13 @@ async def update_separate_mapping(
             mapping.selected_layout_candidate_id = None
             mapping.selected_layout_version = None
             mapping.updated_at = datetime.now(UTC)
-            mapping.sides = [
-                ProductMappingRepositorySide(
-                    role=side.role,
-                    repository_id=side.repository_id,
-                    source_branch=side.source_branch,
-                )
-                for side in (keys, translations)
-            ]
-            mapping.allowed_targets = [
-                ProductMappingAllowedTarget(
-                    branch=target,
-                    is_default=target == default_target,
-                )
-                for target in targets
-            ]
+            mapping.sides = _side_rows(
+                (side.role, side.repository_id, side.source_branch) for side in (keys, translations)
+            )
+            mapping.allowed_targets = _target_rows(
+                targets,
+                default_target=default_target,
+            )
             candidate.version += 1
             session.flush()
             return _record(mapping, candidate_version=candidate.version)
