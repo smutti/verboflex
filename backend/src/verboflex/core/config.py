@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     bitbucket_oauth_callback_uri: AnyHttpUrl | None = None
     bitbucket_oauth_post_callback_path: Literal["/admin/bitbucket"] = "/admin/bitbucket"
     bitbucket_token_encryption_keyring: SecretStr | None = None
+    bitbucket_http_connect_timeout_seconds: Literal[3] = 3
+    bitbucket_http_read_timeout_seconds: Literal[10] = 10
+    bitbucket_http_write_timeout_seconds: Literal[10] = 10
+    bitbucket_http_pool_timeout_seconds: Literal[3] = 3
 
     model_config = SettingsConfigDict(
         env_prefix="VERBOFLEX_",

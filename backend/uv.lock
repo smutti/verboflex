@@ -1799,6 +1799,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "email-validator" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pwdlib", extra = ["argon2"] },
     { name = "pydantic-settings" },
@@ -1816,7 +1817,6 @@ build = [
 dev = [
     { name = "detect-secrets" },
     { name = "diff-cover" },
-    { name = "httpx" },
     { name = "hypothesis" },
     { name = "mutmut" },
     { name = "mypy" },
@@ -1836,6 +1836,7 @@ requires-dist = [
     { name = "cryptography", specifier = "==50.0.1" },
     { name = "email-validator", specifier = "==2.3.0" },
     { name = "fastapi", specifier = "==0.141.1" },
+    { name = "httpx", specifier = "==0.28.1" },
     { name = "psycopg", extras = ["binary"], specifier = "==3.3.4" },
     { name = "pwdlib", extras = ["argon2"], specifier = "==0.3.1" },
     { name = "pydantic-settings", specifier = "==2.15.0" },
@@ -1851,7 +1852,6 @@ build = [{ name = "uv-build", specifier = "==0.11.12" }]
 dev = [
     { name = "detect-secrets", specifier = "==1.5.0" },
     { name = "diff-cover", specifier = "==10.5.1" },
-    { name = "httpx", specifier = "==0.28.1" },
     { name = "hypothesis", specifier = "==6.165.10" },
     { name = "mutmut", specifier = "==3.7.0" },
     { name = "mypy", specifier = "==2.3.1" },

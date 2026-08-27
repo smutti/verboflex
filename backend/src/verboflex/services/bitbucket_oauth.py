@@ -8,7 +8,7 @@ import json
 import secrets
 from base64 import b64encode
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from http.client import HTTPMessage
 from typing import IO, Literal, Protocol, cast
@@ -220,6 +220,14 @@ class BitbucketConnectionPublicStatus:
 
 
 @dataclass(frozen=True, slots=True)
+class BitbucketCredentialLease:
+    """One transient repository-read credential bound to a durable generation."""
+
+    generation: int
+    access_token: str = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
 class _OAuthStateBinding:
     admin_id: str
     session_id: str
@@ -367,6 +375,46 @@ class BitbucketOAuthService:
                 expires_at=connection.provider_expires_at,
                 revoked_at=connection.revoked_at,
             )
+
+    def acquire_repository_read_lease(self, session: Session) -> BitbucketCredentialLease:
+        """Decrypt one current access token without holding a lock across provider I/O."""
+        with session.begin():
+            connection = session.get(BitbucketConnection, 1)
+            self._require_readable_connection(connection)
+            assert connection is not None
+            assert connection.access_token_ciphertext is not None
+            try:
+                access_token = self._secret_box.decrypt(connection.access_token_ciphertext)
+            except SecretBoxDecryptionError as error:
+                raise OAuthConnectionUnavailable(CONNECTION_UNAVAILABLE_MESSAGE) from error
+            return BitbucketCredentialLease(
+                generation=connection.generation,
+                access_token=access_token,
+            )
+
+    @staticmethod
+    def require_current_repository_read_lease(
+        session: Session,
+        lease: BitbucketCredentialLease,
+    ) -> None:
+        """Reject provider work whose credential generation was locally superseded."""
+        with session.begin():
+            connection = session.get(BitbucketConnection, 1)
+            BitbucketOAuthService._require_readable_connection(connection)
+            assert connection is not None
+            if connection.generation != lease.generation:
+                raise OAuthGenerationRejected(GENERATION_REJECTED_MESSAGE)
+
+    @staticmethod
+    def _require_readable_connection(connection: BitbucketConnection | None) -> None:
+        if (
+            connection is None
+            or connection.revoked_at is not None
+            or connection.scope_profile != REPOSITORY_SCOPE
+            or connection.access_token_ciphertext is None
+            or connection.refresh_token_ciphertext is None
+        ):
+            raise OAuthConnectionUnavailable(CONNECTION_UNAVAILABLE_MESSAGE)
 
     def complete_callback(
         self,
