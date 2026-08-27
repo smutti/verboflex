@@ -32,6 +32,12 @@ from verboflex.db.session import get_db_session
 from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.product import Product, ProductRevision
+from verboflex.models.product_mapping import (
+    ProductMappingAllowedTarget,
+    ProductMappingRepositorySide,
+    ProductRepositoryMapping,
+)
+from verboflex.models.repository import Repository
 from verboflex.models.role import Role
 from verboflex.models.user import User
 from verboflex.services.products import list_products, normalize_product_name
@@ -274,6 +280,9 @@ def test_admin_create_and_detail_return_closed_active_and_candidate_summaries(
     assert product_paths == {
         ADMIN_PRODUCTS_PATH,
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}",
+        f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/deactivate",
+        f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/publish",
+        f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/reactivate",
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/candidate/mappings",
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/candidate/mappings/{{mapping_id}}",
     }
@@ -569,6 +578,91 @@ def _seed_active_product(
         product.active_revision_id = revision_id
         session.flush()
     return product_id, revision_id
+
+
+def _add_publishable_mapping(
+    session: Session,
+    *,
+    revision_id: UUID,
+    repository_id: UUID,
+) -> None:
+    """Attach a structurally complete mapping whose preview is deliberately absent."""
+    mapping = ProductRepositoryMapping(
+        revision_id=revision_id,
+        topology="direct",
+        identity_key=f'["direct","{repository_id}","main"]',
+        selected_layout_candidate_id=uuid4(),
+        selected_layout_version=1,
+        sides=[
+            ProductMappingRepositorySide(
+                role="direct",
+                repository_id=repository_id,
+                source_branch="main",
+            )
+        ],
+        allowed_targets=[
+            ProductMappingAllowedTarget(branch="release/1", is_default=True)
+        ],
+    )
+    session.add(mapping)
+
+
+def _seed_product_lifecycle_graph(
+    factory: sessionmaker[Session],
+) -> tuple[UUID, UUID, UUID]:
+    """Seed active and candidate revisions that can only fail on preview confirmation."""
+    product_id = uuid4()
+    active_id = uuid4()
+    candidate_id = uuid4()
+    repository_id = uuid4()
+    with factory.begin() as session:
+        product = Product(
+            id=product_id,
+            display_name=f"Lifecycle {product_id}",
+            name_key=f"lifecycle {product_id}",
+            is_active=True,
+        )
+        session.add(product)
+        session.flush()
+        session.add_all(
+            [
+                ProductRevision(
+                    id=active_id,
+                    product_id=product_id,
+                    description="active",
+                    version=6,
+                    is_published=True,
+                    published_at=datetime.now(UTC),
+                ),
+                ProductRevision(
+                    id=candidate_id,
+                    product_id=product_id,
+                    description="candidate",
+                    version=7,
+                    is_published=False,
+                ),
+                Repository(
+                    id=repository_id,
+                    workspace="lifecycle-team",
+                    repository_slug=f"repo-{repository_id.hex[:12]}",
+                ),
+            ]
+        )
+        session.flush()
+        _add_publishable_mapping(
+            session,
+            revision_id=active_id,
+            repository_id=repository_id,
+        )
+        _add_publishable_mapping(
+            session,
+            revision_id=candidate_id,
+            repository_id=repository_id,
+        )
+        session.flush()
+        product.active_revision_id = active_id
+        product.candidate_revision_id = candidate_id
+    return product_id, active_id, candidate_id
 
 
 def test_published_product_noop_and_candidate_creation_keep_active_summary_immutable(
@@ -884,3 +978,249 @@ def test_product_mutation_cors_preflight_allows_the_registered_patch_contract(
     )
     assert response.status_code == 200
     assert "PATCH" in response.headers["access-control-allow-methods"]
+
+
+def test_admin_product_lifecycle_is_guarded_atomic_and_preview_fail_closed(
+    product_session_factory: sessionmaker[Session],
+) -> None:
+    """Lifecycle routes expose committed state only and never bypass preview."""
+    _admin_id, admin_token = create_authority(
+        product_session_factory,
+        email="admin@example.com",
+        roles=("admin",),
+    )
+    _viewer_id, viewer_token = create_authority(
+        product_session_factory,
+        email="viewer@example.com",
+        roles=("viewer",),
+    )
+    product_id, active_id, candidate_id = _seed_product_lifecycle_graph(
+        product_session_factory
+    )
+    configure_dependencies(product_session_factory)
+
+    publish_path = f"{ADMIN_PRODUCTS_PATH}/{product_id}/publish"
+    deactivate_path = f"{ADMIN_PRODUCTS_PATH}/{product_id}/deactivate"
+    reactivate_path = f"{ADMIN_PRODUCTS_PATH}/{product_id}/reactivate"
+    publish_payload = {
+        "candidate_revision_id": str(candidate_id),
+        "expected_candidate_version": 7,
+    }
+    reactivate_payload = {
+        "active_revision_id": str(active_id),
+        "expected_active_version": 6,
+    }
+    before_denials = _product_graph(product_session_factory)
+
+    for token, expected_status in ((None, 401), (viewer_token, 403)):
+        for path, payload in (
+            (publish_path, publish_payload),
+            (deactivate_path, None),
+            (reactivate_path, reactivate_payload),
+        ):
+            denied = asyncio.run(
+                product_request(
+                    "POST",
+                    access_token=token,
+                    path=path,
+                    json_body=payload,
+                )
+            )
+            assert denied.status_code == expected_status
+            assert _product_graph(product_session_factory) == before_denials
+
+    before_publish = asyncio.run(
+        product_request(
+            "GET",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{product_id}",
+        )
+    ).json()
+    blocked_publish = asyncio.run(
+        product_request(
+            "POST",
+            access_token=admin_token,
+            path=publish_path,
+            json_body=publish_payload,
+        )
+    )
+    assert blocked_publish.status_code == 409
+    assert blocked_publish.json() == {
+        "detail": "Product publication blocked",
+        "blockers": ["preview_confirmation_required"],
+    }
+    after_blocked_publish = asyncio.run(
+        product_request(
+            "GET",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{product_id}",
+        )
+    ).json()
+    assert after_blocked_publish == before_publish
+
+    deactivated = asyncio.run(
+        product_request(
+            "POST",
+            access_token=admin_token,
+            path=deactivate_path,
+        )
+    )
+    assert deactivated.status_code == 200
+    assert deactivated.json() == {
+        **before_publish,
+        "is_active": False,
+    }
+    assert deactivated.json()["active_revision"] == before_publish["active_revision"]
+    assert deactivated.json()["candidate_revision"] == before_publish["candidate_revision"]
+
+    blocked_reactivation = asyncio.run(
+        product_request(
+            "POST",
+            access_token=admin_token,
+            path=reactivate_path,
+            json_body=reactivate_payload,
+        )
+    )
+    assert blocked_reactivation.status_code == 409
+    assert blocked_reactivation.json() == {
+        "detail": "Product publication blocked",
+        "blockers": ["preview_confirmation_required"],
+    }
+    after_blocked_reactivation = asyncio.run(
+        product_request(
+            "GET",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{product_id}",
+        )
+    )
+    assert after_blocked_reactivation.status_code == 200
+    assert after_blocked_reactivation.json() == deactivated.json()
+
+    repeated_deactivation = asyncio.run(
+        product_request(
+            "POST",
+            access_token=admin_token,
+            path=deactivate_path,
+        )
+    )
+    assert repeated_deactivation.status_code == 200
+    assert repeated_deactivation.json() == deactivated.json()
+
+
+def test_product_lifecycle_conflicts_are_stable_closed_and_non_mutating(
+    product_session_factory: sessionmaker[Session],
+) -> None:
+    """Stale lifecycle inputs share one bounded 409 without durable side effects."""
+    _admin_id, admin_token = create_authority(
+        product_session_factory,
+        email="admin@example.com",
+        roles=("admin",),
+    )
+    product_id, active_id, candidate_id = _seed_product_lifecycle_graph(
+        product_session_factory
+    )
+    configure_dependencies(product_session_factory)
+    before = _product_graph(product_session_factory)
+
+    stale_calls = (
+        (
+            f"{ADMIN_PRODUCTS_PATH}/{product_id}/publish",
+            {
+                "candidate_revision_id": str(candidate_id),
+                "expected_candidate_version": 6,
+            },
+        ),
+        (
+            f"{ADMIN_PRODUCTS_PATH}/{product_id}/publish",
+            {
+                "candidate_revision_id": str(uuid4()),
+                "expected_candidate_version": 7,
+            },
+        ),
+        (
+            f"{ADMIN_PRODUCTS_PATH}/{product_id}/reactivate",
+            {
+                "active_revision_id": str(active_id),
+                "expected_active_version": 5,
+            },
+        ),
+    )
+    for path, payload in stale_calls:
+        conflict = asyncio.run(
+            product_request(
+                "POST",
+                access_token=admin_token,
+                path=path,
+                json_body=payload,
+            )
+        )
+        assert conflict.status_code == 409
+        assert conflict.json() == {
+            "detail": "Product lifecycle conflict",
+            "blockers": [],
+        }
+        assert _product_graph(product_session_factory) == before
+
+    unknown = uuid4()
+    for path, payload in (
+        (
+            f"{ADMIN_PRODUCTS_PATH}/{unknown}/publish",
+            {
+                "candidate_revision_id": str(candidate_id),
+                "expected_candidate_version": 7,
+            },
+        ),
+        (f"{ADMIN_PRODUCTS_PATH}/{unknown}/deactivate", None),
+        (
+            f"{ADMIN_PRODUCTS_PATH}/{unknown}/reactivate",
+            {
+                "active_revision_id": str(active_id),
+                "expected_active_version": 6,
+            },
+        ),
+    ):
+        missing = asyncio.run(
+            product_request(
+                "POST",
+                access_token=admin_token,
+                path=path,
+                json_body=payload,
+            )
+        )
+        assert missing.status_code == 404
+        assert missing.json() == {"detail": "Product unavailable"}
+        assert _product_graph(product_session_factory) == before
+
+
+def test_product_lifecycle_surface_exposes_no_provider_or_translation_write_capability(
+    product_session_factory: sessionmaker[Session],
+) -> None:
+    """The lifecycle API remains a product-pointer boundary, never a provider writer."""
+    configure_dependencies(product_session_factory)
+    schema = app.openapi()
+    lifecycle_operations = {
+        path: schema["paths"][path]
+        for path in (
+            f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/publish",
+            f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/deactivate",
+            f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/reactivate",
+        )
+    }
+    assert {path: set(item) for path, item in lifecycle_operations.items()} == {
+        path: {"post"} for path in lifecycle_operations
+    }
+    serialized = json.dumps(lifecycle_operations, sort_keys=True).casefold()
+    for forbidden in (
+        "branch_create",
+        "canonical_translation",
+        "commit_create",
+        "provider_write",
+        "pull_request_create",
+        "webhook_create",
+    ):
+        assert forbidden not in serialized
+
+    for path, operation in lifecycle_operations.items():
+        post = operation["post"]
+        assert post["security"] == [{"OAuth2PasswordBearer": []}]
+        assert "409" in post["responses"] or path.endswith("/deactivate")
