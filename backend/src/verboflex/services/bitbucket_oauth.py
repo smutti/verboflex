@@ -6,10 +6,15 @@ import base64
 import hashlib
 import json
 import secrets
+from base64 import b64encode
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Protocol
+from http.client import HTTPMessage
+from typing import IO, Literal, Protocol, cast
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import HTTPRedirectHandler, OpenerDirector, Request, build_opener
 from uuid import UUID
 
 from sqlalchemy import select
@@ -38,6 +43,10 @@ SETTINGS_REQUIRED_MESSAGE = "Bitbucket OAuth settings are required"
 INVALID_KEYRING_MESSAGE = "Bitbucket token encryption keyring is invalid"
 GENERATION_REJECTED_MESSAGE = "Bitbucket connection generation rejected"
 CONNECTION_UNAVAILABLE_MESSAGE = "Bitbucket connection unavailable"
+BITBUCKET_AUTHORIZE_URL = "https://bitbucket.org/site/oauth2/authorize"
+BITBUCKET_TOKEN_URL = "https://bitbucket.org/site/oauth2/access_token"
+TOKEN_EXCHANGE_TIMEOUT_SECONDS = 10
+MAX_TOKEN_RESPONSE_BYTES = 65_536
 
 
 class RedisOAuthStateClient(Protocol):
@@ -89,6 +98,95 @@ class OAuthConnectionUnavailable(RuntimeError):
     """Bound provider or ciphertext failures without exposing diagnostics."""
 
 
+class _RejectRedirects(HTTPRedirectHandler):
+    """Keep provider credentials on the one exact token endpoint."""
+
+    def redirect_request(
+        self,
+        request: Request,
+        file_pointer: IO[bytes],
+        code: int,
+        message: str,
+        headers: HTTPMessage,
+        new_url: str,
+    ) -> Request | None:
+        return None
+
+
+class BitbucketOAuthTokenExchange:
+    """Bounded standard-library adapter for Bitbucket's exact OAuth token endpoint."""
+
+    def __init__(self, *, opener: OpenerDirector | None = None) -> None:
+        self._opener = opener or build_opener(_RejectRedirects())
+
+    def exchange_authorization_code(
+        self,
+        *,
+        code: str,
+        callback_uri: str,
+        client_id: str,
+        client_secret: str,
+    ) -> Mapping[str, object]:
+        return self._exchange(
+            fields={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": callback_uri,
+            },
+            client_id=client_id,
+            client_secret=client_secret,
+        )
+
+    def refresh_tokens(
+        self,
+        *,
+        refresh_token: str,
+        client_id: str,
+        client_secret: str,
+    ) -> Mapping[str, object]:
+        return self._exchange(
+            fields={"grant_type": "refresh_token", "refresh_token": refresh_token},
+            client_id=client_id,
+            client_secret=client_secret,
+        )
+
+    def _exchange(
+        self,
+        *,
+        fields: Mapping[str, str],
+        client_id: str,
+        client_secret: str,
+    ) -> Mapping[str, object]:
+        credentials = b64encode(f"{client_id}:{client_secret}".encode()).decode("ascii")
+        request = Request(
+            BITBUCKET_TOKEN_URL,
+            data=urlencode(fields).encode("ascii"),
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"Basic {credentials}",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            method="POST",
+        )
+        try:
+            with self._opener.open(
+                request,
+                timeout=TOKEN_EXCHANGE_TIMEOUT_SECONDS,
+            ) as response:
+                payload = response.read(MAX_TOKEN_RESPONSE_BYTES + 1)
+        except (HTTPError, URLError, OSError, TimeoutError) as error:
+            raise OAuthCallbackRejected(CALLBACK_REJECTED_MESSAGE) from error
+        if len(payload) > MAX_TOKEN_RESPONSE_BYTES:
+            raise OAuthCallbackRejected(CALLBACK_REJECTED_MESSAGE)
+        try:
+            decoded = json.loads(payload)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise OAuthCallbackRejected(CALLBACK_REJECTED_MESSAGE) from error
+        if not isinstance(decoded, dict):
+            raise OAuthCallbackRejected(CALLBACK_REJECTED_MESSAGE)
+        return cast(dict[str, object], decoded)
+
+
 @dataclass(frozen=True, slots=True)
 class BitbucketConnectionStatus:
     """Bounded provider state safe for later API projection."""
@@ -104,6 +202,21 @@ class OAuthCallbackResult:
 
     redirect_path: str
     status: BitbucketConnectionStatus
+
+
+@dataclass(frozen=True, slots=True)
+class BitbucketConnectionPublicStatus:
+    """Timestamp-bounded connection projection with no credential generation."""
+
+    state: Literal[
+        "disconnected",
+        "connected",
+        "reauthorization_required",
+        "unavailable",
+    ]
+    connected_at: datetime | None
+    expires_at: datetime | None
+    revoked_at: datetime | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,6 +307,67 @@ class BitbucketOAuthService:
             raise OAuthCallbackRejected(CALLBACK_REJECTED_MESSAGE)
         return state
 
+    def start_current(
+        self,
+        session: Session,
+        *,
+        admin_id: UUID,
+        session_id: UUID,
+    ) -> str:
+        """Bind a new authorization flow to the current durable generation."""
+        with session.begin():
+            connection = session.get(BitbucketConnection, 1)
+            if connection is None:
+                raise OAuthConnectionUnavailable(CONNECTION_UNAVAILABLE_MESSAGE)
+            generation = connection.generation
+        return self.start(
+            admin_id=admin_id,
+            session_id=session_id,
+            expected_generation=generation,
+        )
+
+    def authorization_url(self, state: str) -> str:
+        """Build the exact static-consumer authorization request without scope expansion."""
+        query = urlencode(
+            {
+                "client_id": self._client_id,
+                "response_type": "code",
+                "state": state,
+            }
+        )
+        return f"{BITBUCKET_AUTHORIZE_URL}?{query}"
+
+    def public_status(self, session: Session) -> BitbucketConnectionPublicStatus:
+        """Read one bounded status without decrypting or exposing credential metadata."""
+        with session.begin():
+            connection = session.get(BitbucketConnection, 1)
+            if connection is None:
+                return BitbucketConnectionPublicStatus(
+                    state="unavailable",
+                    connected_at=None,
+                    expires_at=None,
+                    revoked_at=None,
+                )
+            has_access = connection.access_token_ciphertext is not None
+            has_refresh = connection.refresh_token_ciphertext is not None
+            if has_access != has_refresh:
+                state: Literal[
+                    "disconnected",
+                    "connected",
+                    "reauthorization_required",
+                    "unavailable",
+                ] = "unavailable"
+            elif connection.revoked_at is not None or not has_access:
+                state = "disconnected"
+            else:
+                state = "connected"
+            return BitbucketConnectionPublicStatus(
+                state=state,
+                connected_at=connection.connected_at,
+                expires_at=connection.provider_expires_at,
+                revoked_at=connection.revoked_at,
+            )
+
     def complete_callback(
         self,
         session: Session,
@@ -215,6 +389,34 @@ class BitbucketOAuthService:
             callback_uri=callback_uri,
             post_callback_path=post_callback_path,
         )
+        return self._complete_bound_callback(session, binding=binding, code=code)
+
+    def complete_callback_from_state(
+        self,
+        session: Session,
+        *,
+        state: object,
+        code: object,
+        callback_uri: object,
+        post_callback_path: object,
+    ) -> OAuthCallbackResult:
+        """Complete a callback using only the consumed state as user authority."""
+        binding = self._consume_binding(state)
+        self._require_callback_destination(
+            binding,
+            code=code,
+            callback_uri=callback_uri,
+            post_callback_path=post_callback_path,
+        )
+        return self._complete_bound_callback(session, binding=binding, code=code)
+
+    def _complete_bound_callback(
+        self,
+        session: Session,
+        *,
+        binding: _OAuthStateBinding,
+        code: object,
+    ) -> OAuthCallbackResult:
         connected_at = datetime.now(UTC)
         with session.begin():
             connection = self._lock_connection(session)
@@ -360,6 +562,51 @@ class BitbucketOAuthService:
             )
         return status
 
+    def revoke_current(
+        self,
+        session: Session,
+        *,
+        actor_id: UUID,
+    ) -> BitbucketConnectionStatus:
+        """Invalidate whichever generation is current at lock acquisition."""
+        revoked_at = datetime.now(UTC)
+        changed = False
+        with session.begin():
+            connection = self._lock_connection(session)
+            previous_generation = connection.generation
+            if (
+                connection.revoked_at is not None
+                and connection.access_token_ciphertext is None
+                and connection.refresh_token_ciphertext is None
+            ):
+                status = BitbucketConnectionStatus(
+                    state="revoked",
+                    generation=connection.generation,
+                    scope_profile=connection.scope_profile or REPOSITORY_SCOPE,
+                )
+            else:
+                connection.generation += 1
+                connection.access_token_ciphertext = None
+                connection.refresh_token_ciphertext = None
+                connection.provider_expires_at = None
+                connection.revoked_at = revoked_at
+                session.flush()
+                changed = True
+                status = BitbucketConnectionStatus(
+                    state="revoked",
+                    generation=connection.generation,
+                    scope_profile=connection.scope_profile or REPOSITORY_SCOPE,
+                )
+        if changed:
+            self._emit_lifecycle_event(
+                action="bitbucket.revoked",
+                actor_id=actor_id,
+                from_generation=previous_generation,
+                to_generation=status.generation,
+                occurred_at=revoked_at,
+            )
+        return status
+
     @staticmethod
     def _lock_connection(session: Session) -> BitbucketConnection:
         return session.execute(
@@ -429,6 +676,22 @@ class BitbucketOAuthService:
             or not code
             or str(admin_id) != binding.admin_id
             or str(session_id) != binding.session_id
+            or callback_uri != binding.callback_uri
+            or post_callback_path != binding.post_callback_path
+        ):
+            raise OAuthCallbackRejected(CALLBACK_REJECTED_MESSAGE)
+
+    @staticmethod
+    def _require_callback_destination(
+        binding: _OAuthStateBinding,
+        *,
+        code: object,
+        callback_uri: object,
+        post_callback_path: object,
+    ) -> None:
+        if (
+            not isinstance(code, str)
+            or not code
             or callback_uri != binding.callback_uri
             or post_callback_path != binding.post_callback_path
         ):

@@ -44,6 +44,7 @@ class Principal:
     display_name: str
     roles: tuple[RoleName, ...]
     must_change_password: bool
+    session_id: UUID | None = None
 
 
 def _require_current_user(user: User | None, *, token_version: int) -> User:
@@ -98,6 +99,7 @@ def load_principal(
         display_name=user.display_name,
         roles=roles,
         must_change_password=user.must_change_password,
+        session_id=claims.session_id,
     )
 
 
