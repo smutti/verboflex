@@ -477,6 +477,8 @@ def test_repository_api_is_closed_credential_free_and_provider_read_free(
     assert repository_paths == {
         ADMIN_REPOSITORIES_PATH,
         f"{ADMIN_REPOSITORIES_PATH}/{{repository_id}}",
+        f"{ADMIN_REPOSITORIES_PATH}/{{repository_id}}/branches",
+        f"{ADMIN_REPOSITORIES_PATH}/{{repository_id}}/sources",
     }
     request_schema = app.openapi()["components"]["schemas"]["AdminRepositoryCreateRequest"]
     response_schema = app.openapi()["components"]["schemas"]["AdminRepositoryResponse"]
