@@ -378,18 +378,20 @@ class BitbucketHttpAdapter:
                 chunks: list[bytes] = []
                 byte_count = 0
                 if response.is_stream_consumed:
-                    chunks_to_count = (response.content,)
-                    for chunk in chunks_to_count:
-                        byte_count += len(chunk)
-                        if byte_count > max_bytes:
-                            raise BitbucketProviderReadError(kind="limit_exceeded")
-                        chunks.append(chunk)
+                    byte_count = self._append_bounded_chunk(
+                        chunks,
+                        byte_count=byte_count,
+                        chunk=response.content,
+                        max_bytes=max_bytes,
+                    )
                 else:
                     async for chunk in response.aiter_raw():
-                        byte_count += len(chunk)
-                        if byte_count > max_bytes:
-                            raise BitbucketProviderReadError(kind="limit_exceeded")
-                        chunks.append(chunk)
+                        byte_count = self._append_bounded_chunk(
+                            chunks,
+                            byte_count=byte_count,
+                            chunk=chunk,
+                            max_bytes=max_bytes,
+                        )
             self._credential_leases.require_current_repository_read_lease(session, lease)
             return b"".join(chunks)
         except BitbucketProviderReadError:
@@ -404,6 +406,21 @@ class BitbucketHttpAdapter:
             raise BitbucketProviderReadError(kind="timeout") from None
         except Exception:
             raise BitbucketProviderReadError() from None
+
+    @staticmethod
+    def _append_bounded_chunk(
+        chunks: list[bytes],
+        *,
+        byte_count: int,
+        chunk: bytes,
+        max_bytes: int,
+    ) -> int:
+        """Count each transport byte exactly once before retaining it in memory."""
+        next_count = byte_count + len(chunk)
+        if next_count > max_bytes:
+            raise BitbucketProviderReadError(kind="limit_exceeded")
+        chunks.append(chunk)
+        return next_count
 
     async def aclose(self) -> None:
         """Close the one process-scoped connection pool explicitly."""
