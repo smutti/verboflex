@@ -347,9 +347,7 @@ def test_android_preview_completes_read_only(
     """Run commit-bound Android discovery through the durable worker and API."""
     _configure_dependencies(preview_session_factory)
     admin_token = _create_authority(preview_session_factory, role_name="admin")
-    product_id, _active_id, candidate_id, mapping_id = _seed_preview_graph(
-        preview_session_factory
-    )
+    product_id, _active_id, candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
     enqueuer = PersistedUuidEnqueuer(preview_session_factory)
     app.state.preview_job_enqueuer = enqueuer
     adapter = ReadOnlyAndroidSourceAdapter(
@@ -467,8 +465,7 @@ def test_android_preview_completes_read_only(
     }
     assert [event[0] for event in adapter.events] == ["resolve", "list", "read", "read"]
     assert all(
-        COMMIT_HASH in detail or operation == "resolve"
-        for operation, detail in adapter.events
+        COMMIT_HASH in detail or operation == "resolve" for operation, detail in adapter.events
     )
     with preview_session_factory() as session:
         assert session.scalar(text("SELECT count(*) FROM preview_jobs")) == 1
