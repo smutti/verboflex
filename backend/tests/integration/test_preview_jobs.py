@@ -333,9 +333,7 @@ async def _request(
         transport=httpx.ASGITransport(app=app),
         base_url="http://testserver",
     ) as client:
-        headers = (
-            {"Authorization": f"Bearer {access_token}"} if access_token is not None else None
-        )
+        headers = {"Authorization": f"Bearer {access_token}"} if access_token is not None else None
         return await client.request(
             method,
             path,
@@ -1402,9 +1400,7 @@ def test_new_commit_makes_an_inflight_completion_stale_and_nonconfirmable(
     """A worker started for an older commit cannot restore current confirmation authority."""
     _configure_dependencies(preview_session_factory)
     admin_token = _create_authority(preview_session_factory, role_name="admin")
-    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(
-        preview_session_factory
-    )
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
     with preview_session_factory() as session:
         stale = create_or_reuse_preview_job(
             session,
@@ -1468,12 +1464,8 @@ def test_nonconfirmable_preview_states_expose_no_confirmation_action(
     """Queued, empty, failed, and timed-out work cannot assign a mapping layout."""
     _configure_dependencies(preview_session_factory)
     admin_token = _create_authority(preview_session_factory, role_name="admin")
-    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(
-        preview_session_factory
-    )
-    commit_hash = {"queued": "1", "empty": "2", "failed": "3", "timed_out": "4"}[
-        terminal
-    ] * 40
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    commit_hash = {"queued": "1", "empty": "2", "failed": "3", "timed_out": "4"}[terminal] * 40
     with preview_session_factory() as session:
         job = create_or_reuse_preview_job(
             session,
@@ -1484,7 +1476,9 @@ def test_nonconfirmable_preview_states_expose_no_confirmation_action(
             enqueuer=lambda _job_id: None,
         )
     if terminal == "empty":
-        execute_preview_job(preview_session_factory, job_id=job.id, processor=skeleton_preview_processor)
+        execute_preview_job(
+            preview_session_factory, job_id=job.id, processor=skeleton_preview_processor
+        )
     elif terminal == "failed":
         execute_preview_job(
             preview_session_factory,
