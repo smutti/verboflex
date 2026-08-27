@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 1
+open_count: 0
 waived_count: 0
-fixed_count: 9
-total_count: 10
-last_updated: 2026-08-27T07:45:12.335Z
+fixed_count: 14
+total_count: 14
+last_updated: 2026-08-27T11:26:35.292Z
 ---
 
 # Broken Windows Ledger
@@ -24,7 +24,11 @@ last_updated: 2026-08-27T07:45:12.335Z
 | 7 | 01 | stub | docker-compose.yml | 76 | Compose worker command and healthcheck target the Celery app intentionally deferred to Plan 01-08 | fixed |  | 2026-08-24T15:36:10.327Z | 2026-08-26T08:13:30.166Z |
 | 8 | 02 | deviation | backend/tests/api/test_admin_repositories.py |  | Closed repository validation branches and added reproducible mutation proof after the first coverage gate reported 93.36%. | fixed |  | 2026-08-27T06:02:12.251Z | 2026-08-27T06:03:19.868Z |
 | 9 | 02 | deviation | backend/tests/api/test_openapi_contract.py |  | Added exact repository operations and regenerated canonical OpenAPI after full regression exposed contract drift. | fixed |  | 2026-08-27T06:02:12.311Z | 2026-08-27T06:03:19.935Z |
-| 10 | 02 | deviation | backend/tests/unit/services/test_admin_users.py | 159 | Randomized parameter order can expose nondeterministic persisted role ordering; isolated and deterministic full runs pass. | open |  | 2026-08-27T07:45:12.335Z |  |
+| 10 | 02 | deviation | backend/tests/unit/services/test_admin_users.py | 159 | Randomized parameter order can expose nondeterministic persisted role ordering; isolated and deterministic full runs pass. | fixed |  | 2026-08-27T07:45:12.335Z | 2026-08-27T11:26:11.588Z |
+| 11 | 02 | deviation | backend/tests/api/test_openapi_contract.py |  | Corrected a RED assertion whose generic content token collided with required OpenAPI media metadata. | fixed |  | 2026-08-27T11:26:24.789Z | 2026-08-27T11:26:35.111Z |
+| 12 | 02 | deviation | frontend/src/api/client/index.ts |  | Regenerated the checked-in TypeScript client after canonical discovery operations changed. | fixed |  | 2026-08-27T11:26:24.852Z | 2026-08-27T11:26:35.171Z |
+| 13 | 02 | deviation | tools/verify_bitbucket_http_adapter_mutants.py |  | Realigned the prior HTTP mutation subject with the new streamed response implementation. | fixed |  | 2026-08-27T11:26:24.911Z | 2026-08-27T11:26:35.233Z |
+| 14 | 02 | deviation | backend/tests/api/test_admin_repositories.py |  | Expanded the repository surface regression after full randomized tests exposed the approved read-only subresources. | fixed |  | 2026-08-27T11:26:24.970Z | 2026-08-27T11:26:35.292Z |
 
 ````json
 [
@@ -143,10 +147,58 @@ last_updated: 2026-08-27T07:45:12.335Z
     "file": "backend/tests/unit/services/test_admin_users.py",
     "line": 159,
     "description": "Randomized parameter order can expose nondeterministic persisted role ordering; isolated and deterministic full runs pass.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-27T07:45:12.335Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-27T11:26:11.588Z"
+  },
+  {
+    "id": 11,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "backend/tests/api/test_openapi_contract.py",
+    "line": null,
+    "description": "Corrected a RED assertion whose generic content token collided with required OpenAPI media metadata.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-27T11:26:24.789Z",
+    "resolved_at": "2026-08-27T11:26:35.111Z"
+  },
+  {
+    "id": 12,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "frontend/src/api/client/index.ts",
+    "line": null,
+    "description": "Regenerated the checked-in TypeScript client after canonical discovery operations changed.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-27T11:26:24.852Z",
+    "resolved_at": "2026-08-27T11:26:35.171Z"
+  },
+  {
+    "id": 13,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "tools/verify_bitbucket_http_adapter_mutants.py",
+    "line": null,
+    "description": "Realigned the prior HTTP mutation subject with the new streamed response implementation.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-27T11:26:24.911Z",
+    "resolved_at": "2026-08-27T11:26:35.233Z"
+  },
+  {
+    "id": 14,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "backend/tests/api/test_admin_repositories.py",
+    "line": null,
+    "description": "Expanded the repository surface regression after full randomized tests exposed the approved read-only subresources.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-27T11:26:24.970Z",
+    "resolved_at": "2026-08-27T11:26:35.292Z"
   }
 ]
 ````

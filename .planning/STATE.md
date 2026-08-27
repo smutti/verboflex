@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-06-PLAN.md
-last_updated: "2026-08-27T10:43:05.767Z"
+stopped_at: Completed 02-07-PLAN.md
+last_updated: "2026-08-27T11:29:38.830Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 02 execution started
-state_head: 019b6c3e459fc3cb7cc3410208b08f8d1c49b75e
+state_head: 0afdfdc223ddf7c0ad60e589e80c124cfdfc5bb7
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 35
-  completed_plans: 21
+  completed_plans: 22
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 7 of 20
+Plan: 8 of 20
 Status: Ready to execute
 Last activity: 2026-08-26 — Phase 02 execution started
 
@@ -79,6 +79,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P04 | 32min | 3 tasks | 11 files |
 | Phase 02 P05 | 26min | 2 tasks | 15 files |
 | Phase 02 P06 | 20min | 2 tasks | 11 files |
+| Phase 02 P07 | 37min | 2 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -168,6 +169,10 @@ Recent decisions affecting current work:
 - [Phase 02]: Expose only repository metadata, branch list/detail, and commit-bound source tree/raw reads; reject every other Bitbucket endpoint family before credential acquisition.
 - [Phase 02]: Use one pooled HTTPX client with redirects, ambient proxy trust, content decoding, and hidden retries disabled or constrained at construction.
 - [Phase 02]: Treat a generation change during a response as revocation and discard the provider result even after an HTTP success.
+- [Phase 02]: Preserve Bitbucket branch spelling and provider order; expose pagination only through a bounded application-owned opaque cursor.
+- [Phase 02]: Resolve branch authority once, then use only the immutable commit hash for every source tree and raw read.
+- [Phase 02]: Treat every A-03 budget, continuation, encoding, redirect, or generation violation as a typed blocking failure rather than returning partial data.
+- [Phase 02]: Keep raw provider source bytes backend-only; public discovery responses expose only commit, path, size, and aggregate byte metadata.
 
 ### Pending Todos
 
@@ -200,6 +205,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-27T10:43:05.733Z
-Stopped at: Completed 02-06-PLAN.md
+Last session: 2026-08-27T11:29:38.792Z
+Stopped at: Completed 02-07-PLAN.md
 Resume file: None
