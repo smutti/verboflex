@@ -1421,6 +1421,17 @@ def test_new_commit_makes_an_inflight_completion_stale_and_nonconfirmable(
             commits={"direct": "b" * 40},
             enqueuer=lambda _job_id: None,
         )
+    with preview_session_factory() as session:
+        historical_reuse = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    assert historical_reuse.id == stale.id
+    assert historical_reuse.is_current is False
 
     stale_result = _confirmable_processor(stale_identity)
     _finish_preview_job(
