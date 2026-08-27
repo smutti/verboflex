@@ -133,10 +133,7 @@ class _StringsLexer:
                 return
             if self._source.startswith("//", self._position):
                 self._position += 2
-                while (
-                    self._position < self._length
-                    and self._source[self._position] not in "\r\n"
-                ):
+                while self._position < self._length and self._source[self._position] not in "\r\n":
                     self._position += 1
                 continue
             if self._source.startswith("/*", self._position):
@@ -213,12 +210,16 @@ def parse_ios_strings(content: bytes) -> tuple[IosStringsEntry, ...]:
     return _StringsLexer(_decode_ios_strings(content)).parse()
 
 
-def _ios_layout_path(path: str) -> tuple[str, str] | None:
+def _ios_path_components(path: str) -> list[str] | None:
     if not path or path.startswith("/") or "//" in path or not path.endswith(".strings"):
         return None
     components = path.split("/")
     if any(not component or component in {".", ".."} for component in components):
         return None
+    return components
+
+
+def _lproj_locale_components(components: list[str]) -> list[tuple[int, str]] | None:
     locale_components: list[tuple[int, str]] = []
     for index, component in enumerate(components[:-1]):
         if not component.endswith(".lproj"):
@@ -227,6 +228,16 @@ def _ios_layout_path(path: str) -> tuple[str, str] | None:
         if locale is None:
             return None
         locale_components.append((index, locale))
+    return locale_components
+
+
+def _ios_layout_path(path: str) -> tuple[str, str] | None:
+    components = _ios_path_components(path)
+    if components is None:
+        return None
+    locale_components = _lproj_locale_components(components)
+    if locale_components is None:
+        return None
     if len(locale_components) != 1:
         return None
     index, language = locale_components[0]

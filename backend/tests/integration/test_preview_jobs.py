@@ -478,9 +478,7 @@ def test_all_four_formats_return_separate_exact_layout_candidates(
     preview_session_factory: sessionmaker[Session],
 ) -> None:
     """Persist four deterministic candidates through one durable worker processor."""
-    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(
-        preview_session_factory
-    )
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
     with preview_session_factory() as session:
         created = create_or_reuse_preview_job(
             session,
@@ -497,7 +495,7 @@ def test_all_four_formats_return_separate_exact_layout_candidates(
             ),
             "desktop/app_en.ts": (
                 b'<TS version="2.1" language="en"><context><name>Main</name>'
-                b'<message><source>hello</source><translation>Hello</translation>'
+                b"<message><source>hello</source><translation>Hello</translation>"
                 b"</message></context></TS>"
             ),
             "web/catalog.json": b'{"en":{"hello":"Hello"}}',

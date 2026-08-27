@@ -34,12 +34,12 @@ def _candidate_count(content: bytes, *, path: str = "Base/en.lproj/Localizable.s
     (
         b'"welcome.title" = "Welcome";\n"button.ok" = "OK";',
         b'\xef\xbb\xbf/* heading */\n"welcome.title"/* key */=// join\n"Welcome";',
-        b'"quote" = "Say \\\"hello\\\"";\n"line" = "one\\ntwo\\t\\\\";',
+        b'"quote" = "Say \\"hello\\"";\n"line" = "one\\ntwo\\t\\\\";',
         b'"accent" = "caf\\U00E9";',
         b'"emoji" = "\\UD83D\\UDE00";',
         b'"hello"="Hello"; // valid comment at end of file',
-        b'\xff\xfe' + '"welcome.title" = "Benvenuto";'.encode("utf-16-le"),
-        b'\xfe\xff' + '"welcome.title" = "Benvenuto";'.encode("utf-16-be"),
+        b"\xff\xfe" + '"welcome.title" = "Benvenuto";'.encode("utf-16-le"),
+        b"\xfe\xff" + '"welcome.title" = "Benvenuto";'.encode("utf-16-be"),
     ),
     ids=(
         "utf8",
@@ -113,8 +113,8 @@ def test_ios_groups_languages_by_one_exact_lproj_path_layout() -> None:
     (
         '"hello"="Hello";'.encode("utf-16-le"),
         '"hello"="Hello";'.encode("utf-16-be"),
-        b'\xff\xfe\x00\x00' + '"hello"="Hello";'.encode("utf-32-le"),
-        b'\x00\x00\xfe\xff' + '"hello"="Hello";'.encode("utf-32-be"),
+        b"\xff\xfe\x00\x00" + '"hello"="Hello";'.encode("utf-32-le"),
+        b"\x00\x00\xfe\xff" + '"hello"="Hello";'.encode("utf-32-be"),
         b'\xff"hello"="Hello";',
         b'"hello"="Hel\xfflo";',
         b'"hello"="Hel\x00lo";',
@@ -154,7 +154,7 @@ def test_ios_rejects_unsupported_or_malformed_encodings(content: bytes) -> None:
         b'hello = "Hello";',
         b'"hello" = Hello;',
         b'"" = "blank";',
-        b'/* comments only */',
+        b"/* comments only */",
     ),
     ids=(
         "missing-semicolon",
