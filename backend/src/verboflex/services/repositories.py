@@ -10,7 +10,7 @@ import unicodedata
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
-from sqlalchemy import ColumnElement, String, and_, func, literal, or_, select
+from sqlalchemy import ColumnElement, String, func, literal, select, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -230,24 +230,17 @@ def list_repositories(
         statement = select(Repository)
         if position is not None:
             statement = statement.where(
-                or_(
-                    sort_key > position.sort_key,
-                    and_(
-                        sort_key == position.sort_key,
-                        or_(
-                            Repository.workspace > position.workspace,
-                            and_(
-                                Repository.workspace == position.workspace,
-                                or_(
-                                    Repository.repository_slug > position.repository_slug,
-                                    and_(
-                                        Repository.repository_slug == position.repository_slug,
-                                        Repository.id > position.repository_id,
-                                    ),
-                                ),
-                            ),
-                        ),
-                    ),
+                tuple_(
+                    sort_key,
+                    Repository.workspace,
+                    Repository.repository_slug,
+                    Repository.id,
+                )
+                > tuple_(
+                    literal(position.sort_key),
+                    literal(position.workspace),
+                    literal(position.repository_slug),
+                    literal(position.repository_id),
                 )
             )
         repositories = list(
