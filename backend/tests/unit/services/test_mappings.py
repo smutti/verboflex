@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from alembic import command
 from verboflex.integrations.bitbucket.client import BitbucketBranch
 from verboflex.models.product import Product, ProductRevision
+from verboflex.models.product_mapping import ProductRepositoryMapping
 from verboflex.models.repository import Repository
 
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
@@ -229,6 +230,80 @@ def _update_direct(
                 expected_candidate_version=expected_version,
                 repository_id=repository_id,
                 source_branch=source_branch,
+                allowed_target_branches=allowed_targets,
+                default_target_branch=default_target,
+                adapter=adapter,
+            )
+        )
+
+
+def _separate_sides(
+    module: ModuleType,
+    *,
+    keys_repository_id: UUID,
+    translations_repository_id: UUID,
+    keys_branch: str = "keys/main",
+    translations_branch: str = "translations/main",
+) -> tuple[Any, Any]:
+    return (
+        module.MappingSideInput(
+            role="keys",
+            repository_id=keys_repository_id,
+            source_branch=keys_branch,
+        ),
+        module.MappingSideInput(
+            role="translations",
+            repository_id=translations_repository_id,
+            source_branch=translations_branch,
+        ),
+    )
+
+
+def _create_separate(
+    module: ModuleType,
+    factory: sessionmaker[Session],
+    *,
+    product_id: UUID,
+    sides: Sequence[Any],
+    expected_version: int,
+    adapter: BranchAdapter,
+    allowed_targets: Sequence[str] = ("release/1", "release/2"),
+    default_target: str = "release/1",
+) -> Any:
+    with factory() as session:
+        return asyncio.run(
+            module.create_separate_mapping(
+                session,
+                product_id=product_id,
+                expected_candidate_version=expected_version,
+                repository_sides=sides,
+                allowed_target_branches=allowed_targets,
+                default_target_branch=default_target,
+                adapter=adapter,
+            )
+        )
+
+
+def _update_separate(
+    module: ModuleType,
+    factory: sessionmaker[Session],
+    *,
+    product_id: UUID,
+    mapping_id: UUID,
+    sides: Sequence[Any],
+    expected_version: int,
+    adapter: BranchAdapter,
+    allowed_targets: Sequence[str] = ("release/1", "release/2"),
+    default_target: str = "release/1",
+) -> Any:
+    with factory() as session:
+        return asyncio.run(
+            module.update_separate_mapping(
+                session,
+                product_id=product_id,
+                mapping_id=mapping_id,
+                expected_candidate_version=expected_version,
+                repository_sides=sides,
                 allowed_target_branches=allowed_targets,
                 default_target_branch=default_target,
                 adapter=adapter,
@@ -652,6 +727,173 @@ def test_repository_reuse_never_shares_mapping_configuration_between_products(
     assert second_after.primary_source_branch == "develop"
     assert second_after.allowed_target_branches == ("release/2",)
     assert second_after.default_target_branch == "release/2"
+
+
+def test_separate_mapping_requires_exact_keys_and_translations_sides(
+    mapping_database: tuple[Config, sessionmaker[Session]],
+) -> None:
+    """Separate keeps one mapping UUID with two explicit reusable repository sides."""
+    _config, factory = mapping_database
+    module = _mapping_module()
+    models = _mapping_models()
+    product_id, active_id, candidate_id, keys_repository_id = _seed_candidate_graph(factory)
+    translations_repository_id = uuid4()
+    with factory.begin() as session:
+        session.add(
+            Repository(
+                id=translations_repository_id,
+                workspace="translations-team",
+                repository_slug=f"translations-{translations_repository_id.hex[:12]}",
+            )
+        )
+    adapter = BranchAdapter(("keys/main", "translations/main", "release/1", "release/2"))
+    sides = _separate_sides(
+        module,
+        keys_repository_id=keys_repository_id,
+        translations_repository_id=translations_repository_id,
+    )
+    before_active, _before_candidate = _revision_snapshot(
+        factory,
+        product_id=product_id,
+        active_id=active_id,
+        candidate_id=candidate_id,
+    )
+
+    created = _create_separate(
+        module,
+        factory,
+        product_id=product_id,
+        sides=sides,
+        expected_version=4,
+        adapter=adapter,
+    )
+
+    assert created.topology == "separate"
+    assert created.primary_repository_id == keys_repository_id
+    assert created.primary_source_branch == "keys/main"
+    assert created.translations_repository_id == translations_repository_id
+    assert created.translations_source_branch == "translations/main"
+    assert created.allowed_target_branches == ("release/1", "release/2")
+    assert created.default_target_branch == "release/1"
+    assert created.candidate_version == 5
+    assert adapter.calls == [
+        ("mobile-team", f"repo-{keys_repository_id.hex[:12]}"),
+        (
+            "translations-team",
+            f"translations-{translations_repository_id.hex[:12]}",
+        ),
+    ]
+    with factory() as session:
+        persisted = session.get_one(models.ProductRepositoryMapping, created.id)
+        assert persisted.revision_id == candidate_id
+        assert [side.role for side in persisted.sides] == ["keys", "translations"]
+    assert (
+        _revision_snapshot(
+            factory,
+            product_id=product_id,
+            active_id=active_id,
+            candidate_id=candidate_id,
+        )[0]
+        == before_active
+    )
+
+    invalid_sides = (
+        sides[:1],
+        (*sides, module.MappingSideInput("keys", keys_repository_id, "other")),
+        (sides[0], module.MappingSideInput("keys", translations_repository_id, "other")),
+    )
+    after_create = _revision_snapshot(
+        factory,
+        product_id=product_id,
+        active_id=active_id,
+        candidate_id=candidate_id,
+    )
+    for invalid in invalid_sides:
+        with pytest.raises(module.InvalidMappingInput, match="exact keys and translations"):
+            _create_separate(
+                module,
+                factory,
+                product_id=product_id,
+                sides=invalid,
+                expected_version=5,
+                adapter=adapter,
+            )
+    assert (
+        _revision_snapshot(
+            factory,
+            product_id=product_id,
+            active_id=active_id,
+            candidate_id=candidate_id,
+        )
+        == after_create
+    )
+
+
+def test_topology_change_preserves_mapping_identity_and_invalidates_layout(
+    mapping_database: tuple[Config, sessionmaker[Session]],
+) -> None:
+    """Direct-to-separate replacement clears preview authority, never active state."""
+    _config, factory = mapping_database
+    module = _mapping_module()
+    product_id, active_id, candidate_id, keys_repository_id = _seed_candidate_graph(factory)
+    translations_repository_id = uuid4()
+    with factory.begin() as session:
+        session.add(
+            Repository(
+                id=translations_repository_id,
+                workspace="translations-team",
+                repository_slug=f"translations-{translations_repository_id.hex[:12]}",
+            )
+        )
+    adapter = BranchAdapter(("main", "keys/main", "translations/main", "release/1", "release/2"))
+    direct = _create_direct(
+        module,
+        factory,
+        product_id=product_id,
+        repository_id=keys_repository_id,
+        expected_version=4,
+        adapter=adapter,
+    )
+    selected_layout_id = uuid4()
+    with factory.begin() as session:
+        persisted = session.get_one(ProductRepositoryMapping, direct.id)
+        persisted.selected_layout_candidate_id = selected_layout_id
+        persisted.selected_layout_version = 7
+    before_active = _revision_snapshot(
+        factory,
+        product_id=product_id,
+        active_id=active_id,
+        candidate_id=candidate_id,
+    )[0]
+
+    changed = _update_separate(
+        module,
+        factory,
+        product_id=product_id,
+        mapping_id=direct.id,
+        sides=_separate_sides(
+            module,
+            keys_repository_id=keys_repository_id,
+            translations_repository_id=translations_repository_id,
+        ),
+        expected_version=5,
+        adapter=adapter,
+    )
+
+    assert changed.id == direct.id
+    assert changed.topology == "separate"
+    assert changed.selected_layout_candidate_id is None
+    assert changed.selected_layout_version is None
+    assert changed.candidate_version == 6
+    assert (
+        _revision_snapshot(
+            factory,
+            product_id=product_id,
+            active_id=active_id,
+            candidate_id=candidate_id,
+        )[0]
+        == before_active
+    )
 
 
 def test_schema_is_reversible_revision_owned_and_has_no_manual_or_lifecycle_controls(

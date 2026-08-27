@@ -283,6 +283,36 @@ def _direct_payload(
     }
 
 
+def _separate_payload(
+    keys_repository_id: UUID,
+    translations_repository_id: UUID,
+    *,
+    expected_version: int = 4,
+    keys_branch: str = "keys/main",
+    translations_branch: str = "translations/main",
+    allowed_targets: Sequence[str] = ("release/1", "release/2"),
+    default_target: str = "release/1",
+) -> dict[str, object]:
+    return {
+        "topology": "separate",
+        "sides": [
+            {
+                "role": "keys",
+                "repository_id": str(keys_repository_id),
+                "source_branch": keys_branch,
+            },
+            {
+                "role": "translations",
+                "repository_id": str(translations_repository_id),
+                "source_branch": translations_branch,
+            },
+        ],
+        "allowed_target_branches": list(allowed_targets),
+        "default_target_branch": default_target,
+        "expected_candidate_version": expected_version,
+    }
+
+
 def _persist_mapping(
     session: Session,
     *,
@@ -639,6 +669,161 @@ def test_mapping_collection_uses_exact_tuple_order_and_stable_opaque_pages(
             )
         ).status_code
         == 422
+    )
+
+
+def test_separate_mapping_api_is_closed_versioned_and_topology_safe(
+    mapping_session_factory: sessionmaker[Session],
+) -> None:
+    """Separate requires Keys/Translations and preserves mapping/active identity."""
+    product_id, active_id, _candidate_id = _seed_candidate(mapping_session_factory)
+    keys_repository_id = _seed_repository(mapping_session_factory)
+    translations_repository_id = _seed_repository(mapping_session_factory)
+    adapter = BranchAdapter(("main", "keys/main", "translations/main", "release/1", "release/2"))
+    _configure_dependencies(mapping_session_factory, adapter)
+    admin_token = _create_authority(
+        mapping_session_factory,
+        email="separate-admin@example.com",
+        roles=("admin",),
+    )
+    before_active = _active_snapshot(
+        mapping_session_factory,
+        product_id=product_id,
+        active_id=active_id,
+    )
+
+    direct = asyncio.run(
+        _request(
+            "POST",
+            path=_mapping_path(product_id),
+            access_token=admin_token,
+            json_body=_direct_payload(keys_repository_id),
+        )
+    )
+    assert direct.status_code == 201
+    mapping_id = UUID(direct.json()["id"])
+    with mapping_session_factory.begin() as session:
+        persisted = session.get_one(ProductRepositoryMapping, mapping_id)
+        persisted.selected_layout_candidate_id = uuid4()
+        persisted.selected_layout_version = 3
+
+    changed = asyncio.run(
+        _request(
+            "PATCH",
+            path=_mapping_path(product_id, mapping_id),
+            access_token=admin_token,
+            json_body=_separate_payload(
+                keys_repository_id,
+                translations_repository_id,
+                expected_version=5,
+            ),
+        )
+    )
+    assert changed.status_code == 200
+    assert changed.json() == {
+        "id": str(mapping_id),
+        "topology": "separate",
+        "primary_repository_id": str(keys_repository_id),
+        "primary_source_branch": "keys/main",
+        "translations_repository_id": str(translations_repository_id),
+        "translations_source_branch": "translations/main",
+        "allowed_target_branches": ["release/1", "release/2"],
+        "default_target_branch": "release/1",
+        "selected_layout_candidate_id": None,
+        "selected_layout_version": None,
+        "candidate_version": 6,
+    }
+    assert (
+        _active_snapshot(
+            mapping_session_factory,
+            product_id=product_id,
+            active_id=active_id,
+        )
+        == before_active
+    )
+
+    for field, expected_field in (
+        ("keys_branch", "keys_source_branch"),
+        ("translations_branch", "translations_source_branch"),
+    ):
+        payload = _separate_payload(
+            keys_repository_id,
+            translations_repository_id,
+            expected_version=6,
+            **{field: "Missing"},
+        )
+        conflict = asyncio.run(
+            _request(
+                "PATCH",
+                path=_mapping_path(product_id, mapping_id),
+                access_token=admin_token,
+                json_body=payload,
+            )
+        )
+        assert conflict.status_code == 409
+        assert conflict.json() == {
+            "detail": "Source branch unavailable",
+            "field": expected_field,
+        }
+
+
+@pytest.mark.parametrize("side_shape", ["missing", "duplicate", "extra"])
+def test_separate_mapping_api_rejects_missing_duplicate_or_extra_roles(
+    mapping_session_factory: sessionmaker[Session],
+    side_shape: str,
+) -> None:
+    """The closed payload accepts exactly one Keys and one Translations side."""
+    product_id, active_id, _candidate_id = _seed_candidate(mapping_session_factory)
+    keys_repository_id = _seed_repository(mapping_session_factory)
+    translations_repository_id = _seed_repository(mapping_session_factory)
+    adapter = BranchAdapter(("keys/main", "translations/main", "release/1", "release/2"))
+    _configure_dependencies(mapping_session_factory, adapter)
+    admin_token = _create_authority(
+        mapping_session_factory,
+        email=f"side-{side_shape}@example.com",
+        roles=("admin",),
+    )
+    before_active = _active_snapshot(
+        mapping_session_factory,
+        product_id=product_id,
+        active_id=active_id,
+    )
+    payload = _separate_payload(keys_repository_id, translations_repository_id)
+    sides = list(payload["sides"])
+    if side_shape == "missing":
+        sides.pop()
+    elif side_shape == "duplicate":
+        sides[1] = {**sides[1], "role": "keys"}
+    else:
+        sides.append(
+            {
+                "role": "keys",
+                "repository_id": str(uuid4()),
+                "source_branch": "other",
+            }
+        )
+    payload["sides"] = sides
+
+    response = asyncio.run(
+        _request(
+            "POST",
+            path=_mapping_path(product_id),
+            access_token=admin_token,
+            json_body=payload,
+        )
+    )
+
+    assert response.status_code == 422
+    assert adapter.calls == []
+    with mapping_session_factory() as session:
+        assert session.scalar(select(ProductRepositoryMapping.id)) is None
+    assert (
+        _active_snapshot(
+            mapping_session_factory,
+            product_id=product_id,
+            active_id=active_id,
+        )
+        == before_active
     )
 
 
