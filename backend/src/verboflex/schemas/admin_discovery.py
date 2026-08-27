@@ -19,6 +19,21 @@ class AdminBranchListResponse(BaseModel):
     next_cursor: str | None
 
 
+class AdminSourceFileResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    size: int
+
+
+class AdminSourceDiscoveryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    commit_hash: str
+    files: list[AdminSourceFileResponse]
+    total_bytes: int
+
+
 class AdminDiscoveryErrorResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -30,4 +45,6 @@ class AdminDiscoveryErrorResponse(BaseModel):
         "not_found",
         "unavailable",
         "timeout",
+        "invalid_source",
+        "limit_exceeded",
     ]

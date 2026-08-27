@@ -6,15 +6,19 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal, Protocol, cast
+from urllib.parse import urlsplit
 
 import httpx
 from sqlalchemy.orm import Session
 
 from verboflex.core.config import Settings
 from verboflex.integrations.bitbucket.urls import (
+    repository_branch_url,
     repository_branches_url,
     repository_metadata_url,
+    repository_source_url,
     validate_bitbucket_api_url,
+    validate_repository_relative_path,
 )
 from verboflex.services.bitbucket_oauth import (
     REPOSITORY_SCOPE,
@@ -33,7 +37,11 @@ ProviderFailureKind = Literal[
     "not_found",
     "unavailable",
     "timeout",
+    "invalid_source",
+    "limit_exceeded",
 ]
+
+_MAX_JSON_RESPONSE_BYTES = 1_048_576
 
 
 class BitbucketProviderReadError(RuntimeError):
@@ -50,6 +58,23 @@ class BitbucketBranch:
 
     name: str
     commit_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class BitbucketSourceEntry:
+    """One provider source-tree entry with a normalized repository path."""
+
+    path: str
+    kind: Literal["file", "directory"]
+    size: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class BitbucketSourcePage:
+    """One source-tree page and its validated opaque continuation URL."""
+
+    entries: tuple[BitbucketSourceEntry, ...]
+    next_url: str | None
 
 
 class BitbucketCredentialLeaseAuthority(Protocol):
@@ -136,6 +161,74 @@ class BitbucketHttpAdapter:
             branches.extend(page_branches)
         return tuple(branches)
 
+    async def resolve_repository_branch(
+        self,
+        session: Session,
+        *,
+        workspace: str,
+        repository_slug: str,
+        branch: str,
+    ) -> BitbucketBranch:
+        """Resolve one exact branch name to its current immutable commit hash."""
+        url = repository_branch_url(
+            workspace=workspace,
+            repository_slug=repository_slug,
+            branch=branch,
+        )
+        resolved = self._parse_branch(await self._read_json(session, url=url))
+        if resolved.name != branch:
+            raise BitbucketProviderReadError(kind="invalid_source")
+        return resolved
+
+    async def list_repository_source_page(
+        self,
+        session: Session,
+        *,
+        workspace: str,
+        repository_slug: str,
+        commit_hash: str,
+        directory_path: str | None,
+        next_url: str | None = None,
+    ) -> BitbucketSourcePage:
+        """Read one commit-bound directory page through a validated continuation."""
+        source_url = repository_source_url(
+            workspace=workspace,
+            repository_slug=repository_slug,
+            commit_hash=commit_hash,
+            path=directory_path,
+            paginated=True,
+        )
+        url = next_url or source_url
+        if urlsplit(validate_bitbucket_api_url(url)).path != urlsplit(source_url).path:
+            raise BitbucketProviderReadError(kind="invalid_source")
+        return self._parse_source_page(await self._read_json(session, url=url))
+
+    async def read_repository_source_file(
+        self,
+        session: Session,
+        *,
+        workspace: str,
+        repository_slug: str,
+        commit_hash: str,
+        path: str,
+        max_bytes: int,
+    ) -> bytes:
+        """Stream one raw commit-bound file and fail before its byte ceiling is crossed."""
+        if max_bytes < 0:
+            raise BitbucketProviderReadError(kind="limit_exceeded")
+        url = repository_source_url(
+            workspace=workspace,
+            repository_slug=repository_slug,
+            commit_hash=commit_hash,
+            path=path,
+        )
+        return await self._read_bounded_bytes(
+            session,
+            url=url,
+            max_bytes=max_bytes,
+            expect_json=False,
+        )
+
     @classmethod
     def _parse_branch_page(
         cls,
@@ -173,7 +266,69 @@ class BitbucketHttpAdapter:
             raise BitbucketProviderReadError()
         return BitbucketBranch(name=name, commit_hash=commit_hash)
 
+    @staticmethod
+    def _parse_source_page(page: Mapping[str, object]) -> BitbucketSourcePage:
+        values = page.get("values")
+        if not isinstance(values, list):
+            raise BitbucketProviderReadError(kind="invalid_source")
+        entries: list[BitbucketSourceEntry] = []
+        for raw_entry in values:
+            if not isinstance(raw_entry, dict):
+                raise BitbucketProviderReadError(kind="invalid_source")
+            raw_path = raw_entry.get("path")
+            raw_type = raw_entry.get("type")
+            raw_size = raw_entry.get("size")
+            if not isinstance(raw_path, str):
+                raise BitbucketProviderReadError(kind="invalid_source")
+            try:
+                path = validate_repository_relative_path(raw_path)
+            except ValueError:
+                raise BitbucketProviderReadError(kind="invalid_source") from None
+            if raw_type == "commit_directory":
+                if raw_size is not None:
+                    raise BitbucketProviderReadError(kind="invalid_source")
+                entries.append(BitbucketSourceEntry(path=path, kind="directory", size=None))
+            elif raw_type == "commit_file":
+                if not isinstance(raw_size, int) or isinstance(raw_size, bool) or raw_size < 0:
+                    raise BitbucketProviderReadError(kind="invalid_source")
+                entries.append(BitbucketSourceEntry(path=path, kind="file", size=raw_size))
+            else:
+                raise BitbucketProviderReadError(kind="invalid_source")
+        raw_next = page.get("next")
+        if raw_next is None:
+            next_url = None
+        elif isinstance(raw_next, str):
+            try:
+                next_url = validate_bitbucket_api_url(raw_next)
+            except ValueError:
+                raise BitbucketProviderReadError(kind="invalid_source") from None
+        else:
+            raise BitbucketProviderReadError(kind="invalid_source")
+        return BitbucketSourcePage(entries=tuple(entries), next_url=next_url)
+
     async def _read_json(self, session: Session, *, url: str) -> Mapping[str, object]:
+        payload = await self._read_bounded_bytes(
+            session,
+            url=url,
+            max_bytes=_MAX_JSON_RESPONSE_BYTES,
+            expect_json=True,
+        )
+        try:
+            decoded = json.loads(payload)
+        except json.JSONDecodeError, UnicodeDecodeError:
+            raise BitbucketProviderReadError(kind="invalid_source") from None
+        if not isinstance(decoded, dict):
+            raise BitbucketProviderReadError(kind="invalid_source")
+        return cast(dict[str, object], decoded)
+
+    async def _read_bounded_bytes(
+        self,
+        session: Session,
+        *,
+        url: str,
+        max_bytes: int,
+        expect_json: bool,
+    ) -> bytes:
         validated_url = validate_bitbucket_api_url(url)
         lease = self._credential_leases.acquire_repository_read_lease(session)
         try:
@@ -187,7 +342,7 @@ class BitbucketHttpAdapter:
                     location = response.headers.get("location")
                     if location is not None:
                         validate_bitbucket_api_url(location)
-                    raise BitbucketProviderReadError()
+                    raise BitbucketProviderReadError(kind="invalid_source")
                 if not 200 <= response.status_code < 300:
                     kind: ProviderFailureKind
                     if response.status_code == 401:
@@ -203,18 +358,48 @@ class BitbucketHttpAdapter:
                     raise BitbucketProviderReadError(kind=kind)
                 if response.headers.get("x-oauth-scopes") != REPOSITORY_SCOPE:
                     raise BitbucketProviderReadError(kind="permission_denied")
-                payload = await response.aread()
+                content_encoding = response.headers.get("content-encoding")
+                if content_encoding not in {None, "identity"}:
+                    raise BitbucketProviderReadError(kind="invalid_source")
+                if expect_json:
+                    media_type = response.headers.get("content-type", "").split(";", 1)[0]
+                    if media_type != "application/json":
+                        raise BitbucketProviderReadError(kind="invalid_source")
+                content_length = response.headers.get("content-length")
+                if content_length is not None:
+                    try:
+                        declared_length = int(content_length)
+                    except ValueError:
+                        raise BitbucketProviderReadError(kind="invalid_source") from None
+                    if declared_length < 0:
+                        raise BitbucketProviderReadError(kind="invalid_source")
+                    if declared_length > max_bytes:
+                        raise BitbucketProviderReadError(kind="limit_exceeded")
+                chunks: list[bytes] = []
+                byte_count = 0
+                if response.is_stream_consumed:
+                    chunks_to_count = (response.content,)
+                    for chunk in chunks_to_count:
+                        byte_count += len(chunk)
+                        if byte_count > max_bytes:
+                            raise BitbucketProviderReadError(kind="limit_exceeded")
+                        chunks.append(chunk)
+                else:
+                    async for chunk in response.aiter_raw():
+                        byte_count += len(chunk)
+                        if byte_count > max_bytes:
+                            raise BitbucketProviderReadError(kind="limit_exceeded")
+                        chunks.append(chunk)
             self._credential_leases.require_current_repository_read_lease(session, lease)
-            decoded = json.loads(payload)
-            if not isinstance(decoded, dict):
-                raise BitbucketProviderReadError()
-            return cast(dict[str, object], decoded)
+            return b"".join(chunks)
         except BitbucketProviderReadError:
             raise
         except OAuthConnectionUnavailable:
             raise BitbucketProviderReadError(kind="disconnected") from None
         except OAuthGenerationRejected:
             raise BitbucketProviderReadError(kind="reauthorization_required") from None
+        except httpx.DecodingError:
+            raise BitbucketProviderReadError(kind="invalid_source") from None
         except httpx.TimeoutException:
             raise BitbucketProviderReadError(kind="timeout") from None
         except Exception:
@@ -230,4 +415,6 @@ __all__ = [
     "BitbucketBranch",
     "BitbucketHttpAdapter",
     "BitbucketProviderReadError",
+    "BitbucketSourceEntry",
+    "BitbucketSourcePage",
 ]

@@ -17,12 +17,15 @@ from verboflex.schemas.admin_discovery import (
     AdminBranchListResponse,
     AdminBranchResponse,
     AdminDiscoveryErrorResponse,
+    AdminSourceDiscoveryResponse,
+    AdminSourceFileResponse,
 )
 from verboflex.schemas.system import ErrorResponse
 from verboflex.schemas.users import RoleName
 from verboflex.services.repositories import RepositoryNotFound
 from verboflex.services.repository_discovery import (
     InvalidBranchCursor,
+    discover_live_repository_sources,
     list_live_repository_branches,
 )
 
@@ -50,7 +53,7 @@ DISCOVERY_RESPONSES: dict[int | str, dict[str, Any]] = {
     **AUTH_RESPONSES,
     status.HTTP_404_NOT_FOUND: {"model": ErrorResponse | AdminDiscoveryErrorResponse},
     status.HTTP_409_CONFLICT: {"model": AdminDiscoveryErrorResponse},
-    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse | AdminDiscoveryErrorResponse},
     status.HTTP_503_SERVICE_UNAVAILABLE: {"model": AdminDiscoveryErrorResponse},
     status.HTTP_504_GATEWAY_TIMEOUT: {"model": AdminDiscoveryErrorResponse},
 }
@@ -62,6 +65,8 @@ _STATUS_BY_FAILURE = {
     "not_found": status.HTTP_404_NOT_FOUND,
     "unavailable": status.HTTP_503_SERVICE_UNAVAILABLE,
     "timeout": status.HTTP_504_GATEWAY_TIMEOUT,
+    "invalid_source": status.HTTP_422_UNPROCESSABLE_CONTENT,
+    "limit_exceeded": status.HTTP_422_UNPROCESSABLE_CONTENT,
 }
 
 
@@ -108,6 +113,46 @@ async def list_admin_repository_branches(
             for branch in page.items
         ],
         next_cursor=page.next_cursor,
+    )
+
+
+@router.get(
+    "/{repository_id}/sources",
+    operation_id="discover_admin_repository_sources",
+    response_model=AdminSourceDiscoveryResponse,
+    responses=DISCOVERY_RESPONSES,
+)
+async def discover_admin_repository_sources(
+    repository_id: UUID,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+    adapter: DiscoveryAdapter,
+    branch: Annotated[str, Query(min_length=1, max_length=255)],
+) -> AdminSourceDiscoveryResponse | JSONResponse:
+    """Return commit-bound candidate metadata while keeping raw bytes backend-only."""
+    if adapter is None:
+        return _failure_response(BitbucketProviderReadError(kind="unavailable"))
+    try:
+        snapshot = await discover_live_repository_sources(
+            session,
+            repository_id=repository_id,
+            branch=branch,
+            adapter=adapter,
+        )
+    except RepositoryNotFound as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository unavailable",
+        ) from error
+    except BitbucketProviderReadError as error:
+        return _failure_response(error)
+    return AdminSourceDiscoveryResponse(
+        commit_hash=snapshot.commit_hash,
+        files=[
+            AdminSourceFileResponse(path=file.path, size=len(file.content))
+            for file in snapshot.files
+        ],
+        total_bytes=snapshot.total_bytes,
     )
 
 

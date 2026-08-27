@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import quote, urlencode, urlsplit
+from urllib.parse import quote, unquote, urlencode, urlsplit
 
 BITBUCKET_API_HOST = "api.bitbucket.org"
 BITBUCKET_API_ORIGIN = f"https://{BITBUCKET_API_HOST}"
@@ -20,9 +20,30 @@ _ALLOWED_READ_PATHS = (
     ),
     re.compile(
         rf"{_REPOSITORY_READ_BASE}/src/[0-9A-Fa-f]{{40}}"
-        rf"(?:/[^\\]*)?"
+        rf"(?:/{_ENCODED_PATH_SEGMENT}(?:/{_ENCODED_PATH_SEGMENT})*)?/?"
     ),
 )
+
+
+def _source_path_is_safe(path: str) -> bool:
+    marker = "/src/"
+    if marker not in path:
+        return True
+    suffix = path.split(marker, 1)[1]
+    parts = suffix.split("/")[1:]
+    for encoded_part in parts:
+        if not encoded_part:
+            continue
+        decoded_part = unquote(encoded_part)
+        if (
+            decoded_part in {".", ".."}
+            or "/" in decoded_part
+            or "\\" in decoded_part
+            or "\x00" in decoded_part
+            or not decoded_part.isprintable()
+        ):
+            return False
+    return True
 
 
 def validate_bitbucket_api_url(url: str) -> str:
@@ -41,6 +62,7 @@ def validate_bitbucket_api_url(url: str) -> str:
         or parsed.password is not None
         or port is not None
         or not any(pattern.fullmatch(parsed.path) for pattern in _ALLOWED_READ_PATHS)
+        or not _source_path_is_safe(parsed.path)
         or parsed.fragment
     ):
         raise ValueError(BITBUCKET_URL_REJECTED_MESSAGE)
@@ -65,3 +87,72 @@ def repository_branches_url(*, workspace: str, repository_slug: str) -> str:
     """Build the live branch collection with Bitbucket's maximum page size."""
     base = repository_metadata_url(workspace=workspace, repository_slug=repository_slug)
     return validate_bitbucket_api_url(f"{base}/refs/branches?{urlencode({'pagelen': 100})}")
+
+
+def repository_branch_url(
+    *,
+    workspace: str,
+    repository_slug: str,
+    branch: str,
+) -> str:
+    """Build one exact branch-detail endpoint without interpreting its spelling."""
+    if (
+        not isinstance(branch, str)
+        or not branch
+        or len(branch) > 255
+        or "\\" in branch
+        or "\x00" in branch
+        or not branch.isprintable()
+    ):
+        raise ValueError(BITBUCKET_URL_REJECTED_MESSAGE)
+    base = repository_branches_url(
+        workspace=workspace,
+        repository_slug=repository_slug,
+    ).split("?", 1)[0]
+    return validate_bitbucket_api_url(f"{base}/{quote(branch, safe='')}")
+
+
+def validate_repository_relative_path(path: str) -> str:
+    """Return one printable repository-relative POSIX path without traversal."""
+    if (
+        not isinstance(path, str)
+        or not path
+        or len(path) > 4096
+        or path.startswith("/")
+        or path.endswith("/")
+        or "\\" in path
+        or "\x00" in path
+        or not path.isprintable()
+    ):
+        raise ValueError(BITBUCKET_URL_REJECTED_MESSAGE)
+    parts = path.split("/")
+    if any(not part or part in {".", ".."} for part in parts):
+        raise ValueError(BITBUCKET_URL_REJECTED_MESSAGE)
+    return "/".join(parts)
+
+
+def repository_source_url(
+    *,
+    workspace: str,
+    repository_slug: str,
+    commit_hash: str,
+    path: str | None = None,
+    paginated: bool = False,
+) -> str:
+    """Build one commit-bound source tree or raw-file endpoint."""
+    if (
+        not isinstance(commit_hash, str)
+        or len(commit_hash) != 40
+        or any(character not in "0123456789abcdefABCDEF" for character in commit_hash)
+    ):
+        raise ValueError(BITBUCKET_URL_REJECTED_MESSAGE)
+    base = repository_metadata_url(workspace=workspace, repository_slug=repository_slug)
+    url = f"{base}/src/{commit_hash}/"
+    if path is not None:
+        encoded_path = "/".join(
+            quote(part, safe="") for part in validate_repository_relative_path(path).split("/")
+        )
+        url = f"{url}{encoded_path}"
+    if paginated:
+        url = f"{url}?{urlencode({'pagelen': 100})}"
+    return validate_bitbucket_api_url(url)
