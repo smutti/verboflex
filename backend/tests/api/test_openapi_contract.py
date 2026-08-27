@@ -457,6 +457,8 @@ def test_admin_product_openapi_is_closed_to_exact_lifecycle_operations() -> None
     revision = schema["components"]["schemas"]["AdminProductRevisionSummary"]
     conflict = schema["components"]["schemas"]["AdminProductConflictResponse"]
     lifecycle_conflict = schema["components"]["schemas"]["AdminProductLifecycleConflictResponse"]
+    publish_request = schema["components"]["schemas"]["AdminProductPublishRequest"]
+    reactivate_request = schema["components"]["schemas"]["AdminProductReactivateRequest"]
 
     assert product["additionalProperties"] is False
     assert set(product["properties"]) == {
@@ -477,6 +479,16 @@ def test_admin_product_openapi_is_closed_to_exact_lifecycle_operations() -> None
     assert set(conflict["properties"]) == {"detail", "field"}
     assert lifecycle_conflict["additionalProperties"] is False
     assert set(lifecycle_conflict["properties"]) == {"detail", "blockers"}
+    assert publish_request["additionalProperties"] is False
+    assert set(publish_request["properties"]) == {
+        "candidate_revision_id",
+        "expected_candidate_version",
+    }
+    assert reactivate_request["additionalProperties"] is False
+    assert set(reactivate_request["properties"]) == {
+        "active_revision_id",
+        "expected_active_version",
+    }
     assert lifecycle_conflict["properties"]["blockers"]["items"]["enum"] == [
         "mappings_required",
         "mapping_configuration_invalid",

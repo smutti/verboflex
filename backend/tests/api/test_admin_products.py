@@ -1196,6 +1196,21 @@ def test_product_lifecycle_conflicts_are_stable_closed_and_non_mutating(
     configure_dependencies(product_session_factory)
     before = _product_graph(product_session_factory)
 
+    extra_field = asyncio.run(
+        product_request(
+            "POST",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{product_id}/publish",
+            json_body={
+                "candidate_revision_id": str(candidate_id),
+                "expected_candidate_version": 7,
+                "provider_write": True,
+            },
+        )
+    )
+    assert extra_field.status_code == 422
+    assert _product_graph(product_session_factory) == before
+
     stale_calls = (
         (
             f"{ADMIN_PRODUCTS_PATH}/{product_id}/publish",
