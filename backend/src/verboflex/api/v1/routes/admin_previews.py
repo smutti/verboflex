@@ -11,6 +11,7 @@ from verboflex.db.session import get_db_session
 from verboflex.schemas.previews import (
     AdminPreviewJobCreateRequest,
     AdminPreviewJobResponse,
+    AdminPreviewJobResultResponse,
     AdminPreviewRepositorySideResponse,
 )
 from verboflex.schemas.system import ErrorResponse
@@ -74,8 +75,13 @@ def _response(record: PreviewJobRecord) -> AdminPreviewJobResponse:
             )
             for side in record.repository_sides
         ],
-        result=record.result,
+        result=(
+            AdminPreviewJobResultResponse.model_validate(record.result)
+            if record.result is not None
+            else None
+        ),
         error_code=record.error_code,
+        is_current=record.is_current,
         created_at=record.created_at,
         started_at=record.started_at,
         finished_at=record.finished_at,

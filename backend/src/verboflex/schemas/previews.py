@@ -36,6 +36,25 @@ class AdminPreviewRepositorySideResponse(BaseModel):
     commit_hash: str
 
 
+class AdminPreviewLayoutCandidateResponse(BaseModel):
+    """Closed empty pre-detector candidate shape expanded by the detector plans."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AdminPreviewJobResultResponse(BaseModel):
+    """Exact noncanonical skeleton result with no provider or source payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    detector_version: Annotated[str, Field(min_length=1, max_length=64)]
+    digest: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    layout_candidates: Annotated[
+        list[AdminPreviewLayoutCandidateResponse],
+        Field(max_length=0),
+    ]
+
+
 class AdminPreviewJobResponse(BaseModel):
     """Bounded PostgreSQL-authoritative attempt state and deterministic result."""
 
@@ -52,8 +71,20 @@ class AdminPreviewJobResponse(BaseModel):
     connection_generation: int
     detector_version: str
     repository_sides: list[AdminPreviewRepositorySideResponse]
-    result: dict[str, object] | None
-    error_code: str | None
+    result: AdminPreviewJobResultResponse | None
+    error_code: (
+        Literal[
+            "enqueue_failed",
+            "processing_failed",
+            "stale_attempt",
+            "stale_candidate",
+            "stale_connection",
+            "stale_identity",
+            "time_limit_exceeded",
+        ]
+        | None
+    )
+    is_current: bool
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None

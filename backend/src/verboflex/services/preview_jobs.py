@@ -26,7 +26,28 @@ PREVIEW_HARD_TIME_LIMIT_SECONDS = 75
 MAX_RESULT_BYTES = 1_048_576
 
 PreviewJobState = Literal["queued", "running", "succeeded", "failed", "timed_out"]
+PreviewJobErrorCode = Literal[
+    "enqueue_failed",
+    "processing_failed",
+    "stale_attempt",
+    "stale_candidate",
+    "stale_connection",
+    "stale_identity",
+    "time_limit_exceeded",
+]
 RepositoryRole = Literal["direct", "keys", "translations"]
+
+_PREVIEW_JOB_STATES = {"queued", "running", "succeeded", "failed", "timed_out"}
+_PREVIEW_ERROR_CODES = {
+    "enqueue_failed",
+    "processing_failed",
+    "stale_attempt",
+    "stale_candidate",
+    "stale_connection",
+    "stale_identity",
+    "time_limit_exceeded",
+}
+_SKELETON_RESULT_FIELDS = {"detector_version", "digest", "layout_candidates"}
 
 
 class PreviewJobNotFound(LookupError):
@@ -95,7 +116,8 @@ class PreviewJobRecord:
     detector_version: str
     repository_sides: tuple[PreviewRepositorySide, ...]
     result: dict[str, object] | None
-    error_code: str | None
+    error_code: PreviewJobErrorCode | None
+    is_current: bool
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
@@ -132,9 +154,13 @@ def _repository_sides(row: PreviewJob) -> tuple[PreviewRepositorySide, ...]:
     return sides
 
 
-def _record(row: PreviewJob) -> PreviewJobRecord:
-    if row.state not in {"queued", "running", "succeeded", "failed", "timed_out"}:
+def _record(row: PreviewJob, *, is_current: bool) -> PreviewJobRecord:
+    if row.state not in _PREVIEW_JOB_STATES:
         raise PreviewJobConflict("persisted preview state rejected")
+    if row.error_code is not None and row.error_code not in _PREVIEW_ERROR_CODES:
+        raise PreviewJobConflict("persisted preview error rejected")
+    identity = _identity(row)
+    result = None if row.result is None else _closed_result(identity, row.result)
     return PreviewJobRecord(
         id=row.id,
         input_digest=row.input_digest,
@@ -147,8 +173,9 @@ def _record(row: PreviewJob) -> PreviewJobRecord:
         connection_generation=row.connection_generation,
         detector_version=row.detector_version,
         repository_sides=_repository_sides(row),
-        result=row.result,
-        error_code=row.error_code,
+        result=result,
+        error_code=cast(PreviewJobErrorCode | None, row.error_code),
+        is_current=is_current,
         created_at=row.created_at,
         started_at=row.started_at,
         finished_at=row.finished_at,
@@ -172,6 +199,37 @@ def _identity(row: PreviewJob) -> PreviewJobIdentity:
         layout_identity=row.layout_identity,
         repository_sides=_repository_sides(row),
     )
+
+
+def _closed_result(
+    identity: PreviewJobIdentity,
+    raw_result: Mapping[str, object],
+) -> dict[str, object]:
+    """Validate the exact pre-detector result envelope before persistence or projection."""
+    if set(raw_result) != _SKELETON_RESULT_FIELDS:
+        raise ValueError("preview result rejected")
+    detector_version = raw_result.get("detector_version")
+    digest = raw_result.get("digest")
+    layout_candidates = raw_result.get("layout_candidates")
+    if (
+        detector_version != identity.detector_version
+        or digest != identity.input_digest
+        or layout_candidates != []
+    ):
+        raise ValueError("preview result rejected")
+    return {
+        "detector_version": detector_version,
+        "digest": digest,
+        "layout_candidates": [],
+    }
+
+
+def _matches_started_identity(row: PreviewJob, identity: PreviewJobIdentity) -> bool:
+    """Compare every immutable field captured before processor execution."""
+    try:
+        return _identity(row) == identity
+    except PreviewJobConflict:
+        return False
 
 
 def _canonical_identity(
@@ -349,7 +407,7 @@ def create_or_reuse_preview_job(
             session.add(row)
             session.flush()
             created = True
-        record = _record(row)
+        record = _record(row, is_current=True)
 
     if not created:
         return record
@@ -365,7 +423,10 @@ def create_or_reuse_preview_job(
                 row.error_code = "enqueue_failed"
                 row.finished_at = datetime.now(UTC)
                 row.updated_at = row.finished_at
-            record = _record(row)
+            record = _record(
+                row,
+                is_current=_current_failure_code(session, row, for_update=True) is None,
+            )
     return record
 
 
@@ -375,29 +436,40 @@ def get_preview_job(session: Session, *, job_id: UUID) -> PreviewJobRecord:
         row = session.get(PreviewJob, job_id)
         if row is None:
             raise PreviewJobNotFound("preview job unavailable")
-        return _record(row)
+        return _record(
+            row,
+            is_current=_current_failure_code(session, row, for_update=False) is None,
+        )
 
 
-def _current_failure_code(session: Session, row: PreviewJob) -> str | None:
-    product = session.execute(
-        select(Product).where(Product.id == row.product_id).with_for_update()
-    ).scalar_one_or_none()
+def _current_failure_code(
+    session: Session,
+    row: PreviewJob,
+    *,
+    for_update: bool,
+) -> PreviewJobErrorCode | None:
+    product_statement = select(Product).where(Product.id == row.product_id)
+    if for_update:
+        product_statement = product_statement.with_for_update()
+    product = session.execute(product_statement).scalar_one_or_none()
     if product is None or product.candidate_revision_id != row.candidate_revision_id:
         return "stale_candidate"
-    revision = session.execute(
-        select(ProductRevision)
-        .where(ProductRevision.id == row.candidate_revision_id)
-        .with_for_update()
-    ).scalar_one_or_none()
+    revision_statement = select(ProductRevision).where(
+        ProductRevision.id == row.candidate_revision_id
+    )
+    if for_update:
+        revision_statement = revision_statement.with_for_update()
+    revision = session.execute(revision_statement).scalar_one_or_none()
     if (
         revision is None
         or revision.is_published
         or revision.version != row.candidate_revision_version
     ):
         return "stale_candidate"
-    connection = session.execute(
-        select(BitbucketConnection).where(BitbucketConnection.id == 1).with_for_update()
-    ).scalar_one_or_none()
+    connection_statement = select(BitbucketConnection).where(BitbucketConnection.id == 1)
+    if for_update:
+        connection_statement = connection_statement.with_for_update()
+    connection = session.execute(connection_statement).scalar_one_or_none()
     if (
         connection is None
         or connection.generation != row.connection_generation
@@ -412,6 +484,40 @@ def _current_failure_code(session: Session, row: PreviewJob) -> str | None:
     )
     if latest_attempt != row.attempt:
         return "stale_attempt"
+    mapping_statement = (
+        select(ProductRepositoryMapping)
+        .options(selectinload(ProductRepositoryMapping.sides))
+        .where(
+            ProductRepositoryMapping.id == row.mapping_id,
+            ProductRepositoryMapping.revision_id == row.candidate_revision_id,
+        )
+    )
+    if for_update:
+        mapping_statement = mapping_statement.with_for_update()
+    mapping = session.execute(mapping_statement).scalar_one_or_none()
+    if mapping is None:
+        return "stale_identity"
+    try:
+        persisted_sides = _repository_sides(row)
+        commits = {side.role: side.commit_hash for side in persisted_sides}
+        current_sides = _complete_sides(mapping, commits)
+        _encoded, current_digest = _canonical_identity(
+            product_id=row.product_id,
+            revision=revision,
+            mapping=mapping,
+            connection_generation=connection.generation,
+            repository_sides=current_sides,
+        )
+    except PreviewJobConflict:
+        return "stale_identity"
+    if (
+        row.topology != mapping.topology
+        or row.detector_version != PREVIEW_DETECTOR_VERSION
+        or row.layout_identity != PREVIEW_LAYOUT_IDENTITY
+        or row.repository_sides != current_sides
+        or row.input_digest != current_digest
+    ):
+        return "stale_identity"
     return None
 
 
@@ -426,7 +532,7 @@ def _start_preview_job(
         ).scalar_one_or_none()
         if row is None or row.state != "queued":
             return None
-        failure_code = _current_failure_code(session, row)
+        failure_code = _current_failure_code(session, row, for_update=True)
         now = datetime.now(UTC)
         if failure_code is not None:
             row.state = "failed"
@@ -453,9 +559,9 @@ def _finish_preview_job(
         row = session.execute(
             select(PreviewJob).where(PreviewJob.id == identity.job_id).with_for_update()
         ).scalar_one_or_none()
-        if row is None or row.state != "running" or row.attempt != identity.attempt:
+        if row is None or row.state != "running" or not _matches_started_identity(row, identity):
             return
-        failure_code = _current_failure_code(session, row)
+        failure_code = _current_failure_code(session, row, for_update=True)
         now = datetime.now(UTC)
         if failure_code is not None:
             row.state = "failed"
@@ -463,7 +569,11 @@ def _finish_preview_job(
             row.error_code = failure_code
         else:
             row.state = state
-            row.result = result
+            row.result = (
+                _closed_result(identity, result)
+                if state == "succeeded" and result is not None
+                else None
+            )
             row.error_code = error_code
         row.finished_at = now
         row.updated_at = now
@@ -481,7 +591,7 @@ def execute_preview_job(
         return
     try:
         raw_result = processor(identity)
-        result = dict(raw_result)
+        result = _closed_result(identity, raw_result)
         encoded = json.dumps(
             result,
             ensure_ascii=True,
