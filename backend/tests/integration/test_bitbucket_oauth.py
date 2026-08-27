@@ -443,9 +443,21 @@ def test_connects_single_encrypted_repository_scope_generation(
 
 def test_secret_box_rejects_wrong_key_tamper_and_plaintext_representations() -> None:
     """Authenticated encryption rejects every invalid ciphertext without disclosure."""
-    from verboflex.security.secret_box import SecretBox, SecretBoxDecryptionError
+    from verboflex.security.secret_box import (
+        SecretBox,
+        SecretBoxConfigurationError,
+        SecretBoxDecryptionError,
+    )
+
+    with pytest.raises(
+        SecretBoxConfigurationError,
+        match="Secret encryption keyring is invalid",
+    ):
+        SecretBox.from_keyring("")
 
     secret_box = SecretBox.from_keyring(FERNET_KEY)
+    with pytest.raises(ValueError, match="Secret plaintext must be a nonempty string"):
+        secret_box.encrypt("")
     ciphertext = secret_box.encrypt(ACCESS_TOKEN)
 
     assert secret_box.decrypt(ciphertext) == ACCESS_TOKEN
@@ -473,6 +485,100 @@ def test_secret_box_rejects_wrong_key_tamper_and_plaintext_representations() -> 
         secret_box.decrypt(tampered_ciphertext)
     assert ACCESS_TOKEN not in str(tamper_error.value)
     assert tampered_ciphertext not in str(tamper_error.value)
+
+
+def test_oauth_configuration_state_and_binding_rejections_fail_closed(
+    oauth_session_factory: sessionmaker[Session],
+) -> None:
+    """Reject every malformed setup and Redis state branch with bounded errors."""
+    from verboflex.services.bitbucket_oauth import (
+        BitbucketOAuthService,
+        OAuthCallbackRejected,
+    )
+
+    redis = FakeRedis()
+    exchange = FakeTokenExchange()
+
+    for settings_update in (
+        {"bitbucket_oauth_client_id": " "},
+        {"bitbucket_oauth_client_secret": SecretStr("")},
+        {"bitbucket_token_encryption_keyring": None},
+    ):
+        with pytest.raises(ValueError, match="Bitbucket OAuth settings are required"):
+            BitbucketOAuthService(
+                settings=oauth_settings().model_copy(update=settings_update),
+                redis_client=redis,
+                token_exchange=exchange,
+            )
+
+    short_entropy_service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        redis_client=redis,
+        token_exchange=exchange,
+        random_bytes=lambda _length: b"short",
+    )
+    with pytest.raises(ValueError, match="OAuth callback rejected"):
+        short_entropy_service.start(
+            admin_id=ADMIN_ID,
+            session_id=SESSION_ID,
+            expected_generation=0,
+        )
+
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        redis_client=redis,
+        token_exchange=exchange,
+        random_bytes=lambda length: b"3" * length,
+    )
+    with pytest.raises(ValueError, match="OAuth callback rejected"):
+        service.start(
+            admin_id=ADMIN_ID,
+            session_id=SESSION_ID,
+            expected_generation=-1,
+        )
+
+    state = service.start(
+        admin_id=ADMIN_ID,
+        session_id=SESSION_ID,
+        expected_generation=0,
+    )
+    with pytest.raises(OAuthCallbackRejected, match="OAuth callback rejected"):
+        service.start(
+            admin_id=ADMIN_ID,
+            session_id=SESSION_ID,
+            expected_generation=0,
+        )
+
+    with (
+        oauth_session_factory() as session,
+        pytest.raises(OAuthCallbackRejected, match="OAuth callback rejected"),
+    ):
+        service.complete_callback(
+            session,
+            state=None,
+            code="invalid-state-code",
+            admin_id=ADMIN_ID,
+            session_id=SESSION_ID,
+            callback_uri=CALLBACK_URI,
+            post_callback_path=FIXED_POST_CALLBACK_PATH,
+        )
+
+    redis.values[redis.set_calls[-1][0]] = json.dumps({"admin_id": str(ADMIN_ID)})
+    with (
+        oauth_session_factory() as session,
+        pytest.raises(OAuthCallbackRejected, match="OAuth callback rejected"),
+    ):
+        service.complete_callback(
+            session,
+            state=state,
+            code="malformed-binding-code",
+            admin_id=ADMIN_ID,
+            session_id=SESSION_ID,
+            callback_uri=CALLBACK_URI,
+            post_callback_path=FIXED_POST_CALLBACK_PATH,
+        )
+
+    assert exchange.calls == []
 
 
 def test_secret_box_drives_oauth_persistence_without_secret_metadata(
