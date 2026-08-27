@@ -347,6 +347,7 @@ def test_admin_oauth_lifecycle_is_state_authoritative_and_locally_revocable(
         )
     )
     assert started.status_code == 200
+    assert started.headers["cache-control"] == "no-store"
     start_body = started.json()
     assert set(start_body) == {"authorization_url", "state_expires_in"}
     assert start_body["state_expires_in"] == 600
@@ -399,6 +400,7 @@ def test_admin_oauth_lifecycle_is_state_authoritative_and_locally_revocable(
     )
     reconnect_state = parse_qs(urlparse(reconnect.json()["authorization_url"]).query)["state"][0]
     assert reconnect.status_code == 200
+    assert reconnect.headers["cache-control"] == "no-store"
 
     revoked = asyncio.run(
         bitbucket_request(
@@ -492,6 +494,7 @@ def test_callback_rejects_hostile_state_without_bearer_or_provider_diagnostics(
     )
     assert rejected.status_code == 400
     assert rejected.json() == {"detail": "OAuth callback rejected"}
+    assert rejected.headers["cache-control"] == "no-store"
     assert exchange.calls == []
     assert "provider" not in rejected.text.casefold()
 
@@ -530,6 +533,7 @@ def test_missing_configuration_and_missing_principal_session_fail_closed(
     )
     assert rejected_start.status_code == 503
     assert rejected_start.json() == {"detail": "Bitbucket connection unavailable"}
+    assert rejected_start.headers["cache-control"] == "no-store"
 
     principal_without_session = Principal(
         user_id=uuid4(),
@@ -583,6 +587,7 @@ def test_missing_singleton_and_wrong_callback_destination_are_bounded(
     )
     assert missing_callback.status_code == 503
     assert missing_callback.json() == {"detail": "Bitbucket connection unavailable"}
+    assert missing_callback.headers["cache-control"] == "no-store"
     assert exchange.calls == []
 
     with bitbucket_api_session_factory.begin() as session:
