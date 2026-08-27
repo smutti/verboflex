@@ -117,6 +117,38 @@ export type AdminBranchResponse = {
 };
 
 /**
+ * AdminDirectMappingWriteRequest
+ *
+ * Create or replace one direct mapping under candidate-version authority.
+ */
+export type AdminDirectMappingWriteRequest = {
+    /**
+     * Allowed Target Branches
+     */
+    allowed_target_branches: Array<string>;
+    /**
+     * Default Target Branch
+     */
+    default_target_branch: string;
+    /**
+     * Expected Candidate Version
+     */
+    expected_candidate_version: number;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Source Branch
+     */
+    source_branch: string;
+    /**
+     * Topology
+     */
+    topology: 'direct';
+};
+
+/**
  * AdminDiscoveryErrorResponse
  */
 export type AdminDiscoveryErrorResponse = {
@@ -128,6 +160,90 @@ export type AdminDiscoveryErrorResponse = {
      * State
      */
     state: 'disconnected' | 'reauthorization_required' | 'permission_denied' | 'not_found' | 'unavailable' | 'timeout' | 'invalid_source' | 'limit_exceeded';
+};
+
+/**
+ * AdminMappingConflictResponse
+ *
+ * Form-addressable candidate mapping conflict.
+ */
+export type AdminMappingConflictResponse = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Field
+     */
+    field: 'mapping_identity' | 'candidate_version' | 'source_branch' | 'allowed_target_branches';
+};
+
+/**
+ * AdminMappingListResponse
+ *
+ * One bounded exact-order candidate mapping page.
+ */
+export type AdminMappingListResponse = {
+    /**
+     * Items
+     */
+    items: Array<AdminMappingResponse>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * AdminMappingResponse
+ *
+ * One lifecycle-free direct or separate mapping projection.
+ */
+export type AdminMappingResponse = {
+    /**
+     * Allowed Target Branches
+     */
+    allowed_target_branches: Array<string>;
+    /**
+     * Candidate Version
+     */
+    candidate_version: number;
+    /**
+     * Default Target Branch
+     */
+    default_target_branch: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Primary Repository Id
+     */
+    primary_repository_id: string;
+    /**
+     * Primary Source Branch
+     */
+    primary_source_branch: string;
+    /**
+     * Selected Layout Candidate Id
+     */
+    selected_layout_candidate_id: string | null;
+    /**
+     * Selected Layout Version
+     */
+    selected_layout_version: number | null;
+    /**
+     * Topology
+     */
+    topology: 'direct' | 'separate';
+    /**
+     * Translations Repository Id
+     */
+    translations_repository_id: string | null;
+    /**
+     * Translations Source Branch
+     */
+    translations_source_branch: string | null;
 };
 
 /**
@@ -962,6 +1078,161 @@ export type UpdateAdminProductCandidateResponses = {
 };
 
 export type UpdateAdminProductCandidateResponse = UpdateAdminProductCandidateResponses[keyof UpdateAdminProductCandidateResponses];
+
+export type ListAdminCandidateMappingsData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/products/{product_id}/candidate/mappings';
+};
+
+export type ListAdminCandidateMappingsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ListAdminCandidateMappingsError = ListAdminCandidateMappingsErrors[keyof ListAdminCandidateMappingsErrors];
+
+export type ListAdminCandidateMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminMappingListResponse;
+};
+
+export type ListAdminCandidateMappingsResponse = ListAdminCandidateMappingsResponses[keyof ListAdminCandidateMappingsResponses];
+
+export type CreateAdminCandidateMappingData = {
+    body: AdminDirectMappingWriteRequest;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/candidate/mappings';
+};
+
+export type CreateAdminCandidateMappingErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminMappingConflictResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type CreateAdminCandidateMappingError = CreateAdminCandidateMappingErrors[keyof CreateAdminCandidateMappingErrors];
+
+export type CreateAdminCandidateMappingResponses = {
+    /**
+     * Successful Response
+     */
+    201: AdminMappingResponse;
+};
+
+export type CreateAdminCandidateMappingResponse = CreateAdminCandidateMappingResponses[keyof CreateAdminCandidateMappingResponses];
+
+export type UpdateAdminCandidateMappingData = {
+    body: AdminDirectMappingWriteRequest;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Mapping Id
+         */
+        mapping_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}';
+};
+
+export type UpdateAdminCandidateMappingErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminMappingConflictResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type UpdateAdminCandidateMappingError = UpdateAdminCandidateMappingErrors[keyof UpdateAdminCandidateMappingErrors];
+
+export type UpdateAdminCandidateMappingResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminMappingResponse;
+};
+
+export type UpdateAdminCandidateMappingResponse = UpdateAdminCandidateMappingResponses[keyof UpdateAdminCandidateMappingResponses];
 
 export type ListAdminRepositoriesData = {
     body?: never;
