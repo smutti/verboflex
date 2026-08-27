@@ -107,6 +107,21 @@ EXPECTED_OPERATIONS = {
         {"200", "401", "403", "404", "409", "422"},
         True,
     ),
+    ("/api/v1/admin/products/{product_id}/deactivate", "post"): (
+        "deactivate_admin_product",
+        {"200", "401", "403", "404", "422"},
+        True,
+    ),
+    ("/api/v1/admin/products/{product_id}/publish", "post"): (
+        "publish_admin_product_candidate",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
+    ("/api/v1/admin/products/{product_id}/reactivate", "post"): (
+        "reactivate_admin_product",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
     ("/api/v1/admin/users", "get"): (
         "list_admin_users",
         {"200", "401", "403", "422"},
@@ -435,12 +450,15 @@ def test_admin_discovery_openapi_is_commit_bound_bounded_and_body_free() -> None
         assert forbidden not in discovery_contract
 
 
-def test_admin_product_openapi_is_closed_and_exposes_no_publication_shortcut() -> None:
-    """Keep internal keys and generic revision mutation outside this product slice."""
+def test_admin_product_openapi_is_closed_to_exact_lifecycle_operations() -> None:
+    """Expose only typed product lifecycle actions over publication authority."""
     schema = app.openapi()
     product = schema["components"]["schemas"]["AdminProductResponse"]
     revision = schema["components"]["schemas"]["AdminProductRevisionSummary"]
     conflict = schema["components"]["schemas"]["AdminProductConflictResponse"]
+    lifecycle_conflict = schema["components"]["schemas"][
+        "AdminProductLifecycleConflictResponse"
+    ]
 
     assert product["additionalProperties"] is False
     assert set(product["properties"]) == {
@@ -459,8 +477,44 @@ def test_admin_product_openapi_is_closed_and_exposes_no_publication_shortcut() -
     }
     assert conflict["additionalProperties"] is False
     assert set(conflict["properties"]) == {"detail", "field"}
-    assert all("publish" not in path for path in schema["paths"])
+    assert lifecycle_conflict["additionalProperties"] is False
+    assert set(lifecycle_conflict["properties"]) == {"detail", "blockers"}
+    assert lifecycle_conflict["properties"]["blockers"]["items"]["enum"] == [
+        "mappings_required",
+        "mapping_configuration_invalid",
+        "target_configuration_invalid",
+        "layout_required",
+        "preview_confirmation_required",
+    ]
+    lifecycle_paths = {
+        path
+        for path in schema["paths"]
+        if path.startswith("/api/v1/admin/products/{product_id}/")
+        and any(action in path for action in ("publish", "deactivate", "reactivate"))
+    }
+    assert lifecycle_paths == {
+        "/api/v1/admin/products/{product_id}/deactivate",
+        "/api/v1/admin/products/{product_id}/publish",
+        "/api/v1/admin/products/{product_id}/reactivate",
+    }
     assert all("revisions" not in path for path in schema["paths"])
+    lifecycle_contract = json.dumps(
+        {
+            path: schema["paths"][path]
+            for path in sorted(lifecycle_paths)
+        },
+        sort_keys=True,
+    ).casefold()
+    for forbidden in (
+        "access_token",
+        "canonical_translation",
+        "commit_create",
+        "provider_write",
+        "pull_request_create",
+        "refresh_token",
+        "webhook_create",
+    ):
+        assert forbidden not in lifecycle_contract
 
 
 def test_export_is_canonical_and_matches_the_checked_in_schema() -> None:
