@@ -289,9 +289,11 @@ def test_connects_single_encrypted_repository_scope_generation(
             "post_callback_path": FIXED_POST_CALLBACK_PATH,
         }
         arguments.update(overrides)
-        with oauth_session_factory() as session:
-            with pytest.raises(OAuthCallbackRejected, match="OAuth callback rejected"):
-                service.complete_callback(session, **arguments)
+        with (
+            oauth_session_factory() as session,
+            pytest.raises(OAuthCallbackRejected, match="OAuth callback rejected"),
+        ):
+            service.complete_callback(session, **arguments)
         assert len(exchange.calls) == provider_call_count
         assert _connection_snapshot(oauth_session_factory) == connected_snapshot
 
@@ -355,17 +357,19 @@ def test_connects_single_encrypted_repository_scope_generation(
         connection = session.execute(select(BitbucketConnection).with_for_update()).scalar_one()
         connection.generation = 2
     generation_snapshot = _connection_snapshot(oauth_session_factory)
-    with oauth_session_factory() as session:
-        with pytest.raises(OAuthCallbackRejected, match="OAuth callback rejected"):
-            service.complete_callback(
-                session,
-                state=wrong_generation_state,
-                code="stale-generation-code",
-                admin_id=ADMIN_ID,
-                session_id=SESSION_ID,
-                callback_uri=CALLBACK_URI,
-                post_callback_path=FIXED_POST_CALLBACK_PATH,
-            )
+    with (
+        oauth_session_factory() as session,
+        pytest.raises(OAuthCallbackRejected, match="OAuth callback rejected"),
+    ):
+        service.complete_callback(
+            session,
+            state=wrong_generation_state,
+            code="stale-generation-code",
+            admin_id=ADMIN_ID,
+            session_id=SESSION_ID,
+            callback_uri=CALLBACK_URI,
+            post_callback_path=FIXED_POST_CALLBACK_PATH,
+        )
     assert len(exchange.calls) == provider_call_count
     assert _connection_snapshot(oauth_session_factory) == generation_snapshot
 
@@ -375,17 +379,19 @@ def test_connects_single_encrypted_repository_scope_generation(
         expected_generation=2,
     )
     exchange.scope = "repository:write"
-    with oauth_session_factory() as session:
-        with pytest.raises(OAuthCallbackRejected, match="OAuth callback rejected"):
-            service.complete_callback(
-                session,
-                state=scope_state,
-                code="over-scoped-code",
-                admin_id=ADMIN_ID,
-                session_id=SESSION_ID,
-                callback_uri=CALLBACK_URI,
-                post_callback_path=FIXED_POST_CALLBACK_PATH,
-            )
+    with (
+        oauth_session_factory() as session,
+        pytest.raises(OAuthCallbackRejected, match="OAuth callback rejected"),
+    ):
+        service.complete_callback(
+            session,
+            state=scope_state,
+            code="over-scoped-code",
+            admin_id=ADMIN_ID,
+            session_id=SESSION_ID,
+            callback_uri=CALLBACK_URI,
+            post_callback_path=FIXED_POST_CALLBACK_PATH,
+        )
     assert len(exchange.calls) == provider_call_count + 1
     assert _connection_snapshot(oauth_session_factory) == generation_snapshot
 
@@ -396,17 +402,19 @@ def test_connects_single_encrypted_repository_scope_generation(
     )
     exchange.scope = "repository"
     exchange.error = RuntimeError(PROVIDER_ERROR_BODY)
-    with oauth_session_factory() as session:
-        with pytest.raises(OAuthCallbackRejected, match="OAuth callback rejected") as error:
-            service.complete_callback(
-                session,
-                state=provider_error_state,
-                code="provider-failure-code",
-                admin_id=ADMIN_ID,
-                session_id=SESSION_ID,
-                callback_uri=CALLBACK_URI,
-                post_callback_path=FIXED_POST_CALLBACK_PATH,
-            )
+    with (
+        oauth_session_factory() as session,
+        pytest.raises(OAuthCallbackRejected, match="OAuth callback rejected") as error,
+    ):
+        service.complete_callback(
+            session,
+            state=provider_error_state,
+            code="provider-failure-code",
+            admin_id=ADMIN_ID,
+            session_id=SESSION_ID,
+            callback_uri=CALLBACK_URI,
+            post_callback_path=FIXED_POST_CALLBACK_PATH,
+        )
     assert PROVIDER_ERROR_BODY not in str(error.value)
     assert ACCESS_TOKEN not in caplog.text
     assert REFRESH_TOKEN not in caplog.text
@@ -472,9 +480,8 @@ def test_secret_box_drives_oauth_persistence_without_secret_metadata(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """OAuth persistence uses the narrow box while state and status stay bounded."""
-    from verboflex.security.secret_box import SecretBox
-
     from verboflex.models.bitbucket_connection import BitbucketConnection
+    from verboflex.security.secret_box import SecretBox
     from verboflex.services.bitbucket_oauth import BitbucketOAuthService
 
     redis = FakeRedis()
