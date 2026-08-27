@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, type Options as Options2, type RequestResult, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, CompleteAdminBitbucketOauthCallbackData, CompleteAdminBitbucketOauthCallbackErrors, CreateAdminCandidateMappingData, CreateAdminCandidateMappingErrors, CreateAdminCandidateMappingResponses, CreateAdminProductData, CreateAdminProductErrors, CreateAdminProductResponses, CreateAdminRepositoryData, CreateAdminRepositoryErrors, CreateAdminRepositoryResponses, CreateAdminUserData, CreateAdminUserErrors, CreateAdminUserResponses, DeactivateAdminProductData, DeactivateAdminProductErrors, DeactivateAdminProductResponses, DeactivateAdminUserData, DeactivateAdminUserErrors, DeactivateAdminUserResponses, DiscoverAdminRepositorySourcesData, DiscoverAdminRepositorySourcesErrors, DiscoverAdminRepositorySourcesResponses, GetAdminBitbucketStatusData, GetAdminBitbucketStatusErrors, GetAdminBitbucketStatusResponses, GetAdminProductData, GetAdminProductErrors, GetAdminProductResponses, GetAdminRepositoryData, GetAdminRepositoryErrors, GetAdminRepositoryResponses, IssueTokenData, IssueTokenErrors, IssueTokenResponses, ListAdminCandidateMappingsData, ListAdminCandidateMappingsErrors, ListAdminCandidateMappingsResponses, ListAdminProductsData, ListAdminProductsErrors, ListAdminProductsResponses, ListAdminRepositoriesData, ListAdminRepositoriesErrors, ListAdminRepositoriesResponses, ListAdminRepositoryBranchesData, ListAdminRepositoryBranchesErrors, ListAdminRepositoryBranchesResponses, ListAdminUsersData, ListAdminUsersErrors, ListAdminUsersResponses, LogoutData, LogoutErrors, LogoutResponses, PublishAdminProductCandidateData, PublishAdminProductCandidateErrors, PublishAdminProductCandidateResponses, ReactivateAdminProductData, ReactivateAdminProductErrors, ReactivateAdminProductResponses, ReactivateAdminUserData, ReactivateAdminUserErrors, ReactivateAdminUserResponses, ReadCurrentUserData, ReadCurrentUserErrors, ReadCurrentUserResponses, ReadHealthData, ReadHealthErrors, ReadHealthResponses, ReadSystemStatusData, ReadSystemStatusErrors, ReadSystemStatusResponses, ReconnectAdminBitbucketOauthData, ReconnectAdminBitbucketOauthErrors, ReconnectAdminBitbucketOauthResponses, RefreshAccessTokenData, RefreshAccessTokenErrors, RefreshAccessTokenResponses, ResetAdminUserPasswordData, ResetAdminUserPasswordErrors, ResetAdminUserPasswordResponses, RevokeAdminBitbucketConnectionLocallyData, RevokeAdminBitbucketConnectionLocallyErrors, RevokeAdminBitbucketConnectionLocallyResponses, StartAdminBitbucketOauthData, StartAdminBitbucketOauthErrors, StartAdminBitbucketOauthResponses, UpdateAdminCandidateMappingData, UpdateAdminCandidateMappingErrors, UpdateAdminCandidateMappingResponses, UpdateAdminProductCandidateData, UpdateAdminProductCandidateErrors, UpdateAdminProductCandidateResponses, UpdateAdminUserData, UpdateAdminUserErrors, UpdateAdminUserResponses } from './types.gen';
+import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, CompleteAdminBitbucketOauthCallbackData, CompleteAdminBitbucketOauthCallbackErrors, CreateAdminCandidateMappingData, CreateAdminCandidateMappingErrors, CreateAdminCandidateMappingResponses, CreateAdminPreviewJobData, CreateAdminPreviewJobErrors, CreateAdminPreviewJobResponses, CreateAdminProductData, CreateAdminProductErrors, CreateAdminProductResponses, CreateAdminRepositoryData, CreateAdminRepositoryErrors, CreateAdminRepositoryResponses, CreateAdminUserData, CreateAdminUserErrors, CreateAdminUserResponses, DeactivateAdminProductData, DeactivateAdminProductErrors, DeactivateAdminProductResponses, DeactivateAdminUserData, DeactivateAdminUserErrors, DeactivateAdminUserResponses, DiscoverAdminRepositorySourcesData, DiscoverAdminRepositorySourcesErrors, DiscoverAdminRepositorySourcesResponses, GetAdminBitbucketStatusData, GetAdminBitbucketStatusErrors, GetAdminBitbucketStatusResponses, GetAdminPreviewJobData, GetAdminPreviewJobErrors, GetAdminPreviewJobResponses, GetAdminProductData, GetAdminProductErrors, GetAdminProductResponses, GetAdminRepositoryData, GetAdminRepositoryErrors, GetAdminRepositoryResponses, IssueTokenData, IssueTokenErrors, IssueTokenResponses, ListAdminCandidateMappingsData, ListAdminCandidateMappingsErrors, ListAdminCandidateMappingsResponses, ListAdminProductsData, ListAdminProductsErrors, ListAdminProductsResponses, ListAdminRepositoriesData, ListAdminRepositoriesErrors, ListAdminRepositoriesResponses, ListAdminRepositoryBranchesData, ListAdminRepositoryBranchesErrors, ListAdminRepositoryBranchesResponses, ListAdminUsersData, ListAdminUsersErrors, ListAdminUsersResponses, LogoutData, LogoutErrors, LogoutResponses, PublishAdminProductCandidateData, PublishAdminProductCandidateErrors, PublishAdminProductCandidateResponses, ReactivateAdminProductData, ReactivateAdminProductErrors, ReactivateAdminProductResponses, ReactivateAdminUserData, ReactivateAdminUserErrors, ReactivateAdminUserResponses, ReadCurrentUserData, ReadCurrentUserErrors, ReadCurrentUserResponses, ReadHealthData, ReadHealthErrors, ReadHealthResponses, ReadSystemStatusData, ReadSystemStatusErrors, ReadSystemStatusResponses, ReconnectAdminBitbucketOauthData, ReconnectAdminBitbucketOauthErrors, ReconnectAdminBitbucketOauthResponses, RefreshAccessTokenData, RefreshAccessTokenErrors, RefreshAccessTokenResponses, ResetAdminUserPasswordData, ResetAdminUserPasswordErrors, ResetAdminUserPasswordResponses, RevokeAdminBitbucketConnectionLocallyData, RevokeAdminBitbucketConnectionLocallyErrors, RevokeAdminBitbucketConnectionLocallyResponses, StartAdminBitbucketOauthData, StartAdminBitbucketOauthErrors, StartAdminBitbucketOauthResponses, UpdateAdminCandidateMappingData, UpdateAdminCandidateMappingErrors, UpdateAdminCandidateMappingResponses, UpdateAdminProductCandidateData, UpdateAdminProductCandidateErrors, UpdateAdminProductCandidateResponses, UpdateAdminUserData, UpdateAdminUserErrors, UpdateAdminUserResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -66,6 +66,17 @@ export const startAdminBitbucketOauth = <ThrowOnError extends boolean = false>(o
 export const revokeAdminBitbucketConnectionLocally = <ThrowOnError extends boolean = false>(options?: Options<RevokeAdminBitbucketConnectionLocallyData, ThrowOnError>): RequestResult<RevokeAdminBitbucketConnectionLocallyResponses, RevokeAdminBitbucketConnectionLocallyErrors, ThrowOnError> => (options?.client ?? client).post<RevokeAdminBitbucketConnectionLocallyResponses, RevokeAdminBitbucketConnectionLocallyErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/admin/bitbucket/revoke',
+    ...options
+});
+
+/**
+ * Get Admin Preview Job
+ *
+ * Inspect one durable state/result without consulting Celery backend data.
+ */
+export const getAdminPreviewJob = <ThrowOnError extends boolean = false>(options: Options<GetAdminPreviewJobData, ThrowOnError>): RequestResult<GetAdminPreviewJobResponses, GetAdminPreviewJobErrors, ThrowOnError> => (options.client ?? client).get<GetAdminPreviewJobResponses, GetAdminPreviewJobErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/preview-jobs/{job_id}',
     ...options
 });
 
@@ -155,6 +166,21 @@ export const createAdminCandidateMapping = <ThrowOnError extends boolean = false
 export const updateAdminCandidateMapping = <ThrowOnError extends boolean = false>(options: Options<UpdateAdminCandidateMappingData, ThrowOnError>): RequestResult<UpdateAdminCandidateMappingResponses, UpdateAdminCandidateMappingErrors, ThrowOnError> => (options.client ?? client).patch<UpdateAdminCandidateMappingResponses, UpdateAdminCandidateMappingErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Create Admin Preview Job
+ *
+ * Persist or reuse complete input identity before enqueueing one UUID.
+ */
+export const createAdminPreviewJob = <ThrowOnError extends boolean = false>(options: Options<CreateAdminPreviewJobData, ThrowOnError>): RequestResult<CreateAdminPreviewJobResponses, CreateAdminPreviewJobErrors, ThrowOnError> => (options.client ?? client).post<CreateAdminPreviewJobResponses, CreateAdminPreviewJobErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs',
     ...options,
     headers: {
         'Content-Type': 'application/json',

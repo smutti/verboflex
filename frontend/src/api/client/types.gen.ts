@@ -247,6 +247,164 @@ export type AdminMappingResponse = {
 };
 
 /**
+ * AdminPreviewCommitRequest
+ *
+ * One resolved commit associated with a server-owned mapping role.
+ */
+export type AdminPreviewCommitRequest = {
+    /**
+     * Commit Hash
+     */
+    commit_hash: string;
+    /**
+     * Role
+     */
+    role: 'direct' | 'keys' | 'translations';
+};
+
+/**
+ * AdminPreviewJobCreateRequest
+ *
+ * Candidate compare value plus exact resolved commits, with no source bytes.
+ */
+export type AdminPreviewJobCreateRequest = {
+    /**
+     * Commits
+     */
+    commits: Array<AdminPreviewCommitRequest>;
+    /**
+     * Expected Candidate Version
+     */
+    expected_candidate_version: number;
+};
+
+/**
+ * AdminPreviewJobResponse
+ *
+ * Bounded PostgreSQL-authoritative attempt state and deterministic result.
+ */
+export type AdminPreviewJobResponse = {
+    /**
+     * Attempt
+     */
+    attempt: number;
+    /**
+     * Candidate Revision Id
+     */
+    candidate_revision_id: string;
+    /**
+     * Candidate Revision Version
+     */
+    candidate_revision_version: number;
+    /**
+     * Connection Generation
+     */
+    connection_generation: number;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Detector Version
+     */
+    detector_version: string;
+    /**
+     * Error Code
+     */
+    error_code: 'enqueue_failed' | 'processing_failed' | 'stale_attempt' | 'stale_candidate' | 'stale_connection' | 'stale_identity' | 'time_limit_exceeded' | null;
+    /**
+     * Finished At
+     */
+    finished_at: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Input Digest
+     */
+    input_digest: string;
+    /**
+     * Is Current
+     */
+    is_current: boolean;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Repository Sides
+     */
+    repository_sides: Array<AdminPreviewRepositorySideResponse>;
+    result: AdminPreviewJobResultResponse | null;
+    /**
+     * Started At
+     */
+    started_at: string | null;
+    /**
+     * State
+     */
+    state: 'queued' | 'running' | 'succeeded' | 'failed' | 'timed_out';
+};
+
+/**
+ * AdminPreviewJobResultResponse
+ *
+ * Exact noncanonical skeleton result with no provider or source payload.
+ */
+export type AdminPreviewJobResultResponse = {
+    /**
+     * Detector Version
+     */
+    detector_version: string;
+    /**
+     * Digest
+     */
+    digest: string;
+    /**
+     * Layout Candidates
+     */
+    layout_candidates: Array<AdminPreviewLayoutCandidateResponse>;
+};
+
+/**
+ * AdminPreviewLayoutCandidateResponse
+ *
+ * Closed empty pre-detector candidate shape expanded by the detector plans.
+ */
+export type AdminPreviewLayoutCandidateResponse = {
+    [key: string]: never;
+};
+
+/**
+ * AdminPreviewRepositorySideResponse
+ *
+ * One credential-free commit-bound repository side.
+ */
+export type AdminPreviewRepositorySideResponse = {
+    /**
+     * Commit Hash
+     */
+    commit_hash: string;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Role
+     */
+    role: 'direct' | 'keys' | 'translations';
+    /**
+     * Source Branch
+     */
+    source_branch: string;
+};
+
+/**
  * AdminProductConflictResponse
  *
  * Bounded conflict with optional field affinity for form recovery.
@@ -1007,6 +1165,56 @@ export type RevokeAdminBitbucketConnectionLocallyResponses = {
 
 export type RevokeAdminBitbucketConnectionLocallyResponse = RevokeAdminBitbucketConnectionLocallyResponses[keyof RevokeAdminBitbucketConnectionLocallyResponses];
 
+export type GetAdminPreviewJobData = {
+    body?: never;
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/preview-jobs/{job_id}';
+};
+
+export type GetAdminPreviewJobErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetAdminPreviewJobError = GetAdminPreviewJobErrors[keyof GetAdminPreviewJobErrors];
+
+export type GetAdminPreviewJobResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPreviewJobResponse;
+};
+
+export type GetAdminPreviewJobResponse = GetAdminPreviewJobResponses[keyof GetAdminPreviewJobResponses];
+
 export type ListAdminProductsData = {
     body?: never;
     path?: never;
@@ -1346,6 +1554,60 @@ export type UpdateAdminCandidateMappingResponses = {
 };
 
 export type UpdateAdminCandidateMappingResponse = UpdateAdminCandidateMappingResponses[keyof UpdateAdminCandidateMappingResponses];
+
+export type CreateAdminPreviewJobData = {
+    body: AdminPreviewJobCreateRequest;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Mapping Id
+         */
+        mapping_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs';
+};
+
+export type CreateAdminPreviewJobErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type CreateAdminPreviewJobError = CreateAdminPreviewJobErrors[keyof CreateAdminPreviewJobErrors];
+
+export type CreateAdminPreviewJobResponses = {
+    /**
+     * Successful Response
+     */
+    202: AdminPreviewJobResponse;
+};
+
+export type CreateAdminPreviewJobResponse = CreateAdminPreviewJobResponses[keyof CreateAdminPreviewJobResponses];
 
 export type DeactivateAdminProductData = {
     body?: never;
