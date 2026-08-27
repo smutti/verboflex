@@ -596,30 +596,49 @@ def is_current_preview_confirmation(
     mapping: ProductRepositoryMapping,
 ) -> bool:
     """Recompute one exact confirmation against current durable authority."""
-    if (
-        mapping.revision_id != revision.id
-        or mapping.confirmed_preview_job_id is None
+    if not _mapping_has_complete_confirmation(mapping):
+        return False
+    assert mapping.confirmed_preview_job_id is not None
+    row = session.get(PreviewJob, mapping.confirmed_preview_job_id)
+    if row is None or not _confirmation_job_matches(row, revision, mapping):
+        return False
+    connection = _current_connection(session, row, for_update=True)
+    return (
+        connection is not None
+        and _confirmation_job_is_latest(session, row)
+        and _current_identity_matches(row, revision, mapping, connection)
+        and _confirmed_layout_matches(row, mapping)
+    )
+
+
+def _mapping_has_complete_confirmation(mapping: ProductRepositoryMapping) -> bool:
+    return not (
+        mapping.confirmed_preview_job_id is None
         or mapping.confirmed_preview_digest is None
         or mapping.preview_confirmed_by is None
         or mapping.preview_confirmed_at is None
         or mapping.selected_layout_candidate_id is None
         or mapping.selected_layout_version is None
-    ):
-        return False
-    row = session.get(PreviewJob, mapping.confirmed_preview_job_id)
-    if (
-        row is None
-        or row.state != "succeeded"
-        or row.result is None
-        or row.product_id != revision.product_id
-        or row.candidate_revision_id != revision.id
-        or row.candidate_revision_version != revision.version
-        or row.mapping_id != mapping.id
-    ):
-        return False
-    connection = _current_connection(session, row, for_update=True)
-    if connection is None:
-        return False
+    )
+
+
+def _confirmation_job_matches(
+    row: PreviewJob,
+    revision: ProductRevision,
+    mapping: ProductRepositoryMapping,
+) -> bool:
+    return (
+        mapping.revision_id == revision.id
+        and row.state == "succeeded"
+        and row.result is not None
+        and row.product_id == revision.product_id
+        and row.candidate_revision_id == revision.id
+        and row.candidate_revision_version == revision.version
+        and row.mapping_id == mapping.id
+    )
+
+
+def _confirmation_job_is_latest(session: Session, row: PreviewJob) -> bool:
     latest_attempt = session.scalar(
         select(func.max(PreviewJob.attempt)).where(PreviewJob.input_digest == row.input_digest)
     )
@@ -632,19 +651,32 @@ def is_current_preview_confirmation(
         .order_by(PreviewJob.created_at.desc(), PreviewJob.id.desc())
         .limit(1)
     )
-    if (
-        latest_attempt != row.attempt
-        or latest_mapping_job_id != row.id
-        or not _current_identity_matches(row, revision, mapping, connection)
-    ):
-        return False
+    return latest_attempt == row.attempt and latest_mapping_job_id == row.id
+
+
+def _confirmed_layout_matches(
+    row: PreviewJob,
+    mapping: ProductRepositoryMapping,
+) -> bool:
+    assert row.result is not None
+    assert mapping.confirmed_preview_digest is not None
+    assert mapping.selected_layout_candidate_id is not None
+    assert mapping.selected_layout_version is not None
     try:
         result = _closed_result(_identity(row), row.result)
     except PreviewJobConflict, ValueError:
         return False
     if result["digest"] != mapping.confirmed_preview_digest:
         return False
-    candidates = result["layout_candidates"]
+    return _selected_layout_matches(result["layout_candidates"], mapping)
+
+
+def _selected_layout_matches(
+    candidates: object,
+    mapping: ProductRepositoryMapping,
+) -> bool:
+    assert mapping.selected_layout_candidate_id is not None
+    assert mapping.selected_layout_version is not None
     if not isinstance(candidates, list):
         return False
     matches = [
