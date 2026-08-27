@@ -54,6 +54,16 @@ EXPECTED_OPERATIONS = {
         {"201", "401", "403", "409", "422"},
         True,
     ),
+    ("/api/v1/admin/repositories/{repository_id}/branches", "get"): (
+        "list_admin_repository_branches",
+        {"200", "401", "403", "404", "409", "422", "503", "504"},
+        True,
+    ),
+    ("/api/v1/admin/repositories/{repository_id}/sources", "get"): (
+        "discover_admin_repository_sources",
+        {"200", "401", "403", "404", "409", "422", "503", "504"},
+        True,
+    ),
     ("/api/v1/admin/repositories/{repository_id}", "get"): (
         "get_admin_repository",
         {"200", "401", "403", "404", "422"},
@@ -324,6 +334,61 @@ def test_admin_bitbucket_openapi_is_closed_bounded_and_secret_free() -> None:
         "provider_revoke",
     ):
         assert forbidden not in bitbucket_contract
+
+
+def test_admin_discovery_openapi_is_commit_bound_bounded_and_body_free() -> None:
+    """Expose exact branch/source metadata without raw provider bytes or provider URLs."""
+    schema = app.openapi()
+    schemas = schema["components"]["schemas"]
+    source = schemas["AdminSourceDiscoveryResponse"]
+    source_file = schemas["AdminSourceFileResponse"]
+    discovery_error = schemas["AdminDiscoveryErrorResponse"]
+
+    assert source["additionalProperties"] is False
+    assert set(source["properties"]) == {"commit_hash", "files", "total_bytes"}
+    assert source_file["additionalProperties"] is False
+    assert set(source_file["properties"]) == {"path", "size"}
+    assert discovery_error["additionalProperties"] is False
+    assert discovery_error["properties"]["state"]["enum"] == [
+        "disconnected",
+        "reauthorization_required",
+        "permission_denied",
+        "not_found",
+        "unavailable",
+        "timeout",
+        "invalid_source",
+        "limit_exceeded",
+    ]
+
+    discovery_contract = json.dumps(
+        {
+            "paths": {
+                path: value
+                for path, value in schema["paths"].items()
+                if path.startswith("/api/v1/admin/repositories/")
+                and (path.endswith("/branches") or path.endswith("/sources"))
+            },
+            "schemas": {
+                name: value
+                for name, value in schemas.items()
+                if name.startswith("AdminBranch")
+                or name.startswith("AdminSource")
+                or name == "AdminDiscoveryErrorResponse"
+            },
+        },
+        sort_keys=True,
+    ).casefold()
+    for forbidden in (
+        "provider_url",
+        "provider_body",
+        "access_token",
+        "refresh_token",
+        "content",
+        "raw_bytes",
+        "repository:write",
+        "pullrequest",
+    ):
+        assert forbidden not in discovery_contract
 
 
 def test_admin_product_openapi_is_closed_and_exposes_no_publication_shortcut() -> None:

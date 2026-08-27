@@ -23,7 +23,14 @@ EXPECTED_INTEGRATED_CAPABILITIES = {
     "raw-source-file-read-at-commit",
     "provider-next-url-validation",
 }
-ALLOWED_ADAPTER_METHODS = {"read_repository_metadata", "aclose"}
+ALLOWED_ADAPTER_METHODS = {
+    "aclose",
+    "list_repository_branches",
+    "list_repository_source_page",
+    "read_repository_metadata",
+    "read_repository_source_file",
+    "resolve_repository_branch",
+}
 MUTATING_HTTP_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
