@@ -59,8 +59,7 @@ def upgrade() -> None:
             name=op.f("ck_bitbucket_connections_generation_non_negative"),
         ),
         sa.CheckConstraint(
-            "(access_token_ciphertext IS NULL) = "
-            "(refresh_token_ciphertext IS NULL)",
+            "(access_token_ciphertext IS NULL) = (refresh_token_ciphertext IS NULL)",
             name=op.f("ck_bitbucket_connections_credential_pair_state"),
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_bitbucket_connections")),
