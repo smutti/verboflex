@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from verboflex.auth.principal import Principal, require_roles
 from verboflex.db.session import get_db_session
 from verboflex.schemas.previews import (
+    AdminPreviewConfirmationRequest,
+    AdminPreviewConfirmationResponse,
     AdminPreviewJobCreateRequest,
     AdminPreviewJobResponse,
     AdminPreviewJobResultResponse,
@@ -22,6 +24,7 @@ from verboflex.services.preview_jobs import (
     PreviewJobConflict,
     PreviewJobNotFound,
     PreviewJobRecord,
+    confirm_preview_job,
     create_or_reuse_preview_job,
     enqueue_preview_job,
     get_preview_job,
@@ -160,3 +163,38 @@ async def get_admin_preview_job(
     except PreviewJobNotFound as error:
         _raise_preview_error(error)
     return _response(record)
+
+
+@router.post(
+    "/admin/preview-jobs/{job_id}/confirmation",
+    operation_id="confirm_admin_preview_job",
+    response_model=AdminPreviewConfirmationResponse,
+    responses=RESPONSES,
+)
+async def confirm_admin_preview_job(
+    job_id: UUID,
+    payload: AdminPreviewConfirmationRequest,
+    principal: AdminPrincipal,
+    session: AdminSession,
+) -> AdminPreviewConfirmationResponse:
+    """Bind one current exact candidate to its mapping and confirming administrator."""
+    try:
+        confirmation = confirm_preview_job(
+            session,
+            job_id=job_id,
+            preview_digest=payload.preview_digest,
+            layout_candidate_id=payload.layout_candidate_id,
+            layout_candidate_version=payload.layout_candidate_version,
+            actor_id=principal.user_id,
+        )
+    except (PreviewJobNotFound, PreviewJobConflict) as error:
+        _raise_preview_error(error)
+    return AdminPreviewConfirmationResponse(
+        job_id=confirmation.job_id,
+        mapping_id=confirmation.mapping_id,
+        preview_digest=confirmation.preview_digest,
+        layout_candidate_id=confirmation.layout_candidate_id,
+        layout_candidate_version=confirmation.layout_candidate_version,
+        confirmed_by=confirmation.confirmed_by,
+        confirmed_at=confirmation.confirmed_at,
+    )

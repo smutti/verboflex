@@ -40,10 +40,23 @@ class ProductRepositoryMapping(Base):
             "(selected_layout_candidate_id IS NOT NULL AND selected_layout_version > 0)",
             name="selected_layout_state",
         ),
+        CheckConstraint(
+            "(confirmed_preview_job_id IS NULL AND confirmed_preview_digest IS NULL "
+            "AND preview_confirmed_by IS NULL AND preview_confirmed_at IS NULL) OR "
+            "(confirmed_preview_job_id IS NOT NULL "
+            "AND char_length(confirmed_preview_digest) = 64 "
+            "AND confirmed_preview_digest ~ '^[0-9a-f]{64}$' "
+            "AND preview_confirmed_by IS NOT NULL AND preview_confirmed_at IS NOT NULL)",
+            name="preview_confirmation_state",
+        ),
         UniqueConstraint(
             "revision_id",
             "identity_key",
             name="uq_product_repository_mappings_revision_identity",
+        ),
+        UniqueConstraint(
+            "confirmed_preview_job_id",
+            name="uq_product_repository_mappings_confirmed_preview_job",
         ),
     )
 
@@ -65,6 +78,21 @@ class ProductRepositoryMapping(Base):
         nullable=True,
     )
     selected_layout_version: Mapped[int | None] = mapped_column(nullable=True)
+    confirmed_preview_job_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("preview_jobs.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    confirmed_preview_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    preview_confirmed_by: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    preview_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

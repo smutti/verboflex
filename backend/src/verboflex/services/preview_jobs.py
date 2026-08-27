@@ -67,6 +67,19 @@ class PreviewJobTimedOut(TimeoutError):
     """Raised by the worker timeout adapter to request a durable timeout state."""
 
 
+@dataclass(frozen=True, slots=True)
+class PreviewConfirmationRecord:
+    """One explicit historical assignment of a current exact layout."""
+
+    job_id: UUID
+    mapping_id: UUID
+    preview_digest: str
+    layout_candidate_id: UUID
+    layout_candidate_version: Literal[1]
+    confirmed_by: UUID
+    confirmed_at: datetime
+
+
 class PreviewEnqueuer(Protocol):
     """Persisted-job transport seam whose only input is the durable UUID."""
 
@@ -212,14 +225,57 @@ def _closed_result(
     detector_version = raw_result.get("detector_version")
     digest = raw_result.get("digest")
     layout_candidates = raw_result.get("layout_candidates")
-    if detector_version != identity.detector_version or digest != identity.input_digest:
+    if (
+        detector_version != identity.detector_version
+        or not isinstance(digest, str)
+        or len(digest) != 64
+        or any(character not in "0123456789abcdef" for character in digest)
+    ):
         raise ValueError("preview result rejected")
-    candidates = validate_layout_candidate_mappings(layout_candidates)
+    try:
+        candidates = validate_layout_candidate_mappings(layout_candidates)
+    except ValueError as error:
+        raise ValueError("preview result rejected") from error
+    complete_digest = _complete_preview_digest(identity, candidates)
+    if digest not in {identity.input_digest, complete_digest}:
+        raise ValueError("preview result rejected")
     return {
         "detector_version": detector_version,
-        "digest": digest,
+        "digest": complete_digest,
         "layout_candidates": candidates,
     }
+
+
+def _complete_preview_digest(
+    identity: PreviewJobIdentity,
+    layout_candidates: list[dict[str, object]],
+) -> str:
+    """Hash the exact attempt, pre-detector authority, and canonical detector output."""
+    payload = {
+        "attempt": identity.attempt,
+        "candidate_revision_id": str(identity.candidate_revision_id),
+        "candidate_revision_version": identity.candidate_revision_version,
+        "connection_generation": identity.connection_generation,
+        "detector_version": identity.detector_version,
+        "input_digest": identity.input_digest,
+        "job_id": str(identity.job_id),
+        "layout_candidates": layout_candidates,
+        "layout_identity": identity.layout_identity,
+        "mapping_id": str(identity.mapping_id),
+        "product_id": str(identity.product_id),
+        "repository_sides": [
+            {
+                "commit_hash": side.commit_hash,
+                "repository_id": str(side.repository_id),
+                "role": side.role,
+                "source_branch": side.source_branch,
+            }
+            for side in identity.repository_sides
+        ],
+        "topology": identity.topology,
+    }
+    encoded = json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(encoded.encode("ascii")).hexdigest()
 
 
 def _matches_started_identity(row: PreviewJob, identity: PreviewJobIdentity) -> bool:
@@ -419,7 +475,10 @@ def create_or_reuse_preview_job(
             session.add(row)
             session.flush()
             created = True
-        record = _record(row, is_current=True)
+        record = _record(
+            row,
+            is_current=_current_failure_code(session, row, for_update=True) is None,
+        )
 
     if not created:
         return record
@@ -454,6 +513,83 @@ def get_preview_job(session: Session, *, job_id: UUID) -> PreviewJobRecord:
         )
 
 
+def confirm_preview_job(
+    session: Session,
+    *,
+    job_id: UUID,
+    preview_digest: str,
+    layout_candidate_id: UUID,
+    layout_candidate_version: Literal[1],
+    actor_id: UUID,
+) -> PreviewConfirmationRecord:
+    """Assign exactly one current succeeded candidate under durable authority locks."""
+    with session.begin():
+        row = session.execute(
+            select(PreviewJob).where(PreviewJob.id == job_id).with_for_update()
+        ).scalar_one_or_none()
+        if row is None:
+            raise PreviewJobNotFound("preview job unavailable")
+        if _current_failure_code(session, row, for_update=True) is not None:
+            raise PreviewJobConflict("preview identity conflict")
+        if row.state != "succeeded" or row.result is None:
+            raise PreviewJobConflict("preview confirmation unavailable")
+        result = _closed_result(_identity(row), row.result)
+        if result["digest"] != preview_digest:
+            raise PreviewJobConflict("preview identity conflict")
+        raw_candidates = result["layout_candidates"]
+        if not isinstance(raw_candidates, list):
+            raise PreviewJobConflict("preview confirmation unavailable")
+        matches = [
+            candidate
+            for candidate in raw_candidates
+            if candidate["id"] == str(layout_candidate_id)
+            and candidate["version"] == layout_candidate_version
+        ]
+        if len(matches) != 1:
+            raise PreviewJobConflict("preview confirmation unavailable")
+        mapping = _current_mapping(session, row, for_update=True)
+        if mapping is None:
+            raise PreviewJobConflict("preview identity conflict")
+        expected_side = "direct" if mapping.topology == "direct" else "translations"
+        if matches[0]["repository_side"] != expected_side:
+            raise PreviewJobConflict("preview confirmation unavailable")
+        if (
+            mapping.confirmed_preview_job_id == row.id
+            and mapping.confirmed_preview_digest == preview_digest
+            and mapping.selected_layout_candidate_id == layout_candidate_id
+            and mapping.selected_layout_version == layout_candidate_version
+            and mapping.preview_confirmed_by is not None
+            and mapping.preview_confirmed_at is not None
+        ):
+            return PreviewConfirmationRecord(
+                job_id=row.id,
+                mapping_id=mapping.id,
+                preview_digest=preview_digest,
+                layout_candidate_id=layout_candidate_id,
+                layout_candidate_version=layout_candidate_version,
+                confirmed_by=mapping.preview_confirmed_by,
+                confirmed_at=mapping.preview_confirmed_at,
+            )
+        confirmed_at = datetime.now(UTC)
+        mapping.selected_layout_candidate_id = layout_candidate_id
+        mapping.selected_layout_version = layout_candidate_version
+        mapping.confirmed_preview_job_id = row.id
+        mapping.confirmed_preview_digest = preview_digest
+        mapping.preview_confirmed_by = actor_id
+        mapping.preview_confirmed_at = confirmed_at
+        mapping.updated_at = confirmed_at
+        session.flush()
+        return PreviewConfirmationRecord(
+            job_id=row.id,
+            mapping_id=mapping.id,
+            preview_digest=preview_digest,
+            layout_candidate_id=layout_candidate_id,
+            layout_candidate_version=layout_candidate_version,
+            confirmed_by=actor_id,
+            confirmed_at=confirmed_at,
+        )
+
+
 def _current_failure_code(
     session: Session,
     row: PreviewJob,
@@ -471,6 +607,17 @@ def _current_failure_code(
     )
     if latest_attempt != row.attempt:
         return "stale_attempt"
+    latest_mapping_job_id = session.scalar(
+        select(PreviewJob.id)
+        .where(
+            PreviewJob.mapping_id == row.mapping_id,
+            PreviewJob.candidate_revision_id == row.candidate_revision_id,
+        )
+        .order_by(PreviewJob.created_at.desc(), PreviewJob.id.desc())
+        .limit(1)
+    )
+    if latest_mapping_job_id != row.id:
+        return "stale_identity"
     mapping = _current_mapping(session, row, for_update=for_update)
     if mapping is None or not _current_identity_matches(row, revision, mapping, connection):
         return "stale_identity"

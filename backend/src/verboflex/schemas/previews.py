@@ -25,6 +25,30 @@ class AdminPreviewJobCreateRequest(BaseModel):
     commits: Annotated[list[AdminPreviewCommitRequest], Field(min_length=1, max_length=2)]
 
 
+class AdminPreviewConfirmationRequest(BaseModel):
+    """Exact compare values for one explicit current layout assignment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    preview_digest: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    layout_candidate_id: UUID
+    layout_candidate_version: Literal[1]
+
+
+class AdminPreviewConfirmationResponse(BaseModel):
+    """Bounded actor/time evidence for one confirmed preview layout."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: UUID
+    mapping_id: UUID
+    preview_digest: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    layout_candidate_id: UUID
+    layout_candidate_version: Literal[1]
+    confirmed_by: UUID
+    confirmed_at: datetime
+
+
 class AdminPreviewRepositorySideResponse(BaseModel):
     """One credential-free commit-bound repository side."""
 

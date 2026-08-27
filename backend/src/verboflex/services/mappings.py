@@ -668,6 +668,10 @@ async def update_direct_mapping(
             mapping.identity_key = identity_key
             mapping.selected_layout_candidate_id = None
             mapping.selected_layout_version = None
+            mapping.confirmed_preview_job_id = None
+            mapping.confirmed_preview_digest = None
+            mapping.preview_confirmed_by = None
+            mapping.preview_confirmed_at = None
             mapping.updated_at = datetime.now(UTC)
             mapping.sides = _side_rows((("direct", repository_id, exact_source),))
             mapping.allowed_targets = _target_rows(
@@ -822,6 +826,10 @@ async def update_separate_mapping(
             mapping.identity_key = identity_key
             mapping.selected_layout_candidate_id = None
             mapping.selected_layout_version = None
+            mapping.confirmed_preview_job_id = None
+            mapping.confirmed_preview_digest = None
+            mapping.preview_confirmed_by = None
+            mapping.preview_confirmed_at = None
             mapping.updated_at = datetime.now(UTC)
             mapping.sides = _side_rows(
                 (side.role, side.repository_id, side.source_branch) for side in (keys, translations)
