@@ -36,14 +36,36 @@ class AdminPreviewRepositorySideResponse(BaseModel):
     commit_hash: str
 
 
-class AdminPreviewLayoutCandidateResponse(BaseModel):
-    """Closed empty pre-detector candidate shape expanded by the detector plans."""
+class AdminPreviewSampleResponse(BaseModel):
+    """One bounded read-only sample, not a canonical translation."""
 
     model_config = ConfigDict(extra="forbid")
 
+    language: Annotated[str, Field(min_length=1, max_length=64)]
+    key: Annotated[str, Field(min_length=1, max_length=1_048_576)]
+    translation: Annotated[str, Field(max_length=1_048_576)]
+
+
+class AdminPreviewLayoutCandidateResponse(BaseModel):
+    """One bounded noncanonical exact-layout preview candidate."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    version: Literal[1]
+    repository_side: Literal["direct", "keys", "translations"]
+    format: Literal["android_xml", "qt_ts", "json", "ios_strings"]
+    layout_identity: Annotated[str, Field(min_length=1, max_length=4096)]
+    confidence: Annotated[float, Field(ge=1.0, le=1.0)]
+    files: Annotated[list[str], Field(min_length=1, max_length=500)]
+    languages: Annotated[list[str], Field(min_length=1, max_length=32)]
+    keys: Annotated[list[str], Field(min_length=1, max_length=100)]
+    samples: Annotated[list[AdminPreviewSampleResponse], Field(min_length=1, max_length=100)]
+    samples_are_partial: Literal[True]
+
 
 class AdminPreviewJobResultResponse(BaseModel):
-    """Exact noncanonical skeleton result with no provider or source payload."""
+    """Exact noncanonical preview result with no provider or source payload."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -51,7 +73,7 @@ class AdminPreviewJobResultResponse(BaseModel):
     digest: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     layout_candidates: Annotated[
         list[AdminPreviewLayoutCandidateResponse],
-        Field(max_length=0),
+        Field(max_length=500),
     ]
 
 

@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
+from verboflex.localization.preview.core import validate_layout_candidate_mappings
 from verboflex.models.bitbucket_connection import BitbucketConnection
 from verboflex.models.preview_job import PreviewJob
 from verboflex.models.product import Product, ProductRevision
@@ -47,7 +48,7 @@ _PREVIEW_ERROR_CODES = {
     "stale_identity",
     "time_limit_exceeded",
 }
-_SKELETON_RESULT_FIELDS = {"detector_version", "digest", "layout_candidates"}
+_PREVIEW_RESULT_FIELDS = {"detector_version", "digest", "layout_candidates"}
 
 
 class PreviewJobNotFound(LookupError):
@@ -206,21 +207,18 @@ def _closed_result(
     raw_result: Mapping[str, object],
 ) -> dict[str, object]:
     """Validate the exact pre-detector result envelope before persistence or projection."""
-    if set(raw_result) != _SKELETON_RESULT_FIELDS:
+    if set(raw_result) != _PREVIEW_RESULT_FIELDS:
         raise ValueError("preview result rejected")
     detector_version = raw_result.get("detector_version")
     digest = raw_result.get("digest")
     layout_candidates = raw_result.get("layout_candidates")
-    if (
-        detector_version != identity.detector_version
-        or digest != identity.input_digest
-        or layout_candidates != []
-    ):
+    if detector_version != identity.detector_version or digest != identity.input_digest:
         raise ValueError("preview result rejected")
+    candidates = validate_layout_candidate_mappings(layout_candidates)
     return {
         "detector_version": detector_version,
         "digest": digest,
-        "layout_candidates": [],
+        "layout_candidates": candidates,
     }
 
 

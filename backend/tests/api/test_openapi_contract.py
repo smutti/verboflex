@@ -483,6 +483,8 @@ def test_admin_preview_openapi_is_closed_current_and_source_free() -> None:
     response = schemas["AdminPreviewJobResponse"]
     result = schemas["AdminPreviewJobResultResponse"]
     repository_side = schemas["AdminPreviewRepositorySideResponse"]
+    layout_candidate = schemas["AdminPreviewLayoutCandidateResponse"]
+    preview_sample = schemas["AdminPreviewSampleResponse"]
 
     assert create_request["additionalProperties"] is False
     assert set(create_request["properties"]) == {"expected_candidate_version", "commits"}
@@ -508,7 +510,27 @@ def test_admin_preview_openapi_is_closed_current_and_source_free() -> None:
     }
     assert result["additionalProperties"] is False
     assert set(result["properties"]) == {"detector_version", "digest", "layout_candidates"}
-    assert result["properties"]["layout_candidates"]["maxItems"] == 0
+    assert result["properties"]["layout_candidates"]["maxItems"] == 500
+    assert layout_candidate["additionalProperties"] is False
+    assert set(layout_candidate["properties"]) == {
+        "id",
+        "version",
+        "repository_side",
+        "format",
+        "layout_identity",
+        "confidence",
+        "files",
+        "languages",
+        "keys",
+        "samples",
+        "samples_are_partial",
+    }
+    assert layout_candidate["properties"]["languages"]["maxItems"] == 32
+    assert layout_candidate["properties"]["keys"]["maxItems"] == 100
+    assert layout_candidate["properties"]["samples"]["maxItems"] == 100
+    assert layout_candidate["properties"]["samples_are_partial"]["const"] is True
+    assert preview_sample["additionalProperties"] is False
+    assert set(preview_sample["properties"]) == {"language", "key", "translation"}
     assert repository_side["additionalProperties"] is False
 
     preview_contract = json.dumps(
