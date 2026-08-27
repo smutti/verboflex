@@ -944,6 +944,24 @@ def test_mapping_grouping_preview_uses_only_the_writable_side_and_configured_tar
     assert separate_preview.default_target_branch == "release/2"
     assert separate_preview.default_key == separate_preview.key_for_target("release/2")
 
+    with pytest.raises(module.InvalidMappingInput, match="invalid persisted mapping"):
+        module.pr_grouping_preview(
+            module.MappingRecord(
+                id=mapping_id,
+                revision_id=revision_id,
+                topology="separate",
+                primary_repository_id=repository_id,
+                primary_source_branch="keys/main",
+                translations_repository_id=None,
+                translations_source_branch=None,
+                allowed_target_branches=("release/1",),
+                default_target_branch="release/1",
+                selected_layout_candidate_id=None,
+                selected_layout_version=None,
+                candidate_version=5,
+            )
+        )
+
 
 def test_schema_is_reversible_revision_owned_and_has_no_manual_or_lifecycle_controls(
     mapping_database: tuple[Config, sessionmaker[Session]],

@@ -123,6 +123,9 @@ def test_empty_input_is_empty_and_grouping_has_no_provider_or_persistence_capabi
         "provider_client",
     }.isdisjoint(vars(module))
 
+    with pytest.raises(TypeError, match="PullRequestChange"):
+        module.group_pull_request_changes((object(),))
+
 
 def test_grouping_preview_accepts_only_exact_configured_targets_and_default() -> None:
     """D-18 exposes keys only for the configured exact allowed/default branches."""
@@ -150,3 +153,11 @@ def test_grouping_preview_accepts_only_exact_configured_targets_and_default() ->
             allowed_target_branches=("release/1",),
             default_target_branch="release/2",
         )
+
+    for invalid_allowed_targets in ((), ("release/1", "release/1"), ("",)):
+        with pytest.raises(ValueError, match="nonempty exact set"):
+            module.PullRequestGroupingPreview(
+                repository_id=REPOSITORY_ALPHA,
+                allowed_target_branches=invalid_allowed_targets,
+                default_target_branch="release/1",
+            )
