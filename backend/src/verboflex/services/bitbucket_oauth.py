@@ -519,48 +519,11 @@ class BitbucketOAuthService:
         actor_id: UUID,
     ) -> BitbucketConnectionStatus:
         """Immediately invalidate one local generation without provider claims."""
-        revoked_at = datetime.now(UTC)
-        changed = False
-        with session.begin():
-            connection = self._lock_connection(session)
-            if (
-                connection.revoked_at is not None
-                and connection.access_token_ciphertext is None
-                and connection.refresh_token_ciphertext is None
-            ):
-                status = BitbucketConnectionStatus(
-                    state="revoked",
-                    generation=connection.generation,
-                    scope_profile=connection.scope_profile or REPOSITORY_SCOPE,
-                )
-                previous_generation = connection.generation
-            else:
-                self._require_current_generation(
-                    connection,
-                    expected_generation=expected_generation,
-                )
-                previous_generation = connection.generation
-                connection.generation += 1
-                connection.access_token_ciphertext = None
-                connection.refresh_token_ciphertext = None
-                connection.provider_expires_at = None
-                connection.revoked_at = revoked_at
-                session.flush()
-                changed = True
-                status = BitbucketConnectionStatus(
-                    state="revoked",
-                    generation=connection.generation,
-                    scope_profile=connection.scope_profile or REPOSITORY_SCOPE,
-                )
-        if changed:
-            self._emit_lifecycle_event(
-                action="bitbucket.revoked",
-                actor_id=actor_id,
-                from_generation=previous_generation,
-                to_generation=status.generation,
-                occurred_at=revoked_at,
-            )
-        return status
+        return self._revoke_local(
+            session,
+            actor_id=actor_id,
+            expected_generation=expected_generation,
+        )
 
     def revoke_current(
         self,
@@ -569,6 +532,16 @@ class BitbucketOAuthService:
         actor_id: UUID,
     ) -> BitbucketConnectionStatus:
         """Invalidate whichever generation is current at lock acquisition."""
+        return self._revoke_local(session, actor_id=actor_id, expected_generation=None)
+
+    def _revoke_local(
+        self,
+        session: Session,
+        *,
+        actor_id: UUID,
+        expected_generation: int | None,
+    ) -> BitbucketConnectionStatus:
+        """Apply the sole local invalidation transition under the singleton lock."""
         revoked_at = datetime.now(UTC)
         changed = False
         with session.begin():
@@ -585,6 +558,11 @@ class BitbucketOAuthService:
                     scope_profile=connection.scope_profile or REPOSITORY_SCOPE,
                 )
             else:
+                if expected_generation is not None:
+                    self._require_current_generation(
+                        connection,
+                        expected_generation=expected_generation,
+                    )
                 connection.generation += 1
                 connection.access_token_ciphertext = None
                 connection.refresh_token_ciphertext = None
