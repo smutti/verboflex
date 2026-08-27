@@ -16,7 +16,7 @@ import pytest
 from alembic.config import Config
 from psycopg import connect, sql
 from pydantic import AnyHttpUrl, SecretStr
-from sqlalchemy import create_engine, select
+from sqlalchemy import Engine, create_engine, inspect, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
@@ -32,6 +32,7 @@ SESSION_ID = UUID("00000000-0000-4000-8000-000000000902")
 CALLBACK_URI = "https://api.verboflex.example/api/v1/admin/bitbucket/callback"
 FIXED_POST_CALLBACK_PATH = "/admin/bitbucket"
 FERNET_KEY = base64.urlsafe_b64encode(b"0" * 32).decode()
+WRONG_FERNET_KEY = base64.urlsafe_b64encode(b"1" * 32).decode()
 ACCESS_TOKEN = "provider-access-token-must-never-leak"
 REFRESH_TOKEN = "provider-refresh-token-must-never-leak"
 PROVIDER_ERROR_BODY = "provider-body-must-never-leak"
@@ -107,7 +108,7 @@ class FakeTokenExchange:
 
 
 @pytest.fixture
-def oauth_session_factory() -> Iterator[sessionmaker[Session]]:
+def oauth_migration_database() -> Iterator[tuple[Config, Engine]]:
     """Migrate one isolated PostgreSQL database for OAuth persistence."""
     database_name = f"verboflex_oauth_{uuid4().hex}"
     with connect(ADMIN_DATABASE_URL, autocommit=True) as admin_connection:
@@ -121,15 +122,23 @@ def oauth_session_factory() -> Iterator[sessionmaker[Session]]:
     config.set_main_option("sqlalchemy.url", sqlalchemy_url)
     engine = create_engine(sqlalchemy_url)
     command.upgrade(config, "head")
-    factory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
     try:
-        yield factory
+        yield config, engine
     finally:
         engine.dispose()
         with connect(ADMIN_DATABASE_URL, autocommit=True) as admin_connection:
             admin_connection.execute(
                 sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database_name))
             )
+
+
+@pytest.fixture
+def oauth_session_factory(
+    oauth_migration_database: tuple[Config, Engine],
+) -> Iterator[sessionmaker[Session]]:
+    """Expose sessions over the migrated OAuth database."""
+    _config, engine = oauth_migration_database
+    yield sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
 
 
 def oauth_settings() -> Settings:
@@ -421,4 +430,148 @@ def test_connects_single_encrypted_repository_scope_generation(
             redis_client=redis,
             token_exchange=exchange,
             random_bytes=random_bytes,
+        )
+
+
+def test_secret_box_rejects_wrong_key_tamper_and_plaintext_representations() -> None:
+    """Authenticated encryption rejects every invalid ciphertext without disclosure."""
+    from verboflex.security.secret_box import SecretBox, SecretBoxDecryptionError
+
+    secret_box = SecretBox.from_keyring(FERNET_KEY)
+    ciphertext = secret_box.encrypt(ACCESS_TOKEN)
+
+    assert secret_box.decrypt(ciphertext) == ACCESS_TOKEN
+    assert ACCESS_TOKEN not in ciphertext
+    assert REFRESH_TOKEN not in ciphertext
+    assert FERNET_KEY not in repr(secret_box)
+    assert ACCESS_TOKEN not in repr(secret_box)
+    assert repr(secret_box) == "SecretBox(<redacted>)"
+
+    wrong_key_box = SecretBox.from_keyring(WRONG_FERNET_KEY)
+    with pytest.raises(
+        SecretBoxDecryptionError,
+        match="Encrypted secret is invalid",
+    ) as wrong_key_error:
+        wrong_key_box.decrypt(ciphertext)
+    assert ACCESS_TOKEN not in str(wrong_key_error.value)
+    assert ciphertext not in str(wrong_key_error.value)
+
+    final_character = "A" if ciphertext[-1] != "A" else "B"
+    tampered_ciphertext = f"{ciphertext[:-1]}{final_character}"
+    with pytest.raises(
+        SecretBoxDecryptionError,
+        match="Encrypted secret is invalid",
+    ) as tamper_error:
+        secret_box.decrypt(tampered_ciphertext)
+    assert ACCESS_TOKEN not in str(tamper_error.value)
+    assert tampered_ciphertext not in str(tamper_error.value)
+
+
+def test_secret_box_drives_oauth_persistence_without_secret_metadata(
+    oauth_session_factory: sessionmaker[Session],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """OAuth persistence uses the narrow box while state and status stay bounded."""
+    from verboflex.security.secret_box import SecretBox
+
+    from verboflex.models.bitbucket_connection import BitbucketConnection
+    from verboflex.services.bitbucket_oauth import BitbucketOAuthService
+
+    redis = FakeRedis()
+    exchange = FakeTokenExchange()
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        redis_client=redis,
+        token_exchange=exchange,
+        random_bytes=lambda length: b"2" * length,
+    )
+    state = service.start(
+        admin_id=ADMIN_ID,
+        session_id=SESSION_ID,
+        expected_generation=0,
+    )
+    with oauth_session_factory() as session:
+        result = service.complete_callback(
+            session,
+            state=state,
+            code="audit-safe-authorization-code",
+            admin_id=ADMIN_ID,
+            session_id=SESSION_ID,
+            callback_uri=CALLBACK_URI,
+            post_callback_path=FIXED_POST_CALLBACK_PATH,
+        )
+
+    secret_box = SecretBox.from_keyring(FERNET_KEY)
+    with oauth_session_factory() as session:
+        connection = session.execute(select(BitbucketConnection)).scalar_one()
+        assert connection.access_token_ciphertext is not None
+        assert connection.refresh_token_ciphertext is not None
+        assert secret_box.decrypt(connection.access_token_ciphertext) == ACCESS_TOKEN
+        assert secret_box.decrypt(connection.refresh_token_ciphertext) == REFRESH_TOKEN
+
+    state_storage = json.dumps(redis.values, sort_keys=True)
+    audit_safe_status = repr(result.status)
+    for secret in (
+        ACCESS_TOKEN,
+        REFRESH_TOKEN,
+        PROVIDER_ERROR_BODY,
+        "backend-only-client-secret",
+        "audit-safe-authorization-code",
+    ):
+        assert secret not in state_storage
+        assert secret not in audit_safe_status
+        assert secret not in caplog.text
+
+
+def test_bitbucket_singleton_metadata_survives_postgresql_rehearsal(
+    oauth_migration_database: tuple[Config, Engine],
+) -> None:
+    """Declarative registration and upgrade/downgrade/upgrade remain exact."""
+    from verboflex import models
+    from verboflex.db.base import Base
+    from verboflex.models.bitbucket_connection import BitbucketConnection
+
+    config, engine = oauth_migration_database
+    assert models.BitbucketConnection is BitbucketConnection
+    assert "BitbucketConnection" in models.__all__
+    assert Base.metadata.tables["bitbucket_connections"] is BitbucketConnection.__table__
+
+    inspector = inspect(engine)
+    columns = {column["name"] for column in inspector.get_columns("bitbucket_connections")}
+    assert columns == {
+        "id",
+        "generation",
+        "access_token_ciphertext",
+        "refresh_token_ciphertext",
+        "scope_profile",
+        "provider_expires_at",
+        "connected_at",
+        "revoked_at",
+        "created_at",
+        "updated_at",
+    }
+    assert "access_token" not in columns
+    assert "refresh_token" not in columns
+    assert {
+        constraint["name"]
+        for constraint in inspector.get_check_constraints("bitbucket_connections")
+    } == {
+        "ck_bitbucket_connections_credential_pair_state",
+        "ck_bitbucket_connections_generation_non_negative",
+        "ck_bitbucket_connections_singleton_id",
+    }
+    with engine.connect() as connection:
+        assert (
+            connection.exec_driver_sql("SELECT count(*) FROM bitbucket_connections").scalar_one()
+            == 1
+        )
+
+    command.downgrade(config, "0003_repositories")
+    assert "bitbucket_connections" not in inspect(engine).get_table_names()
+    command.upgrade(config, "head")
+    assert "bitbucket_connections" in inspect(engine).get_table_names()
+    with engine.connect() as connection:
+        assert (
+            connection.exec_driver_sql("SELECT count(*) FROM bitbucket_connections").scalar_one()
+            == 1
         )
