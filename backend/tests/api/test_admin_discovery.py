@@ -1,0 +1,271 @@
+"""Administrator branch-discovery API contracts."""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Generator
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+import os
+from pathlib import Path
+from uuid import UUID, uuid4
+
+import httpx
+import pytest
+from alembic.config import Config
+from psycopg import connect, sql
+from pydantic import SecretStr
+from sqlalchemy import create_engine, delete, select, text
+from sqlalchemy.orm import Session, sessionmaker
+
+from alembic import command
+from verboflex.auth.access_tokens import issue_access_token
+from verboflex.auth.passwords import hash_password
+from verboflex.core.config import Settings, get_settings
+from verboflex.db.session import get_db_session
+from verboflex.main import app
+from verboflex.models.auth_session import AuthSession
+from verboflex.models.repository import Repository
+from verboflex.models.role import Role
+from verboflex.models.user import User
+
+SIGNING_SECRET = "0123456789abcdef" * 2
+DISCOVERY_PATH = "/api/v1/admin/repositories"
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+ADMIN_DATABASE_URL = os.environ.get(
+    "VERBOFLEX_TEST_POSTGRES_ADMIN_URL",
+    "postgresql://postgres@127.0.0.1:55432/postgres",
+)
+
+
+@pytest.fixture(scope="module")
+def discovery_session_factory() -> Generator[sessionmaker[Session]]:
+    """Migrate one isolated PostgreSQL database for branch discovery."""
+    database_name = f"verboflex_admin_discovery_{uuid4().hex}"
+    with connect(ADMIN_DATABASE_URL, autocommit=True) as admin_connection:
+        admin_connection.execute(
+            sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database_name))
+        )
+    database_url = ADMIN_DATABASE_URL.rsplit("/", 1)[0] + f"/{database_name}"
+    sqlalchemy_url = database_url.replace("postgresql://", "postgresql+psycopg://")
+    config = Config(BACKEND_ROOT / "alembic.ini")
+    config.set_main_option("sqlalchemy.url", sqlalchemy_url)
+    engine = create_engine(sqlalchemy_url)
+    command.upgrade(config, "head")
+    factory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
+    try:
+        yield factory
+    finally:
+        app.dependency_overrides.clear()
+        engine.dispose()
+        with connect(ADMIN_DATABASE_URL, autocommit=True) as admin_connection:
+            admin_connection.execute(
+                sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database_name))
+            )
+
+
+@pytest.fixture(autouse=True)
+def clean_discovery_database(
+    discovery_session_factory: sessionmaker[Session],
+) -> Generator[None]:
+    app.dependency_overrides.clear()
+    with discovery_session_factory.begin() as session:
+        session.execute(delete(AuthSession))
+        session.execute(delete(User))
+        session.execute(delete(Repository))
+    yield
+    app.dependency_overrides.clear()
+
+
+def _settings() -> Settings:
+    return Settings(jwt_secret_key=SecretStr(SIGNING_SECRET))
+
+
+def _configure(factory: sessionmaker[Session], adapter: object) -> None:
+    def override_session() -> Generator[Session]:
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_session
+    app.dependency_overrides[get_settings] = _settings
+    try:
+        from verboflex.api.v1.routes.admin_discovery import get_bitbucket_discovery_adapter
+    except ModuleNotFoundError:
+        return
+    app.dependency_overrides[get_bitbucket_discovery_adapter] = lambda: adapter
+
+
+def _authority(factory: sessionmaker[Session], *, role: str, email: str) -> str:
+    user_id = uuid4()
+    auth_session_id = uuid4()
+    now = datetime.now(UTC)
+    with factory.begin() as session:
+        durable_role = session.scalar(select(Role).where(Role.name == role))
+        assert durable_role is not None
+        session.add(
+            User(
+                id=user_id,
+                email=email,
+                display_name=email,
+                hashed_password=hash_password("principal password phrase!"),
+                is_active=True,
+                must_change_password=False,
+                roles=[durable_role],
+            )
+        )
+        session.add(
+            AuthSession(
+                id=auth_session_id,
+                user_id=user_id,
+                family_id=uuid4(),
+                token_hash=uuid4().hex + uuid4().hex,
+                expires_at=now + timedelta(days=1),
+            )
+        )
+    return issue_access_token(
+        user_id=user_id,
+        session_id=auth_session_id,
+        token_version=0,
+        purpose="access",
+        settings=_settings(),
+        now=now,
+    )
+
+
+def _repository(factory: sessionmaker[Session]) -> UUID:
+    repository_id = uuid4()
+    with factory.begin() as session:
+        session.add(
+            Repository(
+                id=repository_id,
+                workspace="acme",
+                repository_slug="mobile",
+                descriptive_name="Mobile",
+                descriptive_name_key="mobile",
+            )
+        )
+    return repository_id
+
+
+async def _request(path: str, *, token: str | None) -> httpx.Response:
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    headers = {"Authorization": f"Bearer {token}"} if token is not None else None
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        return await client.get(path, headers=headers)
+
+
+@dataclass
+class FakeDiscoveryAdapter:
+    branches: tuple[FakeBranch, ...]
+    failure_kind: str | None = None
+    calls: list[tuple[str, str]] = field(default_factory=list)
+
+    async def list_repository_branches(
+        self,
+        _session: Session,
+        *,
+        workspace: str,
+        repository_slug: str,
+    ) -> tuple[BitbucketBranch, ...]:
+        self.calls.append((workspace, repository_slug))
+        if self.failure_kind is not None:
+            from verboflex.integrations.bitbucket.client import BitbucketProviderReadError
+
+            raise BitbucketProviderReadError(kind=self.failure_kind)
+        return self.branches
+
+
+@dataclass(frozen=True)
+class FakeBranch:
+    name: str
+    commit_hash: str
+
+
+def test_admin_branch_collection_is_exact_bounded_and_application_opaque(
+    discovery_session_factory: sessionmaker[Session],
+) -> None:
+    """Default/max pages slice provider order and malformed inputs never call Bitbucket."""
+    branches = tuple(
+        FakeBranch(name=f"Branch-{index:03d}", commit_hash=f"{index:040x}") for index in range(120)
+    )
+    adapter = FakeDiscoveryAdapter(branches=branches)
+    _configure(discovery_session_factory, adapter)
+    token = _authority(discovery_session_factory, role="admin", email="admin@example.com")
+    repository_id = _repository(discovery_session_factory)
+    path = f"{DISCOVERY_PATH}/{repository_id}/branches"
+
+    first = asyncio.run(_request(path, token=token))
+    assert first.status_code == 200
+    assert [item["name"] for item in first.json()["items"]] == [
+        branch.name for branch in branches[:50]
+    ]
+    cursor = first.json()["next_cursor"]
+    assert isinstance(cursor, str)
+    assert "bitbucket" not in cursor.lower()
+    assert "http" not in cursor.lower()
+
+    second = asyncio.run(_request(f"{path}?limit=100&cursor={cursor}", token=token))
+    assert second.status_code == 200
+    assert [item["name"] for item in second.json()["items"]] == [
+        branch.name for branch in branches[50:]
+    ]
+    assert second.json()["next_cursor"] is None
+
+    calls_before_invalid = len(adapter.calls)
+    invalid_cursor = asyncio.run(_request(f"{path}?cursor=not-a-cursor", token=token))
+    oversized_page = asyncio.run(_request(f"{path}?limit=101", token=token))
+    assert invalid_cursor.status_code == 422
+    assert oversized_page.status_code == 422
+    assert len(adapter.calls) == calls_before_invalid
+
+
+def test_denied_or_unregistered_discovery_never_calls_provider(
+    discovery_session_factory: sessionmaker[Session],
+) -> None:
+    adapter = FakeDiscoveryAdapter(branches=())
+    _configure(discovery_session_factory, adapter)
+    viewer = _authority(discovery_session_factory, role="viewer", email="viewer@example.com")
+    missing_path = f"{DISCOVERY_PATH}/{uuid4()}/branches"
+
+    anonymous = asyncio.run(_request(missing_path, token=None))
+    forbidden = asyncio.run(_request(missing_path, token=viewer))
+    assert anonymous.status_code == 401
+    assert forbidden.status_code == 403
+    assert adapter.calls == []
+
+    admin = _authority(discovery_session_factory, role="admin", email="admin@example.com")
+    missing = asyncio.run(_request(missing_path, token=admin))
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "Repository unavailable"}
+    assert adapter.calls == []
+
+
+@pytest.mark.parametrize(
+    ("kind", "status_code", "state"),
+    [
+        ("disconnected", 409, "disconnected"),
+        ("reauthorization_required", 409, "reauthorization_required"),
+        ("permission_denied", 403, "permission_denied"),
+        ("not_found", 404, "not_found"),
+        ("unavailable", 503, "unavailable"),
+        ("timeout", 504, "timeout"),
+    ],
+)
+def test_provider_failures_are_typed_bounded_states(
+    discovery_session_factory: sessionmaker[Session],
+    kind: str,
+    status_code: int,
+    state: str,
+) -> None:
+    adapter = FakeDiscoveryAdapter(branches=(), failure_kind=kind)
+    _configure(discovery_session_factory, adapter)
+    token = _authority(discovery_session_factory, role="admin", email=f"{kind}@example.com")
+    repository_id = _repository(discovery_session_factory)
+
+    response = asyncio.run(_request(f"{DISCOVERY_PATH}/{repository_id}/branches", token=token))
+    assert response.status_code == status_code
+    assert response.json() == {
+        "detail": "Bitbucket discovery unavailable",
+        "state": state,
+    }
+    assert adapter.calls == [("acme", "mobile")]
