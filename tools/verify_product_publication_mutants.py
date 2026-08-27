@@ -158,9 +158,7 @@ def run_suite(backend: Path) -> subprocess.CompletedProcess[str]:
 
 def prove_mutations() -> None:
     """Require a green baseline and an assertion failure for every mutant."""
-    with tempfile.TemporaryDirectory(
-        prefix="verboflex-publication-mutants-"
-    ) as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="verboflex-publication-mutants-") as temp_dir:
         workspace = Path(temp_dir)
         baseline = run_suite(copy_backend(workspace / "baseline"))
         if baseline.returncode != 0:
@@ -195,9 +193,7 @@ def prove_mutations() -> None:
 
 def self_test() -> None:
     """Prove source drift reaches the checker's failure path."""
-    with tempfile.TemporaryDirectory(
-        prefix="verboflex-publication-control-"
-    ) as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="verboflex-publication-control-") as temp_dir:
         control = Path(temp_dir) / "control.py"
         control.write_text("approved = True\n")
         try:
