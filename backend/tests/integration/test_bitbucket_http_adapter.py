@@ -143,3 +143,104 @@ def test_reads_metadata_only_through_validated_current_generation() -> None:
         await adapter.aclose()
 
     asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("invalidate_at", ["before_request", "during_response"])
+def test_reconnect_or_revoke_discards_stale_provider_results(invalidate_at: str) -> None:
+    """A locally superseded credential can neither start nor finish a provider read."""
+    from verboflex.integrations.bitbucket.client import (
+        BitbucketHttpAdapter,
+        BitbucketProviderReadError,
+    )
+
+    requests: list[httpx.Request] = []
+
+    @dataclass
+    class InvalidatingCredentialLeaseAuthority(FakeCredentialLeaseAuthority):
+        invalidate_after_acquire: bool = False
+
+        def acquire_repository_read_lease(self, session: object) -> Any:
+            lease = super().acquire_repository_read_lease(session)
+            if self.invalidate_after_acquire:
+                self.generation += 1
+            return lease
+
+    authority = InvalidatingCredentialLeaseAuthority(
+        invalidate_after_acquire=invalidate_at == "before_request"
+    )
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if invalidate_at == "during_response":
+            authority.generation += 1
+        return httpx.Response(
+            200,
+            json={"uuid": "{stale-repository-uuid}"},
+            headers={"x-oauth-scopes": "repository"},
+            request=request,
+        )
+
+    adapter = BitbucketHttpAdapter(
+        settings=Settings(),
+        credential_leases=authority,
+        transport=httpx.MockTransport(provider),
+    )
+
+    async def exercise() -> None:
+        with pytest.raises(BitbucketProviderReadError) as captured:
+            await adapter.read_repository_metadata(
+                object(),
+                workspace="acme",
+                repository_slug="mobile",
+            )
+        assert str(captured.value) == "Bitbucket provider read failed"
+        assert "stale" not in f"{captured.value!r} {captured.value}".lower()
+        assert len(requests) == (0 if invalidate_at == "before_request" else 1)
+        await adapter.aclose()
+
+    asyncio.run(exercise())
+
+
+def test_provider_url_boundary_allows_only_integrated_read_families() -> None:
+    """Excluded Bitbucket endpoint families fail before any credential can be sent."""
+    from verboflex.integrations.bitbucket.urls import validate_bitbucket_api_url
+
+    allowed_urls = (
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/refs/branches?pagelen=100",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/refs/branches/feature%2Fone",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/src/"
+        "0123456789abcdef0123456789abcdef01234567/?pagelen=100",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/src/"
+        "0123456789abcdef0123456789abcdef01234567/locales/en.json",
+    )
+    for allowed_url in allowed_urls:
+        assert validate_bitbucket_api_url(allowed_url) == allowed_url
+
+    excluded_urls = (
+        "https://api.bitbucket.org/2.0/repositories",
+        "https://api.bitbucket.org/2.0/repositories/acme",
+        "https://api.bitbucket.org/2.0/user",
+        "https://api.bitbucket.org/2.0/workspaces/acme/members",
+        "https://api.bitbucket.org/2.0/workspaces/acme/projects",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/refs/tags",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/commits",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/diff/abc..def",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/commit/abc/statuses",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/pullrequests",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/hooks",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/permissions-config",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/branch-restrictions",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/deploy-keys",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/pipelines",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/deployments",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/issues",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/downloads",
+        "https://api.bitbucket.org/2.0/repositories/acme/mobile/wiki",
+        "https://api.bitbucket.org/2.0/snippets/acme",
+        "https://api.bitbucket.org/2.0/workspaces/acme/search/code",
+        "https://bitbucket.org/site/oauth2/revoke",
+    )
+    for excluded_url in excluded_urls:
+        with pytest.raises(ValueError, match="Bitbucket provider URL rejected"):
+            validate_bitbucket_api_url(excluded_url)
