@@ -7,8 +7,10 @@ import hashlib
 import json
 import os
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
+from threading import Event
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -35,6 +37,8 @@ FERNET_KEY = base64.urlsafe_b64encode(b"0" * 32).decode()
 WRONG_FERNET_KEY = base64.urlsafe_b64encode(b"1" * 32).decode()
 ACCESS_TOKEN = "provider-access-token-must-never-leak"
 REFRESH_TOKEN = "provider-refresh-token-must-never-leak"
+ROTATED_ACCESS_TOKEN = "rotated-access-token-must-never-leak"
+ROTATED_REFRESH_TOKEN = "rotated-refresh-token-must-never-leak"
 PROVIDER_ERROR_BODY = "provider-body-must-never-leak"
 
 
@@ -76,8 +80,12 @@ class FakeTokenExchange:
     """Backend-only provider boundary with observable sanitized calls."""
 
     calls: list[dict[str, str]] = field(default_factory=list)
+    refresh_calls: list[dict[str, str]] = field(default_factory=list)
+    provider_revoke_calls: int = 0
     scope: str = "repository"
     error: Exception | None = None
+    refresh_started: Event | None = None
+    release_refresh: Event | None = None
 
     def exchange_authorization_code(
         self,
@@ -105,6 +113,39 @@ class FakeTokenExchange:
             "expires_in": 3600,
             "provider_debug_body": PROVIDER_ERROR_BODY,
         }
+
+    def refresh_tokens(
+        self,
+        *,
+        refresh_token: str,
+        client_id: str,
+        client_secret: str,
+    ) -> dict[str, Any]:
+        """Return one rotated pair and optionally expose a deterministic race seam."""
+        self.refresh_calls.append(
+            {
+                "refresh_token": refresh_token,
+                "client_id": client_id,
+                "client_secret": client_secret,
+            }
+        )
+        if self.refresh_started is not None:
+            self.refresh_started.set()
+        if self.release_refresh is not None:
+            assert self.release_refresh.wait(timeout=5)
+        if self.error is not None:
+            raise self.error
+        return {
+            "access_token": ROTATED_ACCESS_TOKEN,
+            "refresh_token": ROTATED_REFRESH_TOKEN,
+            "scope": self.scope,
+            "expires_in": 1800,
+            "provider_debug_body": PROVIDER_ERROR_BODY,
+        }
+
+    def revoke_tokens(self) -> None:
+        """Trap any guessed provider-side revoke operation."""
+        self.provider_revoke_calls += 1
 
 
 @pytest.fixture
@@ -166,6 +207,219 @@ def _connection_snapshot(factory: sessionmaker[Session]) -> tuple[Any, ...]:
             connection.connected_at,
             connection.revoked_at,
         )
+
+
+def _connect_generation(
+    factory: sessionmaker[Session],
+    service: Any,
+    *,
+    expected_generation: int,
+    code: str,
+) -> Any:
+    state = service.start(
+        admin_id=ADMIN_ID,
+        session_id=SESSION_ID,
+        expected_generation=expected_generation,
+    )
+    with factory() as session:
+        return service.complete_callback(
+            session,
+            state=state,
+            code=code,
+            admin_id=ADMIN_ID,
+            session_id=SESSION_ID,
+            callback_uri=CALLBACK_URI,
+            post_callback_path=FIXED_POST_CALLBACK_PATH,
+        )
+
+
+def test_refresh_and_reconnect_serialize_one_current_rotated_generation(
+    oauth_session_factory: sessionmaker[Session],
+) -> None:
+    """A stale reconnect cannot call the provider or overwrite one rotated pair."""
+    from verboflex.security.secret_box import SecretBox
+    from verboflex.services.bitbucket_oauth import (
+        BitbucketOAuthService,
+        OAuthCallbackRejected,
+    )
+
+    redis = FakeRedis()
+    exchange = FakeTokenExchange()
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        redis_client=redis,
+        token_exchange=exchange,
+        random_bytes=lambda length: b"4" * length,
+    )
+    connected = _connect_generation(
+        oauth_session_factory,
+        service,
+        expected_generation=0,
+        code="initial-authorization-code",
+    )
+    assert connected.status.generation == 1
+
+    reconnect_state = service.start(
+        admin_id=ADMIN_ID,
+        session_id=SESSION_ID,
+        expected_generation=1,
+    )
+    exchange.refresh_started = Event()
+    exchange.release_refresh = Event()
+
+    def refresh() -> Any:
+        with oauth_session_factory() as session:
+            return service.refresh(
+                session,
+                expected_generation=1,
+                actor_id=ADMIN_ID,
+            )
+
+    def reconnect() -> str:
+        with oauth_session_factory() as session:
+            try:
+                service.complete_callback(
+                    session,
+                    state=reconnect_state,
+                    code="stale-reconnect-code",
+                    admin_id=ADMIN_ID,
+                    session_id=SESSION_ID,
+                    callback_uri=CALLBACK_URI,
+                    post_callback_path=FIXED_POST_CALLBACK_PATH,
+                )
+            except OAuthCallbackRejected:
+                return "stale"
+        return "connected"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        refresh_future = executor.submit(refresh)
+        if not exchange.refresh_started.wait(timeout=5):
+            refresh_future.result(timeout=0)
+        reconnect_future = executor.submit(reconnect)
+        exchange.release_refresh.set()
+        refreshed = refresh_future.result(timeout=5)
+        reconnect_result = reconnect_future.result(timeout=5)
+
+    assert refreshed.generation == 2
+    assert reconnect_result == "stale"
+    assert len(exchange.calls) == 1
+    assert exchange.refresh_calls == [
+        {
+            "refresh_token": REFRESH_TOKEN,
+            "client_id": "verboflex-test-client",
+            "client_secret": "backend-only-client-secret",  # pragma: allowlist secret
+        }
+    ]
+
+    secret_box = SecretBox.from_keyring(FERNET_KEY)
+    from verboflex.models.bitbucket_connection import BitbucketConnection
+
+    with oauth_session_factory() as session:
+        connection = session.execute(select(BitbucketConnection)).scalar_one()
+        assert connection.generation == 2
+        assert connection.access_token_ciphertext is not None
+        assert connection.refresh_token_ciphertext is not None
+        assert secret_box.decrypt(connection.access_token_ciphertext) == ROTATED_ACCESS_TOKEN
+        assert secret_box.decrypt(connection.refresh_token_ciphertext) == ROTATED_REFRESH_TOKEN
+
+
+def test_local_revoke_advances_generation_rejects_old_work_and_audits_no_secrets(
+    oauth_session_factory: sessionmaker[Session],
+) -> None:
+    """Local revoke wins immediately without guessing a provider revoke endpoint."""
+    from verboflex.services.bitbucket_oauth import BitbucketOAuthService
+
+    redis = FakeRedis()
+    exchange = FakeTokenExchange()
+    audit_events: list[Any] = []
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        redis_client=redis,
+        token_exchange=exchange,
+        random_bytes=lambda length: b"5" * length,
+        audit_emitter=audit_events.append,
+    )
+    connected = _connect_generation(
+        oauth_session_factory,
+        service,
+        expected_generation=0,
+        code="revocable-authorization-code",
+    )
+    assert connected.status.generation == 1
+    stale_state = service.start(
+        admin_id=ADMIN_ID,
+        session_id=SESSION_ID,
+        expected_generation=1,
+    )
+
+    with oauth_session_factory() as session:
+        revoked = service.revoke(
+            session,
+            expected_generation=1,
+            actor_id=ADMIN_ID,
+        )
+
+    assert revoked.state == "revoked"
+    assert revoked.generation == 2
+    assert exchange.provider_revoke_calls == 0
+    refresh_call_count = len(exchange.refresh_calls)
+    authorization_call_count = len(exchange.calls)
+
+    with (
+        oauth_session_factory() as session,
+        pytest.raises(PermissionError, match="Bitbucket connection generation rejected"),
+    ):
+        service.refresh(
+            session,
+            expected_generation=1,
+            actor_id=ADMIN_ID,
+        )
+    assert len(exchange.refresh_calls) == refresh_call_count
+
+    from verboflex.services.bitbucket_oauth import OAuthCallbackRejected
+
+    with (
+        oauth_session_factory() as session,
+        pytest.raises(OAuthCallbackRejected, match="OAuth callback rejected"),
+    ):
+        service.complete_callback(
+            session,
+            state=stale_state,
+            code="stale-after-revoke-code",
+            admin_id=ADMIN_ID,
+            session_id=SESSION_ID,
+            callback_uri=CALLBACK_URI,
+            post_callback_path=FIXED_POST_CALLBACK_PATH,
+        )
+    assert len(exchange.calls) == authorization_call_count
+
+    snapshot = _connection_snapshot(oauth_session_factory)
+    assert snapshot[0] == 2
+    assert snapshot[1] is None
+    assert snapshot[2] is None
+    assert snapshot[4] is None
+    assert snapshot[6] is not None
+
+    assert [event.action for event in audit_events] == [
+        "bitbucket.connected",
+        "bitbucket.revoked",
+    ]
+    assert audit_events[-1].actor_id == ADMIN_ID
+    assert audit_events[-1].from_generation == 1
+    assert audit_events[-1].to_generation == 2
+    audit_text = repr(audit_events)
+    for secret in (
+        ACCESS_TOKEN,
+        REFRESH_TOKEN,
+        ROTATED_ACCESS_TOKEN,
+        ROTATED_REFRESH_TOKEN,
+        PROVIDER_ERROR_BODY,
+        "backend-only-client-secret",
+        "revocable-authorization-code",
+        "stale-after-revoke-code",
+        stale_state,
+    ):
+        assert secret not in audit_text
 
 
 def test_connects_single_encrypted_repository_scope_generation(
