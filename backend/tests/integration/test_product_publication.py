@@ -16,7 +16,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic.config import Config
 from psycopg import connect, sql
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from alembic import command
@@ -769,7 +769,8 @@ def test_stale_confirmation_identity_preserves_the_prior_active_graph(
                     ProductRepositoryMapping.revision_id == candidate_id
                 )
             )
-            assert mapping_id is not None
+        assert mapping_id is not None
+        with publication_session_factory() as session:
             newer = create_or_reuse_preview_job(
                 session,
                 product_id=product_id,
@@ -804,10 +805,13 @@ def test_stale_confirmation_identity_preserves_the_prior_active_graph(
                 assert side is not None
                 side.source_branch = "release/drift"
             elif mutation == "job_failed":
-                job = session.get_one(PreviewJob, confirmed_job_id)
-                job.state = "failed"
-                job.result = None
-                job.error_code = "processing_failed"
+                session.execute(
+                    text(
+                        "UPDATE preview_jobs SET state = 'failed', result = NULL, "
+                        "error_code = 'processing_failed' WHERE id = :job_id"
+                    ),
+                    {"job_id": confirmed_job_id},
+                )
             elif mutation == "digest":
                 mapping.confirmed_preview_digest = "f" * 64
             else:
