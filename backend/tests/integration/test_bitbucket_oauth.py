@@ -243,7 +243,7 @@ def test_connects_single_encrypted_repository_scope_generation(
             "code": "single-use-authorization-code",
             "callback_uri": CALLBACK_URI,
             "client_id": "verboflex-test-client",
-            "client_secret": "backend-only-client-secret",
+            "client_secret": "backend-only-client-secret",  # pragma: allowlist secret
         }
     ]
     assert result.redirect_path == FIXED_POST_CALLBACK_PATH
