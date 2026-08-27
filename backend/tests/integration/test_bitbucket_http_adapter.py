@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import nullcontext
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -64,10 +66,30 @@ def test_reads_metadata_only_through_validated_current_generation() -> None:
                 headers={"location": "https://attacker.example/steal"},
                 request=request,
             )
+        if slug == "safe-redirect":
+            return httpx.Response(
+                302,
+                headers={"location": "https://api.bitbucket.org/2.0/repositories/acme/mobile"},
+                request=request,
+            )
         if slug == "failure":
             return httpx.Response(503, text=PROVIDER_BODY, request=request)
         if slug == "retry":
             raise httpx.ConnectError(PROVIDER_BODY, request=request)
+        if slug == "wrong-scope":
+            return httpx.Response(
+                200,
+                json={"uuid": "{repository-uuid}"},
+                headers={"x-oauth-scopes": "repository:write"},
+                request=request,
+            )
+        if slug == "non-object":
+            return httpx.Response(
+                200,
+                json=[{"uuid": "{repository-uuid}"}],
+                headers={"x-oauth-scopes": "repository"},
+                request=request,
+            )
         return httpx.Response(
             200,
             json={
@@ -125,7 +147,14 @@ def test_reads_metadata_only_through_validated_current_generation() -> None:
                 validate_bitbucket_api_url(invalid_url)
         assert len(requests) == calls_before_invalid_urls
 
-        for slug in ("redirected", "failure", "retry"):
+        for slug in (
+            "redirected",
+            "safe-redirect",
+            "failure",
+            "retry",
+            "wrong-scope",
+            "non-object",
+        ):
             with pytest.raises(BitbucketProviderReadError) as captured:
                 await adapter.read_repository_metadata(
                     object(),
@@ -137,8 +166,11 @@ def test_reads_metadata_only_through_validated_current_generation() -> None:
             assert PROVIDER_BODY not in diagnostic
 
         assert attempts["redirected"] == 1
+        assert attempts["safe-redirect"] == 1
         assert attempts["failure"] == 1
         assert attempts["retry"] == 1
+        assert attempts["wrong-scope"] == 1
+        assert attempts["non-object"] == 1
         assert all(request.url.host == "api.bitbucket.org" for request in requests)
         await adapter.aclose()
 
@@ -203,7 +235,10 @@ def test_reconnect_or_revoke_discards_stale_provider_results(invalidate_at: str)
 
 def test_provider_url_boundary_allows_only_integrated_read_families() -> None:
     """Excluded Bitbucket endpoint families fail before any credential can be sent."""
-    from verboflex.integrations.bitbucket.urls import validate_bitbucket_api_url
+    from verboflex.integrations.bitbucket.urls import (
+        repository_metadata_url,
+        validate_bitbucket_api_url,
+    )
 
     allowed_urls = (
         "https://api.bitbucket.org/2.0/repositories/acme/mobile",
@@ -244,3 +279,82 @@ def test_provider_url_boundary_allows_only_integrated_read_families() -> None:
     for excluded_url in excluded_urls:
         with pytest.raises(ValueError, match="Bitbucket provider URL rejected"):
             validate_bitbucket_api_url(excluded_url)
+
+    structurally_invalid_urls: tuple[object, ...] = (
+        None,
+        "",
+        "https://api.bitbucket.org\\2.0\\repositories\\acme\\mobile",
+        "https://api.bitbucket.org:not-a-port/2.0/repositories/acme/mobile",
+    )
+    for invalid_url in structurally_invalid_urls:
+        with pytest.raises(ValueError, match="Bitbucket provider URL rejected"):
+            validate_bitbucket_api_url(invalid_url)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="Bitbucket provider URL rejected"):
+        repository_metadata_url(workspace="Acme", repository_slug="mobile")
+
+
+def test_oauth_credential_lease_authority_fails_closed_for_unreadable_rows() -> None:
+    """The real lease authority decrypts only readable rows and rechecks generation."""
+    from verboflex.security.secret_box import SecretBoxDecryptionError
+    from verboflex.services.bitbucket_oauth import (
+        BitbucketOAuthService,
+        OAuthConnectionUnavailable,
+        OAuthGenerationRejected,
+    )
+
+    @dataclass
+    class FakeSession:
+        connection: object | None
+
+        def begin(self) -> Any:
+            return nullcontext()
+
+        def get(self, _model: object, _identity: int) -> object | None:
+            return self.connection
+
+    class ReadableSecretBox:
+        def decrypt(self, ciphertext: str) -> str:
+            assert ciphertext == "encrypted-access-token"
+            return ACCESS_TOKEN
+
+    service = object.__new__(BitbucketOAuthService)
+    service._secret_box = ReadableSecretBox()
+    connection = SimpleNamespace(
+        generation=7,
+        revoked_at=None,
+        scope_profile="repository",
+        access_token_ciphertext="encrypted-access-token",
+        refresh_token_ciphertext="encrypted-refresh-token",
+    )
+    session = FakeSession(connection)
+    lease = service.acquire_repository_read_lease(session)  # type: ignore[arg-type]
+    assert lease.generation == 7
+    assert lease.access_token == ACCESS_TOKEN
+    service.require_current_repository_read_lease(session, lease)  # type: ignore[arg-type]
+
+    connection.generation = 8
+    with pytest.raises(OAuthGenerationRejected, match="generation rejected"):
+        service.require_current_repository_read_lease(session, lease)  # type: ignore[arg-type]
+
+    unreadable_connections = (
+        None,
+        SimpleNamespace(**{**vars(connection), "revoked_at": object()}),
+        SimpleNamespace(**{**vars(connection), "scope_profile": "repository:write"}),
+        SimpleNamespace(**{**vars(connection), "access_token_ciphertext": None}),
+        SimpleNamespace(**{**vars(connection), "refresh_token_ciphertext": None}),
+    )
+    for unreadable_connection in unreadable_connections:
+        with pytest.raises(OAuthConnectionUnavailable, match="connection unavailable"):
+            service.acquire_repository_read_lease(  # type: ignore[arg-type]
+                FakeSession(unreadable_connection)
+            )
+
+    class RejectingSecretBox:
+        def decrypt(self, _ciphertext: str) -> str:
+            raise SecretBoxDecryptionError("invalid ciphertext")
+
+    service._secret_box = RejectingSecretBox()
+    connection.generation = 7
+    with pytest.raises(OAuthConnectionUnavailable, match="connection unavailable"):
+        service.acquire_repository_read_lease(FakeSession(connection))  # type: ignore[arg-type]
