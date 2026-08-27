@@ -456,9 +456,7 @@ def test_admin_product_openapi_is_closed_to_exact_lifecycle_operations() -> None
     product = schema["components"]["schemas"]["AdminProductResponse"]
     revision = schema["components"]["schemas"]["AdminProductRevisionSummary"]
     conflict = schema["components"]["schemas"]["AdminProductConflictResponse"]
-    lifecycle_conflict = schema["components"]["schemas"][
-        "AdminProductLifecycleConflictResponse"
-    ]
+    lifecycle_conflict = schema["components"]["schemas"]["AdminProductLifecycleConflictResponse"]
 
     assert product["additionalProperties"] is False
     assert set(product["properties"]) == {
@@ -499,10 +497,7 @@ def test_admin_product_openapi_is_closed_to_exact_lifecycle_operations() -> None
     }
     assert all("revisions" not in path for path in schema["paths"])
     lifecycle_contract = json.dumps(
-        {
-            path: schema["paths"][path]
-            for path in sorted(lifecycle_paths)
-        },
+        {path: schema["paths"][path] for path in sorted(lifecycle_paths)},
         sort_keys=True,
     ).casefold()
     for forbidden in (

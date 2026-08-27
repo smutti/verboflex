@@ -600,9 +600,7 @@ def _add_publishable_mapping(
                 source_branch="main",
             )
         ],
-        allowed_targets=[
-            ProductMappingAllowedTarget(branch="release/1", is_default=True)
-        ],
+        allowed_targets=[ProductMappingAllowedTarget(branch="release/1", is_default=True)],
     )
     session.add(mapping)
 
@@ -994,9 +992,7 @@ def test_admin_product_lifecycle_is_guarded_atomic_and_preview_fail_closed(
         email="viewer@example.com",
         roles=("viewer",),
     )
-    product_id, active_id, candidate_id = _seed_product_lifecycle_graph(
-        product_session_factory
-    )
+    product_id, active_id, candidate_id = _seed_product_lifecycle_graph(product_session_factory)
     configure_dependencies(product_session_factory)
 
     publish_path = f"{ADMIN_PRODUCTS_PATH}/{product_id}/publish"
@@ -1116,9 +1112,7 @@ def test_product_lifecycle_conflicts_are_stable_closed_and_non_mutating(
         email="admin@example.com",
         roles=("admin",),
     )
-    product_id, active_id, candidate_id = _seed_product_lifecycle_graph(
-        product_session_factory
-    )
+    product_id, active_id, candidate_id = _seed_product_lifecycle_graph(product_session_factory)
     configure_dependencies(product_session_factory)
     before = _product_graph(product_session_factory)
 
