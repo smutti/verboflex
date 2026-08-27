@@ -987,6 +987,10 @@ def test_schema_is_reversible_revision_owned_and_has_no_manual_or_lifecycle_cont
         "identity_key",
         "selected_layout_candidate_id",
         "selected_layout_version",
+        "confirmed_preview_job_id",
+        "confirmed_preview_digest",
+        "preview_confirmed_by",
+        "preview_confirmed_at",
         "created_at",
         "updated_at",
     } == mapping_columns
@@ -1003,6 +1007,27 @@ def test_schema_is_reversible_revision_owned_and_has_no_manual_or_lifecycle_cont
         "file_list",
         "locale_template",
     }.isdisjoint(mapping_columns)
+    confirmation_foreign_keys = {
+        foreign_key["constrained_columns"][0]: (
+            foreign_key["referred_table"],
+            (foreign_key.get("options") or {}).get("ondelete"),
+        )
+        for foreign_key in inspector.get_foreign_keys("product_repository_mappings")
+        if foreign_key["constrained_columns"][0]
+        in {"confirmed_preview_job_id", "preview_confirmed_by"}
+    }
+    assert confirmation_foreign_keys == {
+        "confirmed_preview_job_id": ("preview_jobs", "RESTRICT"),
+        "preview_confirmed_by": ("users", "RESTRICT"),
+    }
+    assert "ck_product_repository_mappings_preview_confirmation_state" in {
+        constraint["name"]
+        for constraint in inspector.get_check_constraints("product_repository_mappings")
+    }
+    assert "uq_product_repository_mappings_confirmed_preview_job" in {
+        constraint["name"]
+        for constraint in inspector.get_unique_constraints("product_repository_mappings")
+    }
     assert models.ProductRepositoryMapping.__table__.metadata is Product.__table__.metadata
 
     command.downgrade(config, "0004_bitbucket_connection")
