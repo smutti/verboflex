@@ -29,6 +29,360 @@ export type AccessTokenResponse = {
 };
 
 /**
+ * AdminBitbucketAuthorizationResponse
+ *
+ * One short-lived authorization destination without provider credentials.
+ */
+export type AdminBitbucketAuthorizationResponse = {
+    /**
+     * Authorization Url
+     */
+    authorization_url: string;
+    /**
+     * State Expires In
+     */
+    state_expires_in: 600;
+};
+
+/**
+ * AdminBitbucketErrorResponse
+ *
+ * Stable integration failures without provider diagnostic material.
+ */
+export type AdminBitbucketErrorResponse = {
+    /**
+     * Detail
+     */
+    detail: 'OAuth callback rejected' | 'Bitbucket connection unavailable';
+};
+
+/**
+ * AdminBitbucketStatusResponse
+ *
+ * Bounded connection state safe for browser projection.
+ */
+export type AdminBitbucketStatusResponse = {
+    /**
+     * Connected At
+     */
+    connected_at: string | null;
+    /**
+     * Expires At
+     */
+    expires_at: string | null;
+    /**
+     * Revoked At
+     */
+    revoked_at: string | null;
+    /**
+     * Scope Label
+     */
+    scope_label?: 'Read-only repository access';
+    /**
+     * Scope Profile
+     */
+    scope_profile?: 'repository';
+    /**
+     * Status
+     */
+    status: 'Disconnected' | 'Connected' | 'Reauthorization required' | 'Unavailable';
+};
+
+/**
+ * AdminProductConflictResponse
+ *
+ * Bounded conflict with optional field affinity for form recovery.
+ */
+export type AdminProductConflictResponse = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Field
+     */
+    field?: 'name' | null;
+};
+
+/**
+ * AdminProductCreateRequest
+ *
+ * Create one stable product identity and its initial candidate revision.
+ */
+export type AdminProductCreateRequest = {
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * AdminProductListResponse
+ *
+ * One bounded stable keyset page of products.
+ */
+export type AdminProductListResponse = {
+    /**
+     * Items
+     */
+    items: Array<AdminProductResponse>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * AdminProductResponse
+ *
+ * Stable product identity with explicitly separate revision states.
+ */
+export type AdminProductResponse = {
+    active_revision: AdminProductRevisionSummary | null;
+    candidate_revision: AdminProductRevisionSummary | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Is Active
+     */
+    is_active: boolean;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * AdminProductRevisionSummary
+ *
+ * Bounded active or candidate revision projection.
+ */
+export type AdminProductRevisionSummary = {
+    /**
+     * Description
+     */
+    description: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Is Published
+     */
+    is_published: boolean;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * AdminProductUpdateRequest
+ *
+ * Compare and save the current candidate configuration.
+ */
+export type AdminProductUpdateRequest = {
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Expected Candidate Version
+     */
+    expected_candidate_version: number;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * AdminRepositoryCreateRequest
+ *
+ * Register one provider identity without credentials or product settings.
+ */
+export type AdminRepositoryCreateRequest = {
+    /**
+     * Descriptive Name
+     */
+    descriptive_name?: string | null;
+    /**
+     * Repository Slug
+     */
+    repository_slug: string;
+    /**
+     * Workspace
+     */
+    workspace: string;
+};
+
+/**
+ * AdminRepositoryListResponse
+ *
+ * One bounded stable keyset page of repository identities.
+ */
+export type AdminRepositoryListResponse = {
+    /**
+     * Items
+     */
+    items: Array<AdminRepositoryResponse>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * AdminRepositoryResponse
+ *
+ * Credential-free reusable repository selection projection.
+ */
+export type AdminRepositoryResponse = {
+    /**
+     * Descriptive Name
+     */
+    descriptive_name: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Repository Slug
+     */
+    repository_slug: string;
+    /**
+     * Workspace
+     */
+    workspace: string;
+};
+
+/**
+ * AdminUserCreateRequest
+ *
+ * Create one immutable corporate-email identity with additive roles.
+ */
+export type AdminUserCreateRequest = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Roles
+     */
+    roles: Array<RoleName>;
+};
+
+/**
+ * AdminUserCredentialResponse
+ *
+ * One successful lifecycle response that reveals a temporary password once.
+ */
+export type AdminUserCredentialResponse = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Is Active
+     */
+    is_active: boolean;
+    /**
+     * Must Change Password
+     */
+    must_change_password: boolean;
+    /**
+     * Roles
+     */
+    roles: Array<RoleName>;
+    /**
+     * Temporary Password
+     */
+    temporary_password: string;
+};
+
+/**
+ * AdminUserListResponse
+ *
+ * Stable keyset page of internal users.
+ */
+export type AdminUserListResponse = {
+    /**
+     * Items
+     */
+    items: Array<AdminUserResponse>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * AdminUserResponse
+ *
+ * Ordinary internal-user projection with no credential material.
+ */
+export type AdminUserResponse = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Is Active
+     */
+    is_active: boolean;
+    /**
+     * Must Change Password
+     */
+    must_change_password: boolean;
+    /**
+     * Roles
+     */
+    roles: Array<RoleName>;
+};
+
+/**
+ * AdminUserUpdateRequest
+ *
+ * The only ordinary fields an administrator may change.
+ */
+export type AdminUserUpdateRequest = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Roles
+     */
+    roles: Array<RoleName>;
+};
+
+/**
  * Body_issue_token
  */
 export type BodyIssueToken = {
@@ -198,6 +552,726 @@ export type ValidationError = {
      */
     type: string;
 };
+
+export type GetAdminBitbucketStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/bitbucket';
+};
+
+export type GetAdminBitbucketStatusErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: AdminBitbucketErrorResponse;
+};
+
+export type GetAdminBitbucketStatusError = GetAdminBitbucketStatusErrors[keyof GetAdminBitbucketStatusErrors];
+
+export type GetAdminBitbucketStatusResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminBitbucketStatusResponse;
+};
+
+export type GetAdminBitbucketStatusResponse = GetAdminBitbucketStatusResponses[keyof GetAdminBitbucketStatusResponses];
+
+export type CompleteAdminBitbucketOauthCallbackData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * State
+         */
+        state: string;
+        /**
+         * Code
+         */
+        code: string;
+    };
+    url: '/api/v1/admin/bitbucket/oauth/callback';
+};
+
+export type CompleteAdminBitbucketOauthCallbackErrors = {
+    /**
+     * Bad Request
+     */
+    400: AdminBitbucketErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Service Unavailable
+     */
+    503: AdminBitbucketErrorResponse;
+};
+
+export type CompleteAdminBitbucketOauthCallbackError = CompleteAdminBitbucketOauthCallbackErrors[keyof CompleteAdminBitbucketOauthCallbackErrors];
+
+export type ReconnectAdminBitbucketOauthData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/bitbucket/oauth/reconnect';
+};
+
+export type ReconnectAdminBitbucketOauthErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: AdminBitbucketErrorResponse;
+};
+
+export type ReconnectAdminBitbucketOauthError = ReconnectAdminBitbucketOauthErrors[keyof ReconnectAdminBitbucketOauthErrors];
+
+export type ReconnectAdminBitbucketOauthResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminBitbucketAuthorizationResponse;
+};
+
+export type ReconnectAdminBitbucketOauthResponse = ReconnectAdminBitbucketOauthResponses[keyof ReconnectAdminBitbucketOauthResponses];
+
+export type StartAdminBitbucketOauthData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/bitbucket/oauth/start';
+};
+
+export type StartAdminBitbucketOauthErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: AdminBitbucketErrorResponse;
+};
+
+export type StartAdminBitbucketOauthError = StartAdminBitbucketOauthErrors[keyof StartAdminBitbucketOauthErrors];
+
+export type StartAdminBitbucketOauthResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminBitbucketAuthorizationResponse;
+};
+
+export type StartAdminBitbucketOauthResponse = StartAdminBitbucketOauthResponses[keyof StartAdminBitbucketOauthResponses];
+
+export type RevokeAdminBitbucketConnectionLocallyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/bitbucket/revoke';
+};
+
+export type RevokeAdminBitbucketConnectionLocallyErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: AdminBitbucketErrorResponse;
+};
+
+export type RevokeAdminBitbucketConnectionLocallyError = RevokeAdminBitbucketConnectionLocallyErrors[keyof RevokeAdminBitbucketConnectionLocallyErrors];
+
+export type RevokeAdminBitbucketConnectionLocallyResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminBitbucketStatusResponse;
+};
+
+export type RevokeAdminBitbucketConnectionLocallyResponse = RevokeAdminBitbucketConnectionLocallyResponses[keyof RevokeAdminBitbucketConnectionLocallyResponses];
+
+export type ListAdminProductsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Status
+         */
+        status?: 'active' | 'inactive' | null;
+    };
+    url: '/api/v1/admin/products';
+};
+
+export type ListAdminProductsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ListAdminProductsError = ListAdminProductsErrors[keyof ListAdminProductsErrors];
+
+export type ListAdminProductsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminProductListResponse;
+};
+
+export type ListAdminProductsResponse = ListAdminProductsResponses[keyof ListAdminProductsResponses];
+
+export type CreateAdminProductData = {
+    body: AdminProductCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/products';
+};
+
+export type CreateAdminProductErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminProductConflictResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type CreateAdminProductError = CreateAdminProductErrors[keyof CreateAdminProductErrors];
+
+export type CreateAdminProductResponses = {
+    /**
+     * Successful Response
+     */
+    201: AdminProductResponse;
+};
+
+export type CreateAdminProductResponse = CreateAdminProductResponses[keyof CreateAdminProductResponses];
+
+export type GetAdminProductData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}';
+};
+
+export type GetAdminProductErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type GetAdminProductError = GetAdminProductErrors[keyof GetAdminProductErrors];
+
+export type GetAdminProductResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminProductResponse;
+};
+
+export type GetAdminProductResponse = GetAdminProductResponses[keyof GetAdminProductResponses];
+
+export type UpdateAdminProductCandidateData = {
+    body: AdminProductUpdateRequest;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}';
+};
+
+export type UpdateAdminProductCandidateErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminProductConflictResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type UpdateAdminProductCandidateError = UpdateAdminProductCandidateErrors[keyof UpdateAdminProductCandidateErrors];
+
+export type UpdateAdminProductCandidateResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminProductResponse;
+};
+
+export type UpdateAdminProductCandidateResponse = UpdateAdminProductCandidateResponses[keyof UpdateAdminProductCandidateResponses];
+
+export type ListAdminRepositoriesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/repositories';
+};
+
+export type ListAdminRepositoriesErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ListAdminRepositoriesError = ListAdminRepositoriesErrors[keyof ListAdminRepositoriesErrors];
+
+export type ListAdminRepositoriesResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminRepositoryListResponse;
+};
+
+export type ListAdminRepositoriesResponse = ListAdminRepositoriesResponses[keyof ListAdminRepositoriesResponses];
+
+export type CreateAdminRepositoryData = {
+    body: AdminRepositoryCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/repositories';
+};
+
+export type CreateAdminRepositoryErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type CreateAdminRepositoryError = CreateAdminRepositoryErrors[keyof CreateAdminRepositoryErrors];
+
+export type CreateAdminRepositoryResponses = {
+    /**
+     * Successful Response
+     */
+    201: AdminRepositoryResponse;
+};
+
+export type CreateAdminRepositoryResponse = CreateAdminRepositoryResponses[keyof CreateAdminRepositoryResponses];
+
+export type GetAdminRepositoryData = {
+    body?: never;
+    path: {
+        /**
+         * Repository Id
+         */
+        repository_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/repositories/{repository_id}';
+};
+
+export type GetAdminRepositoryErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type GetAdminRepositoryError = GetAdminRepositoryErrors[keyof GetAdminRepositoryErrors];
+
+export type GetAdminRepositoryResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminRepositoryResponse;
+};
+
+export type GetAdminRepositoryResponse = GetAdminRepositoryResponses[keyof GetAdminRepositoryResponses];
+
+export type ListAdminUsersData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/users';
+};
+
+export type ListAdminUsersErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ListAdminUsersError = ListAdminUsersErrors[keyof ListAdminUsersErrors];
+
+export type ListAdminUsersResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminUserListResponse;
+};
+
+export type ListAdminUsersResponse = ListAdminUsersResponses[keyof ListAdminUsersResponses];
+
+export type CreateAdminUserData = {
+    body: AdminUserCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/users';
+};
+
+export type CreateAdminUserErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type CreateAdminUserError = CreateAdminUserErrors[keyof CreateAdminUserErrors];
+
+export type CreateAdminUserResponses = {
+    /**
+     * Successful Response
+     */
+    201: AdminUserCredentialResponse;
+};
+
+export type CreateAdminUserResponse = CreateAdminUserResponses[keyof CreateAdminUserResponses];
+
+export type UpdateAdminUserData = {
+    body: AdminUserUpdateRequest;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/users/{user_id}';
+};
+
+export type UpdateAdminUserErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type UpdateAdminUserError = UpdateAdminUserErrors[keyof UpdateAdminUserErrors];
+
+export type UpdateAdminUserResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminUserResponse;
+};
+
+export type UpdateAdminUserResponse = UpdateAdminUserResponses[keyof UpdateAdminUserResponses];
+
+export type DeactivateAdminUserData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/users/{user_id}/deactivate';
+};
+
+export type DeactivateAdminUserErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type DeactivateAdminUserError = DeactivateAdminUserErrors[keyof DeactivateAdminUserErrors];
+
+export type DeactivateAdminUserResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminUserResponse;
+};
+
+export type DeactivateAdminUserResponse = DeactivateAdminUserResponses[keyof DeactivateAdminUserResponses];
+
+export type ReactivateAdminUserData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/users/{user_id}/reactivate';
+};
+
+export type ReactivateAdminUserErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ReactivateAdminUserError = ReactivateAdminUserErrors[keyof ReactivateAdminUserErrors];
+
+export type ReactivateAdminUserResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminUserCredentialResponse;
+};
+
+export type ReactivateAdminUserResponse = ReactivateAdminUserResponses[keyof ReactivateAdminUserResponses];
+
+export type ResetAdminUserPasswordData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/users/{user_id}/reset-password';
+};
+
+export type ResetAdminUserPasswordErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ResetAdminUserPasswordError = ResetAdminUserPasswordErrors[keyof ResetAdminUserPasswordErrors];
+
+export type ResetAdminUserPasswordResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminUserCredentialResponse;
+};
+
+export type ResetAdminUserPasswordResponse = ResetAdminUserPasswordResponses[keyof ResetAdminUserPasswordResponses];
 
 export type ChangePasswordData = {
     body: ChangePasswordRequest;

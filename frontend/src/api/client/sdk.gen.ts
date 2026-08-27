@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, type Options as Options2, type RequestResult, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, IssueTokenData, IssueTokenErrors, IssueTokenResponses, LogoutData, LogoutErrors, LogoutResponses, ReadCurrentUserData, ReadCurrentUserErrors, ReadCurrentUserResponses, ReadHealthData, ReadHealthErrors, ReadHealthResponses, ReadSystemStatusData, ReadSystemStatusErrors, ReadSystemStatusResponses, RefreshAccessTokenData, RefreshAccessTokenErrors, RefreshAccessTokenResponses } from './types.gen';
+import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, CompleteAdminBitbucketOauthCallbackData, CompleteAdminBitbucketOauthCallbackErrors, CreateAdminProductData, CreateAdminProductErrors, CreateAdminProductResponses, CreateAdminRepositoryData, CreateAdminRepositoryErrors, CreateAdminRepositoryResponses, CreateAdminUserData, CreateAdminUserErrors, CreateAdminUserResponses, DeactivateAdminUserData, DeactivateAdminUserErrors, DeactivateAdminUserResponses, GetAdminBitbucketStatusData, GetAdminBitbucketStatusErrors, GetAdminBitbucketStatusResponses, GetAdminProductData, GetAdminProductErrors, GetAdminProductResponses, GetAdminRepositoryData, GetAdminRepositoryErrors, GetAdminRepositoryResponses, IssueTokenData, IssueTokenErrors, IssueTokenResponses, ListAdminProductsData, ListAdminProductsErrors, ListAdminProductsResponses, ListAdminRepositoriesData, ListAdminRepositoriesErrors, ListAdminRepositoriesResponses, ListAdminUsersData, ListAdminUsersErrors, ListAdminUsersResponses, LogoutData, LogoutErrors, LogoutResponses, ReactivateAdminUserData, ReactivateAdminUserErrors, ReactivateAdminUserResponses, ReadCurrentUserData, ReadCurrentUserErrors, ReadCurrentUserResponses, ReadHealthData, ReadHealthErrors, ReadHealthResponses, ReadSystemStatusData, ReadSystemStatusErrors, ReadSystemStatusResponses, ReconnectAdminBitbucketOauthData, ReconnectAdminBitbucketOauthErrors, ReconnectAdminBitbucketOauthResponses, RefreshAccessTokenData, RefreshAccessTokenErrors, RefreshAccessTokenResponses, ResetAdminUserPasswordData, ResetAdminUserPasswordErrors, ResetAdminUserPasswordResponses, RevokeAdminBitbucketConnectionLocallyData, RevokeAdminBitbucketConnectionLocallyErrors, RevokeAdminBitbucketConnectionLocallyResponses, StartAdminBitbucketOauthData, StartAdminBitbucketOauthErrors, StartAdminBitbucketOauthResponses, UpdateAdminProductCandidateData, UpdateAdminProductCandidateErrors, UpdateAdminProductCandidateResponses, UpdateAdminUserData, UpdateAdminUserErrors, UpdateAdminUserResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -17,6 +17,220 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
      */
     meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
 };
+
+/**
+ * Get Admin Bitbucket Status
+ *
+ * Return one no-store status containing no provider credential metadata.
+ */
+export const getAdminBitbucketStatus = <ThrowOnError extends boolean = false>(options?: Options<GetAdminBitbucketStatusData, ThrowOnError>): RequestResult<GetAdminBitbucketStatusResponses, GetAdminBitbucketStatusErrors, ThrowOnError> => (options?.client ?? client).get<GetAdminBitbucketStatusResponses, GetAdminBitbucketStatusErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/bitbucket',
+    ...options
+});
+
+/**
+ * Complete Admin Bitbucket Oauth Callback
+ *
+ * Consume state authority and return through one fixed same-tab redirect.
+ */
+export const completeAdminBitbucketOauthCallback = <ThrowOnError extends boolean = false>(options: Options<CompleteAdminBitbucketOauthCallbackData, ThrowOnError>): RequestResult<unknown, CompleteAdminBitbucketOauthCallbackErrors, ThrowOnError> => (options.client ?? client).get<unknown, CompleteAdminBitbucketOauthCallbackErrors, ThrowOnError>({ url: '/api/v1/admin/bitbucket/oauth/callback', ...options });
+
+/**
+ * Reconnect Admin Bitbucket Oauth
+ *
+ * Replace authority only after a new state-bound callback succeeds.
+ */
+export const reconnectAdminBitbucketOauth = <ThrowOnError extends boolean = false>(options?: Options<ReconnectAdminBitbucketOauthData, ThrowOnError>): RequestResult<ReconnectAdminBitbucketOauthResponses, ReconnectAdminBitbucketOauthErrors, ThrowOnError> => (options?.client ?? client).post<ReconnectAdminBitbucketOauthResponses, ReconnectAdminBitbucketOauthErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/bitbucket/oauth/reconnect',
+    ...options
+});
+
+/**
+ * Start Admin Bitbucket Oauth
+ *
+ * Start one exact static-consumer repository-read authorization flow.
+ */
+export const startAdminBitbucketOauth = <ThrowOnError extends boolean = false>(options?: Options<StartAdminBitbucketOauthData, ThrowOnError>): RequestResult<StartAdminBitbucketOauthResponses, StartAdminBitbucketOauthErrors, ThrowOnError> => (options?.client ?? client).post<StartAdminBitbucketOauthResponses, StartAdminBitbucketOauthErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/bitbucket/oauth/start',
+    ...options
+});
+
+/**
+ * Revoke Admin Bitbucket Connection Locally
+ *
+ * Immediately invalidate local credentials without a provider revoke claim.
+ */
+export const revokeAdminBitbucketConnectionLocally = <ThrowOnError extends boolean = false>(options?: Options<RevokeAdminBitbucketConnectionLocallyData, ThrowOnError>): RequestResult<RevokeAdminBitbucketConnectionLocallyResponses, RevokeAdminBitbucketConnectionLocallyErrors, ThrowOnError> => (options?.client ?? client).post<RevokeAdminBitbucketConnectionLocallyResponses, RevokeAdminBitbucketConnectionLocallyErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/bitbucket/revoke',
+    ...options
+});
+
+/**
+ * List Admin Product Collection
+ *
+ * List products in stable server-owned identity order.
+ */
+export const listAdminProducts = <ThrowOnError extends boolean = false>(options?: Options<ListAdminProductsData, ThrowOnError>): RequestResult<ListAdminProductsResponses, ListAdminProductsErrors, ThrowOnError> => (options?.client ?? client).get<ListAdminProductsResponses, ListAdminProductsErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/products',
+    ...options
+});
+
+/**
+ * Create Admin Product
+ *
+ * Create one stable UUID with an unpublished candidate revision.
+ */
+export const createAdminProduct = <ThrowOnError extends boolean = false>(options: Options<CreateAdminProductData, ThrowOnError>): RequestResult<CreateAdminProductResponses, CreateAdminProductErrors, ThrowOnError> => (options.client ?? client).post<CreateAdminProductResponses, CreateAdminProductErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/products',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Admin Product Detail
+ *
+ * Return explicitly separate active and candidate summaries.
+ */
+export const getAdminProduct = <ThrowOnError extends boolean = false>(options: Options<GetAdminProductData, ThrowOnError>): RequestResult<GetAdminProductResponses, GetAdminProductErrors, ThrowOnError> => (options.client ?? client).get<GetAdminProductResponses, GetAdminProductErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/products/{product_id}',
+    ...options
+});
+
+/**
+ * Update Admin Product Candidate
+ *
+ * Compare and save one candidate without exposing publication mechanics.
+ */
+export const updateAdminProductCandidate = <ThrowOnError extends boolean = false>(options: Options<UpdateAdminProductCandidateData, ThrowOnError>): RequestResult<UpdateAdminProductCandidateResponses, UpdateAdminProductCandidateErrors, ThrowOnError> => (options.client ?? client).patch<UpdateAdminProductCandidateResponses, UpdateAdminProductCandidateErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/products/{product_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List Admin Repository Collection
+ *
+ * List repositories in stable server-owned selection order.
+ */
+export const listAdminRepositories = <ThrowOnError extends boolean = false>(options?: Options<ListAdminRepositoriesData, ThrowOnError>): RequestResult<ListAdminRepositoriesResponses, ListAdminRepositoriesErrors, ThrowOnError> => (options?.client ?? client).get<ListAdminRepositoriesResponses, ListAdminRepositoriesErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/repositories',
+    ...options
+});
+
+/**
+ * Create Admin Repository
+ *
+ * Register one normalized identity without provider discovery.
+ */
+export const createAdminRepository = <ThrowOnError extends boolean = false>(options: Options<CreateAdminRepositoryData, ThrowOnError>): RequestResult<CreateAdminRepositoryResponses, CreateAdminRepositoryErrors, ThrowOnError> => (options.client ?? client).post<CreateAdminRepositoryResponses, CreateAdminRepositoryErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/repositories',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Admin Repository Detail
+ *
+ * Return one existing UUID for a separate mapping reuse operation.
+ */
+export const getAdminRepository = <ThrowOnError extends boolean = false>(options: Options<GetAdminRepositoryData, ThrowOnError>): RequestResult<GetAdminRepositoryResponses, GetAdminRepositoryErrors, ThrowOnError> => (options.client ?? client).get<GetAdminRepositoryResponses, GetAdminRepositoryErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/repositories/{repository_id}',
+    ...options
+});
+
+/**
+ * List Users
+ *
+ * List internal users in stable normalized-email and UUID order.
+ */
+export const listAdminUsers = <ThrowOnError extends boolean = false>(options?: Options<ListAdminUsersData, ThrowOnError>): RequestResult<ListAdminUsersResponses, ListAdminUsersErrors, ThrowOnError> => (options?.client ?? client).get<ListAdminUsersResponses, ListAdminUsersErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/users',
+    ...options
+});
+
+/**
+ * Create User
+ *
+ * Create one account and expose its generated temporary password once.
+ */
+export const createAdminUser = <ThrowOnError extends boolean = false>(options: Options<CreateAdminUserData, ThrowOnError>): RequestResult<CreateAdminUserResponses, CreateAdminUserErrors, ThrowOnError> => (options.client ?? client).post<CreateAdminUserResponses, CreateAdminUserErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/users',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Update User
+ *
+ * Update display name and additive roles through one locked authority.
+ */
+export const updateAdminUser = <ThrowOnError extends boolean = false>(options: Options<UpdateAdminUserData, ThrowOnError>): RequestResult<UpdateAdminUserResponses, UpdateAdminUserErrors, ThrowOnError> => (options.client ?? client).patch<UpdateAdminUserResponses, UpdateAdminUserErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/users/{user_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Deactivate User
+ *
+ * Deactivate one account while preserving an active administrator.
+ */
+export const deactivateAdminUser = <ThrowOnError extends boolean = false>(options: Options<DeactivateAdminUserData, ThrowOnError>): RequestResult<DeactivateAdminUserResponses, DeactivateAdminUserErrors, ThrowOnError> => (options.client ?? client).post<DeactivateAdminUserResponses, DeactivateAdminUserErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/users/{user_id}/deactivate',
+    ...options
+});
+
+/**
+ * Reactivate User
+ *
+ * Reactivate one account with a fresh temporary password.
+ */
+export const reactivateAdminUser = <ThrowOnError extends boolean = false>(options: Options<ReactivateAdminUserData, ThrowOnError>): RequestResult<ReactivateAdminUserResponses, ReactivateAdminUserErrors, ThrowOnError> => (options.client ?? client).post<ReactivateAdminUserResponses, ReactivateAdminUserErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/users/{user_id}/reactivate',
+    ...options
+});
+
+/**
+ * Reset Password
+ *
+ * Generate one new temporary password and revoke all prior authority.
+ */
+export const resetAdminUserPassword = <ThrowOnError extends boolean = false>(options: Options<ResetAdminUserPasswordData, ThrowOnError>): RequestResult<ResetAdminUserPasswordResponses, ResetAdminUserPasswordErrors, ThrowOnError> => (options.client ?? client).post<ResetAdminUserPasswordResponses, ResetAdminUserPasswordErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/users/{user_id}/reset-password',
+    ...options
+});
 
 /**
  * Change Password
