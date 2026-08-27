@@ -34,11 +34,40 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
-        "preview-default-fails-open",
-        "src/verboflex/services/publication.py",
-        '    """Block publication until Plan 14 supplies current digest confirmation."""\n'
-        "    return False",
-        '    """Block publication until Plan 14 supplies current digest confirmation."""\n'
+        "confirmation-completeness-bypassed",
+        "src/verboflex/services/preview_jobs.py",
+        "    if not _mapping_has_complete_confirmation(mapping):\n        return False",
+        "    if False and not _mapping_has_complete_confirmation(mapping):\n        return False",
+    ),
+    Mutation(
+        "confirmation-job-state-inverted",
+        "src/verboflex/services/preview_jobs.py",
+        '        and row.state == "succeeded"',
+        '        and row.state != "succeeded"',
+    ),
+    Mutation(
+        "latest-confirmation-job-bypassed",
+        "src/verboflex/services/preview_jobs.py",
+        "    return latest_attempt == row.attempt and latest_mapping_job_id == row.id",
+        "    return True",
+    ),
+    Mutation(
+        "complete-confirmation-identity-bypassed",
+        "src/verboflex/services/preview_jobs.py",
+        "        and _current_identity_matches(row, revision, mapping, connection)",
+        "        and True",
+    ),
+    Mutation(
+        "confirmed-digest-bypassed",
+        "src/verboflex/services/preview_jobs.py",
+        '    if result["digest"] != mapping.confirmed_preview_digest:\n        return False',
+        '    if False and result["digest"] != mapping.confirmed_preview_digest:\n'
+        "        return False",
+    ),
+    Mutation(
+        "selected-layout-bypassed",
+        "src/verboflex/services/preview_jobs.py",
+        '    return len(matches) == 1 and matches[0]["repository_side"] == expected_side',
         "    return True",
     ),
     Mutation(
