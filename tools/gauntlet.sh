@@ -759,6 +759,7 @@ src/verboflex/auth/password_change.py|55|Secret Keyword|42213dc7f2ef60d5d6744c00
 src/verboflex/auth/principal.py|28|Secret Keyword|3591079abcc3407a2c2ed76661ec29a7ec0d1cb8
 src/verboflex/auth/principal.py|29|Secret Keyword|82bde2d99285779d940c36fdcdb9c3e9afa40d2f
 src/verboflex/auth/refresh_sessions.py|20|Base64 High Entropy String|e582429052cdb908833560f6f7582d232de37c4d
+tests/api/test_admin_users.py|192|Secret Keyword|cbd35a7eedd58ee2f4ab223644a0a2b73a635bbd
 tests/api/test_rate_limits.py|189|Secret Keyword|5ac066cfb3bcf9973a0b40daeb7f5606103c1bd3
 tests/api/test_system_status.py|109|Basic Auth Credentials|e5e9fa1ba31ecd1ae84f75caaa474f3a663f05f4
 tests/auth/test_bootstrap_admin.py|137|Secret Keyword|985a4d67132193977275067aca18c13f8c8371c8
@@ -773,6 +774,8 @@ tests/auth/test_login.py|45|Secret Keyword|e7e0ea25217b715c566268c0607e48acef3b9
 tests/auth/test_password_change.py|188|Secret Keyword|a95b347855753c3b784594a28fa00ec116430d1c
 tests/auth/test_password_change.py|36|Secret Keyword|bc27f09f74d82f81b559a27a26bd03f580960364
 tests/auth/test_password_change.py|37|Secret Keyword|ba8d4568d2e2f6531c78080cedddb3a16f08afd5
+tests/integration/test_bitbucket_discovery.py|735|Base64 High Entropy String|8eb6a2543a00fa38b9a717242e592d4afa7f80cf
+tests/unit/services/test_admin_users.py|335|Secret Keyword|374997990c71d0ff9a4f7a41bc0ceb63a2110237
 AUDITED_FALSE_POSITIVES
 }
 
