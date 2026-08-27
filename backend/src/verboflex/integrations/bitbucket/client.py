@@ -132,23 +132,28 @@ class BitbucketHttpAdapter:
                 raise BitbucketProviderReadError()
             visited.add(next_url)
             page = await self._read_json(session, url=next_url)
-            values = page.get("values")
-            if not isinstance(values, list):
-                raise BitbucketProviderReadError()
-            for raw_branch in values:
-                branch = self._parse_branch(raw_branch)
-                branches.append(branch)
-            raw_next = page.get("next")
-            if raw_next is None:
-                next_url = None
-            elif isinstance(raw_next, str):
-                try:
-                    next_url = validate_bitbucket_api_url(raw_next)
-                except ValueError:
-                    raise BitbucketProviderReadError() from None
-            else:
-                raise BitbucketProviderReadError()
+            page_branches, next_url = self._parse_branch_page(page)
+            branches.extend(page_branches)
         return tuple(branches)
+
+    @classmethod
+    def _parse_branch_page(
+        cls,
+        page: Mapping[str, object],
+    ) -> tuple[tuple[BitbucketBranch, ...], str | None]:
+        values = page.get("values")
+        if not isinstance(values, list):
+            raise BitbucketProviderReadError()
+        branches = tuple(cls._parse_branch(raw_branch) for raw_branch in values)
+        raw_next = page.get("next")
+        if raw_next is None:
+            return branches, None
+        if not isinstance(raw_next, str):
+            raise BitbucketProviderReadError()
+        try:
+            return branches, validate_bitbucket_api_url(raw_next)
+        except ValueError:
+            raise BitbucketProviderReadError() from None
 
     @staticmethod
     def _parse_branch(raw_branch: object) -> BitbucketBranch:
