@@ -15,6 +15,7 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = REPOSITORY_ROOT / "backend"
 TEST_SELECTION = (
+    "tests/unit/services/test_pr_grouping.py",
     "tests/unit/services/test_mappings.py",
     "tests/api/test_admin_mappings.py",
 )
@@ -33,6 +34,44 @@ class Mutation:
 
 
 MUTATIONS = (
+    Mutation(
+        "grouping-target-casefolded",
+        "src/verboflex/services/pr_grouping.py",
+        "                target_branch=change.target_branch,\n"
+        "            )\n"
+        "        ].append(change)",
+        "                target_branch=change.target_branch.casefold(),\n"
+        "            )\n"
+        "        ].append(change)",
+    ),
+    Mutation(
+        "grouping-repository-replaced-by-mapping",
+        "src/verboflex/services/pr_grouping.py",
+        "            PullRequestGroupKey(\n"
+        "                repository_id=change.repository_id,\n"
+        "                target_branch=change.target_branch,",
+        "            PullRequestGroupKey(\n"
+        "                repository_id=change.mapping_id,\n"
+        "                target_branch=change.target_branch,",
+    ),
+    Mutation(
+        "group-order-depends-on-input",
+        "src/verboflex/services/pr_grouping.py",
+        "        for key in sorted(\n"
+        "            grouped,\n"
+        "            key=lambda group_key: (\n"
+        "                group_key.repository_id.int,\n"
+        "                group_key.target_branch,\n"
+        "            ),\n"
+        "        )",
+        "        for key in grouped",
+    ),
+    Mutation(
+        "unconfigured-target-is-accepted",
+        "src/verboflex/services/pr_grouping.py",
+        "if target_branch not in self.allowed_target_branches:",
+        "if target_branch in self.allowed_target_branches:",
+    ),
     Mutation(
         "admin-guard-to-product-manager-reviewer",
         "src/verboflex/api/v1/routes/admin_mappings.py",
@@ -88,8 +127,10 @@ MUTATIONS = (
     Mutation(
         "normalized-target-noop-inverted",
         "src/verboflex/services/mappings.py",
-        "and current.allowed_target_branches == targets",
-        "and current.allowed_target_branches != targets",
+        "and current.primary_source_branch == exact_source\n"
+        "                and current.allowed_target_branches == targets",
+        "and current.primary_source_branch == exact_source\n"
+        "                and current.allowed_target_branches != targets",
     ),
     Mutation(
         "target-conflict-projected-to-wrong-field",
