@@ -137,7 +137,10 @@ def test_reads_metadata_only_through_validated_current_generation() -> None:
         calls_before_invalid_urls = len(requests)
         invalid_urls = (
             "http://api.bitbucket.org/2.0/repositories/acme/mobile",
-            "https://user:password@api.bitbucket.org/2.0/repositories/acme/mobile",
+            (
+                "https://user:"  # pragma: allowlist secret
+                "password@api.bitbucket.org/2.0/repositories/acme/mobile"
+            ),
             "https://api.bitbucket.org:443/2.0/repositories/acme/mobile",
             "https://api.bitbucket.org.attacker.example/2.0/repositories/acme/mobile",
             "https://attacker.example/2.0/repositories/acme/mobile",
