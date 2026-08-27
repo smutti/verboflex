@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, urlencode, urlsplit
 
 BITBUCKET_API_HOST = "api.bitbucket.org"
 BITBUCKET_API_ORIGIN = f"https://{BITBUCKET_API_HOST}"
@@ -59,3 +59,9 @@ def repository_metadata_url(*, workspace: str, repository_slug: str) -> str:
         f"{quote(workspace, safe='')}/{quote(repository_slug, safe='')}"
     )
     return validate_bitbucket_api_url(url)
+
+
+def repository_branches_url(*, workspace: str, repository_slug: str) -> str:
+    """Build the live branch collection with Bitbucket's maximum page size."""
+    base = repository_metadata_url(workspace=workspace, repository_slug=repository_slug)
+    return validate_bitbucket_api_url(f"{base}/refs/branches?{urlencode({'pagelen': 100})}")
