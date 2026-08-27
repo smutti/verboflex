@@ -274,6 +274,8 @@ def test_admin_create_and_detail_return_closed_active_and_candidate_summaries(
     assert product_paths == {
         ADMIN_PRODUCTS_PATH,
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}",
+        f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/candidate/mappings",
+        f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/candidate/mappings/{{mapping_id}}",
     }
     assert "delete" not in app.openapi()["paths"][f"{ADMIN_PRODUCTS_PATH}/{{product_id}}"]
     assert "post" not in app.openapi()["paths"][f"{ADMIN_PRODUCTS_PATH}/{{product_id}}"]
