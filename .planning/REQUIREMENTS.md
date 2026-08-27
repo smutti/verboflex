@@ -34,7 +34,7 @@
 - [ ] **PROD-05**: Admin can configure product-specific pull request grouping behavior.
 - [ ] **PROD-06**: Admin can configure whether translations live directly in the product repository or in a linked translation repository.
 - [ ] **PROD-07**: Admin can configure links between a repository containing translation keys and a separate Bitbucket project/repository containing translated values.
-- [ ] **PROD-08**: Admin can validate a repository mapping by previewing detected files, languages, sample keys, and sample translations before enabling imports.
+- [x] **PROD-08**: Admin can validate a repository mapping by previewing detected files, languages, sample keys, and sample translations before enabling imports.
 - [ ] **PROD-09**: Admin can configure the localization file format used by each mapping.
 
 ### Bitbucket Cloud Integration
@@ -42,7 +42,7 @@
 - [x] **BITB-01**: Admin can connect, reconnect, revoke, and view bounded status for the single organization-wide Bitbucket Cloud OAuth 2.0 connection used for repository access.
 - [ ] **BITB-02**: System validates and reports Bitbucket Cloud capabilities required by configured read/import operations and the later write/pull-request profile without silently expanding OAuth scopes.
 - [ ] **BITB-03**: System can list configured repository branches from Bitbucket Cloud.
-- [ ] **BITB-04**: System can read configured localization files from the configured Bitbucket Cloud source branch.
+- [x] **BITB-04**: System can read configured localization files from the configured Bitbucket Cloud source branch.
 - [ ] **BITB-05**: System stores the source commit hash and file reference used for each import.
 - [ ] **BITB-06**: System reports Bitbucket connection, permission, and import errors in a way admins can act on.
 
@@ -193,12 +193,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROD-05 | Phase 2 | Pending |
 | PROD-06 | Phase 2 | Pending |
 | PROD-07 | Phase 2 | Pending |
-| PROD-08 | Phase 2 | Pending |
+| PROD-08 | Phase 2 | Complete |
 | PROD-09 | Phase 2 | Pending |
 | BITB-01 | Phase 2 | Complete |
 | BITB-02 | Phase 3 | Pending |
 | BITB-03 | Phase 2 | Pending |
-| BITB-04 | Phase 2 | Pending |
+| BITB-04 | Phase 2 | Complete |
 | BITB-05 | Phase 3 | Pending |
 | BITB-06 | Phase 3 | Pending |
 | FMT-01 | Phase 4 | Pending |
