@@ -93,6 +93,16 @@ class PreviewDetectionResult:
         return [candidate.to_mapping() for candidate in self.candidates]
 
 
+@dataclass(frozen=True, slots=True)
+class _CandidateHeader:
+    id: UUID
+    version: int
+    repository_side: RepositorySide
+    format: PreviewFormat
+    layout_identity: str
+    confidence: float
+
+
 def _candidate_id(
     *,
     repository_side: RepositorySide,
@@ -126,35 +136,13 @@ def build_layout_candidate(
     received_files = tuple(files)
     ordered_files = tuple(sorted(received_files))
     ordered_languages = tuple(sorted(values))
-    if (
-        not layout_identity
-        or not ordered_files
-        or len(set(ordered_files)) != len(ordered_files)
-        or len(ordered_files) > MAX_LAYOUT_FILES
-        or not ordered_languages
-        or len(ordered_languages) > MAX_PREVIEW_LANGUAGES
-    ):
-        raise ValueError("preview candidate rejected")
-
-    samples: list[PreviewSample] = []
-    for language in ordered_languages:
-        translations = values[language]
-        if not translations:
-            raise ValueError("preview candidate rejected")
-        for key in sorted(translations)[:MAX_SAMPLES_PER_LANGUAGE]:
-            if len(samples) == MAX_TOTAL_SAMPLES:
-                break
-            samples.append(
-                PreviewSample(
-                    language=language,
-                    key=key,
-                    translation=translations[key],
-                )
-            )
-        if len(samples) == MAX_TOTAL_SAMPLES:
-            break
-    if not samples:
-        raise ValueError("preview candidate rejected")
+    _require_candidate(bool(layout_identity))
+    _require_candidate(bool(ordered_files))
+    _require_candidate(len(set(ordered_files)) == len(ordered_files))
+    _require_candidate(len(ordered_files) <= MAX_LAYOUT_FILES)
+    _require_candidate(bool(ordered_languages))
+    _require_candidate(len(ordered_languages) <= MAX_PREVIEW_LANGUAGES)
+    samples = _build_samples(values=values, ordered_languages=ordered_languages)
     keys = tuple(sorted({sample.key for sample in samples}))
     return PreviewLayoutCandidate(
         id=_candidate_id(
@@ -171,9 +159,28 @@ def build_layout_candidate(
         files=ordered_files,
         languages=ordered_languages,
         keys=keys,
-        samples=tuple(samples),
+        samples=samples,
         samples_are_partial=True,
     )
+
+
+def _build_samples(
+    *,
+    values: Mapping[str, Mapping[str, str]],
+    ordered_languages: tuple[str, ...],
+) -> tuple[PreviewSample, ...]:
+    samples: list[PreviewSample] = []
+    for language in ordered_languages:
+        translations = values[language]
+        _require_candidate(bool(translations))
+        for key in sorted(translations)[:MAX_SAMPLES_PER_LANGUAGE]:
+            if len(samples) == MAX_TOTAL_SAMPLES:
+                return tuple(samples)
+            translation = translations[key]
+            _require_candidate(isinstance(translation, str) and "\x00" not in translation)
+            samples.append(PreviewSample(language=language, key=key, translation=translation))
+    _require_candidate(bool(samples))
+    return tuple(samples)
 
 
 def _required_string(value: object, *, max_length: int = 1_048_576) -> str:
@@ -182,95 +189,136 @@ def _required_string(value: object, *, max_length: int = 1_048_576) -> str:
     return value
 
 
-def layout_candidate_from_mapping(raw: object) -> PreviewLayoutCandidate:
-    """Validate an untrusted worker candidate before durable persistence."""
-    if not isinstance(raw, Mapping) or set(raw) != _CANDIDATE_FIELDS:
+def _require_candidate(condition: bool) -> None:
+    if not condition:
         raise ValueError("preview candidate rejected")
+
+
+def _candidate_header(raw: Mapping[object, object]) -> _CandidateHeader:
     repository_side = raw["repository_side"]
     format_name = raw["format"]
-    if repository_side not in _REPOSITORY_SIDES or format_name not in _FORMATS:
-        raise ValueError("preview candidate rejected")
-    version = raw["version"]
-    if not isinstance(version, int) or isinstance(version, bool) or version != 1:
-        raise ValueError("preview candidate rejected")
+    _require_candidate(repository_side in _REPOSITORY_SIDES)
+    _require_candidate(format_name in _FORMATS)
+    version_raw = raw["version"]
+    _require_candidate(isinstance(version_raw, int) and not isinstance(version_raw, bool))
+    version = cast(int, version_raw)
+    _require_candidate(version == LAYOUT_CANDIDATE_VERSION)
     layout_identity = _required_string(raw["layout_identity"], max_length=4096)
     try:
         candidate_id = UUID(_required_string(raw["id"], max_length=36))
     except ValueError as error:
         raise ValueError("preview candidate rejected") from error
-    confidence = raw["confidence"]
-    if not isinstance(confidence, int | float) or isinstance(confidence, bool) or confidence != 1.0:
-        raise ValueError("preview candidate rejected")
-
-    files_raw = raw["files"]
-    languages_raw = raw["languages"]
-    keys_raw = raw["keys"]
-    samples_raw = raw["samples"]
-    if not all(
-        isinstance(value, list)
-        for value in (files_raw, languages_raw, keys_raw, samples_raw)
-    ):
-        raise ValueError("preview candidate rejected")
-    files = tuple(_required_string(value, max_length=4096) for value in files_raw)
-    languages = tuple(_required_string(value, max_length=64) for value in languages_raw)
-    keys = tuple(_required_string(value) for value in keys_raw)
-    if (
-        not files
-        or len(files) > MAX_LAYOUT_FILES
-        or files != tuple(sorted(set(files)))
-        or not languages
-        or len(languages) > MAX_PREVIEW_LANGUAGES
-        or languages != tuple(sorted(set(languages)))
-        or len(keys) > MAX_TOTAL_SAMPLES
-        or keys != tuple(sorted(set(keys)))
-        or not samples_raw
-        or len(samples_raw) > MAX_TOTAL_SAMPLES
-    ):
-        raise ValueError("preview candidate rejected")
-    samples: list[PreviewSample] = []
-    per_language: dict[str, int] = {}
-    for raw_sample in samples_raw:
-        if not isinstance(raw_sample, Mapping) or set(raw_sample) != _SAMPLE_FIELDS:
-            raise ValueError("preview candidate rejected")
-        translation = raw_sample["translation"]
-        if not isinstance(translation, str) or "\x00" in translation:
-            raise ValueError("preview candidate rejected")
-        sample = PreviewSample(
-            language=_required_string(raw_sample["language"], max_length=64),
-            key=_required_string(raw_sample["key"]),
-            translation=translation,
-        )
-        per_language[sample.language] = per_language.get(sample.language, 0) + 1
-        if per_language[sample.language] > MAX_SAMPLES_PER_LANGUAGE:
-            raise ValueError("preview candidate rejected")
-        samples.append(sample)
-    if (
-        tuple((sample.language, sample.key) for sample in samples)
-        != tuple(sorted((sample.language, sample.key) for sample in samples))
-        or not set(keys).issubset({sample.key for sample in samples})
-        or not set(sample.language for sample in samples).issubset(set(languages))
-        or raw["samples_are_partial"] is not True
-    ):
-        raise ValueError("preview candidate rejected")
-    expected_id = _candidate_id(
-        repository_side=cast(RepositorySide, repository_side),
-        format=cast(PreviewFormat, format_name),
-        layout_identity=layout_identity,
-        version=version,
-    )
-    if candidate_id != expected_id:
-        raise ValueError("preview candidate rejected")
-    return PreviewLayoutCandidate(
+    confidence_raw = raw["confidence"]
+    _require_candidate(isinstance(confidence_raw, int | float))
+    confidence = cast(int | float, confidence_raw)
+    _require_candidate(not isinstance(confidence, bool) and confidence == 1.0)
+    return _CandidateHeader(
         id=candidate_id,
         version=version,
         repository_side=cast(RepositorySide, repository_side),
         format=cast(PreviewFormat, format_name),
         layout_identity=layout_identity,
         confidence=float(confidence),
+    )
+
+
+def _ordered_unique_strings(
+    raw: object,
+    *,
+    max_count: int,
+    max_length: int,
+) -> tuple[str, ...]:
+    _require_candidate(isinstance(raw, list))
+    items = cast(list[object], raw)
+    values = tuple(_required_string(value, max_length=max_length) for value in items)
+    _require_candidate(bool(values))
+    _require_candidate(len(values) <= max_count)
+    _require_candidate(values == tuple(sorted(set(values))))
+    return values
+
+
+def _sample_from_mapping(raw: object) -> PreviewSample:
+    _require_candidate(isinstance(raw, Mapping))
+    mapping = cast(Mapping[object, object], raw)
+    _require_candidate(set(mapping) == _SAMPLE_FIELDS)
+    translation = mapping["translation"]
+    _require_candidate(isinstance(translation, str) and "\x00" not in translation)
+    return PreviewSample(
+        language=_required_string(mapping["language"], max_length=64),
+        key=_required_string(mapping["key"]),
+        translation=cast(str, translation),
+    )
+
+
+def _validated_samples(raw: object) -> tuple[PreviewSample, ...]:
+    _require_candidate(isinstance(raw, list))
+    items = cast(list[object], raw)
+    _require_candidate(bool(items))
+    _require_candidate(len(items) <= MAX_TOTAL_SAMPLES)
+    samples = tuple(_sample_from_mapping(item) for item in items)
+    per_language: dict[str, int] = {}
+    for sample in samples:
+        per_language[sample.language] = per_language.get(sample.language, 0) + 1
+        _require_candidate(per_language[sample.language] <= MAX_SAMPLES_PER_LANGUAGE)
+    pairs = tuple((sample.language, sample.key) for sample in samples)
+    _require_candidate(pairs == tuple(sorted(set(pairs))))
+    return samples
+
+
+def _validate_candidate_links(
+    *,
+    header: _CandidateHeader,
+    files: tuple[str, ...],
+    languages: tuple[str, ...],
+    keys: tuple[str, ...],
+    samples: tuple[PreviewSample, ...],
+    samples_are_partial: object,
+) -> None:
+    del files
+    _require_candidate({sample.language for sample in samples}.issubset(set(languages)))
+    _require_candidate(set(keys) == {sample.key for sample in samples})
+    _require_candidate(samples_are_partial is True)
+    _require_candidate(
+        header.id
+        == _candidate_id(
+            repository_side=header.repository_side,
+            format=header.format,
+            layout_identity=header.layout_identity,
+            version=header.version,
+        )
+    )
+
+
+def layout_candidate_from_mapping(raw: object) -> PreviewLayoutCandidate:
+    """Validate an untrusted worker candidate before durable persistence."""
+    if not isinstance(raw, Mapping) or set(raw) != _CANDIDATE_FIELDS:
+        raise ValueError("preview candidate rejected")
+    header = _candidate_header(raw)
+    files = _ordered_unique_strings(raw["files"], max_count=MAX_LAYOUT_FILES, max_length=4096)
+    languages = _ordered_unique_strings(
+        raw["languages"], max_count=MAX_PREVIEW_LANGUAGES, max_length=64
+    )
+    keys = _ordered_unique_strings(raw["keys"], max_count=MAX_TOTAL_SAMPLES, max_length=1_048_576)
+    samples = _validated_samples(raw["samples"])
+    _validate_candidate_links(
+        header=header,
         files=files,
         languages=languages,
         keys=keys,
-        samples=tuple(samples),
+        samples=samples,
+        samples_are_partial=raw["samples_are_partial"],
+    )
+    return PreviewLayoutCandidate(
+        id=header.id,
+        version=header.version,
+        repository_side=header.repository_side,
+        format=header.format,
+        layout_identity=header.layout_identity,
+        confidence=header.confidence,
+        files=files,
+        languages=languages,
+        keys=keys,
+        samples=samples,
         samples_are_partial=True,
     )
 

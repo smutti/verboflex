@@ -7,10 +7,13 @@ from dataclasses import FrozenInstanceError
 from itertools import product
 
 import pytest
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
-from verboflex.services.repository_discovery import SOURCE_DISCOVERY_BUDGET
-from verboflex.services.repository_discovery import RepositorySourceFile
+from verboflex.services.repository_discovery import (
+    SOURCE_DISCOVERY_BUDGET,
+    RepositorySourceFile,
+)
 
 
 def _detector_module() -> object:
@@ -23,9 +26,7 @@ def _source(path: str, content: bytes) -> RepositorySourceFile:
 
 
 def _plain_xml(*, key: str = "hello", translation: str = "Hello") -> bytes:
-    return (
-        f'<resources><string name="{key}">{translation}</string></resources>'.encode()
-    )
+    return f'<resources><string name="{key}">{translation}</string></resources>'.encode()
 
 
 def _xml_at_size(size: int, *, key: str = "hello") -> bytes:
@@ -185,18 +186,8 @@ def test_android_duplicate_source_paths_and_unsupported_qualifiers_block_layout(
 def test_android_raw_file_limit_accepts_exact_boundary_and_rejects_one_byte_more() -> None:
     maximum = SOURCE_DISCOVERY_BUDGET.max_file_bytes
 
-    assert (
-        _candidate_count(
-            _source("res/values/strings.xml", _xml_at_size(maximum))
-        )
-        == 1
-    )
-    assert (
-        _candidate_count(
-            _source("res/values/strings.xml", _xml_at_size(maximum + 1))
-        )
-        == 0
-    )
+    assert _candidate_count(_source("res/values/strings.xml", _xml_at_size(maximum))) == 1
+    assert _candidate_count(_source("res/values/strings.xml", _xml_at_size(maximum + 1))) == 0
 
 
 def test_android_total_byte_limit_accepts_exact_boundary_and_rejects_one_byte_more() -> None:
@@ -212,25 +203,24 @@ def test_android_total_byte_limit_accepts_exact_boundary_and_rejects_one_byte_mo
 
     assert sum(len(file.content) for file in exact) == SOURCE_DISCOVERY_BUDGET.max_total_bytes
     assert _candidate_count(*exact) == 1
-    assert _candidate_count(
-        *exact,
-        _source("res/values/overflow.xml", _plain_xml(key="overflow")),
-    ) == 0
+    assert (
+        _candidate_count(
+            *exact,
+            _source("res/values/overflow.xml", _plain_xml(key="overflow")),
+        )
+        == 0
+    )
 
 
 def test_android_language_limit_accepts_32_and_rejects_33_without_truncation() -> None:
     languages = tuple(
-        first + second
-        for first, second in product("abcdefghijklmnopqrstuvwxyz", repeat=2)
+        first + second for first, second in product("abcdefghijklmnopqrstuvwxyz", repeat=2)
     )[:33]
 
     accepted = tuple(
-        _source(f"res/values-{language}/strings.xml", _plain_xml())
-        for language in languages[:32]
+        _source(f"res/values-{language}/strings.xml", _plain_xml()) for language in languages[:32]
     )
-    rejected = accepted + (
-        _source(f"res/values-{languages[32]}/strings.xml", _plain_xml()),
-    )
+    rejected = accepted + (_source(f"res/values-{languages[32]}/strings.xml", _plain_xml()),)
 
     detector = _detector_module()
     result = detector.detect_android_layouts(accepted, repository_side="direct")
@@ -247,10 +237,7 @@ def test_android_samples_are_capped_per_language_and_globally_in_code_point_orde
             f"res/values-{language}/strings.xml",
             b"<resources>"
             + b"".join(
-                (
-                    f'<string name="{key}">{language}-{key}</string>'.encode()
-                    for key in reversed(keys)
-                )
+                f'<string name="{key}">{language}-{key}</string>'.encode() for key in reversed(keys)
             )
             + b"</resources>",
         )
@@ -275,9 +262,4 @@ def test_android_samples_are_capped_per_language_and_globally_in_code_point_orde
 @settings(max_examples=100, deadline=None)
 @given(st.binary(max_size=2048))
 def test_arbitrary_invalid_android_bytes_never_crash_or_confirm(payload: bytes) -> None:
-    assert (
-        _candidate_count(
-            _source("res/values/strings.xml", b"\xff" + payload)
-        )
-        == 0
-    )
+    assert _candidate_count(_source("res/values/strings.xml", b"\xff" + payload)) == 0

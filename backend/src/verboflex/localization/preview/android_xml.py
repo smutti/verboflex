@@ -6,6 +6,7 @@ import re
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
+from xml.etree.ElementTree import Element
 
 from defusedxml import ElementTree  # type: ignore[import-untyped]
 from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped]
@@ -32,9 +33,7 @@ _ANDROID_PATH = re.compile(
     r"\A(?:(?P<prefix>.+)/)?res/values(?:-(?P<language>[A-Za-z]{2,3}))?/"
     r"(?P<filename>[^/]+\.xml)\Z"
 )
-_ANDROID_RESOURCE_XML_PATH = re.compile(
-    r"\A(?:(?P<prefix>.+)/)?res/values[^/]*/[^/]+\.xml\Z"
-)
+_ANDROID_RESOURCE_XML_PATH = re.compile(r"\A(?:(?P<prefix>.+)/)?res/values[^/]*/[^/]+\.xml\Z")
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,23 +79,28 @@ def _plain_strings(content: bytes) -> dict[str, str]:
         raise ValueError("unsupported Android XML")
     values: dict[str, str] = {}
     for child in root:
-        if (
-            child.tag != "string"
-            or set(child.attrib) != {"name"}
-            or len(child) != 0
-            or (child.tail or "").strip()
-        ):
-            raise ValueError("unsupported Android XML")
-        key = child.attrib["name"]
-        if not key or "\x00" in key or key in values:
-            raise ValueError("unsupported Android XML")
-        translation = child.text or ""
-        if "\x00" in translation:
+        key, translation = _plain_string(child)
+        if key in values:
             raise ValueError("unsupported Android XML")
         values[key] = translation
     if not values:
         raise ValueError("unsupported Android XML")
     return values
+
+
+def _plain_string(child: Element) -> tuple[str, str]:
+    if (
+        child.tag != "string"
+        or set(child.attrib) != {"name"}
+        or len(child) != 0
+        or (child.tail or "").strip()
+    ):
+        raise ValueError("unsupported Android XML")
+    key = child.attrib["name"]
+    translation = child.text or ""
+    if not key or "\x00" in key or "\x00" in translation:
+        raise ValueError("unsupported Android XML")
+    return key, translation
 
 
 def _classify(file: RepositorySourceFile) -> _AndroidFile | None:
@@ -119,67 +123,93 @@ def _layout_identity(path_match: re.Match[str]) -> str:
     return f"{prefix}/res" if prefix else "res"
 
 
+def _classify_bounded_file(
+    file: RepositorySourceFile,
+    *,
+    seen_paths: set[str],
+) -> tuple[str, _AndroidFile | None, int] | None:
+    resource_match = _ANDROID_RESOURCE_XML_PATH.fullmatch(file.path)
+    if resource_match is None:
+        return None
+    layout_identity = _layout_identity(resource_match)
+    byte_count = len(file.content)
+    if byte_count > SOURCE_DISCOVERY_BUDGET.max_file_bytes or file.path in seen_paths:
+        return layout_identity, None, byte_count
+    seen_paths.add(file.path)
+    if _ANDROID_PATH.fullmatch(file.path) is None:
+        return layout_identity, None, byte_count
+    try:
+        return layout_identity, _classify(file), byte_count
+    except ValueError:
+        return layout_identity, None, byte_count
+
+
+def _collect_android_files(
+    files: Iterable[RepositorySourceFile],
+) -> tuple[dict[str, list[_AndroidFile]], set[str]] | None:
+    grouped: dict[str, list[_AndroidFile]] = defaultdict(list)
+    invalid_layouts: set[str] = set()
+    seen_paths: set[str] = set()
+    total_bytes = 0
+    for file in sorted(files, key=lambda item: item.path):
+        classified = _classify_bounded_file(file, seen_paths=seen_paths)
+        if classified is None:
+            continue
+        layout_identity, source, byte_count = classified
+        total_bytes += byte_count
+        if total_bytes > SOURCE_DISCOVERY_BUDGET.max_total_bytes:
+            return None
+        if source is None:
+            invalid_layouts.add(layout_identity)
+        else:
+            grouped[layout_identity].append(source)
+    return grouped, invalid_layouts
+
+
+def _candidate_for_layout(
+    *,
+    layout_identity: str,
+    sources: list[_AndroidFile],
+    repository_side: RepositorySide,
+) -> PreviewLayoutCandidate | None:
+    language_values: dict[str, dict[str, str]] = {}
+    for source in sources:
+        values = language_values.setdefault(source.language, {})
+        if set(values).intersection(source.values):
+            return None
+        values.update(source.values)
+    try:
+        return build_layout_candidate(
+            repository_side=repository_side,
+            format="android_xml",
+            layout_identity=layout_identity,
+            files=(source.path for source in sources),
+            values=language_values,
+        )
+    except ValueError:
+        return None
+
+
 def detect_android_layouts(
     files: Iterable[RepositorySourceFile],
     *,
     repository_side: RepositorySide,
 ) -> PreviewDetectionResult:
     """Return separate exact Android resource-root candidates without guessing."""
-    grouped: dict[str, list[_AndroidFile]] = defaultdict(list)
-    invalid_layouts: set[str] = set()
-    seen_paths: set[str] = set()
-    total_bytes = 0
-    for file in sorted(files, key=lambda item: item.path):
-        resource_match = _ANDROID_RESOURCE_XML_PATH.fullmatch(file.path)
-        if resource_match is None:
-            continue
-        layout_identity = _layout_identity(resource_match)
-        total_bytes += len(file.content)
-        if total_bytes > SOURCE_DISCOVERY_BUDGET.max_total_bytes:
-            return PreviewDetectionResult(candidates=())
-        if (
-            len(file.content) > SOURCE_DISCOVERY_BUDGET.max_file_bytes
-            or file.path in seen_paths
-        ):
-            invalid_layouts.add(layout_identity)
-            continue
-        seen_paths.add(file.path)
-
-        path_match = _ANDROID_PATH.fullmatch(file.path)
-        if path_match is None:
-            invalid_layouts.add(layout_identity)
-            continue
-        try:
-            classified = _classify(file)
-        except ValueError:
-            invalid_layouts.add(layout_identity)
-            continue
-        if classified is not None:
-            grouped[layout_identity].append(classified)
+    collected = _collect_android_files(files)
+    if collected is None:
+        return PreviewDetectionResult(candidates=())
+    grouped, invalid_layouts = collected
 
     candidates: list[PreviewLayoutCandidate] = []
     for layout_identity in sorted(grouped):
         if layout_identity in invalid_layouts:
             continue
-        language_values: dict[str, dict[str, str]] = {}
-        valid = True
-        for source in grouped[layout_identity]:
-            values = language_values.setdefault(source.language, {})
-            if set(values).intersection(source.values):
-                valid = False
-                break
-            values.update(source.values)
-        if not valid:
-            continue
-        try:
-            candidate = build_layout_candidate(
-                repository_side=repository_side,
-                format="android_xml",
-                layout_identity=layout_identity,
-                files=(source.path for source in grouped[layout_identity]),
-                values=language_values,
-            )
-        except ValueError:
-            continue
-        candidates.append(candidate)
+        candidate = _candidate_for_layout(
+            layout_identity=layout_identity,
+            sources=grouped[layout_identity],
+            repository_side=repository_side,
+        )
+        if candidate is not None:
+            candidates.append(candidate)
     return PreviewDetectionResult(candidates=tuple(candidates))
