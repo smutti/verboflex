@@ -171,6 +171,14 @@ def test_android_unsupported_grammar_never_confirms(content: bytes) -> None:
     assert _candidate_count(_source("res/values/strings.xml", content)) == 0
 
 
+def test_android_empty_names_and_unrelated_files_never_confirm_or_interfere() -> None:
+    empty_name = b"<resources><string name=''>Hello</string></resources>"
+    unrelated = _source("docs/example.xml", b"not Android XML")
+
+    assert _candidate_count(_source("res/values/strings.xml", empty_name)) == 0
+    assert _candidate_count(unrelated, _source("res/values/strings.xml", _plain_xml())) == 1
+
+
 def test_android_duplicate_source_paths_and_unsupported_qualifiers_block_layout() -> None:
     duplicate_path = (
         _source("res/values/first.xml", _plain_xml(key="first")),
@@ -183,6 +191,15 @@ def test_android_duplicate_source_paths_and_unsupported_qualifiers_block_layout(
 
     assert _candidate_count(*duplicate_path) == 0
     assert _candidate_count(*unsupported_qualifier) == 0
+
+
+def test_android_case_folded_language_duplicates_block_the_layout() -> None:
+    files = (
+        _source("res/values-en/strings.xml", _plain_xml()),
+        _source("res/values-EN/strings.xml", _plain_xml()),
+    )
+
+    assert _candidate_count(*files) == 0
 
 
 def test_android_raw_file_limit_accepts_exact_boundary_and_rejects_one_byte_more() -> None:
@@ -265,3 +282,11 @@ def test_android_samples_are_capped_per_language_and_globally_in_code_point_orde
 @given(st.binary(max_size=2048))
 def test_arbitrary_invalid_android_bytes_never_crash_or_confirm(payload: bytes) -> None:
     assert _candidate_count(_source("res/values/strings.xml", b"\xff" + payload)) == 0
+
+
+@pytest.mark.parametrize("raw", (None, (), {"unexpected": "field"}))
+def test_untrusted_candidate_mappings_fail_closed_before_persistence(raw: object) -> None:
+    core = importlib.import_module("verboflex.localization.preview.core")
+
+    with pytest.raises(ValueError, match="preview candidate rejected"):
+        core.layout_candidate_from_mapping(raw)
