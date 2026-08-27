@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import Generator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-import os
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -15,7 +15,7 @@ import pytest
 from alembic.config import Config
 from psycopg import connect, sql
 from pydantic import SecretStr
-from sqlalchemy import create_engine, delete, select, text
+from sqlalchemy import create_engine, delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
@@ -23,6 +23,7 @@ from verboflex.auth.access_tokens import issue_access_token
 from verboflex.auth.passwords import hash_password
 from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
+from verboflex.integrations.bitbucket.client import BitbucketBranch
 from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.repository import Repository
