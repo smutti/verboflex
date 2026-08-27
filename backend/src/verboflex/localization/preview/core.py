@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal, cast
@@ -33,6 +34,12 @@ _CANDIDATE_FIELDS = {
 _SAMPLE_FIELDS = {"language", "key", "translation"}
 _REPOSITORY_SIDES = {"direct", "keys", "translations"}
 _FORMATS = {"android_xml", "qt_ts", "json", "ios_strings"}
+_PREVIEW_LOCALE = re.compile(
+    r"\A(?P<language>[A-Za-z]{2,3})"
+    r"(?:[-_](?P<script>[A-Za-z]{4}))?"
+    r"(?:[-_](?P<region>[A-Za-z]{2}|[0-9]{3}))?\Z",
+    re.ASCII,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +108,80 @@ class _CandidateHeader:
     format: PreviewFormat
     layout_identity: str
     confidence: float
+
+
+def normalize_preview_locale(raw: str) -> str | None:
+    """Canonicalize only the deliberately bounded Phase 2 locale subset."""
+    if not isinstance(raw, str):
+        return None
+    match = _PREVIEW_LOCALE.fullmatch(raw)
+    if match is None:
+        return None
+    parts = [match.group("language").lower()]
+    script = match.group("script")
+    region = match.group("region")
+    if script is not None:
+        parts.append(script.title())
+    if region is not None:
+        parts.append(region.upper())
+    return "-".join(parts)
+
+
+def extract_preview_locale_path(
+    path: str,
+    *,
+    suffix: str,
+    allow_prefixed_stem: bool = False,
+    expected_locale: str | None = None,
+) -> tuple[str, str] | None:
+    """Return one unambiguous locale and its exact path template."""
+    if (
+        not path
+        or not suffix
+        or not path.endswith(suffix)
+        or path.startswith("/")
+        or "//" in path
+    ):
+        return None
+    components = path.split("/")
+    if any(not component or component in {".", ".."} for component in components):
+        return None
+    stem = components[-1][: -len(suffix)]
+    signals: list[tuple[int, str, str]] = []
+    for index, component in enumerate(components[:-1]):
+        locale = normalize_preview_locale(component)
+        if locale is not None:
+            signals.append((index, locale, "{locale}"))
+
+    stem_signals: list[tuple[str, str]] = []
+    stem_locale = normalize_preview_locale(stem)
+    if stem_locale is not None:
+        stem_signals.append((stem_locale, "{locale}"))
+    if allow_prefixed_stem:
+        for offset, character in enumerate(stem):
+            if character not in {"-", "_"}:
+                continue
+            possible = normalize_preview_locale(stem[offset + 1 :])
+            if possible is not None:
+                stem_signals.append((possible, f"{stem[: offset + 1]}{{locale}}"))
+    if expected_locale is not None:
+        directory_locales = {locale for index, locale, _ in signals if index < len(components) - 1}
+        if directory_locales and directory_locales != {expected_locale}:
+            return None
+        stem_signals = [signal for signal in stem_signals if signal[0] == expected_locale]
+    if stem_signals:
+        chosen_locale, stem_template = stem_signals[0]
+        signals.append((len(components) - 1, chosen_locale, f"{stem_template}{suffix}"))
+    if not signals or len({locale for _, locale, _ in signals}) != 1:
+        return None
+
+    templated = list(components)
+    for index, _, replacement in signals:
+        templated[index] = replacement
+    locale = signals[0][1]
+    if expected_locale is not None and locale != expected_locale:
+        return None
+    return locale, "/".join(templated)
 
 
 def _candidate_id(
