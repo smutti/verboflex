@@ -130,13 +130,16 @@ def _seed_candidate_graph(
                     version=candidate_version,
                     is_published=False,
                 ),
+            ]
+        )
+        if session.get(Repository, durable_repository_id) is None:
+            session.add(
                 Repository(
                     id=durable_repository_id,
                     workspace="mobile-team",
                     repository_slug=f"repo-{durable_repository_id.hex[:12]}",
-                ),
-            ]
-        )
+                )
+            )
         session.flush()
         product.active_revision_id = active_id
         product.candidate_revision_id = candidate_id
