@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-11-PLAN.md
-last_updated: "2026-08-27T18:26:20.304Z"
+stopped_at: Completed 02-12-PLAN.md
+last_updated: "2026-08-27T19:11:40.530Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 02 execution started
-state_head: b544d81255df495b0875389a9ccb90a5182f8b48
+state_head: 04089b23185620b7c4d5a87a7d6c78cd29a5b4ee
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 35
-  completed_plans: 26
+  completed_plans: 27
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 12 of 20
+Plan: 13 of 20
 Status: Ready to execute
 Last activity: 2026-08-26 — Phase 02 execution started
 
@@ -84,6 +84,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P09 | 2h27min | 2 tasks | 11 files |
 | Phase 02 P10 | 28min | 2 tasks | 11 files |
 | Phase 02 P11 | 2h 14m | 2 tasks | 18 files |
+| Phase 02 P12 | 32min | 2 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -189,6 +190,10 @@ Recent decisions affecting current work:
 - [Phase 02]: Return lifecycle success only from a fresh post-commit product projection; provider writes and canonical translation mutations remain absent.
 - [Phase 02]: Preview currentness requires complete live candidate, mapping, repository-side, connection-generation, detector/layout, digest, and attempt identity while historical results remain inspectable.
 - [Phase 02]: The pre-detector preview contract rejects source, credential, provider, Celery, canonical-row, and confirmation data before persistence.
+- [Phase 02]: Android preview accepts only strict UTF-8 with an optional UTF-8 BOM and plain direct-child string elements; every unsupported construct fails closed.
+- [Phase 02]: One preview candidate represents exactly one Android res root and repository side at confidence 1.0 without canonical identity or confirmation authority.
+- [Phase 02]: The 1 MiB/file, 20 MiB total, 32-language, 10-sample/language, and 100-sample ceilings are exact blocking boundaries.
+- [Phase 02]: Provider reads remain commit-bound and mutation-free while parsing and persistence stay behind the durable Celery worker boundary.
 
 ### Pending Todos
 
@@ -221,6 +226,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-27T18:26:20.263Z
-Stopped at: Completed 02-11-PLAN.md
+Last session: 2026-08-27T19:11:40.489Z
+Stopped at: Completed 02-12-PLAN.md
 Resume file: None

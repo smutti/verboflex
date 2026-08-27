@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 0
 waived_count: 0
-fixed_count: 18
-total_count: 18
-last_updated: 2026-08-27T12:47:24.709Z
+fixed_count: 22
+total_count: 22
+last_updated: 2026-08-27T19:11:19.702Z
 ---
 
 # Broken Windows Ledger
@@ -33,6 +33,10 @@ last_updated: 2026-08-27T12:47:24.709Z
 | 16 | 02 | deviation | frontend/openapi.json |  | Synchronized canonical OpenAPI and generated TypeScript client | fixed |  | 2026-08-27T12:46:58.120Z | 2026-08-27T12:47:24.591Z |
 | 17 | 02 | deviation | backend/tests/api/test_admin_products.py |  | Admitted approved mapping subresources in product surface assertion | fixed |  | 2026-08-27T12:46:58.186Z | 2026-08-27T12:47:24.651Z |
 | 18 | 02 | deviation | tools/verify_mapping_api_mutants.py |  | Closed candidate cursor dependency and corruption evidence gaps | fixed |  | 2026-08-27T12:46:58.248Z | 2026-08-27T12:47:24.709Z |
+| 19 | 02 | deviation | backend/tests/unit/localization/preview/test_android_xml.py |  | Added mutation and branch-coverage evidence for every fail-closed boundary | fixed |  | 2026-08-27T19:10:58.316Z | 2026-08-27T19:11:19.519Z |
+| 20 | 02 | deviation | backend/src/verboflex/localization/preview/android_xml.py |  | Reduced changed detector and core complexity below grade C | fixed |  | 2026-08-27T19:10:58.394Z | 2026-08-27T19:11:19.579Z |
+| 21 | 02 | deviation | frontend/openapi.json |  | Synchronized the expanded browser-facing preview contract | fixed |  | 2026-08-27T19:10:58.457Z | 2026-08-27T19:11:19.640Z |
+| 22 | 02 | deviation | backend/tests/integration/test_preview_jobs.py |  | Applied repository formatting to the tracer integration file | fixed |  | 2026-08-27T19:10:58.518Z | 2026-08-27T19:11:19.702Z |
 
 ````json
 [
@@ -251,6 +255,54 @@ last_updated: 2026-08-27T12:47:24.709Z
     "reason": "",
     "recorded_at": "2026-08-27T12:46:58.248Z",
     "resolved_at": "2026-08-27T12:47:24.709Z"
+  },
+  {
+    "id": 19,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "backend/tests/unit/localization/preview/test_android_xml.py",
+    "line": null,
+    "description": "Added mutation and branch-coverage evidence for every fail-closed boundary",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-27T19:10:58.316Z",
+    "resolved_at": "2026-08-27T19:11:19.519Z"
+  },
+  {
+    "id": 20,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "backend/src/verboflex/localization/preview/android_xml.py",
+    "line": null,
+    "description": "Reduced changed detector and core complexity below grade C",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-27T19:10:58.394Z",
+    "resolved_at": "2026-08-27T19:11:19.579Z"
+  },
+  {
+    "id": 21,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "frontend/openapi.json",
+    "line": null,
+    "description": "Synchronized the expanded browser-facing preview contract",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-27T19:10:58.457Z",
+    "resolved_at": "2026-08-27T19:11:19.640Z"
+  },
+  {
+    "id": 22,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "backend/tests/integration/test_preview_jobs.py",
+    "line": null,
+    "description": "Applied repository formatting to the tracer integration file",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-27T19:10:58.518Z",
+    "resolved_at": "2026-08-27T19:11:19.702Z"
   }
 ]
 ````
