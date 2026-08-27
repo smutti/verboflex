@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-08-PLAN.md
-last_updated: "2026-08-27T12:47:55.959Z"
+stopped_at: Completed 02-09-PLAN.md
+last_updated: "2026-08-27T15:23:28.014Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 02 execution started
-state_head: f3ef5049c9276e940372311a1813f4f3e659fddc
+state_head: 1e70189647fde6ed924937d1437b4abc194665e9
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 35
-  completed_plans: 23
+  completed_plans: 24
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 9 of 20
+Plan: 10 of 20
 Status: Ready to execute
 Last activity: 2026-08-26 — Phase 02 execution started
 
@@ -81,6 +81,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P06 | 20min | 2 tasks | 11 files |
 | Phase 02 P07 | 37min | 2 tasks | 18 files |
 | Phase 02 P08 | 65min | 3 tasks | 16 files |
+| Phase 02 P09 | 2h27min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -178,6 +179,8 @@ Recent decisions affecting current work:
 - [Phase 02]: Store branch, target, default, and selected-layout configuration on the candidate mapping; global Repository reuse shares none of it.
 - [Phase 02]: Expose only guarded mapping list/create/update in Plan 08; Separate writes remain Plan 09 and no mapping delete lifecycle exists.
 - [Phase 02]: Bind canonical mapping cursors to the candidate revision and exact topology/repository/C-collated branch/NULLS-LAST/UUID tuple.
+- [Phase 02]: Fix future PR grouping identity to exact Repository UUID plus exact target branch; mapping, file, language, and product never alter the group key.
+- [Phase 02]: For Separate mappings, configuration preview targets the Translations repository; Direct targets its sole repository, and only configured allowed/default target branches are exposed.
 
 ### Pending Todos
 
@@ -210,6 +213,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-27T12:47:55.923Z
-Stopped at: Completed 02-08-PLAN.md
+Last session: 2026-08-27T15:23:27.975Z
+Stopped at: Completed 02-09-PLAN.md
 Resume file: None
