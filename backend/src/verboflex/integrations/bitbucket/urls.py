@@ -10,6 +10,19 @@ BITBUCKET_API_ORIGIN = f"https://{BITBUCKET_API_HOST}"
 BITBUCKET_URL_REJECTED_MESSAGE = "Bitbucket provider URL rejected"
 
 _PROVIDER_IDENTIFIER = re.compile(r"[a-z0-9][a-z0-9_-]{0,99}")
+_ENCODED_PATH_SEGMENT = r"(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+"
+_REPOSITORY_READ_BASE = rf"/2\.0/repositories/{_ENCODED_PATH_SEGMENT}/{_ENCODED_PATH_SEGMENT}"
+_ALLOWED_READ_PATHS = (
+    re.compile(rf"{_REPOSITORY_READ_BASE}/?"),
+    re.compile(
+        rf"{_REPOSITORY_READ_BASE}/refs/branches"
+        rf"(?:/{_ENCODED_PATH_SEGMENT})?/?"
+    ),
+    re.compile(
+        rf"{_REPOSITORY_READ_BASE}/src/[0-9A-Fa-f]{{40}}"
+        rf"(?:/[^\\]*)?"
+    ),
+)
 
 
 def validate_bitbucket_api_url(url: str) -> str:
@@ -27,7 +40,7 @@ def validate_bitbucket_api_url(url: str) -> str:
         or parsed.username is not None
         or parsed.password is not None
         or port is not None
-        or not parsed.path.startswith("/2.0/")
+        or not any(pattern.fullmatch(parsed.path) for pattern in _ALLOWED_READ_PATHS)
         or parsed.fragment
     ):
         raise ValueError(BITBUCKET_URL_REJECTED_MESSAGE)
