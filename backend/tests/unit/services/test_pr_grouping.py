@@ -11,8 +11,8 @@ from types import ModuleType
 from uuid import UUID
 
 import pytest
-from hypothesis import given, strategies as st
-
+from hypothesis import given
+from hypothesis import strategies as st
 
 REPOSITORY_ALPHA = UUID("00000000-0000-0000-0000-000000000001")
 REPOSITORY_BETA = UUID("00000000-0000-0000-0000-000000000002")
