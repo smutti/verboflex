@@ -77,22 +77,14 @@ MUTATIONS = (
     Mutation(
         "mapping-identity-drift-ignored",
         "src/verboflex/services/preview_jobs.py",
-        "    if (\n"
-        "        row.topology != mapping.topology\n"
-        "        or row.detector_version != PREVIEW_DETECTOR_VERSION\n"
-        "        or row.layout_identity != PREVIEW_LAYOUT_IDENTITY\n"
-        "        or row.repository_sides != current_sides\n"
-        "        or row.input_digest != current_digest\n"
-        "    ):\n"
-        '        return "stale_identity"',
-        "    if False and (\n"
-        "        row.topology != mapping.topology\n"
-        "        or row.detector_version != PREVIEW_DETECTOR_VERSION\n"
-        "        or row.layout_identity != PREVIEW_LAYOUT_IDENTITY\n"
-        "        or row.repository_sides != current_sides\n"
-        "        or row.input_digest != current_digest\n"
-        "    ):\n"
-        '        return "stale_identity"',
+        "    return (\n"
+        "        row.topology == mapping.topology\n"
+        "        and row.detector_version == PREVIEW_DETECTOR_VERSION\n"
+        "        and row.layout_identity == PREVIEW_LAYOUT_IDENTITY\n"
+        "        and row.repository_sides == current_sides\n"
+        "        and row.input_digest == current_digest\n"
+        "    )",
+        "    return True",
     ),
     Mutation(
         "create-schema-accepts-extra-fields",

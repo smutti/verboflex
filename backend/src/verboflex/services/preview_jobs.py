@@ -312,21 +312,10 @@ def _complete_sides(
     mapping: ProductRepositoryMapping,
     raw_commits: object,
 ) -> list[dict[str, str]]:
-    if isinstance(raw_commits, (str, bytes)) or not isinstance(raw_commits, Mapping):
-        raise PreviewJobConflict("preview commit identity rejected")
-    commits: dict[str, str] = {}
-    for raw_role, raw_commit in raw_commits.items():
-        if raw_role not in {"direct", "keys", "translations"} or raw_role in commits:
-            raise PreviewJobConflict("preview commit identity rejected")
-        commits[cast(str, raw_role)] = _exact_commit_hash(raw_commit)
+    commits = _validated_commits(raw_commits)
     persisted_sides = sorted(mapping.sides, key=lambda side: side.role)
     expected_roles = {side.role for side in persisted_sides}
-    if set(commits) != expected_roles:
-        raise PreviewJobConflict("preview commit identity rejected")
-    if mapping.topology == "direct" and expected_roles != {"direct"}:
-        raise PreviewJobConflict("preview mapping identity rejected")
-    if mapping.topology == "separate" and expected_roles != {"keys", "translations"}:
-        raise PreviewJobConflict("preview mapping identity rejected")
+    _require_mapping_roles(mapping, submitted_roles=set(commits), expected_roles=expected_roles)
     return [
         {
             "role": side.role,
@@ -336,6 +325,31 @@ def _complete_sides(
         }
         for side in persisted_sides
     ]
+
+
+def _validated_commits(raw_commits: object) -> dict[str, str]:
+    if isinstance(raw_commits, (str, bytes)) or not isinstance(raw_commits, Mapping):
+        raise PreviewJobConflict("preview commit identity rejected")
+    commits: dict[str, str] = {}
+    for raw_role, raw_commit in raw_commits.items():
+        if raw_role not in {"direct", "keys", "translations"} or raw_role in commits:
+            raise PreviewJobConflict("preview commit identity rejected")
+        commits[cast(str, raw_role)] = _exact_commit_hash(raw_commit)
+    return commits
+
+
+def _require_mapping_roles(
+    mapping: ProductRepositoryMapping,
+    *,
+    submitted_roles: set[str],
+    expected_roles: set[str],
+) -> None:
+    if submitted_roles != expected_roles:
+        raise PreviewJobConflict("preview commit identity rejected")
+    if mapping.topology == "direct" and expected_roles != {"direct"}:
+        raise PreviewJobConflict("preview mapping identity rejected")
+    if mapping.topology == "separate" and expected_roles != {"keys", "translations"}:
+        raise PreviewJobConflict("preview mapping identity rejected")
 
 
 def enqueue_preview_job(job_id: UUID) -> None:
@@ -448,12 +462,35 @@ def _current_failure_code(
     *,
     for_update: bool,
 ) -> PreviewJobErrorCode | None:
+    revision = _current_revision(session, row, for_update=for_update)
+    if revision is None:
+        return "stale_candidate"
+    connection = _current_connection(session, row, for_update=for_update)
+    if connection is None:
+        return "stale_connection"
+    latest_attempt = session.scalar(
+        select(func.max(PreviewJob.attempt)).where(PreviewJob.input_digest == row.input_digest)
+    )
+    if latest_attempt != row.attempt:
+        return "stale_attempt"
+    mapping = _current_mapping(session, row, for_update=for_update)
+    if mapping is None or not _current_identity_matches(row, revision, mapping, connection):
+        return "stale_identity"
+    return None
+
+
+def _current_revision(
+    session: Session,
+    row: PreviewJob,
+    *,
+    for_update: bool,
+) -> ProductRevision | None:
     product_statement = select(Product).where(Product.id == row.product_id)
     if for_update:
         product_statement = product_statement.with_for_update()
     product = session.execute(product_statement).scalar_one_or_none()
     if product is None or product.candidate_revision_id != row.candidate_revision_id:
-        return "stale_candidate"
+        return None
     revision_statement = select(ProductRevision).where(
         ProductRevision.id == row.candidate_revision_id
     )
@@ -465,7 +502,16 @@ def _current_failure_code(
         or revision.is_published
         or revision.version != row.candidate_revision_version
     ):
-        return "stale_candidate"
+        return None
+    return revision
+
+
+def _current_connection(
+    session: Session,
+    row: PreviewJob,
+    *,
+    for_update: bool,
+) -> BitbucketConnection | None:
     connection_statement = select(BitbucketConnection).where(BitbucketConnection.id == 1)
     if for_update:
         connection_statement = connection_statement.with_for_update()
@@ -478,12 +524,16 @@ def _current_failure_code(
         or connection.scope_profile != "repository"
         or connection.revoked_at is not None
     ):
-        return "stale_connection"
-    latest_attempt = session.scalar(
-        select(func.max(PreviewJob.attempt)).where(PreviewJob.input_digest == row.input_digest)
-    )
-    if latest_attempt != row.attempt:
-        return "stale_attempt"
+        return None
+    return connection
+
+
+def _current_mapping(
+    session: Session,
+    row: PreviewJob,
+    *,
+    for_update: bool,
+) -> ProductRepositoryMapping | None:
     mapping_statement = (
         select(ProductRepositoryMapping)
         .options(selectinload(ProductRepositoryMapping.sides))
@@ -494,9 +544,15 @@ def _current_failure_code(
     )
     if for_update:
         mapping_statement = mapping_statement.with_for_update()
-    mapping = session.execute(mapping_statement).scalar_one_or_none()
-    if mapping is None:
-        return "stale_identity"
+    return session.execute(mapping_statement).scalar_one_or_none()
+
+
+def _current_identity_matches(
+    row: PreviewJob,
+    revision: ProductRevision,
+    mapping: ProductRepositoryMapping,
+    connection: BitbucketConnection,
+) -> bool:
     try:
         persisted_sides = _repository_sides(row)
         commits = {side.role: side.commit_hash for side in persisted_sides}
@@ -509,16 +565,14 @@ def _current_failure_code(
             repository_sides=current_sides,
         )
     except PreviewJobConflict:
-        return "stale_identity"
-    if (
-        row.topology != mapping.topology
-        or row.detector_version != PREVIEW_DETECTOR_VERSION
-        or row.layout_identity != PREVIEW_LAYOUT_IDENTITY
-        or row.repository_sides != current_sides
-        or row.input_digest != current_digest
-    ):
-        return "stale_identity"
-    return None
+        return False
+    return (
+        row.topology == mapping.topology
+        and row.detector_version == PREVIEW_DETECTOR_VERSION
+        and row.layout_identity == PREVIEW_LAYOUT_IDENTITY
+        and row.repository_sides == current_sides
+        and row.input_digest == current_digest
+    )
 
 
 def _start_preview_job(
