@@ -22,6 +22,7 @@ from verboflex.models.product_mapping import (
     ProductMappingRepositorySide,
     ProductRepositoryMapping,
 )
+from verboflex.services.pr_grouping import PullRequestGroupingPreview
 from verboflex.services.repositories import RepositoryNotFound, get_repository
 from verboflex.services.repository_discovery import BranchDiscoveryAdapter
 
@@ -298,6 +299,20 @@ def _record(
         selected_layout_candidate_id=mapping.selected_layout_candidate_id,
         selected_layout_version=mapping.selected_layout_version,
         candidate_version=candidate_version,
+    )
+
+
+def pr_grouping_preview(record: MappingRecord) -> PullRequestGroupingPreview:
+    """Project one mapping's exact future writable repository/target configuration."""
+    repository_id = record.primary_repository_id
+    if record.topology == "separate":
+        if record.translations_repository_id is None:
+            raise InvalidMappingInput("invalid persisted mapping")
+        repository_id = record.translations_repository_id
+    return PullRequestGroupingPreview(
+        repository_id=repository_id,
+        allowed_target_branches=record.allowed_target_branches,
+        default_target_branch=record.default_target_branch,
     )
 
 
