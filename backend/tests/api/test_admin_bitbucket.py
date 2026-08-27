@@ -6,6 +6,7 @@ import asyncio
 import base64
 import os
 from collections.abc import Generator, Iterator, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from email.message import Message
@@ -157,6 +158,19 @@ class FakeOpener:
             raise self.error
         assert self.response is not None
         return self.response
+
+
+@dataclass
+class FakeStatusSession:
+    """Expose one structurally corrupt row without bypassing the database constraint."""
+
+    connection: BitbucketConnection
+
+    def begin(self) -> nullcontext[None]:
+        return nullcontext()
+
+    def get(self, _model: type[BitbucketConnection], _key: int) -> BitbucketConnection:
+        return self.connection
 
 
 @pytest.fixture(scope="module")
@@ -497,6 +511,22 @@ def test_callback_rejects_hostile_state_without_bearer_or_provider_diagnostics(
     assert rejected.headers["cache-control"] == "no-store"
     assert exchange.calls == []
     assert "provider" not in rejected.text.casefold()
+
+
+def test_public_status_fails_closed_for_structurally_incomplete_credentials() -> None:
+    """Keep the read model unavailable if durable pair integrity is ever bypassed."""
+    connection = BitbucketConnection(
+        id=1,
+        access_token_ciphertext=b"encrypted-access",
+        refresh_token_ciphertext=None,
+    )
+    service = BitbucketOAuthService(
+        settings=oauth_settings(), redis_client=FakeRedis(), token_exchange=FakeTokenExchange()
+    )
+
+    snapshot = service.public_status(cast(Session, FakeStatusSession(connection)))
+
+    assert snapshot.state == "unavailable"
 
 
 def test_missing_configuration_and_missing_principal_session_fail_closed(
