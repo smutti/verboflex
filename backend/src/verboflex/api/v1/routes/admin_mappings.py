@@ -99,6 +99,29 @@ def _raise_mapping_error(error: Exception) -> NoReturn:
     raise error
 
 
+MappingMutationError = (
+    MappingConflict
+    | MappingVersionConflict
+    | MappingBranchConflict
+    | MappingTargetConflict
+    | MappingNotFound
+    | InvalidMappingInput
+)
+
+
+def _mutation_error_response(error: MappingMutationError) -> JSONResponse:
+    """Project one domain failure into the bounded form-addressable contract."""
+    if isinstance(error, MappingConflict):
+        return _conflict("Mapping unavailable", "mapping_identity")
+    if isinstance(error, MappingVersionConflict):
+        return _conflict("Mapping candidate conflict", "candidate_version")
+    if isinstance(error, MappingBranchConflict):
+        return _conflict("Source branch unavailable", "source_branch")
+    if isinstance(error, MappingTargetConflict):
+        return _conflict("Target branch unavailable", "allowed_target_branches")
+    _raise_mapping_error(error)
+
+
 @router.get(
     "",
     operation_id="list_admin_candidate_mappings",
@@ -164,16 +187,15 @@ async def create_admin_candidate_mapping(
             default_target_branch=payload.default_target_branch,
             adapter=adapter,
         )
-    except MappingConflict:
-        return _conflict("Mapping unavailable", "mapping_identity")
-    except MappingVersionConflict:
-        return _conflict("Mapping candidate conflict", "candidate_version")
-    except MappingBranchConflict:
-        return _conflict("Source branch unavailable", "source_branch")
-    except MappingTargetConflict:
-        return _conflict("Target branch unavailable", "allowed_target_branches")
-    except (MappingNotFound, InvalidMappingInput) as error:
-        _raise_mapping_error(error)
+    except (
+        MappingConflict,
+        MappingVersionConflict,
+        MappingBranchConflict,
+        MappingTargetConflict,
+        MappingNotFound,
+        InvalidMappingInput,
+    ) as error:
+        return _mutation_error_response(error)
     return _response(record)
 
 
@@ -209,14 +231,13 @@ async def update_admin_candidate_mapping(
             default_target_branch=payload.default_target_branch,
             adapter=adapter,
         )
-    except MappingConflict:
-        return _conflict("Mapping unavailable", "mapping_identity")
-    except MappingVersionConflict:
-        return _conflict("Mapping candidate conflict", "candidate_version")
-    except MappingBranchConflict:
-        return _conflict("Source branch unavailable", "source_branch")
-    except MappingTargetConflict:
-        return _conflict("Target branch unavailable", "allowed_target_branches")
-    except (MappingNotFound, InvalidMappingInput) as error:
-        _raise_mapping_error(error)
+    except (
+        MappingConflict,
+        MappingVersionConflict,
+        MappingBranchConflict,
+        MappingTargetConflict,
+        MappingNotFound,
+        InvalidMappingInput,
+    ) as error:
+        return _mutation_error_response(error)
     return _response(record)
