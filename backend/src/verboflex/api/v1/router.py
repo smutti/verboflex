@@ -6,6 +6,7 @@ from verboflex.api.v1.routes import (
     admin_bitbucket,
     admin_discovery,
     admin_mappings,
+    admin_previews,
     admin_products,
     admin_repositories,
     admin_users,
@@ -23,6 +24,7 @@ api_router.include_router(system.router)
 api_router.include_router(admin_bitbucket.router)
 api_router.include_router(admin_discovery.router)
 api_router.include_router(admin_mappings.router)
+api_router.include_router(admin_previews.router)
 api_router.include_router(admin_users.router)
 api_router.include_router(admin_products.router)
 api_router.include_router(admin_repositories.router)

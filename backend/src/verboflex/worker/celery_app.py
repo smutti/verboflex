@@ -14,7 +14,7 @@ def create_celery_app(settings: Settings | None = None) -> Celery:
         "verboflex",
         broker=redis_url,
         backend=redis_url,
-        include=["verboflex.worker.tasks"],
+        include=["verboflex.worker.tasks", "verboflex.worker.preview_tasks"],
     )
     application.conf.update(
         accept_content=["json"],
