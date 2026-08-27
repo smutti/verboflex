@@ -89,6 +89,48 @@ export type AdminBitbucketStatusResponse = {
 };
 
 /**
+ * AdminBranchListResponse
+ */
+export type AdminBranchListResponse = {
+    /**
+     * Items
+     */
+    items: Array<AdminBranchResponse>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * AdminBranchResponse
+ */
+export type AdminBranchResponse = {
+    /**
+     * Commit Hash
+     */
+    commit_hash: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * AdminDiscoveryErrorResponse
+ */
+export type AdminDiscoveryErrorResponse = {
+    /**
+     * Detail
+     */
+    detail: 'Bitbucket discovery unavailable';
+    /**
+     * State
+     */
+    state: 'disconnected' | 'reauthorization_required' | 'permission_denied' | 'not_found' | 'unavailable' | 'timeout' | 'invalid_source' | 'limit_exceeded';
+};
+
+/**
  * AdminProductConflictResponse
  *
  * Bounded conflict with optional field affinity for form recovery.
@@ -260,6 +302,38 @@ export type AdminRepositoryResponse = {
      * Workspace
      */
     workspace: string;
+};
+
+/**
+ * AdminSourceDiscoveryResponse
+ */
+export type AdminSourceDiscoveryResponse = {
+    /**
+     * Commit Hash
+     */
+    commit_hash: string;
+    /**
+     * Files
+     */
+    files: Array<AdminSourceFileResponse>;
+    /**
+     * Total Bytes
+     */
+    total_bytes: number;
+};
+
+/**
+ * AdminSourceFileResponse
+ */
+export type AdminSourceFileResponse = {
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Size
+     */
+    size: number;
 };
 
 /**
@@ -1009,6 +1083,140 @@ export type GetAdminRepositoryResponses = {
 };
 
 export type GetAdminRepositoryResponse = GetAdminRepositoryResponses[keyof GetAdminRepositoryResponses];
+
+export type ListAdminRepositoryBranchesData = {
+    body?: never;
+    path: {
+        /**
+         * Repository Id
+         */
+        repository_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/repositories/{repository_id}/branches';
+};
+
+export type ListAdminRepositoryBranchesErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Response 403 List Admin Repository Branches
+     *
+     * Forbidden
+     */
+    403: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Response 404 List Admin Repository Branches
+     *
+     * Not Found
+     */
+    404: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminDiscoveryErrorResponse;
+    /**
+     * Response 422 List Admin Repository Branches
+     *
+     * Unprocessable Content
+     */
+    422: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: AdminDiscoveryErrorResponse;
+    /**
+     * Gateway Timeout
+     */
+    504: AdminDiscoveryErrorResponse;
+};
+
+export type ListAdminRepositoryBranchesError = ListAdminRepositoryBranchesErrors[keyof ListAdminRepositoryBranchesErrors];
+
+export type ListAdminRepositoryBranchesResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminBranchListResponse;
+};
+
+export type ListAdminRepositoryBranchesResponse = ListAdminRepositoryBranchesResponses[keyof ListAdminRepositoryBranchesResponses];
+
+export type DiscoverAdminRepositorySourcesData = {
+    body?: never;
+    path: {
+        /**
+         * Repository Id
+         */
+        repository_id: string;
+    };
+    query: {
+        /**
+         * Branch
+         */
+        branch: string;
+    };
+    url: '/api/v1/admin/repositories/{repository_id}/sources';
+};
+
+export type DiscoverAdminRepositorySourcesErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Response 403 Discover Admin Repository Sources
+     *
+     * Forbidden
+     */
+    403: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Response 404 Discover Admin Repository Sources
+     *
+     * Not Found
+     */
+    404: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminDiscoveryErrorResponse;
+    /**
+     * Response 422 Discover Admin Repository Sources
+     *
+     * Unprocessable Content
+     */
+    422: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: AdminDiscoveryErrorResponse;
+    /**
+     * Gateway Timeout
+     */
+    504: AdminDiscoveryErrorResponse;
+};
+
+export type DiscoverAdminRepositorySourcesError = DiscoverAdminRepositorySourcesErrors[keyof DiscoverAdminRepositorySourcesErrors];
+
+export type DiscoverAdminRepositorySourcesResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminSourceDiscoveryResponse;
+};
+
+export type DiscoverAdminRepositorySourcesResponse = DiscoverAdminRepositorySourcesResponses[keyof DiscoverAdminRepositorySourcesResponses];
 
 export type ListAdminUsersData = {
     body?: never;
