@@ -205,9 +205,7 @@ def prove_mutations() -> None:
 
 def self_test() -> None:
     """Prove source drift reaches the checker's failure path."""
-    with tempfile.TemporaryDirectory(
-        prefix="verboflex-oauth-mutant-control-"
-    ) as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="verboflex-oauth-mutant-control-") as temp_dir:
         control = Path(temp_dir) / "control.py"
         control.write_text("approved = True\n")
         try:

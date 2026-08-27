@@ -307,9 +307,7 @@ def test_admin_bitbucket_openapi_is_closed_bounded_and_secret_free() -> None:
                 if path.startswith("/api/v1/admin/bitbucket")
             },
             "schemas": {
-                name: value
-                for name, value in schemas.items()
-                if name.startswith("AdminBitbucket")
+                name: value for name, value in schemas.items() if name.startswith("AdminBitbucket")
             },
         },
         sort_keys=True,
