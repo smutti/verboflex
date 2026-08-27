@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 0
 waived_count: 0
-fixed_count: 7
-total_count: 7
-last_updated: 2026-08-26T08:13:30.166Z
+fixed_count: 9
+total_count: 9
+last_updated: 2026-08-27T06:03:19.935Z
 ---
 
 # Broken Windows Ledger
@@ -22,6 +22,8 @@ last_updated: 2026-08-26T08:13:30.166Z
 | 5 | 01 | stub | backend/src/verboflex/api/v1/routes/users.py | 23 | GET /users/me remains an intentional callable 501 seam until Plan 01-06 | fixed |  | 2026-08-24T14:07:24.591Z | 2026-08-24T16:53:04.133Z |
 | 6 | 01 | stub | backend/src/verboflex/api/v1/routes/system.py | 22 | GET /system/status remains an intentional callable 501 seam until Plan 01-08 | fixed |  | 2026-08-24T14:07:24.648Z | 2026-08-26T08:13:30.100Z |
 | 7 | 01 | stub | docker-compose.yml | 76 | Compose worker command and healthcheck target the Celery app intentionally deferred to Plan 01-08 | fixed |  | 2026-08-24T15:36:10.327Z | 2026-08-26T08:13:30.166Z |
+| 8 | 02 | deviation | backend/tests/api/test_admin_repositories.py |  | Closed repository validation branches and added reproducible mutation proof after the first coverage gate reported 93.36%. | fixed |  | 2026-08-27T06:02:12.251Z | 2026-08-27T06:03:19.868Z |
+| 9 | 02 | deviation | backend/tests/api/test_openapi_contract.py |  | Added exact repository operations and regenerated canonical OpenAPI after full regression exposed contract drift. | fixed |  | 2026-08-27T06:02:12.311Z | 2026-08-27T06:03:19.935Z |
 
 ````json
 [
@@ -108,6 +110,30 @@ last_updated: 2026-08-26T08:13:30.166Z
     "reason": "",
     "recorded_at": "2026-08-24T15:36:10.327Z",
     "resolved_at": "2026-08-26T08:13:30.166Z"
+  },
+  {
+    "id": 8,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "backend/tests/api/test_admin_repositories.py",
+    "line": null,
+    "description": "Closed repository validation branches and added reproducible mutation proof after the first coverage gate reported 93.36%.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-27T06:02:12.251Z",
+    "resolved_at": "2026-08-27T06:03:19.868Z"
+  },
+  {
+    "id": 9,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "backend/tests/api/test_openapi_contract.py",
+    "line": null,
+    "description": "Added exact repository operations and regenerated canonical OpenAPI after full regression exposed contract drift.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-27T06:02:12.311Z",
+    "resolved_at": "2026-08-27T06:03:19.935Z"
   }
 ]
 ````
