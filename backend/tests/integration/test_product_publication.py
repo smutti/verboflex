@@ -6,7 +6,7 @@ import importlib
 import os
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Barrier
 from types import ModuleType
@@ -17,9 +17,13 @@ import pytest
 from alembic.config import Config
 from psycopg import connect, sql
 from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from alembic import command
+from verboflex.auth.passwords import hash_password
+from verboflex.localization.preview.core import build_layout_candidate
+from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.models.preview_job import PreviewJob
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
     ProductMappingAllowedTarget,
@@ -27,6 +31,16 @@ from verboflex.models.product_mapping import (
     ProductRepositoryMapping,
 )
 from verboflex.models.repository import Repository
+from verboflex.models.user import User
+from verboflex.services.preview_jobs import (
+    PREVIEW_DETECTOR_VERSION,
+    PREVIEW_LAYOUT_IDENTITY,
+    _canonical_identity,
+    _closed_result,
+    _complete_sides,
+    _identity,
+    create_or_reuse_preview_job,
+)
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 ADMIN_DATABASE_URL = os.environ.get(
@@ -106,6 +120,7 @@ def _seed_product_graph(
     factory: sessionmaker[Session],
     *,
     candidate_mapping_state: str = "valid",
+    candidate_mapping_count: int = 1,
     include_candidate: bool = True,
     is_active: bool = True,
 ) -> tuple[UUID, UUID, UUID | None, UUID]:
@@ -158,12 +173,23 @@ def _seed_product_graph(
             state="valid",
         )
         if candidate_id is not None and candidate_mapping_state != "missing":
-            _add_mapping(
-                session,
-                revision_id=candidate_id,
-                repository_id=repository_id,
-                state=candidate_mapping_state,
-            )
+            for index in range(candidate_mapping_count):
+                candidate_repository_id = repository_id if index == 0 else uuid4()
+                if index > 0:
+                    session.add(
+                        Repository(
+                            id=candidate_repository_id,
+                            workspace="publication-team",
+                            repository_slug=f"repo-{candidate_repository_id.hex[:12]}",
+                        )
+                    )
+                    session.flush()
+                _add_mapping(
+                    session,
+                    revision_id=candidate_id,
+                    repository_id=candidate_repository_id,
+                    state=candidate_mapping_state,
+                )
         session.flush()
         product.active_revision_id = active_id
         product.candidate_revision_id = candidate_id
@@ -210,6 +236,10 @@ def _graph_snapshot(
                     ProductRepositoryMapping.identity_key,
                     ProductRepositoryMapping.selected_layout_candidate_id,
                     ProductRepositoryMapping.selected_layout_version,
+                    ProductRepositoryMapping.confirmed_preview_job_id,
+                    ProductRepositoryMapping.confirmed_preview_digest,
+                    ProductRepositoryMapping.preview_confirmed_by,
+                    ProductRepositoryMapping.preview_confirmed_at,
                 )
                 .where(ProductRepositoryMapping.revision_id.in_(revision_ids))
                 .order_by(ProductRepositoryMapping.id)
@@ -246,6 +276,104 @@ def _graph_snapshot(
             ).all()
         )
     return (tuple(product), revisions, mappings, sides, targets)
+
+
+def _preview_candidate(mapping_id: UUID) -> dict[str, object]:
+    return build_layout_candidate(
+        repository_side="direct",
+        format="android_xml",
+        layout_identity=f"mobile/{mapping_id}/src/main/res",
+        files=(f"mobile/{mapping_id}/src/main/res/values/strings.xml",),
+        values={"default": {"hello": "Hello"}},
+    ).to_mapping()
+
+
+def _confirm_revision_mappings(
+    factory: sessionmaker[Session],
+    *,
+    product_id: UUID,
+    revision_id: UUID,
+    mapping_ids: set[UUID] | None = None,
+) -> tuple[UUID, ...]:
+    """Persist exact succeeded jobs and current confirmations for selected mappings."""
+    actor_id = uuid4()
+    now = datetime.now(UTC)
+    confirmed_jobs: list[UUID] = []
+    with factory.begin() as session:
+        session.add(
+            User(
+                id=actor_id,
+                email=f"publication-{actor_id}@example.com",
+                display_name="Publication Admin",
+                hashed_password=hash_password("publication test password phrase!"),
+                is_active=True,
+                must_change_password=False,
+            )
+        )
+        connection = session.get_one(BitbucketConnection, 1)
+        connection.generation = 7
+        connection.access_token_ciphertext = "encrypted-access"
+        connection.refresh_token_ciphertext = "encrypted-refresh"
+        connection.scope_profile = "repository"
+        connection.provider_expires_at = now + timedelta(hours=1)
+        connection.connected_at = now
+        connection.revoked_at = None
+        revision = session.get_one(ProductRevision, revision_id)
+        mappings = tuple(
+            session.execute(
+                select(ProductRepositoryMapping)
+                .options(selectinload(ProductRepositoryMapping.sides))
+                .where(ProductRepositoryMapping.revision_id == revision_id)
+                .order_by(ProductRepositoryMapping.id)
+            ).scalars()
+        )
+        for mapping in mappings:
+            if mapping_ids is not None and mapping.id not in mapping_ids:
+                continue
+            repository_sides = _complete_sides(mapping, {"direct": "a" * 40})
+            _encoded, input_digest = _canonical_identity(
+                product_id=product_id,
+                revision=revision,
+                mapping=mapping,
+                connection_generation=connection.generation,
+                repository_sides=repository_sides,
+            )
+            job = PreviewJob(
+                id=uuid4(),
+                input_digest=input_digest,
+                attempt=1,
+                state="succeeded",
+                product_id=product_id,
+                candidate_revision_id=revision_id,
+                candidate_revision_version=revision.version,
+                mapping_id=mapping.id,
+                topology=mapping.topology,
+                connection_generation=connection.generation,
+                detector_version=PREVIEW_DETECTOR_VERSION,
+                layout_identity=PREVIEW_LAYOUT_IDENTITY,
+                repository_sides=repository_sides,
+                result={},
+                started_at=now,
+                finished_at=now,
+            )
+            candidate = _preview_candidate(mapping.id)
+            job.result = _closed_result(
+                _identity(job),
+                {
+                    "detector_version": PREVIEW_DETECTOR_VERSION,
+                    "digest": input_digest,
+                    "layout_candidates": [candidate],
+                },
+            )
+            session.add(job)
+            mapping.selected_layout_candidate_id = UUID(str(candidate["id"]))
+            mapping.selected_layout_version = 1
+            mapping.confirmed_preview_job_id = job.id
+            mapping.confirmed_preview_digest = str(job.result["digest"])
+            mapping.preview_confirmed_by = actor_id
+            mapping.preview_confirmed_at = now
+            confirmed_jobs.append(job.id)
+    return tuple(confirmed_jobs)
 
 
 def _always_confirmed(
@@ -483,3 +611,223 @@ def test_publication_closed_structure_and_corruption_guards(
     unsupported = separate_mapping(roles=("keys", "translations"))
     unsupported.topology = "unsupported"
     assert not publication._mapping_structure_is_valid(unsupported)
+
+
+def test_current_confirmations_are_the_atomic_publication_and_reactivation_bridge(
+    publication_session_factory: sessionmaker[Session],
+) -> None:
+    """The real digest predicate permits one winner, equal retry, and reactivation."""
+    publication = _publication_module()
+    product_id, old_active_id, candidate_id, _repository_id = _seed_product_graph(
+        publication_session_factory
+    )
+    assert candidate_id is not None
+    _confirm_revision_mappings(
+        publication_session_factory,
+        product_id=product_id,
+        revision_id=candidate_id,
+    )
+    barrier = Barrier(2)
+
+    def publish_once(_index: int) -> bool:
+        with publication_session_factory() as session:
+            barrier.wait()
+            return publication.publish_product_candidate(
+                session,
+                product_id=product_id,
+                candidate_revision_id=candidate_id,
+                expected_candidate_version=7,
+            ).changed
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(publish_once, range(2)))
+
+    assert sorted(results) == [False, True]
+    with publication_session_factory() as session:
+        product = session.get_one(Product, product_id)
+        assert product.active_revision_id == candidate_id
+        assert product.candidate_revision_id is None
+        assert session.get_one(ProductRevision, old_active_id).is_published is True
+
+    with publication_session_factory() as session:
+        publication.deactivate_product(session, product_id=product_id)
+    with publication_session_factory() as session:
+        reactivated = publication.reactivate_product(
+            session,
+            product_id=product_id,
+            active_revision_id=candidate_id,
+            expected_active_version=7,
+        )
+    assert reactivated.changed is True
+    assert reactivated.is_active is True
+
+
+def test_every_mapping_requires_one_current_exact_confirmation(
+    publication_session_factory: sessionmaker[Session],
+) -> None:
+    """One confirmed mapping cannot authorize an otherwise valid multi-mapping graph."""
+    publication = _publication_module()
+    product_id, _active_id, candidate_id, _repository_id = _seed_product_graph(
+        publication_session_factory,
+        candidate_mapping_count=2,
+    )
+    assert candidate_id is not None
+    with publication_session_factory() as session:
+        mapping_ids = tuple(
+            session.scalars(
+                select(ProductRepositoryMapping.id)
+                .where(ProductRepositoryMapping.revision_id == candidate_id)
+                .order_by(ProductRepositoryMapping.id)
+            )
+        )
+    assert len(mapping_ids) == 2
+    _confirm_revision_mappings(
+        publication_session_factory,
+        product_id=product_id,
+        revision_id=candidate_id,
+        mapping_ids={mapping_ids[0]},
+    )
+    before = _graph_snapshot(publication_session_factory, product_id=product_id)
+
+    with (
+        publication_session_factory() as session,
+        pytest.raises(publication.PublicationBlocked) as blocked,
+    ):
+        publication.publish_product_candidate(
+            session,
+            product_id=product_id,
+            candidate_revision_id=candidate_id,
+            expected_candidate_version=7,
+        )
+
+    assert tuple(blocker.value for blocker in blocked.value.blockers) == (
+        "preview_confirmation_required",
+    )
+    assert _graph_snapshot(publication_session_factory, product_id=product_id) == before
+
+    _confirm_revision_mappings(
+        publication_session_factory,
+        product_id=product_id,
+        revision_id=candidate_id,
+        mapping_ids={mapping_ids[1]},
+    )
+    with publication_session_factory() as session:
+        published = publication.publish_product_candidate(
+            session,
+            product_id=product_id,
+            candidate_revision_id=candidate_id,
+            expected_candidate_version=7,
+        )
+    assert published.changed is True
+    assert published.active_revision_id == candidate_id
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "candidate_version",
+        "connection_generation",
+        "branch",
+        "new_commit",
+        "job_failed",
+        "digest",
+        "layout",
+        "detector_version",
+        "layout_identity",
+    ),
+)
+def test_stale_confirmation_identity_preserves_the_prior_active_graph(
+    publication_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+) -> None:
+    """Every stale candidate/job/generation/commit/layout identity fails atomically."""
+    publication = _publication_module()
+    preview_jobs = importlib.import_module("verboflex.services.preview_jobs")
+    product_id, old_active_id, candidate_id, _repository_id = _seed_product_graph(
+        publication_session_factory
+    )
+    assert candidate_id is not None
+    (confirmed_job_id,) = _confirm_revision_mappings(
+        publication_session_factory,
+        product_id=product_id,
+        revision_id=candidate_id,
+    )
+    expected_version = 7
+
+    if mutation in {"detector_version", "layout_identity"}:
+        constant = (
+            "PREVIEW_DETECTOR_VERSION"
+            if mutation == "detector_version"
+            else "PREVIEW_LAYOUT_IDENTITY"
+        )
+        monkeypatch.setattr(preview_jobs, constant, f"changed-{mutation}-v2")
+    elif mutation == "new_commit":
+        with publication_session_factory() as session:
+            mapping_id = session.scalar(
+                select(ProductRepositoryMapping.id).where(
+                    ProductRepositoryMapping.revision_id == candidate_id
+                )
+            )
+            assert mapping_id is not None
+            newer = create_or_reuse_preview_job(
+                session,
+                product_id=product_id,
+                mapping_id=mapping_id,
+                expected_candidate_version=7,
+                commits={"direct": "b" * 40},
+                enqueuer=lambda _job_id: None,
+            )
+        with publication_session_factory.begin() as session:
+            row = session.get_one(PreviewJob, newer.id)
+            row.created_at = datetime.now(UTC) + timedelta(minutes=1)
+    else:
+        with publication_session_factory.begin() as session:
+            mapping = session.scalar(
+                select(ProductRepositoryMapping).where(
+                    ProductRepositoryMapping.revision_id == candidate_id
+                )
+            )
+            assert mapping is not None
+            if mutation == "candidate_version":
+                revision = session.get_one(ProductRevision, candidate_id)
+                revision.version += 1
+                expected_version = 8
+            elif mutation == "connection_generation":
+                session.get_one(BitbucketConnection, 1).generation += 1
+            elif mutation == "branch":
+                side = session.scalar(
+                    select(ProductMappingRepositorySide).where(
+                        ProductMappingRepositorySide.mapping_id == mapping.id
+                    )
+                )
+                assert side is not None
+                side.source_branch = "release/drift"
+            elif mutation == "job_failed":
+                job = session.get_one(PreviewJob, confirmed_job_id)
+                job.state = "failed"
+                job.result = None
+                job.error_code = "processing_failed"
+            elif mutation == "digest":
+                mapping.confirmed_preview_digest = "f" * 64
+            else:
+                mapping.selected_layout_candidate_id = uuid4()
+
+    before = _graph_snapshot(publication_session_factory, product_id=product_id)
+    with (
+        publication_session_factory() as session,
+        pytest.raises(publication.PublicationBlocked) as blocked,
+    ):
+        publication.publish_product_candidate(
+            session,
+            product_id=product_id,
+            candidate_revision_id=candidate_id,
+            expected_candidate_version=expected_version,
+        )
+
+    assert tuple(blocker.value for blocker in blocked.value.blockers) == (
+        "preview_confirmation_required",
+    )
+    after = _graph_snapshot(publication_session_factory, product_id=product_id)
+    assert after == before
+    assert after[0][2] == old_active_id
