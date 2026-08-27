@@ -15,7 +15,12 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from verboflex.audit.events import AuditEventEmitter, emit_audit_event, new_audit_event
+from verboflex.audit.events import (
+    AuditAction,
+    AuditEventEmitter,
+    emit_audit_event,
+    new_audit_event,
+)
 from verboflex.core.config import Settings
 from verboflex.models.bitbucket_connection import BitbucketConnection
 from verboflex.security.secret_box import (
@@ -212,9 +217,7 @@ class BitbucketOAuthService:
         )
         connected_at = datetime.now(UTC)
         with session.begin():
-            connection = session.execute(
-                select(BitbucketConnection).where(BitbucketConnection.id == 1).with_for_update()
-            ).scalar_one()
+            connection = self._lock_connection(session)
             if connection.generation != binding.expected_generation:
                 raise OAuthCallbackRejected(CALLBACK_REJECTED_MESSAGE)
             token_response = self._exchange(code)
@@ -233,14 +236,12 @@ class BitbucketOAuthService:
                 generation=connection.generation,
                 scope_profile=REPOSITORY_SCOPE,
             )
-        self._audit_emitter(
-            new_audit_event(
-                action="bitbucket.connected",
-                actor_id=UUID(binding.admin_id),
-                from_generation=previous_generation,
-                to_generation=status.generation,
-                occurred_at=connected_at,
-            )
+        self._emit_lifecycle_event(
+            action="bitbucket.connected",
+            actor_id=UUID(binding.admin_id),
+            from_generation=previous_generation,
+            to_generation=status.generation,
+            occurred_at=connected_at,
         )
         return OAuthCallbackResult(
             redirect_path=self._settings.bitbucket_oauth_post_callback_path,
@@ -257,9 +258,7 @@ class BitbucketOAuthService:
         """Rotate one current provider pair while holding the singleton lock."""
         refreshed_at = datetime.now(UTC)
         with session.begin():
-            connection = session.execute(
-                select(BitbucketConnection).where(BitbucketConnection.id == 1).with_for_update()
-            ).scalar_one()
+            connection = self._lock_connection(session)
             self._require_current_generation(
                 connection,
                 expected_generation=expected_generation,
@@ -301,14 +300,12 @@ class BitbucketOAuthService:
                 generation=connection.generation,
                 scope_profile=REPOSITORY_SCOPE,
             )
-        self._audit_emitter(
-            new_audit_event(
-                action="bitbucket.refreshed",
-                actor_id=actor_id,
-                from_generation=previous_generation,
-                to_generation=status.generation,
-                occurred_at=refreshed_at,
-            )
+        self._emit_lifecycle_event(
+            action="bitbucket.refreshed",
+            actor_id=actor_id,
+            from_generation=previous_generation,
+            to_generation=status.generation,
+            occurred_at=refreshed_at,
         )
         return status
 
@@ -323,9 +320,7 @@ class BitbucketOAuthService:
         revoked_at = datetime.now(UTC)
         changed = False
         with session.begin():
-            connection = session.execute(
-                select(BitbucketConnection).where(BitbucketConnection.id == 1).with_for_update()
-            ).scalar_one()
+            connection = self._lock_connection(session)
             if (
                 connection.revoked_at is not None
                 and connection.access_token_ciphertext is None
@@ -356,16 +351,39 @@ class BitbucketOAuthService:
                     scope_profile=connection.scope_profile or REPOSITORY_SCOPE,
                 )
         if changed:
-            self._audit_emitter(
-                new_audit_event(
-                    action="bitbucket.revoked",
-                    actor_id=actor_id,
-                    from_generation=previous_generation,
-                    to_generation=status.generation,
-                    occurred_at=revoked_at,
-                )
+            self._emit_lifecycle_event(
+                action="bitbucket.revoked",
+                actor_id=actor_id,
+                from_generation=previous_generation,
+                to_generation=status.generation,
+                occurred_at=revoked_at,
             )
         return status
+
+    @staticmethod
+    def _lock_connection(session: Session) -> BitbucketConnection:
+        return session.execute(
+            select(BitbucketConnection).where(BitbucketConnection.id == 1).with_for_update()
+        ).scalar_one()
+
+    def _emit_lifecycle_event(
+        self,
+        *,
+        action: AuditAction,
+        actor_id: UUID,
+        from_generation: int,
+        to_generation: int,
+        occurred_at: datetime,
+    ) -> None:
+        self._audit_emitter(
+            new_audit_event(
+                action=action,
+                actor_id=actor_id,
+                from_generation=from_generation,
+                to_generation=to_generation,
+                occurred_at=occurred_at,
+            )
+        )
 
     @staticmethod
     def _require_current_generation(
