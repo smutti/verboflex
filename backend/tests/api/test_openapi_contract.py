@@ -110,6 +110,11 @@ EXPECTED_OPERATIONS = {
         {"200", "401", "403", "404", "409", "422", "503"},
         True,
     ),
+    ("/api/v1/admin/preview-jobs/{job_id}/confirmation", "post"): (
+        "confirm_admin_preview_job",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
     ("/api/v1/admin/products/{product_id}", "get"): (
         "get_admin_product",
         {"200", "401", "403", "404", "422"},
@@ -485,6 +490,8 @@ def test_admin_preview_openapi_is_closed_current_and_source_free() -> None:
     repository_side = schemas["AdminPreviewRepositorySideResponse"]
     layout_candidate = schemas["AdminPreviewLayoutCandidateResponse"]
     preview_sample = schemas["AdminPreviewSampleResponse"]
+    confirmation_request = schemas["AdminPreviewConfirmationRequest"]
+    confirmation_response = schemas["AdminPreviewConfirmationResponse"]
 
     assert create_request["additionalProperties"] is False
     assert set(create_request["properties"]) == {"expected_candidate_version", "commits"}
@@ -532,6 +539,24 @@ def test_admin_preview_openapi_is_closed_current_and_source_free() -> None:
     assert preview_sample["additionalProperties"] is False
     assert set(preview_sample["properties"]) == {"language", "key", "translation"}
     assert repository_side["additionalProperties"] is False
+    assert confirmation_request["additionalProperties"] is False
+    assert set(confirmation_request["properties"]) == {
+        "preview_digest",
+        "layout_candidate_id",
+        "layout_candidate_version",
+    }
+    assert confirmation_request["properties"]["preview_digest"]["pattern"] == "^[0-9a-f]{64}$"
+    assert confirmation_request["properties"]["layout_candidate_version"]["const"] == 1
+    assert confirmation_response["additionalProperties"] is False
+    assert set(confirmation_response["properties"]) == {
+        "job_id",
+        "mapping_id",
+        "preview_digest",
+        "layout_candidate_id",
+        "layout_candidate_version",
+        "confirmed_by",
+        "confirmed_at",
+    }
 
     preview_contract = json.dumps(
         {
@@ -550,7 +575,7 @@ def test_admin_preview_openapi_is_closed_current_and_source_free() -> None:
         "provider_body",
         "celery_result",
         "canonical_translation",
-        "confirmed",
+        "source_file_content",
     ):
         assert forbidden not in preview_contract
 
