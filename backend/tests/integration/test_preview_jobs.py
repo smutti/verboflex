@@ -1436,12 +1436,15 @@ def test_new_commit_makes_an_inflight_completion_stale_and_nonconfirmable(
 
     with preview_session_factory() as session:
         stale_row = session.get(PreviewJob, stale.id)
-        current_record = get_preview_job(session, job_id=current.id)
         assert stale_row is not None
-        assert stale_row.state == "failed"
-        assert stale_row.error_code == "stale_identity"
-        assert stale_row.result is None
-        assert current_record.is_current is True
+        session.expunge(stale_row)
+    with preview_session_factory() as session:
+        current_record = get_preview_job(session, job_id=current.id)
+    assert stale_row is not None
+    assert current_record.is_current is True
+    assert stale_row.state == "failed"
+    assert stale_row.error_code == "stale_identity"
+    assert stale_row.result is None
     confirm = asyncio.run(
         _request(
             "POST",
