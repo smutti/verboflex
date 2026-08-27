@@ -16,7 +16,10 @@ from verboflex.localization.preview.core import (
     RepositorySide,
     build_layout_candidate,
 )
-from verboflex.services.repository_discovery import RepositorySourceFile
+from verboflex.services.repository_discovery import (
+    SOURCE_DISCOVERY_BUDGET,
+    RepositorySourceFile,
+)
 
 _UTF8_BOM = b"\xef\xbb\xbf"
 _XML_DECLARATION = re.compile(
@@ -28,6 +31,9 @@ _XML_DECLARATION = re.compile(
 _ANDROID_PATH = re.compile(
     r"\A(?:(?P<prefix>.+)/)?res/values(?:-(?P<language>[A-Za-z]{2,3}))?/"
     r"(?P<filename>[^/]+\.xml)\Z"
+)
+_ANDROID_RESOURCE_XML_PATH = re.compile(
+    r"\A(?:(?P<prefix>.+)/)?res/values[^/]*/[^/]+\.xml\Z"
 )
 
 
@@ -108,6 +114,11 @@ def _classify(file: RepositorySourceFile) -> _AndroidFile | None:
     )
 
 
+def _layout_identity(path_match: re.Match[str]) -> str:
+    prefix = path_match.group("prefix")
+    return f"{prefix}/res" if prefix else "res"
+
+
 def detect_android_layouts(
     files: Iterable[RepositorySourceFile],
     *,
@@ -116,12 +127,28 @@ def detect_android_layouts(
     """Return separate exact Android resource-root candidates without guessing."""
     grouped: dict[str, list[_AndroidFile]] = defaultdict(list)
     invalid_layouts: set[str] = set()
+    seen_paths: set[str] = set()
+    total_bytes = 0
     for file in sorted(files, key=lambda item: item.path):
+        resource_match = _ANDROID_RESOURCE_XML_PATH.fullmatch(file.path)
+        if resource_match is None:
+            continue
+        layout_identity = _layout_identity(resource_match)
+        total_bytes += len(file.content)
+        if total_bytes > SOURCE_DISCOVERY_BUDGET.max_total_bytes:
+            return PreviewDetectionResult(candidates=())
+        if (
+            len(file.content) > SOURCE_DISCOVERY_BUDGET.max_file_bytes
+            or file.path in seen_paths
+        ):
+            invalid_layouts.add(layout_identity)
+            continue
+        seen_paths.add(file.path)
+
         path_match = _ANDROID_PATH.fullmatch(file.path)
         if path_match is None:
+            invalid_layouts.add(layout_identity)
             continue
-        prefix = path_match.group("prefix")
-        layout_identity = f"{prefix}/res" if prefix else "res"
         try:
             classified = _classify(file)
         except ValueError:

@@ -123,11 +123,13 @@ def build_layout_candidate(
     values: Mapping[str, Mapping[str, str]],
 ) -> PreviewLayoutCandidate:
     """Build one bounded candidate from already validated decoded values."""
-    ordered_files = tuple(sorted(files))
+    received_files = tuple(files)
+    ordered_files = tuple(sorted(received_files))
     ordered_languages = tuple(sorted(values))
     if (
         not layout_identity
         or not ordered_files
+        or len(set(ordered_files)) != len(ordered_files)
         or len(ordered_files) > MAX_LAYOUT_FILES
         or not ordered_languages
         or len(ordered_languages) > MAX_PREVIEW_LANGUAGES
