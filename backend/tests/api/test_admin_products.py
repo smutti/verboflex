@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql import Executable
 
 from alembic import command
+from verboflex.api.v1.routes import admin_products as admin_product_routes
 from verboflex.auth.access_tokens import issue_access_token
 from verboflex.auth.passwords import hash_password
 from verboflex.core.config import Settings, get_settings
@@ -40,6 +41,7 @@ from verboflex.models.product_mapping import (
 from verboflex.models.repository import Repository
 from verboflex.models.role import Role
 from verboflex.models.user import User
+from verboflex.services import publication as publication_service
 from verboflex.services.products import list_products, normalize_product_name
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -1054,6 +1056,17 @@ def test_admin_product_lifecycle_is_guarded_atomic_and_preview_fail_closed(
     ).json()
     assert after_blocked_publish == before_publish
 
+    already_active = asyncio.run(
+        product_request(
+            "POST",
+            access_token=admin_token,
+            path=reactivate_path,
+            json_body=reactivate_payload,
+        )
+    )
+    assert already_active.status_code == 200
+    assert already_active.json() == before_publish
+
     deactivated = asyncio.run(
         product_request(
             "POST",
@@ -1101,6 +1114,73 @@ def test_admin_product_lifecycle_is_guarded_atomic_and_preview_fail_closed(
     )
     assert repeated_deactivation.status_code == 200
     assert repeated_deactivation.json() == deactivated.json()
+
+
+def test_publish_route_projects_only_the_committed_active_summary(
+    product_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A confirmed service commit is re-read before its HTTP response is projected."""
+    _admin_id, admin_token = create_authority(
+        product_session_factory,
+        email="admin@example.com",
+        roles=("admin",),
+    )
+    product_id, _active_id, candidate_id = _seed_product_lifecycle_graph(product_session_factory)
+    configure_dependencies(product_session_factory)
+
+    def confirmed_publish(
+        session: Session,
+        *,
+        product_id: UUID,
+        candidate_revision_id: UUID,
+        expected_candidate_version: int,
+    ) -> publication_service.PublicationResult:
+        return publication_service.publish_product_candidate(
+            session,
+            product_id=product_id,
+            candidate_revision_id=candidate_revision_id,
+            expected_candidate_version=expected_candidate_version,
+            confirmation_predicate=lambda _session, _revision, _mapping: True,
+        )
+
+    monkeypatch.setattr(
+        admin_product_routes,
+        "publish_product_candidate",
+        confirmed_publish,
+    )
+    published = asyncio.run(
+        product_request(
+            "POST",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{product_id}/publish",
+            json_body={
+                "candidate_revision_id": str(candidate_id),
+                "expected_candidate_version": 7,
+            },
+        )
+    )
+    assert published.status_code == 200
+    body = published.json()
+    assert body["is_active"] is True
+    assert body["active_revision"] == {
+        "id": str(candidate_id),
+        "version": 7,
+        "description": "candidate",
+        "is_published": True,
+    }
+    assert body["candidate_revision"] is None
+    with product_session_factory() as session:
+        product = session.get_one(Product, product_id)
+        assert product.active_revision_id == candidate_id
+        assert product.candidate_revision_id is None
+
+
+def test_lifecycle_error_projection_never_hides_unexpected_failures() -> None:
+    """Only closed domain conflicts may be converted into lifecycle responses."""
+    failure = RuntimeError("unexpected lifecycle failure")
+    with pytest.raises(RuntimeError, match="unexpected lifecycle failure"):
+        admin_product_routes._lifecycle_conflict_response(failure)
 
 
 def test_product_lifecycle_conflicts_are_stable_closed_and_non_mutating(
