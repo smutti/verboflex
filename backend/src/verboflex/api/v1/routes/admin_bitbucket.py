@@ -61,6 +61,7 @@ STATUS_LABELS: dict[PublicConnectionState, PublicConnectionLabel] = {
     "reauthorization_required": "Reauthorization required",
     "unavailable": "Unavailable",
 }
+NO_STORE_HEADERS = {"Cache-Control": "no-store"}
 
 
 def get_bitbucket_oauth_service(
@@ -89,6 +90,7 @@ def _configured(service: BitbucketOAuthService | None) -> BitbucketOAuthService:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Bitbucket connection unavailable",
+            headers=NO_STORE_HEADERS,
         )
     return service
 
@@ -98,6 +100,7 @@ def _session_id(principal: Principal) -> UUID:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Bitbucket connection unavailable",
+            headers=NO_STORE_HEADERS,
         )
     return principal.session_id
 
@@ -158,11 +161,13 @@ async def get_admin_bitbucket_status(
     responses=PROTECTED_RESPONSES,
 )
 async def start_admin_bitbucket_oauth(
+    response: Response,
     principal: AdminPrincipal,
     session: AdminSession,
     service: ConfiguredOAuthService,
 ) -> AdminBitbucketAuthorizationResponse:
     """Start one exact static-consumer repository-read authorization flow."""
+    response.headers.update(NO_STORE_HEADERS)
     return _authorization_response(_configured(service), session, principal)
 
 
@@ -173,11 +178,13 @@ async def start_admin_bitbucket_oauth(
     responses=PROTECTED_RESPONSES,
 )
 async def reconnect_admin_bitbucket_oauth(
+    response: Response,
     principal: AdminPrincipal,
     session: AdminSession,
     service: ConfiguredOAuthService,
 ) -> AdminBitbucketAuthorizationResponse:
     """Replace authority only after a new state-bound callback succeeds."""
+    response.headers.update(NO_STORE_HEADERS)
     return _authorization_response(_configured(service), session, principal)
 
 
@@ -209,16 +216,18 @@ async def complete_admin_bitbucket_oauth_callback(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="OAuth callback rejected",
+            headers=NO_STORE_HEADERS,
         ) from error
     except OAuthConnectionUnavailable as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Bitbucket connection unavailable",
+            headers=NO_STORE_HEADERS,
         ) from error
     return RedirectResponse(
         url=result.redirect_path,
         status_code=status.HTTP_303_SEE_OTHER,
-        headers={"Cache-Control": "no-store"},
+        headers=NO_STORE_HEADERS,
     )
 
 
