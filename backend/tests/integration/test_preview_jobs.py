@@ -461,7 +461,8 @@ def test_android_preview_completes_read_only(
     assert status_body is not None
     assert status_body["state"] == "succeeded"
     result = status_body["result"]
-    assert result["digest"] == created_body["input_digest"]
+    assert result["digest"] != created_body["input_digest"]
+    assert len(result["digest"]) == 64
     assert len(result["layout_candidates"]) == 1
     layout = result["layout_candidates"][0]
     UUID(layout["id"])
@@ -709,9 +710,12 @@ def test_admin_job_runs_api_to_distinct_worker_and_persists_terminal_state(
 
     assert status_body is not None
     assert status_body["state"] == "succeeded"
+    complete_digest = status_body["result"]["digest"]
+    assert complete_digest != created_body["input_digest"]
+    assert len(complete_digest) == 64
     assert status_body["result"] == {
         "detector_version": "preview-skeleton-v1",
-        "digest": created_body["input_digest"],
+        "digest": complete_digest,
         "layout_candidates": [],
     }
     assert set(status_body) == {
@@ -788,9 +792,12 @@ def test_succeeded_result_remains_inspectable_but_is_not_current_after_revision_
         current = get_preview_job(session, job_id=created.id)
     assert current.state == "succeeded"
     assert current.is_current is True
+    assert current.result is not None
+    complete_digest = current.result["digest"]
+    assert complete_digest != created.input_digest
     assert current.result == {
         "detector_version": "preview-skeleton-v1",
-        "digest": created.input_digest,
+        "digest": complete_digest,
         "layout_candidates": [],
     }
 
