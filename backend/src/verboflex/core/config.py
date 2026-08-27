@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = Field(default=7, ge=1, le=30)
     service_probe_timeout_seconds: float = Field(default=2.0, gt=0, le=30)
     refresh_cookie_secure: bool = True
+    bitbucket_oauth_client_id: str | None = None
+    bitbucket_oauth_client_secret: SecretStr | None = None
+    bitbucket_oauth_callback_uri: AnyHttpUrl | None = None
+    bitbucket_oauth_post_callback_path: Literal["/admin/bitbucket"] = "/admin/bitbucket"
+    bitbucket_token_encryption_keyring: SecretStr | None = None
 
     model_config = SettingsConfigDict(
         env_prefix="VERBOFLEX_",
