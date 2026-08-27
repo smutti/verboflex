@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from dataclasses import replace as dataclass_replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 import httpx
@@ -33,6 +33,7 @@ from verboflex.integrations.bitbucket.client import (
     BitbucketSourceEntry,
     BitbucketSourcePage,
 )
+from verboflex.localization.preview.core import build_layout_candidate
 from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.bitbucket_connection import BitbucketConnection
@@ -325,19 +326,49 @@ async def _request(
     method: str,
     path: str,
     *,
-    access_token: str,
+    access_token: str | None,
     json: dict[str, Any] | None = None,
 ) -> httpx.Response:
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://testserver",
     ) as client:
+        headers = (
+            {"Authorization": f"Bearer {access_token}"} if access_token is not None else None
+        )
         return await client.request(
             method,
             path,
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers=headers,
             json=json,
         )
+
+
+def _candidate(
+    *,
+    format_name: Literal["android_xml", "json"] = "android_xml",
+    layout_identity: str = "mobile/src/main/res",
+) -> dict[str, object]:
+    return build_layout_candidate(
+        repository_side="direct",
+        format=format_name,
+        layout_identity=layout_identity,
+        files=(f"{layout_identity}/values/strings.xml",),
+        values={"default": {"hello": "Hello"}},
+    ).to_mapping()
+
+
+def _confirmable_processor(identity: object) -> dict[str, object]:
+    assert hasattr(identity, "detector_version")
+    assert hasattr(identity, "input_digest")
+    return {
+        "detector_version": identity.detector_version,
+        "digest": identity.input_digest,
+        "layout_candidates": [
+            _candidate(),
+            _candidate(format_name="json", layout_identity="web/{locale}.json"),
+        ],
+    }
 
 
 def test_android_preview_completes_read_only(
@@ -1174,3 +1205,305 @@ def test_worker_closes_attempt_when_candidate_changes_before_start(
         assert row.error_code == "stale_candidate"
         assert row.finished_at is not None
         assert row.updated_at == row.finished_at
+
+
+def _complete_confirmable_preview(
+    factory: sessionmaker[Session],
+) -> tuple[UUID, UUID, UUID, object, dict[str, object]]:
+    product_id, _active_id, candidate_id, mapping_id = _seed_preview_graph(factory)
+    with factory() as session:
+        created = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    execute_preview_job(
+        factory,
+        job_id=created.id,
+        processor=_confirmable_processor,
+    )
+    with factory() as session:
+        completed = get_preview_job(session, job_id=created.id)
+    assert completed.result is not None
+    return product_id, candidate_id, mapping_id, completed, completed.result
+
+
+def test_admin_explicitly_confirms_one_exact_current_layout(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Bind actor, complete digest, job identity, and exactly one layout selection."""
+    _configure_dependencies(preview_session_factory)
+    admin_token = _create_authority(preview_session_factory, role_name="admin")
+    viewer_token = _create_authority(preview_session_factory, role_name="viewer")
+    _product_id, _candidate_id, mapping_id, completed, result = _complete_confirmable_preview(
+        preview_session_factory
+    )
+    candidates = result["layout_candidates"]
+    assert isinstance(candidates, list)
+    selected = candidates[1]
+    assert isinstance(selected, dict)
+    assert completed.state == "succeeded"
+    assert completed.is_current is True
+    assert result["digest"] != completed.input_digest
+    assert len(str(result["digest"])) == 64
+    path = f"/api/v1/admin/preview-jobs/{completed.id}/confirmation"
+    payload = {
+        "preview_digest": result["digest"],
+        "layout_candidate_id": selected["id"],
+        "layout_candidate_version": selected["version"],
+    }
+
+    anonymous = asyncio.run(_request("POST", path, access_token=None, json=payload))
+    viewer = asyncio.run(_request("POST", path, access_token=viewer_token, json=payload))
+    wrong_digest = asyncio.run(
+        _request(
+            "POST",
+            path,
+            access_token=admin_token,
+            json={**payload, "preview_digest": "f" * 64},
+        )
+    )
+    confirmed = asyncio.run(_request("POST", path, access_token=admin_token, json=payload))
+
+    assert anonymous.status_code == 401
+    assert viewer.status_code == 403
+    assert wrong_digest.status_code == 409
+    assert confirmed.status_code == 200
+    body = confirmed.json()
+    assert body == {
+        "job_id": str(completed.id),
+        "mapping_id": str(mapping_id),
+        "preview_digest": result["digest"],
+        "layout_candidate_id": selected["id"],
+        "layout_candidate_version": 1,
+        "confirmed_by": body["confirmed_by"],
+        "confirmed_at": body["confirmed_at"],
+    }
+    with preview_session_factory() as session:
+        mapping = session.get(ProductRepositoryMapping, mapping_id)
+        assert mapping is not None
+        assert mapping.selected_layout_candidate_id == UUID(str(selected["id"]))
+        assert mapping.selected_layout_version == 1
+        assert mapping.confirmed_preview_job_id == completed.id
+        assert mapping.confirmed_preview_digest == result["digest"]
+        assert str(mapping.preview_confirmed_by) == body["confirmed_by"]
+        assert mapping.preview_confirmed_at is not None
+        assert session.scalar(text("SELECT to_regclass('public.translations')")) is None
+
+    repeated = asyncio.run(_request("POST", path, access_token=admin_token, json=payload))
+    assert repeated.status_code == 200
+    assert repeated.json() == body
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "candidate_version",
+        "topology",
+        "branch",
+        "connection_generation",
+        "detector_version",
+        "layout_identity",
+        "new_commit",
+    ],
+)
+def test_confirmation_is_invalid_after_every_live_identity_change(
+    preview_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+) -> None:
+    """Preserve historical output but reject confirmation after any authority drift."""
+    _configure_dependencies(preview_session_factory)
+    admin_token = _create_authority(preview_session_factory, role_name="admin")
+    product_id, candidate_id, mapping_id, completed, result = _complete_confirmable_preview(
+        preview_session_factory
+    )
+    selected = result["layout_candidates"][0]
+    path = f"/api/v1/admin/preview-jobs/{completed.id}/confirmation"
+    payload = {
+        "preview_digest": result["digest"],
+        "layout_candidate_id": selected["id"],
+        "layout_candidate_version": selected["version"],
+    }
+    assert (
+        asyncio.run(_request("POST", path, access_token=admin_token, json=payload)).status_code
+        == 200
+    )
+
+    if mutation == "new_commit":
+        with preview_session_factory() as session:
+            replacement = create_or_reuse_preview_job(
+                session,
+                product_id=product_id,
+                mapping_id=mapping_id,
+                expected_candidate_version=4,
+                commits={"direct": "b" * 40},
+                enqueuer=lambda _job_id: None,
+            )
+        assert replacement.id != completed.id
+    elif mutation in {"detector_version", "layout_identity"}:
+        module = importlib.import_module("verboflex.services.preview_jobs")
+        constant = (
+            "PREVIEW_DETECTOR_VERSION"
+            if mutation == "detector_version"
+            else "PREVIEW_LAYOUT_IDENTITY"
+        )
+        monkeypatch.setattr(module, constant, f"changed-{mutation}-v2")
+    else:
+        with preview_session_factory.begin() as session:
+            if mutation == "candidate_version":
+                revision = session.get(ProductRevision, candidate_id)
+                assert revision is not None
+                revision.version += 1
+            elif mutation == "connection_generation":
+                connection = session.get(BitbucketConnection, 1)
+                assert connection is not None
+                connection.generation += 1
+            elif mutation == "topology":
+                mapping = session.get(ProductRepositoryMapping, mapping_id)
+                assert mapping is not None
+                mapping.topology = "separate"
+            else:
+                side = session.execute(
+                    select(ProductMappingRepositorySide).where(
+                        ProductMappingRepositorySide.mapping_id == mapping_id
+                    )
+                ).scalar_one()
+                side.source_branch = "release/drift"
+
+    rejected = asyncio.run(_request("POST", path, access_token=admin_token, json=payload))
+    historical = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/preview-jobs/{completed.id}",
+            access_token=admin_token,
+        )
+    )
+    assert rejected.status_code == 409
+    assert historical.status_code == 200
+    assert historical.json()["is_current"] is False
+    assert historical.json()["state"] == "succeeded"
+    assert historical.json()["result"] == result
+
+
+def test_new_commit_makes_an_inflight_completion_stale_and_nonconfirmable(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """A worker started for an older commit cannot restore current confirmation authority."""
+    _configure_dependencies(preview_session_factory)
+    admin_token = _create_authority(preview_session_factory, role_name="admin")
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(
+        preview_session_factory
+    )
+    with preview_session_factory() as session:
+        stale = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    stale_identity = _start_preview_job(preview_session_factory, job_id=stale.id)
+    assert stale_identity is not None
+    with preview_session_factory() as session:
+        current = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": "b" * 40},
+            enqueuer=lambda _job_id: None,
+        )
+
+    stale_result = _confirmable_processor(stale_identity)
+    _finish_preview_job(
+        preview_session_factory,
+        identity=stale_identity,
+        state="succeeded",
+        result=stale_result,
+    )
+
+    with preview_session_factory() as session:
+        stale_row = session.get(PreviewJob, stale.id)
+        current_record = get_preview_job(session, job_id=current.id)
+        assert stale_row is not None
+        assert stale_row.state == "failed"
+        assert stale_row.error_code == "stale_identity"
+        assert stale_row.result is None
+        assert current_record.is_current is True
+    confirm = asyncio.run(
+        _request(
+            "POST",
+            f"/api/v1/admin/preview-jobs/{stale.id}/confirmation",
+            access_token=admin_token,
+            json={
+                "preview_digest": "f" * 64,
+                "layout_candidate_id": _candidate()["id"],
+                "layout_candidate_version": 1,
+            },
+        )
+    )
+    assert confirm.status_code == 409
+
+
+@pytest.mark.parametrize("terminal", ["queued", "empty", "failed", "timed_out"])
+def test_nonconfirmable_preview_states_expose_no_confirmation_action(
+    preview_session_factory: sessionmaker[Session],
+    terminal: str,
+) -> None:
+    """Queued, empty, failed, and timed-out work cannot assign a mapping layout."""
+    _configure_dependencies(preview_session_factory)
+    admin_token = _create_authority(preview_session_factory, role_name="admin")
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(
+        preview_session_factory
+    )
+    commit_hash = {"queued": "1", "empty": "2", "failed": "3", "timed_out": "4"}[
+        terminal
+    ] * 40
+    with preview_session_factory() as session:
+        job = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": commit_hash},
+            enqueuer=lambda _job_id: None,
+        )
+    if terminal == "empty":
+        execute_preview_job(preview_session_factory, job_id=job.id, processor=skeleton_preview_processor)
+    elif terminal == "failed":
+        execute_preview_job(
+            preview_session_factory,
+            job_id=job.id,
+            processor=lambda _identity: {"malformed": True},
+        )
+    elif terminal == "timed_out":
+        from verboflex.services.preview_jobs import PreviewJobTimedOut
+
+        def time_out(_identity: object) -> dict[str, object]:
+            raise PreviewJobTimedOut
+
+        execute_preview_job(preview_session_factory, job_id=job.id, processor=time_out)
+
+    response = asyncio.run(
+        _request(
+            "POST",
+            f"/api/v1/admin/preview-jobs/{job.id}/confirmation",
+            access_token=admin_token,
+            json={
+                "preview_digest": "f" * 64,
+                "layout_candidate_id": _candidate()["id"],
+                "layout_candidate_version": 1,
+            },
+        )
+    )
+    assert response.status_code == 409
+    with preview_session_factory() as session:
+        mapping = session.get(ProductRepositoryMapping, mapping_id)
+        assert mapping is not None
+        assert mapping.selected_layout_candidate_id is None
+        assert mapping.confirmed_preview_job_id is None
