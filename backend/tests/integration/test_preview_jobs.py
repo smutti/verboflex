@@ -474,6 +474,90 @@ def test_android_preview_completes_read_only(
         assert product.candidate_revision_id == candidate_id
 
 
+def test_all_four_formats_return_separate_exact_layout_candidates(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Persist four deterministic candidates through one durable worker processor."""
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(
+        preview_session_factory
+    )
+    with preview_session_factory() as session:
+        created = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    adapter = ReadOnlyAndroidSourceAdapter(
+        files={
+            "mobile/src/main/res/values/strings.xml": (
+                b'<resources><string name="hello">Hello</string></resources>'
+            ),
+            "desktop/app_en.ts": (
+                b'<TS version="2.1" language="en"><context><name>Main</name>'
+                b'<message><source>hello</source><translation>Hello</translation>'
+                b"</message></context></TS>"
+            ),
+            "web/catalog.json": b'{"en":{"hello":"Hello"}}',
+            "ios/en.lproj/Localizable.strings": b'"hello" = "Hello";',
+        }
+    )
+    preview_tasks = importlib.import_module("verboflex.worker.preview_tasks")
+
+    execute_preview_job(
+        preview_session_factory,
+        job_id=created.id,
+        processor=lambda identity: preview_tasks.process_preview(
+            identity,
+            factory=preview_session_factory,
+            adapter=adapter,
+        ),
+    )
+
+    with preview_session_factory() as session:
+        completed = get_preview_job(session, job_id=created.id)
+    assert completed.state == "succeeded"
+    assert completed.result is not None
+    candidates = completed.result["layout_candidates"]
+    assert [candidate["format"] for candidate in candidates] == [
+        "android_xml",
+        "ios_strings",
+        "json",
+        "qt_ts",
+    ]
+    assert len({candidate["id"] for candidate in candidates}) == 4
+    assert all(candidate["confidence"] == 1.0 for candidate in candidates)
+    assert all(candidate["repository_side"] == "direct" for candidate in candidates)
+    assert [candidate["files"] for candidate in candidates] == [
+        ["mobile/src/main/res/values/strings.xml"],
+        ["ios/en.lproj/Localizable.strings"],
+        ["web/catalog.json"],
+        ["desktop/app_en.ts"],
+    ]
+    assert [candidate["languages"] for candidate in candidates] == [
+        ["default"],
+        ["en"],
+        ["en"],
+        ["en"],
+    ]
+    assert [candidate["samples"][0]["translation"] for candidate in candidates] == [
+        "Hello",
+        "Hello",
+        "Hello",
+        "Hello",
+    ]
+    assert [event[0] for event in adapter.events] == [
+        "resolve",
+        "list",
+        "read",
+        "read",
+        "read",
+        "read",
+    ]
+
+
 def test_admin_job_runs_api_to_distinct_worker_and_persists_terminal_state(
     preview_session_factory: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,
