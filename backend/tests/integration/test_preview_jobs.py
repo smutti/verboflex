@@ -42,6 +42,8 @@ from verboflex.models.role import Role
 from verboflex.models.user import User
 from verboflex.services.preview_jobs import (
     PreviewJobConflict,
+    PreviewJobNotFound,
+    _complete_sides,
     _current_failure_code,
     _finish_preview_job,
     _matches_started_identity,
@@ -761,3 +763,94 @@ def test_mapping_branch_drift_makes_historical_attempt_noncurrent(
         historical = get_preview_job(session, job_id=created.id)
     assert historical.is_current is False
     assert historical.repository_sides[0].source_branch == "main"
+
+
+def test_preview_projection_covers_missing_and_mismatched_durable_authority(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Exercise each closed currentness outcome through durable authority changes."""
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    with preview_session_factory() as session:
+        mapping = session.get(ProductRepositoryMapping, mapping_id)
+        assert mapping is not None
+        with pytest.raises(PreviewJobConflict, match="commit identity rejected"):
+            _complete_sides(mapping, {})
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobNotFound, match="job unavailable"),
+    ):
+        get_preview_job(session, job_id=uuid4())
+
+    def unavailable_enqueuer(_job_id: UUID) -> None:
+        raise RuntimeError("broker unavailable")
+
+    with preview_session_factory() as session:
+        first = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=unavailable_enqueuer,
+        )
+    with preview_session_factory() as session:
+        second = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+        assert get_preview_job(session, job_id=first.id).is_current is False
+
+    with preview_session_factory.begin() as session:
+        connection = session.get(BitbucketConnection, 1)
+        assert connection is not None
+        connection.generation += 1
+    with preview_session_factory() as session:
+        assert get_preview_job(session, job_id=second.id).is_current is False
+        detached = session.get(PreviewJob, second.id)
+        assert detached is not None
+        session.expunge(detached)
+    detached.product_id = uuid4()
+    with preview_session_factory() as session:
+        assert _current_failure_code(session, detached, for_update=False) == "stale_candidate"
+
+
+def test_worker_closes_attempt_when_candidate_changes_before_start(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Persist the stale-candidate terminal timestamps before processor invocation."""
+    product_id, _active_id, candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    with preview_session_factory() as session:
+        created = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    with preview_session_factory.begin() as session:
+        revision = session.get(ProductRevision, candidate_id)
+        assert revision is not None
+        revision.version += 1
+
+    processor_called = False
+
+    def processor(_identity: object) -> dict[str, object]:
+        nonlocal processor_called
+        processor_called = True
+        return {}
+
+    execute_preview_job(preview_session_factory, job_id=created.id, processor=processor)
+
+    assert processor_called is False
+    with preview_session_factory() as session:
+        row = session.get(PreviewJob, created.id)
+        assert row is not None
+        assert row.state == "failed"
+        assert row.error_code == "stale_candidate"
+        assert row.finished_at is not None
+        assert row.updated_at == row.finished_at
