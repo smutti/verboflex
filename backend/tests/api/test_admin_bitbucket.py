@@ -392,7 +392,7 @@ def test_admin_oauth_lifecycle_is_state_authoritative_and_locally_revocable(
             "code": "provider-code",
             "callback_uri": CALLBACK_URI,
             "client_id": "verboflex-api-client",
-            "client_secret": "backend-client-secret",
+            "client_secret": "backend-client-secret",  # pragma: allowlist secret
         }
     ]
     assert admin_id != admin_session_id
@@ -659,12 +659,12 @@ def test_standard_library_token_exchange_is_bounded_exact_and_redirect_free() ->
         code="code",
         callback_uri=CALLBACK_URI,
         client_id="client",
-        client_secret="secret",
+        client_secret="secret",  # pragma: allowlist secret
     )
     refreshed = exchange.refresh_tokens(
         refresh_token="refresh",
         client_id="client",
-        client_secret="secret",
+        client_secret="secret",  # pragma: allowlist secret
     )
     assert authorization["scope"] == refreshed["scope"] == "repository"
     assert response.read_limits == [MAX_TOKEN_RESPONSE_BYTES + 1] * 2
@@ -718,7 +718,7 @@ def test_standard_library_token_exchange_sanitizes_every_failure(
             code="code",
             callback_uri=CALLBACK_URI,
             client_id="client",
-            client_secret="secret",
+            client_secret="secret",  # pragma: allowlist secret
         )
     assert str(rejected.value) == "OAuth callback rejected"
     assert "provider unavailable" not in str(rejected.value)
