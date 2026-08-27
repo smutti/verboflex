@@ -325,12 +325,11 @@ def test_admin_job_runs_api_to_distinct_worker_and_persists_terminal_state(
             "layout_candidates": [],
         },
     )
-    celery_app.conf.update(
-        broker_url="memory://",
-        result_backend="cache+memory://",
-        task_always_eager=False,
-        task_ignore_result=True,
-    )
+    celery_app.close()
+    monkeypatch.setitem(celery_app.conf, "broker_url", "memory://")
+    monkeypatch.setitem(celery_app.conf, "result_backend", "cache+memory://")
+    monkeypatch.setitem(celery_app.conf, "task_always_eager", False)
+    monkeypatch.setitem(celery_app.conf, "task_ignore_result", True)
     from celery.contrib.testing.worker import start_worker
 
     with start_worker(
@@ -355,6 +354,7 @@ def test_admin_job_runs_api_to_distinct_worker_and_persists_terminal_state(
             if status_body["state"] == "succeeded":
                 break
             time.sleep(0.02)
+    celery_app.close()
 
     assert status_body is not None
     assert status_body["state"] == "succeeded"

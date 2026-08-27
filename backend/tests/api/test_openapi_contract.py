@@ -97,6 +97,19 @@ EXPECTED_OPERATIONS = {
         {"200", "401", "403", "404", "409", "422", "503"},
         True,
     ),
+    (
+        "/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs",
+        "post",
+    ): (
+        "create_admin_preview_job",
+        {"202", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    ("/api/v1/admin/preview-jobs/{job_id}", "get"): (
+        "get_admin_preview_job",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
     ("/api/v1/admin/products/{product_id}", "get"): (
         "get_admin_product",
         {"200", "401", "403", "404", "422"},
@@ -252,6 +265,18 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
             "/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}",
             "patch",
         ): {"401", "403", "404", "422", "503"},
+        (
+            "/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs",
+            "post",
+        ): {"401", "403", "404", "409", "422", "503"},
+        ("/api/v1/admin/preview-jobs/{job_id}", "get"): {
+            "401",
+            "403",
+            "404",
+            "409",
+            "422",
+            "503",
+        },
         ("/api/v1/admin/products/{product_id}", "get"): {"401", "403", "404", "422"},
         ("/api/v1/admin/products/{product_id}", "patch"): {
             "401",
@@ -448,6 +473,64 @@ def test_admin_discovery_openapi_is_commit_bound_bounded_and_body_free() -> None
         "pullrequest",
     ):
         assert forbidden not in discovery_contract
+
+
+def test_admin_preview_openapi_is_closed_current_and_source_free() -> None:
+    """Freeze durable attempt metadata while excluding source/provider/worker payloads."""
+    schema = app.openapi()
+    schemas = schema["components"]["schemas"]
+    create_request = schemas["AdminPreviewJobCreateRequest"]
+    response = schemas["AdminPreviewJobResponse"]
+    result = schemas["AdminPreviewJobResultResponse"]
+    repository_side = schemas["AdminPreviewRepositorySideResponse"]
+
+    assert create_request["additionalProperties"] is False
+    assert set(create_request["properties"]) == {"expected_candidate_version", "commits"}
+    assert response["additionalProperties"] is False
+    assert set(response["properties"]) == {
+        "id",
+        "input_digest",
+        "attempt",
+        "state",
+        "product_id",
+        "candidate_revision_id",
+        "candidate_revision_version",
+        "mapping_id",
+        "connection_generation",
+        "detector_version",
+        "repository_sides",
+        "result",
+        "error_code",
+        "is_current",
+        "created_at",
+        "started_at",
+        "finished_at",
+    }
+    assert result["additionalProperties"] is False
+    assert set(result["properties"]) == {"detector_version", "digest", "layout_candidates"}
+    assert result["properties"]["layout_candidates"]["maxItems"] == 0
+    assert repository_side["additionalProperties"] is False
+
+    preview_contract = json.dumps(
+        {
+            "paths": {
+                path: value for path, value in schema["paths"].items() if "preview-jobs" in path
+            },
+            "schemas": {
+                name: value for name, value in schemas.items() if name.startswith("AdminPreview")
+            },
+        },
+        sort_keys=True,
+    ).casefold()
+    for forbidden in (
+        "source_bytes",
+        "access_token",
+        "provider_body",
+        "celery_result",
+        "canonical_translation",
+        "confirmed",
+    ):
+        assert forbidden not in preview_contract
 
 
 def test_admin_product_openapi_is_closed_to_exact_lifecycle_operations() -> None:
