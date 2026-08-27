@@ -41,6 +41,10 @@ class MappingVersionConflict(ValueError):
 class MappingBranchConflict(ValueError):
     """Raised when the exact source branch is absent from current discovery."""
 
+    def __init__(self, message: str, *, field: str = "source_branch") -> None:
+        super().__init__(message)
+        self.field = field
+
 
 class MappingTargetConflict(ValueError):
     """Raised when an exact target branch is absent from current discovery."""
@@ -75,6 +79,15 @@ class MappingRecord:
     selected_layout_candidate_id: UUID | None
     selected_layout_version: int | None
     candidate_version: int
+
+
+@dataclass(frozen=True, slots=True)
+class MappingSideInput:
+    """One explicit repository side accepted by the separate-topology authority."""
+
+    role: Literal["keys", "translations"]
+    repository_id: UUID
+    source_branch: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +146,46 @@ def _direct_identity(repository_id: UUID, source_branch: str) -> str:
     )
 
 
+def _separate_identity(
+    keys: MappingSideInput,
+    translations: MappingSideInput,
+) -> str:
+    return json.dumps(
+        [
+            "separate",
+            str(keys.repository_id),
+            keys.source_branch,
+            str(translations.repository_id),
+            translations.source_branch,
+        ],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+
+
+def _separate_sides(raw_sides: object) -> tuple[MappingSideInput, MappingSideInput]:
+    if isinstance(raw_sides, (str, bytes)) or not isinstance(raw_sides, Iterable):
+        raise InvalidMappingInput("separate requires exact keys and translations sides")
+    sides = tuple(raw_sides)
+    if len(sides) != 2 or not all(isinstance(side, MappingSideInput) for side in sides):
+        raise InvalidMappingInput("separate requires exact keys and translations sides")
+    by_role = {side.role: side for side in sides}
+    if set(by_role) != {"keys", "translations"}:
+        raise InvalidMappingInput("separate requires exact keys and translations sides")
+    keys = by_role["keys"]
+    translations = by_role["translations"]
+    if keys.repository_id == translations.repository_id:
+        raise InvalidMappingInput("separate repository sides must remain explicit")
+    return (
+        MappingSideInput("keys", keys.repository_id, _exact_branch(keys.source_branch)),
+        MappingSideInput(
+            "translations",
+            translations.repository_id,
+            _exact_branch(translations.source_branch),
+        ),
+    )
+
+
 async def _validate_live_branches(
     session: Session,
     *,
@@ -140,6 +193,7 @@ async def _validate_live_branches(
     source_branch: str,
     targets: tuple[str, ...],
     adapter: BranchDiscoveryAdapter,
+    source_field: str = "source_branch",
 ) -> None:
     try:
         repository = get_repository(session, repository_id=repository_id)
@@ -152,7 +206,7 @@ async def _validate_live_branches(
     )
     branch_names = {branch.name for branch in discovered}
     if source_branch not in branch_names:
-        raise MappingBranchConflict("source branch unavailable")
+        raise MappingBranchConflict("source branch unavailable", field=source_field)
     if any(target not in branch_names for target in targets):
         raise MappingTargetConflict("target branch unavailable")
 
@@ -560,11 +614,12 @@ async def update_direct_mapping(
                     ProductRepositoryMapping.revision_id == candidate.id,
                 )
             ).scalar_one_or_none()
-            if mapping is None or mapping.topology != "direct":
+            if mapping is None:
                 raise MappingNotFound("mapping unavailable")
             current = _record(mapping, candidate_version=candidate.version)
             if (
-                current.primary_repository_id == repository_id
+                current.topology == "direct"
+                and current.primary_repository_id == repository_id
                 and current.primary_source_branch == exact_source
                 and current.allowed_target_branches == targets
                 and current.default_target_branch == default_target
@@ -579,18 +634,192 @@ async def update_direct_mapping(
             )
             if duplicate is not None:
                 raise MappingConflict("mapping unavailable")
-            direct_side = next(
-                (side for side in mapping.sides if side.role == "direct"),
-                None,
-            )
-            if direct_side is None or len(mapping.sides) != 1:
-                raise InvalidMappingInput("invalid persisted mapping")
+            mapping.topology = "direct"
             mapping.identity_key = identity_key
             mapping.selected_layout_candidate_id = None
             mapping.selected_layout_version = None
             mapping.updated_at = datetime.now(UTC)
-            direct_side.repository_id = repository_id
-            direct_side.source_branch = exact_source
+            mapping.sides = [
+                ProductMappingRepositorySide(
+                    role="direct",
+                    repository_id=repository_id,
+                    source_branch=exact_source,
+                )
+            ]
+            mapping.allowed_targets = [
+                ProductMappingAllowedTarget(
+                    branch=target,
+                    is_default=target == default_target,
+                )
+                for target in targets
+            ]
+            candidate.version += 1
+            session.flush()
+            return _record(mapping, candidate_version=candidate.version)
+    except IntegrityError as error:
+        raise MappingConflict("mapping unavailable") from error
+
+
+async def create_separate_mapping(
+    session: Session,
+    *,
+    product_id: UUID,
+    expected_candidate_version: int,
+    repository_sides: object,
+    allowed_target_branches: object,
+    default_target_branch: object,
+    adapter: BranchDiscoveryAdapter,
+) -> MappingRecord:
+    """Create one explicit Keys/Translations mapping and advance its candidate once."""
+    keys, translations = _separate_sides(repository_sides)
+    targets, default_target = _normalized_targets(
+        allowed_target_branches,
+        default_target=default_target_branch,
+    )
+    await _validate_live_branches(
+        session,
+        repository_id=keys.repository_id,
+        source_branch=keys.source_branch,
+        targets=(),
+        adapter=adapter,
+        source_field="keys_source_branch",
+    )
+    await _validate_live_branches(
+        session,
+        repository_id=translations.repository_id,
+        source_branch=translations.source_branch,
+        targets=targets,
+        adapter=adapter,
+        source_field="translations_source_branch",
+    )
+    mapping_id = uuid4()
+    identity_key = _separate_identity(keys, translations)
+    try:
+        with session.begin():
+            candidate = _locked_candidate(
+                session,
+                product_id=product_id,
+                expected_version=expected_candidate_version,
+            )
+            duplicate = session.scalar(
+                select(ProductRepositoryMapping.id).where(
+                    ProductRepositoryMapping.revision_id == candidate.id,
+                    ProductRepositoryMapping.identity_key == identity_key,
+                )
+            )
+            if duplicate is not None:
+                raise MappingConflict("mapping unavailable")
+            mapping = ProductRepositoryMapping(
+                id=mapping_id,
+                revision_id=candidate.id,
+                topology="separate",
+                identity_key=identity_key,
+                sides=[
+                    ProductMappingRepositorySide(
+                        role=side.role,
+                        repository_id=side.repository_id,
+                        source_branch=side.source_branch,
+                    )
+                    for side in (keys, translations)
+                ],
+                allowed_targets=[
+                    ProductMappingAllowedTarget(
+                        branch=target,
+                        is_default=target == default_target,
+                    )
+                    for target in targets
+                ],
+            )
+            session.add(mapping)
+            candidate.version += 1
+            session.flush()
+            return _record(mapping, candidate_version=candidate.version)
+    except IntegrityError as error:
+        raise MappingConflict("mapping unavailable") from error
+
+
+async def update_separate_mapping(
+    session: Session,
+    *,
+    product_id: UUID,
+    mapping_id: UUID,
+    expected_candidate_version: int,
+    repository_sides: object,
+    allowed_target_branches: object,
+    default_target_branch: object,
+    adapter: BranchDiscoveryAdapter,
+) -> MappingRecord:
+    """Replace any candidate mapping with explicit separate topology or preserve a no-op."""
+    keys, translations = _separate_sides(repository_sides)
+    targets, default_target = _normalized_targets(
+        allowed_target_branches,
+        default_target=default_target_branch,
+    )
+    await _validate_live_branches(
+        session,
+        repository_id=keys.repository_id,
+        source_branch=keys.source_branch,
+        targets=(),
+        adapter=adapter,
+        source_field="keys_source_branch",
+    )
+    await _validate_live_branches(
+        session,
+        repository_id=translations.repository_id,
+        source_branch=translations.source_branch,
+        targets=targets,
+        adapter=adapter,
+        source_field="translations_source_branch",
+    )
+    identity_key = _separate_identity(keys, translations)
+    try:
+        with session.begin():
+            candidate = _locked_candidate(
+                session,
+                product_id=product_id,
+                expected_version=expected_candidate_version,
+            )
+            mapping = session.execute(
+                _mapping_statement().where(
+                    ProductRepositoryMapping.id == mapping_id,
+                    ProductRepositoryMapping.revision_id == candidate.id,
+                )
+            ).scalar_one_or_none()
+            if mapping is None:
+                raise MappingNotFound("mapping unavailable")
+            current = _record(mapping, candidate_version=candidate.version)
+            if (
+                current.topology == "separate"
+                and current.primary_repository_id == keys.repository_id
+                and current.primary_source_branch == keys.source_branch
+                and current.translations_repository_id == translations.repository_id
+                and current.translations_source_branch == translations.source_branch
+                and current.allowed_target_branches == targets
+                and current.default_target_branch == default_target
+            ):
+                return current
+            duplicate = session.scalar(
+                select(ProductRepositoryMapping.id).where(
+                    ProductRepositoryMapping.revision_id == candidate.id,
+                    ProductRepositoryMapping.identity_key == identity_key,
+                    ProductRepositoryMapping.id != mapping.id,
+                )
+            )
+            if duplicate is not None:
+                raise MappingConflict("mapping unavailable")
+            mapping.topology = "separate"
+            mapping.identity_key = identity_key
+            mapping.selected_layout_candidate_id = None
+            mapping.selected_layout_version = None
+            mapping.updated_at = datetime.now(UTC)
+            mapping.sides = [
+                ProductMappingRepositorySide(
+                    role=side.role,
+                    repository_id=side.repository_id,
+                    source_branch=side.source_branch,
+                )
+                for side in (keys, translations)
+            ]
             mapping.allowed_targets = [
                 ProductMappingAllowedTarget(
                     branch=target,

@@ -16,6 +16,7 @@ from verboflex.schemas.admin_mappings import (
     AdminMappingConflictResponse,
     AdminMappingListResponse,
     AdminMappingResponse,
+    AdminMappingWriteRequest,
 )
 from verboflex.schemas.system import ErrorResponse
 from verboflex.schemas.users import RoleName
@@ -26,11 +27,14 @@ from verboflex.services.mappings import (
     MappingConflict,
     MappingNotFound,
     MappingRecord,
+    MappingSideInput,
     MappingTargetConflict,
     MappingVersionConflict,
     create_direct_mapping,
+    create_separate_mapping,
     list_candidate_mappings,
     update_direct_mapping,
+    update_separate_mapping,
 )
 
 router = APIRouter(
@@ -116,7 +120,7 @@ def _mutation_error_response(error: MappingMutationError) -> JSONResponse:
     if isinstance(error, MappingVersionConflict):
         return _conflict("Mapping candidate conflict", "candidate_version")
     if isinstance(error, MappingBranchConflict):
-        return _conflict("Source branch unavailable", "source_branch")
+        return _conflict("Source branch unavailable", error.field)
     if isinstance(error, MappingTargetConflict):
         return _conflict("Target branch unavailable", "allowed_target_branches")
     _raise_mapping_error(error)
@@ -165,7 +169,7 @@ async def list_admin_candidate_mappings(
 )
 async def create_admin_candidate_mapping(
     product_id: UUID,
-    payload: AdminDirectMappingWriteRequest,
+    payload: AdminMappingWriteRequest,
     _principal: AdminPrincipal,
     session: AdminSession,
     adapter: DiscoveryAdapter,
@@ -177,16 +181,30 @@ async def create_admin_candidate_mapping(
             detail="Mapping branch discovery unavailable",
         )
     try:
-        record = await create_direct_mapping(
-            session,
-            product_id=product_id,
-            expected_candidate_version=payload.expected_candidate_version,
-            repository_id=payload.repository_id,
-            source_branch=payload.source_branch,
-            allowed_target_branches=payload.allowed_target_branches,
-            default_target_branch=payload.default_target_branch,
-            adapter=adapter,
-        )
+        if isinstance(payload, AdminDirectMappingWriteRequest):
+            record = await create_direct_mapping(
+                session,
+                product_id=product_id,
+                expected_candidate_version=payload.expected_candidate_version,
+                repository_id=payload.repository_id,
+                source_branch=payload.source_branch,
+                allowed_target_branches=payload.allowed_target_branches,
+                default_target_branch=payload.default_target_branch,
+                adapter=adapter,
+            )
+        else:
+            record = await create_separate_mapping(
+                session,
+                product_id=product_id,
+                expected_candidate_version=payload.expected_candidate_version,
+                repository_sides=tuple(
+                    MappingSideInput(side.role, side.repository_id, side.source_branch)
+                    for side in payload.sides
+                ),
+                allowed_target_branches=payload.allowed_target_branches,
+                default_target_branch=payload.default_target_branch,
+                adapter=adapter,
+            )
     except (
         MappingConflict,
         MappingVersionConflict,
@@ -208,7 +226,7 @@ async def create_admin_candidate_mapping(
 async def update_admin_candidate_mapping(
     product_id: UUID,
     mapping_id: UUID,
-    payload: AdminDirectMappingWriteRequest,
+    payload: AdminMappingWriteRequest,
     _principal: AdminPrincipal,
     session: AdminSession,
     adapter: DiscoveryAdapter,
@@ -220,17 +238,32 @@ async def update_admin_candidate_mapping(
             detail="Mapping branch discovery unavailable",
         )
     try:
-        record = await update_direct_mapping(
-            session,
-            product_id=product_id,
-            mapping_id=mapping_id,
-            expected_candidate_version=payload.expected_candidate_version,
-            repository_id=payload.repository_id,
-            source_branch=payload.source_branch,
-            allowed_target_branches=payload.allowed_target_branches,
-            default_target_branch=payload.default_target_branch,
-            adapter=adapter,
-        )
+        if isinstance(payload, AdminDirectMappingWriteRequest):
+            record = await update_direct_mapping(
+                session,
+                product_id=product_id,
+                mapping_id=mapping_id,
+                expected_candidate_version=payload.expected_candidate_version,
+                repository_id=payload.repository_id,
+                source_branch=payload.source_branch,
+                allowed_target_branches=payload.allowed_target_branches,
+                default_target_branch=payload.default_target_branch,
+                adapter=adapter,
+            )
+        else:
+            record = await update_separate_mapping(
+                session,
+                product_id=product_id,
+                mapping_id=mapping_id,
+                expected_candidate_version=payload.expected_candidate_version,
+                repository_sides=tuple(
+                    MappingSideInput(side.role, side.repository_id, side.source_branch)
+                    for side in payload.sides
+                ),
+                allowed_target_branches=payload.allowed_target_branches,
+                default_target_branch=payload.default_target_branch,
+                adapter=adapter,
+            )
     except (
         MappingConflict,
         MappingVersionConflict,
