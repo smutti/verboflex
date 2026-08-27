@@ -8,6 +8,7 @@ import os
 import time
 from collections.abc import Generator, Iterator
 from dataclasses import dataclass, field
+from dataclasses import replace as dataclass_replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,7 @@ from verboflex.db.session import get_db_session
 from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.models.preview_job import PreviewJob
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
     ProductMappingAllowedTarget,
@@ -38,6 +40,14 @@ from verboflex.models.product_mapping import (
 from verboflex.models.repository import Repository
 from verboflex.models.role import Role
 from verboflex.models.user import User
+from verboflex.services.preview_jobs import (
+    _finish_preview_job,
+    _start_preview_job,
+    create_or_reuse_preview_job,
+    execute_preview_job,
+    get_preview_job,
+    skeleton_preview_processor,
+)
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 ADMIN_DATABASE_URL = os.environ.get(
@@ -294,6 +304,7 @@ def test_admin_job_runs_api_to_distinct_worker_and_persists_terminal_state(
     assert created_body["candidate_revision_id"] == str(candidate_id)
     assert created_body["candidate_revision_version"] == 4
     assert created_body["connection_generation"] == 7
+    assert created_body["is_current"] is True
     assert enqueuer.payloads == [(created_body["id"],)]
 
     preview_tasks = importlib.import_module("verboflex.worker.preview_tasks")
@@ -363,6 +374,7 @@ def test_admin_job_runs_api_to_distinct_worker_and_persists_terminal_state(
         "created_at",
         "started_at",
         "finished_at",
+        "is_current",
     }
     assert status_body["repository_sides"] == [
         {
@@ -394,3 +406,166 @@ def test_admin_job_runs_api_to_distinct_worker_and_persists_terminal_state(
         assert product.active_revision_id == active_id
         assert product.candidate_revision_id == candidate_id
         assert session.scalar(text("SELECT count(*) FROM preview_jobs")) == 1
+
+
+def test_succeeded_result_remains_inspectable_but_is_not_current_after_revision_change(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Retain historical output while projecting currentness from live authority."""
+    product_id, _active_id, candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    with preview_session_factory() as session:
+        created = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    execute_preview_job(
+        preview_session_factory,
+        job_id=created.id,
+        processor=skeleton_preview_processor,
+    )
+    with preview_session_factory() as session:
+        current = get_preview_job(session, job_id=created.id)
+    assert current.state == "succeeded"
+    assert current.is_current is True
+    assert current.result == {
+        "detector_version": "preview-skeleton-v1",
+        "digest": created.input_digest,
+        "layout_candidates": [],
+    }
+
+    with preview_session_factory.begin() as session:
+        revision = session.get(ProductRevision, candidate_id)
+        assert revision is not None
+        revision.version = 5
+
+    with preview_session_factory() as session:
+        historical = get_preview_job(session, job_id=created.id)
+    assert historical.state == "succeeded"
+    assert historical.is_current is False
+    assert historical.result == current.result
+
+
+@pytest.mark.parametrize(
+    ("field_name", "replacement"),
+    [
+        ("attempt", 2),
+        ("candidate_revision_version", 5),
+        ("connection_generation", 8),
+        ("detector_version", "preview-skeleton-v2"),
+        ("layout_identity", "automatic-layout-discovery-v2"),
+    ],
+)
+def test_terminal_write_requires_the_complete_started_identity(
+    preview_session_factory: sessionmaker[Session],
+    field_name: str,
+    replacement: object,
+) -> None:
+    """A stale or altered worker identity cannot write a terminal payload."""
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    with preview_session_factory() as session:
+        created = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    identity = _start_preview_job(preview_session_factory, job_id=created.id)
+    assert identity is not None
+    altered = dataclass_replace(identity, **{field_name: replacement})
+
+    _finish_preview_job(
+        preview_session_factory,
+        identity=altered,
+        state="succeeded",
+        result={
+            "detector_version": identity.detector_version,
+            "digest": identity.input_digest,
+            "layout_candidates": [],
+        },
+    )
+
+    with preview_session_factory() as session:
+        row = session.get(PreviewJob, created.id)
+        assert row is not None
+        assert row.state == "running"
+        assert row.result is None
+        assert row.finished_at is None
+
+    _finish_preview_job(
+        preview_session_factory,
+        identity=identity,
+        state="succeeded",
+        result={
+            "detector_version": identity.detector_version,
+            "digest": identity.input_digest,
+            "layout_candidates": [],
+        },
+    )
+    with preview_session_factory() as session:
+        completed = get_preview_job(session, job_id=created.id)
+    assert completed.state == "succeeded"
+
+
+@pytest.mark.parametrize(
+    "forbidden_field",
+    [
+        "source_bytes",
+        "access_token",
+        "provider_body",
+        "celery_result",
+        "canonical_translation",
+        "confirmed",
+    ],
+)
+def test_processor_output_rejects_forbidden_or_noncanonical_fields_without_persisting_them(
+    preview_session_factory: sessionmaker[Session],
+    forbidden_field: str,
+) -> None:
+    """Fail closed before arbitrary processor data reaches PostgreSQL or the API."""
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    with preview_session_factory() as session:
+        created = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+
+    def unsafe_processor(identity: object) -> dict[str, object]:
+        assert hasattr(identity, "input_digest")
+        return {
+            "detector_version": "preview-skeleton-v1",
+            "digest": created.input_digest,
+            "layout_candidates": [],
+            forbidden_field: "must-not-persist",
+        }
+
+    execute_preview_job(
+        preview_session_factory,
+        job_id=created.id,
+        processor=unsafe_processor,
+    )
+
+    with preview_session_factory() as session:
+        row = session.get(PreviewJob, created.id)
+        assert row is not None
+        assert row.state == "failed"
+        assert row.error_code == "processing_failed"
+        assert row.result is None
+        assert forbidden_field not in str(row.repository_sides)
+
+
+def test_preview_job_model_is_registered_in_explicit_metadata_exports() -> None:
+    """Alembic model discovery must not depend on incidental route imports."""
+    models = importlib.import_module("verboflex.models")
+
+    assert models.PreviewJob is PreviewJob
+    assert models.PreviewJob.__table__.metadata.tables["preview_jobs"] is PreviewJob.__table__
