@@ -279,6 +279,22 @@ export type AdminProductCreateRequest = {
 };
 
 /**
+ * AdminProductLifecycleConflictResponse
+ *
+ * Stable lifecycle conflict with a closed ordered blocker vocabulary.
+ */
+export type AdminProductLifecycleConflictResponse = {
+    /**
+     * Blockers
+     */
+    blockers: Array<'mappings_required' | 'mapping_configuration_invalid' | 'target_configuration_invalid' | 'layout_required' | 'preview_confirmation_required'>;
+    /**
+     * Detail
+     */
+    detail: 'Product lifecycle conflict' | 'Product publication blocked';
+};
+
+/**
  * AdminProductListResponse
  *
  * One bounded stable keyset page of products.
@@ -292,6 +308,38 @@ export type AdminProductListResponse = {
      * Next Cursor
      */
     next_cursor: string | null;
+};
+
+/**
+ * AdminProductPublishRequest
+ *
+ * Publish one exact candidate under optimistic version authority.
+ */
+export type AdminProductPublishRequest = {
+    /**
+     * Candidate Revision Id
+     */
+    candidate_revision_id: string;
+    /**
+     * Expected Candidate Version
+     */
+    expected_candidate_version: number;
+};
+
+/**
+ * AdminProductReactivateRequest
+ *
+ * Reactivate one exact published revision under version authority.
+ */
+export type AdminProductReactivateRequest = {
+    /**
+     * Active Revision Id
+     */
+    active_revision_id: string;
+    /**
+     * Expected Active Version
+     */
+    expected_active_version: number;
 };
 
 /**
@@ -1298,6 +1346,140 @@ export type UpdateAdminCandidateMappingResponses = {
 };
 
 export type UpdateAdminCandidateMappingResponse = UpdateAdminCandidateMappingResponses[keyof UpdateAdminCandidateMappingResponses];
+
+export type DeactivateAdminProductData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/deactivate';
+};
+
+export type DeactivateAdminProductErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeactivateAdminProductError = DeactivateAdminProductErrors[keyof DeactivateAdminProductErrors];
+
+export type DeactivateAdminProductResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminProductResponse;
+};
+
+export type DeactivateAdminProductResponse = DeactivateAdminProductResponses[keyof DeactivateAdminProductResponses];
+
+export type PublishAdminProductCandidateData = {
+    body: AdminProductPublishRequest;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/publish';
+};
+
+export type PublishAdminProductCandidateErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminProductLifecycleConflictResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type PublishAdminProductCandidateError = PublishAdminProductCandidateErrors[keyof PublishAdminProductCandidateErrors];
+
+export type PublishAdminProductCandidateResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminProductResponse;
+};
+
+export type PublishAdminProductCandidateResponse = PublishAdminProductCandidateResponses[keyof PublishAdminProductCandidateResponses];
+
+export type ReactivateAdminProductData = {
+    body: AdminProductReactivateRequest;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/reactivate';
+};
+
+export type ReactivateAdminProductErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminProductLifecycleConflictResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ReactivateAdminProductError = ReactivateAdminProductErrors[keyof ReactivateAdminProductErrors];
+
+export type ReactivateAdminProductResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminProductResponse;
+};
+
+export type ReactivateAdminProductResponse = ReactivateAdminProductResponses[keyof ReactivateAdminProductResponses];
 
 export type ListAdminRepositoriesData = {
     body?: never;
