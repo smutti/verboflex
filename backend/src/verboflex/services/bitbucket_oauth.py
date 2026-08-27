@@ -587,9 +587,12 @@ class BitbucketOAuthService:
 
     @staticmethod
     def _lock_connection(session: Session) -> BitbucketConnection:
-        return session.execute(
+        connection = session.execute(
             select(BitbucketConnection).where(BitbucketConnection.id == 1).with_for_update()
-        ).scalar_one()
+        ).scalar_one_or_none()
+        if connection is None:
+            raise OAuthConnectionUnavailable(CONNECTION_UNAVAILABLE_MESSAGE)
+        return connection
 
     def _emit_lifecycle_event(
         self,

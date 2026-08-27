@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import os
-from email.message import Message
-from io import BytesIO
 from collections.abc import Generator, Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from email.message import Message
+from io import BytesIO
 from pathlib import Path
 from typing import Any, cast
 from urllib.error import URLError
@@ -20,20 +20,20 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from alembic.config import Config
+from fastapi import HTTPException
 from psycopg import connect, sql
 from pydantic import AnyHttpUrl, SecretStr
 from sqlalchemy import create_engine, delete, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
-from fastapi import HTTPException
-
 from verboflex.api.v1.routes.admin_bitbucket import (
     _session_id,
     get_bitbucket_oauth_service,
 )
 from verboflex.auth.access_tokens import issue_access_token
 from verboflex.auth.passwords import hash_password
+from verboflex.auth.principal import Principal
 from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
 from verboflex.main import app
@@ -51,7 +51,6 @@ from verboflex.services.bitbucket_oauth import (
     OAuthConnectionUnavailable,
     _RejectRedirects,
 )
-from verboflex.auth.principal import Principal
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 ADMIN_DATABASE_URL = os.environ.get(
@@ -183,9 +182,7 @@ def bitbucket_api_session_factory() -> Iterator[sessionmaker[Session]]:
         engine.dispose()
         with connect(ADMIN_DATABASE_URL, autocommit=True) as admin_connection:
             admin_connection.execute(
-                sql.SQL("DROP DATABASE {} WITH (FORCE)").format(
-                    sql.Identifier(database_name)
-                )
+                sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database_name))
             )
 
 
@@ -330,9 +327,7 @@ def test_admin_oauth_lifecycle_is_state_authoritative_and_locally_revocable(
     )
     configure_dependencies(bitbucket_api_session_factory, service)
 
-    initial = asyncio.run(
-        bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token)
-    )
+    initial = asyncio.run(bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token))
     assert initial.status_code == 200
     assert initial.json() == {
         "status": "Disconnected",
@@ -387,9 +382,7 @@ def test_admin_oauth_lifecycle_is_state_authoritative_and_locally_revocable(
     ]
     assert admin_id != admin_session_id
 
-    connected = asyncio.run(
-        bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token)
-    )
+    connected = asyncio.run(bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token))
     assert connected.status_code == 200
     assert connected.json()["status"] == "Connected"
     assert connected.json()["scope_profile"] == "repository"
@@ -467,16 +460,17 @@ def test_every_protected_bitbucket_operation_requires_current_admin_without_muta
     )
     for method, path in protected:
         anonymous = asyncio.run(bitbucket_request(method, path=path))
-        viewer = asyncio.run(
-            bitbucket_request(method, path=path, access_token=viewer_token)
-        )
+        viewer = asyncio.run(bitbucket_request(method, path=path, access_token=viewer_token))
         assert anonymous.status_code == 401
         assert viewer.status_code == 403
 
     assert connection_snapshot(bitbucket_api_session_factory) == before
-    assert asyncio.run(
-        bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token)
-    ).status_code == 200
+    assert (
+        asyncio.run(
+            bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token)
+        ).status_code
+        == 200
+    )
 
 
 def test_callback_rejects_hostile_state_without_bearer_or_provider_diagnostics(
@@ -573,13 +567,12 @@ def test_missing_singleton_and_wrong_callback_destination_are_bounded(
 
     with bitbucket_api_session_factory() as session:
         assert service.public_status(session).state == "unavailable"
-    with bitbucket_api_session_factory() as session:
-        with pytest.raises(OAuthConnectionUnavailable):
-            service.start_current(
-                session,
-                admin_id=admin_id,
-                session_id=admin_session_id,
-            )
+    with bitbucket_api_session_factory() as session, pytest.raises(OAuthConnectionUnavailable):
+        service.start_current(
+            session,
+            admin_id=admin_id,
+            session_id=admin_session_id,
+        )
 
     missing_callback = asyncio.run(
         bitbucket_request(
@@ -599,19 +592,24 @@ def test_missing_singleton_and_wrong_callback_destination_are_bounded(
         session_id=admin_session_id,
         expected_generation=0,
     )
-    with bitbucket_api_session_factory() as session:
-        with pytest.raises(OAuthCallbackRejected, match="OAuth callback rejected"):
-            service.complete_callback_from_state(
-                session,
-                state=wrong_destination_state,
-                code="provider-code",
-                callback_uri=CALLBACK_URI,
-                post_callback_path="/attacker",
-            )
+    with (
+        bitbucket_api_session_factory() as session,
+        pytest.raises(OAuthCallbackRejected, match="OAuth callback rejected"),
+    ):
+        service.complete_callback_from_state(
+            session,
+            state=wrong_destination_state,
+            code="provider-code",
+            callback_uri=CALLBACK_URI,
+            post_callback_path="/attacker",
+        )
     assert exchange.calls == []
-    assert asyncio.run(
-        bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token)
-    ).status_code == 200
+    assert (
+        asyncio.run(
+            bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token)
+        ).status_code
+        == 200
+    )
 
 
 def test_standard_library_token_exchange_is_bounded_exact_and_redirect_free() -> None:
@@ -620,9 +618,7 @@ def test_standard_library_token_exchange_is_bounded_exact_and_redirect_free() ->
         b'{"access_token":"a","refresh_token":"r","scope":"repository","expires_in":1}'
     )
     opener = FakeOpener(response=response)
-    exchange = BitbucketOAuthTokenExchange(
-        opener=cast(OpenerDirector, opener)
-    )
+    exchange = BitbucketOAuthTokenExchange(opener=cast(OpenerDirector, opener))
 
     authorization = exchange.exchange_authorization_code(
         code="code",
