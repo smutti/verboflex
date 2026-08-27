@@ -219,7 +219,7 @@ def _seed_repository(
             Repository(
                 id=durable_id,
                 workspace="mobile-team",
-                repository_slug=f"repo-{durable_id.hex[:12]}",
+                repository_slug=f"repo-{durable_id.hex}",
             )
         )
     return durable_id
