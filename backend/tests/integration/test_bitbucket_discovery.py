@@ -167,6 +167,7 @@ def test_source_url_and_adapter_guards_reject_ambiguous_provider_coordinates() -
     """Malformed identifiers, branch drift and cross-resource next links stop before raw reads."""
     commit_hash = "a" * 40
     source_root = f"https://api.bitbucket.org/2.0/repositories/acme/mobile/src/{commit_hash}/"
+    requests: list[httpx.Request] = []
     with pytest.raises(ValueError):
         repository_branch_url(workspace="acme", repository_slug="mobile", branch="")
     with pytest.raises(ValueError):
@@ -179,6 +180,7 @@ def test_source_url_and_adapter_guards_reject_ambiguous_provider_coordinates() -
         validate_bitbucket_api_url(f"{source_root}%2e%2e/secret.json")
 
     def provider(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
         return httpx.Response(
             200,
             json={"name": "other", "target": {"hash": commit_hash}},
@@ -201,6 +203,7 @@ def test_source_url_and_adapter_guards_reject_ambiguous_provider_coordinates() -
                 branch="main",
             )
         assert mismatch.value.kind == "invalid_source"
+        assert len(requests) == 1
         with pytest.raises(BitbucketProviderReadError) as continuation:
             await adapter.list_repository_source_page(
                 object(),
@@ -211,6 +214,7 @@ def test_source_url_and_adapter_guards_reject_ambiguous_provider_coordinates() -
                 next_url=f"{source_root}different?pagelen=100&page=2",
             )
         assert continuation.value.kind == "invalid_source"
+        assert len(requests) == 1
         with pytest.raises(BitbucketProviderReadError) as negative_limit:
             await adapter.read_repository_source_file(
                 object(),
@@ -249,7 +253,11 @@ def test_source_page_parser_rejects_every_open_or_incoherent_shape(
 @pytest.mark.parametrize(
     ("headers", "body", "expected_kind"),
     [
-        ({"content-encoding": "br"}, b"x", "invalid_source"),
+        (
+            {"content-encoding": "br", "content-type": "application/json"},
+            b"{}",
+            "invalid_source",
+        ),
         ({"content-type": "text/plain"}, b"{}", "invalid_source"),
         (
             {"content-type": "application/json", "content-length": "invalid"},

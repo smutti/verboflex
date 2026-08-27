@@ -74,12 +74,10 @@ MUTATIONS = (
     Mutation(
         "post-response-generation-check-removed",
         "src/verboflex/integrations/bitbucket/client.py",
-        "                payload = await response.aread()\n"
         "            self._credential_leases.require_current_repository_read_lease("
         "session, lease)\n"
-        "            decoded = json.loads(payload)",
-        "                payload = await response.aread()\n"
-        "            decoded = json.loads(payload)",
+        '            return b"".join(chunks)',
+        '            return b"".join(chunks)',
     ),
     Mutation(
         "effective-scope-comparison-inverted",
