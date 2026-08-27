@@ -79,6 +79,24 @@ EXPECTED_OPERATIONS = {
         {"201", "401", "403", "409", "422"},
         True,
     ),
+    ("/api/v1/admin/products/{product_id}/candidate/mappings", "get"): (
+        "list_admin_candidate_mappings",
+        {"200", "401", "403", "404", "422"},
+        True,
+    ),
+    ("/api/v1/admin/products/{product_id}/candidate/mappings", "post"): (
+        "create_admin_candidate_mapping",
+        {"201", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}",
+        "patch",
+    ): (
+        "update_admin_candidate_mapping",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
     ("/api/v1/admin/products/{product_id}", "get"): (
         "get_admin_product",
         {"200", "401", "403", "404", "422"},
@@ -202,6 +220,23 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
         },
         ("/api/v1/admin/products", "get"): {"401", "403", "422"},
         ("/api/v1/admin/products", "post"): {"401", "403", "422"},
+        ("/api/v1/admin/products/{product_id}/candidate/mappings", "get"): {
+            "401",
+            "403",
+            "404",
+            "422",
+        },
+        ("/api/v1/admin/products/{product_id}/candidate/mappings", "post"): {
+            "401",
+            "403",
+            "404",
+            "422",
+            "503",
+        },
+        (
+            "/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}",
+            "patch",
+        ): {"401", "403", "404", "422", "503"},
         ("/api/v1/admin/products/{product_id}", "get"): {"401", "403", "404", "422"},
         ("/api/v1/admin/products/{product_id}", "patch"): {
             "401",
@@ -271,6 +306,14 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
     assert (
         _response_schema(operations[("/api/v1/admin/products/{product_id}", "patch")], "409")
         == "#/components/schemas/AdminProductConflictResponse"
+    )
+    mapping_collection = "/api/v1/admin/products/{product_id}/candidate/mappings"
+    mapping_detail = mapping_collection + "/{mapping_id}"
+    assert _response_schema(operations[(mapping_collection, "post")], "409") == (
+        "#/components/schemas/AdminMappingConflictResponse"
+    )
+    assert _response_schema(operations[(mapping_detail, "patch")], "409") == (
+        "#/components/schemas/AdminMappingConflictResponse"
     )
 
 
