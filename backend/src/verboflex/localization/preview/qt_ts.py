@@ -142,8 +142,6 @@ def _parse_qt_file(file: RepositorySourceFile) -> _QtFile:
         if set(values).intersection(context_values):
             raise ValueError("unsupported Qt TS")
         values.update(context_values)
-    if not values:
-        raise ValueError("unsupported Qt TS")
     return _QtFile(
         path=file.path,
         layout_identity=_qt_layout_identity(file.path, language=language),

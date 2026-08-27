@@ -209,15 +209,11 @@ def _path_locale_signals(
 def _render_locale_template(
     components: list[str],
     signals: list[tuple[int, str, str]],
-    *,
-    expected_locale: str | None,
 ) -> tuple[str, str] | None:
     locales = {locale for _, locale, _ in signals}
     if not signals or len(locales) != 1:
         return None
     locale = signals[0][1]
-    if expected_locale is not None and locale != expected_locale:
-        return None
     templated = list(components)
     for index, _, replacement in signals:
         templated[index] = replacement
@@ -245,11 +241,7 @@ def extract_preview_locale_path(
     )
     if signals is None:
         return None
-    return _render_locale_template(
-        components,
-        signals,
-        expected_locale=expected_locale,
-    )
+    return _render_locale_template(components, signals)
 
 
 def _candidate_id(
