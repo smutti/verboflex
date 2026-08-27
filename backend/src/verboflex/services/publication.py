@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import ProductRepositoryMapping
+from verboflex.services.preview_jobs import is_current_preview_confirmation
 
 
 class PublicationBlocker(StrEnum):
@@ -56,15 +57,6 @@ ConfirmationPredicate = Callable[
     [Session, ProductRevision, ProductRepositoryMapping],
     bool,
 ]
-
-
-def fail_closed_preview_confirmation(
-    _session: Session,
-    _revision: ProductRevision,
-    _mapping: ProductRepositoryMapping,
-) -> bool:
-    """Block publication until Plan 14 supplies current digest confirmation."""
-    return False
 
 
 def _locked_product(session: Session, product_id: UUID) -> Product:
@@ -179,7 +171,7 @@ def publish_product_candidate(
     product_id: UUID,
     candidate_revision_id: UUID,
     expected_candidate_version: int,
-    confirmation_predicate: ConfirmationPredicate = fail_closed_preview_confirmation,
+    confirmation_predicate: ConfirmationPredicate = is_current_preview_confirmation,
 ) -> PublicationResult:
     """Atomically validate and publish one exact candidate revision."""
     with session.begin():
@@ -229,7 +221,7 @@ def reactivate_product(
     product_id: UUID,
     active_revision_id: UUID,
     expected_active_version: int,
-    confirmation_predicate: ConfirmationPredicate = fail_closed_preview_confirmation,
+    confirmation_predicate: ConfirmationPredicate = is_current_preview_confirmation,
 ) -> PublicationResult:
     """Resume only the exact active revision after the publication predicate passes."""
     with session.begin():

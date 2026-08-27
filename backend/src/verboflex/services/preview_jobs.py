@@ -590,6 +590,73 @@ def confirm_preview_job(
         )
 
 
+def is_current_preview_confirmation(
+    session: Session,
+    revision: ProductRevision,
+    mapping: ProductRepositoryMapping,
+) -> bool:
+    """Recompute one exact confirmation against current durable authority."""
+    if (
+        mapping.revision_id != revision.id
+        or mapping.confirmed_preview_job_id is None
+        or mapping.confirmed_preview_digest is None
+        or mapping.preview_confirmed_by is None
+        or mapping.preview_confirmed_at is None
+        or mapping.selected_layout_candidate_id is None
+        or mapping.selected_layout_version is None
+    ):
+        return False
+    row = session.get(PreviewJob, mapping.confirmed_preview_job_id)
+    if (
+        row is None
+        or row.state != "succeeded"
+        or row.result is None
+        or row.product_id != revision.product_id
+        or row.candidate_revision_id != revision.id
+        or row.candidate_revision_version != revision.version
+        or row.mapping_id != mapping.id
+    ):
+        return False
+    connection = _current_connection(session, row, for_update=True)
+    if connection is None:
+        return False
+    latest_attempt = session.scalar(
+        select(func.max(PreviewJob.attempt)).where(PreviewJob.input_digest == row.input_digest)
+    )
+    latest_mapping_job_id = session.scalar(
+        select(PreviewJob.id)
+        .where(
+            PreviewJob.mapping_id == row.mapping_id,
+            PreviewJob.candidate_revision_id == row.candidate_revision_id,
+        )
+        .order_by(PreviewJob.created_at.desc(), PreviewJob.id.desc())
+        .limit(1)
+    )
+    if (
+        latest_attempt != row.attempt
+        or latest_mapping_job_id != row.id
+        or not _current_identity_matches(row, revision, mapping, connection)
+    ):
+        return False
+    try:
+        result = _closed_result(_identity(row), row.result)
+    except PreviewJobConflict, ValueError:
+        return False
+    if result["digest"] != mapping.confirmed_preview_digest:
+        return False
+    candidates = result["layout_candidates"]
+    if not isinstance(candidates, list):
+        return False
+    matches = [
+        candidate
+        for candidate in candidates
+        if candidate["id"] == str(mapping.selected_layout_candidate_id)
+        and candidate["version"] == mapping.selected_layout_version
+    ]
+    expected_side = "direct" if mapping.topology == "direct" else "translations"
+    return len(matches) == 1 and matches[0]["repository_side"] == expected_side
+
+
 def _current_failure_code(
     session: Session,
     row: PreviewJob,
