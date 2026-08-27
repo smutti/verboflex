@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-05-PLAN.md
-last_updated: "2026-08-27T09:52:46.357Z"
+stopped_at: Completed 02-06-PLAN.md
+last_updated: "2026-08-27T10:43:05.767Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 02 execution started
-state_head: 954fbd830f4cd9567b2e8aee0c6c14f24c8b33c8
+state_head: 019b6c3e459fc3cb7cc3410208b08f8d1c49b75e
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 35
-  completed_plans: 20
+  completed_plans: 21
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 6 of 20
+Plan: 7 of 20
 Status: Ready to execute
 Last activity: 2026-08-26 — Phase 02 execution started
 
@@ -78,6 +78,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P03 | 15min | 3 tasks | 12 files |
 | Phase 02 P04 | 32min | 3 tasks | 11 files |
 | Phase 02 P05 | 26min | 2 tasks | 15 files |
+| Phase 02 P06 | 20min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -164,6 +165,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Guarantee Bitbucket revocation locally by advancing the locked generation and deleting both ciphertexts; do not claim an unverified provider revoke operation.
 - [Phase 02]: Authorize the Bitbucket callback from consumed OAuth state rather than an ambient bearer token, then redirect only to /admin/bitbucket.
 - [Phase 02]: Keep exact repository read scope and expose only the four approved public connection statuses through closed schemas.
+- [Phase 02]: Expose only repository metadata, branch list/detail, and commit-bound source tree/raw reads; reject every other Bitbucket endpoint family before credential acquisition.
+- [Phase 02]: Use one pooled HTTPX client with redirects, ambient proxy trust, content decoding, and hidden retries disabled or constrained at construction.
+- [Phase 02]: Treat a generation change during a response as revocation and discard the provider result even after an HTTP success.
 
 ### Pending Todos
 
@@ -196,6 +200,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-27T09:52:46.320Z
-Stopped at: Completed 02-05-PLAN.md
+Last session: 2026-08-27T10:43:05.733Z
+Stopped at: Completed 02-06-PLAN.md
 Resume file: None
