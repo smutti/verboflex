@@ -41,7 +41,11 @@ from verboflex.models.repository import Repository
 from verboflex.models.role import Role
 from verboflex.models.user import User
 from verboflex.services.preview_jobs import (
+    PreviewJobConflict,
+    _current_failure_code,
     _finish_preview_job,
+    _matches_started_identity,
+    _record,
     _start_preview_job,
     create_or_reuse_preview_job,
     execute_preview_job,
@@ -563,9 +567,197 @@ def test_processor_output_rejects_forbidden_or_noncanonical_fields_without_persi
         assert forbidden_field not in str(row.repository_sides)
 
 
+@pytest.mark.parametrize(
+    "forbidden_field",
+    [
+        "source_bytes",
+        "access_token",
+        "provider_body",
+        "celery_result",
+        "canonical_translation",
+        "confirmed",
+    ],
+)
+def test_create_request_rejects_forbidden_or_confirmation_shortcut_fields(
+    preview_session_factory: sessionmaker[Session],
+    forbidden_field: str,
+) -> None:
+    """Keep secrets, source content, worker internals, and confirmation out of input."""
+    _configure_dependencies(preview_session_factory)
+    admin_token = _create_authority(preview_session_factory, role_name="admin")
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    app.state.preview_job_enqueuer = PersistedUuidEnqueuer(preview_session_factory)
+    path = f"/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs"
+
+    response = asyncio.run(
+        _request(
+            "POST",
+            path,
+            access_token=admin_token,
+            json={
+                "expected_candidate_version": 4,
+                "commits": [{"role": "direct", "commit_hash": COMMIT_HASH}],
+                forbidden_field: "must-not-accept",
+            },
+        )
+    )
+
+    assert response.status_code == 422
+    with preview_session_factory() as session:
+        assert session.scalar(text("SELECT count(*) FROM preview_jobs")) == 0
+
+
 def test_preview_job_model_is_registered_in_explicit_metadata_exports() -> None:
     """Alembic model discovery must not depend on incidental route imports."""
     models = importlib.import_module("verboflex.models")
 
     assert models.PreviewJob is PreviewJob
     assert models.PreviewJob.__table__.metadata.tables["preview_jobs"] is PreviewJob.__table__
+
+
+def test_enqueue_failure_is_bounded_current_and_retryable(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Convert transport failure to a closed durable attempt without leaking the exception."""
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+
+    def unavailable_enqueuer(_job_id: UUID) -> None:
+        raise RuntimeError("broker diagnostics must not escape")
+
+    with preview_session_factory() as session:
+        failed = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=unavailable_enqueuer,
+        )
+    assert failed.state == "failed"
+    assert failed.error_code == "enqueue_failed"
+    assert failed.is_current is True
+    assert failed.result is None
+
+    with preview_session_factory() as session:
+        retried = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    assert retried.attempt == 2
+    assert retried.state == "queued"
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("state", "provider_raw_state"),
+        ("error_code", "provider_exception_body"),
+        (
+            "result",
+            {
+                "detector_version": "wrong-version",
+                "digest": "f" * 64,
+                "layout_candidates": [],
+            },
+        ),
+        (
+            "result",
+            {
+                "detector_version": "preview-skeleton-v1",
+                "digest": COMMIT_HASH,
+                "layout_candidates": [{}],
+            },
+        ),
+    ],
+)
+def test_structurally_invalid_persisted_projection_fails_closed(
+    preview_session_factory: sessionmaker[Session],
+    field_name: str,
+    value: object,
+) -> None:
+    """Reject corrupted status/error/result values instead of projecting them publicly."""
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    with preview_session_factory() as session:
+        created = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    with preview_session_factory() as session:
+        row = session.get(PreviewJob, created.id)
+        assert row is not None
+        session.expunge(row)
+    setattr(row, field_name, value)
+
+    with pytest.raises((PreviewJobConflict, ValueError), match="persisted|result rejected"):
+        _record(row, is_current=True)
+
+
+def test_corrupted_started_identity_and_missing_mapping_fail_closed(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Treat malformed repository sides and absent mapping identity as stale."""
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    with preview_session_factory() as session:
+        created = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    identity = _start_preview_job(preview_session_factory, job_id=created.id)
+    assert identity is not None
+
+    with preview_session_factory() as session:
+        malformed = session.get(PreviewJob, created.id)
+        assert malformed is not None
+        session.expunge(malformed)
+    malformed.repository_sides = []
+    assert _matches_started_identity(malformed, identity) is False
+    with preview_session_factory() as session:
+        assert _current_failure_code(session, malformed, for_update=False) == "stale_identity"
+
+    with preview_session_factory() as session:
+        missing_mapping = session.get(PreviewJob, created.id)
+        assert missing_mapping is not None
+        session.expunge(missing_mapping)
+    missing_mapping.mapping_id = uuid4()
+    with preview_session_factory() as session:
+        assert _current_failure_code(session, missing_mapping, for_update=False) == "stale_identity"
+
+
+def test_mapping_branch_drift_makes_historical_attempt_noncurrent(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Bind currentness to the exact repository side even if revision version was not advanced."""
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    with preview_session_factory() as session:
+        created = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    with preview_session_factory.begin() as session:
+        side = session.execute(
+            select(ProductMappingRepositorySide).where(
+                ProductMappingRepositorySide.mapping_id == mapping_id
+            )
+        ).scalar_one()
+        side.source_branch = "release/drift"
+
+    with preview_session_factory() as session:
+        historical = get_preview_job(session, job_id=created.id)
+    assert historical.is_current is False
+    assert historical.repository_sides[0].source_branch == "main"
