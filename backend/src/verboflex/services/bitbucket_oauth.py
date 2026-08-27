@@ -15,9 +15,14 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from verboflex.audit.events import AuditEventEmitter, emit_audit_event, new_audit_event
 from verboflex.core.config import Settings
 from verboflex.models.bitbucket_connection import BitbucketConnection
-from verboflex.security.secret_box import SecretBox, SecretBoxConfigurationError
+from verboflex.security.secret_box import (
+    SecretBox,
+    SecretBoxConfigurationError,
+    SecretBoxDecryptionError,
+)
 
 OAUTH_STATE_BYTES = 32
 OAUTH_STATE_TTL_SECONDS = 600
@@ -26,6 +31,8 @@ REPOSITORY_SCOPE = "repository"
 CALLBACK_REJECTED_MESSAGE = "OAuth callback rejected"
 SETTINGS_REQUIRED_MESSAGE = "Bitbucket OAuth settings are required"
 INVALID_KEYRING_MESSAGE = "Bitbucket token encryption keyring is invalid"
+GENERATION_REJECTED_MESSAGE = "Bitbucket connection generation rejected"
+CONNECTION_UNAVAILABLE_MESSAGE = "Bitbucket connection unavailable"
 
 
 class RedisOAuthStateClient(Protocol):
@@ -54,9 +61,27 @@ class TokenExchange(Protocol):
         """Exchange one code without exposing provider material to the browser."""
         ...
 
+    def refresh_tokens(
+        self,
+        *,
+        refresh_token: str,
+        client_id: str,
+        client_secret: str,
+    ) -> Mapping[str, object]:
+        """Exchange one current rotating refresh token for one complete pair."""
+        ...
+
 
 class OAuthCallbackRejected(PermissionError):
     """Stable non-enumerating callback denial."""
+
+
+class OAuthGenerationRejected(PermissionError):
+    """Reject work bound to any non-current provider generation."""
+
+
+class OAuthConnectionUnavailable(RuntimeError):
+    """Bound provider or ciphertext failures without exposing diagnostics."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,11 +120,13 @@ class BitbucketOAuthService:
         redis_client: RedisOAuthStateClient,
         token_exchange: TokenExchange,
         random_bytes: Callable[[int], bytes] = secrets.token_bytes,
+        audit_emitter: AuditEventEmitter = emit_audit_event,
     ) -> None:
         self._settings = settings
         self._redis = redis_client
         self._token_exchange = token_exchange
         self._random_bytes = random_bytes
+        self._audit_emitter = audit_emitter
         self._client_id, self._client_secret, self._callback_uri = self._require_oauth_settings(
             settings
         )
@@ -183,6 +210,7 @@ class BitbucketOAuthService:
             callback_uri=callback_uri,
             post_callback_path=post_callback_path,
         )
+        connected_at = datetime.now(UTC)
         with session.begin():
             connection = session.execute(
                 select(BitbucketConnection).where(BitbucketConnection.id == 1).with_for_update()
@@ -191,7 +219,7 @@ class BitbucketOAuthService:
                 raise OAuthCallbackRejected(CALLBACK_REJECTED_MESSAGE)
             token_response = self._exchange(code)
             access_token, refresh_token, expires_in = self._require_token_response(token_response)
-            connected_at = datetime.now(UTC)
+            previous_generation = connection.generation
             connection.generation += 1
             connection.access_token_ciphertext = self._secret_box.encrypt(access_token)
             connection.refresh_token_ciphertext = self._secret_box.encrypt(refresh_token)
@@ -205,10 +233,148 @@ class BitbucketOAuthService:
                 generation=connection.generation,
                 scope_profile=REPOSITORY_SCOPE,
             )
+        self._audit_emitter(
+            new_audit_event(
+                action="bitbucket.connected",
+                actor_id=UUID(binding.admin_id),
+                from_generation=previous_generation,
+                to_generation=status.generation,
+                occurred_at=connected_at,
+            )
+        )
         return OAuthCallbackResult(
             redirect_path=self._settings.bitbucket_oauth_post_callback_path,
             status=status,
         )
+
+    def refresh(
+        self,
+        session: Session,
+        *,
+        expected_generation: int,
+        actor_id: UUID,
+    ) -> BitbucketConnectionStatus:
+        """Rotate one current provider pair while holding the singleton lock."""
+        refreshed_at = datetime.now(UTC)
+        with session.begin():
+            connection = session.execute(
+                select(BitbucketConnection).where(BitbucketConnection.id == 1).with_for_update()
+            ).scalar_one()
+            self._require_current_generation(
+                connection,
+                expected_generation=expected_generation,
+            )
+            if (
+                connection.access_token_ciphertext is None
+                or connection.refresh_token_ciphertext is None
+                or connection.revoked_at is not None
+            ):
+                raise OAuthGenerationRejected(GENERATION_REJECTED_MESSAGE)
+            try:
+                refresh_token = self._secret_box.decrypt(connection.refresh_token_ciphertext)
+            except SecretBoxDecryptionError as error:
+                raise OAuthConnectionUnavailable(CONNECTION_UNAVAILABLE_MESSAGE) from error
+            try:
+                token_response = self._token_exchange.refresh_tokens(
+                    refresh_token=refresh_token,
+                    client_id=self._client_id,
+                    client_secret=self._client_secret,
+                )
+                access_token, rotated_refresh_token, expires_in = self._require_token_response(
+                    token_response
+                )
+            except OAuthCallbackRejected as error:
+                raise OAuthConnectionUnavailable(CONNECTION_UNAVAILABLE_MESSAGE) from error
+            except Exception as error:
+                raise OAuthConnectionUnavailable(CONNECTION_UNAVAILABLE_MESSAGE) from error
+
+            previous_generation = connection.generation
+            connection.generation += 1
+            connection.access_token_ciphertext = self._secret_box.encrypt(access_token)
+            connection.refresh_token_ciphertext = self._secret_box.encrypt(rotated_refresh_token)
+            connection.scope_profile = REPOSITORY_SCOPE
+            connection.provider_expires_at = refreshed_at + timedelta(seconds=expires_in)
+            connection.revoked_at = None
+            session.flush()
+            status = BitbucketConnectionStatus(
+                state="connected",
+                generation=connection.generation,
+                scope_profile=REPOSITORY_SCOPE,
+            )
+        self._audit_emitter(
+            new_audit_event(
+                action="bitbucket.refreshed",
+                actor_id=actor_id,
+                from_generation=previous_generation,
+                to_generation=status.generation,
+                occurred_at=refreshed_at,
+            )
+        )
+        return status
+
+    def revoke(
+        self,
+        session: Session,
+        *,
+        expected_generation: int,
+        actor_id: UUID,
+    ) -> BitbucketConnectionStatus:
+        """Immediately invalidate one local generation without provider claims."""
+        revoked_at = datetime.now(UTC)
+        changed = False
+        with session.begin():
+            connection = session.execute(
+                select(BitbucketConnection).where(BitbucketConnection.id == 1).with_for_update()
+            ).scalar_one()
+            if (
+                connection.revoked_at is not None
+                and connection.access_token_ciphertext is None
+                and connection.refresh_token_ciphertext is None
+            ):
+                status = BitbucketConnectionStatus(
+                    state="revoked",
+                    generation=connection.generation,
+                    scope_profile=connection.scope_profile or REPOSITORY_SCOPE,
+                )
+                previous_generation = connection.generation
+            else:
+                self._require_current_generation(
+                    connection,
+                    expected_generation=expected_generation,
+                )
+                previous_generation = connection.generation
+                connection.generation += 1
+                connection.access_token_ciphertext = None
+                connection.refresh_token_ciphertext = None
+                connection.provider_expires_at = None
+                connection.revoked_at = revoked_at
+                session.flush()
+                changed = True
+                status = BitbucketConnectionStatus(
+                    state="revoked",
+                    generation=connection.generation,
+                    scope_profile=connection.scope_profile or REPOSITORY_SCOPE,
+                )
+        if changed:
+            self._audit_emitter(
+                new_audit_event(
+                    action="bitbucket.revoked",
+                    actor_id=actor_id,
+                    from_generation=previous_generation,
+                    to_generation=status.generation,
+                    occurred_at=revoked_at,
+                )
+            )
+        return status
+
+    @staticmethod
+    def _require_current_generation(
+        connection: BitbucketConnection,
+        *,
+        expected_generation: int,
+    ) -> None:
+        if connection.generation != expected_generation:
+            raise OAuthGenerationRejected(GENERATION_REJECTED_MESSAGE)
 
     def _consume_binding(self, state: object) -> _OAuthStateBinding:
         if not isinstance(state, str) or not state:
