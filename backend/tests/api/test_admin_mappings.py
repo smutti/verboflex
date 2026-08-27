@@ -736,7 +736,7 @@ def test_mapping_requests_are_admin_guarded_and_reject_manual_controls(
     user_token = _create_authority(
         mapping_session_factory,
         email=f"user-{forbidden_field}@example.com",
-        roles=("reviewer",),
+        roles=("product_manager_reviewer",),
     )
     admin_token = _create_authority(
         mapping_session_factory,
