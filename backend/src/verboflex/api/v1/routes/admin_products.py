@@ -12,7 +12,10 @@ from verboflex.db.session import get_db_session
 from verboflex.schemas.admin_products import (
     AdminProductConflictResponse,
     AdminProductCreateRequest,
+    AdminProductLifecycleConflictResponse,
     AdminProductListResponse,
+    AdminProductPublishRequest,
+    AdminProductReactivateRequest,
     AdminProductResponse,
     AdminProductRevisionSummary,
     AdminProductStatus,
@@ -31,6 +34,14 @@ from verboflex.services.products import (
     get_product,
     list_products,
     save_product_candidate,
+)
+from verboflex.services.publication import (
+    PublicationBlocked,
+    PublicationConflict,
+    PublicationNotFound,
+    deactivate_product,
+    publish_product_candidate,
+    reactivate_product,
 )
 
 router = APIRouter(prefix="/admin/products", tags=["admin-products"])
@@ -105,6 +116,34 @@ UPDATE_RESPONSES: dict[int | str, dict[str, Any]] = {
     status.HTTP_409_CONFLICT: {"model": AdminProductConflictResponse},
     status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
 }
+LIFECYCLE_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **AUTH_RESPONSES,
+    status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    status.HTTP_409_CONFLICT: {"model": AdminProductLifecycleConflictResponse},
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
+}
+
+
+def _lifecycle_conflict_response(error: Exception) -> JSONResponse:
+    if isinstance(error, PublicationBlocked):
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "Product publication blocked",
+                "blockers": [blocker.value for blocker in error.blockers],
+            },
+        )
+    if isinstance(error, PublicationConflict):
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": "Product lifecycle conflict", "blockers": []},
+        )
+    if isinstance(error, PublicationNotFound):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product unavailable",
+        ) from error
+    raise error
 
 
 @router.get(
@@ -216,3 +255,75 @@ async def update_admin_product_candidate(
     except (ProductNotFound, ProductVersionConflict, ValueError) as error:
         _raise_product_error(error)
     return _response(record)
+
+
+@router.post(
+    "/{product_id}/publish",
+    operation_id="publish_admin_product_candidate",
+    response_model=AdminProductResponse,
+    responses=LIFECYCLE_RESPONSES,
+)
+async def publish_admin_product(
+    product_id: UUID,
+    payload: AdminProductPublishRequest,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+) -> AdminProductResponse | JSONResponse:
+    """Publish only a complete and currently confirmed candidate revision."""
+    try:
+        publish_product_candidate(
+            session,
+            product_id=product_id,
+            candidate_revision_id=payload.candidate_revision_id,
+            expected_candidate_version=payload.expected_candidate_version,
+        )
+        return _response(get_product(session, product_id=product_id))
+    except (PublicationBlocked, PublicationConflict, PublicationNotFound) as error:
+        return _lifecycle_conflict_response(error)
+
+
+@router.post(
+    "/{product_id}/deactivate",
+    operation_id="deactivate_admin_product",
+    response_model=AdminProductResponse,
+    responses={
+        **AUTH_RESPONSES,
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    },
+)
+async def deactivate_admin_product(
+    product_id: UUID,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+) -> AdminProductResponse | JSONResponse:
+    """Suspend operation while retaining active and candidate configuration."""
+    try:
+        deactivate_product(session, product_id=product_id)
+        return _response(get_product(session, product_id=product_id))
+    except PublicationNotFound as error:
+        return _lifecycle_conflict_response(error)
+
+
+@router.post(
+    "/{product_id}/reactivate",
+    operation_id="reactivate_admin_product",
+    response_model=AdminProductResponse,
+    responses=LIFECYCLE_RESPONSES,
+)
+async def reactivate_admin_product_route(
+    product_id: UUID,
+    payload: AdminProductReactivateRequest,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+) -> AdminProductResponse | JSONResponse:
+    """Resume only a published revision with a current preview confirmation."""
+    try:
+        reactivate_product(
+            session,
+            product_id=product_id,
+            active_revision_id=payload.active_revision_id,
+            expected_active_version=payload.expected_active_version,
+        )
+        return _response(get_product(session, product_id=product_id))
+    except (PublicationBlocked, PublicationConflict, PublicationNotFound) as error:
+        return _lifecycle_conflict_response(error)

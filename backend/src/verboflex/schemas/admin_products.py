@@ -25,6 +25,24 @@ class AdminProductUpdateRequest(BaseModel):
     expected_candidate_version: Annotated[int, Field(ge=1)]
 
 
+class AdminProductPublishRequest(BaseModel):
+    """Publish one exact candidate under optimistic version authority."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_revision_id: UUID
+    expected_candidate_version: Annotated[int, Field(ge=1)]
+
+
+class AdminProductReactivateRequest(BaseModel):
+    """Reactivate one exact published revision under version authority."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    active_revision_id: UUID
+    expected_active_version: Annotated[int, Field(ge=1)]
+
+
 class AdminProductRevisionSummary(BaseModel):
     """Bounded active or candidate revision projection."""
 
@@ -64,6 +82,27 @@ class AdminProductConflictResponse(BaseModel):
 
     detail: str
     field: Literal["name"] | None = None
+
+
+AdminProductPublicationBlocker = Literal[
+    "mappings_required",
+    "mapping_configuration_invalid",
+    "target_configuration_invalid",
+    "layout_required",
+    "preview_confirmation_required",
+]
+
+
+class AdminProductLifecycleConflictResponse(BaseModel):
+    """Stable lifecycle conflict with a closed ordered blocker vocabulary."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    detail: Literal[
+        "Product lifecycle conflict",
+        "Product publication blocked",
+    ]
+    blockers: list[AdminProductPublicationBlocker]
 
 
 AdminProductStatus = Literal["active", "inactive"]
