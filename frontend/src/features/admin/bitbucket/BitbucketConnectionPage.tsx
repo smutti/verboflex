@@ -76,6 +76,24 @@ function safeAuthorizationDestination(value: string) {
   }
 }
 
+function ConnectionTimestamp({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | null;
+}) {
+  const bounded = boundedTimestamp(value);
+  return bounded === null ? null : (
+    <div>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd>
+        <time dateTime={value ?? undefined}>{bounded}</time>
+      </dd>
+    </div>
+  );
+}
+
 export function BitbucketConnectionPage({
   accessToken,
   navigateTo = defaultNavigateTo,
@@ -233,9 +251,11 @@ export function BitbucketConnectionPage({
   }
 
   const connection = loadState.connection;
-  const connectedAt = boundedTimestamp(connection.connected_at);
-  const expiresAt = boundedTimestamp(connection.expires_at);
-  const revokedAt = boundedTimestamp(connection.revoked_at);
+  const hasBoundedTimestamp = [
+    connection.connected_at,
+    connection.expires_at,
+    connection.revoked_at,
+  ].some((value) => boundedTimestamp(value) !== null);
   const reconnect =
     connection.status === "Reauthorization required" ||
     connection.status === "Unavailable";
@@ -273,40 +293,19 @@ export function BitbucketConnectionPage({
 
         <p className="font-medium">Read-only repository access</p>
 
-        {connectedAt === null && expiresAt === null && revokedAt === null ? null : (
+        {hasBoundedTimestamp ? (
           <dl className="grid gap-3 sm:grid-cols-2">
-            {connectedAt === null ? null : (
-              <div>
-                <dt className="text-muted-foreground">Connected</dt>
-                <dd>
-                  <time dateTime={connection.connected_at ?? undefined}>
-                    {connectedAt}
-                  </time>
-                </dd>
-              </div>
-            )}
-            {expiresAt === null ? null : (
-              <div>
-                <dt className="text-muted-foreground">Access expires</dt>
-                <dd>
-                  <time dateTime={connection.expires_at ?? undefined}>
-                    {expiresAt}
-                  </time>
-                </dd>
-              </div>
-            )}
-            {revokedAt === null ? null : (
-              <div>
-                <dt className="text-muted-foreground">Revoked</dt>
-                <dd>
-                  <time dateTime={connection.revoked_at ?? undefined}>
-                    {revokedAt}
-                  </time>
-                </dd>
-              </div>
-            )}
+            <ConnectionTimestamp
+              label="Connected"
+              value={connection.connected_at}
+            />
+            <ConnectionTimestamp
+              label="Access expires"
+              value={connection.expires_at}
+            />
+            <ConnectionTimestamp label="Revoked" value={connection.revoked_at} />
           </dl>
-        )}
+        ) : null}
 
         <div className="flex flex-wrap gap-3">
           {connection.status === "Disconnected" ? (
