@@ -37,7 +37,10 @@ export interface ProductOverviewPageProps {
   productId?: string;
 }
 
-type LoadState = "loading" | "ready" | "error";
+type ProductLoadState =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "ready"; product: AdminProductResponse };
 
 function RevisionSummary({
   label,
@@ -78,17 +81,18 @@ export function ProductOverviewPage({
   const deactivateTriggerRef = useRef<HTMLButtonElement>(null);
   const deactivateErrorRef = useRef<HTMLDivElement>(null);
   const deactivatePendingRef = useRef(false);
-  const [loadState, setLoadState] = useState<LoadState>("loading");
-  const [product, setProduct] = useState<AdminProductResponse | null>(null);
+  const [loadState, setLoadState] = useState<ProductLoadState>({
+    status: "loading",
+  });
   const [deactivateOpen, setDeactivateOpen] = useState(false);
   const [deactivatePending, setDeactivatePending] = useState(false);
   const [deactivateError, setDeactivateError] = useState(false);
 
   const loadProduct = useCallback(async () => {
     const generation = ++loadGeneration.current;
-    setLoadState("loading");
+    setLoadState({ status: "loading" });
     if (resolvedProductId === undefined) {
-      setLoadState("error");
+      setLoadState({ status: "error" });
       return;
     }
 
@@ -103,11 +107,10 @@ export function ProductOverviewPage({
       if (result.data === undefined) {
         throw new Error("Product detail rejected");
       }
-      setProduct(result.data);
-      setLoadState("ready");
+      setLoadState({ status: "ready", product: result.data });
     } catch {
       if (generation === loadGeneration.current) {
-        setLoadState("error");
+        setLoadState({ status: "error" });
       }
     }
   }, [accessToken, resolvedProductId]);
@@ -145,7 +148,7 @@ export function ProductOverviewPage({
   async function submitDeactivate() {
     if (
       deactivatePendingRef.current ||
-      product === null ||
+      loadState.status !== "ready" ||
       resolvedProductId === undefined
     ) {
       return;
@@ -162,7 +165,7 @@ export function ProductOverviewPage({
         setDeactivateError(true);
         return;
       }
-      setProduct(result.data);
+      setLoadState({ status: "ready", product: result.data });
       setDeactivateOpen(false);
     } catch {
       setDeactivateError(true);
@@ -172,7 +175,7 @@ export function ProductOverviewPage({
     }
   }
 
-  if (loadState === "loading") {
+  if (loadState.status === "loading") {
     return (
       <section className="grid gap-4" role="status" aria-live="polite">
         <Skeleton className="h-9 w-64 max-w-full" />
@@ -182,7 +185,7 @@ export function ProductOverviewPage({
     );
   }
 
-  if (loadState === "error" || product === null) {
+  if (loadState.status === "error") {
     return (
       <Alert variant="destructive">
         <AlertTitle>Product unavailable</AlertTitle>
@@ -202,6 +205,8 @@ export function ProductOverviewPage({
       </Alert>
     );
   }
+
+  const product = loadState.product;
 
   return (
     <ProductDetailLayout
