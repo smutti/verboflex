@@ -499,7 +499,11 @@ describe("administrator product configuration tracer", () => {
     const loadMore = await screen.findByRole("button", {
       name: "Load more products",
     });
-    await userEvent.click(loadMore);
+    act(() => {
+      loadMore.click();
+      loadMore.click();
+    });
+    expect(listAdminProductsMock).toHaveBeenCalledTimes(2);
     expect(loadMore).toBeDisabled();
     expect(loadMore).toHaveAttribute("aria-busy", "true");
     await act(async () => {
