@@ -35,6 +35,7 @@ const ROLE_LABELS: Record<RoleName, string> = {
 };
 
 interface WorkspaceNavigationProps {
+  administrationLabelId: string;
   onNavigate?: () => void;
   showAdministration: boolean;
 }
@@ -69,6 +70,7 @@ function UsersDestination({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function WorkspaceNavigation({
+  administrationLabelId,
   onNavigate,
   showAdministration,
 }: WorkspaceNavigationProps) {
@@ -86,12 +88,9 @@ function WorkspaceNavigation({
         </Button>
       </div>
       {showAdministration ? (
-        <section
-          className="grid gap-2"
-          aria-labelledby="administration-nav-title"
-        >
+        <section className="grid gap-2" aria-labelledby={administrationLabelId}>
           <h2
-            id="administration-nav-title"
+            id={administrationLabelId}
             className="px-3 text-label font-semibold text-muted-foreground"
           >
             Administration
@@ -100,6 +99,46 @@ function WorkspaceNavigation({
         </section>
       ) : null}
     </nav>
+  );
+}
+
+function WorkspaceOverviewContent({
+  accessToken,
+  principal,
+}: Pick<AppShellProps, "accessToken" | "principal">) {
+  return (
+    <>
+      <section
+        aria-labelledby="workspace-overview-title"
+        className="grid gap-4"
+      >
+        <div className="grid gap-2">
+          <h1
+            id="workspace-overview-title"
+            className="text-display font-semibold"
+          >
+            Workspace overview
+          </h1>
+          <p className="text-muted-foreground">
+            Your review workspace will appear here as products and repositories
+            are configured.
+          </p>
+        </div>
+        <div className="grid gap-2">
+          <p className="font-semibold">{principal.display_name}</p>
+          <p className="text-muted-foreground">{principal.email}</p>
+          <div className="flex flex-wrap gap-2" aria-label="Assigned roles">
+            {principal.roles.map((role) => (
+              <Badge key={role} variant="outline" className="rounded-md">
+                {ROLE_LABELS[role]}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      </section>
+      <ServiceStatus accessToken={accessToken} />
+      <Dashboard />
+    </>
   );
 }
 
@@ -155,6 +194,7 @@ export function AppShell({
               </SheetHeader>
               <div className="px-4">
                 <WorkspaceNavigation
+                  administrationLabelId="mobile-administration-nav-title"
                   showAdministration={showAdministration}
                   onNavigate={() => setNavigationOpen(false)}
                 />
@@ -184,49 +224,17 @@ export function AppShell({
       </header>
       <div className="lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
         <aside className="hidden min-h-[calc(100vh-65px)] border-r bg-secondary p-4 lg:flex">
-          <WorkspaceNavigation showAdministration={showAdministration} />
+          <WorkspaceNavigation
+            administrationLabelId="desktop-administration-nav-title"
+            showAdministration={showAdministration}
+          />
         </aside>
         <main className="grid min-w-0 content-start gap-8 px-6 py-8">
           {children === undefined ? (
-            <>
-              <section
-                aria-labelledby="workspace-overview-title"
-                className="grid gap-4"
-              >
-                <div className="grid gap-2">
-                  <h1
-                    id="workspace-overview-title"
-                    className="text-display font-semibold"
-                  >
-                    Workspace overview
-                  </h1>
-                  <p className="text-muted-foreground">
-                    Your review workspace will appear here as products and
-                    repositories are configured.
-                  </p>
-                </div>
-                <div className="grid gap-2">
-                  <p className="font-semibold">{principal.display_name}</p>
-                  <p className="text-muted-foreground">{principal.email}</p>
-                  <div
-                    className="flex flex-wrap gap-2"
-                    aria-label="Assigned roles"
-                  >
-                    {principal.roles.map((role) => (
-                      <Badge
-                        key={role}
-                        variant="outline"
-                        className="rounded-md"
-                      >
-                        {ROLE_LABELS[role]}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              </section>
-              <ServiceStatus accessToken={accessToken} />
-              <Dashboard />
-            </>
+            <WorkspaceOverviewContent
+              accessToken={accessToken}
+              principal={principal}
+            />
           ) : (
             children
           )}
