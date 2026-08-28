@@ -232,15 +232,7 @@ export function AppShell({
     >
       <header className="flex items-center justify-between gap-4 border-b bg-secondary px-6 py-4 md:px-8">
         <div className="flex min-w-0 items-center gap-2">
-          <Sheet
-            open={navigationOpen}
-            onOpenChange={(open) => {
-              setNavigationOpen(open);
-              if (open) {
-                setNavigationTooltipOpen(false);
-              }
-            }}
-          >
+          <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
             <TooltipProvider>
               <Tooltip
                 open={!navigationOpen && navigationTooltipOpen}
