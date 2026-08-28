@@ -386,6 +386,32 @@ describe("session routes", () => {
     ).toBeVisible();
   });
 
+  it("preserves the current product section when the URL has a trailing slash", () => {
+    render(
+      <MemoryRouter initialEntries={["/admin/products/product-123/mappings/"]}>
+        <Routes>
+          <Route
+            path="/admin/products/:productId/*"
+            element={<ProductDetailLayout />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const navigation = screen.getByRole("navigation", {
+      name: "Product configuration",
+    });
+    expect(
+      within(navigation).getAllByRole("link", { current: "page" }),
+    ).toHaveLength(1);
+    expect(
+      within(navigation).getByRole("link", {
+        name: "Mappings",
+        current: "page",
+      }),
+    ).toBeVisible();
+  });
+
   it("projects authenticated session authority into the guarded application route", async () => {
     issueTokenMock.mockResolvedValue({
       data: {
