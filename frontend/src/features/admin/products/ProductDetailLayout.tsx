@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Link, Outlet, useLocation, useParams } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { cn } from "../../../lib/utils";
 
@@ -17,13 +17,11 @@ const PRODUCT_SECTIONS = [
 
 type ProductSection = (typeof PRODUCT_SECTIONS)[number]["slug"];
 
-function resolveProductLocation(pathname: string, routeProductId?: string) {
+function resolveProductLocation(pathname: string) {
   const pathSegments = pathname.split("/").filter(Boolean);
   const productsIndex = pathSegments.indexOf("products");
   const productId =
-    routeProductId ??
-    (productsIndex >= 0 ? pathSegments[productsIndex + 1] : undefined) ??
-    "";
+    (productsIndex >= 0 ? pathSegments[productsIndex + 1] : undefined) ?? "";
   const requestedSection = pathSegments.at(-1);
   const currentSection: ProductSection =
     PRODUCT_SECTIONS.find(({ slug }) => slug === requestedSection)?.slug ??
@@ -37,10 +35,8 @@ export function ProductDetailLayout({
   productName = "Product configuration",
 }: ProductDetailLayoutProps) {
   const location = useLocation();
-  const params = useParams();
   const { currentSection, productId } = resolveProductLocation(
     location.pathname,
-    params.productId,
   );
   const productBase = `/admin/products/${encodeURIComponent(productId)}`;
 
