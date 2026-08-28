@@ -92,6 +92,7 @@ function ok<T>(data: T, status = 200) {
   return {
     data,
     error: undefined,
+    request: new Request("http://localhost/api/v1/admin/users"),
     response: new Response(null, { status }),
   };
 }
@@ -100,6 +101,7 @@ function conflict(detail: string) {
   return {
     data: undefined,
     error: { detail },
+    request: new Request("http://localhost/api/v1/admin/users"),
     response: new Response(null, { status: 409 }),
   };
 }
@@ -142,7 +144,7 @@ describe("administrator users page tracer", () => {
   });
 
   it("renders an approved stable loading state while the first API page is pending", () => {
-    listAdminUsersMock.mockReturnValue(new Promise(() => undefined));
+    listAdminUsersMock.mockReturnValue(new Promise<never>(() => undefined));
 
     renderUsers();
 
@@ -307,11 +309,12 @@ describe("administrator users page tracer", () => {
           next_cursor: null,
         }),
       );
-    createAdminUserMock.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveCreate = resolve;
-      }),
-    );
+    const pendingCreate = new Promise<
+      ReturnType<typeof ok<AdminUserCredentialResponse>>
+    >((resolve) => {
+      resolveCreate = resolve;
+    });
+    createAdminUserMock.mockReturnValueOnce(pendingCreate);
     renderUsers();
     const user = await openAddDialog();
 
