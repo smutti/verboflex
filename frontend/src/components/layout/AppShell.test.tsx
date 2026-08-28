@@ -510,6 +510,12 @@ describe("authenticated application shell", () => {
     expect(screen.getByTestId("shell-current-route")).toHaveTextContent(
       "/admin/users",
     );
+    expect(
+      within(navigation).getByRole("link", {
+        name: "Users",
+        current: "page",
+      }),
+    ).toBeVisible();
   });
 
   it("shows the same Administration destination in the mobile Sheet", async () => {
