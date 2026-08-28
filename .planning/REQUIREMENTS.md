@@ -19,8 +19,8 @@
 ### Authentication and Roles
 
 - [x] **AUTH-01**: User can authenticate to the backend with an internal corporate-email/password account using OAuth2 bearer-token authentication; bootstrapped or reset credentials require a password change before normal application access.
-- [ ] **AUTH-02**: Admin can create, update, administratively reset passwords for, deactivate, and view internal users.
-- [ ] **AUTH-03**: Admin can assign multiple roles to the same user.
+- [x] **AUTH-02**: Admin can create, update, administratively reset passwords for, deactivate, and view internal users.
+- [x] **AUTH-03**: Admin can assign multiple roles to the same user.
 - [x] **AUTH-04**: System supports the roles admin, product manager/reviewer, translator, and viewer.
 - [ ] **AUTH-05**: Backend enforces role-based authorization on admin configuration, translation editing, approval, commenting, and PR submission APIs.
 - [ ] **AUTH-06**: Frontend hides or disables actions the authenticated user is not authorized to perform.
@@ -181,8 +181,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PLAT-06 | Phase 1 | Complete |
 | PLAT-07 | Phase 9 | Pending |
 | AUTH-01 | Phase 1 | Complete |
-| AUTH-02 | Phase 2 | Pending |
-| AUTH-03 | Phase 2 | Pending |
+| AUTH-02 | Phase 2 | Complete |
+| AUTH-03 | Phase 2 | Complete |
 | AUTH-04 | Phase 1 | Complete |
 | AUTH-05 | Phase 9 | Pending |
 | AUTH-06 | Phase 9 | Pending |
