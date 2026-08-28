@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 
 import {
   createAdminUser,
@@ -63,10 +62,11 @@ export interface UsersPageProps {
 type LoadState = "loading" | "ready" | "error";
 type StatusFilter = "all" | "active" | "inactive";
 type LifecycleAction = "reset" | "deactivate" | "reactivate";
+type LifecycleError = "conflict" | "generic" | null;
 
 interface LifecycleTarget {
   action: LifecycleAction;
-  returnFocus: HTMLButtonElement | null;
+  returnFocus: HTMLButtonElement;
   user: AdminUserResponse;
 }
 
@@ -151,6 +151,20 @@ const LIFECYCLE_COPY: Record<
   },
 };
 
+function lifecycleErrorCopy(
+  error: Exclude<LifecycleError, null>,
+  action: LifecycleAction,
+) {
+  switch (error) {
+    case "conflict":
+      return action === "deactivate"
+        ? "This account cannot be deactivated because administrator authority must be preserved."
+        : "This user changed in another session or administrator authority must be preserved.";
+    case "generic":
+      return "The current user state is unchanged. Try again.";
+  }
+}
+
 function UserActions({
   onEdit,
   onLifecycle,
@@ -190,7 +204,7 @@ function UserActions({
                 onSelect={() =>
                   onLifecycle({
                     action: "reset",
-                    returnFocus: actionTriggerRef.current,
+                    returnFocus: actionTriggerRef.current!,
                     user,
                   })
                 }
@@ -202,7 +216,7 @@ function UserActions({
                 onSelect={() =>
                   onLifecycle({
                     action: "deactivate",
-                    returnFocus: actionTriggerRef.current,
+                    returnFocus: actionTriggerRef.current!,
                     user,
                   })
                 }
@@ -215,7 +229,7 @@ function UserActions({
               onSelect={() =>
                 onLifecycle({
                   action: "reactivate",
-                  returnFocus: actionTriggerRef.current,
+                  returnFocus: actionTriggerRef.current!,
                   user,
                 })
               }
@@ -243,9 +257,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
   const [lifecycleTarget, setLifecycleTarget] =
     useState<LifecycleTarget | null>(null);
   const [lifecyclePending, setLifecyclePending] = useState(false);
-  const [lifecycleError, setLifecycleError] = useState<
-    "conflict" | "generic" | null
-  >(null);
+  const [lifecycleError, setLifecycleError] = useState<LifecycleError>(null);
   const lifecycleErrorRef = useRef<HTMLDivElement>(null);
   const [temporaryCredential, setTemporaryCredential] =
     useState<TemporaryCredential | null>(null);
@@ -345,10 +357,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
     });
   }
 
-  function acknowledgeTemporaryCredential(credential: TemporaryCredential) {
-    flushSync(() => {
-      setTemporaryCredential({ ...credential, temporaryPassword: "" });
-    });
+  function acknowledgeTemporaryCredential() {
     setTemporaryCredential(null);
   }
 
@@ -638,12 +647,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
               >
                 <AlertTitle>We could not update this account</AlertTitle>
                 <AlertDescription>
-                  {lifecycleError === "conflict" &&
-                  lifecycleTarget.action === "deactivate"
-                    ? "This account cannot be deactivated because administrator authority must be preserved."
-                    : lifecycleError === "conflict"
-                      ? "This user changed in another session or administrator authority must be preserved."
-                      : "The current user state is unchanged. Try again."}
+                  {lifecycleErrorCopy(lifecycleError, lifecycleTarget.action)}
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -675,9 +679,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
           key={temporaryCredential.userId}
           displayName={temporaryCredential.displayName}
           temporaryPassword={temporaryCredential.temporaryPassword}
-          onAcknowledged={() =>
-            acknowledgeTemporaryCredential(temporaryCredential)
-          }
+          onAcknowledged={acknowledgeTemporaryCredential}
         />
       ) : null}
     </section>

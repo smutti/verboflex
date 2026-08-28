@@ -633,6 +633,7 @@ describe("administrator users page tracer", () => {
         screen.getByRole("dialog", { name: "Temporary password created" }),
       ).toBeVisible();
       expect(screen.queryByText(temporaryPassword)).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Temporary password")).toBeEmptyDOMElement();
     });
     render(
       <TemporaryPasswordDialog
@@ -711,7 +712,9 @@ describe("administrator users page tracer", () => {
       expect(
         within(credentialDialog).getByText(temporaryPassword),
       ).toBeVisible();
-      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("alertdialog", { hidden: true }),
+      ).not.toBeInTheDocument();
       if (actionName === "Reactivate user") {
         const table = screen.getByRole("table", {
           name: "Internal users",
@@ -795,9 +798,17 @@ describe("administrator users page tracer", () => {
   });
 
   it("keeps reset conflicts bounded to their named dialog and preserves the row", async () => {
-    resetAdminUserPasswordMock.mockResolvedValueOnce(
-      conflict("stale authority with Reset-Secret-That-Must-Not-Leak"),
-    );
+    resetAdminUserPasswordMock
+      .mockResolvedValueOnce(
+        conflict("stale authority with Reset-Secret-That-Must-Not-Leak"),
+      )
+      .mockResolvedValueOnce(
+        ok({
+          ...translator,
+          must_change_password: true,
+          temporary_password: "Retry-Reset-Secret!2048",
+        }),
+      );
     renderUsers();
     const user = await chooseRowAction(
       translator.display_name,
@@ -821,6 +832,14 @@ describe("administrator users page tracer", () => {
     expect(
       within(confirmation).getByRole("button", { name: "Reset password" }),
     ).toBeEnabled();
+
+    await user.click(
+      within(confirmation).getByRole("button", { name: "Reset password" }),
+    );
+    expect(await screen.findByText("Retry-Reset-Secret!2048")).toBeVisible();
+    expect(
+      screen.queryByRole("alertdialog", { hidden: true }),
+    ).not.toBeInTheDocument();
   });
 
   it("maps a non-conflict lifecycle denial to bounded generic copy", async () => {
@@ -852,6 +871,43 @@ describe("administrator users page tracer", () => {
     expect(
       within(confirmation).getByRole("button", { name: "Reset password" }),
     ).toBeEnabled();
+  });
+
+  it("maps a non-conflict deactivation denial without altering the active row", async () => {
+    deactivateAdminUserMock.mockResolvedValueOnce({
+      data: undefined,
+      error: { detail: "deactivate detail with Deactivate-Lifecycle-Leak" },
+      request: new Request("http://localhost/api/v1/admin/users"),
+      response: new Response(null, { status: 503 }),
+    });
+    renderUsers();
+    const user = await chooseRowAction(
+      translator.display_name,
+      "Deactivate user",
+    );
+    const confirmation = screen.getByRole("alertdialog", {
+      name: "Deactivate Alpha Translator?",
+    });
+
+    await user.click(
+      within(confirmation).getByRole("button", { name: "Deactivate user" }),
+    );
+
+    const alert = await within(confirmation).findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "The current user state is unchanged. Try again.",
+    );
+    expect(alert).not.toHaveTextContent("Deactivate-Lifecycle-Leak");
+    expect(alert).toHaveFocus();
+    const table = screen.getByRole("table", {
+      name: "Internal users",
+      hidden: true,
+    });
+    const row = within(table).getByRole("row", {
+      name: /Alpha Translator/i,
+      hidden: true,
+    });
+    expect(within(row).getByText("Active")).toBeVisible();
   });
 
   it("sanitizes rejected lifecycle requests and preserves the inactive row", async () => {
