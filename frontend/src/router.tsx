@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import { Button } from "./components/ui/button";
 import { Skeleton } from "./components/ui/skeleton";
 import { AdminAccessDenied } from "./features/admin/AdminAccessDenied";
+import { BitbucketConnectionPage } from "./features/admin/bitbucket/BitbucketConnectionPage";
 import { ProductMappingsPage } from "./features/admin/mappings/ProductMappingsPage";
 import { ProductDetailLayout } from "./features/admin/products/ProductDetailLayout";
 import { ProductOverviewPage } from "./features/admin/products/ProductOverviewPage";
@@ -213,6 +214,10 @@ export function AdminApplicationRoutes({
         element={
           <UsersPage accessToken={accessToken} currentUserId={currentUserId} />
         }
+      />
+      <Route
+        path="bitbucket"
+        element={<BitbucketConnectionPage accessToken={accessToken} />}
       />
       <Route path="*" element={<Navigate replace to="/admin/users" />} />
     </Routes>

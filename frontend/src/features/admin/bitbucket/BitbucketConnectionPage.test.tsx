@@ -2,7 +2,7 @@ import "@testing-library/jest-dom/vitest";
 
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -100,6 +100,9 @@ describe("administrator Bitbucket connection page", () => {
       "Loading Bitbucket connection",
     );
     expect(screen.getByRole("heading", { name: "Bitbucket" })).toBeVisible();
+    await waitFor(() => {
+      expect(getStatusMock).toHaveBeenCalledTimes(1);
+    });
 
     view.unmount();
     getStatusMock.mockRejectedValueOnce(
@@ -137,7 +140,7 @@ describe("administrator Bitbucket connection page", () => {
     getStatusMock.mockResolvedValueOnce(ok(status));
     renderPage();
 
-    expect(await screen.findByText(label)).toBeVisible();
+    expect((await screen.findAllByText(label))[0]).toBeVisible();
     const statusPanel = screen.getByRole("region", {
       name: "Bitbucket connection status",
     });
@@ -147,7 +150,7 @@ describe("administrator Bitbucket connection page", () => {
     if (label === "Connected") {
       expect(statusPanel).toHaveTextContent("Read-only repository access");
       expect(statusPanel).toHaveTextContent("28 Aug 2026, 12:34 UTC");
-      expect(statusPanel).toHaveTextContent("27 Sep 2026, 12:34 UTC");
+      expect(statusPanel).toHaveTextContent("27 Sept 2026, 12:34 UTC");
       expect(statusPanel).not.toHaveTextContent("56.123456");
     }
   });
@@ -155,15 +158,23 @@ describe("administrator Bitbucket connection page", () => {
   it("reaches the guarded Bitbucket route", async () => {
     render(
       <MemoryRouter initialEntries={["/admin/bitbucket"]}>
-        <AdminApplicationRoutes
-          accessToken="memory-only-admin-bearer"
-          currentUserId="admin-id"
-        />
+        <Routes>
+          <Route
+            path="/admin/*"
+            element={
+              <AdminApplicationRoutes
+                accessToken="memory-only-admin-bearer"
+                currentUserId="admin-id"
+              />
+            }
+          />
+        </Routes>
       </MemoryRouter>,
     );
 
+    expect(await screen.findByText("Disconnected")).toBeVisible();
     expect(
-      await screen.findByRole("heading", { name: "Bitbucket" }),
+      screen.getByRole("heading", { name: "Bitbucket" }),
     ).toBeVisible();
     expect(getStatusMock).toHaveBeenCalledWith({
       auth: "memory-only-admin-bearer",
@@ -232,7 +243,7 @@ describe("administrator Bitbucket connection page", () => {
         name: "Revoke the Bitbucket connection?",
       }),
     ).toBeVisible();
-    expect(screen.getByRole("dialog")).toHaveTextContent(
+    expect(screen.getByRole("alertdialog")).toHaveTextContent(
       "New branch reads, previews, confirmations, and publications will be blocked until an administrator reconnects.",
     );
 
@@ -240,7 +251,7 @@ describe("administrator Bitbucket connection page", () => {
       screen.getByRole("button", { name: "Revoke connection" }),
     );
     expect(await screen.findByText("Connection not revoked")).toBeVisible();
-    expect(screen.getByText("Connected")).toBeVisible();
+    expect(screen.getAllByText("Connected")[0]).toBeVisible();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Revoke connection" }),
