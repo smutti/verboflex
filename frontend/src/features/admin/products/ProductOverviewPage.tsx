@@ -77,6 +77,7 @@ export function ProductOverviewPage({
   const loadGeneration = useRef(0);
   const deactivateTriggerRef = useRef<HTMLButtonElement>(null);
   const deactivateErrorRef = useRef<HTMLDivElement>(null);
+  const deactivatePendingRef = useRef(false);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [product, setProduct] = useState<AdminProductResponse | null>(null);
   const [deactivateOpen, setDeactivateOpen] = useState(false);
@@ -143,12 +144,13 @@ export function ProductOverviewPage({
 
   async function submitDeactivate() {
     if (
-      deactivatePending ||
+      deactivatePendingRef.current ||
       product === null ||
       resolvedProductId === undefined
     ) {
       return;
     }
+    deactivatePendingRef.current = true;
     setDeactivatePending(true);
     setDeactivateError(false);
     try {
@@ -165,6 +167,7 @@ export function ProductOverviewPage({
     } catch {
       setDeactivateError(true);
     } finally {
+      deactivatePendingRef.current = false;
       setDeactivatePending(false);
     }
   }

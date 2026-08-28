@@ -145,15 +145,12 @@ export function ProductWizardPage({
     queueMicrotask(() => returnFocus?.focus());
   }
 
-  function discardAndNavigate() {
-    if (pendingNavigation === null) {
-      return;
-    }
+  function discardAndNavigate(navigation: PendingNavigation) {
     setName(savedName);
     setDescription(savedDescriptionValue);
     setNameError(null);
     setSubmissionError(false);
-    setCurrentStep(pendingNavigation.step);
+    setCurrentStep(navigation.step);
     setPendingNavigation(null);
   }
 
@@ -346,7 +343,7 @@ export function ProductWizardPage({
               <Button
                 type="button"
                 variant="destructive"
-                onClick={discardAndNavigate}
+                onClick={() => discardAndNavigate(pendingNavigation)}
               >
                 Discard changes
               </Button>

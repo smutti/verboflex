@@ -249,9 +249,7 @@ describe("administrator product configuration tracer", () => {
     expect(
       screen.getByRole("link", { name: "Create product" }),
     ).toHaveAttribute("aria-disabled", "true");
-    await userEvent.click(
-      screen.getByRole("link", { name: "Create product" }),
-    );
+    await userEvent.click(screen.getByRole("link", { name: "Create product" }));
     expect(screen.getByTestId("current-location")).toHaveTextContent("/");
     await waitFor(() => expect(listAdminProductsMock).toHaveBeenCalledOnce());
 
@@ -424,9 +422,9 @@ describe("administrator product configuration tracer", () => {
         <ProductsPage accessToken="replacement-product-authority" />
       </MemoryRouter>,
     );
-    expect(
-      await screen.findAllByText(candidateOnlyProduct.name),
-    ).toHaveLength(2);
+    expect(await screen.findAllByText(candidateOnlyProduct.name)).toHaveLength(
+      2,
+    );
 
     await act(async () => {
       resolveFirst?.(ok({ items: [activeProduct], next_cursor: null }));
