@@ -4,6 +4,16 @@ Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypothe
 
 ---
 
+## admin-sidebar-spacing — CSS Grid stretches navigation tracks through a tall flex sidebar
+- **Date:** 2026-08-28
+- **Error patterns:** Desktop sidebar destinations spread vertically across the viewport; main page layout remains normal; no runtime error
+- **Root cause(s):** The `lg:flex` desktop aside cross-axis stretches its grid nav to full height. With default `align-content: normal`, the nav's implicit auto rows absorb that height and the nested Administration grid stretches its four rows again.
+- **Fix:** Add `content-start` to the shared `WorkspaceNavigation` nav so implicit tracks remain compact at the top.
+- **Files changed:** none in product code during diagnosis
+- **Why not caught:** AppShell JSDOM tests cover semantic navigation, responsive utilities, containment, and active routes but do not execute or assert browser layout geometry.
+- **Recurrence guard:** Add a browser-level desktop sidebar geometry assertion at a tall viewport before applying the fix.
+---
+
 ## dockerized-frontend-login — frontend image omits canonical OpenAPI input
 - **Date:** 2026-08-28
 - **Error patterns:** Compose frontend image fails `tsc --noEmit`, TS2307 for `../../openapi.json`, manual Vite workaround needed for port 8080
