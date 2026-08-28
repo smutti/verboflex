@@ -229,9 +229,7 @@ describe("session routes", () => {
       "/admin/products/private-candidate",
     );
 
-    await user.click(
-      screen.getByRole("link", { name: "Return to workspace" }),
-    );
+    await user.click(screen.getByRole("link", { name: "Return to workspace" }));
     expect(screen.getByTestId("current-route")).toHaveTextContent("/");
   });
 
