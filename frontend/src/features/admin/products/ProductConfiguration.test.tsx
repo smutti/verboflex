@@ -1697,9 +1697,12 @@ describe("administrator product configuration tracer", () => {
     expect(
       await screen.findByRole("heading", { name: "Preview" }),
     ).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "No mappings configured",
+    );
     expect(
       screen.getByText(
-        "Run validation to detect files, languages, and partial translation samples.",
+        "Add a mapping that represents one localization format and layout.",
       ),
     ).toBeVisible();
   });
