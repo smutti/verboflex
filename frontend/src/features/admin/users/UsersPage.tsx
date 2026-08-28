@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 import {
   createAdminUser,
+  deactivateAdminUser,
   listAdminUsers,
+  reactivateAdminUser,
+  resetAdminUserPassword,
   updateAdminUser,
   type AdminUserCreateRequest,
+  type AdminUserCredentialResponse,
   type AdminUserResponse,
   type AdminUserUpdateRequest,
 } from "../../../api/client";
@@ -15,6 +20,21 @@ import {
 } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../../components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../../components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -32,6 +52,7 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { UserDialog, type UserDialogResult } from "./UserDialog";
+import { TemporaryPasswordDialog } from "./TemporaryPasswordDialog";
 import { USER_ROLE_OPTIONS } from "./userRoles";
 
 export interface UsersPageProps {
@@ -41,6 +62,18 @@ export interface UsersPageProps {
 
 type LoadState = "loading" | "ready" | "error";
 type StatusFilter = "all" | "active" | "inactive";
+type LifecycleAction = "reset" | "deactivate" | "reactivate";
+
+interface LifecycleTarget {
+  action: LifecycleAction;
+  user: AdminUserResponse;
+}
+
+interface TemporaryCredential {
+  displayName: string;
+  temporaryPassword: string;
+  userId: string;
+}
 
 function responseStatus(result: { response?: Response }) {
   return result.response?.status;
@@ -50,6 +83,19 @@ function isCreateRequest(
   request: AdminUserCreateRequest | AdminUserUpdateRequest,
 ): request is AdminUserCreateRequest {
   return "email" in request;
+}
+
+function ordinaryUserFromCredential(
+  response: AdminUserCredentialResponse,
+): AdminUserResponse {
+  return {
+    display_name: response.display_name,
+    email: response.email,
+    id: response.id,
+    is_active: response.is_active,
+    must_change_password: response.must_change_password,
+    roles: response.roles,
+  };
 }
 
 function UserRoles({ user }: { user: AdminUserResponse }) {
@@ -76,6 +122,91 @@ function UserStatus({ user }: { user: AdminUserResponse }) {
   );
 }
 
+const LIFECYCLE_COPY: Record<
+  LifecycleAction,
+  {
+    body: (displayName: string) => string;
+    confirmLabel: string;
+    title: (displayName: string) => string;
+  }
+> = {
+  reset: {
+    title: (displayName) => `Reset password for ${displayName}?`,
+    body: () =>
+      "Their current password and sessions will stop working. A new temporary password will be shown once.",
+    confirmLabel: "Reset password",
+  },
+  deactivate: {
+    title: (displayName) => `Deactivate ${displayName}?`,
+    body: () =>
+      "They will immediately lose access. You can reactivate them later with a new temporary password.",
+    confirmLabel: "Deactivate user",
+  },
+  reactivate: {
+    title: (displayName) => `Reactivate ${displayName}?`,
+    body: () =>
+      "A new temporary password will be created and all earlier credentials will remain invalid.",
+    confirmLabel: "Reactivate user",
+  },
+};
+
+function UserActions({
+  onEdit,
+  onLifecycle,
+  user,
+}: {
+  onEdit: (user: AdminUserResponse) => void;
+  onLifecycle: (target: LifecycleTarget) => void;
+  user: AdminUserResponse;
+}) {
+  return (
+    <div className="flex flex-wrap justify-end gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        aria-label={`Edit ${user.display_name}`}
+        onClick={() => onEdit(user)}
+      >
+        Edit
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            aria-label={`More actions for ${user.display_name}`}
+          >
+            More actions
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {user.is_active ? (
+            <>
+              <DropdownMenuItem
+                onSelect={() => onLifecycle({ action: "reset", user })}
+              >
+                Reset password
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={() => onLifecycle({ action: "deactivate", user })}
+              >
+                Deactivate user
+              </DropdownMenuItem>
+            </>
+          ) : (
+            <DropdownMenuItem
+              onSelect={() => onLifecycle({ action: "reactivate", user })}
+            >
+              Reactivate user
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
   const loadGeneration = useRef(0);
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -87,6 +218,21 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
   const [selectedUser, setSelectedUser] = useState<AdminUserResponse | null>(
     null,
   );
+  const [lifecycleTarget, setLifecycleTarget] =
+    useState<LifecycleTarget | null>(null);
+  const [lifecyclePending, setLifecyclePending] = useState(false);
+  const [lifecycleError, setLifecycleError] = useState<
+    "conflict" | "generic" | null
+  >(null);
+  const lifecycleErrorRef = useRef<HTMLDivElement>(null);
+  const [temporaryCredential, setTemporaryCredential] =
+    useState<TemporaryCredential | null>(null);
+
+  useEffect(() => {
+    if (lifecycleError !== null) {
+      lifecycleErrorRef.current?.focus();
+    }
+  }, [lifecycleError]);
 
   const loadUsers = useCallback(
     async (cursor: string | null, append: boolean) => {
@@ -149,6 +295,41 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
     setDialogOpen(true);
   }
 
+  function openLifecycle(target: LifecycleTarget) {
+    setLifecycleError(null);
+    setLifecycleTarget(target);
+  }
+
+  function closeLifecycle() {
+    if (!lifecyclePending) {
+      setLifecycleError(null);
+      setLifecycleTarget(null);
+    }
+  }
+
+  function replaceUser(user: AdminUserResponse) {
+    setUsers((current) =>
+      current.map((existing) => (existing.id === user.id ? user : existing)),
+    );
+  }
+
+  function revealTemporaryCredential(response: AdminUserCredentialResponse) {
+    setTemporaryCredential({
+      displayName: response.display_name,
+      temporaryPassword: response.temporary_password,
+      userId: response.id,
+    });
+  }
+
+  function acknowledgeTemporaryCredential() {
+    flushSync(() => {
+      setTemporaryCredential((current) =>
+        current === null ? null : { ...current, temporaryPassword: "" },
+      );
+    });
+    setTemporaryCredential(null);
+  }
+
   async function submitUser(
     request: AdminUserCreateRequest | AdminUserUpdateRequest,
   ): Promise<UserDialogResult> {
@@ -163,6 +344,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
           : { status: "error" };
       }
       await loadUsers(null, false);
+      revealTemporaryCredential(result.data);
       return { status: "success" };
     }
 
@@ -183,6 +365,49 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
       current.map((user) => (user.id === result.data.id ? result.data : user)),
     );
     return { status: "success" };
+  }
+
+  async function submitLifecycle() {
+    if (lifecycleTarget === null || lifecyclePending) {
+      return;
+    }
+    setLifecyclePending(true);
+    setLifecycleError(null);
+    const options = {
+      auth: accessToken,
+      path: { user_id: lifecycleTarget.user.id },
+    };
+
+    try {
+      if (lifecycleTarget.action === "deactivate") {
+        const result = await deactivateAdminUser(options);
+        if (result.data === undefined) {
+          setLifecycleError(
+            responseStatus(result) === 409 ? "conflict" : "generic",
+          );
+          return;
+        }
+        replaceUser(result.data);
+      } else {
+        const result =
+          lifecycleTarget.action === "reset"
+            ? await resetAdminUserPassword(options)
+            : await reactivateAdminUser(options);
+        if (result.data === undefined) {
+          setLifecycleError(
+            responseStatus(result) === 409 ? "conflict" : "generic",
+          );
+          return;
+        }
+        replaceUser(ordinaryUserFromCredential(result.data));
+        revealTemporaryCredential(result.data);
+      }
+      setLifecycleTarget(null);
+    } catch {
+      setLifecycleError("generic");
+    } finally {
+      setLifecyclePending(false);
+    }
   }
 
   const visibleUsers = users.filter((user) => {
@@ -305,14 +530,11 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
                           <UserStatus user={user} />
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            aria-label={`Edit ${user.display_name}`}
-                            onClick={() => openEdit(user)}
-                          >
-                            Edit
-                          </Button>
+                          <UserActions
+                            user={user}
+                            onEdit={openEdit}
+                            onLifecycle={openLifecycle}
+                          />
                         </TableCell>
                       </TableRow>
                     ))}
@@ -334,14 +556,11 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
                     </div>
                     <UserRoles user={user} />
                     <UserStatus user={user} />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      aria-label={`Edit ${user.display_name}`}
-                      onClick={() => openEdit(user)}
-                    >
-                      Edit user
-                    </Button>
+                    <UserActions
+                      user={user}
+                      onEdit={openEdit}
+                      onLifecycle={openLifecycle}
+                    />
                   </article>
                 ))}
               </div>
@@ -371,6 +590,78 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
           currentUserId={currentUserId}
           onOpenChange={setDialogOpen}
           onSubmit={submitUser}
+        />
+      ) : null}
+
+      {lifecycleTarget !== null ? (
+        <AlertDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              closeLifecycle();
+            }
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {LIFECYCLE_COPY[lifecycleTarget.action].title(
+                  lifecycleTarget.user.display_name,
+                )}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {LIFECYCLE_COPY[lifecycleTarget.action].body(
+                  lifecycleTarget.user.display_name,
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+
+            {lifecycleError !== null ? (
+              <Alert
+                ref={lifecycleErrorRef}
+                tabIndex={-1}
+                variant="destructive"
+              >
+                <AlertTitle>We could not update this account</AlertTitle>
+                <AlertDescription>
+                  {lifecycleError === "conflict" &&
+                  lifecycleTarget.action === "deactivate"
+                    ? "This account cannot be deactivated because administrator authority must be preserved."
+                    : lifecycleError === "conflict"
+                      ? "This user changed in another session or administrator authority must be preserved."
+                      : "The current user state is unchanged. Try again."}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={lifecyclePending}>
+                Cancel
+              </AlertDialogCancel>
+              <Button
+                type="button"
+                variant={
+                  lifecycleTarget.action === "deactivate"
+                    ? "destructive"
+                    : "default"
+                }
+                disabled={lifecyclePending}
+                aria-busy={lifecyclePending}
+                onClick={() => void submitLifecycle()}
+              >
+                {LIFECYCLE_COPY[lifecycleTarget.action].confirmLabel}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
+
+      {temporaryCredential !== null ? (
+        <TemporaryPasswordDialog
+          key={temporaryCredential.userId}
+          displayName={temporaryCredential.displayName}
+          temporaryPassword={temporaryCredential.temporaryPassword}
+          onAcknowledged={acknowledgeTemporaryCredential}
         />
       ) : null}
     </section>

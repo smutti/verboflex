@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import {
   act,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -519,13 +520,17 @@ describe("administrator users page tracer", () => {
         ok({ items: [currentAdmin, translator], next_cursor: null }),
       )
       .mockResolvedValueOnce(
-        ok({ items: [currentAdmin, translator, createdUser], next_cursor: null }),
+        ok({
+          items: [currentAdmin, translator, createdUser],
+          next_cursor: null,
+        }),
       );
     createAdminUserMock.mockResolvedValueOnce(
       ok({ ...createdUser, temporary_password: temporaryPassword }, 201),
     );
     renderUsers();
     const user = await openAddDialog();
+    const writeClipboard = vi.spyOn(navigator.clipboard, "writeText");
 
     await user.type(
       screen.getByRole("textbox", { name: "Corporate email" }),
@@ -541,11 +546,11 @@ describe("administrator users page tracer", () => {
       name: "Temporary password created",
     });
     expect(within(credentialDialog).getByText(temporaryPassword)).toBeVisible();
-    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+    expect(writeClipboard).not.toHaveBeenCalled();
 
     await user.keyboard("{Escape}");
     expect(credentialDialog).toBeVisible();
-    await user.pointer({ keys: "[MouseLeft]", target: document.body });
+    fireEvent.pointerDown(document.body);
     expect(credentialDialog).toBeVisible();
 
     await user.click(
@@ -553,8 +558,8 @@ describe("administrator users page tracer", () => {
         name: "Copy temporary password",
       }),
     );
-    expect(navigator.clipboard.writeText).toHaveBeenCalledOnce();
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(temporaryPassword);
+    expect(writeClipboard).toHaveBeenCalledOnce();
+    expect(writeClipboard).toHaveBeenCalledWith(temporaryPassword);
     const copyStatus = within(credentialDialog).getByRole("status");
     expect(copyStatus).toHaveTextContent("Temporary password copied");
     expect(copyStatus).not.toHaveTextContent(temporaryPassword);
@@ -567,7 +572,9 @@ describe("administrator users page tracer", () => {
     expect(
       screen.queryByRole("dialog", { name: "Temporary password created" }),
     ).not.toBeInTheDocument();
-    expect(document.documentElement.textContent).not.toContain(temporaryPassword);
+    expect(document.documentElement.textContent).not.toContain(
+      temporaryPassword,
+    );
     expect(window.location.href).not.toContain(temporaryPassword);
     expect(JSON.stringify(Object.entries(localStorage))).not.toContain(
       temporaryPassword,
@@ -607,7 +614,10 @@ describe("administrator users page tracer", () => {
       const target =
         actionName === "Reset password" ? translator : inactiveViewer;
       listAdminUsersMock.mockResolvedValueOnce(
-        ok({ items: [currentAdmin, translator, inactiveViewer], next_cursor: null }),
+        ok({
+          items: [currentAdmin, translator, inactiveViewer],
+          next_cursor: null,
+        }),
       );
       operation.mockResolvedValueOnce(
         ok({
@@ -636,7 +646,9 @@ describe("administrator users page tracer", () => {
       const credentialDialog = await screen.findByRole("dialog", {
         name: "Temporary password created",
       });
-      expect(within(credentialDialog).getByText(temporaryPassword)).toBeVisible();
+      expect(
+        within(credentialDialog).getByText(temporaryPassword),
+      ).toBeVisible();
     },
   );
 
@@ -651,7 +663,10 @@ describe("administrator users page tracer", () => {
     });
     resetAdminUserPasswordMock.mockReturnValueOnce(pendingReset);
     renderUsers();
-    const user = await chooseRowAction(translator.display_name, "Reset password");
+    const user = await chooseRowAction(
+      translator.display_name,
+      "Reset password",
+    );
     const confirmation = screen.getByRole("alertdialog", {
       name: "Reset password for Alpha Translator?",
     });
@@ -684,7 +699,10 @@ describe("administrator users page tracer", () => {
       conflict("last active administrator cannot be deactivated"),
     );
     renderUsers();
-    const user = await chooseRowAction(currentAdmin.display_name, "Deactivate user");
+    const user = await chooseRowAction(
+      currentAdmin.display_name,
+      "Deactivate user",
+    );
 
     const confirmation = screen.getByRole("alertdialog", {
       name: "Deactivate Zulu Admin?",
@@ -699,8 +717,14 @@ describe("administrator users page tracer", () => {
     );
     expect(alert).toHaveFocus();
     expect(confirmation).toBeVisible();
-    const table = screen.getByRole("table", { name: "Internal users" });
-    const row = within(table).getByRole("row", { name: /Zulu Admin/i });
+    const table = screen.getByRole("table", {
+      name: "Internal users",
+      hidden: true,
+    });
+    const row = within(table).getByRole("row", {
+      name: /Zulu Admin/i,
+      hidden: true,
+    });
     expect(within(row).getByText("Active")).toBeVisible();
     expect(deactivateAdminUserMock).toHaveBeenCalledOnce();
   });
@@ -710,7 +734,10 @@ describe("administrator users page tracer", () => {
       ok({ ...translator, is_active: false }),
     );
     renderUsers();
-    const user = await chooseRowAction(translator.display_name, "Deactivate user");
+    const user = await chooseRowAction(
+      translator.display_name,
+      "Deactivate user",
+    );
     const confirmation = screen.getByRole("alertdialog", {
       name: "Deactivate Alpha Translator?",
     });
