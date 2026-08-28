@@ -19,6 +19,7 @@ type OpenApiSchema = {
 };
 
 type OpenApiOperation = {
+  operationId?: string;
   requestBody?: unknown;
 };
 
@@ -114,6 +115,83 @@ const forbiddenWireShapes = [
   ["items", "next_cursor"],
   ["display_name", "email", "id", "is_active", "must_change_password", "roles"],
 ].map((shape) => shape.sort().join("\u0000"));
+
+const phaseTwoAdminOperationIds = new Map([
+  ["GET /api/v1/admin/bitbucket", "get_admin_bitbucket_status"],
+  [
+    "GET /api/v1/admin/bitbucket/oauth/callback",
+    "complete_admin_bitbucket_oauth_callback",
+  ],
+  [
+    "POST /api/v1/admin/bitbucket/oauth/reconnect",
+    "reconnect_admin_bitbucket_oauth",
+  ],
+  ["POST /api/v1/admin/bitbucket/oauth/start", "start_admin_bitbucket_oauth"],
+  [
+    "POST /api/v1/admin/bitbucket/revoke",
+    "revoke_admin_bitbucket_connection_locally",
+  ],
+  ["GET /api/v1/admin/preview-jobs/{job_id}", "get_admin_preview_job"],
+  [
+    "POST /api/v1/admin/preview-jobs/{job_id}/confirmation",
+    "confirm_admin_preview_job",
+  ],
+  ["GET /api/v1/admin/products", "list_admin_products"],
+  ["POST /api/v1/admin/products", "create_admin_product"],
+  ["GET /api/v1/admin/products/{product_id}", "get_admin_product"],
+  [
+    "PATCH /api/v1/admin/products/{product_id}",
+    "update_admin_product_candidate",
+  ],
+  [
+    "GET /api/v1/admin/products/{product_id}/candidate/mappings",
+    "list_admin_candidate_mappings",
+  ],
+  [
+    "POST /api/v1/admin/products/{product_id}/candidate/mappings",
+    "create_admin_candidate_mapping",
+  ],
+  [
+    "PATCH /api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}",
+    "update_admin_candidate_mapping",
+  ],
+  [
+    "POST /api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs",
+    "create_admin_preview_job",
+  ],
+  [
+    "POST /api/v1/admin/products/{product_id}/deactivate",
+    "deactivate_admin_product",
+  ],
+  [
+    "POST /api/v1/admin/products/{product_id}/publish",
+    "publish_admin_product_candidate",
+  ],
+  [
+    "POST /api/v1/admin/products/{product_id}/reactivate",
+    "reactivate_admin_product",
+  ],
+  ["GET /api/v1/admin/repositories", "list_admin_repositories"],
+  ["POST /api/v1/admin/repositories", "create_admin_repository"],
+  ["GET /api/v1/admin/repositories/{repository_id}", "get_admin_repository"],
+  [
+    "GET /api/v1/admin/repositories/{repository_id}/branches",
+    "list_admin_repository_branches",
+  ],
+  [
+    "GET /api/v1/admin/repositories/{repository_id}/sources",
+    "discover_admin_repository_sources",
+  ],
+  ["GET /api/v1/admin/users", "list_admin_users"],
+  ["POST /api/v1/admin/users", "create_admin_user"],
+  ["PATCH /api/v1/admin/users/{user_id}", "update_admin_user"],
+  ["POST /api/v1/admin/users/{user_id}/deactivate", "deactivate_admin_user"],
+  ["POST /api/v1/admin/users/{user_id}/reactivate", "reactivate_admin_user"],
+  [
+    "POST /api/v1/admin/users/{user_id}/reset-password",
+    "reset_admin_user_password",
+  ],
+]);
 
 function findHandwrittenAdminUserWireTypes(
   file: string,
@@ -255,6 +333,25 @@ describe("canonical generated Phase 2 admin client", () => {
         "get",
       ]);
     }
+  });
+
+  it("freezes every Phase 2 admin operation ID", () => {
+    const actual = new Map<string, string>();
+
+    for (const [path, pathItem] of Object.entries(openApi.paths).filter(
+      ([path]) => path.startsWith("/api/v1/admin/"),
+    )) {
+      for (const [method, operation] of Object.entries(pathItem)) {
+        expect(
+          operation.operationId,
+          `${method.toUpperCase()} ${path}`,
+        ).toBeDefined();
+        actual.set(`${method.toUpperCase()} ${path}`, operation.operationId!);
+      }
+    }
+
+    expect(actual).toEqual(phaseTwoAdminOperationIds);
+    expect(new Set(actual.values()).size).toBe(actual.size);
   });
 
   it("rejects handwritten substitutes for generated user request and response shapes", () => {
