@@ -66,6 +66,7 @@ type LifecycleAction = "reset" | "deactivate" | "reactivate";
 
 interface LifecycleTarget {
   action: LifecycleAction;
+  returnFocus: HTMLButtonElement | null;
   user: AdminUserResponse;
 }
 
@@ -159,6 +160,8 @@ function UserActions({
   onLifecycle: (target: LifecycleTarget) => void;
   user: AdminUserResponse;
 }) {
+  const actionTriggerRef = useRef<HTMLButtonElement>(null);
+
   return (
     <div className="flex flex-wrap justify-end gap-2">
       <Button
@@ -172,6 +175,7 @@ function UserActions({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
+            ref={actionTriggerRef}
             type="button"
             variant="outline"
             aria-label={`More actions for ${user.display_name}`}
@@ -183,20 +187,38 @@ function UserActions({
           {user.is_active ? (
             <>
               <DropdownMenuItem
-                onSelect={() => onLifecycle({ action: "reset", user })}
+                onSelect={() =>
+                  onLifecycle({
+                    action: "reset",
+                    returnFocus: actionTriggerRef.current,
+                    user,
+                  })
+                }
               >
                 Reset password
               </DropdownMenuItem>
               <DropdownMenuItem
                 variant="destructive"
-                onSelect={() => onLifecycle({ action: "deactivate", user })}
+                onSelect={() =>
+                  onLifecycle({
+                    action: "deactivate",
+                    returnFocus: actionTriggerRef.current,
+                    user,
+                  })
+                }
               >
                 Deactivate user
               </DropdownMenuItem>
             </>
           ) : (
             <DropdownMenuItem
-              onSelect={() => onLifecycle({ action: "reactivate", user })}
+              onSelect={() =>
+                onLifecycle({
+                  action: "reactivate",
+                  returnFocus: actionTriggerRef.current,
+                  user,
+                })
+              }
             >
               Reactivate user
             </DropdownMenuItem>
@@ -301,9 +323,11 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
   }
 
   function closeLifecycle() {
-    if (!lifecyclePending) {
+    if (!lifecyclePending && lifecycleTarget !== null) {
+      const returnFocus = lifecycleTarget.returnFocus;
       setLifecycleError(null);
       setLifecycleTarget(null);
+      queueMicrotask(() => returnFocus?.focus());
     }
   }
 
@@ -367,19 +391,16 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
     return { status: "success" };
   }
 
-  async function submitLifecycle() {
-    if (lifecycleTarget === null || lifecyclePending) {
-      return;
-    }
+  async function submitLifecycle(target: LifecycleTarget) {
     setLifecyclePending(true);
     setLifecycleError(null);
     const options = {
       auth: accessToken,
-      path: { user_id: lifecycleTarget.user.id },
+      path: { user_id: target.user.id },
     };
 
     try {
-      if (lifecycleTarget.action === "deactivate") {
+      if (target.action === "deactivate") {
         const result = await deactivateAdminUser(options);
         if (result.data === undefined) {
           setLifecycleError(
@@ -388,9 +409,11 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
           return;
         }
         replaceUser(result.data);
+        setLifecycleTarget(null);
+        queueMicrotask(() => target.returnFocus?.focus());
       } else {
         const result =
-          lifecycleTarget.action === "reset"
+          target.action === "reset"
             ? await resetAdminUserPassword(options)
             : await reactivateAdminUser(options);
         if (result.data === undefined) {
@@ -401,8 +424,8 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
         }
         replaceUser(ordinaryUserFromCredential(result.data));
         revealTemporaryCredential(result.data);
+        setLifecycleTarget(null);
       }
-      setLifecycleTarget(null);
     } catch {
       setLifecycleError("generic");
     } finally {
@@ -594,14 +617,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
       ) : null}
 
       {lifecycleTarget !== null ? (
-        <AlertDialog
-          open
-          onOpenChange={(open) => {
-            if (!open) {
-              closeLifecycle();
-            }
-          }}
-        >
+        <AlertDialog open onOpenChange={closeLifecycle}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
@@ -647,7 +663,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
                 }
                 disabled={lifecyclePending}
                 aria-busy={lifecyclePending}
-                onClick={() => void submitLifecycle()}
+                onClick={() => void submitLifecycle(lifecycleTarget)}
               >
                 {LIFECYCLE_COPY[lifecycleTarget.action].confirmLabel}
               </Button>

@@ -553,14 +553,28 @@ describe("administrator users page tracer", () => {
     fireEvent.pointerDown(document.body);
     expect(credentialDialog).toBeVisible();
 
+    writeClipboard.mockRejectedValueOnce(
+      new Error(`clipboard failed with ${temporaryPassword}`),
+    );
     await user.click(
       within(credentialDialog).getByRole("button", {
         name: "Copy temporary password",
       }),
     );
-    expect(writeClipboard).toHaveBeenCalledOnce();
-    expect(writeClipboard).toHaveBeenCalledWith(temporaryPassword);
     const copyStatus = within(credentialDialog).getByRole("status");
+    expect(copyStatus).toHaveTextContent(
+      "The password could not be copied. Select it and copy it manually.",
+    );
+    expect(copyStatus).not.toHaveTextContent(temporaryPassword);
+
+    writeClipboard.mockResolvedValueOnce(undefined);
+    await user.click(
+      within(credentialDialog).getByRole("button", {
+        name: "Copy temporary password",
+      }),
+    );
+    expect(writeClipboard).toHaveBeenCalledTimes(2);
+    expect(writeClipboard).toHaveBeenCalledWith(temporaryPassword);
     expect(copyStatus).toHaveTextContent("Temporary password copied");
     expect(copyStatus).not.toHaveTextContent(temporaryPassword);
 
@@ -677,6 +691,8 @@ describe("administrator users page tracer", () => {
     await user.click(submit);
     expect(submit).toBeDisabled();
     expect(submit).toHaveAttribute("aria-busy", "true");
+    await user.keyboard("{Escape}");
+    expect(confirmation).toBeVisible();
     await user.click(submit);
     expect(resetAdminUserPasswordMock).toHaveBeenCalledOnce();
 
@@ -692,6 +708,93 @@ describe("administrator users page tracer", () => {
     expect(
       await screen.findByRole("dialog", { name: "Temporary password created" }),
     ).toBeVisible();
+  });
+
+  it("cancels a named confirmation without mutating and restores the invoking control", async () => {
+    renderUsers();
+    const user = await chooseRowAction(
+      translator.display_name,
+      "Reset password",
+    );
+    const confirmation = screen.getByRole("alertdialog", {
+      name: "Reset password for Alpha Translator?",
+    });
+
+    await user.click(
+      within(confirmation).getByRole("button", { name: "Cancel" }),
+    );
+
+    expect(confirmation).not.toBeInTheDocument();
+    expect(resetAdminUserPasswordMock).not.toHaveBeenCalled();
+    const table = screen.getByRole("table", { name: "Internal users" });
+    expect(
+      within(table).getByRole("button", {
+        name: "More actions for Alpha Translator",
+      }),
+    ).toHaveFocus();
+  });
+
+  it("keeps reset conflicts bounded to their named dialog and preserves the row", async () => {
+    resetAdminUserPasswordMock.mockResolvedValueOnce(
+      conflict("stale authority with Reset-Secret-That-Must-Not-Leak"),
+    );
+    renderUsers();
+    const user = await chooseRowAction(
+      translator.display_name,
+      "Reset password",
+    );
+    const confirmation = screen.getByRole("alertdialog", {
+      name: "Reset password for Alpha Translator?",
+    });
+
+    await user.click(
+      within(confirmation).getByRole("button", { name: "Reset password" }),
+    );
+
+    const alert = await within(confirmation).findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "This user changed in another session or administrator authority must be preserved.",
+    );
+    expect(alert).not.toHaveTextContent("Reset-Secret-That-Must-Not-Leak");
+    expect(alert).toHaveFocus();
+    expect(confirmation).toBeVisible();
+  });
+
+  it("sanitizes rejected lifecycle requests and preserves the inactive row", async () => {
+    listAdminUsersMock.mockResolvedValueOnce(
+      ok({ items: [currentAdmin, inactiveViewer], next_cursor: null }),
+    );
+    reactivateAdminUserMock.mockRejectedValueOnce(
+      new Error("provider=https://example.invalid?token=Lifecycle-Leak"),
+    );
+    renderUsers();
+    const user = await chooseRowAction(
+      inactiveViewer.display_name,
+      "Reactivate user",
+    );
+    const confirmation = screen.getByRole("alertdialog", {
+      name: "Reactivate Middle Viewer?",
+    });
+
+    await user.click(
+      within(confirmation).getByRole("button", { name: "Reactivate user" }),
+    );
+
+    const alert = await within(confirmation).findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "The current user state is unchanged. Try again.",
+    );
+    expect(alert).not.toHaveTextContent("Lifecycle-Leak");
+    expect(alert).toHaveFocus();
+    const table = screen.getByRole("table", {
+      name: "Internal users",
+      hidden: true,
+    });
+    const row = within(table).getByRole("row", {
+      name: /Middle Viewer/i,
+      hidden: true,
+    });
+    expect(within(row).getByText("Inactive")).toBeVisible();
   });
 
   it("keeps the named deactivate dialog and active row intact on server denial", async () => {

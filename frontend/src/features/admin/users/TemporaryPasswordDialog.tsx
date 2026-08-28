@@ -42,12 +42,8 @@ export function TemporaryPasswordDialog({
   }
 
   return (
-    <Dialog open onOpenChange={() => undefined}>
-      <DialogContent
-        showCloseButton={false}
-        onEscapeKeyDown={(event) => event.preventDefault()}
-        onPointerDownOutside={(event) => event.preventDefault()}
-      >
+    <Dialog open>
+      <DialogContent showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Temporary password created</DialogTitle>
           <DialogDescription>
