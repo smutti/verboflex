@@ -15,24 +15,33 @@ const PRODUCT_SECTIONS = [
   { label: "Preview", slug: "preview" },
 ] as const;
 
+type ProductSection = (typeof PRODUCT_SECTIONS)[number]["slug"];
+
+function resolveProductLocation(pathname: string, routeProductId?: string) {
+  const pathSegments = pathname.split("/").filter(Boolean);
+  const productsIndex = pathSegments.indexOf("products");
+  const productId =
+    routeProductId ??
+    (productsIndex >= 0 ? pathSegments[productsIndex + 1] : undefined) ??
+    "";
+  const requestedSection = pathSegments.at(-1);
+  const currentSection: ProductSection =
+    PRODUCT_SECTIONS.find(({ slug }) => slug === requestedSection)?.slug ??
+    "overview";
+
+  return { currentSection, productId };
+}
+
 export function ProductDetailLayout({
   children,
   productName = "Product configuration",
 }: ProductDetailLayoutProps) {
   const location = useLocation();
   const params = useParams();
-  const pathSegments = location.pathname.split("/").filter(Boolean);
-  const productsIndex = pathSegments.indexOf("products");
-  const productId =
-    params.productId ??
-    (productsIndex >= 0 ? pathSegments[productsIndex + 1] : undefined) ??
-    "";
-  const requestedSection = pathSegments.at(-1);
-  const currentSection = PRODUCT_SECTIONS.some(
-    ({ slug }) => slug === requestedSection,
-  )
-    ? requestedSection
-    : "overview";
+  const { currentSection, productId } = resolveProductLocation(
+    location.pathname,
+    params.productId,
+  );
   const productBase = `/admin/products/${encodeURIComponent(productId)}`;
 
   return (
