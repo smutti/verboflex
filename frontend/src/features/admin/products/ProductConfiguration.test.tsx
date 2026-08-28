@@ -586,6 +586,7 @@ describe("administrator product configuration tracer", () => {
     expect(name).toHaveValue("Recoverable Product");
     expect(screen.getByRole("alert")).not.toHaveTextContent("provider secret");
     cleanup();
+    createAdminProductMock.mockReset();
 
     createAdminProductMock.mockReturnValue(
       new Promise<ReturnType<typeof ok<AdminProductResponse>>>(() => undefined),
