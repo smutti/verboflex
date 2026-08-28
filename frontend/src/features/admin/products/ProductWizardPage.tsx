@@ -110,6 +110,7 @@ export function ProductWizardPage({
   const nameId = useId();
   const descriptionId = useId();
   const nameRef = useRef<HTMLInputElement>(null);
+  const submitPendingRef = useRef(false);
   const [product, setProduct] = useState(initialProduct);
   const [savedName, setSavedName] = useState(initialProduct?.name ?? "");
   const [savedDescriptionValue, setSavedDescriptionValue] = useState(
@@ -156,7 +157,7 @@ export function ProductWizardPage({
 
   async function submitDetails(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending) {
+    if (submitPendingRef.current) {
       return;
     }
     if (name.trim().length === 0) {
@@ -165,6 +166,7 @@ export function ProductWizardPage({
       return;
     }
 
+    submitPendingRef.current = true;
     setPending(true);
     setNameError(null);
     setSubmissionError(false);
@@ -199,13 +201,11 @@ export function ProductWizardPage({
         setSavedDescriptionValue(responseDescription);
         setName(responseProduct.name);
         setDescription(responseDescription);
-        setPending(false);
         toast.success("Draft saved");
         setCurrentStep(2);
         return;
       }
 
-      setPending(false);
       if (result !== undefined && responseStatus(result) === 409) {
         setNameError("duplicate");
         nameRef.current?.focus();
@@ -213,8 +213,10 @@ export function ProductWizardPage({
       }
       setSubmissionError(true);
     } catch {
-      setPending(false);
       setSubmissionError(true);
+    } finally {
+      submitPendingRef.current = false;
+      setPending(false);
     }
   }
 
