@@ -246,6 +246,7 @@ export function ProductWizardPage({
                   className="min-h-11 w-full rounded-md border px-2 py-3 text-left text-label font-semibold break-words [overflow-wrap:anywhere] aria-[current=step]:border-primary aria-[current=step]:text-primary"
                   aria-current={currentStep === step ? "step" : undefined}
                   data-completed={step < currentStep ? "true" : undefined}
+                  disabled={product === undefined && step > 1}
                   onClick={(event) => requestStep(step, event)}
                 >
                   {label}
