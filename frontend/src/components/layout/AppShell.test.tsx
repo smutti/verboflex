@@ -2,6 +2,7 @@ import "@testing-library/jest-dom/vitest";
 
 import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { readSystemStatus, type CurrentUserResponse } from "../../api/client";
@@ -74,6 +75,16 @@ const principal: CurrentUserResponse = {
   roles: ["admin", "product_manager_reviewer", "translator", "viewer"],
   must_change_password: false,
 };
+
+const ordinaryPrincipal: CurrentUserResponse = {
+  ...principal,
+  roles: ["translator"],
+};
+
+function LocationMarker() {
+  const location = useLocation();
+  return <div data-testid="shell-current-route">{location.pathname}</div>;
+}
 
 afterEach(() => {
   cleanup();
@@ -464,5 +475,91 @@ describe("authenticated application shell", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
     expect(trigger).toHaveFocus();
+  });
+
+  it("shows one desktop Administration group for admins and opens Users", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <AppShell
+          accessToken="admin-server-token"
+          onLogout={vi.fn()}
+          principal={principal}
+        />
+        <LocationMarker />
+      </MemoryRouter>,
+    );
+
+    const navigation = screen.getByRole("navigation", {
+      name: "Primary navigation",
+    });
+    expect(
+      within(navigation).getAllByRole("heading", {
+        name: "Administration",
+        level: 2,
+      }),
+    ).toHaveLength(1);
+
+    await user.click(within(navigation).getByRole("link", { name: "Users" }));
+
+    expect(screen.getByTestId("shell-current-route")).toHaveTextContent(
+      "/admin/users",
+    );
+  });
+
+  it("shows the same Administration destination in the mobile Sheet", async () => {
+    setViewportWidth(375);
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <AppShell
+          accessToken="admin-server-token"
+          onLogout={vi.fn()}
+          principal={principal}
+        />
+        <LocationMarker />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open navigation" }));
+    const sheet = await screen.findByRole("dialog", { name: "Navigation" });
+    const navigation = within(sheet).getByRole("navigation", {
+      name: "Primary navigation",
+    });
+    expect(
+      within(navigation).getAllByRole("heading", {
+        name: "Administration",
+        level: 2,
+      }),
+    ).toHaveLength(1);
+
+    await user.click(within(navigation).getByRole("link", { name: "Users" }));
+
+    expect(screen.getByTestId("shell-current-route")).toHaveTextContent(
+      "/admin/users",
+    );
+    expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
+  });
+
+  it("omits Administration from desktop and mobile navigation for non-admins", async () => {
+    setViewportWidth(375);
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <AppShell
+          accessToken="ordinary-server-token"
+          onLogout={vi.fn()}
+          principal={ordinaryPrincipal}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText("Administration")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Users" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Open navigation" }));
+    const sheet = await screen.findByRole("dialog", { name: "Navigation" });
+    expect(within(sheet).queryByText("Administration")).toBeNull();
+    expect(within(sheet).queryByRole("link", { name: "Users" })).toBeNull();
   });
 });

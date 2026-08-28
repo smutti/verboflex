@@ -32,6 +32,11 @@ const ordinaryPrincipal = {
   must_change_password: false,
 };
 
+const adminPrincipal = {
+  ...ordinaryPrincipal,
+  roles: ["admin" as const, "translator" as const],
+};
+
 afterEach(() => {
   cleanup();
 });
@@ -49,15 +54,24 @@ function LocationMarker() {
 function renderRoutes(
   state: Parameters<typeof SessionRoutes>[0]["state"],
   initialEntry = "/",
+  adminRequest = vi.fn(),
 ) {
+  function AdminRouteProbe() {
+    adminRequest();
+    return <h1>Users administration route</h1>;
+  }
+
+  const routeProps = {
+    state,
+    loginElement: <h1>Login route</h1>,
+    changePasswordElement: <h1>Password change route</h1>,
+    ordinaryElement: <h1>Ordinary route</h1>,
+    adminElement: <AdminRouteProbe />,
+  };
+
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
-      <SessionRoutes
-        state={state}
-        loginElement={<h1>Login route</h1>}
-        changePasswordElement={<h1>Password change route</h1>}
-        ordinaryElement={<h1>Ordinary route</h1>}
-      />
+      <SessionRoutes {...routeProps} />
       <LocationMarker />
     </MemoryRouter>,
   );
@@ -164,6 +178,62 @@ describe("session routes", () => {
       ).not.toBeInTheDocument();
     },
   );
+
+  it("opens the administrator users route only for a server-loaded admin role", () => {
+    const adminRequest = vi.fn();
+
+    renderRoutes(
+      {
+        status: "authenticated",
+        accessToken: "admin-server-token",
+        principal: adminPrincipal,
+      },
+      "/admin/users",
+      adminRequest,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Users administration route" }),
+    ).toBeVisible();
+    expect(screen.getByTestId("current-route")).toHaveTextContent(
+      "/admin/users",
+    );
+    expect(adminRequest).toHaveBeenCalledOnce();
+  });
+
+  it("denies every direct administrator route before mounting admin requests", async () => {
+    const adminRequest = vi.fn();
+    const user = userEvent.setup();
+
+    renderRoutes(
+      {
+        status: "authenticated",
+        accessToken: "ordinary-server-token",
+        principal: ordinaryPrincipal,
+      },
+      "/admin/products/private-candidate",
+      adminRequest,
+    );
+
+    const heading = await screen.findByRole("heading", {
+      name: "Administrator access required",
+    });
+    expect(heading).toHaveFocus();
+    expect(
+      screen.getByText(
+        "Your account does not have permission to open administration.",
+      ),
+    ).toBeVisible();
+    expect(adminRequest).not.toHaveBeenCalled();
+    expect(screen.getByTestId("current-route")).toHaveTextContent(
+      "/admin/products/private-candidate",
+    );
+
+    await user.click(
+      screen.getByRole("link", { name: "Return to workspace" }),
+    );
+    expect(screen.getByTestId("current-route")).toHaveTextContent("/");
+  });
 
   it("returns a successful required-password change to signed-out login", async () => {
     issueTokenMock.mockResolvedValue({
