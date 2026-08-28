@@ -379,12 +379,13 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
       return { status: "success" };
     }
 
-    if (selectedUser === null) {
-      return { status: "error" };
-    }
+    // The keyed dialog emits update requests only from edit mode. If that
+    // invariant is violated, property access fails before any API call and the
+    // dialog maps the rejection to bounded generic copy.
+    const updateTarget = selectedUser!;
     const result = await updateAdminUser({
       auth: accessToken,
-      path: { user_id: selectedUser.id },
+      path: { user_id: updateTarget.id },
       body: request,
     });
     if (result.data === undefined) {

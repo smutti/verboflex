@@ -162,10 +162,7 @@ export function UserDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        onEscapeKeyDown={(event) => pending && event.preventDefault()}
-        onPointerDownOutside={(event) => pending && event.preventDefault()}
-      >
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>
             {isEditing ? `Edit ${user.display_name}` : "Add user"}
