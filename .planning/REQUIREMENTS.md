@@ -27,7 +27,7 @@
 
 ### Product and Repository Configuration
 
-- [ ] **PROD-01**: Admin can create and edit a product record with name, description, and active/inactive status.
+- [x] **PROD-01**: Admin can create and edit a product record with name, description, and active/inactive status.
 - [ ] **PROD-02**: Admin can configure one or more Bitbucket Cloud repositories for a product.
 - [ ] **PROD-03**: Admin can configure the source branch the platform reads from for each repository mapping.
 - [ ] **PROD-04**: Admin can configure allowed target branches for translation pull requests.
@@ -35,13 +35,13 @@
 - [ ] **PROD-06**: Admin can configure whether translations live directly in the product repository or in a linked translation repository.
 - [ ] **PROD-07**: Admin can configure links between a repository containing translation keys and a separate Bitbucket project/repository containing translated values.
 - [x] **PROD-08**: Admin can validate a repository mapping by previewing detected files, languages, sample keys, and sample translations before enabling imports.
-- [ ] **PROD-09**: Admin can configure the localization file format used by each mapping.
+- [x] **PROD-09**: Admin can configure the localization file format used by each mapping.
 
 ### Bitbucket Cloud Integration
 
 - [x] **BITB-01**: Admin can connect, reconnect, revoke, and view bounded status for the single organization-wide Bitbucket Cloud OAuth 2.0 connection used for repository access.
 - [ ] **BITB-02**: System validates and reports Bitbucket Cloud capabilities required by configured read/import operations and the later write/pull-request profile without silently expanding OAuth scopes.
-- [ ] **BITB-03**: System can list configured repository branches from Bitbucket Cloud.
+- [x] **BITB-03**: System can list configured repository branches from Bitbucket Cloud.
 - [x] **BITB-04**: System can read configured localization files from the configured Bitbucket Cloud source branch.
 - [ ] **BITB-05**: System stores the source commit hash and file reference used for each import.
 - [ ] **BITB-06**: System reports Bitbucket connection, permission, and import errors in a way admins can act on.
@@ -186,7 +186,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-04 | Phase 1 | Complete |
 | AUTH-05 | Phase 9 | Pending |
 | AUTH-06 | Phase 9 | Pending |
-| PROD-01 | Phase 2 | Pending |
+| PROD-01 | Phase 2 | Complete |
 | PROD-02 | Phase 2 | Pending |
 | PROD-03 | Phase 2 | Pending |
 | PROD-04 | Phase 2 | Pending |
@@ -194,10 +194,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROD-06 | Phase 2 | Pending |
 | PROD-07 | Phase 2 | Pending |
 | PROD-08 | Phase 2 | Complete |
-| PROD-09 | Phase 2 | Pending |
+| PROD-09 | Phase 2 | Complete |
 | BITB-01 | Phase 2 | Complete |
 | BITB-02 | Phase 3 | Pending |
-| BITB-03 | Phase 2 | Pending |
+| BITB-03 | Phase 2 | Complete |
 | BITB-04 | Phase 2 | Complete |
 | BITB-05 | Phase 3 | Pending |
 | BITB-06 | Phase 3 | Pending |
