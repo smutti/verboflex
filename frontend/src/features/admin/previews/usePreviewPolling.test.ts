@@ -172,8 +172,8 @@ describe("bounded preview polling state machine", () => {
     const oldRequest = new Promise<
       ReturnType<typeof ok<AdminPreviewJobResponse>>
     >((resolve) => {
-        resolveOld = resolve;
-      });
+      resolveOld = resolve;
+    });
     getJobMock.mockReturnValueOnce(oldRequest as never);
     const oldJob = job();
     const newJob = job({

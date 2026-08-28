@@ -80,7 +80,10 @@ const JOB_LABELS: Record<AdminPreviewJobResponse["state"], string> = {
   timed_out: "Timed out",
 };
 
-const FORMAT_LABELS: Record<AdminPreviewLayoutCandidateResponse["format"], string> = {
+const FORMAT_LABELS: Record<
+  AdminPreviewLayoutCandidateResponse["format"],
+  string
+> = {
   android_xml: "Android XML",
   ios_strings: "iOS strings",
   json: "JSON",
@@ -182,7 +185,13 @@ async function resolveCommits(
   );
 }
 
-function PreviewAlert({ children, title }: { children: ReactNode; title: string }) {
+function PreviewAlert({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title: string;
+}) {
   return (
     <Alert variant="destructive">
       <AlertTitle>{title}</AlertTitle>
@@ -316,7 +325,9 @@ function PreviewJobView({
   const [confirmPending, setConfirmPending] = useState(false);
   const confirmPendingRef = useRef(false);
   const [confirmError, setConfirmError] = useState(false);
-  const [confirmedIdentity, setConfirmedIdentity] = useState<string | null>(null);
+  const [confirmedIdentity, setConfirmedIdentity] = useState<string | null>(
+    null,
+  );
   const { automaticUpdatesPaused, job, pollingError, refreshStatus } =
     usePreviewPolling({
       accessToken,
@@ -447,7 +458,9 @@ function PreviewJobView({
         </PreviewAlert>
       ) : null}
 
-      {job.state === "succeeded" && job.is_current && candidates.length === 0 ? (
+      {job.state === "succeeded" &&
+      job.is_current &&
+      candidates.length === 0 ? (
         <PreviewAlert title="No supported layout">
           No supported localization layout was found in this source branch.
         </PreviewAlert>
@@ -685,7 +698,10 @@ export function ProductPreviewPage({
       if (generation !== loadGenerationRef.current) {
         return;
       }
-      if (productResult.data === undefined || mappingResult.data === undefined) {
+      if (
+        productResult.data === undefined ||
+        mappingResult.data === undefined
+      ) {
         setPageState({ status: "error" });
         return;
       }
@@ -749,7 +765,11 @@ export function ProductPreviewPage({
             We could not load this page. Retry without leaving the
             administration area.
           </p>
-          <Button type="button" variant="outline" onClick={() => void loadPage()}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void loadPage()}
+          >
             Retry loading page
           </Button>
         </PreviewAlert>
@@ -767,9 +787,12 @@ export function ProductPreviewPage({
     currentProduct.active_revision !== null &&
     currentProduct.candidate_revision === null;
   const publishLabel =
-    currentProduct.active_revision === null ? "Publish product" : "Publish changes";
+    currentProduct.active_revision === null
+      ? "Publish product"
+      : "Publish changes";
   const actionLabel = isReactivation ? "Reactivate product" : publishLabel;
-  const showAction = isReactivation || currentProduct.candidate_revision !== null;
+  const showAction =
+    isReactivation || currentProduct.candidate_revision !== null;
 
   async function submitPublication() {
     if (publicationPendingRef.current || !allConfirmed) {
@@ -809,7 +832,9 @@ export function ProductPreviewPage({
       }
       setPageState({ ...readyState, product: result.data });
       setPublicationOpen(false);
-      toast.success(isReactivation ? "Product reactivated" : "Product published");
+      toast.success(
+        isReactivation ? "Product reactivated" : "Product published",
+      );
     } catch {
       setPublicationError(true);
     } finally {
@@ -824,7 +849,8 @@ export function ProductPreviewPage({
         <div className="grid min-w-0 gap-2">
           <h1 className="text-display font-semibold">Preview</h1>
           <p className="break-words text-muted-foreground">
-            Validate and explicitly confirm the current draft for {currentProduct.name}.
+            Validate and explicitly confirm the current draft for{" "}
+            {currentProduct.name}.
           </p>
         </div>
         <Badge variant="outline" className="w-fit rounded-md">
@@ -870,7 +896,10 @@ export function ProductPreviewPage({
             <ul className="grid gap-2">
               {mappings.map((mapping, index) => (
                 <li key={mapping.id}>
-                  <a className="text-accent underline" href={`#preview-${mapping.id}`}>
+                  <a
+                    className="text-accent underline"
+                    href={`#preview-${mapping.id}`}
+                  >
                     Review mapping {index + 1}
                   </a>
                 </li>
@@ -887,7 +916,10 @@ export function ProductPreviewPage({
             <ul className="grid gap-2">
               {mappings.map((mapping, index) => (
                 <li key={mapping.id}>
-                  <a className="text-accent underline" href={`#preview-${mapping.id}`}>
+                  <a
+                    className="text-accent underline"
+                    href={`#preview-${mapping.id}`}
+                  >
                     Mapping {index + 1}: Preview confirmation required
                   </a>
                 </li>

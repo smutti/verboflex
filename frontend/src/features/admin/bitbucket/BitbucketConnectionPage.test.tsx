@@ -66,9 +66,7 @@ function failure(status = 503) {
   };
 }
 
-function renderPage(
-  navigateTo: (url: string) => void = vi.fn(),
-) {
+function renderPage(navigateTo: (url: string) => void = vi.fn()) {
   return render(
     <BitbucketConnectionPage
       accessToken="memory-only-admin-bearer"
@@ -124,18 +122,12 @@ describe("administrator Bitbucket connection page", () => {
 
   it.each([
     ["Disconnected", disconnected],
-    [
-      "Connected",
-      connected,
-    ],
+    ["Connected", connected],
     [
       "Reauthorization required",
       { ...connected, status: "Reauthorization required" as const },
     ],
-    [
-      "Unavailable",
-      { ...connected, status: "Unavailable" as const },
-    ],
+    ["Unavailable", { ...connected, status: "Unavailable" as const }],
   ])("projects only the approved %s status", async (label, status) => {
     getStatusMock.mockResolvedValueOnce(ok(status));
     renderPage();
@@ -173,9 +165,7 @@ describe("administrator Bitbucket connection page", () => {
     );
 
     expect(await screen.findByText("Disconnected")).toBeVisible();
-    expect(
-      screen.getByRole("heading", { name: "Bitbucket" }),
-    ).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Bitbucket" })).toBeVisible();
     expect(getStatusMock).toHaveBeenCalledWith({
       auth: "memory-only-admin-bearer",
     });
@@ -210,8 +200,8 @@ describe("administrator Bitbucket connection page", () => {
           }>
         >
       >((resolve) => {
-          resolveOperation = resolve;
-        });
+        resolveOperation = resolve;
+      });
       operation.mockReturnValueOnce(pendingOperation as never);
       const navigateTo = vi.fn();
       renderPage(navigateTo);
@@ -243,9 +233,9 @@ describe("administrator Bitbucket connection page", () => {
 
   it("revokes only after named confirmation and keeps server authority on failure", async () => {
     getStatusMock.mockResolvedValueOnce(ok(connected));
-    revokeMock.mockResolvedValueOnce(failure()).mockResolvedValueOnce(
-      ok(disconnected),
-    );
+    revokeMock
+      .mockResolvedValueOnce(failure())
+      .mockResolvedValueOnce(ok(disconnected));
     renderPage();
 
     await userEvent.click(

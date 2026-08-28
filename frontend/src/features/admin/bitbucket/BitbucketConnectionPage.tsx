@@ -303,7 +303,10 @@ export function BitbucketConnectionPage({
               label="Access expires"
               value={connection.expires_at}
             />
-            <ConnectionTimestamp label="Revoked" value={connection.revoked_at} />
+            <ConnectionTimestamp
+              label="Revoked"
+              value={connection.revoked_at}
+            />
           </dl>
         ) : null}
 
@@ -350,21 +353,16 @@ export function BitbucketConnectionPage({
                 Revoke the Bitbucket connection?
               </AlertDialogTitle>
               <AlertDialogDescription>
-                New branch reads, previews, confirmations, and publications
-                will be blocked until an administrator reconnects.
+                New branch reads, previews, confirmations, and publications will
+                be blocked until an administrator reconnects.
               </AlertDialogDescription>
             </AlertDialogHeader>
 
             {revokeError ? (
-              <Alert
-                ref={revokeErrorRef}
-                tabIndex={-1}
-                variant="destructive"
-              >
+              <Alert ref={revokeErrorRef} tabIndex={-1} variant="destructive">
                 <AlertTitle>Connection not revoked</AlertTitle>
                 <AlertDescription>
-                  The current Bitbucket connection remains unchanged. Try
-                  again.
+                  The current Bitbucket connection remains unchanged. Try again.
                 </AlertDescription>
               </Alert>
             ) : null}

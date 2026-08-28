@@ -316,7 +316,10 @@ describe("administrator product preview and publication page", () => {
           detector_version: "detector-v1",
           digest: "c".repeat(64),
           layout_candidates: [
-            { ...candidates[0], confidence: 0.9 } as AdminPreviewLayoutCandidateResponse,
+            {
+              ...candidates[0],
+              confidence: 0.9,
+            } as AdminPreviewLayoutCandidateResponse,
           ],
         },
       }),
@@ -438,7 +441,9 @@ describe("administrator product preview and publication page", () => {
       screen.getByRole("button", { name: "Publish product" }),
     );
     await userEvent.click(
-      screen.getByRole("alertdialog").querySelector("button[data-variant='default']")!,
+      screen
+        .getByRole("alertdialog")
+        .querySelector("button[data-variant='default']")!,
     );
 
     const alert = await screen.findByRole("alert", {
@@ -446,10 +451,9 @@ describe("administrator product preview and publication page", () => {
     });
     expect(alert).toHaveTextContent("Preview confirmation required");
     expect(alert).not.toHaveTextContent("never render");
-    expect(within(alert).getByRole("link", { name: "Review mapping 1" })).toHaveAttribute(
-      "href",
-      `#preview-${mapping.id}`,
-    );
+    expect(
+      within(alert).getByRole("link", { name: "Review mapping 1" }),
+    ).toHaveAttribute("href", `#preview-${mapping.id}`);
     expect(screen.getByText("Confirmed")).toBeVisible();
     expect(toastSuccessMock).not.toHaveBeenCalled();
   });
