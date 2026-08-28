@@ -207,6 +207,7 @@ describe("administrator product configuration tracer", () => {
     expect(
       screen.getByRole("link", { name: "Create product" }),
     ).toHaveAttribute("aria-disabled", "true");
+    await waitFor(() => expect(listAdminProductsMock).toHaveBeenCalledOnce());
 
     loadingView.unmount();
     listAdminProductsMock.mockRejectedValueOnce(
