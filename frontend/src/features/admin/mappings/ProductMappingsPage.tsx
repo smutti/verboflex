@@ -329,14 +329,13 @@ export function ProductMappingsPage({
     void requestBranches(side, repositoryId);
   }
 
-  function applyTopologyChange() {
-    if (pendingTopology === null) {
-      return;
-    }
+  function invalidateBranchRequests() {
     branchGenerationRef.current.direct += 1;
     branchGenerationRef.current.keys += 1;
     branchGenerationRef.current.translations += 1;
-    setTopology(pendingTopology);
+  }
+
+  function clearMappingSelection() {
     setDirectRepositoryId("");
     setKeysRepositoryId("");
     setTranslationsRepositoryId("");
@@ -350,6 +349,15 @@ export function ProductMappingsPage({
       keys: EMPTY_BRANCH_STATE,
       translations: EMPTY_BRANCH_STATE,
     });
+  }
+
+  function applyTopologyChange() {
+    if (pendingTopology === null) {
+      return;
+    }
+    invalidateBranchRequests();
+    setTopology(pendingTopology);
+    clearMappingSelection();
     setFormError(null);
     setPendingTopology(null);
   }
@@ -400,21 +408,10 @@ export function ProductMappingsPage({
   }
 
   function resetForm(version = currentCandidateVersion) {
+    invalidateBranchRequests();
     setEditingMapping(null);
     setTopology("direct");
-    setDirectRepositoryId("");
-    setKeysRepositoryId("");
-    setTranslationsRepositoryId("");
-    setDirectSourceBranch("");
-    setKeysSourceBranch("");
-    setTranslationsSourceBranch("");
-    setAllowedTargetBranches([]);
-    setDefaultTargetBranch("");
-    setBranches({
-      direct: EMPTY_BRANCH_STATE,
-      keys: EMPTY_BRANCH_STATE,
-      translations: EMPTY_BRANCH_STATE,
-    });
+    clearMappingSelection();
     setCurrentCandidateVersion(version);
     setFormError(null);
   }
