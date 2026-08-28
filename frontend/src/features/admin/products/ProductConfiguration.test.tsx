@@ -1498,18 +1498,24 @@ describe("administrator product configuration tracer", () => {
     expect(
       screen.getByRole("button", { name: "Deactivate product" }),
     ).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    const retryTrigger = screen.getByRole("button", {
-      name: "Deactivate product",
-    });
-    await user.click(retryTrigger);
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    deactivateAdminProductMock.mockResolvedValueOnce(
-      ok({ ...activeProduct, is_active: false }),
+    let resolveRetryDeactivate:
+      | ((value: ReturnType<typeof ok<AdminProductResponse>>) => void)
+      | undefined;
+    deactivateAdminProductMock.mockReturnValueOnce(
+      new Promise<ReturnType<typeof ok<AdminProductResponse>>>((resolve) => {
+        resolveRetryDeactivate = resolve;
+      }),
     );
     await user.click(
       screen.getByRole("button", { name: "Deactivate product" }),
     );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Deactivate product" }),
+    ).toBeDisabled();
+    await act(async () => {
+      resolveRetryDeactivate?.(ok({ ...activeProduct, is_active: false }));
+    });
     expect(await screen.findByText("Inactive")).toBeVisible();
   });
 
