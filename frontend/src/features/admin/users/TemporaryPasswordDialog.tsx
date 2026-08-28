@@ -37,7 +37,7 @@ export function TemporaryPasswordDialog({
   }
 
   function acknowledgeTemporaryPassword() {
-    flushSync(setSecret.bind(null, ""));
+    flushSync(setSecret.bind(null, String()));
     onAcknowledged();
   }
 
