@@ -435,6 +435,7 @@ describe("administrator product configuration tracer", () => {
     createAdminProductMock.mockReturnValueOnce(pendingCreate);
     renderWizard();
     const user = userEvent.setup();
+    expect(screen.getByRole("button", { name: "Repositories" })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Save and continue" }));
     const name = screen.getByRole("textbox", { name: "Name" });
@@ -458,6 +459,9 @@ describe("administrator product configuration tracer", () => {
     });
 
     expect(toastSuccessMock).toHaveBeenCalledWith("Draft saved");
+    expect(
+      screen.getByRole("button", { name: "Repositories", current: "step" }),
+    ).toBeEnabled();
     expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
       "Step 2 of 5Repositories",
     );
