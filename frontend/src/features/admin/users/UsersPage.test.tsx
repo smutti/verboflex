@@ -23,6 +23,7 @@ import {
   type AdminUserResponse,
 } from "../../../api/client";
 import { TemporaryPasswordDialog } from "./TemporaryPasswordDialog";
+import { UserDialog } from "./UserDialog";
 import { UsersPage } from "./UsersPage";
 
 class TestResizeObserver implements ResizeObserver {
@@ -117,6 +118,15 @@ function conflict(detail: string) {
   };
 }
 
+function failure(status = 503) {
+  return {
+    data: undefined,
+    error: { detail: "bounded test failure" },
+    request: new Request("http://localhost/api/v1/admin/users"),
+    response: new Response(null, { status }),
+  };
+}
+
 function renderUsers() {
   return render(
     <UsersPage
@@ -158,6 +168,7 @@ async function chooseRowAction(userName: string, actionName: string) {
 
 describe("administrator users page tracer", () => {
   beforeEach(() => {
+    listAdminUsersMock.mockReset();
     listAdminUsersMock.mockResolvedValue(
       ok({ items: [currentAdmin, translator], next_cursor: null }),
     );
@@ -208,6 +219,113 @@ describe("administrator users page tracer", () => {
       expect(await screen.findAllByText(currentAdmin.email)).toHaveLength(2);
     },
   );
+
+  it("fails closed when the generated user list has no response data", async () => {
+    listAdminUsersMock.mockResolvedValueOnce(failure());
+
+    renderUsers();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We could not load this page. Retry without leaving the administration area.",
+    );
+  });
+
+  it("ignores a user list response superseded by newer access authority", async () => {
+    let resolveFirst:
+      | ((
+          value: ReturnType<
+            typeof ok<{ items: AdminUserResponse[]; next_cursor: null }>
+          >,
+        ) => void)
+      | undefined;
+    const firstLoad = new Promise<
+      ReturnType<typeof ok<{ items: AdminUserResponse[]; next_cursor: null }>>
+    >((resolve) => {
+      resolveFirst = resolve;
+    });
+    listAdminUsersMock
+      .mockReturnValueOnce(firstLoad)
+      .mockResolvedValueOnce(ok({ items: [translator], next_cursor: null }));
+    const view = render(
+      <UsersPage
+        accessToken="first-memory-only-bearer"
+        currentUserId={currentAdmin.id}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(listAdminUsersMock).toHaveBeenCalledWith({
+        auth: "first-memory-only-bearer",
+        query: { cursor: null, limit: 50 },
+      });
+    });
+
+    view.rerender(
+      <UsersPage
+        accessToken="second-memory-only-bearer"
+        currentUserId={currentAdmin.id}
+      />,
+    );
+    expect(await screen.findAllByText(translator.display_name)).toHaveLength(2);
+
+    await act(async () => {
+      resolveFirst?.(ok({ items: [currentAdmin], next_cursor: null }));
+    });
+
+    expect(
+      screen.queryByText(currentAdmin.display_name),
+    ).not.toBeInTheDocument();
+    expect(listAdminUsersMock).toHaveBeenNthCalledWith(2, {
+      auth: "second-memory-only-bearer",
+      query: { cursor: null, limit: 50 },
+    });
+  });
+
+  it("ignores a rejected user list request superseded by newer access authority", async () => {
+    let rejectFirst: ((reason: unknown) => void) | undefined;
+    const firstLoad = new Promise<never>((_resolve, reject) => {
+      rejectFirst = reject;
+    });
+    listAdminUsersMock
+      .mockReturnValueOnce(firstLoad)
+      .mockResolvedValueOnce(ok({ items: [translator], next_cursor: null }));
+    const view = render(
+      <UsersPage
+        accessToken="first-rejected-memory-bearer"
+        currentUserId={currentAdmin.id}
+      />,
+    );
+    await waitFor(() => {
+      expect(listAdminUsersMock).toHaveBeenCalledWith({
+        auth: "first-rejected-memory-bearer",
+        query: { cursor: null, limit: 50 },
+      });
+    });
+
+    view.rerender(
+      <UsersPage
+        accessToken="replacement-memory-bearer"
+        currentUserId={currentAdmin.id}
+      />,
+    );
+    expect(await screen.findAllByText(translator.display_name)).toHaveLength(2);
+
+    await act(async () => {
+      rejectFirst?.(new Error("stale authority failure"));
+    });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Internal users" })).toBeVisible();
+  });
+
+  it("does not start a queued user load after the page unmounts", async () => {
+    const view = renderUsers();
+
+    view.unmount();
+    await act(async () => Promise.resolve());
+
+    expect(listAdminUsersMock).not.toHaveBeenCalled();
+  });
 
   it("preserves API order and cursor pagination without client re-sorting or de-duplicating", async () => {
     listAdminUsersMock
@@ -338,6 +456,110 @@ describe("administrator users page tracer", () => {
     expect(createAdminUserMock).not.toHaveBeenCalled();
   });
 
+  it("focuses each missing identity field and closes only through the explicit cancel action", async () => {
+    const onOpenChange = vi.fn();
+    const onSubmit = vi.fn();
+    render(
+      <UserDialog
+        currentUserId={currentAdmin.id}
+        onOpenChange={onOpenChange}
+        onSubmit={onSubmit}
+        open
+        user={null}
+      />,
+    );
+    const user = userEvent.setup();
+    const email = screen.getByRole("textbox", { name: "Corporate email" });
+    const displayName = screen.getByRole("textbox", { name: "Display name" });
+
+    await user.click(screen.getByRole("button", { name: "Create user" }));
+    expect(screen.getByText("Enter a corporate email.")).toBeVisible();
+    expect(email).toHaveFocus();
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await user.type(email, "required@example.com");
+    await user.click(screen.getByRole("button", { name: "Create user" }));
+    expect(screen.getByText("Enter a display name.")).toBeVisible();
+    expect(displayName).toHaveFocus();
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("prevents duplicate pending user submissions and sanitizes failure", async () => {
+    let resolveSubmission: ((value: { status: "error" }) => void) | undefined;
+    const pendingSubmission = new Promise<{ status: "error" }>((resolve) => {
+      resolveSubmission = resolve;
+    });
+    const onOpenChange = vi.fn();
+    const onSubmit = vi.fn(() => pendingSubmission);
+    render(
+      <UserDialog
+        currentUserId={currentAdmin.id}
+        onOpenChange={onOpenChange}
+        onSubmit={onSubmit}
+        open
+        user={null}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByRole("textbox", { name: "Corporate email" }),
+      "pending@example.com",
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "Display name" }),
+      "Pending User",
+    );
+    await user.click(screen.getByRole("button", { name: "Create user" }));
+
+    const submit = screen.getByRole("button", { name: "Create user" });
+    expect(submit).toBeDisabled();
+    await user.click(submit);
+    expect(onSubmit).toHaveBeenCalledOnce();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Add user" })).toBeVisible();
+
+    await act(async () => resolveSubmission?.({ status: "error" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Your entries are still here. Review them and try again.",
+    );
+  });
+
+  it("maps a rejected user submission to bounded generic copy", async () => {
+    const onSubmit = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new Error("provider detail with User-Secret-That-Must-Not-Leak"),
+      );
+    render(
+      <UserDialog
+        currentUserId={currentAdmin.id}
+        onOpenChange={vi.fn()}
+        onSubmit={onSubmit}
+        open
+        user={null}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByRole("textbox", { name: "Corporate email" }),
+      "rejected@example.com",
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "Display name" }),
+      "Rejected User",
+    );
+    await user.click(screen.getByRole("button", { name: "Create user" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Your entries are still here. Review them and try again.",
+    );
+    expect(alert).not.toHaveTextContent("User-Secret-That-Must-Not-Leak");
+  });
+
   it("prevents duplicate create submission and replaces attempted values only with the backend response", async () => {
     let resolveCreate:
       | ((value: ReturnType<typeof ok<AdminUserCredentialResponse>>) => void)
@@ -433,6 +655,24 @@ describe("administrator users page tracer", () => {
     expect(email).toHaveFocus();
   });
 
+  it("keeps create fields on a bounded non-conflict server failure", async () => {
+    createAdminUserMock.mockResolvedValueOnce(failure());
+    renderUsers();
+    const user = await openAddDialog();
+    const email = screen.getByRole("textbox", { name: "Corporate email" });
+    const displayName = screen.getByRole("textbox", { name: "Display name" });
+
+    await user.type(email, "retry-create@example.com");
+    await user.type(displayName, "Retry Create");
+    await user.click(screen.getByRole("button", { name: "Create user" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Your entries are still here. Review them and try again.",
+    );
+    expect(email).toHaveValue("retry-create@example.com");
+    expect(displayName).toHaveValue("Retry Create");
+  });
+
   it("shows immutable email and prevents the current administrator from unchecking admin", async () => {
     renderUsers();
     await openEditDialog(currentAdmin.display_name);
@@ -524,6 +764,36 @@ describe("administrator users page tracer", () => {
         screen.getByRole("table", { name: "Internal users", hidden: true }),
       ).getByText("Alpha Translator"),
     ).toBeVisible();
+  });
+
+  it("keeps edit fields on a bounded non-conflict server failure", async () => {
+    updateAdminUserMock.mockResolvedValueOnce(failure());
+    renderUsers();
+    const user = await openEditDialog(translator.display_name);
+    const displayName = screen.getByRole("textbox", { name: "Display name" });
+
+    await user.clear(displayName);
+    await user.type(displayName, "Retry Edit");
+    await user.click(screen.getByRole("button", { name: "Save user" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Your entries are still here. Review them and try again.",
+    );
+    expect(displayName).toHaveValue("Retry Edit");
+  });
+
+  it("renders an unknown server role literally instead of inventing a label", async () => {
+    const roleOutsideCurrentClientEnum = {
+      ...translator,
+      roles: ["future_server_role" as AdminUserResponse["roles"][number]],
+    };
+    listAdminUsersMock.mockResolvedValueOnce(
+      ok({ items: [roleOutsideCurrentClientEnum], next_cursor: null }),
+    );
+
+    renderUsers();
+
+    expect(await screen.findAllByText("future_server_role")).toHaveLength(2);
   });
 
   it("reveals a created credential only in a non-dismissible acknowledgement dialog", async () => {
