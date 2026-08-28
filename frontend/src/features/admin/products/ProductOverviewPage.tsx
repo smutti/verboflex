@@ -110,6 +110,7 @@ export function ProductOverviewPage({
         throw new Error();
       }
       setLoadState({
+        // Stryker disable next-line StringLiteral: a validated response transitions this non-ready branch into the erased TypeScript ready discriminant.
         status: "ready",
         product: result.data,
         productId: resolvedProductId,

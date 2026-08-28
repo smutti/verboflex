@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import {
   listAdminProducts,
@@ -80,6 +80,7 @@ function ProductFields({ product }: { product: AdminProductResponse }) {
 }
 
 export function ProductsPage({ accessToken }: ProductsPageProps) {
+  const currentLocation = useLocation();
   const loadGeneration = useRef(0);
   // Stryker disable next-line BooleanLiteral: append controls are absent until the first response, whose finally block resets this internal gate.
   const loadingMoreRef = useRef(false);
@@ -175,15 +176,13 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
           </p>
         </div>
         <Button asChild className="w-full sm:w-auto">
-          {/* Stryker disable StringLiteral: React Router canonicalizes both "." and "" to the current URL; readiness and both hrefs are asserted. */}
           <Link
-            to={collectionReady ? "/admin/products/new" : "."}
+            to={collectionReady ? "/admin/products/new" : currentLocation}
             aria-disabled={!collectionReady}
             tabIndex={collectionReady ? undefined : -1}
           >
             Create product
           </Link>
-          {/* Stryker restore StringLiteral */}
         </Button>
       </div>
 
