@@ -4,6 +4,16 @@ Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypothe
 
 ---
 
+## dockerized-frontend-login — frontend image omits canonical OpenAPI input
+- **Date:** 2026-08-28
+- **Error patterns:** Compose frontend image fails `tsc --noEmit`, TS2307 for `../../openapi.json`, manual Vite workaround needed for port 8080
+- **Root cause(s):** `docker/frontend.Dockerfile` copied `frontend/src` but not the root-level canonical `frontend/openapi.json` imported by the generated-client contract test.
+- **Fix:** Copy `frontend/openapi.json` to `/app/openapi.json` before the frontend source and build step.
+- **Files changed:** docker/frontend.Dockerfile
+- **Why not caught:** Local production builds could see the repository-root schema; only the isolated Docker build context exposed the missing input.
+- **Recurrence guard:** `tools/real_smoke.sh --browser-only` must build the frontend image and complete the Playwright auth shell against an isolated Compose stack.
+---
+
 ## web-login-rejected — Vite dev server posts auth requests to itself
 - **Date:** 2026-08-28
 - **Error patterns:** valid local admin password, generic login failure, no backend login request, frontend `/api/v1/auth/token` returns 404
