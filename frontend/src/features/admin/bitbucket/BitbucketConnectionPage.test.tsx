@@ -193,13 +193,26 @@ describe("administrator Bitbucket connection page", () => {
           : { ...connected, status: "Reauthorization required" as const };
       getStatusMock.mockResolvedValueOnce(ok(status));
       let resolveOperation:
-        | ((value: ReturnType<typeof ok>) => void)
+        | ((
+            value: ReturnType<
+              typeof ok<{
+                authorization_url: string;
+                state_expires_in: 600;
+              }>
+            >,
+          ) => void)
         | undefined;
-      operation.mockReturnValueOnce(
-        new Promise((resolve) => {
+      const pendingOperation = new Promise<
+        ReturnType<
+          typeof ok<{
+            authorization_url: string;
+            state_expires_in: 600;
+          }>
+        >
+      >((resolve) => {
           resolveOperation = resolve;
-        }),
-      );
+        });
+      operation.mockReturnValueOnce(pendingOperation as never);
       const navigateTo = vi.fn();
       renderPage(navigateTo);
 
