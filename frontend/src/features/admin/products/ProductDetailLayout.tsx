@@ -6,6 +6,7 @@ import { cn } from "../../../lib/utils";
 export interface ProductDetailLayoutProps {
   children?: ReactNode;
   hideTitle?: boolean;
+  productId?: string;
   productName?: string;
 }
 
@@ -30,10 +31,12 @@ function resolveProductSection(pathname: string): ProductSection {
 export function ProductDetailLayout({
   children,
   hideTitle = false,
+  productId: productIdProp,
   productName = "Product configuration",
 }: ProductDetailLayoutProps) {
   const location = useLocation();
-  const productId = useParams<"productId">().productId!;
+  const routeProductId = useParams<"productId">().productId;
+  const productId = productIdProp ?? routeProductId ?? "";
   const currentSection = resolveProductSection(location.pathname);
   const productBase = `/admin/products/${encodeURIComponent(productId)}`;
 

@@ -30,6 +30,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../../components/ui/tabs";
+import { ProductDetailLayout } from "./ProductDetailLayout";
 
 export interface ProductOverviewPageProps {
   accessToken: string;
@@ -200,105 +201,105 @@ export function ProductOverviewPage({
   }
 
   return (
-    <section
-      className="grid min-w-0 max-w-full gap-8 overflow-x-clip"
-      aria-labelledby="product-overview-title"
+    <ProductDetailLayout
+      productId={resolvedProductId}
+      productName={product.name}
     >
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="grid min-w-0 gap-2">
-          <h1
-            id="product-overview-title"
-            className="text-display font-semibold break-words [overflow-wrap:anywhere]"
-          >
-            {product.name}
-          </h1>
-          <Badge variant="outline" className="w-fit rounded-md">
-            {product.is_active ? "Active" : "Inactive"}
-          </Badge>
+      <section
+        className="grid min-w-0 max-w-full gap-8 overflow-x-clip"
+        aria-label="Product overview"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="grid min-w-0 gap-2">
+            <span className="text-heading font-semibold">Lifecycle status</span>
+            <Badge variant="outline" className="w-fit rounded-md">
+              {product.is_active ? "Active" : "Inactive"}
+            </Badge>
+          </div>
+          {product.is_active ? (
+            <Button
+              ref={deactivateTriggerRef}
+              type="button"
+              variant="destructive"
+              className="w-full sm:w-auto"
+              onClick={() => setDeactivateOpen(true)}
+            >
+              Deactivate product
+            </Button>
+          ) : null}
         </div>
-        {product.is_active ? (
-          <Button
-            ref={deactivateTriggerRef}
-            type="button"
-            variant="destructive"
-            className="w-full sm:w-auto"
-            onClick={() => setDeactivateOpen(true)}
-          >
-            Deactivate product
-          </Button>
+
+        {product.is_active && product.candidate_revision !== null ? (
+          <Alert>
+            <AlertTitle>Draft in progress</AlertTitle>
+            <AlertDescription>
+              Published configuration remains active while you edit this draft.
+            </AlertDescription>
+          </Alert>
         ) : null}
-      </div>
 
-      {product.is_active && product.candidate_revision !== null ? (
-        <Alert>
-          <AlertTitle>Draft in progress</AlertTitle>
-          <AlertDescription>
-            Published configuration remains active while you edit this draft.
-          </AlertDescription>
-        </Alert>
-      ) : null}
+        <Tabs defaultValue="published" className="min-w-0 max-w-full">
+          <TabsList aria-label="Configuration revisions">
+            <TabsTrigger value="published">Published</TabsTrigger>
+            <TabsTrigger value="draft">Draft</TabsTrigger>
+          </TabsList>
+          <TabsContent value="published" forceMount>
+            <RevisionSummary
+              label="Published configuration"
+              revision={product.active_revision}
+            />
+          </TabsContent>
+          <TabsContent value="draft" forceMount>
+            <RevisionSummary
+              label="Draft configuration"
+              revision={product.candidate_revision}
+            />
+          </TabsContent>
+        </Tabs>
 
-      <Tabs defaultValue="published" className="min-w-0 max-w-full">
-        <TabsList aria-label="Configuration revisions">
-          <TabsTrigger value="published">Published</TabsTrigger>
-          <TabsTrigger value="draft">Draft</TabsTrigger>
-        </TabsList>
-        <TabsContent value="published" forceMount>
-          <RevisionSummary
-            label="Published configuration"
-            revision={product.active_revision}
-          />
-        </TabsContent>
-        <TabsContent value="draft" forceMount>
-          <RevisionSummary
-            label="Draft configuration"
-            revision={product.candidate_revision}
-          />
-        </TabsContent>
-      </Tabs>
+        {deactivateOpen ? (
+          <AlertDialog open onOpenChange={closeDeactivate}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Deactivate {product.name}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Its mappings will stop operating, but its published
+                  configuration will be kept.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
 
-      {deactivateOpen ? (
-        <AlertDialog open onOpenChange={closeDeactivate}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Deactivate {product.name}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Its mappings will stop operating, but its published
-                configuration will be kept.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
+              {deactivateError ? (
+                <Alert
+                  ref={deactivateErrorRef}
+                  tabIndex={-1}
+                  variant="destructive"
+                >
+                  <AlertTitle>Product not deactivated</AlertTitle>
+                  <AlertDescription>
+                    We could not deactivate this product. Its active state is
+                    unchanged.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
 
-            {deactivateError ? (
-              <Alert
-                ref={deactivateErrorRef}
-                tabIndex={-1}
-                variant="destructive"
-              >
-                <AlertTitle>Product not deactivated</AlertTitle>
-                <AlertDescription>
-                  We could not deactivate this product. Its active state is
-                  unchanged.
-                </AlertDescription>
-              </Alert>
-            ) : null}
-
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={deactivatePending}>
-                Cancel
-              </AlertDialogCancel>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={deactivatePending}
-                aria-busy={deactivatePending}
-                onClick={() => void submitDeactivate()}
-              >
-                Deactivate product
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      ) : null}
-    </section>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deactivatePending}>
+                  Cancel
+                </AlertDialogCancel>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={deactivatePending}
+                  aria-busy={deactivatePending}
+                  onClick={() => void submitDeactivate()}
+                >
+                  Deactivate product
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        ) : null}
+      </section>
+    </ProductDetailLayout>
   );
 }

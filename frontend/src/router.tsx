@@ -168,11 +168,7 @@ export function AdminApplicationRoutes({
       />
       <Route
         path="products/:productId/overview"
-        element={
-          <ProductDetailLayout hideTitle>
-            <ProductOverviewPage accessToken={accessToken} />
-          </ProductDetailLayout>
-        }
+        element={<ProductOverviewPage accessToken={accessToken} />}
       />
       <Route
         path="products/:productId/repositories"
