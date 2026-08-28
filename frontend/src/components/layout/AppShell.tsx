@@ -222,7 +222,6 @@ export function AppShell({
   principal,
 }: AppShellProps) {
   const [navigationOpen, setNavigationOpen] = useState(false);
-  const [navigationTooltipOpen, setNavigationTooltipOpen] = useState(false);
   const showAdministration = principal.roles.includes("admin");
 
   return (
@@ -234,10 +233,7 @@ export function AppShell({
         <div className="flex min-w-0 items-center gap-2">
           <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
             <TooltipProvider>
-              <Tooltip
-                open={!navigationOpen && navigationTooltipOpen}
-                onOpenChange={setNavigationTooltipOpen}
-              >
+              <Tooltip>
                 <TooltipTrigger asChild>
                   <SheetTrigger asChild>
                     <Button
