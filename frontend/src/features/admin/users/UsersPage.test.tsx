@@ -13,7 +13,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createAdminUser,
+  deactivateAdminUser,
   listAdminUsers,
+  reactivateAdminUser,
+  resetAdminUserPassword,
   updateAdminUser,
   type AdminUserCredentialResponse,
   type AdminUserResponse,
@@ -52,13 +55,19 @@ vi.mock("../../../api/client", async (importOriginal) => {
   return {
     ...original,
     createAdminUser: vi.fn(),
+    deactivateAdminUser: vi.fn(),
     listAdminUsers: vi.fn(),
+    reactivateAdminUser: vi.fn(),
+    resetAdminUserPassword: vi.fn(),
     updateAdminUser: vi.fn(),
   };
 });
 
 const createAdminUserMock = vi.mocked(createAdminUser);
+const deactivateAdminUserMock = vi.mocked(deactivateAdminUser);
 const listAdminUsersMock = vi.mocked(listAdminUsers);
+const reactivateAdminUserMock = vi.mocked(reactivateAdminUser);
+const resetAdminUserPasswordMock = vi.mocked(resetAdminUserPassword);
 const updateAdminUserMock = vi.mocked(updateAdminUser);
 
 const currentAdmin: AdminUserResponse = {
@@ -130,13 +139,33 @@ async function openEditDialog(userName: string) {
   return user;
 }
 
+async function chooseRowAction(userName: string, actionName: string) {
+  const user = userEvent.setup();
+  const table = await screen.findByRole("table", { name: "Internal users" });
+  const row = within(table).getByRole("row", {
+    name: new RegExp(userName, "i"),
+  });
+  await user.click(
+    within(row).getByRole("button", {
+      name: `More actions for ${userName}`,
+    }),
+  );
+  await user.click(await screen.findByRole("menuitem", { name: actionName }));
+  return user;
+}
+
 describe("administrator users page tracer", () => {
   beforeEach(() => {
     listAdminUsersMock.mockResolvedValue(
       ok({ items: [currentAdmin, translator], next_cursor: null }),
     );
     createAdminUserMock.mockReset();
+    deactivateAdminUserMock.mockReset();
+    reactivateAdminUserMock.mockReset();
+    resetAdminUserPasswordMock.mockReset();
     updateAdminUserMock.mockReset();
+    localStorage.clear();
+    sessionStorage.clear();
   });
 
   afterEach(() => {
@@ -473,5 +502,227 @@ describe("administrator users page tracer", () => {
         screen.getByRole("table", { name: "Internal users", hidden: true }),
       ).getByText("Alpha Translator"),
     ).toBeVisible();
+  });
+
+  it("reveals a created credential only in a non-dismissible acknowledgement dialog", async () => {
+    const temporaryPassword = "Create-Only-Secret!2048";
+    const createdUser: AdminUserResponse = {
+      id: "00000000-0000-4000-8000-000000000004",
+      email: "created@example.com",
+      display_name: "Created User",
+      is_active: true,
+      must_change_password: true,
+      roles: ["viewer"],
+    };
+    listAdminUsersMock
+      .mockResolvedValueOnce(
+        ok({ items: [currentAdmin, translator], next_cursor: null }),
+      )
+      .mockResolvedValueOnce(
+        ok({ items: [currentAdmin, translator, createdUser], next_cursor: null }),
+      );
+    createAdminUserMock.mockResolvedValueOnce(
+      ok({ ...createdUser, temporary_password: temporaryPassword }, 201),
+    );
+    renderUsers();
+    const user = await openAddDialog();
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Corporate email" }),
+      createdUser.email,
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "Display name" }),
+      createdUser.display_name,
+    );
+    await user.click(screen.getByRole("button", { name: "Create user" }));
+
+    const credentialDialog = await screen.findByRole("dialog", {
+      name: "Temporary password created",
+    });
+    expect(within(credentialDialog).getByText(temporaryPassword)).toBeVisible();
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+
+    await user.keyboard("{Escape}");
+    expect(credentialDialog).toBeVisible();
+    await user.pointer({ keys: "[MouseLeft]", target: document.body });
+    expect(credentialDialog).toBeVisible();
+
+    await user.click(
+      within(credentialDialog).getByRole("button", {
+        name: "Copy temporary password",
+      }),
+    );
+    expect(navigator.clipboard.writeText).toHaveBeenCalledOnce();
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(temporaryPassword);
+    const copyStatus = within(credentialDialog).getByRole("status");
+    expect(copyStatus).toHaveTextContent("Temporary password copied");
+    expect(copyStatus).not.toHaveTextContent(temporaryPassword);
+
+    await user.click(
+      within(credentialDialog).getByRole("button", {
+        name: "I saved the password",
+      }),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Temporary password created" }),
+    ).not.toBeInTheDocument();
+    expect(document.documentElement.textContent).not.toContain(temporaryPassword);
+    expect(window.location.href).not.toContain(temporaryPassword);
+    expect(JSON.stringify(Object.entries(localStorage))).not.toContain(
+      temporaryPassword,
+    );
+    expect(JSON.stringify(Object.entries(sessionStorage))).not.toContain(
+      temporaryPassword,
+    );
+    expect(JSON.stringify(createAdminUserMock.mock.calls)).not.toContain(
+      temporaryPassword,
+    );
+  });
+
+  it.each([
+    {
+      actionName: "Reset password",
+      confirmTitle: "Reset password for Alpha Translator?",
+      confirmLabel: "Reset password",
+      temporaryPassword: "Reset-Only-Secret!2048",
+      operation: resetAdminUserPasswordMock,
+    },
+    {
+      actionName: "Reactivate user",
+      confirmTitle: "Reactivate Middle Viewer?",
+      confirmLabel: "Reactivate user",
+      temporaryPassword: "Reactivate-Only-Secret!2048",
+      operation: reactivateAdminUserMock,
+    },
+  ])(
+    "$actionName requires named confirmation and opens the one-time credential boundary",
+    async ({
+      actionName,
+      confirmTitle,
+      confirmLabel,
+      temporaryPassword,
+      operation,
+    }) => {
+      const target =
+        actionName === "Reset password" ? translator : inactiveViewer;
+      listAdminUsersMock.mockResolvedValueOnce(
+        ok({ items: [currentAdmin, translator, inactiveViewer], next_cursor: null }),
+      );
+      operation.mockResolvedValueOnce(
+        ok({
+          ...target,
+          is_active: true,
+          must_change_password: true,
+          temporary_password: temporaryPassword,
+        }),
+      );
+      renderUsers();
+      const user = await chooseRowAction(target.display_name, actionName);
+
+      const confirmation = screen.getByRole("alertdialog", {
+        name: confirmTitle,
+      });
+      const submit = within(confirmation).getByRole("button", {
+        name: confirmLabel,
+      });
+      await user.click(submit);
+
+      expect(operation).toHaveBeenCalledOnce();
+      expect(operation).toHaveBeenCalledWith({
+        auth: "memory-only-admin-bearer",
+        path: { user_id: target.id },
+      });
+      const credentialDialog = await screen.findByRole("dialog", {
+        name: "Temporary password created",
+      });
+      expect(within(credentialDialog).getByText(temporaryPassword)).toBeVisible();
+    },
+  );
+
+  it("prevents duplicate reset submission while the named confirmation is pending", async () => {
+    let resolveReset:
+      | ((value: ReturnType<typeof ok<AdminUserCredentialResponse>>) => void)
+      | undefined;
+    const pendingReset = new Promise<
+      ReturnType<typeof ok<AdminUserCredentialResponse>>
+    >((resolve) => {
+      resolveReset = resolve;
+    });
+    resetAdminUserPasswordMock.mockReturnValueOnce(pendingReset);
+    renderUsers();
+    const user = await chooseRowAction(translator.display_name, "Reset password");
+    const confirmation = screen.getByRole("alertdialog", {
+      name: "Reset password for Alpha Translator?",
+    });
+    const submit = within(confirmation).getByRole("button", {
+      name: "Reset password",
+    });
+
+    await user.click(submit);
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAttribute("aria-busy", "true");
+    await user.click(submit);
+    expect(resetAdminUserPasswordMock).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      resolveReset?.(
+        ok({
+          ...translator,
+          must_change_password: true,
+          temporary_password: "Pending-Reset-Secret!2048",
+        }),
+      );
+    });
+    expect(
+      await screen.findByRole("dialog", { name: "Temporary password created" }),
+    ).toBeVisible();
+  });
+
+  it("keeps the named deactivate dialog and active row intact on server denial", async () => {
+    deactivateAdminUserMock.mockResolvedValueOnce(
+      conflict("last active administrator cannot be deactivated"),
+    );
+    renderUsers();
+    const user = await chooseRowAction(currentAdmin.display_name, "Deactivate user");
+
+    const confirmation = screen.getByRole("alertdialog", {
+      name: "Deactivate Zulu Admin?",
+    });
+    await user.click(
+      within(confirmation).getByRole("button", { name: "Deactivate user" }),
+    );
+
+    const alert = await within(confirmation).findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "This account cannot be deactivated because administrator authority must be preserved.",
+    );
+    expect(alert).toHaveFocus();
+    expect(confirmation).toBeVisible();
+    const table = screen.getByRole("table", { name: "Internal users" });
+    const row = within(table).getByRole("row", { name: /Zulu Admin/i });
+    expect(within(row).getByText("Active")).toBeVisible();
+    expect(deactivateAdminUserMock).toHaveBeenCalledOnce();
+  });
+
+  it("applies deactivation only from the backend response", async () => {
+    deactivateAdminUserMock.mockResolvedValueOnce(
+      ok({ ...translator, is_active: false }),
+    );
+    renderUsers();
+    const user = await chooseRowAction(translator.display_name, "Deactivate user");
+    const confirmation = screen.getByRole("alertdialog", {
+      name: "Deactivate Alpha Translator?",
+    });
+
+    await user.click(
+      within(confirmation).getByRole("button", { name: "Deactivate user" }),
+    );
+
+    await waitFor(() => {
+      const table = screen.getByRole("table", { name: "Internal users" });
+      const row = within(table).getByRole("row", { name: /Alpha Translator/i });
+      expect(within(row).getByText("Inactive")).toBeVisible();
+    });
   });
 });
