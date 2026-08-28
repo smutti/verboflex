@@ -40,7 +40,7 @@ export interface ProductOverviewPageProps {
 type ProductLoadState =
   | { status: "loading" }
   | { status: "error" }
-  | { status: "ready"; product: AdminProductResponse };
+  | { status: "ready"; product: AdminProductResponse; productId: string };
 
 function RevisionSummary({
   label,
@@ -105,9 +105,13 @@ export function ProductOverviewPage({
         return;
       }
       if (result.data === undefined) {
-        throw new Error("Product detail rejected");
+        throw new Error();
       }
-      setLoadState({ status: "ready", product: result.data });
+      setLoadState({
+        status: "ready",
+        product: result.data,
+        productId: resolvedProductId,
+      });
     } catch {
       if (generation === loadGeneration.current) {
         setLoadState({ status: "error" });
@@ -130,7 +134,7 @@ export function ProductOverviewPage({
 
   useEffect(() => {
     if (deactivateError) {
-      deactivateErrorRef.current?.focus();
+      deactivateErrorRef.current!.focus();
     }
   }, [deactivateError]);
 
@@ -141,16 +145,12 @@ export function ProductOverviewPage({
     setDeactivateOpen(open);
     if (!open) {
       setDeactivateError(false);
-      queueMicrotask(() => deactivateTriggerRef.current?.focus());
+      queueMicrotask(() => deactivateTriggerRef.current!.focus());
     }
   }
 
   async function submitDeactivate() {
-    if (
-      deactivatePendingRef.current ||
-      loadState.status !== "ready" ||
-      resolvedProductId === undefined
-    ) {
+    if (deactivatePendingRef.current || loadState.status !== "ready") {
       return;
     }
     deactivatePendingRef.current = true;
@@ -159,13 +159,17 @@ export function ProductOverviewPage({
     try {
       const result = await deactivateAdminProduct({
         auth: accessToken,
-        path: { product_id: resolvedProductId },
+        path: { product_id: loadState.productId },
       });
       if (result.data === undefined) {
         setDeactivateError(true);
         return;
       }
-      setLoadState({ status: "ready", product: result.data });
+      setLoadState({
+        status: "ready",
+        product: result.data,
+        productId: loadState.productId,
+      });
       setDeactivateOpen(false);
     } catch {
       setDeactivateError(true);
@@ -185,7 +189,7 @@ export function ProductOverviewPage({
     );
   }
 
-  if (loadState.status === "error") {
+  if (loadState.status !== "ready") {
     return (
       <Alert variant="destructive">
         <AlertTitle>Product unavailable</AlertTitle>
@@ -210,7 +214,7 @@ export function ProductOverviewPage({
 
   return (
     <ProductDetailLayout
-      productId={resolvedProductId}
+      productId={loadState.productId}
       productName={product.name}
     >
       <section

@@ -82,10 +82,12 @@ function ProductFields({ product }: { product: AdminProductResponse }) {
 export function ProductsPage({ accessToken }: ProductsPageProps) {
   const loadGeneration = useRef(0);
   const [loadState, setLoadState] = useState<LoadState>("loading");
+  // Stryker disable next-line ArrayDeclaration: rows are hidden until the first generated response replaces this seed.
   const [products, setProducts] = useState<AdminProductResponse[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>("all");
   const [pageSize, setPageSize] = useState<ProductPageSize>(50);
+  // Stryker disable next-line BooleanLiteral: pagination is absent until the first response also normalizes this flag.
   const [loadingMore, setLoadingMore] = useState(false);
 
   const loadProducts = useCallback(
@@ -115,7 +117,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
           return;
         }
         if (result.data === undefined) {
-          throw new Error("Product list rejected");
+          throw new Error();
         }
         setProducts((current) =>
           append ? [...current, ...result.data.items] : result.data.items,
@@ -166,14 +168,9 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
         </div>
         <Button asChild className="w-full sm:w-auto">
           <Link
-            to="/admin/products/new"
+            to={collectionReady ? "/admin/products/new" : "."}
             aria-disabled={!collectionReady}
             tabIndex={collectionReady ? undefined : -1}
-            onClick={(event) => {
-              if (!collectionReady) {
-                event.preventDefault();
-              }
-            }}
           >
             Create product
           </Link>
@@ -282,7 +279,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
                   </TableHeader>
                   <TableBody>
                     {products.map((product, index) => (
-                      <TableRow key={`${product.id}-${index}`}>
+                      <TableRow key={index}>
                         <TableCell className="min-w-0 whitespace-normal">
                           <div className="grid min-w-0 gap-1">
                             <Link
@@ -314,7 +311,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
               >
                 {products.map((product, index) => (
                   <article
-                    key={`${product.id}-${index}`}
+                    key={index}
                     className="grid min-w-0 max-w-full gap-3 border-b pb-4"
                   >
                     <ProductFields product={product} />

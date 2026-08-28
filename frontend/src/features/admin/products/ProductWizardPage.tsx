@@ -133,17 +133,16 @@ export function ProductWizardPage({
     if (step === currentStep) {
       return;
     }
-    if (currentStep === 1 && dirty) {
+    if (dirty) {
       setPendingNavigation({ returnFocus: event.currentTarget, step });
       return;
     }
     setCurrentStep(step);
   }
 
-  function keepEditing() {
-    const returnFocus = pendingNavigation?.returnFocus;
+  function keepEditing(navigation: PendingNavigation) {
     setPendingNavigation(null);
-    queueMicrotask(() => returnFocus?.focus());
+    queueMicrotask(() => navigation.returnFocus.focus());
   }
 
   function discardAndNavigate(navigation: PendingNavigation) {
@@ -162,7 +161,11 @@ export function ProductWizardPage({
     }
     if (name.trim().length === 0) {
       setNameError("required");
-      nameRef.current?.focus();
+      nameRef.current!.focus();
+      return;
+    }
+    if (product !== undefined && product.candidate_revision === null) {
+      setSubmissionError(true);
       return;
     }
 
@@ -180,20 +183,17 @@ export function ProductWizardPage({
               auth: accessToken,
               body: { name, description: normalizedDescription },
             })
-          : product.candidate_revision === null
-            ? undefined
-            : await updateAdminProductCandidate({
-                auth: accessToken,
-                path: { product_id: product.id },
-                body: {
-                  name,
-                  description: normalizedDescription,
-                  expected_candidate_version:
-                    product.candidate_revision.version,
-                },
-              });
+          : await updateAdminProductCandidate({
+              auth: accessToken,
+              path: { product_id: product.id },
+              body: {
+                name,
+                description: normalizedDescription,
+                expected_candidate_version: product.candidate_revision!.version,
+              },
+            });
 
-      if (result?.data !== undefined) {
+      if (result.data !== undefined) {
         const responseProduct = result.data;
         const responseDescription = savedDescription(responseProduct);
         setProduct(responseProduct);
@@ -206,9 +206,9 @@ export function ProductWizardPage({
         return;
       }
 
-      if (result !== undefined && responseStatus(result) === 409) {
+      if (responseStatus(result) === 409) {
         setNameError("duplicate");
-        nameRef.current?.focus();
+        nameRef.current!.focus();
         return;
       }
       setSubmissionError(true);
@@ -330,7 +330,10 @@ export function ProductWizardPage({
       )}
 
       {pendingNavigation !== null ? (
-        <AlertDialog open onOpenChange={(open) => !open && keepEditing()}>
+        <AlertDialog
+          open
+          onOpenChange={(open) => !open && keepEditing(pendingNavigation)}
+        >
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
@@ -339,7 +342,7 @@ export function ProductWizardPage({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={keepEditing}>
+              <AlertDialogCancel onClick={() => keepEditing(pendingNavigation)}>
                 Keep editing
               </AlertDialogCancel>
               <Button
