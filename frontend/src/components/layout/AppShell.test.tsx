@@ -499,6 +499,11 @@ describe("authenticated application shell", () => {
         level: 2,
       }),
     ).toHaveLength(1);
+    expect(
+      within(navigation)
+        .getAllByRole("link")
+        .map((link) => link.textContent?.trim()),
+    ).toEqual(["Products", "Users", "Bitbucket"]);
 
     await user.click(within(navigation).getByRole("link", { name: "Users" }));
 
@@ -521,7 +526,8 @@ describe("authenticated application shell", () => {
       </MemoryRouter>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Open navigation" }));
+    const trigger = screen.getByRole("button", { name: "Open navigation" });
+    await user.click(trigger);
     const sheet = await screen.findByRole("dialog", { name: "Navigation" });
     const navigation = within(sheet).getByRole("navigation", {
       name: "Primary navigation",
@@ -532,13 +538,63 @@ describe("authenticated application shell", () => {
         level: 2,
       }),
     ).toHaveLength(1);
+    expect(sheet).toHaveClass(
+      "max-w-[calc(100vw-32px)]",
+      "motion-reduce:animate-none",
+      "motion-reduce:transition-none",
+    );
 
-    await user.click(within(navigation).getByRole("link", { name: "Users" }));
+    await user.click(
+      within(navigation).getByRole("link", { name: "Products" }),
+    );
 
     expect(screen.getByTestId("shell-current-route")).toHaveTextContent(
-      "/admin/users",
+      "/admin/products",
     );
     expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("freezes the 320, 768, 1024, and wide shell containment contracts", () => {
+    render(
+      <MemoryRouter initialEntries={["/admin/products"]}>
+        <AppShell
+          accessToken="admin-server-token"
+          onLogout={vi.fn()}
+          principal={principal}
+        >
+          <h1 className="break-words [overflow-wrap:anywhere]">
+            {"A-long-administration-label-".repeat(16)}
+          </h1>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("app-shell")).toHaveClass(
+      "min-w-0",
+      "max-w-full",
+      "overflow-x-clip",
+    );
+    expect(screen.getByTestId("app-shell-content")).toHaveClass(
+      "min-w-0",
+      "max-w-full",
+      "px-6",
+      "md:px-8",
+    );
+    expect(screen.getByTestId("desktop-navigation")).toHaveClass(
+      "hidden",
+      "lg:flex",
+    );
+    expect(screen.getByRole("button", { name: "Open navigation" })).toHaveClass(
+      "lg:hidden",
+    );
+
+    for (const name of ["Products", "Users", "Bitbucket"]) {
+      expect(screen.getByRole("link", { name })).toHaveClass(
+        "min-w-0",
+        "max-w-full",
+      );
+    }
   });
 
   it("omits Administration from desktop and mobile navigation for non-admins", async () => {

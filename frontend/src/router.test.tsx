@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +9,7 @@ import {
   changePassword as generatedChangePassword,
   issueToken,
 } from "./api/client";
+import { ProductDetailLayout } from "./features/admin/products/ProductDetailLayout";
 import { SessionProvider } from "./features/auth/session";
 import { AppRouter, SessionRoutes } from "./router";
 
@@ -55,6 +56,7 @@ function renderRoutes(
   state: Parameters<typeof SessionRoutes>[0]["state"],
   initialEntry = "/",
   adminRequest = vi.fn(),
+  adminRouteState?: Parameters<typeof SessionRoutes>[0]["adminRouteState"],
 ) {
   function AdminRouteProbe() {
     adminRequest();
@@ -67,6 +69,7 @@ function renderRoutes(
     changePasswordElement: <h1>Password change route</h1>,
     ordinaryElement: <h1>Ordinary route</h1>,
     adminElement: <AdminRouteProbe />,
+    adminRouteState,
   };
 
   return render(
@@ -231,6 +234,115 @@ describe("session routes", () => {
 
     await user.click(screen.getByRole("link", { name: "Return to workspace" }));
     expect(screen.getByTestId("current-route")).toHaveTextContent("/");
+  });
+
+  it("announces administrator loading without mounting protected content", () => {
+    const adminRequest = vi.fn();
+
+    renderRoutes(
+      {
+        status: "authenticated",
+        accessToken: "admin-server-token",
+        principal: adminPrincipal,
+      },
+      "/admin/users",
+      adminRequest,
+      { status: "loading" },
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading administration page",
+    );
+    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
+    expect(
+      screen.queryByRole("heading", { name: "Users administration route" }),
+    ).not.toBeInTheDocument();
+    expect(adminRequest).not.toHaveBeenCalled();
+  });
+
+  it("keeps administrator load errors bounded, recoverable, and free of protected content", async () => {
+    const adminRequest = vi.fn();
+    const retry = vi.fn();
+    const user = userEvent.setup();
+
+    renderRoutes(
+      {
+        status: "authenticated",
+        accessToken: "admin-server-token",
+        principal: adminPrincipal,
+      },
+      "/admin/users",
+      adminRequest,
+      { status: "error", onRetry: retry },
+    );
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(
+      "We could not load this page. Retry without leaving the administration area.",
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Users administration route" }),
+    ).not.toBeInTheDocument();
+    expect(adminRequest).not.toHaveBeenCalled();
+
+    await user.click(
+      screen.getByRole("button", { name: "Retry loading page" }),
+    );
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
+  it("keeps product navigation URL-backed, ordered, singular, and locally contained", async () => {
+    const user = userEvent.setup();
+    const longProductName = `Product ${"localization-".repeat(24)}`;
+
+    render(
+      <MemoryRouter
+        initialEntries={["/admin/products/product-123/mappings"]}
+      >
+        <ProductDetailLayout productName={longProductName}>
+          <p>Current product section</p>
+        </ProductDetailLayout>
+        <LocationMarker />
+      </MemoryRouter>,
+    );
+
+    const layout = screen.getByTestId("product-detail-layout");
+    expect(layout).toHaveClass("min-w-0", "max-w-full", "overflow-x-clip");
+    expect(
+      screen.getByRole("heading", { name: longProductName, level: 1 }),
+    ).toHaveClass("break-words", "[overflow-wrap:anywhere]");
+
+    const navigation = screen.getByRole("navigation", {
+      name: "Product configuration",
+    });
+    expect(
+      within(navigation)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["Overview", "Repositories", "Mappings", "Preview"]);
+    expect(within(navigation).getAllByRole("link", { current: "page" })).toHaveLength(
+      1,
+    );
+    expect(
+      within(navigation).getByRole("link", {
+        name: "Mappings",
+        current: "page",
+      }),
+    ).toBeVisible();
+
+    await user.click(within(navigation).getByRole("link", { name: "Preview" }));
+    expect(screen.getByTestId("current-route")).toHaveTextContent(
+      "/admin/products/product-123/preview",
+    );
+    expect(within(navigation).getAllByRole("link", { current: "page" })).toHaveLength(
+      1,
+    );
+    expect(
+      within(navigation).getByRole("link", {
+        name: "Preview",
+        current: "page",
+      }),
+    ).toBeVisible();
   });
 
   it("returns a successful required-password change to signed-out login", async () => {
