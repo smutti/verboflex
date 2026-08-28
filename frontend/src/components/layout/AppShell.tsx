@@ -1,7 +1,15 @@
 import type { CurrentUserResponse, RoleName } from "../../api/client";
-import { LayoutDashboard, LogOut, Menu, Users } from "lucide-react";
+import {
+  Boxes,
+  Cloud,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { Link, useInRouterContext } from "react-router-dom";
+import { Link, useInRouterContext, useLocation } from "react-router-dom";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
@@ -40,31 +48,90 @@ interface WorkspaceNavigationProps {
   showAdministration: boolean;
 }
 
-function UsersDestination({ onNavigate }: { onNavigate?: () => void }) {
-  const isWithinRouter = useInRouterContext();
-  const content = (
+interface AdministrationDestination {
+  icon: LucideIcon;
+  label: string;
+  to: string;
+}
+
+const ADMINISTRATION_DESTINATIONS: AdministrationDestination[] = [
+  { icon: Boxes, label: "Products", to: "/admin/products" },
+  { icon: Users, label: "Users", to: "/admin/users" },
+  { icon: Cloud, label: "Bitbucket", to: "/admin/bitbucket" },
+];
+
+function DestinationContent({
+  icon: Icon,
+  label,
+}: Pick<AdministrationDestination, "icon" | "label">) {
+  return (
     <>
-      <Users aria-hidden="true" />
-      Users
+      <Icon aria-hidden="true" />
+      <span className="min-w-0 break-words text-left [overflow-wrap:anywhere]">
+        {label}
+      </span>
     </>
   );
+}
+
+function RoutedAdministrationDestination({
+  destination,
+  onNavigate,
+}: {
+  destination: AdministrationDestination;
+  onNavigate?: () => void;
+}) {
+  const location = useLocation();
+  const isCurrent =
+    location.pathname === destination.to ||
+    location.pathname.startsWith(`${destination.to}/`);
 
   return (
     <Button
       type="button"
       variant="ghost"
-      className="w-full justify-start"
+      className="h-auto min-h-9 w-full min-w-0 max-w-full justify-start whitespace-normal"
       asChild
     >
-      {isWithinRouter ? (
-        <Link to="/admin/users" onClick={onNavigate}>
-          {content}
-        </Link>
-      ) : (
-        <a href="/admin/users" onClick={onNavigate}>
-          {content}
-        </a>
-      )}
+      <Link
+        to={destination.to}
+        onClick={onNavigate}
+        aria-current={isCurrent ? "page" : undefined}
+      >
+        <DestinationContent {...destination} />
+      </Link>
+    </Button>
+  );
+}
+
+function AdministrationDestinationLink({
+  destination,
+  onNavigate,
+}: {
+  destination: AdministrationDestination;
+  onNavigate?: () => void;
+}) {
+  const isWithinRouter = useInRouterContext();
+
+  if (isWithinRouter) {
+    return (
+      <RoutedAdministrationDestination
+        destination={destination}
+        onNavigate={onNavigate}
+      />
+    );
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      className="h-auto min-h-9 w-full min-w-0 max-w-full justify-start whitespace-normal"
+      asChild
+    >
+      <a href={destination.to} onClick={onNavigate}>
+        <DestinationContent {...destination} />
+      </a>
     </Button>
   );
 }
@@ -95,7 +162,13 @@ function WorkspaceNavigation({
           >
             Administration
           </h2>
-          <UsersDestination onNavigate={onNavigate} />
+          {ADMINISTRATION_DESTINATIONS.map((destination) => (
+            <AdministrationDestinationLink
+              key={destination.to}
+              destination={destination}
+              onNavigate={onNavigate}
+            />
+          ))}
         </section>
       ) : null}
     </nav>
@@ -153,8 +226,11 @@ export function AppShell({
   const showAdministration = principal.roles.includes("admin");
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="flex items-center justify-between gap-4 border-b bg-secondary px-6 py-4">
+    <div
+      data-testid="app-shell"
+      className="min-h-screen min-w-0 max-w-full overflow-x-clip bg-background text-foreground"
+    >
+      <header className="flex items-center justify-between gap-4 border-b bg-secondary px-6 py-4 md:px-8">
         <div className="flex min-w-0 items-center gap-2">
           <Sheet
             open={navigationOpen}
@@ -188,7 +264,10 @@ export function AppShell({
                 )}
               </Tooltip>
             </TooltipProvider>
-            <SheetContent side="left" className="w-72 max-w-[calc(100vw-32px)]">
+            <SheetContent
+              side="left"
+              className="w-72 max-w-[calc(100vw-32px)] motion-reduce:animate-none motion-reduce:transition-none"
+            >
               <SheetHeader>
                 <SheetTitle>Navigation</SheetTitle>
               </SheetHeader>
@@ -222,14 +301,20 @@ export function AppShell({
           </Tooltip>
         </TooltipProvider>
       </header>
-      <div className="lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
-        <aside className="hidden min-h-[calc(100vh-65px)] border-r bg-secondary p-4 lg:flex">
+      <div className="min-w-0 max-w-full lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <aside
+          data-testid="desktop-navigation"
+          className="hidden min-h-[calc(100vh-65px)] border-r bg-secondary p-4 lg:flex"
+        >
           <WorkspaceNavigation
             administrationLabelId="desktop-administration-nav-title"
             showAdministration={showAdministration}
           />
         </aside>
-        <main className="grid min-w-0 content-start gap-8 px-6 py-8">
+        <main
+          data-testid="app-shell-content"
+          className="grid min-w-0 max-w-full content-start gap-8 px-6 py-8 md:px-8"
+        >
           {children === undefined ? (
             <WorkspaceOverviewContent
               accessToken={accessToken}

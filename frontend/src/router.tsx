@@ -3,11 +3,18 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { App } from "./App";
 import { AppShell } from "./components/layout/AppShell";
+import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
+import { Button } from "./components/ui/button";
 import { Skeleton } from "./components/ui/skeleton";
 import { AdminAccessDenied } from "./features/admin/AdminAccessDenied";
 import { ChangePasswordPage } from "./features/auth/ChangePasswordPage";
 import { LoginPage } from "./features/auth/LoginPage";
 import { useSession, type SessionState } from "./features/auth/session";
+
+export type AdminRouteState =
+  | { status: "ready" }
+  | { status: "loading" }
+  | { status: "error"; onRetry: () => void };
 
 export interface SessionRoutesProps {
   state: SessionState;
@@ -15,7 +22,49 @@ export interface SessionRoutesProps {
   changePasswordElement: ReactNode;
   ordinaryElement: ReactNode;
   adminElement?: ReactNode;
+  adminRouteState?: AdminRouteState;
   accessDeniedElement?: ReactNode;
+}
+
+function AdminRouteContent({
+  children,
+  state,
+}: {
+  children: ReactNode;
+  state: AdminRouteState;
+}) {
+  if (state.status === "loading") {
+    return (
+      <section
+        className="grid max-w-3xl gap-4"
+        role="status"
+        aria-live="polite"
+      >
+        <Skeleton className="h-8 w-52 max-w-full" />
+        <Skeleton className="h-24 w-full" />
+        <span>Loading administration page</span>
+      </section>
+    );
+  }
+
+  if (state.status === "error") {
+    return (
+      <Alert variant="destructive" className="max-w-3xl">
+        <AlertTitle>Administration page unavailable</AlertTitle>
+        <AlertDescription>
+          <p>
+            We could not load this page. Retry without leaving the
+            administration area.
+          </p>
+          <Button type="button" variant="outline" onClick={state.onRetry}>
+            Retry loading page
+          </Button>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  return children;
 }
 
 export function SessionRoutes({
@@ -24,6 +73,7 @@ export function SessionRoutes({
   changePasswordElement,
   ordinaryElement,
   adminElement,
+  adminRouteState = { status: "ready" },
   accessDeniedElement,
 }: SessionRoutesProps) {
   if (state.status === "checking_session") {
@@ -62,14 +112,18 @@ export function SessionRoutes({
 
   const isAdmin = state.principal.roles.includes("admin");
   const deniedElement = accessDeniedElement ?? <AdminAccessDenied />;
+  const guardedAdminElement = isAdmin ? (
+    <AdminRouteContent state={adminRouteState}>
+      {adminElement ?? ordinaryElement}
+    </AdminRouteContent>
+  ) : (
+    deniedElement
+  );
 
   return (
     <Routes>
       <Route path="/" element={ordinaryElement} />
-      <Route
-        path="/admin/users"
-        element={isAdmin ? (adminElement ?? ordinaryElement) : deniedElement}
-      />
+      <Route path="/admin/users" element={guardedAdminElement} />
       <Route
         path="/admin/*"
         element={
