@@ -137,6 +137,12 @@ const inactivePublishedProduct: AdminProductResponse = {
   candidate_revision: null,
 };
 
+const activeWithoutCandidateProduct: AdminProductResponse = {
+  ...inactivePublishedProduct,
+  name: "Published Without Draft",
+  is_active: true,
+};
+
 function ok<T>(data: T, status = 200) {
   return {
     data,
@@ -249,6 +255,9 @@ describe("administrator product configuration tracer", () => {
     expect(
       screen.getByRole("link", { name: "Create product" }),
     ).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByRole("link", { name: "Create product" }),
+    ).toHaveAttribute("tabindex", "-1");
     await userEvent.click(screen.getByRole("link", { name: "Create product" }));
     expect(screen.getByTestId("current-location")).toHaveTextContent("/");
     await waitFor(() => expect(listAdminProductsMock).toHaveBeenCalledOnce());
@@ -279,6 +288,12 @@ describe("administrator product configuration tracer", () => {
         "Create a product to connect repositories and validate a localization layout.",
       ),
     ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Create product" }),
+    ).toHaveAttribute("aria-disabled", "false");
+    expect(
+      screen.getByRole("link", { name: "Create product" }),
+    ).not.toHaveAttribute("tabindex");
   });
 
   it("keeps status, page size, cursor, and API row order server-owned", async () => {
@@ -312,6 +327,12 @@ describe("administrator product configuration tracer", () => {
       auth: "memory-only-admin-bearer",
       query: { cursor: null, limit: 50, status: null },
     });
+    expect(
+      screen.getByRole("button", { name: "Load more products" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Load more products" }),
+    ).toHaveAttribute("aria-busy", "false");
 
     await userEvent.click(
       screen.getByRole("button", { name: "Load more products" }),
@@ -379,6 +400,68 @@ describe("administrator product configuration tracer", () => {
       expect.stringContaining("Zulu Mobile"),
       expect.stringContaining("Alpha Embedded"),
     ]);
+    expect(within(table).getByText("Published version 4")).toBeVisible();
+    expect(within(table).getByText("Draft version 5")).toBeVisible();
+    expect(within(table).getByText("Not published")).toBeVisible();
+    expect(
+      within(table).getByRole("link", { name: activeProduct.name }),
+    ).toHaveAttribute("href", `/admin/products/${activeProduct.id}/overview`);
+    expect(
+      within(table).getAllByText("Active", { selector: "[data-slot=badge]" }),
+    ).toHaveLength(1);
+    expect(
+      within(table).getAllByText("Inactive", { selector: "[data-slot=badge]" }),
+    ).toHaveLength(1);
+  });
+
+  it("keeps paged and filtered loading transitions bounded and single-flight", async () => {
+    let resolveMore:
+      | ((
+          value: ReturnType<
+            typeof ok<{
+              items: AdminProductResponse[];
+              next_cursor: null;
+            }>
+          >,
+        ) => void)
+      | undefined;
+    const pendingMore = new Promise<
+      ReturnType<
+        typeof ok<{ items: AdminProductResponse[]; next_cursor: null }>
+      >
+    >((resolve) => {
+      resolveMore = resolve;
+    });
+    listAdminProductsMock
+      .mockResolvedValueOnce(
+        ok({ items: [activeProduct], next_cursor: "next-products" }),
+      )
+      .mockReturnValueOnce(pendingMore)
+      .mockReturnValueOnce(new Promise<never>(() => undefined));
+    renderProducts();
+    const loadMore = await screen.findByRole("button", {
+      name: "Load more products",
+    });
+    await userEvent.click(loadMore);
+    expect(loadMore).toBeDisabled();
+    expect(loadMore).toHaveAttribute("aria-busy", "true");
+    await act(async () => {
+      resolveMore?.(ok({ items: [candidateOnlyProduct], next_cursor: null }));
+    });
+    expect(
+      screen.queryByRole("button", { name: "Load more products" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Product status" }),
+    );
+    await userEvent.click(screen.getByRole("option", { name: "Active" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Loading products",
+    );
+    expect(
+      screen.getByRole("link", { name: "Create product" }),
+    ).toHaveAttribute("aria-disabled", "true");
   });
 
   it("fails closed on generated no-data responses and ignores superseded product pages", async () => {
@@ -430,11 +513,58 @@ describe("administrator product configuration tracer", () => {
       resolveFirst?.(ok({ items: [activeProduct], next_cursor: null }));
     });
     expect(screen.queryByText(activeProduct.name)).not.toBeInTheDocument();
+
+    cleanup();
+    let rejectStale: ((reason?: unknown) => void) | undefined;
+    const staleRejection = new Promise<
+      ReturnType<
+        typeof ok<{ items: AdminProductResponse[]; next_cursor: null }>
+      >
+    >((_resolve, reject) => {
+      rejectStale = reject;
+    });
+    listAdminProductsMock.mockReset();
+    listAdminProductsMock
+      .mockReturnValueOnce(staleRejection)
+      .mockResolvedValueOnce(ok({ items: [activeProduct], next_cursor: null }));
+    const rejectionView = render(
+      <MemoryRouter>
+        <ProductsPage accessToken="stale-rejection-authority" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(listAdminProductsMock).toHaveBeenCalledOnce());
+    rejectionView.rerender(
+      <MemoryRouter>
+        <ProductsPage accessToken="current-rejection-authority" />
+      </MemoryRouter>,
+    );
+    expect(await screen.findAllByText(activeProduct.name)).toHaveLength(2);
+    await act(async () => {
+      rejectStale?.(new Error("stale provider detail"));
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    cleanup();
+    listAdminProductsMock.mockReset();
+    const unmountedView = renderProducts();
+    unmountedView.unmount();
+    await act(async () => Promise.resolve());
+    expect(listAdminProductsMock).not.toHaveBeenCalled();
   });
 
   it("renders exactly five responsive wizard steps with current and completed semantics", async () => {
     renderWizard(activeProduct);
 
+    expect(
+      screen.getByRole("heading", { name: activeProduct.name }),
+    ).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
+      activeProduct.name,
+    );
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue(
+      activeProduct.candidate_revision?.description,
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     const desktop = screen.getByRole("navigation", {
       name: "Product setup steps",
     });
@@ -455,6 +585,22 @@ describe("administrator product configuration tracer", () => {
         current: "step",
       }),
     ).toBeVisible();
+    expect(
+      within(desktop).getByRole("button", { name: "Product details" }),
+    ).not.toHaveAttribute("data-completed");
+    for (const label of [
+      "Repositories",
+      "Mappings",
+      "Preview",
+      "Review and publish",
+    ]) {
+      expect(
+        within(desktop).getByRole("button", { name: label }),
+      ).not.toHaveAttribute("aria-current");
+      expect(
+        within(desktop).getByRole("button", { name: label }),
+      ).not.toHaveAttribute("data-completed");
+    }
     expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
       "Step 1 of 5Product details",
     );
@@ -509,9 +655,26 @@ describe("administrator product configuration tracer", () => {
     expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
       "Step 5 of 5Review and publish",
     );
+    expect(
+      within(desktop).getByRole("button", { name: "Review and publish" }),
+    ).not.toHaveAttribute("data-completed");
+    expect(
+      within(desktop)
+        .getAllByRole("button")
+        .slice(0, 4)
+        .every((step) => step.dataset.completed === "true"),
+    ).toBe(true);
   });
 
   it("creates a product with an optional description and announces Draft saved only after the response", async () => {
+    const canonicalCreatedProduct: AdminProductResponse = {
+      ...candidateOnlyProduct,
+      name: "Canonical Embedded Product",
+      candidate_revision: {
+        ...candidateOnlyProduct.candidate_revision!,
+        description: "Canonical server description",
+      },
+    };
     let resolveCreate:
       | ((value: ReturnType<typeof ok<AdminProductResponse>>) => void)
       | undefined;
@@ -523,15 +686,40 @@ describe("administrator product configuration tracer", () => {
     createAdminProductMock.mockReturnValueOnce(pendingCreate);
     renderWizard();
     const user = userEvent.setup();
-    expect(screen.getByRole("button", { name: "Repositories" })).toBeDisabled();
+    for (const label of [
+      "Repositories",
+      "Mappings",
+      "Preview",
+      "Review and publish",
+    ]) {
+      expect(screen.getByRole("button", { name: label })).toBeDisabled();
+    }
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Save and continue" }));
     const name = screen.getByRole("textbox", { name: "Name" });
     expect(name).toHaveFocus();
     expect(name).toHaveAttribute("aria-invalid", "true");
+    expect(name).toHaveAttribute(
+      "aria-describedby",
+      `${name.getAttribute("id")}-error`,
+    );
+    expect(screen.getByText("Enter a product name.")).toBeVisible();
     expect(createAdminProductMock).not.toHaveBeenCalled();
 
+    await user.type(name, "   ");
+    await user.click(screen.getByRole("button", { name: "Save and continue" }));
+    expect(name).toHaveFocus();
+    expect(createAdminProductMock).not.toHaveBeenCalled();
+    await user.clear(name);
     await user.type(name, "Alpha Embedded");
+    expect(name).toHaveAttribute("aria-invalid", "false");
+    expect(name).not.toHaveAttribute("aria-describedby");
+    expect(screen.queryByText("Enter a product name.")).not.toBeInTheDocument();
+    await user.type(
+      screen.getByRole("textbox", { name: "Description" }),
+      "   ",
+    );
     await user.click(screen.getByRole("button", { name: "Save and continue" }));
     expect(createAdminProductMock).toHaveBeenCalledWith({
       auth: "memory-only-admin-bearer",
@@ -543,7 +731,7 @@ describe("administrator product configuration tracer", () => {
     ).toBeDisabled();
 
     await act(async () => {
-      resolveCreate?.(ok(candidateOnlyProduct, 201));
+      resolveCreate?.(ok(canonicalCreatedProduct, 201));
     });
 
     expect(toastSuccessMock).toHaveBeenCalledWith("Draft saved");
@@ -553,6 +741,22 @@ describe("administrator product configuration tracer", () => {
     expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
       "Step 2 of 5Repositories",
     );
+    await user.click(screen.getByRole("button", { name: "Product details" }));
+    expect(
+      screen.getByRole("heading", { name: canonicalCreatedProduct.name }),
+    ).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
+      canonicalCreatedProduct.name,
+    );
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue(
+      canonicalCreatedProduct.candidate_revision?.description,
+    );
+    expect(
+      screen.getByRole("button", { name: "Save and continue" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Save and continue" }),
+    ).toHaveAttribute("aria-busy", "false");
   });
 
   it("focuses Name and preserves every attempted field on a duplicate-name conflict", async () => {
@@ -573,6 +777,11 @@ describe("administrator product configuration tracer", () => {
     expect(name).toHaveValue("Duplicate Product");
     expect(description).toHaveValue("Still recoverable");
     expect(toastSuccessMock).not.toHaveBeenCalled();
+    await user.type(name, " revised");
+    expect(name).toHaveAttribute("aria-invalid", "false");
+    expect(
+      screen.queryByText("A product already uses this name."),
+    ).not.toBeInTheDocument();
   });
 
   it("fails closed on rejected creates and admits only one in-flight submission", async () => {
@@ -589,6 +798,14 @@ describe("administrator product configuration tracer", () => {
     );
     expect(name).toHaveValue("Recoverable Product");
     expect(screen.getByRole("alert")).not.toHaveTextContent("provider secret");
+    expect(
+      screen.getByRole("button", { name: "Save and continue" }),
+    ).toBeEnabled();
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Description" }),
+      "still editable",
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     cleanup();
     createAdminProductMock.mockReset();
 
@@ -648,6 +865,30 @@ describe("administrator product configuration tracer", () => {
     );
     expect(name).toHaveValue("Rejected Product");
     expect(description).toHaveValue("Conflict-safe description");
+    expect(
+      screen.getByRole("button", { name: "Save and continue" }),
+    ).toBeEnabled();
+  });
+
+  it("fails closed when a generated product has no editable candidate", async () => {
+    renderWizard(inactivePublishedProduct);
+    const user = userEvent.setup();
+    expect(
+      screen.getByRole("heading", { name: inactivePublishedProduct.name }),
+    ).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue(
+      "",
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "Name" }),
+      " candidate",
+    );
+    await user.click(screen.getByRole("button", { name: "Save and continue" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We could not save this draft. Your entries are still here. Review the error and try again.",
+    );
+    expect(updateAdminProductCandidateMock).not.toHaveBeenCalled();
   });
 
   it("guards dirty step navigation with the exact discard confirmation", async () => {
@@ -671,10 +912,25 @@ describe("administrator product configuration tracer", () => {
     expect(description).toHaveValue("Unsaved draft details");
     expect(repositories).toHaveFocus();
 
+    await user.type(screen.getByRole("textbox", { name: "Name" }), " changed");
+    await user.click(repositories);
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(repositories).toHaveFocus());
+    expect(
+      screen.queryByRole("alertdialog", { name: "Leave without saving?" }),
+    ).not.toBeInTheDocument();
+
     await user.click(repositories);
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
       "Step 2 of 5Repositories",
+    );
+    await user.click(screen.getByRole("button", { name: "Product details" }));
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
+      activeProduct.name,
+    );
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue(
+      activeProduct.candidate_revision?.description,
     );
   });
 
@@ -703,6 +959,52 @@ describe("administrator product configuration tracer", () => {
     expect(
       within(candidate).getByText("Candidate mobile strings"),
     ).toBeVisible();
+    expect(getAdminProductMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: { product_id: activeProduct.id },
+    });
+    const detailNavigation = screen.getByRole("navigation", {
+      name: "Product configuration",
+    });
+    expect(
+      within(detailNavigation).getByRole("link", {
+        name: "Overview",
+        current: "page",
+      }),
+    ).toHaveAttribute("href", `/admin/products/${activeProduct.id}/overview`);
+    expect(
+      within(detailNavigation).getByRole("link", { name: "Repositories" }),
+    ).toHaveAttribute(
+      "href",
+      `/admin/products/${activeProduct.id}/repositories`,
+    );
+    expect(
+      within(detailNavigation).getByRole("link", { name: "Mappings" }),
+    ).toHaveAttribute("href", `/admin/products/${activeProduct.id}/mappings`);
+    expect(
+      within(detailNavigation).getByRole("link", { name: "Preview" }),
+    ).toHaveAttribute("href", `/admin/products/${activeProduct.id}/preview`);
+    expect(
+      within(detailNavigation).getAllByRole("link", { current: "page" }),
+    ).toHaveLength(1);
+  });
+
+  it("renders bounded overview loading and cancels queued work on unmount", async () => {
+    getAdminProductMock.mockReturnValueOnce(
+      new Promise<never>(() => undefined),
+    );
+    const loadingView = renderOverview();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading product overview",
+    );
+    await waitFor(() => expect(getAdminProductMock).toHaveBeenCalledOnce());
+    loadingView.unmount();
+
+    getAdminProductMock.mockReset();
+    const queuedView = renderOverview();
+    queuedView.unmount();
+    await act(async () => Promise.resolve());
+    expect(getAdminProductMock).not.toHaveBeenCalled();
   });
 
   it("fails closed without product authority and retries generated no-data overview results", async () => {
@@ -742,6 +1044,37 @@ describe("administrator product configuration tracer", () => {
     expect(
       screen.queryByRole("button", { name: "Deactivate product" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Published configuration remains active while you edit this draft.",
+      ),
+    ).not.toBeInTheDocument();
+
+    cleanup();
+    getAdminProductMock.mockResolvedValueOnce(
+      ok(activeWithoutCandidateProduct),
+    );
+    render(
+      <MemoryRouter>
+        <ProductOverviewPage
+          accessToken="memory-only-admin-bearer"
+          productId={activeWithoutCandidateProduct.id}
+        />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: activeWithoutCandidateProduct.name,
+      }),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(
+        "Published configuration remains active while you edit this draft.",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Deactivate product" }),
+    ).toBeVisible();
   });
 
   it("ignores superseded overview loads", async () => {
@@ -783,6 +1116,42 @@ describe("administrator product configuration tracer", () => {
     expect(
       screen.queryByRole("heading", { name: activeProduct.name }),
     ).not.toBeInTheDocument();
+
+    cleanup();
+    let rejectFirst: ((reason?: unknown) => void) | undefined;
+    const staleRejection = new Promise<
+      ReturnType<typeof ok<AdminProductResponse>>
+    >((_resolve, reject) => {
+      rejectFirst = reject;
+    });
+    getAdminProductMock.mockReset();
+    getAdminProductMock
+      .mockReturnValueOnce(staleRejection)
+      .mockResolvedValueOnce(ok(candidateOnlyProduct));
+    const rejectionView = render(
+      <MemoryRouter>
+        <ProductOverviewPage
+          accessToken="stale-overview-authority"
+          productId={activeProduct.id}
+        />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(getAdminProductMock).toHaveBeenCalledOnce());
+    rejectionView.rerender(
+      <MemoryRouter>
+        <ProductOverviewPage
+          accessToken="current-overview-authority"
+          productId={candidateOnlyProduct.id}
+        />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: candidateOnlyProduct.name }),
+    ).toBeVisible();
+    await act(async () => {
+      rejectFirst?.(new Error("stale provider detail"));
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("returns focus when deactivation is cancelled and bounds rejected failures", async () => {
@@ -808,7 +1177,14 @@ describe("administrator product configuration tracer", () => {
     );
     expect(alert).not.toHaveTextContent("private details");
     expect(alert).toHaveFocus();
+    expect(alert).toHaveAttribute("tabindex", "-1");
     expect(screen.getByText("Active")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Deactivate product" }),
+    ).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(trigger);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("deactivates only after named backend confirmation and keeps state unchanged on failure", async () => {
@@ -849,6 +1225,8 @@ describe("administrator product configuration tracer", () => {
     expect(deactivateAdminProductMock).toHaveBeenCalledOnce();
     expect(screen.getByText("Active")).toBeVisible();
     expect(confirm).toBeDisabled();
+    expect(confirm).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
     await user.keyboard("{Escape}");
     expect(
       screen.getByRole("alertdialog", { name: "Deactivate Zulu Mobile?" }),
@@ -858,6 +1236,12 @@ describe("administrator product configuration tracer", () => {
       resolveDeactivate?.(ok({ ...activeProduct, is_active: false }));
     });
     expect(await screen.findByText("Inactive")).toBeVisible();
+    expect(
+      screen.queryByRole("alertdialog", { name: "Deactivate Zulu Mobile?" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Deactivate product" }),
+    ).not.toBeInTheDocument();
 
     getAdminProductMock.mockResolvedValueOnce(ok(activeProduct));
     cleanup();
@@ -876,6 +1260,9 @@ describe("administrator product configuration tracer", () => {
     expect(
       screen.getByRole("alertdialog", { name: "Deactivate Zulu Mobile?" }),
     ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Deactivate product" }),
+    ).toBeEnabled();
   });
 
   it("mounts the product collection, new wizard, and URL-backed overview routes inside the guarded shell", async () => {
@@ -917,6 +1304,41 @@ describe("administrator product configuration tracer", () => {
     await userEvent.click(screen.getByRole("link", { name: "Repositories" }));
     expect(
       await screen.findByRole("heading", { name: "Repositories" }),
+    ).toBeVisible();
+    const detailLayout = screen.getByTestId("product-detail-layout");
+    expect(detailLayout).toHaveAttribute("aria-label", "Product configuration");
+    expect(detailLayout).not.toHaveAttribute("aria-labelledby");
+    const sectionNavigation = within(detailLayout).getByRole("navigation", {
+      name: "Product configuration",
+    });
+    expect(
+      within(sectionNavigation).getAllByRole("link", { current: "page" }),
+    ).toHaveLength(1);
+    expect(
+      within(sectionNavigation).getByRole("link", {
+        name: "Repositories",
+        current: "page",
+      }),
+    ).toHaveClass("border-primary", "text-primary");
+    await userEvent.click(
+      within(sectionNavigation).getByRole("link", { name: "Mappings" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Mappings" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Add a mapping that represents one localization format and layout.",
+      ),
+    ).toBeVisible();
+    await userEvent.click(screen.getByRole("link", { name: "Preview" }));
+    expect(
+      await screen.findByRole("heading", { name: "Preview" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Run validation to detect files, languages, and partial translation samples.",
+      ),
     ).toBeVisible();
   });
 });
