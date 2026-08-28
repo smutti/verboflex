@@ -330,8 +330,8 @@ class BitbucketHttpAdapter:
         expect_json: bool,
     ) -> bytes:
         validated_url = validate_bitbucket_api_url(url)
-        lease = self._credential_leases.acquire_repository_read_lease(session)
         try:
+            lease = self._credential_leases.acquire_repository_read_lease(session)
             self._credential_leases.require_current_repository_read_lease(session, lease)
             async with self._client.stream(
                 "GET",

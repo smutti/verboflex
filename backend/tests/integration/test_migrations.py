@@ -1,4 +1,4 @@
-"""Real-PostgreSQL contract for the reversible authentication schema."""
+"""Real-PostgreSQL contract for the complete reversible application schema."""
 
 from __future__ import annotations
 
@@ -20,7 +20,20 @@ ADMIN_DATABASE_URL = os.environ.get(
     "VERBOFLEX_TEST_POSTGRES_ADMIN_URL",
     "postgresql://postgres@127.0.0.1:55432/postgres",
 )
-EXPECTED_TABLES = {"users", "roles", "user_roles", "auth_sessions"}
+EXPECTED_TABLES = {
+    "auth_sessions",
+    "bitbucket_connections",
+    "preview_jobs",
+    "product_mapping_allowed_targets",
+    "product_mapping_repository_sides",
+    "product_repository_mappings",
+    "product_revisions",
+    "products",
+    "repositories",
+    "roles",
+    "user_roles",
+    "users",
+}
 EXPECTED_ROLES = {
     "admin",
     "product_manager_reviewer",
@@ -54,24 +67,24 @@ def migrated_database() -> Iterator[tuple[Config, Engine]]:
             )
 
 
-def test_auth_schema_upgrades_downgrades_and_upgrades_reversibly(
+def test_complete_schema_upgrades_downgrades_and_upgrades_reversibly(
     migrated_database: tuple[Config, Engine],
 ) -> None:
-    """Create the exact auth schema and roles twice without residual objects."""
+    """Create the exact Phase 2 schema twice without leaving residual objects."""
     config, engine = migrated_database
 
     command.upgrade(config, "head")
-    assert_auth_schema(engine)
+    assert_complete_schema(engine)
 
     command.downgrade(config, "base")
     assert EXPECTED_TABLES.isdisjoint(inspect(engine).get_table_names())
 
     command.upgrade(config, "head")
-    assert_auth_schema(engine)
+    assert_complete_schema(engine)
 
 
-def assert_auth_schema(engine: Engine) -> None:
-    """Assert the authoritative tables, constraints, indexes, and role seed."""
+def assert_complete_schema(engine: Engine) -> None:
+    """Assert the complete authority/configuration tables and the original auth seed."""
     inspector = inspect(engine)
     assert set(inspector.get_table_names()) >= EXPECTED_TABLES
 
@@ -132,6 +145,31 @@ def assert_auth_schema(engine: Engine) -> None:
         "uq_auth_sessions_token_hash",
         "uq_auth_sessions_parent_id",
     } <= index_names
+
+    expected_phase2_indexes = {
+        "ix_preview_jobs_candidate_revision_id",
+        "ix_preview_jobs_mapping_digest_attempt",
+        "ix_preview_jobs_product_id",
+        "ix_product_repository_mappings_revision_id",
+        "ix_product_revisions_product_id",
+        "uq_product_mapping_allowed_targets_one_default",
+    }
+    assert expected_phase2_indexes <= index_names
+
+    expected_unique_constraints = {
+        "products": {"uq_products_name_key"},
+        "repositories": {"uq_repositories_provider_identity"},
+        "product_repository_mappings": {
+            "uq_product_repository_mappings_confirmed_preview_job",
+            "uq_product_repository_mappings_revision_identity",
+        },
+        "preview_jobs": {"uq_preview_jobs_digest_attempt"},
+    }
+    for table_name, constraint_names in expected_unique_constraints.items():
+        actual_names = {
+            constraint["name"] for constraint in inspector.get_unique_constraints(table_name)
+        }
+        assert constraint_names <= actual_names
 
     with engine.connect() as connection:
         roles = connection.execute(text("SELECT name FROM roles ORDER BY name")).scalars().all()

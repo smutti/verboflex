@@ -42,6 +42,41 @@ class FakeCredentialLeaseAuthority:
             raise PermissionError("stale provider generation")
 
 
+def test_disconnected_lease_fails_as_bounded_provider_state_before_http() -> None:
+    """A local revoke is a bounded disconnected read failure, never an HTTP 500."""
+    from verboflex.integrations.bitbucket.client import (
+        BitbucketHttpAdapter,
+        BitbucketProviderReadError,
+    )
+    from verboflex.services.bitbucket_oauth import OAuthConnectionUnavailable
+
+    class DisconnectedAuthority(FakeCredentialLeaseAuthority):
+        def acquire_repository_read_lease(self, _session: object) -> Any:
+            raise OAuthConnectionUnavailable("connection unavailable")
+
+    requests: list[httpx.Request] = []
+    adapter = BitbucketHttpAdapter(
+        settings=Settings(),
+        credential_leases=DisconnectedAuthority(),
+        transport=httpx.MockTransport(
+            lambda request: requests.append(request) or httpx.Response(200, request=request)
+        ),
+    )
+
+    async def exercise() -> None:
+        with pytest.raises(BitbucketProviderReadError) as captured:
+            await adapter.read_repository_metadata(
+                object(),
+                workspace="acme",
+                repository_slug="mobile",
+            )
+        assert captured.value.kind == "disconnected"
+        assert requests == []
+        await adapter.aclose()
+
+    asyncio.run(exercise())
+
+
 def test_reads_metadata_only_through_validated_current_generation() -> None:
     """One metadata read is bounded, host-locked, non-retrying, and secret-safe."""
     try:

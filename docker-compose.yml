@@ -72,6 +72,7 @@ services:
 
   worker:
     <<: *backend-common
+    init: true
     command:
       ["celery", "-A", "verboflex.worker.celery_app", "worker", "--loglevel=INFO"]
     healthcheck:
