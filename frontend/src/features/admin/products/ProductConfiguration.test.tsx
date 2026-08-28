@@ -460,6 +460,12 @@ describe("administrator product configuration tracer", () => {
     expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
       "Step 1 of 5Product details",
     );
+    await userEvent.click(
+      within(desktop).getByRole("button", { name: "Product details" }),
+    );
+    expect(
+      screen.queryByRole("alertdialog", { name: "Leave without saving?" }),
+    ).not.toBeInTheDocument();
 
     const description = screen.getByRole("textbox", { name: "Description" });
     await userEvent.clear(description);
@@ -834,13 +840,21 @@ describe("administrator product configuration tracer", () => {
     const confirm = within(dialog).getByRole("button", {
       name: "Deactivate product",
     });
-    await user.click(confirm);
+    act(() => {
+      confirm.click();
+      confirm.click();
+    });
     expect(deactivateAdminProductMock).toHaveBeenCalledWith({
       auth: "memory-only-admin-bearer",
       path: { product_id: activeProduct.id },
     });
+    expect(deactivateAdminProductMock).toHaveBeenCalledOnce();
     expect(screen.getByText("Active")).toBeVisible();
     expect(confirm).toBeDisabled();
+    await user.keyboard("{Escape}");
+    expect(
+      screen.getByRole("alertdialog", { name: "Deactivate Zulu Mobile?" }),
+    ).toBeVisible();
 
     await act(async () => {
       resolveDeactivate?.(ok({ ...activeProduct, is_active: false }));
