@@ -207,7 +207,10 @@ describe("administrator product configuration tracer", () => {
     readSystemStatusMock.mockReturnValue(new Promise<never>(() => undefined));
     useSessionMock.mockReset();
     useSessionMock.mockReturnValue({
+      changePassword: vi.fn(),
+      login: vi.fn(),
       logout: vi.fn(),
+      restoreSession: vi.fn(),
       state: {
         status: "authenticated",
         accessToken: "memory-only-admin-bearer",

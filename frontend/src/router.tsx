@@ -7,6 +7,10 @@ import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import { Button } from "./components/ui/button";
 import { Skeleton } from "./components/ui/skeleton";
 import { AdminAccessDenied } from "./features/admin/AdminAccessDenied";
+import { ProductDetailLayout } from "./features/admin/products/ProductDetailLayout";
+import { ProductOverviewPage } from "./features/admin/products/ProductOverviewPage";
+import { ProductsPage } from "./features/admin/products/ProductsPage";
+import { ProductWizardPage } from "./features/admin/products/ProductWizardPage";
 import { UsersPage } from "./features/admin/users/UsersPage";
 import { ChangePasswordPage } from "./features/auth/ChangePasswordPage";
 import { LoginPage } from "./features/auth/LoginPage";
@@ -124,14 +128,96 @@ export function SessionRoutes({
   return (
     <Routes>
       <Route path="/" element={ordinaryElement} />
-      <Route path="/admin/users" element={guardedAdminElement} />
+      <Route path="/admin/*" element={guardedAdminElement} />
+      <Route path="*" element={<Navigate replace to="/" />} />
+    </Routes>
+  );
+}
+
+function ProductSectionEmptyState({
+  body,
+  heading,
+}: {
+  body: string;
+  heading: string;
+}) {
+  return (
+    <section className="grid gap-2 rounded-lg border bg-secondary p-6">
+      <h1 className="text-display font-semibold">{heading}</h1>
+      <p className="text-muted-foreground">{body}</p>
+    </section>
+  );
+}
+
+export function AdminApplicationRoutes({
+  accessToken,
+  currentUserId,
+}: {
+  accessToken: string;
+  currentUserId: string;
+}) {
+  return (
+    <Routes>
       <Route
-        path="/admin/*"
+        path="products"
+        element={<ProductsPage accessToken={accessToken} />}
+      />
+      <Route
+        path="products/new"
+        element={<ProductWizardPage accessToken={accessToken} />}
+      />
+      <Route
+        path="products/:productId/overview"
         element={
-          isAdmin ? <Navigate replace to="/admin/users" /> : deniedElement
+          <ProductDetailLayout hideTitle>
+            <ProductOverviewPage accessToken={accessToken} />
+          </ProductDetailLayout>
         }
       />
-      <Route path="*" element={<Navigate replace to="/" />} />
+      <Route
+        path="products/:productId/repositories"
+        element={
+          <ProductDetailLayout hideTitle>
+            <ProductSectionEmptyState
+              heading="Repositories"
+              body="Add or reuse a Bitbucket repository before configuring a mapping."
+            />
+          </ProductDetailLayout>
+        }
+      />
+      <Route
+        path="products/:productId/mappings"
+        element={
+          <ProductDetailLayout hideTitle>
+            <ProductSectionEmptyState
+              heading="Mappings"
+              body="Add a mapping that represents one localization format and layout."
+            />
+          </ProductDetailLayout>
+        }
+      />
+      <Route
+        path="products/:productId/preview"
+        element={
+          <ProductDetailLayout hideTitle>
+            <ProductSectionEmptyState
+              heading="Preview"
+              body="Run validation to detect files, languages, and partial translation samples."
+            />
+          </ProductDetailLayout>
+        }
+      />
+      <Route
+        path="products/:productId"
+        element={<Navigate replace to="overview" />}
+      />
+      <Route
+        path="users"
+        element={
+          <UsersPage accessToken={accessToken} currentUserId={currentUserId} />
+        }
+      />
+      <Route path="*" element={<Navigate replace to="/admin/users" />} />
     </Routes>
   );
 }
@@ -156,7 +242,7 @@ export function AppRouter() {
       adminElement={
         authenticatedShellProps === null ? null : (
           <AppShell {...authenticatedShellProps}>
-            <UsersPage
+            <AdminApplicationRoutes
               accessToken={authenticatedShellProps.accessToken}
               currentUserId={authenticatedShellProps.principal.id}
             />

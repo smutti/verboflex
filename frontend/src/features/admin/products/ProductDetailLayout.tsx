@@ -5,6 +5,7 @@ import { cn } from "../../../lib/utils";
 
 export interface ProductDetailLayoutProps {
   children?: ReactNode;
+  hideTitle?: boolean;
   productName?: string;
 }
 
@@ -28,6 +29,7 @@ function resolveProductSection(pathname: string): ProductSection {
 
 export function ProductDetailLayout({
   children,
+  hideTitle = false,
   productName = "Product configuration",
 }: ProductDetailLayoutProps) {
   const location = useLocation();
@@ -39,14 +41,17 @@ export function ProductDetailLayout({
     <section
       data-testid="product-detail-layout"
       className="grid min-w-0 max-w-full gap-8 overflow-x-clip"
-      aria-labelledby="product-detail-title"
+      aria-label={hideTitle ? "Product configuration" : undefined}
+      aria-labelledby={hideTitle ? undefined : "product-detail-title"}
     >
-      <h1
-        id="product-detail-title"
-        className="break-words text-display font-semibold [overflow-wrap:anywhere]"
-      >
-        {productName}
-      </h1>
+      {hideTitle ? null : (
+        <h1
+          id="product-detail-title"
+          className="break-words text-display font-semibold [overflow-wrap:anywhere]"
+        >
+          {productName}
+        </h1>
+      )}
       <nav aria-label="Product configuration" className="min-w-0 max-w-full">
         <ul className="flex min-w-0 max-w-full flex-wrap gap-2 border-b">
           {PRODUCT_SECTIONS.map(({ label, slug }) => {
