@@ -18,12 +18,15 @@ import {
   deactivateAdminProduct,
   getAdminProduct,
   listAdminProducts,
+  readSystemStatus,
   updateAdminProductCandidate,
   type AdminProductResponse,
 } from "../../../api/client";
+import { useSession } from "../../auth/session";
 import { ProductOverviewPage } from "./ProductOverviewPage";
 import { ProductsPage } from "./ProductsPage";
 import { ProductWizardPage } from "./ProductWizardPage";
+import { AppRouter } from "../../../router";
 
 class TestResizeObserver implements ResizeObserver {
   disconnect() {}
@@ -66,7 +69,17 @@ vi.mock("../../../api/client", async (importOriginal) => {
     deactivateAdminProduct: vi.fn(),
     getAdminProduct: vi.fn(),
     listAdminProducts: vi.fn(),
+    readSystemStatus: vi.fn(),
     updateAdminProductCandidate: vi.fn(),
+  };
+});
+
+vi.mock("../../auth/session", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../auth/session")>();
+
+  return {
+    ...original,
+    useSession: vi.fn(),
   };
 });
 
@@ -74,6 +87,8 @@ const createAdminProductMock = vi.mocked(createAdminProduct);
 const deactivateAdminProductMock = vi.mocked(deactivateAdminProduct);
 const getAdminProductMock = vi.mocked(getAdminProduct);
 const listAdminProductsMock = vi.mocked(listAdminProducts);
+const readSystemStatusMock = vi.mocked(readSystemStatus);
+const useSessionMock = vi.mocked(useSession);
 const updateAdminProductCandidateMock = vi.mocked(updateAdminProductCandidate);
 const toastSuccessMock = vi.mocked(toast.success);
 
@@ -188,6 +203,23 @@ describe("administrator product configuration tracer", () => {
     listAdminProductsMock.mockResolvedValue(
       ok({ items: [activeProduct, candidateOnlyProduct], next_cursor: null }),
     );
+    readSystemStatusMock.mockReset();
+    readSystemStatusMock.mockReturnValue(new Promise<never>(() => undefined));
+    useSessionMock.mockReset();
+    useSessionMock.mockReturnValue({
+      logout: vi.fn(),
+      state: {
+        status: "authenticated",
+        accessToken: "memory-only-admin-bearer",
+        principal: {
+          id: "00000000-0000-4000-8000-000000000001",
+          email: "admin@example.com",
+          display_name: "Admin",
+          must_change_password: false,
+          roles: ["admin"],
+        },
+      },
+    });
     updateAdminProductCandidateMock.mockReset();
     toastSuccessMock.mockReset();
   });
@@ -599,6 +631,44 @@ describe("administrator product configuration tracer", () => {
     expect(screen.getByText("Active")).toBeVisible();
     expect(
       screen.getByRole("alertdialog", { name: "Deactivate Zulu Mobile?" }),
+    ).toBeVisible();
+  });
+
+  it("mounts the product collection, new wizard, and URL-backed overview routes inside the guarded shell", async () => {
+    const collectionView = render(
+      <MemoryRouter initialEntries={["/admin/products"]}>
+        <AppRouter />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Products" }),
+    ).toBeVisible();
+    await userEvent.click(screen.getByRole("link", { name: "Create product" }));
+    expect(
+      await screen.findByRole("heading", { name: "Create product" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("navigation", { name: "Product setup steps" }),
+    ).toBeVisible();
+
+    collectionView.unmount();
+    render(
+      <MemoryRouter
+        initialEntries={[`/admin/products/${activeProduct.id}/overview`]}
+      >
+        <AppRouter />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: activeProduct.name }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("navigation", { name: "Product configuration" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Overview", current: "page" }),
     ).toBeVisible();
   });
 });
