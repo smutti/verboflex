@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   changePassword as generatedChangePassword,
   issueToken,
+  readCurrentUser,
+  readSystemStatus,
 } from "./api/client";
 import { ProductDetailLayout } from "./features/admin/products/ProductDetailLayout";
 import { SessionProvider } from "./features/auth/session";
@@ -19,11 +21,14 @@ vi.mock("./api/client", () => ({
   logout: vi.fn(),
   readCurrentUser: vi.fn(),
   readHealth: vi.fn(),
+  readSystemStatus: vi.fn(),
   refreshAccessToken: vi.fn(),
 }));
 
 const issueTokenMock = vi.mocked(issueToken);
 const changePasswordMock = vi.mocked(generatedChangePassword);
+const readCurrentUserMock = vi.mocked(readCurrentUser);
+const readSystemStatusMock = vi.mocked(readSystemStatus);
 
 const ordinaryPrincipal = {
   id: "73f123f7-ebad-4dad-8b5d-dcc3214b3b06",
@@ -45,6 +50,9 @@ afterEach(() => {
 beforeEach(() => {
   issueTokenMock.mockReset();
   changePasswordMock.mockReset();
+  readCurrentUserMock.mockReset();
+  readSystemStatusMock.mockReset();
+  readSystemStatusMock.mockReturnValue(new Promise<never>(() => undefined));
 });
 
 function LocationMarker() {
@@ -341,6 +349,75 @@ describe("session routes", () => {
         current: "page",
       }),
     ).toBeVisible();
+  });
+
+  it("defaults an unknown product section to one Overview current link", () => {
+    render(
+      <MemoryRouter
+        initialEntries={["/admin/products/product-123/unsupported-section"]}
+      >
+        <ProductDetailLayout />
+      </MemoryRouter>,
+    );
+
+    const navigation = screen.getByRole("navigation", {
+      name: "Product configuration",
+    });
+    expect(
+      within(navigation).getAllByRole("link", { current: "page" }),
+    ).toHaveLength(1);
+    expect(
+      within(navigation).getByRole("link", {
+        name: "Overview",
+        current: "page",
+      }),
+    ).toBeVisible();
+  });
+
+  it("projects authenticated session authority into the guarded application route", async () => {
+    issueTokenMock.mockResolvedValue({
+      data: {
+        access_token: "admin-server-token",
+        expires_in: 300,
+        must_change_password: false,
+        token_type: "bearer",
+      },
+      error: undefined,
+    });
+    readCurrentUserMock.mockResolvedValue({
+      data: adminPrincipal,
+      error: undefined,
+    });
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={["/login"]}>
+        <SessionProvider restoreOnMount={false}>
+          <AppRouter />
+          <LocationMarker />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Email" }),
+      "admin@example.com",
+    );
+    await user.type(screen.getByLabelText("Password"), "admin phrase 2026!");
+    await user.click(
+      screen.getByRole("button", { name: "Sign in to VerboFlex" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Workspace overview" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("link", { name: "Users" }));
+    expect(
+      await screen.findByRole("heading", { name: "Users", level: 1 }),
+    ).toBeVisible();
+    expect(screen.getByTestId("current-route")).toHaveTextContent(
+      "/admin/users",
+    );
   });
 
   it("returns a successful required-password change to signed-out login", async () => {
