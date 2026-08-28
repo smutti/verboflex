@@ -225,7 +225,7 @@ export function ProductWizardPage({
 
   return (
     <section
-      className="grid min-w-0 max-w-3xl gap-8 overflow-x-clip"
+      className="mx-auto grid w-full min-w-0 max-w-3xl gap-8 overflow-x-clip"
       aria-labelledby="product-wizard-title"
     >
       <div className="grid gap-2">
@@ -245,7 +245,7 @@ export function ProductWizardPage({
               <li key={label} className="min-w-0">
                 <button
                   type="button"
-                  className="min-h-11 w-full rounded-md border px-2 py-3 text-left text-label font-semibold break-words [overflow-wrap:anywhere] aria-[current=step]:border-primary aria-[current=step]:text-primary"
+                  className="min-h-11 w-full rounded-md border px-2 py-3 text-left text-label font-semibold whitespace-nowrap aria-[current=step]:border-primary aria-[current=step]:text-primary"
                   aria-current={currentStep === step ? "step" : undefined}
                   data-completed={step < currentStep ? "true" : undefined}
                   disabled={product === undefined && step > 1}

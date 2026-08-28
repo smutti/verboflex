@@ -638,6 +638,11 @@ describe("administrator product configuration tracer", () => {
       name: "Product setup steps",
     });
     expect(
+      screen
+        .getByRole("heading", { name: activeProduct.name })
+        .closest("section"),
+    ).toHaveClass("mx-auto", "w-full", "max-w-3xl");
+    expect(
       within(desktop)
         .getAllByRole("button")
         .map((step) => step.textContent),
@@ -648,6 +653,10 @@ describe("administrator product configuration tracer", () => {
       "Preview",
       "Review and publish",
     ]);
+    for (const step of within(desktop).getAllByRole("button")) {
+      expect(step).toHaveClass("whitespace-nowrap");
+      expect(step).not.toHaveClass("break-words", "[overflow-wrap:anywhere]");
+    }
     expect(
       within(desktop).getByRole("button", {
         name: "Product details",

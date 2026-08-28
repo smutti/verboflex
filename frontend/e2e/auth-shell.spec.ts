@@ -109,6 +109,54 @@ async function expectCompactDesktopNavigation(page: Page) {
   }
 }
 
+async function expectCenteredProductWizard(page: Page) {
+  const main = page.locator("main");
+  const wizard = page.locator(
+    'section[aria-labelledby="product-wizard-title"]',
+  );
+  const [mainBox, wizardBox] = await Promise.all([
+    main.boundingBox(),
+    wizard.boundingBox(),
+  ]);
+
+  expect(mainBox).not.toBeNull();
+  expect(wizardBox).not.toBeNull();
+  if (mainBox === null || wizardBox === null) {
+    return;
+  }
+
+  const leftSpace = wizardBox.x - mainBox.x;
+  const rightSpace =
+    mainBox.x + mainBox.width - (wizardBox.x + wizardBox.width);
+  expect(Math.abs(leftSpace - rightSpace)).toBeLessThanOrEqual(1);
+
+  const stepMetrics = await wizard
+    .getByRole("navigation", { name: "Product setup steps" })
+    .getByRole("button")
+    .evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const range = document.createRange();
+        range.selectNodeContents(button);
+        const lineTops = new Set(
+          Array.from(range.getClientRects()).map((rect) =>
+            Math.round(rect.top * 100),
+          ),
+        );
+        return {
+          clientWidth: button.clientWidth,
+          lineCount: lineTops.size,
+          scrollWidth: button.scrollWidth,
+        };
+      }),
+    );
+
+  expect(stepMetrics).toHaveLength(5);
+  for (const metric of stepMetrics) {
+    expect(metric.lineCount).toBe(1);
+    expect(metric.scrollWidth).toBeLessThanOrEqual(metric.clientWidth + 1);
+  }
+}
+
 async function expectWorkspaceCopy(page: Page) {
   await expect(
     page.getByRole("heading", { name: "Workspace overview", level: 1 }),
@@ -206,6 +254,13 @@ test("auth shell completes forced change, refresh, responsive navigation, and lo
   await expectWorkspaceCopy(page);
   await expect(page.getByText("API online", { exact: true })).toBeVisible();
   await expectNoAuthInWebStorage(page);
+
+  await page.goto("/admin/products/new");
+  await expect(
+    page.getByRole("heading", { name: "Create product", level: 1 }),
+  ).toBeVisible();
+  await expectCenteredProductWizard(page);
+  await page.goto("/");
 
   for (const width of [1440, 768, 375]) {
     await page.setViewportSize({ width, height: 900 });
