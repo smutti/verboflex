@@ -68,6 +68,47 @@ async function expectBoundedLayout(page: Page) {
   expect(layout.nestedSectionCount).toBe(0);
 }
 
+async function expectCompactDesktopNavigation(page: Page) {
+  const navigation = page.locator("aside").getByRole("navigation", {
+    name: "Primary navigation",
+  });
+  const overview = navigation.getByRole("button", {
+    name: "Workspace overview",
+  });
+  const administration = navigation.getByRole("heading", {
+    name: "Administration",
+    level: 2,
+  });
+  const destinations = ["Products", "Users", "Bitbucket"].map((name) =>
+    navigation.getByRole("link", { name }),
+  );
+  const [overviewBox, administrationBox, ...destinationBoxes] =
+    await Promise.all([
+      overview.boundingBox(),
+      administration.boundingBox(),
+      ...destinations.map((destination) => destination.boundingBox()),
+    ]);
+
+  expect(overviewBox).not.toBeNull();
+  expect(administrationBox).not.toBeNull();
+  expect(destinationBoxes).not.toContain(null);
+  if (
+    overviewBox === null ||
+    administrationBox === null ||
+    destinationBoxes.some((box) => box === null)
+  ) {
+    return;
+  }
+
+  expect(
+    administrationBox.y - (overviewBox.y + overviewBox.height),
+  ).toBeLessThanOrEqual(40);
+  expect(administrationBox.height).toBeLessThanOrEqual(24);
+  for (const box of destinationBoxes) {
+    expect(box?.height).toBeLessThanOrEqual(48);
+  }
+}
+
 async function expectWorkspaceCopy(page: Page) {
   await expect(
     page.getByRole("heading", { name: "Workspace overview", level: 1 }),
@@ -181,6 +222,7 @@ test("auth shell completes forced change, refresh, responsive navigation, and lo
           name: "Primary navigation",
         }),
       ).toBeVisible();
+      await expectCompactDesktopNavigation(page);
     } else {
       await expect(navigationTrigger).toBeVisible();
       for (const cycle of [1, 2, 3, 4]) {

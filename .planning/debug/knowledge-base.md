@@ -9,9 +9,9 @@ Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypothe
 - **Error patterns:** Desktop sidebar destinations spread vertically across the viewport; main page layout remains normal; no runtime error
 - **Root cause(s):** The `lg:flex` desktop aside cross-axis stretches its grid nav to full height. With default `align-content: normal`, the nav's implicit auto rows absorb that height and the nested Administration grid stretches its four rows again.
 - **Fix:** Add `content-start` to the shared `WorkspaceNavigation` nav so implicit tracks remain compact at the top.
-- **Files changed:** none in product code during diagnosis
+- **Files changed:** frontend/src/components/layout/AppShell.tsx, frontend/e2e/auth-shell.spec.ts
 - **Why not caught:** AppShell JSDOM tests cover semantic navigation, responsive utilities, containment, and active routes but do not execute or assert browser layout geometry.
-- **Recurrence guard:** Add a browser-level desktop sidebar geometry assertion at a tall viewport before applying the fix.
+- **Recurrence guard:** The isolated Playwright auth-shell smoke asserts a compact desktop group at 1440x900, including the Overview-to-Administration gap and heading/link heights.
 ---
 
 ## dockerized-frontend-login — frontend image omits canonical OpenAPI input

@@ -142,7 +142,10 @@ function WorkspaceNavigation({
   showAdministration,
 }: WorkspaceNavigationProps) {
   return (
-    <nav aria-label="Primary navigation" className="grid w-full gap-6">
+    <nav
+      aria-label="Primary navigation"
+      className="grid w-full content-start gap-6"
+    >
       <div>
         <Button
           type="button"
