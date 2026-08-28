@@ -66,10 +66,13 @@ MUTATIONS = (
         "pre-request-generation-check-removed",
         "src/verboflex/integrations/bitbucket/client.py",
         "        try:\n"
+        "            lease = self._credential_leases.acquire_repository_read_lease(session)\n"
         "            self._credential_leases.require_current_repository_read_lease("
         "session, lease)\n"
         "            async with self._client.stream(",
-        "        try:\n            async with self._client.stream(",
+        "        try:\n"
+        "            lease = self._credential_leases.acquire_repository_read_lease(session)\n"
+        "            async with self._client.stream(",
     ),
     Mutation(
         "post-response-generation-check-removed",

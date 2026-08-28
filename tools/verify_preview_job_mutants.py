@@ -33,16 +33,16 @@ MUTATIONS = (
     Mutation(
         "result-envelope-allows-extra-fields",
         "src/verboflex/services/preview_jobs.py",
-        "    if set(raw_result) != _SKELETON_RESULT_FIELDS:\n"
+        "    if set(raw_result) != _PREVIEW_RESULT_FIELDS:\n"
         '        raise ValueError("preview result rejected")',
-        "    if not _SKELETON_RESULT_FIELDS.issubset(raw_result):\n"
+        "    if not _PREVIEW_RESULT_FIELDS.issubset(raw_result):\n"
         '        raise ValueError("preview result rejected")',
     ),
     Mutation(
         "result-envelope-accepts-wrong-digest",
         "src/verboflex/services/preview_jobs.py",
-        "        or digest != identity.input_digest\n",
-        "        or digest == identity.input_digest\n",
+        "    if digest not in {identity.input_digest, complete_digest}:\n",
+        "    if digest in {identity.input_digest, complete_digest}:\n",
     ),
     Mutation(
         "persisted-error-vocabulary-bypassed",
