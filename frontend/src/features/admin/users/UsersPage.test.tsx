@@ -20,6 +20,32 @@ import {
 } from "../../../api/client";
 import { UsersPage } from "./UsersPage";
 
+class TestResizeObserver implements ResizeObserver {
+  disconnect() {}
+  observe() {}
+  unobserve() {}
+}
+
+vi.stubGlobal("ResizeObserver", TestResizeObserver);
+Object.defineProperties(HTMLElement.prototype, {
+  hasPointerCapture: {
+    configurable: true,
+    value: () => false,
+  },
+  releasePointerCapture: {
+    configurable: true,
+    value: () => undefined,
+  },
+  scrollIntoView: {
+    configurable: true,
+    value: () => undefined,
+  },
+  setPointerCapture: {
+    configurable: true,
+    value: () => undefined,
+  },
+});
+
 vi.mock("../../../api/client", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../../api/client")>();
 
@@ -146,7 +172,7 @@ describe("administrator users page tracer", () => {
       await userEvent.click(
         screen.getByRole("button", { name: "Retry loading page" }),
       );
-      expect(await screen.findByText(currentAdmin.email)).toBeVisible();
+      expect(await screen.findAllByText(currentAdmin.email)).toHaveLength(2);
     },
   );
 
@@ -243,6 +269,14 @@ describe("administrator users page tracer", () => {
     ).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Viewer" })).toBeChecked();
 
+    await user.type(
+      screen.getByRole("textbox", { name: "Corporate email" }),
+      "role-check@example.com",
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "Display name" }),
+      "Role Check",
+    );
     await user.click(screen.getByRole("checkbox", { name: "Viewer" }));
     await user.click(screen.getByRole("button", { name: "Create user" }));
 
@@ -319,8 +353,8 @@ describe("administrator users page tracer", () => {
       );
     });
 
-    expect(await screen.findByText("Canonical Response")).toBeVisible();
-    expect(screen.getByText("canonical@example.com")).toBeVisible();
+    expect(await screen.findAllByText("Canonical Response")).toHaveLength(2);
+    expect(screen.getAllByText("canonical@example.com")).toHaveLength(2);
     expect(screen.queryByText("Attempted Name")).not.toBeInTheDocument();
   });
 
@@ -352,7 +386,11 @@ describe("administrator users page tracer", () => {
     expect(
       screen.getByRole("dialog", { name: "Edit Zulu Admin" }),
     ).toBeVisible();
-    expect(screen.getByText(currentAdmin.email)).toBeVisible();
+    expect(
+      within(screen.getByRole("dialog", { name: "Edit Zulu Admin" })).getByText(
+        currentAdmin.email,
+      ),
+    ).toBeVisible();
     expect(
       screen.getByText(
         "Email cannot be changed. Create a new account to correct it.",
@@ -401,8 +439,8 @@ describe("administrator users page tracer", () => {
         roles: ["product_manager_reviewer"],
       },
     });
-    expect(await screen.findByText("Server-owned Name")).toBeVisible();
-    expect(screen.getByText("server-owned@example.com")).toBeVisible();
+    expect(await screen.findAllByText("Server-owned Name")).toHaveLength(2);
+    expect(screen.getAllByText("server-owned@example.com")).toHaveLength(2);
     expect(screen.queryByText("Attempted Edit")).not.toBeInTheDocument();
   });
 
@@ -428,9 +466,9 @@ describe("administrator users page tracer", () => {
       screen.getByRole("dialog", { name: "Edit Alpha Translator" }),
     ).toBeVisible();
     expect(
-      within(screen.getByRole("table", { name: "Internal users" })).getByText(
-        "Alpha Translator",
-      ),
+      within(
+        screen.getByRole("table", { name: "Internal users", hidden: true }),
+      ).getByText("Alpha Translator"),
     ).toBeVisible();
   });
 });
