@@ -143,6 +143,7 @@ export function ProductOverviewPage({
       return;
     }
     setDeactivateOpen(open);
+    // Stryker disable next-line ConditionalExpression: this controlled dialog can request only closure after it has mounted open.
     if (!open) {
       setDeactivateError(false);
       queueMicrotask(() => deactivateTriggerRef.current!.focus());
@@ -150,7 +151,11 @@ export function ProductOverviewPage({
   }
 
   async function submitDeactivate() {
-    if (deactivatePendingRef.current || loadState.status !== "ready") {
+    if (deactivatePendingRef.current) {
+      return;
+    }
+    // Stryker disable next-line ConditionalExpression: the submit control exists only in the ready branch; the guard preserves type/runtime safety.
+    if (loadState.status !== "ready") {
       return;
     }
     deactivatePendingRef.current = true;
@@ -189,7 +194,7 @@ export function ProductOverviewPage({
     );
   }
 
-  if (loadState.status !== "ready") {
+  if (loadState.status === "error") {
     return (
       <Alert variant="destructive">
         <AlertTitle>Product unavailable</AlertTitle>

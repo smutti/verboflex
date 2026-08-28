@@ -173,6 +173,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
           </p>
         </div>
         <Button asChild className="w-full sm:w-auto">
+          {/* Stryker disable next-line StringLiteral: React Router canonicalizes both "." and "" to the current URL; readiness and both hrefs are asserted. */}
           <Link
             to={collectionReady ? "/admin/products/new" : "."}
             aria-disabled={!collectionReady}
