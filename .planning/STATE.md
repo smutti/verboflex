@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-17-PLAN.md
-last_updated: "2026-08-28T16:59:50.000Z"
+stopped_at: Completed 02-18-PLAN.md
+last_updated: "2026-08-28T19:10:15.605Z"
 last_activity: 2026-08-28
-last_activity_desc: "Completed quick task 260828-q9p: centered the Create product wizard and kept desktop step labels on one line"
-state_head: 0ca9ac25425c5ae8d1977c677316a6e0ed8f0d82
+last_activity_desc: Completed Plan 02-18
+state_head: 372c89930af600494c98ba0d7e09edaa55feef19
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 35
-  completed_plans: 32
+  completed_plans: 33
   percent: 11
 ---
 
@@ -29,8 +29,8 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 
 Phase: 02 (Admin Configuration) — EXECUTING
 Plan: 18 of 20
-Status: Ready to execute
-Last activity: 2026-08-28 — Completed quick task 260828-q9p: centered the Create product wizard and kept desktop step labels on one line
+Status: Executing Phase 02
+Last activity: 2026-08-28 — Completed Plan 02-18
 
 Progress: [█░░░░░░░░░] 11%
 
@@ -90,6 +90,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P15 | 18min | 2 tasks | 1 files |
 | Phase 02 P16 | 37min | 2 tasks | 6 files |
 | Phase 02 P17 | 42min | 2 tasks | 11 files |
+| Phase 02 P18 | 1h22m | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -214,6 +215,10 @@ Recent decisions affecting current work:
 - [Phase 02]: Generated administrator user operations remain the sole wire authority; visible rows change only from backend responses.
 - [Phase 02]: Temporary plaintext remains local to the acknowledgement dialog and is synchronously cleared before parent closure.
 - [Phase 02]: Reset, deactivate, and reactivate use named confirmations that preserve server-owned row and dialog state on denial.
+- [Phase 02]: Keep repository registration limited to Workspace, Repository slug, and an optional descriptive name; credentials remain outside every product form.
+- [Phase 02]: Populate source, target, Keys, and Translations branch controls only from generated live discovery responses and invalidate superseded reads by generation.
+- [Phase 02]: Represent allowed targets as a checkbox set and permit Default target only when it is a member of that set.
+- [Phase 02]: Require named confirmation before clearing topology-specific values and expose no mapping delete or manual path, glob, locale, file, or format controls.
 
 ### Pending Todos
 
@@ -252,6 +257,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-28T10:33:41.829Z
-Stopped at: Completed 02-17-PLAN.md
+Last session: 2026-08-28T19:10:15.555Z
+Stopped at: Completed 02-18-PLAN.md
 Resume file: None
