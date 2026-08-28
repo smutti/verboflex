@@ -3,13 +3,14 @@ import "@testing-library/jest-dom/vitest";
 import {
   act,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -167,8 +168,14 @@ function renderProducts() {
   return render(
     <MemoryRouter>
       <ProductsPage accessToken="memory-only-admin-bearer" />
+      <LocationMarker />
     </MemoryRouter>,
   );
+}
+
+function LocationMarker() {
+  const location = useLocation();
+  return <span data-testid="current-location">{location.pathname}</span>;
 }
 
 function renderWizard(initialProduct?: AdminProductResponse) {
@@ -242,6 +249,10 @@ describe("administrator product configuration tracer", () => {
     expect(
       screen.getByRole("link", { name: "Create product" }),
     ).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(
+      screen.getByRole("link", { name: "Create product" }),
+    );
+    expect(screen.getByTestId("current-location")).toHaveTextContent("/");
     await waitFor(() => expect(listAdminProductsMock).toHaveBeenCalledOnce());
 
     loadingView.unmount();
@@ -372,6 +383,57 @@ describe("administrator product configuration tracer", () => {
     ]);
   });
 
+  it("fails closed on generated no-data responses and ignores superseded product pages", async () => {
+    listAdminProductsMock.mockResolvedValueOnce(failure());
+    renderProducts();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We could not load this page. Retry without leaving the administration area.",
+    );
+    cleanup();
+
+    let resolveFirst:
+      | ((
+          value: ReturnType<
+            typeof ok<{
+              items: AdminProductResponse[];
+              next_cursor: null;
+            }>
+          >,
+        ) => void)
+      | undefined;
+    const firstLoad = new Promise<
+      ReturnType<
+        typeof ok<{ items: AdminProductResponse[]; next_cursor: null }>
+      >
+    >((resolve) => {
+      resolveFirst = resolve;
+    });
+    listAdminProductsMock
+      .mockReturnValueOnce(firstLoad)
+      .mockResolvedValueOnce(
+        ok({ items: [candidateOnlyProduct], next_cursor: null }),
+      );
+    const view = render(
+      <MemoryRouter>
+        <ProductsPage accessToken="first-product-authority" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(listAdminProductsMock).toHaveBeenCalledOnce());
+    view.rerender(
+      <MemoryRouter>
+        <ProductsPage accessToken="replacement-product-authority" />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findAllByText(candidateOnlyProduct.name),
+    ).toHaveLength(2);
+
+    await act(async () => {
+      resolveFirst?.(ok({ items: [activeProduct], next_cursor: null }));
+    });
+    expect(screen.queryByText(activeProduct.name)).not.toBeInTheDocument();
+  });
+
   it("renders exactly five responsive wizard steps with current and completed semantics", async () => {
     renderWizard(activeProduct);
 
@@ -420,6 +482,28 @@ describe("administrator product configuration tracer", () => {
     ).toHaveAttribute("data-completed", "true");
     expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
       "Step 2 of 5Repositories",
+    );
+
+    await userEvent.click(
+      within(desktop).getByRole("button", { name: "Mappings" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "No mappings configured" }),
+    ).toBeVisible();
+    await userEvent.click(
+      within(desktop).getByRole("button", { name: "Preview" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Validation has not run" }),
+    ).toBeVisible();
+    await userEvent.click(
+      within(desktop).getByRole("button", { name: "Review and publish" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Publish product" }),
+    ).toBeDisabled();
+    expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
+      "Step 5 of 5Review and publish",
     );
   });
 
@@ -485,6 +569,40 @@ describe("administrator product configuration tracer", () => {
     expect(name).toHaveValue("Duplicate Product");
     expect(description).toHaveValue("Still recoverable");
     expect(toastSuccessMock).not.toHaveBeenCalled();
+  });
+
+  it("fails closed on rejected creates and admits only one in-flight submission", async () => {
+    createAdminProductMock.mockRejectedValueOnce(new Error("provider secret"));
+    renderWizard();
+    const name = screen.getByRole("textbox", { name: "Name" });
+    await userEvent.type(name, "Recoverable Product");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save and continue" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We could not save this draft. Your entries are still here. Review the error and try again.",
+    );
+    expect(name).toHaveValue("Recoverable Product");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("provider secret");
+    cleanup();
+
+    createAdminProductMock.mockReturnValue(
+      new Promise<ReturnType<typeof ok<AdminProductResponse>>>(() => undefined),
+    );
+    renderWizard();
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Name" }),
+      "Single Flight Product",
+    );
+    const form = screen
+      .getByRole("button", { name: "Save and continue" })
+      .closest("form");
+    expect(form).not.toBeNull();
+    fireEvent.submit(form!);
+    fireEvent.submit(form!);
+
+    expect(createAdminProductMock).toHaveBeenCalledOnce();
   });
 
   it("uses expected candidate version and preserves edits on conflict or failure", async () => {
@@ -582,6 +700,112 @@ describe("administrator product configuration tracer", () => {
     ).toBeVisible();
   });
 
+  it("fails closed without product authority and retries generated no-data overview results", async () => {
+    const missingIdView = render(
+      <MemoryRouter>
+        <ProductOverviewPage accessToken="memory-only-admin-bearer" />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We could not load this page. Retry without leaving the administration area.",
+    );
+    expect(getAdminProductMock).not.toHaveBeenCalled();
+    missingIdView.unmount();
+
+    getAdminProductMock
+      .mockResolvedValueOnce(failure())
+      .mockResolvedValueOnce(ok(candidateOnlyProduct));
+    render(
+      <MemoryRouter>
+        <ProductOverviewPage
+          accessToken="memory-only-admin-bearer"
+          productId={candidateOnlyProduct.id}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We could not load this page. Retry without leaving the administration area.",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry loading page" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: candidateOnlyProduct.name }),
+    ).toBeVisible();
+    expect(screen.getByText("Not configured")).toBeVisible();
+    expect(screen.getByText("No description")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Deactivate product" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("ignores superseded overview loads", async () => {
+    let resolveFirst:
+      | ((value: ReturnType<typeof ok<AdminProductResponse>>) => void)
+      | undefined;
+    const firstLoad = new Promise<ReturnType<typeof ok<AdminProductResponse>>>(
+      (resolve) => {
+        resolveFirst = resolve;
+      },
+    );
+    getAdminProductMock
+      .mockReturnValueOnce(firstLoad)
+      .mockResolvedValueOnce(ok(candidateOnlyProduct));
+    const view = render(
+      <MemoryRouter>
+        <ProductOverviewPage
+          accessToken="first-overview-authority"
+          productId={activeProduct.id}
+        />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(getAdminProductMock).toHaveBeenCalledOnce());
+    view.rerender(
+      <MemoryRouter>
+        <ProductOverviewPage
+          accessToken="replacement-overview-authority"
+          productId={candidateOnlyProduct.id}
+        />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: candidateOnlyProduct.name }),
+    ).toBeVisible();
+
+    await act(async () => {
+      resolveFirst?.(ok(activeProduct));
+    });
+    expect(
+      screen.queryByRole("heading", { name: activeProduct.name }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("returns focus when deactivation is cancelled and bounds rejected failures", async () => {
+    deactivateAdminProductMock.mockRejectedValueOnce(
+      new Error("provider response with private details"),
+    );
+    renderOverview();
+    const user = userEvent.setup();
+    const trigger = await screen.findByRole("button", {
+      name: "Deactivate product",
+    });
+    await user.click(trigger);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(trigger).toHaveFocus());
+
+    await user.click(trigger);
+    await user.click(
+      screen.getByRole("button", { name: "Deactivate product" }),
+    );
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "We could not deactivate this product. Its active state is unchanged.",
+    );
+    expect(alert).not.toHaveTextContent("private details");
+    expect(alert).toHaveFocus();
+    expect(screen.getByText("Active")).toBeVisible();
+  });
+
   it("deactivates only after named backend confirmation and keeps state unchanged on failure", async () => {
     let resolveDeactivate:
       | ((value: ReturnType<typeof ok<AdminProductResponse>>) => void)
@@ -676,6 +900,10 @@ describe("administrator product configuration tracer", () => {
     ).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Overview", current: "page" }),
+    ).toBeVisible();
+    await userEvent.click(screen.getByRole("link", { name: "Repositories" }));
+    expect(
+      await screen.findByRole("heading", { name: "Repositories" }),
     ).toBeVisible();
   });
 });
