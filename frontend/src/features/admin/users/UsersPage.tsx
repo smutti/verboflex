@@ -345,11 +345,9 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
     });
   }
 
-  function acknowledgeTemporaryCredential() {
+  function acknowledgeTemporaryCredential(credential: TemporaryCredential) {
     flushSync(() => {
-      setTemporaryCredential((current) =>
-        current === null ? null : { ...current, temporaryPassword: "" },
-      );
+      setTemporaryCredential({ ...credential, temporaryPassword: "" });
     });
     setTemporaryCredential(null);
   }
@@ -416,15 +414,15 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
           target.action === "reset"
             ? await resetAdminUserPassword(options)
             : await reactivateAdminUser(options);
-        if (result.data === undefined) {
+        if (result.data !== undefined) {
+          replaceUser(ordinaryUserFromCredential(result.data));
+          revealTemporaryCredential(result.data);
+          setLifecycleTarget(null);
+        } else {
           setLifecycleError(
             responseStatus(result) === 409 ? "conflict" : "generic",
           );
-          return;
         }
-        replaceUser(ordinaryUserFromCredential(result.data));
-        revealTemporaryCredential(result.data);
-        setLifecycleTarget(null);
       }
     } catch {
       setLifecycleError("generic");
@@ -677,7 +675,9 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
           key={temporaryCredential.userId}
           displayName={temporaryCredential.displayName}
           temporaryPassword={temporaryCredential.temporaryPassword}
-          onAcknowledged={acknowledgeTemporaryCredential}
+          onAcknowledged={() =>
+            acknowledgeTemporaryCredential(temporaryCredential)
+          }
         />
       ) : null}
     </section>

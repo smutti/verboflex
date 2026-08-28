@@ -281,6 +281,26 @@ describe("administrator users page tracer", () => {
     ).toBeVisible();
   });
 
+  it("projects the active filter without reordering or retaining inactive rows", async () => {
+    listAdminUsersMock.mockResolvedValueOnce(
+      ok({
+        items: [currentAdmin, inactiveViewer, translator],
+        next_cursor: null,
+      }),
+    );
+    renderUsers();
+
+    await userEvent.click(
+      await screen.findByRole("combobox", { name: "User status" }),
+    );
+    await userEvent.click(screen.getByRole("option", { name: "Active users" }));
+
+    const table = screen.getByRole("table", { name: "Internal users" });
+    expect(within(table).getByText("Zulu Admin")).toBeVisible();
+    expect(within(table).getByText("Alpha Translator")).toBeVisible();
+    expect(within(table).queryByText("Middle Viewer")).not.toBeInTheDocument();
+  });
+
   it("opens Add user with the fixed role set and enforces a non-empty selection", async () => {
     renderUsers();
     const user = await openAddDialog();
