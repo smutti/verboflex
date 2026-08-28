@@ -22,6 +22,7 @@ import {
   type AdminUserCredentialResponse,
   type AdminUserResponse,
 } from "../../../api/client";
+import { TemporaryPasswordDialog } from "./TemporaryPasswordDialog";
 import { UsersPage } from "./UsersPage";
 
 class TestResizeObserver implements ResizeObserver {
@@ -566,6 +567,10 @@ describe("administrator users page tracer", () => {
       name: "Temporary password created",
     });
     expect(within(credentialDialog).getByText(temporaryPassword)).toBeVisible();
+    expect(
+      within(credentialDialog).queryByRole("button", { name: "Close" }),
+    ).not.toBeInTheDocument();
+    expect(within(credentialDialog).getByRole("status")).toBeEmptyDOMElement();
     expect(writeClipboard).not.toHaveBeenCalled();
 
     await user.keyboard("{Escape}");
@@ -619,6 +624,29 @@ describe("administrator users page tracer", () => {
     expect(JSON.stringify(createAdminUserMock.mock.calls)).not.toContain(
       temporaryPassword,
     );
+  });
+
+  it("zeroes the temporary password before notifying its acknowledgement owner", async () => {
+    const temporaryPassword = "Erase-Before-Close!2048";
+    const onAcknowledged = vi.fn(() => {
+      expect(
+        screen.getByRole("dialog", { name: "Temporary password created" }),
+      ).toBeVisible();
+      expect(screen.queryByText(temporaryPassword)).not.toBeInTheDocument();
+    });
+    render(
+      <TemporaryPasswordDialog
+        displayName="Erase Check"
+        temporaryPassword={temporaryPassword}
+        onAcknowledged={onAcknowledged}
+      />,
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "I saved the password" }),
+    );
+
+    expect(onAcknowledged).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -683,6 +711,18 @@ describe("administrator users page tracer", () => {
       expect(
         within(credentialDialog).getByText(temporaryPassword),
       ).toBeVisible();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      if (actionName === "Reactivate user") {
+        const table = screen.getByRole("table", {
+          name: "Internal users",
+          hidden: true,
+        });
+        const row = within(table).getByRole("row", {
+          name: /Middle Viewer/i,
+          hidden: true,
+        });
+        expect(within(row).getByText("Active")).toBeVisible();
+      }
     },
   );
 
@@ -778,6 +818,40 @@ describe("administrator users page tracer", () => {
     expect(alert).not.toHaveTextContent("Reset-Secret-That-Must-Not-Leak");
     expect(alert).toHaveFocus();
     expect(confirmation).toBeVisible();
+    expect(
+      within(confirmation).getByRole("button", { name: "Reset password" }),
+    ).toBeEnabled();
+  });
+
+  it("maps a non-conflict lifecycle denial to bounded generic copy", async () => {
+    resetAdminUserPasswordMock.mockResolvedValueOnce({
+      data: undefined,
+      error: { detail: "server detail with Generic-Lifecycle-Leak" },
+      request: new Request("http://localhost/api/v1/admin/users"),
+      response: new Response(null, { status: 503 }),
+    });
+    renderUsers();
+    const user = await chooseRowAction(
+      translator.display_name,
+      "Reset password",
+    );
+    const confirmation = screen.getByRole("alertdialog", {
+      name: "Reset password for Alpha Translator?",
+    });
+
+    await user.click(
+      within(confirmation).getByRole("button", { name: "Reset password" }),
+    );
+
+    const alert = await within(confirmation).findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "The current user state is unchanged. Try again.",
+    );
+    expect(alert).not.toHaveTextContent("Generic-Lifecycle-Leak");
+    expect(alert).toHaveFocus();
+    expect(
+      within(confirmation).getByRole("button", { name: "Reset password" }),
+    ).toBeEnabled();
   });
 
   it("sanitizes rejected lifecycle requests and preserves the inactive row", async () => {
@@ -874,5 +948,13 @@ describe("administrator users page tracer", () => {
       const row = within(table).getByRole("row", { name: /Alpha Translator/i });
       expect(within(row).getByText("Inactive")).toBeVisible();
     });
+    expect(
+      within(screen.getByRole("table", { name: "Internal users" })).getByRole(
+        "button",
+        {
+          name: "More actions for Alpha Translator",
+        },
+      ),
+    ).toHaveFocus();
   });
 });
