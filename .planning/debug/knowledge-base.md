@@ -4,6 +4,16 @@ Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypothe
 
 ---
 
+## web-login-rejected — Vite dev server posts auth requests to itself
+- **Date:** 2026-08-28
+- **Error patterns:** valid local admin password, generic login failure, no backend login request, frontend `/api/v1/auth/token` returns 404
+- **Root cause(s):** Vite was launched without `VITE_API_BASE_URL`; `frontend/src/api/config.ts` fell back to `/`, while `vite.config.ts` had no API proxy, so the browser posted to port 8080 instead of the backend on port 8000.
+- **Fix:** Launch local Vite with `VITE_API_BASE_URL=http://localhost:8000`; consider a durable development proxy or environment contract separately.
+- **Files changed:** none; operational configuration only
+- **Why not caught:** Frontend unit/build checks use generated-operation mocks or explicit build configuration and did not exercise the manually launched dev server environment.
+- **Recurrence guard:** Local smoke must assert the effective browser token endpoint reaches the backend rather than returning the frontend server's 404.
+---
+
 ## randomized-admin-role-order — ORM role collections sometimes reload outside the fixed domain order
 - **Date:** 2026-08-27
 - **Error patterns:** pytest-randomly role-order assertion failures, persisted `target.roles` differs from `FIXED_ROLE_ORDER`, passes in isolation, randomized full-suite failure
