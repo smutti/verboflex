@@ -81,6 +81,7 @@ function ProductFields({ product }: { product: AdminProductResponse }) {
 
 export function ProductsPage({ accessToken }: ProductsPageProps) {
   const loadGeneration = useRef(0);
+  const loadingMoreRef = useRef(false);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   // Stryker disable next-line ArrayDeclaration: rows are hidden until the first generated response replaces this seed.
   const [products, setProducts] = useState<AdminProductResponse[]>([]);
@@ -97,6 +98,10 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
       status: ProductStatusFilter,
       limit: ProductPageSize,
     ) => {
+      if (append && loadingMoreRef.current) {
+        return;
+      }
+      loadingMoreRef.current = append;
       const generation = ++loadGeneration.current;
       if (append) {
         setLoadingMore(true);
@@ -130,6 +135,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
         }
       } finally {
         if (generation === loadGeneration.current) {
+          loadingMoreRef.current = false;
           setLoadingMore(false);
         }
       }
