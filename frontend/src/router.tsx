@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 
 import { App } from "./App";
 import { AppShell } from "./components/layout/AppShell";
@@ -7,10 +7,12 @@ import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import { Button } from "./components/ui/button";
 import { Skeleton } from "./components/ui/skeleton";
 import { AdminAccessDenied } from "./features/admin/AdminAccessDenied";
+import { ProductMappingsPage } from "./features/admin/mappings/ProductMappingsPage";
 import { ProductDetailLayout } from "./features/admin/products/ProductDetailLayout";
 import { ProductOverviewPage } from "./features/admin/products/ProductOverviewPage";
 import { ProductsPage } from "./features/admin/products/ProductsPage";
 import { ProductWizardPage } from "./features/admin/products/ProductWizardPage";
+import { ProductRepositoriesPage } from "./features/admin/repositories/ProductRepositoriesPage";
 import { UsersPage } from "./features/admin/users/UsersPage";
 import { ChangePasswordPage } from "./features/auth/ChangePasswordPage";
 import { LoginPage } from "./features/auth/LoginPage";
@@ -149,6 +151,15 @@ function ProductSectionEmptyState({
   );
 }
 
+function ProductMappingsRoute({ accessToken }: { accessToken: string }) {
+  const productId = useParams<"productId">().productId ?? "";
+  return (
+    <ProductDetailLayout hideTitle>
+      <ProductMappingsPage accessToken={accessToken} productId={productId} />
+    </ProductDetailLayout>
+  );
+}
+
 export function AdminApplicationRoutes({
   accessToken,
   currentUserId,
@@ -174,23 +185,13 @@ export function AdminApplicationRoutes({
         path="products/:productId/repositories"
         element={
           <ProductDetailLayout hideTitle>
-            <ProductSectionEmptyState
-              heading="Repositories"
-              body="Add or reuse a Bitbucket repository before configuring a mapping."
-            />
+            <ProductRepositoriesPage accessToken={accessToken} />
           </ProductDetailLayout>
         }
       />
       <Route
         path="products/:productId/mappings"
-        element={
-          <ProductDetailLayout hideTitle>
-            <ProductSectionEmptyState
-              heading="Mappings"
-              body="Add a mapping that represents one localization format and layout."
-            />
-          </ProductDetailLayout>
-        }
+        element={<ProductMappingsRoute accessToken={accessToken} />}
       />
       <Route
         path="products/:productId/preview"

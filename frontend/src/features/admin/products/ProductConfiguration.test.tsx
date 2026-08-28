@@ -203,6 +203,15 @@ const liveBranches = {
   next_cursor: null,
 };
 
+function exposeTask2Repositories() {
+  listAdminRepositoriesMock.mockResolvedValue(
+    ok({
+      items: [applicationRepository, translationRepository],
+      next_cursor: null,
+    }),
+  );
+}
+
 function ok<T>(data: T, status = 200) {
   return {
     data,
@@ -295,7 +304,7 @@ describe("administrator product configuration tracer", () => {
     getAdminProductMock.mockResolvedValue(ok(activeProduct));
     listAdminCandidateMappingsMock.mockReset();
     listAdminCandidateMappingsMock.mockResolvedValue(
-      ok({ items: [directMapping], next_cursor: null }),
+      ok({ items: [], next_cursor: null }),
     );
     listAdminProductsMock.mockReset();
     listAdminProductsMock.mockResolvedValue(
@@ -303,10 +312,7 @@ describe("administrator product configuration tracer", () => {
     );
     listAdminRepositoriesMock.mockReset();
     listAdminRepositoriesMock.mockResolvedValue(
-      ok({
-        items: [applicationRepository, translationRepository],
-        next_cursor: null,
-      }),
+      ok({ items: [], next_cursor: null }),
     );
     listAdminRepositoryBranchesMock.mockReset();
     listAdminRepositoryBranchesMock.mockResolvedValue(ok(liveBranches));
@@ -1699,6 +1705,7 @@ describe("administrator product configuration tracer", () => {
   });
 
   it("reuses or registers credential-free repositories with responsive API ordering", async () => {
+    exposeTask2Repositories();
     const registeredRepository: AdminRepositoryResponse = {
       id: "00000000-0000-4000-8000-000000000303",
       descriptive_name: null,
@@ -1783,6 +1790,7 @@ describe("administrator product configuration tracer", () => {
   });
 
   it("uses only live branch results for direct source and target controls", async () => {
+    exposeTask2Repositories();
     renderWizard(activeProduct);
     await userEvent.click(screen.getByRole("button", { name: "Mappings" }));
 
@@ -1841,6 +1849,7 @@ describe("administrator product configuration tracer", () => {
   });
 
   it("confirms topology changes before clearing direct values and exposes explicit separate sides", async () => {
+    exposeTask2Repositories();
     renderWizard(activeProduct);
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Mappings" }));
@@ -1883,6 +1892,7 @@ describe("administrator product configuration tracer", () => {
   });
 
   it("writes an expected-version mapping, preserves conflicts, and keeps default membership valid", async () => {
+    exposeTask2Repositories();
     createAdminCandidateMappingMock
       .mockResolvedValueOnce(mappingConflict("allowed_target_branches"))
       .mockResolvedValueOnce(
@@ -1952,10 +1962,14 @@ describe("administrator product configuration tracer", () => {
 
     await user.click(screen.getByRole("button", { name: "Save mapping" }));
     expect(toastSuccessMock).toHaveBeenCalledWith("Draft saved");
-    expect(await screen.findByText("Draft version 6")).toBeVisible();
+    expect(await screen.findAllByText("Draft version 6")).toHaveLength(2);
   });
 
   it("renders mapping tables as ordered stacks below 768px with local focusable branch overflow", async () => {
+    exposeTask2Repositories();
+    listAdminCandidateMappingsMock.mockResolvedValueOnce(
+      ok({ items: [directMapping], next_cursor: null }),
+    );
     renderWizard(activeProduct);
     await userEvent.click(screen.getByRole("button", { name: "Mappings" }));
 

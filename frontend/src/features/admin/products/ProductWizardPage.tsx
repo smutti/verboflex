@@ -5,6 +5,7 @@ import {
   type FormEvent,
   type MouseEvent,
 } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import {
@@ -30,6 +31,8 @@ import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { Textarea } from "../../../components/ui/textarea";
+import { ProductMappingsPage } from "../mappings/ProductMappingsPage";
+import { ProductRepositoriesPage } from "../repositories/ProductRepositoriesPage";
 
 export interface ProductWizardPageProps {
   accessToken: string;
@@ -58,34 +61,23 @@ function savedDescription(product: AdminProductResponse | undefined) {
   return product?.candidate_revision?.description ?? "";
 }
 
-function FutureStep({ step }: { step: number }) {
+function FutureStep({ productId, step }: { productId: string; step: number }) {
   switch (step) {
-    case 2:
-      return (
-        <section className="grid gap-2 rounded-lg border bg-secondary p-6">
-          <h2 className="text-heading font-semibold">No repositories added</h2>
-          <p className="text-muted-foreground">
-            Add or reuse a Bitbucket repository before configuring a mapping.
-          </p>
-        </section>
-      );
-    case 3:
-      return (
-        <section className="grid gap-2 rounded-lg border bg-secondary p-6">
-          <h2 className="text-heading font-semibold">No mappings configured</h2>
-          <p className="text-muted-foreground">
-            Add a mapping that represents one localization format and layout.
-          </p>
-        </section>
-      );
     case 4:
       return (
-        <section className="grid gap-2 rounded-lg border bg-secondary p-6">
+        <section className="grid gap-4 rounded-lg border bg-secondary p-6">
           <h2 className="text-heading font-semibold">Validation has not run</h2>
           <p className="text-muted-foreground">
             Run validation to detect files, languages, and partial translation
             samples.
           </p>
+          <Button asChild variant="outline" className="justify-self-start">
+            <Link
+              to={`/admin/products/${encodeURIComponent(productId)}/preview`}
+            >
+              Open product preview
+            </Link>
+          </Button>
         </section>
       );
     default:
@@ -96,6 +88,12 @@ function FutureStep({ step }: { step: number }) {
             Complete repository, mapping, and preview confirmation before
             publishing.
           </p>
+          <Link
+            className="justify-self-start font-semibold text-primary underline-offset-4 hover:underline"
+            to={`/admin/products/${encodeURIComponent(productId)}/preview`}
+          >
+            Review preview blockers
+          </Link>
           <Button type="button" disabled className="justify-self-start">
             Publish product
           </Button>
@@ -223,6 +221,20 @@ export function ProductWizardPage({
     }
   }
 
+  function updateCandidateVersion(version: number) {
+    setProduct((current) =>
+      current === undefined || current.candidate_revision === null
+        ? current
+        : {
+            ...current,
+            candidate_revision: {
+              ...current.candidate_revision,
+              version,
+            },
+          },
+    );
+  }
+
   return (
     <section
       className="mx-auto grid w-full min-w-0 max-w-3xl gap-8 overflow-x-clip"
@@ -328,9 +340,21 @@ export function ProductWizardPage({
             </Button>
           </div>
         </form>
-      ) : (
-        <FutureStep step={currentStep} />
-      )}
+      ) : currentStep === 2 && product !== undefined ? (
+        <ProductRepositoriesPage accessToken={accessToken} embedded />
+      ) : currentStep === 3 &&
+        product !== undefined &&
+        product.candidate_revision !== null ? (
+        <ProductMappingsPage
+          accessToken={accessToken}
+          candidateVersion={product.candidate_revision.version}
+          embedded
+          onCandidateVersionChange={updateCandidateVersion}
+          productId={product.id}
+        />
+      ) : product !== undefined ? (
+        <FutureStep productId={product.id} step={currentStep} />
+      ) : null}
 
       {pendingNavigation !== null ? (
         <AlertDialog
