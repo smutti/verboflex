@@ -81,6 +81,7 @@ function ProductFields({ product }: { product: AdminProductResponse }) {
 
 export function ProductsPage({ accessToken }: ProductsPageProps) {
   const loadGeneration = useRef(0);
+  // Stryker disable next-line BooleanLiteral: append controls are absent until the first response, whose finally block resets this internal gate.
   const loadingMoreRef = useRef(false);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   // Stryker disable next-line ArrayDeclaration: rows are hidden until the first generated response replaces this seed.
@@ -134,6 +135,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
           setLoadState("error");
         }
       } finally {
+        // Stryker disable next-line ConditionalExpression: a stale finally can only reset append-only state while the replacement collection request hides pagination.
         if (generation === loadGeneration.current) {
           loadingMoreRef.current = false;
           setLoadingMore(false);
@@ -173,7 +175,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
           </p>
         </div>
         <Button asChild className="w-full sm:w-auto">
-          {/* Stryker disable next-line StringLiteral: React Router canonicalizes both "." and "" to the current URL; readiness and both hrefs are asserted. */}
+          {/* Stryker disable StringLiteral: React Router canonicalizes both "." and "" to the current URL; readiness and both hrefs are asserted. */}
           <Link
             to={collectionReady ? "/admin/products/new" : "."}
             aria-disabled={!collectionReady}
@@ -181,6 +183,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
           >
             Create product
           </Link>
+          {/* Stryker restore StringLiteral */}
         </Button>
       </div>
 

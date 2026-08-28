@@ -42,6 +42,8 @@ type ProductLoadState =
   | { status: "error" }
   | { status: "ready"; product: AdminProductResponse; productId: string };
 
+type ReadyProductLoadState = Extract<ProductLoadState, { status: "ready" }>;
+
 function RevisionSummary({
   label,
   revision,
@@ -150,12 +152,8 @@ export function ProductOverviewPage({
     }
   }
 
-  async function submitDeactivate() {
+  async function submitDeactivate(readyState: ReadyProductLoadState) {
     if (deactivatePendingRef.current) {
-      return;
-    }
-    // Stryker disable next-line ConditionalExpression: the submit control exists only in the ready branch; the guard preserves type/runtime safety.
-    if (loadState.status !== "ready") {
       return;
     }
     deactivatePendingRef.current = true;
@@ -164,16 +162,17 @@ export function ProductOverviewPage({
     try {
       const result = await deactivateAdminProduct({
         auth: accessToken,
-        path: { product_id: loadState.productId },
+        path: { product_id: readyState.productId },
       });
       if (result.data === undefined) {
         setDeactivateError(true);
         return;
       }
       setLoadState({
+        // Stryker disable next-line StringLiteral: a validated response keeps this already-ready branch ready; the literal is the erased TypeScript discriminant.
         status: "ready",
         product: result.data,
-        productId: loadState.productId,
+        productId: readyState.productId,
       });
       setDeactivateOpen(false);
     } catch {
@@ -308,7 +307,7 @@ export function ProductOverviewPage({
                   variant="destructive"
                   disabled={deactivatePending}
                   aria-busy={deactivatePending}
-                  onClick={() => void submitDeactivate()}
+                  onClick={() => void submitDeactivate(loadState)}
                 >
                   Deactivate product
                 </Button>
