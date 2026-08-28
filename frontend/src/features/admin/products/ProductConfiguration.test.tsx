@@ -282,6 +282,9 @@ describe("administrator product configuration tracer", () => {
     expect(
       screen.getByRole("link", { name: "Create product" }),
     ).toHaveAttribute("tabindex", "-1");
+    expect(
+      screen.getByRole("link", { name: "Create product" }),
+    ).toHaveAttribute("href", "/");
     await userEvent.click(screen.getByRole("link", { name: "Create product" }));
     expect(screen.getByTestId("current-location")).toHaveTextContent("/");
     await waitFor(() => expect(listAdminProductsMock).toHaveBeenCalledOnce());
@@ -313,6 +316,9 @@ describe("administrator product configuration tracer", () => {
       await screen.findByRole("heading", { name: "No products configured" }),
     ).toBeVisible();
     expect(
+      screen.queryByRole("button", { name: "Load more products" }),
+    ).not.toBeInTheDocument();
+    expect(
       screen.getByText(
         "Create a product to connect repositories and validate a localization layout.",
       ),
@@ -323,6 +329,9 @@ describe("administrator product configuration tracer", () => {
     expect(
       screen.getByRole("link", { name: "Create product" }),
     ).not.toHaveAttribute("tabindex");
+    expect(
+      screen.getByRole("link", { name: "Create product" }),
+    ).toHaveAttribute("href", "/admin/products/new");
   });
 
   it("keeps status, page size, cursor, and API row order server-owned", async () => {
@@ -343,6 +352,7 @@ describe("administrator product configuration tracer", () => {
     renderProducts();
 
     const table = await screen.findByRole("table", { name: "Products" });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(
       within(table)
         .getAllByRole("row")
@@ -416,6 +426,10 @@ describe("administrator product configuration tracer", () => {
     renderProducts();
 
     const table = await screen.findByRole("table", { name: "Products" });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Load more products" }),
+    ).not.toBeInTheDocument();
     expect(table.parentElement?.parentElement).toHaveClass(
       "hidden",
       "md:block",
@@ -666,6 +680,12 @@ describe("administrator product configuration tracer", () => {
     await userEvent.clear(description);
     await userEvent.type(description, "Changed candidate details");
     await userEvent.click(
+      within(desktop).getByRole("button", { name: "Product details" }),
+    );
+    expect(
+      screen.queryByRole("alertdialog", { name: "Leave without saving?" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
       within(desktop).getByRole("button", { name: "Repositories" }),
     );
     await userEvent.click(
@@ -684,6 +704,14 @@ describe("administrator product configuration tracer", () => {
     expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
       "Step 2 of 5Repositories",
     );
+    expect(
+      screen.getByRole("heading", { name: "No repositories added" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Add or reuse a Bitbucket repository before configuring a mapping.",
+      ),
+    ).toBeVisible();
 
     await userEvent.click(
       within(desktop).getByRole("button", { name: "Mappings" }),
@@ -893,6 +921,8 @@ describe("administrator product configuration tracer", () => {
     expect(
       screen.getByRole("button", { name: "Save and continue" }),
     ).toBeEnabled();
+    await userEvent.type(name, " revised");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     createAdminProductMock.mockReturnValueOnce(
       new Promise<ReturnType<typeof ok<AdminProductResponse>>>(() => undefined),
     );
@@ -1003,6 +1033,28 @@ describe("administrator product configuration tracer", () => {
       "We could not save this draft. Your entries are still here. Review the error and try again.",
     );
     expect(updateAdminProductCandidateMock).not.toHaveBeenCalled();
+  });
+
+  it("clears duplicate ownership when conflicted edits are discarded", async () => {
+    updateAdminProductCandidateMock.mockResolvedValueOnce(conflict());
+    renderWizard(activeProduct);
+    const user = userEvent.setup();
+    const name = screen.getByRole("textbox", { name: "Name" });
+    await user.clear(name);
+    await user.type(name, "Duplicate Candidate");
+    await user.click(screen.getByRole("button", { name: "Save and continue" }));
+    expect(
+      await screen.findByText("A product already uses this name."),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Repositories" }));
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await user.click(screen.getByRole("button", { name: "Product details" }));
+    expect(
+      screen.queryByText("A product already uses this name."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
+      activeProduct.name,
+    );
   });
 
   it("guards dirty step navigation with the exact discard confirmation", async () => {
@@ -1129,6 +1181,22 @@ describe("administrator product configuration tracer", () => {
     expect(
       screen.getByRole("link", { name: "Mappings", current: "page" }),
     ).toHaveAttribute("href", `/admin/products/${activeProduct.id}/mappings`);
+    expect(
+      screen.getByRole("link", { name: "Mappings", current: "page" }),
+    ).toHaveClass("min-h-11", "break-words");
+
+    cleanup();
+    render(
+      <MemoryRouter>
+        <ProductDetailLayout>
+          <p>Missing route identity remains bounded</p>
+        </ProductDetailLayout>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute(
+      "href",
+      "/admin/products/overview",
+    );
   });
 
   it("renders bounded overview loading and cancels queued work on unmount", async () => {
@@ -1322,6 +1390,11 @@ describe("administrator product configuration tracer", () => {
     });
     await user.click(trigger);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("alertdialog", { name: "Deactivate Zulu Mobile?" })
+        .contains(document.activeElement),
+    ).toBe(true);
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(trigger).toHaveFocus());
 
@@ -1427,6 +1500,13 @@ describe("administrator product configuration tracer", () => {
     });
     await user.click(retryTrigger);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    deactivateAdminProductMock.mockResolvedValueOnce(
+      ok({ ...activeProduct, is_active: false }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Deactivate product" }),
+    );
+    expect(await screen.findByText("Inactive")).toBeVisible();
   });
 
   it("mounts the product collection, new wizard, and URL-backed overview routes inside the guarded shell", async () => {
