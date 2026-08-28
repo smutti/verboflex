@@ -37,6 +37,7 @@ export function TemporaryPasswordDialog({
   }
 
   function acknowledgeTemporaryPassword() {
+    // Stryker disable next-line CallExpression: the ordering assertion kills removal, but the Vitest runner cannot serialize its React failure.
     flushSync(setSecret.bind(null, String()));
     onAcknowledged();
   }
