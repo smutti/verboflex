@@ -557,7 +557,7 @@ describe("authenticated application shell", () => {
 
   it("freezes the 320, 768, 1024, and wide shell containment contracts", () => {
     render(
-      <MemoryRouter initialEntries={["/admin/products"]}>
+      <MemoryRouter initialEntries={["/admin/products/product-123/mappings"]}>
         <AppShell
           accessToken="admin-server-token"
           onLogout={vi.fn()}
@@ -588,6 +588,19 @@ describe("authenticated application shell", () => {
     expect(screen.getByRole("button", { name: "Open navigation" })).toHaveClass(
       "lg:hidden",
     );
+
+    const navigation = screen.getByRole("navigation", {
+      name: "Primary navigation",
+    });
+    expect(
+      within(navigation).getAllByRole("link", { current: "page" }),
+    ).toHaveLength(1);
+    expect(
+      within(navigation).getByRole("link", {
+        name: "Products",
+        current: "page",
+      }),
+    ).toBeVisible();
 
     for (const name of ["Products", "Users", "Bitbucket"]) {
       expect(screen.getByRole("link", { name })).toHaveClass(
