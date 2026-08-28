@@ -15,13 +15,20 @@ import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createAdminCandidateMapping,
   createAdminProduct,
+  createAdminRepository,
   deactivateAdminProduct,
   getAdminProduct,
+  listAdminCandidateMappings,
   listAdminProducts,
+  listAdminRepositories,
+  listAdminRepositoryBranches,
   readSystemStatus,
   updateAdminProductCandidate,
+  type AdminMappingResponse,
   type AdminProductResponse,
+  type AdminRepositoryResponse,
 } from "../../../api/client";
 import { useSession } from "../../auth/session";
 import { ProductOverviewPage } from "./ProductOverviewPage";
@@ -67,10 +74,15 @@ vi.mock("../../../api/client", async (importOriginal) => {
 
   return {
     ...original,
+    createAdminCandidateMapping: vi.fn(),
     createAdminProduct: vi.fn(),
+    createAdminRepository: vi.fn(),
     deactivateAdminProduct: vi.fn(),
     getAdminProduct: vi.fn(),
+    listAdminCandidateMappings: vi.fn(),
     listAdminProducts: vi.fn(),
+    listAdminRepositories: vi.fn(),
+    listAdminRepositoryBranches: vi.fn(),
     readSystemStatus: vi.fn(),
     updateAdminProductCandidate: vi.fn(),
   };
@@ -85,10 +97,15 @@ vi.mock("../../auth/session", async (importOriginal) => {
   };
 });
 
+const createAdminCandidateMappingMock = vi.mocked(createAdminCandidateMapping);
 const createAdminProductMock = vi.mocked(createAdminProduct);
+const createAdminRepositoryMock = vi.mocked(createAdminRepository);
 const deactivateAdminProductMock = vi.mocked(deactivateAdminProduct);
 const getAdminProductMock = vi.mocked(getAdminProduct);
+const listAdminCandidateMappingsMock = vi.mocked(listAdminCandidateMappings);
 const listAdminProductsMock = vi.mocked(listAdminProducts);
+const listAdminRepositoriesMock = vi.mocked(listAdminRepositories);
+const listAdminRepositoryBranchesMock = vi.mocked(listAdminRepositoryBranches);
 const readSystemStatusMock = vi.mocked(readSystemStatus);
 const useSessionMock = vi.mocked(useSession);
 const updateAdminProductCandidateMock = vi.mocked(updateAdminProductCandidate);
@@ -144,6 +161,48 @@ const activeWithoutCandidateProduct: AdminProductResponse = {
   is_active: true,
 };
 
+const applicationRepository: AdminRepositoryResponse = {
+  id: "00000000-0000-4000-8000-000000000301",
+  descriptive_name: "Mobile application source",
+  workspace: "product-team",
+  repository_slug: "mobile-app",
+};
+
+const translationRepository: AdminRepositoryResponse = {
+  id: "00000000-0000-4000-8000-000000000302",
+  descriptive_name: null,
+  workspace: "localization-team",
+  repository_slug: "mobile-translations",
+};
+
+const directMapping: AdminMappingResponse = {
+  id: "00000000-0000-4000-8000-000000000401",
+  topology: "direct",
+  candidate_version: 5,
+  primary_repository_id: applicationRepository.id,
+  primary_source_branch: "main",
+  translations_repository_id: null,
+  translations_source_branch: null,
+  allowed_target_branches: [
+    "release/2026-with-a-very-long-opaque-provider-branch-name",
+  ],
+  default_target_branch:
+    "release/2026-with-a-very-long-opaque-provider-branch-name",
+  selected_layout_candidate_id: null,
+  selected_layout_version: null,
+};
+
+const liveBranches = {
+  items: [
+    { name: "main", commit_hash: "a".repeat(40) },
+    {
+      name: "release/2026-with-a-very-long-opaque-provider-branch-name",
+      commit_hash: "b".repeat(40),
+    },
+  ],
+  next_cursor: null,
+};
+
 function ok<T>(data: T, status = 200) {
   return {
     data,
@@ -158,6 +217,25 @@ function conflict(field: "name" | null = "name") {
     data: undefined,
     error: { detail: "Product conflict", field },
     request: new Request("http://localhost/api/v1/admin/products"),
+    response: new Response(null, { status: 409 }),
+  };
+}
+
+function mappingConflict(
+  field:
+    | "mapping_identity"
+    | "candidate_version"
+    | "source_branch"
+    | "keys_source_branch"
+    | "translations_source_branch"
+    | "allowed_target_branches",
+) {
+  return {
+    data: undefined,
+    error: { detail: "private provider conflict detail", field },
+    request: new Request(
+      "http://localhost/api/v1/admin/products/product-id/candidate/mappings",
+    ),
     response: new Response(null, { status: 409 }),
   };
 }
@@ -209,14 +287,29 @@ function renderOverview() {
 
 describe("administrator product configuration tracer", () => {
   beforeEach(() => {
+    createAdminCandidateMappingMock.mockReset();
     createAdminProductMock.mockReset();
+    createAdminRepositoryMock.mockReset();
     deactivateAdminProductMock.mockReset();
     getAdminProductMock.mockReset();
     getAdminProductMock.mockResolvedValue(ok(activeProduct));
+    listAdminCandidateMappingsMock.mockReset();
+    listAdminCandidateMappingsMock.mockResolvedValue(
+      ok({ items: [directMapping], next_cursor: null }),
+    );
     listAdminProductsMock.mockReset();
     listAdminProductsMock.mockResolvedValue(
       ok({ items: [activeProduct, candidateOnlyProduct], next_cursor: null }),
     );
+    listAdminRepositoriesMock.mockReset();
+    listAdminRepositoriesMock.mockResolvedValue(
+      ok({
+        items: [applicationRepository, translationRepository],
+        next_cursor: null,
+      }),
+    );
+    listAdminRepositoryBranchesMock.mockReset();
+    listAdminRepositoryBranchesMock.mockResolvedValue(ok(liveBranches));
     readSystemStatusMock.mockReset();
     readSystemStatusMock.mockReturnValue(new Promise<never>(() => undefined));
     useSessionMock.mockReset();
@@ -1603,5 +1696,292 @@ describe("administrator product configuration tracer", () => {
         "Run validation to detect files, languages, and partial translation samples.",
       ),
     ).toBeVisible();
+  });
+
+  it("reuses or registers credential-free repositories with responsive API ordering", async () => {
+    const registeredRepository: AdminRepositoryResponse = {
+      id: "00000000-0000-4000-8000-000000000303",
+      descriptive_name: null,
+      workspace: "new-workspace",
+      repository_slug: "new-repository",
+    };
+    createAdminRepositoryMock.mockResolvedValueOnce(
+      ok(registeredRepository, 201),
+    );
+    render(
+      <MemoryRouter
+        initialEntries={[`/admin/products/${activeProduct.id}/repositories`]}
+      >
+        <AppRouter />
+      </MemoryRouter>,
+    );
+
+    const table = await screen.findByRole("table", { name: "Repositories" });
+    expect(listAdminRepositoriesMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      query: { cursor: null, limit: 50 },
+    });
+    expect(
+      within(table)
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining("Mobile application source"),
+      expect.stringContaining("localization-team/mobile-translations"),
+    ]);
+    expect(table.parentElement?.parentElement).toHaveClass(
+      "hidden",
+      "md:block",
+    );
+    const mobileList = screen.getByLabelText("Repositories mobile list");
+    expect(mobileList).toHaveClass("md:hidden", "min-w-0", "max-w-full");
+    expect(
+      within(mobileList)
+        .getAllByRole("article")
+        .map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining("Mobile application source"),
+      expect.stringContaining("localization-team/mobile-translations"),
+    ]);
+    await userEvent.click(
+      within(table).getByRole("button", {
+        name: "Use Mobile application source",
+      }),
+    );
+    expect(
+      within(table).getByRole("button", {
+        name: "Mobile application source selected",
+      }),
+    ).toBeDisabled();
+
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Workspace" }),
+      "new-workspace",
+    );
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Repository slug" }),
+      "new-repository",
+    );
+    expect(
+      screen.queryByLabelText(/credential|password|token|secret/i),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Register repository" }),
+    );
+    expect(createAdminRepositoryMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      body: {
+        descriptive_name: null,
+        repository_slug: "new-repository",
+        workspace: "new-workspace",
+      },
+    });
+    expect(
+      await screen.findByText("new-workspace/new-repository"),
+    ).toBeVisible();
+  });
+
+  it("uses only live branch results for direct source and target controls", async () => {
+    renderWizard(activeProduct);
+    await userEvent.click(screen.getByRole("button", { name: "Mappings" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Mappings" }),
+    ).toBeVisible();
+    expect(screen.getByRole("radio", { name: "Direct" })).toBeChecked();
+    await userEvent.click(screen.getByRole("combobox", { name: "Repository" }));
+    await userEvent.click(
+      screen.getByRole("option", {
+        name: "Mobile application source — product-team/mobile-app",
+      }),
+    );
+    expect(listAdminRepositoryBranchesMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: { repository_id: applicationRepository.id },
+      query: { cursor: null, limit: 100 },
+    });
+
+    const sourceBranch = await screen.findByRole("combobox", {
+      name: "Source branch",
+    });
+    await userEvent.click(sourceBranch);
+    expect(screen.getByRole("option", { name: "main" })).toBeVisible();
+    expect(
+      screen.getByRole("option", {
+        name: "release/2026-with-a-very-long-opaque-provider-branch-name",
+      }),
+    ).toBeVisible();
+    await userEvent.click(screen.getByRole("option", { name: "main" }));
+
+    const defaultTarget = screen.getByRole("combobox", {
+      name: "Default target",
+    });
+    expect(defaultTarget).toBeDisabled();
+    await userEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Allow target release/2026-with-a-very-long-opaque-provider-branch-name",
+      }),
+    );
+    expect(defaultTarget).toBeEnabled();
+    await userEvent.click(defaultTarget);
+    await userEvent.click(
+      screen.getByRole("option", {
+        name: "release/2026-with-a-very-long-opaque-provider-branch-name",
+      }),
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /delete mapping/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: /glob|path|file|locale|format/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+  });
+
+  it("confirms topology changes before clearing direct values and exposes explicit separate sides", async () => {
+    renderWizard(activeProduct);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Mappings" }));
+    await screen.findByRole("heading", { name: "Mappings" });
+    await user.click(screen.getByRole("combobox", { name: "Repository" }));
+    await user.click(
+      screen.getByRole("option", {
+        name: "Mobile application source — product-team/mobile-app",
+      }),
+    );
+    await user.click(screen.getByRole("radio", { name: "Separate" }));
+
+    const dialog = screen.getByRole("alertdialog", {
+      name: "Change mapping topology?",
+    });
+    expect(dialog).toHaveTextContent(
+      "Changing topology clears the repository and branch selections in this unsaved mapping.",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("radio", { name: "Direct" })).toBeChecked();
+    expect(
+      screen.getByRole("combobox", { name: "Repository" }),
+    ).toHaveTextContent("Mobile application source");
+
+    await user.click(screen.getByRole("radio", { name: "Separate" }));
+    await user.click(screen.getByRole("button", { name: "Change topology" }));
+    expect(screen.getByRole("radio", { name: "Separate" })).toBeChecked();
+    expect(
+      screen.getByRole("combobox", { name: "Keys repository" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("combobox", { name: "Translations repository" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("combobox", { name: "Repository" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/credential|password|token|secret/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("writes an expected-version mapping, preserves conflicts, and keeps default membership valid", async () => {
+    createAdminCandidateMappingMock
+      .mockResolvedValueOnce(mappingConflict("allowed_target_branches"))
+      .mockResolvedValueOnce(
+        ok(
+          {
+            ...directMapping,
+            id: "00000000-0000-4000-8000-000000000402",
+            candidate_version: 6,
+          },
+          201,
+        ),
+      );
+    renderWizard(activeProduct);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Mappings" }));
+    await screen.findByRole("heading", { name: "Mappings" });
+    await user.click(screen.getByRole("combobox", { name: "Repository" }));
+    await user.click(
+      screen.getByRole("option", {
+        name: "Mobile application source — product-team/mobile-app",
+      }),
+    );
+    await user.click(
+      await screen.findByRole("combobox", { name: "Source branch" }),
+    );
+    await user.click(screen.getByRole("option", { name: "main" }));
+    const target = screen.getByRole("checkbox", {
+      name: "Allow target release/2026-with-a-very-long-opaque-provider-branch-name",
+    });
+    await user.click(target);
+    await user.click(screen.getByRole("combobox", { name: "Default target" }));
+    await user.click(
+      screen.getByRole("option", {
+        name: "release/2026-with-a-very-long-opaque-provider-branch-name",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save mapping" }));
+
+    expect(createAdminCandidateMappingMock).toHaveBeenNthCalledWith(1, {
+      auth: "memory-only-admin-bearer",
+      path: { product_id: activeProduct.id },
+      body: {
+        allowed_target_branches: [
+          "release/2026-with-a-very-long-opaque-provider-branch-name",
+        ],
+        default_target_branch:
+          "release/2026-with-a-very-long-opaque-provider-branch-name",
+        expected_candidate_version: 5,
+        repository_id: applicationRepository.id,
+        source_branch: "main",
+        topology: "direct",
+      },
+    });
+    const conflictAlert = await screen.findByRole("alert");
+    expect(conflictAlert).toHaveTextContent(
+      "The allowed target branches changed. Your selections are still here. Refresh branches and try again.",
+    );
+    expect(conflictAlert).not.toHaveTextContent(
+      "private provider conflict detail",
+    );
+    expect(target).toBeChecked();
+    expect(
+      screen.getByRole("combobox", { name: "Default target" }),
+    ).toHaveTextContent(
+      "release/2026-with-a-very-long-opaque-provider-branch-name",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save mapping" }));
+    expect(toastSuccessMock).toHaveBeenCalledWith("Draft saved");
+    expect(await screen.findByText("Draft version 6")).toBeVisible();
+  });
+
+  it("renders mapping tables as ordered stacks below 768px with local focusable branch overflow", async () => {
+    renderWizard(activeProduct);
+    await userEvent.click(screen.getByRole("button", { name: "Mappings" }));
+
+    const table = await screen.findByRole("table", { name: "Mappings" });
+    expect(table.parentElement?.parentElement).toHaveClass(
+      "hidden",
+      "md:block",
+    );
+    const mobileList = screen.getByLabelText("Mappings mobile list");
+    expect(mobileList).toHaveClass("md:hidden", "min-w-0", "max-w-full");
+    expect(within(mobileList).getAllByRole("article")).toHaveLength(1);
+    const overflowRegions = screen.getAllByRole("region", {
+      name: "Mapping branch details",
+    });
+    expect(overflowRegions.length).toBeGreaterThan(0);
+    for (const region of overflowRegions) {
+      expect(region).toHaveAttribute("tabindex", "0");
+      expect(region).toHaveClass("max-w-full", "overflow-x-auto");
+    }
+    expect(
+      screen.getAllByText(
+        "release/2026-with-a-very-long-opaque-provider-branch-name",
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("button", { name: /delete mapping/i }),
+    ).not.toBeInTheDocument();
   });
 });
