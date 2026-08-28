@@ -296,9 +296,7 @@ describe("session routes", () => {
     const longProductName = `Product ${"localization-".repeat(24)}`;
 
     render(
-      <MemoryRouter
-        initialEntries={["/admin/products/product-123/mappings"]}
-      >
+      <MemoryRouter initialEntries={["/admin/products/product-123/mappings"]}>
         <ProductDetailLayout productName={longProductName}>
           <p>Current product section</p>
         </ProductDetailLayout>
@@ -320,9 +318,9 @@ describe("session routes", () => {
         .getAllByRole("link")
         .map((link) => link.textContent),
     ).toEqual(["Overview", "Repositories", "Mappings", "Preview"]);
-    expect(within(navigation).getAllByRole("link", { current: "page" })).toHaveLength(
-      1,
-    );
+    expect(
+      within(navigation).getAllByRole("link", { current: "page" }),
+    ).toHaveLength(1);
     expect(
       within(navigation).getByRole("link", {
         name: "Mappings",
@@ -334,9 +332,9 @@ describe("session routes", () => {
     expect(screen.getByTestId("current-route")).toHaveTextContent(
       "/admin/products/product-123/preview",
     );
-    expect(within(navigation).getAllByRole("link", { current: "page" })).toHaveLength(
-      1,
-    );
+    expect(
+      within(navigation).getAllByRole("link", { current: "page" }),
+    ).toHaveLength(1);
     expect(
       within(navigation).getByRole("link", {
         name: "Preview",
