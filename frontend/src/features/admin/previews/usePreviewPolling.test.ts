@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -141,9 +141,17 @@ describe("bounded preview polling state machine", () => {
       }),
     );
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(90_000);
-    });
+    for (let poll = 0; poll < 15; poll += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2_000);
+      });
+    }
+    for (let poll = 0; poll < 12; poll += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+    }
+    expect(getJobMock).toHaveBeenCalledTimes(27);
     expect(result.current.automaticUpdatesPaused).toBe(true);
     const callsAtCutoff = getJobMock.mock.calls.length;
     await act(async () => {
@@ -161,11 +169,12 @@ describe("bounded preview polling state machine", () => {
     let resolveOld:
       | ((value: ReturnType<typeof ok<AdminPreviewJobResponse>>) => void)
       | undefined;
-    getJobMock.mockReturnValueOnce(
-      new Promise((resolve) => {
+    const oldRequest = new Promise<
+      ReturnType<typeof ok<AdminPreviewJobResponse>>
+    >((resolve) => {
         resolveOld = resolve;
-      }),
-    );
+      });
+    getJobMock.mockReturnValueOnce(oldRequest as never);
     const oldJob = job();
     const newJob = job({
       id: "job-2",
@@ -199,10 +208,11 @@ describe("bounded preview polling state machine", () => {
 
   it("leaves the durable backend job running across navigation unmount", async () => {
     getJobMock.mockResolvedValue(ok(job({ state: "running" })));
+    const durableJob = job();
     const first = renderHook(() =>
       usePreviewPolling({
         accessToken: "memory-only-admin-bearer",
-        initialJob: job(),
+        initialJob: durableJob,
       }),
     );
     first.unmount();
@@ -210,15 +220,13 @@ describe("bounded preview polling state machine", () => {
     const second = renderHook(() =>
       usePreviewPolling({
         accessToken: "memory-only-admin-bearer",
-        initialJob: job(),
+        initialJob: durableJob,
       }),
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
-    await waitFor(() => {
-      expect(second.result.current.job.state).toBe("running");
-    });
+    expect(second.result.current.job.state).toBe("running");
     expect(getJobMock).toHaveBeenCalledWith({
       auth: "memory-only-admin-bearer",
       path: { job_id: "job-1" },

@@ -24,6 +24,7 @@ import {
   type AdminMappingResponse,
   type AdminPreviewJobResponse,
   type AdminPreviewLayoutCandidateResponse,
+  type AdminProductLifecycleConflictResponse,
   type AdminProductResponse,
 } from "../../../api/client";
 import { ProductPreviewPage } from "./ProductPreviewPage";
@@ -161,7 +162,7 @@ function ok<T>(data: T, status = 200) {
   };
 }
 
-function failure(error: unknown, status = 503) {
+function failure<T>(error: T, status = 503) {
   return {
     data: undefined,
     error,
@@ -277,7 +278,7 @@ describe("administrator product preview and publication page", () => {
     const preview = screen.getByRole("region", {
       name: "Selected layout preview",
     });
-    expect(preview).toHaveTextContent("Repository sideDirect");
+    expect(preview).toHaveTextContent("Repository sidedirect");
     expect(preview).toHaveTextContent("Branchmain");
     expect(preview).toHaveTextContent("bbbbbbbbbbbb");
     expect(preview).toHaveTextContent("localization/json/messages.3");
@@ -416,7 +417,9 @@ describe("administrator product preview and publication page", () => {
       }),
     );
     publishMock.mockResolvedValueOnce(
-      failure(
+      failure<
+        AdminProductLifecycleConflictResponse & { provider_body: string }
+      >(
         {
           blockers: ["preview_confirmation_required"],
           detail: "Product publication blocked",

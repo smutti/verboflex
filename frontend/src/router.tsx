@@ -9,6 +9,7 @@ import { Skeleton } from "./components/ui/skeleton";
 import { AdminAccessDenied } from "./features/admin/AdminAccessDenied";
 import { BitbucketConnectionPage } from "./features/admin/bitbucket/BitbucketConnectionPage";
 import { ProductMappingsPage } from "./features/admin/mappings/ProductMappingsPage";
+import { ProductPreviewPage } from "./features/admin/previews/ProductPreviewPage";
 import { ProductDetailLayout } from "./features/admin/products/ProductDetailLayout";
 import { ProductOverviewPage } from "./features/admin/products/ProductOverviewPage";
 import { ProductsPage } from "./features/admin/products/ProductsPage";
@@ -137,21 +138,6 @@ export function SessionRoutes({
   );
 }
 
-function ProductSectionEmptyState({
-  body,
-  heading,
-}: {
-  body: string;
-  heading: string;
-}) {
-  return (
-    <section className="grid gap-2 rounded-lg border bg-secondary p-6">
-      <h1 className="text-display font-semibold">{heading}</h1>
-      <p className="text-muted-foreground">{body}</p>
-    </section>
-  );
-}
-
 function ProductMappingsRoute({ accessToken }: { accessToken: string }) {
   const productId = useParams<"productId">().productId ?? "";
   return (
@@ -198,10 +184,7 @@ export function AdminApplicationRoutes({
         path="products/:productId/preview"
         element={
           <ProductDetailLayout hideTitle>
-            <ProductSectionEmptyState
-              heading="Preview"
-              body="Run validation to detect files, languages, and partial translation samples."
-            />
+            <ProductPreviewPage accessToken={accessToken} />
           </ProductDetailLayout>
         }
       />
