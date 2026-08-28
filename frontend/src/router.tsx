@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import { Button } from "./components/ui/button";
 import { Skeleton } from "./components/ui/skeleton";
 import { AdminAccessDenied } from "./features/admin/AdminAccessDenied";
+import { UsersPage } from "./features/admin/users/UsersPage";
 import { ChangePasswordPage } from "./features/auth/ChangePasswordPage";
 import { LoginPage } from "./features/auth/LoginPage";
 import { useSession, type SessionState } from "./features/auth/session";
@@ -155,14 +156,10 @@ export function AppRouter() {
       adminElement={
         authenticatedShellProps === null ? null : (
           <AppShell {...authenticatedShellProps}>
-            <section className="grid gap-2" aria-labelledby="admin-users-title">
-              <h1 id="admin-users-title" className="text-display font-semibold">
-                Users
-              </h1>
-              <p className="text-muted-foreground">
-                Manage internal users, roles, and account access.
-              </p>
-            </section>
+            <UsersPage
+              accessToken={authenticatedShellProps.accessToken}
+              currentUserId={authenticatedShellProps.principal.id}
+            />
           </AppShell>
         )
       }
