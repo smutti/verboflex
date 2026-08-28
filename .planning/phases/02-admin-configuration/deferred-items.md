@@ -2,6 +2,13 @@
 
 ## Open
 
+- **Plan 02-15 — frontend container omits the canonical OpenAPI schema:** the
+  `tools/real_smoke.sh --browser-only` frontend image build fails because
+  `frontend/src/api/admin-client-contract.test.ts` imports `../../openapi.json`
+  during `tsc --noEmit`, while `docker/frontend.Dockerfile` copies `src` but not
+  `frontend/openapi.json`. Plan 02-16 did not introduce either file and its local
+  production build passes; restore the container smoke before the Phase 2 close.
+
 - **Plan 02-07 — pre-existing development-only `qs` advisory:** `npm audit` reports
   GHSA-q8mj-m7cp-5q26 at moderate severity through
   `@stryker-mutator/core -> typed-rest-client@2.3.1 -> qs@6.15.1`. The dependency graph
