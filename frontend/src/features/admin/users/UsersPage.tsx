@@ -339,7 +339,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
       const returnFocus = lifecycleTarget.returnFocus;
       setLifecycleError(null);
       setLifecycleTarget(null);
-      queueMicrotask(() => returnFocus?.focus());
+      queueMicrotask(() => returnFocus.focus());
     }
   }
 
@@ -417,7 +417,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
         }
         replaceUser(result.data);
         setLifecycleTarget(null);
-        queueMicrotask(() => target.returnFocus?.focus());
+        queueMicrotask(() => target.returnFocus.focus());
       } else {
         const result =
           target.action === "reset"

@@ -798,17 +798,24 @@ describe("administrator users page tracer", () => {
   });
 
   it("keeps reset conflicts bounded to their named dialog and preserves the row", async () => {
+    let resolveRetry:
+      | ((value: ReturnType<typeof ok<AdminUserCredentialResponse>>) => void)
+      | undefined;
+    const pendingRetry = new Promise<
+      ReturnType<typeof ok<AdminUserCredentialResponse>>
+    >((resolve) => {
+      resolveRetry = resolve;
+    });
     resetAdminUserPasswordMock
       .mockResolvedValueOnce(
         conflict("stale authority with Reset-Secret-That-Must-Not-Leak"),
       )
-      .mockResolvedValueOnce(
-        ok({
-          ...translator,
-          must_change_password: true,
-          temporary_password: "Retry-Reset-Secret!2048",
-        }),
-      );
+      .mockReturnValueOnce(pendingRetry);
+    const successfulRetry = ok({
+      ...translator,
+      must_change_password: true,
+      temporary_password: "Retry-Reset-Secret!2048",
+    });
     renderUsers();
     const user = await chooseRowAction(
       translator.display_name,
@@ -836,6 +843,13 @@ describe("administrator users page tracer", () => {
     await user.click(
       within(confirmation).getByRole("button", { name: "Reset password" }),
     );
+    await waitFor(() => {
+      expect(within(confirmation).queryByRole("alert")).not.toBeInTheDocument();
+      expect(
+        within(confirmation).getByRole("button", { name: "Reset password" }),
+      ).toBeDisabled();
+    });
+    await act(async () => resolveRetry?.(successfulRetry));
     expect(await screen.findByText("Retry-Reset-Secret!2048")).toBeVisible();
     expect(
       screen.queryByRole("alertdialog", { hidden: true }),
