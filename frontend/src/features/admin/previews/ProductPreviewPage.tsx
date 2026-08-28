@@ -95,6 +95,20 @@ const BLOCKER_LABELS: Record<PublicationBlocker, string> = {
   target_configuration_invalid: "Target configuration invalid",
 };
 
+function candidateLabel(candidate: AdminPreviewLayoutCandidateResponse) {
+  return `${FORMAT_LABELS[candidate.format]} — ${candidate.layout_identity}`;
+}
+
+function isExactCandidate(candidate: AdminPreviewLayoutCandidateResponse) {
+  return (
+    candidate.confidence === 1 &&
+    candidate.files.length > 0 &&
+    candidate.languages.length > 0 &&
+    candidate.keys.length > 0 &&
+    candidate.samples.length > 0
+  );
+}
+
 function responseStatus(result: { response?: Response }) {
   return result.response?.status;
 }
@@ -313,15 +327,7 @@ function PreviewJobView({
   const result = job.result;
   const candidates = result?.layout_candidates ?? [];
   const candidatesAreExact =
-    candidates.length > 0 &&
-    candidates.every(
-      (candidate) =>
-        candidate.confidence === 1 &&
-        candidate.files.length > 0 &&
-        candidate.languages.length > 0 &&
-        candidate.keys.length > 0 &&
-        candidate.samples.length > 0,
-    );
+    candidates.length > 0 && candidates.every(isExactCandidate);
   const confirmable =
     job.state === "succeeded" &&
     job.is_current &&
@@ -473,7 +479,7 @@ function PreviewJobView({
               className="grid gap-3"
             >
               {candidates.map((candidate) => {
-                const label = `${FORMAT_LABELS[candidate.format]} — ${candidate.layout_identity}`;
+                const label = candidateLabel(candidate);
                 return (
                   <label
                     key={candidate.id}
