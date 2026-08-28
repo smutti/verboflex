@@ -255,6 +255,24 @@ describe("administrator users page tracer", () => {
     let resolveCreate:
       | ((value: ReturnType<typeof ok<AdminUserCredentialResponse>>) => void)
       | undefined;
+    const createdUser: AdminUserResponse = {
+      id: "00000000-0000-4000-8000-000000000004",
+      email: "canonical@example.com",
+      display_name: "Canonical Response",
+      is_active: true,
+      must_change_password: true,
+      roles: ["translator", "viewer"],
+    };
+    listAdminUsersMock
+      .mockResolvedValueOnce(
+        ok({ items: [currentAdmin, translator], next_cursor: null }),
+      )
+      .mockResolvedValueOnce(
+        ok({
+          items: [translator, createdUser, currentAdmin],
+          next_cursor: null,
+        }),
+      );
     createAdminUserMock.mockReturnValueOnce(
       new Promise((resolve) => {
         resolveCreate = resolve;
@@ -293,12 +311,7 @@ describe("administrator users page tracer", () => {
       resolveCreate?.(
         ok(
           {
-            id: "00000000-0000-4000-8000-000000000004",
-            email: "canonical@example.com",
-            display_name: "Canonical Response",
-            is_active: true,
-            must_change_password: true,
-            roles: ["translator", "viewer"],
+            ...createdUser,
             temporary_password: "shown-in-task-two",
           },
           201,
