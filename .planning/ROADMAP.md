@@ -85,7 +85,7 @@ Plans:
   7. Guided shadcn admin screens provide actionable user, repository, mapping, OAuth, validation, and background-job states.
   8. Phase quality gate passes with RED→GREEN TDD evidence, code review, and backend/frontend/worker/deploy smoke verification.
 
-**Plans**: 14/20 plans executed
+**Plans**: 15/20 plans executed
 
 Plans:
 **Wave 1**
@@ -146,7 +146,7 @@ Plans:
 
 **Wave 15** *(blocked on Wave 14 completion)*
 
-- [ ] 02-15-PLAN.md — Canonical generated TypeScript admin client
+- [x] 02-15-PLAN.md — Canonical generated TypeScript admin client
 
 **Wave 16** *(blocked on Wave 15 completion)*
 
@@ -355,7 +355,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Platform Foundation | 15/15 | Complete    | 2026-08-26 |
-| 2. Admin Configuration | 14/20 | In Progress|  |
+| 2. Admin Configuration | 15/20 | In Progress|  |
 | 3. Bitbucket Import Integration | 0/4 | Not started | - |
 | 4. Localization Parser Foundation | 0/7 | Not started | - |
 | 5. Import, Search, and Constraints | 0/6 | Not started | - |

@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-14-PLAN.md
-last_updated: "2026-08-27T21:12:57.774Z"
+stopped_at: Completed 02-15-PLAN.md
+last_updated: "2026-08-28T07:15:21.967Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 02 execution started
-state_head: 5e9560fb9bdc1fbeb51f0499f7674b951020392d
+state_head: a435c3233a3656d2f71833273d0775e2a95cf5a4
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 35
-  completed_plans: 29
+  completed_plans: 30
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 15 of 20
+Plan: 16 of 20
 Status: Ready to execute
 Last activity: 2026-08-26 — Phase 02 execution started
 
@@ -87,6 +87,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P12 | 32min | 2 tasks | 16 files |
 | Phase 02 P13 | 35m | 2 tasks | 11 files |
 | Phase 02 P14 | 1h07m | 2 tasks | 16 files |
+| Phase 02 P15 | 18min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -202,6 +203,9 @@ Recent decisions affecting current work:
 - [Phase 02]: A confirmation is current only when its complete candidate, job, mapping, repository side, connection generation, commit, detector, layout, and result digest identity still matches. — Historical or partial preview evidence must never authorize publication.
 - [Phase 02]: The Product row lock remains the sole all-mapping publication and reactivation linearization point. — All candidate digests are rechecked before one atomic active-revision transition.
 - [Phase 02]: Reactivation of an unchanged published revision uses the same exact current-confirmation predicate. — A relaxed reactivation path would allow stale work to restore authority.
+- [Phase 02]: Keep the existing pinned api:generate and api:check scripts unchanged; deterministic regeneration plus git diff is the drift authority.
+- [Phase 02]: Freeze the complete set of 29 Phase 2 admin operation IDs and require uniqueness before UI consumption.
+- [Phase 02]: Treat the already-current Plan 02-14 generated outputs as canonical regression armor; no generated or dependency file needed a committed edit.
 
 ### Pending Todos
 
@@ -234,6 +238,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-27T21:12:57.735Z
-Stopped at: Completed 02-14-PLAN.md
+Last session: 2026-08-28T07:15:21.927Z
+Stopped at: Completed 02-15-PLAN.md
 Resume file: None
