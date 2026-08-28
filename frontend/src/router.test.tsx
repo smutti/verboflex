@@ -2,7 +2,7 @@ import "@testing-library/jest-dom/vitest";
 
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -305,9 +305,16 @@ describe("session routes", () => {
 
     render(
       <MemoryRouter initialEntries={["/admin/products/product-123/mappings"]}>
-        <ProductDetailLayout productName={longProductName}>
-          <p>Current product section</p>
-        </ProductDetailLayout>
+        <Routes>
+          <Route
+            path="/admin/products/:productId/*"
+            element={
+              <ProductDetailLayout productName={longProductName}>
+                <p>Current product section</p>
+              </ProductDetailLayout>
+            }
+          />
+        </Routes>
         <LocationMarker />
       </MemoryRouter>,
     );
@@ -356,7 +363,12 @@ describe("session routes", () => {
       <MemoryRouter
         initialEntries={["/admin/products/product-123/unsupported-section"]}
       >
-        <ProductDetailLayout />
+        <Routes>
+          <Route
+            path="/admin/products/:productId/*"
+            element={<ProductDetailLayout />}
+          />
+        </Routes>
       </MemoryRouter>,
     );
 
