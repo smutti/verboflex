@@ -637,3 +637,13 @@ def test_phase2_audit_rejects_semantic_path_and_scope_mutations() -> None:
 
     with pytest.raises(AssertionError):
         _unique([("D-01", "first"), ("D-01", "replacement")], source="mutation")
+
+
+def test_phase2_gap_authorities_are_wired() -> None:
+    """CR/WR and G1-G5 must reach production runtime authority, not prose."""
+    pytest.fail("Plan 02-37 runtime authority registry is not implemented")
+
+
+def test_phase2_forbidden_bypasses_are_absent() -> None:
+    """Deferred authentication, provider-write, and canonical surfaces stay absent."""
+    pytest.fail("Plan 02-37 structural bypass audit is not implemented")
