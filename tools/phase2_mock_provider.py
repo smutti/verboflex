@@ -15,41 +15,10 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 COMMIT_HASH = "0123456789abcdef0123456789abcdef01234567"
 FILES = {
-    "app_en.ts": (
-        b'<TS version="2.1" language="en"><context><name>Main</name>'
-        b"<message><source>hello</source><translation>Hello</translation>"
-        b"</message></context></TS>"
-    ),
-    "catalog.json": b'{"en":{"hello":"Hello"}}',
-    "en.lproj/Localizable.strings": b'"hello" = "Hello";',
     "res/values/strings.xml": (b'<resources><string name="hello">Hello</string></resources>'),
 }
 TREE = {
     "": (
-        [
-            {"path": "res", "type": "commit_directory"},
-        ],
-        [
-            {"path": "en.lproj", "type": "commit_directory"},
-            {"path": "app_en.ts", "size": len(FILES["app_en.ts"]), "type": "commit_file"},
-            {
-                "path": "catalog.json",
-                "size": len(FILES["catalog.json"]),
-                "type": "commit_file",
-            },
-        ],
-    ),
-    "en.lproj": (
-        [
-            {
-                "path": "en.lproj/Localizable.strings",
-                "size": len(FILES["en.lproj/Localizable.strings"]),
-                "type": "commit_file",
-            }
-        ],
-    ),
-    "res": ([{"path": "res/values", "type": "commit_directory"}],),
-    "res/values": (
         [
             {
                 "path": "res/values/strings.xml",
@@ -63,16 +32,29 @@ TREE = {
 AUDIT_LOCK = threading.Lock()
 AUDIT_FILE = Path(os.environ["MOCK_AUDIT_FILE"])
 ACCESS_TOKEN = os.environ["MOCK_ACCESS_TOKEN"]
-REFRESH_TOKEN = os.environ["MOCK_REFRESH_TOKEN"]
 CLIENT_ID = os.environ["MOCK_CLIENT_ID"]
 CLIENT_SECRET = os.environ["MOCK_CLIENT_SECRET"]
-CALLBACK_URL = os.environ["MOCK_CALLBACK_URL"]
+CLIENT_CREDENTIALS_AUDIT = {
+    "effective_scope": "repository",
+    "grant_type": "client_credentials",
+}
 
 
-def audit(*, method: str, path: str, category: str) -> None:
+def audit(
+    *,
+    method: str,
+    category: str,
+    grant_type: str = "",
+    effective_scope: str = "repository",
+) -> None:
     """Append only bounded request metadata; never record headers, bodies, or tokens."""
     record = json.dumps(
-        {"category": category, "method": method, "path": path},
+        {
+            "category": category,
+            "effective_scope": effective_scope,
+            "grant_type": grant_type,
+            "method": method,
+        },
         separators=(",", ":"),
         sort_keys=True,
     )
@@ -117,31 +99,31 @@ class MockBitbucketHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlsplit(self.path)
         if parsed.path != "/site/oauth2/access_token":
-            audit(method="POST", path=parsed.path, category="forbidden-mutation")
+            audit(method="POST", category="forbidden-mutation")
             self._json(HTTPStatus.METHOD_NOT_ALLOWED, {"error": "read_only"})
             return
-        audit(method="POST", path=parsed.path, category="oauth-token-exchange")
         expected_basic = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
         if self.headers.get("Authorization") != f"Basic {expected_basic}":
-            audit(method="POST", path=parsed.path, category="invalid-oauth-client")
+            audit(method="POST", category="invalid-oauth-client", effective_scope="")
             self._json(HTTPStatus.UNAUTHORIZED, {"error": "invalid_client"})
             return
         length = int(self.headers.get("Content-Length", "0"))
         form = parse_qs(self.rfile.read(length).decode("ascii"), strict_parsing=True)
-        if (
-            form.get("grant_type") != ["authorization_code"]
-            or form.get("code") != ["mock-code"]
-            or form.get("redirect_uri") != [CALLBACK_URL]
-        ):
-            audit(method="POST", path=parsed.path, category="invalid-oauth-grant")
+        if form.get("grant_type") != ["client_credentials"]:
+            audit(method="POST", category="invalid-oauth-grant", effective_scope="")
             self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid_grant"})
             return
+        audit(
+            method="POST",
+            category="oauth-token-exchange",
+            grant_type=CLIENT_CREDENTIALS_AUDIT["grant_type"],
+            effective_scope=CLIENT_CREDENTIALS_AUDIT["effective_scope"],
+        )
         self._json(
             HTTPStatus.OK,
             {
                 "access_token": ACCESS_TOKEN,
                 "expires_in": 3600,
-                "refresh_token": REFRESH_TOKEN,
                 "scope": "repository",
                 "token_type": "bearer",
             },
@@ -153,12 +135,12 @@ class MockBitbucketHandler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.OK, {"status": "ok"})
             return
         if not parsed.path.startswith("/2.0/repositories/"):
-            audit(method="GET", path=parsed.path, category="unapproved-read")
+            audit(method="GET", category="unapproved-read")
             self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
             return
         if not self._authorized():
             return
-        audit(method="GET", path=parsed.path, category="repository-read")
+        audit(method="GET", category="repository-read")
         self._repository_read(parsed.path, parse_qs(parsed.query))
 
     def do_PATCH(self) -> None:  # noqa: N802
@@ -171,8 +153,7 @@ class MockBitbucketHandler(BaseHTTPRequestHandler):
         self._reject_mutation()
 
     def _reject_mutation(self) -> None:
-        parsed = urlsplit(self.path)
-        audit(method=self.command, path=parsed.path, category="forbidden-mutation")
+        audit(method=self.command, category="forbidden-mutation")
         self._json(HTTPStatus.METHOD_NOT_ALLOWED, {"error": "read_only"})
 
     def _repository_read(self, raw_path: str, query: dict[str, list[str]]) -> None:

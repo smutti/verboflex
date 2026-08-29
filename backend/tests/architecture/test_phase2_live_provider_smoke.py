@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
 import importlib.util
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
 
-import httpx
 import pytest
 from cryptography.fernet import Fernet
 
@@ -20,7 +18,6 @@ from verboflex.services.bitbucket_oauth import BitbucketOAuthService
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 LIVE_SMOKE_HELPER = REPOSITORY_ROOT / "tools" / "phase2_live_provider.py"
-EXPECTED_CALLBACK = "http://localhost:8000/api/v1/admin/bitbucket/oauth/callback"
 BASE_COMPOSE = REPOSITORY_ROOT / "docker-compose.yml"
 SMOKE_HARNESS = REPOSITORY_ROOT / "tools" / "phase2_smoke.sh"
 MOCK_PROVIDER = REPOSITORY_ROOT / "tools" / "phase2_mock_provider.py"
@@ -46,10 +43,11 @@ def _load_live_smoke() -> ModuleType:
 
 def _write_live_env(path: Path, **overrides: str) -> None:
     values = {
-        "VERBOFLEX_CONSUMER_VERIFIED": "consumer verified",
-        "BITBUCKET_CLIENT_ID": "client-id",
-        "BITBUCKET_CLIENT_SECRET": "client-secret",
-        "BITBUCKET_CALLBACK_URL": EXPECTED_CALLBACK,
+        "VERBOFLEX_LIVE_PROVIDER_OPT_IN": "production-api-read-only-confirmed",
+        "VERBOFLEX_BASE_URL": "http://localhost:8123",
+        "VERBOFLEX_ADMIN_EMAIL": "provider-admin@example.com",
+        "VERBOFLEX_ADMIN_PASSWORD": "local-admin-password-one",
+        "VERBOFLEX_ADMIN_NEW_PASSWORD": "local-admin-password-two",
         "BITBUCKET_WORKSPACE": "acme",
         "BITBUCKET_REPOSITORY_SLUG": "translations",
         "BITBUCKET_BRANCH": "main",
@@ -223,8 +221,14 @@ def test_smoke_contract_scans_all_evidence_and_always_tears_down() -> None:
     assert "traceback" in source.casefold()
     assert "compose down --volumes --remove-orphans" in source
     assert 'docker ps -aq --filter "label=com.docker.compose.project=$SMOKE_PROJECT"' in source
-    assert 'docker volume ls -q --filter "label=com.docker.compose.project=$SMOKE_PROJECT"' in source
-    assert 'docker network ls -q --filter "label=com.docker.compose.project=$SMOKE_PROJECT"' in source
+    assert (
+        'docker volume ls -q --filter "label=com.docker.compose.project=$SMOKE_PROJECT"'
+        in source
+    )
+    assert (
+        'docker network ls -q --filter "label=com.docker.compose.project=$SMOKE_PROJECT"'
+        in source
+    )
 
 
 def test_live_config_requires_secure_exact_authorization_and_repository_identity(
@@ -237,14 +241,13 @@ def test_live_config_requires_secure_exact_authorization_and_repository_identity
 
     config = live_smoke.LiveSmokeConfig.from_dotenv(environment)
 
-    assert config.callback_url == EXPECTED_CALLBACK
+    assert config.base_url == "http://localhost:8123"
     assert config.workspace == "acme"
     assert config.repository_slug == "translations"
     assert config.branch == "main"
 
     rejected = (
-        {"VERBOFLEX_CONSUMER_VERIFIED": "yes"},
-        {"BITBUCKET_CALLBACK_URL": "http://localhost:8000/callback"},
+        {"VERBOFLEX_BASE_URL": "https://api.bitbucket.org"},
         {"BITBUCKET_WORKSPACE": "../acme"},
         {"BITBUCKET_REPOSITORY_SLUG": "translations/other"},
         {"BITBUCKET_BRANCH": "bad\\branch"},
@@ -255,66 +258,25 @@ def test_live_config_requires_secure_exact_authorization_and_repository_identity
         with pytest.raises(live_smoke.LiveSmokeRejected):
             live_smoke.LiveSmokeConfig.from_dotenv(candidate)
 
+    skipped = tmp_path / "skipped.env"
+    _write_live_env(skipped, VERBOFLEX_LIVE_PROVIDER_OPT_IN="")
+    with pytest.raises(live_smoke.LiveSmokeSkipped):
+        live_smoke.LiveSmokeConfig.from_dotenv(skipped)
+
     environment.chmod(0o640)
     with pytest.raises(live_smoke.LiveSmokeRejected):
         live_smoke.LiveSmokeConfig.from_dotenv(environment)
 
 
-def test_provider_transport_allows_get_only_and_audits_mutation_attempts() -> None:
-    """The live provider transport cannot emit a mutating REST request."""
+def test_local_api_client_rejects_non_application_paths() -> None:
+    """The probe client cannot be redirected into a provider or arbitrary URL."""
     live_smoke = _load_live_smoke()
-    delegated: list[httpx.Request] = []
+    api = live_smoke.LocalApi("http://localhost:8123")
 
-    async def exercise() -> None:
-        inner = httpx.MockTransport(
-            lambda request: (
-                delegated.append(request)
-                or httpx.Response(
-                    200,
-                    json={"uuid": "{repository-uuid}"},
-                    headers={"x-oauth-scopes": "repository"},
-                    request=request,
-                )
-            )
-        )
-        audit = live_smoke.ProviderReadAudit()
-        transport = live_smoke.ReadOnlyAuditTransport(inner=inner, audit=audit)
-        get_request = httpx.Request(
-            "GET",
-            "https://api.bitbucket.org/2.0/repositories/acme/translations",
-        )
-        response = await transport.handle_async_request(get_request)
-        assert response.status_code == 200
-
-        for method in ("POST", "PUT", "PATCH", "DELETE"):
-            request = httpx.Request(
-                method,
-                "https://api.bitbucket.org/2.0/repositories/acme/translations",
-            )
-            with pytest.raises(live_smoke.LiveSmokeRejected):
-                await transport.handle_async_request(request)
-
-        assert [request.method for request in delegated] == ["GET"]
-        assert audit.get_requests == 1
-        assert audit.mutation_attempts == 4
-        await transport.aclose()
-
-    asyncio.run(exercise())
-
-
-def test_local_generation_revoke_erases_token_and_rejects_existing_lease() -> None:
-    """The disposable token becomes unusable after the smoke's local revoke."""
-    live_smoke = _load_live_smoke()
-    authority = live_smoke.LiveCredentialAuthority(access_token="opaque")
-    lease = authority.acquire_repository_read_lease(object())
-
-    authority.revoke_local()
-
-    assert authority.is_revoked is True
-    with pytest.raises(live_smoke.OAuthGenerationRejected):
-        authority.require_current_repository_read_lease(object(), lease)
-    with pytest.raises(live_smoke.OAuthConnectionUnavailable):
-        authority.acquire_repository_read_lease(object())
+    with pytest.raises(live_smoke.LiveSmokeRejected):
+        api.request("GET", "https://api.bitbucket.org/2.0/repositories/acme/translations")
+    with pytest.raises(live_smoke.LiveSmokeRejected):
+        api.request("GET", "/health")
 
 
 def test_mock_provider_smoke_retries_only_the_bounded_port_binding_race() -> None:

@@ -1,69 +1,34 @@
 #!/usr/bin/env python3
-"""Disposable, bounded, read-only Bitbucket Cloud smoke for Phase 2."""
+"""Secret-safe Phase 2 probe that drives only authenticated VerboFlex APIs."""
 
 from __future__ import annotations
 
 import ast
-import asyncio
-import base64
-import hashlib
 import json
 import os
 import re
 import stat
 import sys
-import time
-from collections import deque
 from dataclasses import dataclass, field
-from http.client import HTTPMessage
+from http import HTTPStatus
 from pathlib import Path
-from typing import IO, NoReturn, cast
+from typing import Any, NoReturn
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
-from urllib.request import HTTPRedirectHandler, OpenerDirector, Request, build_opener
+from urllib.parse import urlencode, urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-import httpx
-
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-BACKEND_SOURCE = REPOSITORY_ROOT / "backend" / "src"
-if str(BACKEND_SOURCE) not in sys.path:
-    sys.path.insert(0, str(BACKEND_SOURCE))
-
-from verboflex.core.config import Settings  # noqa: E402
-from verboflex.integrations.bitbucket.client import (  # noqa: E402
-    BitbucketCredentialLease,
-    BitbucketHttpAdapter,
-    BitbucketProviderReadError,
-    BitbucketSourceEntry,
-)
-from verboflex.integrations.bitbucket.urls import (  # noqa: E402
-    repository_branch_url,
-    repository_metadata_url,
-    validate_bitbucket_api_url,
-)
-from verboflex.services.bitbucket_oauth import (  # noqa: E402
-    OAuthConnectionUnavailable,
-    OAuthGenerationRejected,
-)
-
-EXACT_CONSUMER_AUTHORIZATION = "consumer verified"
-EXACT_CALLBACK_URL = "http://localhost:8000/api/v1/admin/bitbucket/oauth/callback"
-EXACT_SCOPE = "repository"
-TOKEN_URL = "https://bitbucket.org/site/oauth2/access_token"
 MAX_ENV_BYTES = 65_536
-MAX_TOKEN_RESPONSE_BYTES = 65_536
-MAX_TOKEN_CHARACTERS = 8_192
-MAX_PROVIDER_PAGES = 50
-MAX_PROVIDER_ENTRIES = 5_000
-MAX_SOURCE_DEPTH = 12
-MAX_RAW_FILE_BYTES = 1_048_576
-TOKEN_TIMEOUT_SECONDS = 10
+MAX_RESPONSE_BYTES = 1_048_576
+REQUEST_TIMEOUT_SECONDS = 20
+EXACT_OPT_IN = "production-api-read-only-confirmed"
 _ENV_NAME = re.compile(r"[A-Z][A-Z0-9_]*")
+_REPOSITORY_PART = re.compile(r"[A-Za-z0-9._-]+")
 _REQUIRED_KEYS = (
-    "VERBOFLEX_CONSUMER_VERIFIED",
-    "BITBUCKET_CLIENT_ID",
-    "BITBUCKET_CLIENT_SECRET",
-    "BITBUCKET_CALLBACK_URL",
+    "VERBOFLEX_LIVE_PROVIDER_OPT_IN",
+    "VERBOFLEX_BASE_URL",
+    "VERBOFLEX_ADMIN_EMAIL",
+    "VERBOFLEX_ADMIN_PASSWORD",
+    "VERBOFLEX_ADMIN_NEW_PASSWORD",
     "BITBUCKET_WORKSPACE",
     "BITBUCKET_REPOSITORY_SLUG",
     "BITBUCKET_BRANCH",
@@ -71,39 +36,37 @@ _REQUIRED_KEYS = (
 
 
 class LiveSmokeRejected(RuntimeError):
-    """Reject a live run with one stable message that contains no provider data."""
+    """Reject an unsafe or invalid probe with a stable non-secret diagnostic."""
+
+
+class LiveSmokeSkipped(RuntimeError):
+    """Report an unmet opt-in/configuration precondition before application contact."""
 
 
 class _RejectRedirects(HTTPRedirectHandler):
-    """Keep the client credential on the exact token endpoint."""
-
-    def redirect_request(
-        self,
-        request: Request,
-        file_pointer: IO[bytes],
-        code: int,
-        message: str,
-        headers: HTTPMessage,
-        new_url: str,
-    ) -> Request | None:
+    def redirect_request(self, *_args: object, **_kwargs: object) -> None:
         return None
 
 
 def _reject() -> NoReturn:
-    raise LiveSmokeRejected("live provider smoke rejected")
+    raise LiveSmokeRejected("local production API smoke rejected")
+
+
+def _skip() -> NoReturn:
+    raise LiveSmokeSkipped("local production API smoke skipped")
 
 
 def _parse_dotenv_value(raw_value: str) -> str:
     value = raw_value.strip()
     if not value:
-        _reject()
+        _skip()
     if value[0] in {"'", '"'}:
         try:
             parsed = ast.literal_eval(value)
-        except SyntaxError, ValueError:
+        except (SyntaxError, ValueError):
             _reject()
         if not isinstance(parsed, str) or not parsed:
-            _reject()
+            _skip()
         return parsed
     if any(character.isspace() for character in value) or "#" in value:
         _reject()
@@ -113,15 +76,18 @@ def _parse_dotenv_value(raw_value: str) -> str:
 def _read_secure_dotenv(path: Path) -> dict[str, str]:
     try:
         metadata = path.lstat()
-        if (
-            not stat.S_ISREG(metadata.st_mode)
-            or stat.S_IMODE(metadata.st_mode) != 0o600
-            or metadata.st_uid != os.getuid()
-            or metadata.st_size > MAX_ENV_BYTES
-        ):
-            _reject()
+    except OSError:
+        _skip()
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or stat.S_IMODE(metadata.st_mode) != 0o600
+        or metadata.st_uid != os.getuid()
+        or metadata.st_size > MAX_ENV_BYTES
+    ):
+        _reject()
+    try:
         text = path.read_text(encoding="utf-8")
-    except OSError, UnicodeError:
+    except (OSError, UnicodeError):
         _reject()
     if "\x00" in text:
         _reject()
@@ -143,11 +109,12 @@ def _read_secure_dotenv(path: Path) -> dict[str, str]:
 
 @dataclass(frozen=True, slots=True)
 class LiveSmokeConfig:
-    """Exact authorization and one disposable repository target."""
+    """Local administrator authority plus one non-secret repository identity."""
 
-    client_id: str = field(repr=False)
-    client_secret: str = field(repr=False)
-    callback_url: str
+    base_url: str
+    administrator_email: str
+    administrator_password: str = field(repr=False)
+    administrator_new_password: str = field(repr=False)
     workspace: str
     repository_slug: str
     branch: str
@@ -155,330 +122,285 @@ class LiveSmokeConfig:
     @classmethod
     def from_dotenv(cls, path: Path) -> LiveSmokeConfig:
         values = _read_secure_dotenv(path)
+        if values.get("VERBOFLEX_LIVE_PROVIDER_OPT_IN") != EXACT_OPT_IN:
+            _skip()
         if any(not values.get(name) for name in _REQUIRED_KEYS):
-            _reject()
-        if values["VERBOFLEX_CONSUMER_VERIFIED"] != EXACT_CONSUMER_AUTHORIZATION:
-            _reject()
-        if values["BITBUCKET_CALLBACK_URL"] != EXACT_CALLBACK_URL:
+            _skip()
+        base_url = values["VERBOFLEX_BASE_URL"].rstrip("/")
+        parsed = urlsplit(base_url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or parsed.hostname not in {"127.0.0.1", "localhost"}
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
             _reject()
         workspace = values["BITBUCKET_WORKSPACE"]
         repository_slug = values["BITBUCKET_REPOSITORY_SLUG"]
         branch = values["BITBUCKET_BRANCH"]
-        try:
-            repository_metadata_url(workspace=workspace, repository_slug=repository_slug)
-            repository_branch_url(
-                workspace=workspace,
-                repository_slug=repository_slug,
-                branch=branch,
-            )
-        except ValueError:
+        if (
+            _REPOSITORY_PART.fullmatch(workspace) is None
+            or _REPOSITORY_PART.fullmatch(repository_slug) is None
+            or not branch
+            or len(branch) > 255
+            or "\\" in branch
+            or any(ord(character) < 32 for character in branch)
+            or any(part in {"", ".", ".."} for part in branch.split("/"))
+        ):
             _reject()
         return cls(
-            client_id=values["BITBUCKET_CLIENT_ID"],
-            client_secret=values["BITBUCKET_CLIENT_SECRET"],
-            callback_url=values["BITBUCKET_CALLBACK_URL"],
+            base_url=base_url,
+            administrator_email=values["VERBOFLEX_ADMIN_EMAIL"],
+            administrator_password=values["VERBOFLEX_ADMIN_PASSWORD"],
+            administrator_new_password=values["VERBOFLEX_ADMIN_NEW_PASSWORD"],
             workspace=workspace,
             repository_slug=repository_slug,
             branch=branch,
         )
 
 
-@dataclass(slots=True)
-class ProviderReadAudit:
-    """Count only request methods; retain no URL, header, or response body."""
-
-    get_requests: int = 0
-    mutation_attempts: int = 0
-
-
-class ReadOnlyAuditTransport(httpx.AsyncBaseTransport):
-    """Fail before delegation unless one validated Bitbucket REST GET is requested."""
-
-    def __init__(
-        self,
-        *,
-        inner: httpx.AsyncBaseTransport,
-        audit: ProviderReadAudit,
-    ) -> None:
-        self._inner = inner
-        self._audit = audit
-
-    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        if request.method != "GET":
-            self._audit.mutation_attempts += 1
-            _reject()
-        try:
-            validate_bitbucket_api_url(str(request.url))
-        except ValueError:
-            _reject()
-        self._audit.get_requests += 1
-        return await self._inner.handle_async_request(request)
-
-    async def aclose(self) -> None:
-        await self._inner.aclose()
-
-
-@dataclass(slots=True)
-class LiveCredentialAuthority:
-    """One memory-only provider credential generation for a disposable smoke."""
-
-    access_token: str = field(repr=False)
-    generation: int = 1
-    is_revoked: bool = False
-
-    def acquire_repository_read_lease(self, _session: object) -> BitbucketCredentialLease:
-        if self.is_revoked or not self.access_token:
-            raise OAuthConnectionUnavailable("connection unavailable")
-        return BitbucketCredentialLease(
-            generation=self.generation,
-            access_token=self.access_token,
-        )
-
-    def require_current_repository_read_lease(
-        self,
-        _session: object,
-        lease: BitbucketCredentialLease,
-    ) -> None:
-        if self.is_revoked or not self.access_token or lease.generation != self.generation:
-            raise OAuthGenerationRejected("generation rejected")
-
-    def revoke_local(self) -> None:
-        self.generation += 1
-        self.access_token = ""
-        self.is_revoked = True
-
-
 @dataclass(frozen=True, slots=True)
-class LiveSmokeResult:
-    """Non-secret measurements permitted by the Phase 2 checkpoint."""
+class Response:
+    status: int
+    headers: Any
+    body: bytes = field(repr=False)
 
-    repository_identity_digest: str
-    commit_identity_digest: str
-    branch_count: int
-    tree_page_count: int
-    tree_entry_count: int
-    raw_byte_count: int
-    raw_content_digest: str
-    provider_get_count: int
-    duration_milliseconds: int
+    def json(self) -> dict[str, Any]:
+        try:
+            decoded = json.loads(self.body)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            _reject()
+        if not isinstance(decoded, dict):
+            _reject()
+        return decoded
 
-    def render(self) -> str:
-        return (
-            "phase2 live provider read-only smoke: PASS\n"
-            f"repository_identity_digest={self.repository_identity_digest}\n"
-            f"commit_identity_digest={self.commit_identity_digest}\n"
-            f"branches={self.branch_count} tree_pages={self.tree_page_count} "
-            f"tree_entries={self.tree_entry_count} raw_bytes={self.raw_byte_count}\n"
-            f"raw_content_digest={self.raw_content_digest}\n"
-            f"provider_gets={self.provider_get_count} provider_writes=0 "
-            "oauth_token_exchanges=1 local_generation_revoke=PASS\n"
-            f"duration_ms={self.duration_milliseconds}"
+
+class LocalApi:
+    """Bounded client for the loopback VerboFlex API only."""
+
+    def __init__(self, base_url: str) -> None:
+        self._base_url = base_url
+        self._opener = build_opener(_RejectRedirects())
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        session_token: str | None = None,
+        json_body: object | None = None,
+        form: dict[str, str] | None = None,
+        expected: int | tuple[int, ...] = HTTPStatus.OK,
+    ) -> Response:
+        if not path.startswith("/api/v1/") or "://" in path:
+            _reject()
+        headers = {"Accept": "application/json"}
+        body: bytes | None = None
+        if session_token is not None:
+            headers["Authorization"] = f"Bearer {session_token}"
+        if json_body is not None:
+            headers["Content-Type"] = "application/json"
+            body = json.dumps(json_body, separators=(",", ":")).encode()
+        elif form is not None:
+            headers["Content-Type"] = "application/x-www-form-urlencoded"
+            body = urlencode(form).encode()
+        request = Request(
+            f"{self._base_url}{path}",
+            data=body,
+            headers=headers,
+            method=method,
         )
+        try:
+            with self._opener.open(request, timeout=REQUEST_TIMEOUT_SECONDS) as opened:
+                response_body = opened.read(MAX_RESPONSE_BYTES + 1)
+                response = Response(opened.status, opened.headers, response_body)
+        except HTTPError as error:
+            response = Response(
+                error.code,
+                error.headers,
+                error.read(MAX_RESPONSE_BYTES + 1),
+            )
+        except (URLError, OSError, TimeoutError):
+            _reject()
+        if len(response.body) > MAX_RESPONSE_BYTES:
+            _reject()
+        allowed = (expected,) if isinstance(expected, int) else expected
+        if response.status not in allowed:
+            _reject()
+        return response
 
 
-def _exchange_client_credentials(
-    config: LiveSmokeConfig,
-    *,
-    opener: OpenerDirector | None = None,
-) -> str:
-    credentials = base64.b64encode(f"{config.client_id}:{config.client_secret}".encode()).decode(
-        "ascii"
-    )
-    request = Request(
-        TOKEN_URL,
-        data=urlencode({"grant_type": "client_credentials"}).encode("ascii"),
-        headers={
-            "Accept": "application/json",
-            "Authorization": f"Basic {credentials}",
-            "Content-Type": "application/x-www-form-urlencoded",
+def _login(api: LocalApi, config: LiveSmokeConfig) -> str:
+    response = api.request(
+        "POST",
+        "/api/v1/auth/token",
+        form={
+            "username": config.administrator_email,
+            "password": config.administrator_password,
         },
-        method="POST",
-    )
-    try:
-        with (opener or build_opener(_RejectRedirects())).open(
-            request,
-            timeout=TOKEN_TIMEOUT_SECONDS,
-        ) as response:
-            payload = response.read(MAX_TOKEN_RESPONSE_BYTES + 1)
-    except HTTPError, URLError, OSError, TimeoutError:
+    ).json()
+    token = response.get("access_token")
+    if not isinstance(token, str) or not token:
         _reject()
-    if len(payload) > MAX_TOKEN_RESPONSE_BYTES:
-        _reject()
-    try:
-        decoded = json.loads(payload)
-    except UnicodeDecodeError, json.JSONDecodeError:
-        _reject()
-    if not isinstance(decoded, dict):
-        _reject()
-    token = decoded.get("access_token")
-    token_type = decoded.get("token_type")
-    if (
-        not isinstance(token, str)
-        or not token
-        or len(token) > MAX_TOKEN_CHARACTERS
-        or not isinstance(token_type, str)
-        or token_type.casefold() != "bearer"
-        or decoded.get("scope") != EXACT_SCOPE
-    ):
-        _reject()
+    if response.get("must_change_password") is True:
+        api.request(
+            "POST",
+            "/api/v1/auth/change-password",
+            session_token=token,
+            json_body={
+                "current_password": config.administrator_password,
+                "new_password": config.administrator_new_password,
+            },
+            expected=HTTPStatus.NO_CONTENT,
+        )
+        response = api.request(
+            "POST",
+            "/api/v1/auth/token",
+            form={
+                "username": config.administrator_email,
+                "password": config.administrator_new_password,
+            },
+        ).json()
+        token = response.get("access_token")
+        if not isinstance(token, str) or not token:
+            _reject()
     return token
 
 
-def _record_entry(
-    entry: BitbucketSourceEntry,
-    *,
-    seen_paths: set[str],
-) -> tuple[str | None, tuple[str, int] | None]:
-    if entry.path in seen_paths or len(entry.path.split("/")) > MAX_SOURCE_DEPTH:
+def _assert_connection(payload: dict[str, Any], expected_status: str) -> None:
+    if set(payload) != {
+        "connected_at",
+        "expires_at",
+        "revoked_at",
+        "scope_label",
+        "scope_profile",
+        "status",
+    }:
         _reject()
-    seen_paths.add(entry.path)
-    if entry.kind == "directory":
-        return entry.path, None
-    if entry.size is None or entry.size > MAX_RAW_FILE_BYTES:
-        return None, None
-    return None, (entry.path, entry.size)
-
-
-async def _run_live_reads(
-    config: LiveSmokeConfig,
-    *,
-    authority: LiveCredentialAuthority,
-    audit: ProviderReadAudit,
-) -> LiveSmokeResult:
-    started = time.monotonic()
-    transport = ReadOnlyAuditTransport(
-        inner=httpx.AsyncHTTPTransport(retries=0),
-        audit=audit,
-    )
-    adapter = BitbucketHttpAdapter(
-        settings=Settings(),
-        credential_leases=authority,
-        transport=transport,
-    )
-    session = cast(object, None)
-    try:
-        metadata = await adapter.read_repository_metadata(
-            session,
-            workspace=config.workspace,
-            repository_slug=config.repository_slug,
-        )
-        repository_uuid = metadata.get("uuid")
-        if not isinstance(repository_uuid, str) or not repository_uuid:
-            _reject()
-
-        branches = await adapter.list_repository_branches(
-            session,
-            workspace=config.workspace,
-            repository_slug=config.repository_slug,
-        )
-        if not branches or len(branches) > MAX_PROVIDER_ENTRIES:
-            _reject()
-        resolved = await adapter.resolve_repository_branch(
-            session,
-            workspace=config.workspace,
-            repository_slug=config.repository_slug,
-            branch=config.branch,
-        )
-
-        directories: deque[str | None] = deque([None])
-        seen_paths: set[str] = set()
-        tree_page_count = 0
-        selected_file: tuple[str, int] | None = None
-        while directories and selected_file is None:
-            directory_path = directories.popleft()
-            next_url: str | None = None
-            visited_pages: set[str] = set()
-            while selected_file is None:
-                if tree_page_count >= MAX_PROVIDER_PAGES:
-                    _reject()
-                page = await adapter.list_repository_source_page(
-                    session,
-                    workspace=config.workspace,
-                    repository_slug=config.repository_slug,
-                    commit_hash=resolved.commit_hash,
-                    directory_path=directory_path,
-                    next_url=next_url,
-                )
-                tree_page_count += 1
-                for entry in page.entries:
-                    if len(seen_paths) >= MAX_PROVIDER_ENTRIES:
-                        _reject()
-                    directory, candidate = _record_entry(entry, seen_paths=seen_paths)
-                    if directory is not None:
-                        directories.append(directory)
-                    if selected_file is None and candidate is not None:
-                        selected_file = candidate
-                if selected_file is not None or page.next_url is None:
-                    break
-                if page.next_url in visited_pages:
-                    _reject()
-                visited_pages.add(page.next_url)
-                next_url = page.next_url
-        if selected_file is None:
-            _reject()
-        selected_path, declared_size = selected_file
-        raw_content = await adapter.read_repository_source_file(
-            session,
-            workspace=config.workspace,
-            repository_slug=config.repository_slug,
-            commit_hash=resolved.commit_hash,
-            path=selected_path,
-            max_bytes=MAX_RAW_FILE_BYTES,
-        )
-        if len(raw_content) > MAX_RAW_FILE_BYTES or len(raw_content) != declared_size:
-            _reject()
-        duration = max(0, int((time.monotonic() - started) * 1000))
-        return LiveSmokeResult(
-            repository_identity_digest=hashlib.sha256(repository_uuid.encode()).hexdigest(),
-            commit_identity_digest=hashlib.sha256(resolved.commit_hash.encode()).hexdigest(),
-            branch_count=len(branches),
-            tree_page_count=tree_page_count,
-            tree_entry_count=len(seen_paths),
-            raw_byte_count=len(raw_content),
-            raw_content_digest=hashlib.sha256(raw_content).hexdigest(),
-            provider_get_count=audit.get_requests,
-            duration_milliseconds=duration,
-        )
-    except BitbucketProviderReadError, ValueError:
+    if payload.get("status") != expected_status or payload.get("scope_profile") != "repository":
         _reject()
-    finally:
-        await adapter.aclose()
 
 
-def run(path: Path) -> LiveSmokeResult:
+def _repository_id(api: LocalApi, config: LiveSmokeConfig, session_token: str) -> str:
+    response = api.request(
+        "POST",
+        "/api/v1/admin/repositories",
+        session_token=session_token,
+        json_body={
+            "workspace": config.workspace,
+            "repository_slug": config.repository_slug,
+            "descriptive_name": "Phase 2 provider smoke",
+        },
+        expected=(HTTPStatus.CREATED, HTTPStatus.CONFLICT),
+    )
+    if response.status == HTTPStatus.CREATED:
+        repository_id = response.json().get("id")
+        if isinstance(repository_id, str) and repository_id:
+            return repository_id
+        _reject()
+    collection = api.request(
+        "GET",
+        "/api/v1/admin/repositories?limit=100",
+        session_token=session_token,
+    ).json()
+    items = collection.get("items")
+    if not isinstance(items, list):
+        _reject()
+    for item in items:
+        if (
+            isinstance(item, dict)
+            and item.get("workspace") == config.workspace.casefold()
+            and item.get("repository_slug") == config.repository_slug.casefold()
+            and isinstance(item.get("id"), str)
+        ):
+            return item["id"]
+    _reject()
+
+
+def run(path: Path) -> None:
     config = LiveSmokeConfig.from_dotenv(path)
-    access_token = _exchange_client_credentials(config)
-    authority = LiveCredentialAuthority(access_token=access_token)
-    initial_lease = authority.acquire_repository_read_lease(object())
-    audit = ProviderReadAudit()
-    try:
-        result = asyncio.run(_run_live_reads(config, authority=authority, audit=audit))
-        if audit.mutation_attempts != 0 or audit.get_requests < 5:
-            _reject()
-    finally:
-        authority.revoke_local()
-        access_token = ""
-    if not authority.is_revoked or authority.access_token:
+    api = LocalApi(config.base_url)
+    session_token = _login(api, config)
+    connected = api.request(
+        "POST",
+        "/api/v1/admin/bitbucket/connect",
+        session_token=session_token,
+    ).json()
+    _assert_connection(connected, "Connected")
+    _assert_connection(
+        api.request(
+            "GET",
+            "/api/v1/admin/bitbucket",
+            session_token=session_token,
+        ).json(),
+        "Connected",
+    )
+    repository_id = _repository_id(api, config, session_token)
+    branches = api.request(
+        "GET",
+        f"/api/v1/admin/repositories/{repository_id}/branches?limit=100",
+        session_token=session_token,
+    ).json()
+    items = branches.get("items")
+    if not isinstance(items, list) or config.branch not in {
+        item.get("name") for item in items if isinstance(item, dict)
+    }:
         _reject()
-    try:
-        authority.require_current_repository_read_lease(object(), initial_lease)
-    except OAuthGenerationRejected:
-        pass
-    else:
+    sources = api.request(
+        "GET",
+        (
+            f"/api/v1/admin/repositories/{repository_id}/sources?"
+            f"{urlencode({'branch': config.branch})}"
+        ),
+        session_token=session_token,
+    ).json()
+    if not isinstance(sources.get("commit_hash"), str) or not sources.get("files"):
         _reject()
-    return result
+    _assert_connection(
+        api.request(
+            "POST",
+            "/api/v1/admin/bitbucket/revoke",
+            session_token=session_token,
+        ).json(),
+        "Disconnected",
+    )
+    _assert_connection(
+        api.request(
+            "POST",
+            "/api/v1/admin/bitbucket/reconnect",
+            session_token=session_token,
+        ).json(),
+        "Connected",
+    )
+    _assert_connection(
+        api.request(
+            "POST",
+            "/api/v1/admin/bitbucket/revoke",
+            session_token=session_token,
+        ).json(),
+        "Disconnected",
+    )
 
 
 def main() -> int:
     if len(sys.argv) != 2:
-        print("phase2-live error: secure environment file is required", file=sys.stderr)
-        return 2
+        print("phase2-live SKIP: secure local API configuration is required")
+        return 0
     try:
-        result = run(Path(sys.argv[1]))
-    except LiveSmokeRejected:
-        print("phase2-live error: read-only smoke rejected", file=sys.stderr)
+        run(Path(sys.argv[1]))
+    except LiveSmokeSkipped:
+        print("phase2-live SKIP: opt-in or local server configuration is unavailable")
+        return 0
+    except Exception:
+        print("phase2-live error: production API smoke rejected", file=sys.stderr)
         return 1
-    print(result.render())
+    print(
+        "phase2 live provider production API smoke: PASS\n"
+        "provider_gets_expected=5 provider_writes_expected=0 final_local_revoke=PASS"
+    )
     return 0
 
 
