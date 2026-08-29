@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import ast
 import copy
 import hashlib
+import importlib
 import re
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from test_phase2_spec_edge_traceability import (
     _assert_nodes_collect,
     _assert_source_matrix_equal,
@@ -28,6 +31,11 @@ UI_SPEC_PATH = PHASE_DIR / "02-UI-SPEC.md"
 COVERAGE_PATH = PHASE_DIR / "COVERAGE.md"
 REVIEW_PATH = PHASE_DIR / "02-REVIEW.md"
 VERIFICATION_PATH = PHASE_DIR / "02-VERIFICATION.md"
+BACKEND_SOURCE = REPOSITORY_ROOT / "backend" / "src" / "verboflex"
+FRONTEND_SOURCE = REPOSITORY_ROOT / "frontend" / "src"
+FRONTEND_E2E = REPOSITORY_ROOT / "frontend" / "e2e" / "admin-configuration.spec.ts"
+BASE_COMPOSE = REPOSITORY_ROOT / "docker-compose.yml"
+SMOKE_HARNESS = REPOSITORY_ROOT / "tools" / "phase2_smoke.sh"
 
 GOAL_FINGERPRINT = "46b6d274b4cc0980cbad"
 REQUIREMENT_FINGERPRINTS = {
@@ -197,6 +205,159 @@ NODE_WORKSPACE = (
     "frontend/src/features/workspace/WorkspaceOverviewPage.test.tsx::"
     "loads exactly three bounded administrator summaries from server authority"
 )
+
+GAP_RUNTIME_BINDINGS = {
+    "CR-01": {
+        "runtime": (
+            "compose:x-backend-common.environment."
+            "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID"
+        ),
+        "evidence": (
+            "backend/tests/architecture/test_phase2_live_provider_smoke.py::"
+            "test_base_compose_inherits_exact_provider_settings_without_secret_output"
+        ),
+    },
+    "CR-02": {
+        "runtime": (
+            "python:verboflex.services.bitbucket_oauth:"
+            "BitbucketOAuthService.acquire_client_credentials"
+        ),
+        "evidence": (
+            "backend/tests/integration/test_bitbucket_oauth.py::"
+            "test_client_credentials_provider_exchange_is_exact_and_bounded"
+        ),
+    },
+    "CR-03": {
+        "runtime": "openapi:connect_admin_bitbucket_oauth",
+        "evidence": (
+            "backend/tests/integration/test_bitbucket_oauth.py::"
+            "test_client_credentials_service_has_no_callback_or_refresh_authority"
+        ),
+    },
+    "CR-04": {
+        "runtime": (
+            "python:verboflex.services.bitbucket_oauth:"
+            "BitbucketOAuthService.acquire_repository_read_lease"
+        ),
+        "evidence": (
+            "backend/tests/integration/test_bitbucket_oauth.py::"
+            "test_client_credentials_expiry_boundary_is_authoritative"
+        ),
+    },
+    "CR-05": {
+        "runtime": "python:verboflex.services.products:_clone_active_revision_graph",
+        "evidence": (
+            "backend/tests/api/test_admin_products.py::"
+            "test_existing_product_edit_clones_complete_graph_once_and_isolates_candidate_identity"
+        ),
+    },
+    "CR-06": {
+        "runtime": "python:verboflex.services.publication:reactivate_product",
+        "evidence": (
+            "e2e:unchanged active revision reactivation uses real backend state and "
+            "blocks stale confirmation"
+        ),
+    },
+    "CR-07": {
+        "runtime": (
+            "typescript:frontend/src/features/admin/products/"
+            "ProductWizardPage.tsx:mobileWizardNavigation"
+        ),
+        "evidence": "e2e:mobile five-step wizard remains reachable at 320 pixels",
+    },
+    "CR-08": {
+        "runtime": (
+            "typescript:frontend/src/features/admin/useCursorCollection.ts:"
+            "useCursorCollection"
+        ),
+        "evidence": (
+            "e2e:51st mapping preview readiness consumes terminal cursor before "
+            "lifecycle authority"
+        ),
+    },
+    "CR-09": {
+        "runtime": (
+            "python:verboflex.services.preview_jobs:reconcile_stale_preview_jobs"
+        ),
+        "evidence": (
+            "backend/tests/integration/test_preview_jobs.py::"
+            "test_retry_after_watchdog_timeout_isolated_from_old_worker_completion"
+        ),
+    },
+    "CR-10": {
+        "runtime": (
+            "python:verboflex.services.admin_users:"
+            "_deactivate_user_under_admin_authority_lock"
+        ),
+        "evidence": (
+            "backend/tests/test_cli.py::"
+            "test_cli_sole_admin_deactivation_fails_without_changing_authority"
+        ),
+    },
+    "WR-01": {
+        "runtime": (
+            "typescript:frontend/src/features/workspace/"
+            "WorkspaceOverviewPage.tsx:WorkspaceOverviewPage"
+        ),
+        "evidence": (
+            "e2e:role-aware Workspace navigation stays location-authoritative on "
+            "desktop and mobile"
+        ),
+    },
+    "WR-02": {
+        "runtime": (
+            "migration:backend/alembic/versions/0009_product_graph_integrity.py:upgrade"
+        ),
+        "evidence": (
+            "backend/tests/integration/test_migrations.py::"
+            "test_product_graph_integrity_upgrade_downgrade_and_reupgrade"
+        ),
+    },
+    "G1": {
+        "runtime": (
+            "python:verboflex.services.admin_users:"
+            "_deactivate_user_under_admin_authority_lock"
+        ),
+        "evidence": (
+            "backend/tests/integration/test_admin_user_concurrency.py::"
+            "test_cross_entry_cli_and_http_deactivation_preserve_one_active_admin_and_both_uuids"
+        ),
+    },
+    "G2": {
+        "runtime": "python:verboflex.services.products:_clone_active_revision_graph",
+        "evidence": (
+            "backend/tests/integration/test_product_publication.py::"
+            "test_product_lock_linearizes_publish_equal_retry_and_stale_writer"
+        ),
+    },
+    "G3": {
+        "runtime": (
+            "compose:x-backend-common.environment."
+            "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET"
+        ),
+        "evidence": "smoke:--mock-live-provider",
+    },
+    "G4": {
+        "runtime": (
+            "typescript:frontend/src/features/admin/products/"
+            "ProductWizardPage.tsx:ProductWizardPage"
+        ),
+        "evidence": "e2e:mobile five-step wizard remains reachable at 320 pixels",
+    },
+    "G5": {
+        "runtime": (
+            "python:verboflex.services.preview_jobs:reconcile_stale_preview_jobs"
+        ),
+        "evidence": "smoke:--worker-loss",
+    },
+}
+
+EXPECTED_GAP_RUNTIME_KEYS = {
+    *(f"CR-{number:02d}" for number in range(1, 11)),
+    "WR-01",
+    "WR-02",
+    *(f"G{number}" for number in range(1, 6)),
+}
 
 
 def _fingerprint(value: str) -> str:
@@ -602,6 +763,118 @@ def _assert_deferred_scope_rejected(inventory: dict[str, dict[str, object]]) -> 
     )
 
 
+def _without_comments(source: str, *, shell: bool = False) -> str:
+    if shell:
+        return "\n".join(
+            line for line in source.splitlines() if not line.lstrip().startswith("#")
+        )
+    without_blocks = re.sub(r"/\*.*?\*/", "", source, flags=re.S)
+    return re.sub(r"//[^\n]*", "", without_blocks)
+
+
+def _openapi_operations() -> dict[str, dict[str, object]]:
+    from verboflex.main import create_app
+
+    operations: dict[str, dict[str, object]] = {}
+    for path_item in create_app().openapi()["paths"].values():
+        for operation in path_item.values():
+            if isinstance(operation, dict) and "operationId" in operation:
+                operations[str(operation["operationId"])] = operation
+    return operations
+
+
+def _resolve_runtime_binding(reference: str) -> object:
+    kind, target = reference.split(":", 1)
+    if kind == "python":
+        module_name, qualified_name = target.split(":", 1)
+        resolved: object = importlib.import_module(module_name)
+        for segment in qualified_name.split("."):
+            resolved = getattr(resolved, segment)
+        assert callable(resolved), f"runtime symbol is not callable: {reference}"
+        return resolved
+    if kind in {"typescript", "migration"}:
+        path_text, symbol = target.rsplit(":", 1)
+        path = REPOSITORY_ROOT / path_text
+        assert path.is_file(), f"runtime source is absent: {path_text}"
+        source = path.read_text(encoding="utf-8")
+        if kind == "typescript":
+            executable = _without_comments(source)
+            declaration = re.compile(
+                rf"^export\s+(?:async\s+)?function\s+{re.escape(symbol)}"
+                r"(?:<[^>]+>)?\s*\(",
+                re.M,
+            )
+            assert declaration.search(executable), f"TypeScript symbol is absent: {reference}"
+            return symbol
+        tree = ast.parse(source, filename=path_text)
+        declarations = {
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        }
+        assert symbol in declarations, f"migration symbol is absent: {reference}"
+        return symbol
+    if kind == "compose":
+        current: object = yaml.safe_load(BASE_COMPOSE.read_text(encoding="utf-8"))
+        for segment in target.split("."):
+            assert isinstance(current, dict) and segment in current, (
+                f"Compose symbol is absent: {reference}"
+            )
+            current = current[segment]
+        assert current is not None, f"Compose symbol is empty: {reference}"
+        return current
+    if kind == "openapi":
+        operations = _openapi_operations()
+        assert target in operations, f"OpenAPI operation is absent: {target}"
+        return operations[target]
+    raise AssertionError(f"unsupported runtime binding kind: {kind}")
+
+
+def _assert_executable_evidence(references: list[str]) -> None:
+    collectable: list[str] = []
+    normalized_e2e_source = " ".join(
+        FRONTEND_E2E.read_text(encoding="utf-8").split()
+    )
+    smoke_source = _without_comments(
+        SMOKE_HARNESS.read_text(encoding="utf-8"), shell=True
+    )
+    for reference in references:
+        if reference.startswith("e2e:"):
+            title = reference.removeprefix("e2e:")
+            assert f'test("{title}"' in normalized_e2e_source, (
+                f"E2E title is absent: {title}"
+            )
+        elif reference.startswith("smoke:"):
+            scenario = reference.removeprefix("smoke:")
+            assert scenario in smoke_source, f"smoke scenario is absent: {scenario}"
+            assert {
+                "--mock-live-provider": "run_mock_live_provider",
+                "--worker-loss": "run_worker_loss",
+            }[scenario] in smoke_source
+        else:
+            collectable.append(reference)
+    _assert_nodes_collect([{"test_nodes": collectable}])
+
+
+def _admin_route_functions() -> list[tuple[Path, ast.AsyncFunctionDef | ast.FunctionDef]]:
+    functions: list[tuple[Path, ast.AsyncFunctionDef | ast.FunctionDef]] = []
+    route_root = BACKEND_SOURCE / "api" / "v1" / "routes"
+    for path in sorted(route_root.glob("admin_*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            if not isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
+                continue
+            if any(
+                isinstance(decorator, ast.Call)
+                and isinstance(decorator.func, ast.Attribute)
+                and isinstance(decorator.func.value, ast.Name)
+                and decorator.func.value.id == "router"
+                for decorator in node.decorator_list
+            ):
+                functions.append((path, node))
+    return functions
+
+
 def test_phase2_multi_source_coverage_contract() -> None:
     """Every canonical item retains meaning and reaches executable evidence."""
     inventory = _multi_source_inventory()
@@ -641,9 +914,147 @@ def test_phase2_audit_rejects_semantic_path_and_scope_mutations() -> None:
 
 def test_phase2_gap_authorities_are_wired() -> None:
     """CR/WR and G1-G5 must reach production runtime authority, not prose."""
-    pytest.fail("Plan 02-37 runtime authority registry is not implemented")
+    assert GAP_RUNTIME_BINDINGS.keys() == EXPECTED_GAP_RUNTIME_KEYS
+    for key, binding in GAP_RUNTIME_BINDINGS.items():
+        assert set(binding) == {"runtime", "evidence"}, f"incomplete runtime row: {key}"
+        _resolve_runtime_binding(binding["runtime"])
+    _assert_executable_evidence(
+        [binding["evidence"] for binding in GAP_RUNTIME_BINDINGS.values()]
+    )
+
+    from verboflex.schemas.admin_bitbucket import AdminBitbucketStatusResponse
+
+    status_values = {
+        "Disconnected",
+        "Connected",
+        "Reauthorization required",
+        "Unavailable",
+    }
+    assert "status" in AdminBitbucketStatusResponse.model_fields
+    schema = AdminBitbucketStatusResponse.model_json_schema()
+    assert schema["required"] == [
+        "status",
+        "connected_at",
+        "expires_at",
+        "revoked_at",
+    ]
+    assert set(schema["properties"]["status"]["enum"]) == status_values
+
+    operations = _openapi_operations()
+    openapi_schema = operations["get_admin_bitbucket_status"]
+    response_schema = openapi_schema["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    assert response_schema == {
+        "$ref": "#/components/schemas/AdminBitbucketStatusResponse"
+    }
+    generated = (FRONTEND_SOURCE / "api" / "client" / "types.gen.ts").read_text(
+        encoding="utf-8"
+    )
+    generated_status = generated.split(
+        "export type AdminBitbucketStatusResponse = {", 1
+    )[1].split("\n};", 1)[0]
+    assert re.search(r"^\s*status:\s*", generated_status, re.M)
+    assert all(repr(value) in generated_status for value in status_values)
+    bitbucket_page = _without_comments(
+        (
+            FRONTEND_SOURCE
+            / "features"
+            / "admin"
+            / "bitbucket"
+            / "BitbucketConnectionPage.tsx"
+        ).read_text(encoding="utf-8")
+    )
+    workspace_page = _without_comments(
+        (
+            FRONTEND_SOURCE
+            / "features"
+            / "workspace"
+            / "WorkspaceOverviewPage.tsx"
+        ).read_text(encoding="utf-8")
+    )
+    assert "connection.status" in bitbucket_page
+    assert 'AdminBitbucketStatusResponse["status"]' in workspace_page
 
 
 def test_phase2_forbidden_bypasses_are_absent() -> None:
     """Deferred authentication, provider-write, and canonical surfaces stay absent."""
-    pytest.fail("Plan 02-37 structural bypass audit is not implemented")
+    operations = _openapi_operations()
+    bitbucket_operations = {
+        operation_id
+        for operation_id in operations
+        if "bitbucket" in operation_id.casefold()
+    }
+    assert bitbucket_operations == {
+        "get_admin_bitbucket_status",
+        "connect_admin_bitbucket_oauth",
+        "reconnect_admin_bitbucket_oauth",
+        "revoke_admin_bitbucket_connection_locally",
+    }
+    assert not any(
+        token in operation_id.casefold()
+        for operation_id in bitbucket_operations
+        for token in ("callback", "authorization_code", "refresh")
+    )
+
+    oauth_tree = ast.parse(
+        (BACKEND_SOURCE / "services" / "bitbucket_oauth.py").read_text(
+            encoding="utf-8"
+        )
+    )
+    oauth_methods = {
+        node.name
+        for node in ast.walk(oauth_tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    assert not {
+        name
+        for name in oauth_methods
+        if any(token in name for token in ("callback", "authorization_code", "refresh"))
+    }
+
+    provider_violations: list[str] = []
+    for path in sorted((BACKEND_SOURCE / "integrations" / "bitbucket").glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            if node.func.attr in {"put", "patch", "delete"}:
+                provider_violations.append(f"{path.name}:{node.lineno}:{node.func.attr}")
+            if node.func.attr in {"request", "stream"}:
+                method = node.args[0] if node.args else None
+                if not isinstance(method, ast.Constant) or method.value != "GET":
+                    provider_violations.append(
+                        f"{path.name}:{node.lineno}:non-static-provider-GET"
+                    )
+    assert provider_violations == []
+
+    model_names = {
+        path.stem.casefold()
+        for path in (BACKEND_SOURCE / "models").glob("*.py")
+        if path.name != "__init__.py"
+    }
+    assert not any(
+        token in model_name
+        for model_name in model_names
+        for token in ("canonical", "translation", "import", "pull_request", "comment")
+    )
+
+    admin_routes = _admin_route_functions()
+    assert len(admin_routes) == 30
+    for path, function in admin_routes:
+        annotations = {
+            ast.unparse(argument.annotation)
+            for argument in (*function.args.posonlyargs, *function.args.args)
+            if argument.annotation is not None
+        }
+        assert "AdminPrincipal" in annotations, (
+            f"administrator role dependency is absent: {path.name}:{function.name}"
+        )
+
+    router_source = _without_comments(
+        (FRONTEND_SOURCE / "router.tsx").read_text(encoding="utf-8")
+    )
+    assert "const guardedAdminElement = isAdmin ?" in router_source
+    assert '<Route path="/admin/*" element={guardedAdminElement}' in router_source
+    assert "<AdminApplicationRoutes" in router_source
