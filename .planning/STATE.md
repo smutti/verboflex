@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-23-PLAN.md
-last_updated: "2026-08-29T15:23:39.537Z"
+stopped_at: Completed 02-22-PLAN.md
+last_updated: "2026-08-29T15:48:54.667Z"
 last_activity: 2026-08-29
 last_activity_desc: Phase 02 execution started
-state_head: 37b8c8eeb0bee0f98051e782cc0701d5bf5ed6ec
+state_head: 2ed7d22782c02f432854f8a8d41446163354a2c9
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 53
-  completed_plans: 37
+  completed_plans: 38
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 22 of 38
+Plan: 23 of 38
 Status: Ready to execute
 Last activity: 2026-08-29 — Phase 02 execution started
 
@@ -95,6 +95,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P20 | 13h40min | 3 tasks | 19 files |
 | Phase 02-admin-configuration P21 | 26min | 3 tasks | 12 files |
 | Phase 02-admin-configuration P23 | 13min | 2 tasks | 5 files |
+| Phase 02-admin-configuration P22 | 19min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -235,6 +236,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Preserve the canonical User UUID across role plurality and concurrency — Roles remain fixed-vocabulary set membership and never create role-specific identity.
 - [Phase 02]: Route HTTP and CLI deactivation through one survivor authority — The global advisory lock, target lock, and prospective survivor predicate now guard both entry points.
 - [Phase 02]: Retry generated credential policy collisions within a bounded loop — Rejected candidates never mutate authority or appear in responses or logs.
+- [Phase 02]: Connect and reconnect are direct generated API mutations that never navigate and always refetch bounded public status after success.
+- [Phase 02]: Bitbucket acquisition failures expose fixed recovery guidance while provider diagnostics and credential-bearing fields remain outside browser-visible state.
+- [Phase 02]: Only the active connect or reconnect control is disabled; revoke retains independent confirmation and pending authority.
 
 ### Pending Todos
 
@@ -273,6 +277,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-29T15:23:39.489Z
-Stopped at: Completed 02-23-PLAN.md
+Last session: 2026-08-29T15:48:54.618Z
+Stopped at: Completed 02-22-PLAN.md
 Resume file: None

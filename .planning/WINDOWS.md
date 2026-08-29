@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 0
 waived_count: 0
-fixed_count: 27
-total_count: 27
-last_updated: 2026-08-29T09:57:06.951Z
+fixed_count: 29
+total_count: 29
+last_updated: 2026-08-29T15:48:31.840Z
 ---
 
 # Broken Windows Ledger
@@ -42,6 +42,8 @@ last_updated: 2026-08-29T09:57:06.951Z
 | 25 | 02 | unmet-truth | docker/frontend.Dockerfile |  | Frontend container smoke cannot typecheck the Plan 02-15 admin client contract because frontend/openapi.json is not copied into the image build context. | fixed |  | 2026-08-28T07:58:44.977Z | 2026-08-28T15:52:44Z |
 | 26 | 02 | deviation | tools/phase2_gauntlet.sh |  | Bound the exact dummy live credential fixture and replaced the obsolete live checkpoint assertion. | fixed |  | 2026-08-29T09:55:47.879Z | 2026-08-29T09:57:06.774Z |
 | 27 | 02 | deviation | tools/phase2_smoke.sh |  | Added a bounded exact-address-in-use Compose retry after a transient host-port race. | fixed |  | 2026-08-29T09:57:06.841Z | 2026-08-29T09:57:06.951Z |
+| 28 | 02 | deviation | frontend/src/api/admin-client-contract.test.ts |  | Scoped the generated credential-surface assertion to Bitbucket aliases after the initial full-client scan produced unrelated false positives. | fixed |  | 2026-08-29T15:48:27.121Z | 2026-08-29T15:48:31.780Z |
+| 29 | 02 | deviation | frontend/src/api/client/index.ts |  | Included the canonical generator-owned client barrel omitted from the plan file list. | fixed |  | 2026-08-29T15:48:27.185Z | 2026-08-29T15:48:31.840Z |
 
 ````json
 [
@@ -368,6 +370,30 @@ last_updated: 2026-08-29T09:57:06.951Z
     "reason": "",
     "recorded_at": "2026-08-29T09:57:06.841Z",
     "resolved_at": "2026-08-29T09:57:06.951Z"
+  },
+  {
+    "id": 28,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "frontend/src/api/admin-client-contract.test.ts",
+    "line": null,
+    "description": "Scoped the generated credential-surface assertion to Bitbucket aliases after the initial full-client scan produced unrelated false positives.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-29T15:48:27.121Z",
+    "resolved_at": "2026-08-29T15:48:31.780Z"
+  },
+  {
+    "id": 29,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "frontend/src/api/client/index.ts",
+    "line": null,
+    "description": "Included the canonical generator-owned client barrel omitted from the plan file list.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-29T15:48:27.185Z",
+    "resolved_at": "2026-08-29T15:48:31.840Z"
   }
 ]
 ````
