@@ -666,6 +666,42 @@ function MappingPreview({
   );
 }
 
+function PublishedMappingConfirmation({
+  index,
+  mapping,
+}: {
+  index: number;
+  mapping: AdminMappingResponse;
+}) {
+  return (
+    <section
+      id={`preview-${mapping.id}`}
+      className="grid gap-3 rounded-lg border bg-secondary p-6"
+      aria-labelledby={`preview-title-${mapping.id}`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="grid gap-1">
+          <h2
+            id={`preview-title-${mapping.id}`}
+            className="text-heading font-semibold"
+          >
+            Mapping {index + 1}
+          </h2>
+          <p className="text-muted-foreground">
+            {mapping.topology === "direct" ? "Direct" : "Separate"} published
+            mapping
+          </p>
+        </div>
+        <Badge variant="outline" className="w-fit rounded-md">
+          {hasPublishedPreviewConfirmation(mapping)
+            ? "Confirmed"
+            : "Preview confirmation required"}
+        </Badge>
+      </div>
+    </section>
+  );
+}
+
 export function ProductPreviewPage({
   accessToken,
   productId,
@@ -893,32 +929,11 @@ export function ProductPreviewPage({
       ) : (
         mappings.map((mapping, index) =>
           isReactivation ? (
-            <section
-              id={`preview-${mapping.id}`}
+            <PublishedMappingConfirmation
               key={mapping.id}
-              className="grid gap-3 rounded-lg border bg-secondary p-6"
-              aria-labelledby={`preview-title-${mapping.id}`}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="grid gap-1">
-                  <h2
-                    id={`preview-title-${mapping.id}`}
-                    className="text-heading font-semibold"
-                  >
-                    Mapping {index + 1}
-                  </h2>
-                  <p className="text-muted-foreground">
-                    {mapping.topology === "direct" ? "Direct" : "Separate"}{" "}
-                    published mapping
-                  </p>
-                </div>
-                <Badge variant="outline" className="w-fit rounded-md">
-                  {hasPublishedPreviewConfirmation(mapping)
-                    ? "Confirmed"
-                    : "Preview confirmation required"}
-                </Badge>
-              </div>
-            </section>
+              index={index}
+              mapping={mapping}
+            />
           ) : (
             <MappingPreview
               key={mapping.id}
