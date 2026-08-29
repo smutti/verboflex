@@ -2,15 +2,15 @@
 
 - Review-status: CLOSED
 - Open-critical-high: 0
-- Full-gauntlet-status: PASS
-- Reviewed-source-digest: `eefa340a56806506dbc9024a380d6a59e24f109fe9daecd4d216184cd6ef9130`
+- Full-gauntlet-status: PENDING
+- Reviewed-source-digest: `a6486afd844d4a6f0e1edc2de01f3d80df0a6ac5e8213ff9c7ae1e2459e10239`
 - Review-standard: OWASP ASVS 5.0 Level 1
 - Review-scope: Complete Phase 2 diff from `ce9fbeef86b00f594d1d06e15d3083d623c54095`
-- Review-date: 2026-08-28
+- Review-date: 2026-08-29
 
 ## Verdict
 
-No Critical or High severity blocker remains open. The Phase 2 administrative configuration slice is bounded to users, product revisions, repository registration, encrypted Bitbucket OAuth, candidate mappings, deterministic read-only discovery/preview, and publication of the currently confirmed candidate. The provider adapter exposes only reviewed GET operations, and the mocked-provider deployment proof records zero provider writes.
+No Critical or High severity blocker remains open. The Phase 2 administrative configuration slice is bounded to users, product revisions, repository registration, encrypted Bitbucket OAuth, candidate mappings, deterministic read-only discovery/preview, and publication of the currently confirmed candidate. The provider adapter exposes only reviewed GET operations. Both the mocked deployment proof and the human-authorized disposable live smoke record zero repository writes; the latter performs one bounded OAuth token exchange before five audited GET requests.
 
 One Moderate development-only dependency advisory remains explicitly deferred in `.planning/phases/02-admin-configuration/deferred-items.md`: Stryker's transitive `qs` dependency. Production dependency audit remains clean, no approved runtime dependency has an unreviewed provenance, and the deferred item is not concealed by this review.
 
@@ -24,7 +24,7 @@ One Moderate development-only dependency advisory remains explicitly deferred in
 | Stale discovery/preview result overwrites a newer candidate | High | Candidate revision, connection generation, detector version, input digest, attempt, and repository-side identities are checked end to end; polling ignores superseded responses. Closed. |
 | Parser accepts hostile or malformed localization input | High | Size/key/depth/entity/encoding limits plus property tests and Android/iOS/JSON/Qt detector mutation proofs. Closed. |
 | Migration upgrade or rollback leaves an incomplete Phase 2 schema | High | Disposable PostgreSQL upgrade-to-head, full downgrade-to-base, and re-upgrade cycle with exact table/constraint assertions. Closed. |
-| Browser or worker performs provider mutation during configuration | High | Static architecture provider boundary and transport verb scan plus runtime TLS provider spy. Closed. |
+| Browser, worker, or live smoke performs provider mutation during configuration | High | Static architecture provider boundary, transport verb scan, runtime TLS provider spy, and a live audit transport that rejects non-GET REST requests before delegation. Mock and live evidence both record zero repository writes. Closed. |
 | Duplicate publication or retry creates inconsistent durable state | High | Current-candidate confirmation, idempotency, conflict checks, durable job attempts, and publication mutation proof. Closed. |
 | Generated API client diverges from the backend contract | Moderate | Canonical OpenAPI regeneration and checked-in client drift gate. Closed. |
 | Responsive admin workflow becomes unusable | Moderate | Keyboard/focus assertions and Playwright at 320, 768, 1024, and 1440 pixel widths. Closed. |
@@ -68,16 +68,25 @@ One Moderate development-only dependency advisory remains explicitly deferred in
 - Resolution: Add `backend/tests/architecture/test_phase2_scope.py` covering OpenAPI paths, model set, provider verbs, and frontend destinations.
 - Verification: Architecture/provider-spy gauntlet layer.
 
+### P2-FINAL-03 — disposable live smoke required a fail-closed execution boundary
+
+- Severity: High
+- Status: CLOSED
+- Found by: Task 3 live-provider preparation review
+- Risk: Loading credentials or calling a representative repository without an exact-scope, GET-only, bounded, non-secret harness could broaden authority or leak source/token material.
+- Resolution: Add a mode-0600 owner-only dotenv parser, exact callback and token-scope checks, redirect rejection for the token exchange, a validated GET-only audit transport, fixed A-03 page/entry/depth/raw-size ceilings, digest/count-only output, and an in-memory generation revoke that erases the token and rejects the prior lease.
+- Verification: Three fail-closed architecture tests, six existing adapter tests, and the authorized live run: 5 GET requests, zero repository writes, 37 branches, 1 tree page, 12 entries, one 106-byte bounded raw read, and successful local generation invalidation. No credential, token, repository path, or raw content was persisted in evidence.
+
 ## Scope and Capability Diff
 
 - Network: Adds Bitbucket Cloud OAuth and read-only repository/source discovery through one bounded adapter. No provider write verb is approved in Phase 2.
 - Files: Reads localization blobs received from the provider into bounded memory; no arbitrary local filesystem path is accepted from an API request.
 - Subprocess: Production code adds no subprocess execution. Test and deployment harnesses use Docker, Alembic, Celery, Playwright, and pinned project tooling.
 - Database: Adds migrations `0002` through `0007`; upgrade/downgrade/re-upgrade is rehearsed against disposable PostgreSQL.
-- Secrets: Adds encrypted provider credentials and ephemeral OAuth flow state. No raw credential is permitted in logs, reprs, response schemas, browser persistence, or evidence.
+- Secrets: Adds encrypted provider credentials and ephemeral OAuth flow state. The disposable live token remains memory-only, is erased by local generation revoke, and is excluded from logs and evidence. No raw credential is permitted in logs, reprs, response schemas, browser persistence, or evidence.
 
 ## Review Limits
 
-- The disposable live Bitbucket read-only smoke is deliberately not part of this closed automated review. It remains a blocking-human Task 3 checkpoint requiring the exact callback and least-privilege scope confirmation.
+- The disposable live Bitbucket smoke ran only after the user confirmed the client-credentials grant and exact `repository` authority. Its evidence is limited to digests, counts, duration, and the zero-write/local-revoke assertions; provider-side revocation is still not claimed.
 - The final differential coverage gate is scoped to Plan 02-20 against `50664a2`; prior Phase 2 plan summaries retain their own 100% changed-production-line and branch proofs. The final full randomized suites still execute the complete accumulated source and test set.
-- The complete candidate gauntlet passed before evidence assembly. The final exact entry point rechecks this closed review, the unchanged source digest, and the signed evidence report.
+- The complete candidate gauntlet is pending after this source-bound review update. The final exact entry point must recheck the closed review, unchanged source digest, and signed evidence report before closure.
