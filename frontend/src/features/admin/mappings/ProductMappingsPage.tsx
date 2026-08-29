@@ -276,9 +276,7 @@ function useExactConfiguredBranches({
     });
 
     return () => {
-      if (generationRef.current === generation) {
-        generationRef.current += 1;
-      }
+      generationRef.current += 1;
       controller.abort();
     };
   }, [accessToken, namesKey, productId, repositoryId, side]);

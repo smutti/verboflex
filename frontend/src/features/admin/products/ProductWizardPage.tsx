@@ -496,10 +496,8 @@ export function ProductWizardPage({
   }
 
   function goBack() {
-    if (currentStep > 1) {
-      setStepError(null);
-      setCurrentStep((step) => step - 1);
-    }
+    setStepError(null);
+    setCurrentStep((step) => step - 1);
   }
 
   function goForward() {
@@ -512,9 +510,7 @@ export function ProductWizardPage({
       setStepError("Select or register a repository before continuing.");
       return;
     }
-    if (currentStep < PRODUCT_STEPS.length) {
-      setCurrentStep((step) => step + 1);
-    }
+    setCurrentStep((step) => step + 1);
   }
 
   if (routeLoadState === "loading") {
