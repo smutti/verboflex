@@ -232,6 +232,33 @@ def _response_schema(operation: dict[str, Any], status_code: str) -> str | None:
     return reference if isinstance(reference, str) else None
 
 
+def _parameters_by_name(operation: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {parameter["name"]: parameter for parameter in operation["parameters"]}
+
+
+def _schema_references(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        references = {
+            reference.rsplit("/", maxsplit=1)[-1]
+            for key, reference in value.items()
+            if key == "$ref" and isinstance(reference, str)
+        }
+        return references.union(*(_schema_references(nested) for nested in value.values()))
+    if isinstance(value, list):
+        return set().union(*(_schema_references(nested) for nested in value))
+    return set()
+
+
+def _schema_property_names(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        properties = value.get("properties")
+        names = set(properties) if isinstance(properties, dict) else set()
+        return names.union(*(_schema_property_names(nested) for nested in value.values()))
+    if isinstance(value, list):
+        return set().union(*(_schema_property_names(nested) for nested in value))
+    return set()
+
+
 def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
     """Freeze every approved method, operation id, response, and bearer boundary."""
     schema = app.openapi()
@@ -507,6 +534,119 @@ def test_admin_discovery_openapi_is_commit_bound_bounded_and_body_free() -> None
         "pullrequest",
     ):
         assert forbidden not in discovery_contract
+
+
+def test_revision_mapping_and_exact_branch_openapi_contract_is_structurally_frozen() -> None:
+    """Freeze owned revision IDs, opaque branch queries, cursors, and closed schemas."""
+    schema = app.openapi()
+    schemas = schema["components"]["schemas"]
+    revision_path = "/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings"
+    branch_path = "/api/v1/admin/repositories/{repository_id}/branch"
+    revision_operation = schema["paths"][revision_path]["get"]
+    branch_operation = schema["paths"][branch_path]["get"]
+
+    assert revision_operation["operationId"] == "list_admin_revision_mappings"
+    revision_parameters = _parameters_by_name(revision_operation)
+    assert set(revision_parameters) == {"product_id", "revision_id", "limit", "cursor"}
+    assert {
+        name: (parameter["in"], parameter["required"])
+        for name, parameter in revision_parameters.items()
+    } == {
+        "product_id": ("path", True),
+        "revision_id": ("path", True),
+        "limit": ("query", False),
+        "cursor": ("query", False),
+    }
+    for name in ("product_id", "revision_id"):
+        assert revision_parameters[name]["schema"] == {
+            "type": "string",
+            "format": "uuid",
+            "title": " ".join(part.title() for part in name.split("_")),
+        }
+    assert revision_parameters["limit"]["schema"] == {
+        "type": "integer",
+        "maximum": 100,
+        "minimum": 1,
+        "default": 50,
+        "title": "Limit",
+    }
+    assert revision_parameters["cursor"]["schema"]["anyOf"] == [
+        {"type": "string"},
+        {"type": "null"},
+    ]
+    assert _response_schema(revision_operation, "200") == (
+        "#/components/schemas/AdminMappingListResponse"
+    )
+
+    assert branch_operation["operationId"] == "get_admin_repository_branch"
+    branch_parameters = _parameters_by_name(branch_operation)
+    assert set(branch_parameters) == {"repository_id", "branch_name"}
+    assert branch_parameters["repository_id"]["in"] == "path"
+    assert branch_parameters["repository_id"]["required"] is True
+    assert branch_parameters["branch_name"]["in"] == "query"
+    assert branch_parameters["branch_name"]["required"] is True
+    assert branch_parameters["branch_name"]["schema"] == {
+        "type": "string",
+        "maxLength": 255,
+        "minLength": 1,
+        "title": "Branch Name",
+    }
+    assert _response_schema(branch_operation, "200") == ("#/components/schemas/AdminBranchResponse")
+    assert not any("{branch" in path for path in schema["paths"])
+
+    for list_schema_name, item_schema_name in (
+        ("AdminRepositoryListResponse", "AdminRepositoryResponse"),
+        ("AdminBranchListResponse", "AdminBranchResponse"),
+        ("AdminMappingListResponse", "AdminMappingResponse"),
+    ):
+        list_schema = schemas[list_schema_name]
+        assert list_schema["additionalProperties"] is False
+        assert set(list_schema["properties"]) == {"items", "next_cursor"}
+        assert set(list_schema["required"]) == {"items", "next_cursor"}
+        assert list_schema["properties"]["items"]["items"]["$ref"] == (
+            f"#/components/schemas/{item_schema_name}"
+        )
+        assert list_schema["properties"]["next_cursor"]["anyOf"] == [
+            {"type": "string"},
+            {"type": "null"},
+        ]
+
+    public_operation_schemas = {
+        name
+        for operation in (revision_operation, branch_operation)
+        for name in _schema_references(operation["responses"])
+    }
+    assert public_operation_schemas == {
+        "AdminBranchResponse",
+        "AdminDiscoveryErrorResponse",
+        "AdminMappingListResponse",
+        "ErrorResponse",
+    }
+    for schema_name in public_operation_schemas:
+        assert schemas[schema_name]["additionalProperties"] is False
+
+    public_contract_schemas = {
+        name: value
+        for name, value in schemas.items()
+        if name.startswith(("AdminBranch", "AdminDiscovery", "AdminMapping"))
+        or name in {"AdminRepositoryListResponse", "AdminBitbucketStatusResponse"}
+    }
+    assert _schema_property_names(public_contract_schemas).isdisjoint(
+        {
+            "access_token",
+            "authorization_url",
+            "ciphertext",
+            "client_secret",
+            "credentials",
+            "next",
+            "next_url",
+            "provider_next",
+            "provider_next_url",
+            "provider_url",
+            "refresh_token",
+        }
+    )
+    assert "workspace" not in schemas["AdminBitbucketStatusResponse"]["properties"]
 
 
 def test_admin_preview_openapi_is_closed_current_and_source_free() -> None:
