@@ -3,10 +3,10 @@
 ## Outcome
 
 - Gauntlet-status: PASS
-- Source-digest: `63711d77bb0ea42f7ca6a15fc3f52b72b46d99dc21b488a4294c9a8e1d5aed55`
+- Source-digest: `ef16933ac828d1448a9b5633343e0c92a51e5297ace503f62e836e451a1c6740`
 - Review-status: CLOSED
 - Open-critical-high: 0
-- Live-provider-smoke: NOT RUN — BLOCKING HUMAN CHECKPOINT
+- Live-provider-smoke: PASS — EXACT REPOSITORY SCOPE, 5 GET, ZERO WRITES, LOCAL REVOKE PASS
 
 Phase 2 delivers the approved administration slice: internal user administration,
 versioned product configuration, repository registration, encrypted Bitbucket OAuth,
@@ -27,11 +27,11 @@ is source-bound and closed with no Critical or High blocker.
 - Complete Phase 2 review base: `ce9fbeef86b00f594d1d06e15d3083d623c54095`
 - Canonical source manifest: `tools/phase2_source_manifest.txt`
 - Review artifact: `docs/reviews/phase-02-code-security.md`
-- Review-mode digest: `eefa340a56806506dbc9024a380d6a59e24f109fe9daecd4d216184cd6ef9130`
+- Review-mode digest: `9e63e9bcf79d17a990c6b99ae81488177a48f55f5784fa45360646967ebaac7f`
 - Candidate canonical digest before the review PASS annotation:
-  `bdb1de56fdfab55cbd81c72f5b96ece3480bcfff12a4d66bca7e9f19f3628452`
+  `69dcd6bad76cf269981c13068b3ecffc80cf7d08b5a415f1b17e2cd53fc7ca65`
 - Final canonical digest after the source-bound review was closed:
-  `63711d77bb0ea42f7ca6a15fc3f52b72b46d99dc21b488a4294c9a8e1d5aed55`
+  `ef16933ac828d1448a9b5633343e0c92a51e5297ace503f62e836e451a1c6740`
 
 The manifest includes implementation, tests, migrations, deployment contracts,
 lockfiles, verifier scripts, and the closed review. It excludes this evidence report
@@ -59,7 +59,7 @@ exact final command) evidence verification.
 
 | Surface | Result |
 | --- | --- |
-| Backend randomized regression | 703 passed, 0 failures/errors/skips; 57.980 s |
+| Backend randomized regression | 706 passed, 0 failures/errors/skips; 49.34 s in the source-identical candidate run |
 | Frontend unit/component | 16 files, 183 passed, shuffled seed 220 |
 | Backend type/static | mypy clean across 81 source files; Ruff and Ruff format clean |
 | Frontend type/static/build | TypeScript, ESLint with zero warnings, Prettier, and Vite production build passed |
@@ -70,7 +70,7 @@ exact final command) evidence verification.
 | Frontend polling mutation | 30/30 Stryker mutants killed in the critical delay and stale-authority ranges |
 | Migration and schema | 3 migration tests passed; disposable PostgreSQL upgrade -> downgrade to base -> re-upgrade passed |
 | OpenAPI/generated client | Canonical regeneration/drift check passed |
-| Architecture/provider boundary | 28 architecture, provider-adapter, and OpenAPI tests passed |
+| Architecture/provider boundary | 31 architecture, provider-adapter, and OpenAPI tests passed |
 | Mock provider deployment | 3 repositories, 2 mappings, all 4 formats; 48 GET reads and zero writes |
 | Browser deployment journey | Playwright 4/4 at the 320, 768, 1024, and 1440 width contracts |
 
@@ -88,7 +88,7 @@ change is the bounded provider lease error mapping proven above.
 - `npm audit --omit=dev --audit-level=moderate` passed with no production advisory.
 - The complete npm dependency tree and direct-package provenance/license inventory
   were generated from the lockfile-resolved installation.
-- The Phase 2 secret scan found exactly five reviewed test/code false positives and
+- The Phase 2 secret scan found exactly six reviewed test/code false positives and
   zero unreviewed finding. Browser storage guards passed, and Compose logs contained
   no disposable password, OAuth credential, bearer, refresh token, or secret value.
 - The TLS mock provider audit observed 48 bounded GET reads and zero POST, PUT, PATCH,
@@ -122,25 +122,28 @@ mapping. A regression test was added and the acquisition now remains inside the
 reviewed exception boundary. The final mock smoke receives the approved bounded
 response and still observes zero provider writes.
 
-## Deliberate live-provider checkpoint
+## Disposable live-provider result
 
-No live Bitbucket OAuth navigation, metadata read, file read, provider mutation, or
-provider credential use was performed while producing this evidence. Task 3 remains a
-blocking-human gate. Before it can run, the user must personally verify all of the
-following:
+After the user personally enabled the client-credentials grant and confirmed that the
+issued authority was exactly `repository`, the disposable live smoke completed against
+one representative repository. The run used the unchanged A-03 ceilings and recorded
+only the approved aggregates and digests:
 
-1. The organizational test consumer callback exactly matches `BITBUCKET_CALLBACK_URL`.
-2. Permission is exactly `repository`; no write or admin scope is enabled.
-3. Consumer credentials are disposable.
-4. One representative disposable test repository is authorized for bounded read-only
-   metadata, branch pagination, commit resolution, tree pagination, and raw reads.
-5. File contents and token values will not be captured, and no fixed A-03 limit will be
-   changed without a separately reviewed contract.
+| Measurement | Result |
+| --- | --- |
+| OAuth authority | exact `repository`; any additional scope rejected before repository reads |
+| Repository REST audit | 5 GET requests, 0 POST/PUT/PATCH/DELETE repository requests |
+| Branch pagination | 37 branches within the fixed entry/page bounds |
+| Commit binding | immutable commit identity digest `f8c3268ef0ed3fd146ea06efdc3c9f9bc36c7a721fef05dc0991e240aab67d3f` |
+| Tree pagination | 1 page, 12 entries, fixed depth/entry limits unchanged |
+| Raw read | 106 bytes; content digest `dcffcf92cc31594102467afa5acd82f21215b85219e1d791bf1da69d0f280745` |
+| Repository identity | digest `218bd42aa6d34e001da2f787dfcd4f8a68d1bef771fc4261c8c057074a1594c8` |
+| Duration | 4355 ms |
+| Credential lifecycle | one token exchange; memory-only token erased; generation advanced; prior lease rejected |
 
-Only after that personal verification and authorization may the agent run
-`bash tools/phase2_smoke.sh --live-provider-read-only`. Local generation revoke is the
-guarantee; no provider-side revoke is claimed. The exact resume signal is
-`consumer verified`.
+No credential, token, repository path, branch name, or raw file content was persisted or
+printed. Local generation invalidation is the guarantee; no provider-side revoke is
+claimed. The ignored owner-only credentials file remains outside Git and all evidence.
 
 ## Known limit
 
