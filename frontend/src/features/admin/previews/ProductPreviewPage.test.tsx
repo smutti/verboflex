@@ -198,15 +198,26 @@ function failure<T>(error: T, status = 503) {
   };
 }
 
-function renderPage() {
+function renderPage(productId = product.id) {
   return render(
     <MemoryRouter>
       <ProductPreviewPage
         accessToken="memory-only-admin-bearer"
-        productId={product.id}
+        productId={productId}
       />
     </MemoryRouter>,
   );
+}
+
+function mappingAt(
+  index: number,
+  overrides: Partial<AdminMappingResponse> = {},
+): AdminMappingResponse {
+  return {
+    ...mapping,
+    id: `00000000-0000-4000-8000-${index.toString().padStart(12, "0")}`,
+    ...overrides,
+  };
 }
 
 async function runValidation() {
@@ -273,6 +284,211 @@ describe("administrator product preview and publication page", () => {
     renderPage();
     expect(await screen.findByText("Validation has not run")).toBeVisible();
     expect(screen.getByText(/Run validation to detect files/)).toBeVisible();
+  });
+
+  it.each([0, 1, 50, 51])(
+    "consumes the terminal cursor before rendering %i mappings as complete",
+    async (mappingCount) => {
+      const mappings = Array.from({ length: mappingCount }, (_, index) =>
+        mappingAt(index + 1),
+      );
+      listRevisionMappingsMock.mockImplementation(async (options) => {
+        const cursor = options.query?.cursor ?? null;
+        if (mappingCount === 51 && cursor === null) {
+          return ok({ items: mappings.slice(0, 50), next_cursor: "page-2" });
+        }
+        if (mappingCount === 51 && cursor === "page-2") {
+          return ok({ items: mappings.slice(50), next_cursor: null });
+        }
+        return ok({ items: mappings, next_cursor: null });
+      });
+
+      renderPage();
+
+      if (mappingCount === 0) {
+        expect(await screen.findByText("No mappings configured")).toBeVisible();
+      } else {
+        expect(
+          await screen.findByRole("heading", {
+            name: `Mapping ${mappingCount}`,
+          }),
+        ).toBeVisible();
+      }
+      await waitFor(() =>
+        expect(listRevisionMappingsMock).toHaveBeenCalledTimes(
+          mappingCount === 51 ? 2 : 1,
+        ),
+      );
+      expect(
+        listRevisionMappingsMock.mock.calls.map(
+          ([options]) => options.query?.cursor ?? null,
+        ),
+      ).toEqual(mappingCount === 51 ? [null, "page-2"] : [null]);
+    },
+  );
+
+  it("keeps page-1 preview and lifecycle authority disabled after page-2 failure, then retries without duplicates", async () => {
+    const firstPage = Array.from({ length: 50 }, (_, index) =>
+      mappingAt(index + 1),
+    );
+    const boundaryMapping = mappingAt(51);
+    listRevisionMappingsMock
+      .mockResolvedValueOnce(ok({ items: firstPage, next_cursor: "page-2" }))
+      .mockResolvedValueOnce(
+        failure({ detail: "provider diagnostic must stay bounded" }),
+      )
+      .mockResolvedValueOnce(
+        ok({
+          items: [firstPage[0], boundaryMapping],
+          next_cursor: null,
+        }),
+      );
+
+    renderPage();
+
+    const incomplete = await screen.findByRole("alert", {
+      name: "Mapping collection incomplete",
+    });
+    expect(incomplete).toHaveTextContent("50 mappings loaded");
+    expect(incomplete).not.toHaveTextContent("provider diagnostic");
+    const runValidationButtons = screen.getAllByRole("button", {
+      name: "Run validation",
+    });
+    expect(runValidationButtons).toHaveLength(50);
+    expect(
+      runValidationButtons.every((button) => button.hasAttribute("disabled")),
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Publish product" }),
+    ).toBeDisabled();
+    expect(createJobMock).not.toHaveBeenCalled();
+    expect(publishMock).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      within(incomplete).getByRole("button", {
+        name: "Retry loading mappings",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Mapping 51" }),
+    ).toBeVisible();
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("button", { name: "Run validation" }),
+      ).toHaveLength(51),
+    );
+    expect(listRevisionMappingsMock).toHaveBeenCalledTimes(3);
+    expect(
+      listRevisionMappingsMock.mock.calls.map(
+        ([options]) => options.query?.cursor ?? null,
+      ),
+    ).toEqual([null, "page-2", "page-2"]);
+    expect(createJobMock).not.toHaveBeenCalled();
+    expect(publishMock).not.toHaveBeenCalled();
+  });
+
+  it("waits for mapping 51 and lets its missing active confirmation block reactivation", async () => {
+    let releaseBoundaryPage!: () => void;
+    const boundaryGate = new Promise<void>((resolve) => {
+      releaseBoundaryPage = resolve;
+    });
+    const firstPage = Array.from({ length: 50 }, (_, index) =>
+      mappingAt(index + 1, {
+        candidate_version: inactiveActiveOnlyProduct.active_revision!.version,
+        selected_layout_candidate_id:
+          confirmedActiveMapping.selected_layout_candidate_id,
+        selected_layout_version: 1,
+      }),
+    );
+    const boundaryMapping = mappingAt(51, {
+      candidate_version: inactiveActiveOnlyProduct.active_revision!.version,
+      selected_layout_candidate_id: null,
+      selected_layout_version: null,
+    });
+    getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock
+      .mockResolvedValueOnce(ok({ items: firstPage, next_cursor: "page-2" }))
+      .mockImplementationOnce(async () => {
+        await boundaryGate;
+        return ok({ items: [boundaryMapping], next_cursor: null });
+      });
+
+    renderPage();
+
+    expect(
+      await screen.findByText(
+        "Loading complete mapping set: 50 mappings loaded.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Reactivate product" }),
+    ).toBeDisabled();
+    expect(reactivateMock).not.toHaveBeenCalled();
+
+    releaseBoundaryPage();
+
+    expect(
+      await screen.findByText("Mapping 51: Preview confirmation required"),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Reactivate product" }),
+    ).toBeDisabled();
+    expect(reactivateMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores a late mapping page from a superseded product generation", async () => {
+    const nextProduct: AdminProductResponse = {
+      ...product,
+      candidate_revision: {
+        ...product.candidate_revision!,
+        id: "00000000-0000-4000-8000-000000000299",
+      },
+      id: "00000000-0000-4000-8000-000000000199",
+      name: "Next Product",
+    };
+    let releaseStalePage!: () => void;
+    const staleGate = new Promise<void>((resolve) => {
+      releaseStalePage = resolve;
+    });
+    const staleBoundary = mappingAt(51);
+    getProductMock
+      .mockResolvedValueOnce(ok(product))
+      .mockResolvedValueOnce(ok(nextProduct));
+    listRevisionMappingsMock
+      .mockResolvedValueOnce(
+        ok({ items: [mappingAt(1)], next_cursor: "page-2" }),
+      )
+      .mockImplementationOnce(async () => {
+        await staleGate;
+        return ok({ items: [staleBoundary], next_cursor: null });
+      })
+      .mockResolvedValueOnce(ok({ items: [mappingAt(2)], next_cursor: null }));
+
+    const view = renderPage(product.id);
+    expect(
+      await screen.findByText(
+        "Loading complete mapping set: 1 mapping loaded.",
+      ),
+    ).toBeVisible();
+    view.rerender(
+      <MemoryRouter>
+        <ProductPreviewPage
+          accessToken="memory-only-admin-bearer"
+          productId={nextProduct.id}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/Next Product/)).toBeVisible();
+    releaseStalePage();
+    await waitFor(() =>
+      expect(listRevisionMappingsMock).toHaveBeenCalledTimes(3),
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Mapping 51" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Mapping 1" })).toBeVisible();
   });
 
   it("resolves exact commits and renders every four-format layout as a separate radio", async () => {
