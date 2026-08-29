@@ -56,9 +56,7 @@ describe("authenticated application entry", () => {
 
     render(<App />);
 
-    expect(
-      screen.getByRole("heading", { name: "Workspace overview" }),
-    ).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Workspace" })).toBeVisible();
     expect(screen.getByText("Person Example")).toBeVisible();
     expect(readSystemStatusMock).toHaveBeenCalledWith({
       auth: "ordinary-memory-token",
