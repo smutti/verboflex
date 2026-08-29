@@ -34,6 +34,58 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        "candidate-product-lock-bypassed",
+        "src/verboflex/services/products.py",
+        "        select(Product).where(Product.id == product_id).with_for_update()",
+        "        select(Product).where(Product.id == product_id)",
+    ),
+    Mutation(
+        "candidate-clones-only-first-mapping",
+        "src/verboflex/services/products.py",
+        "    for active_mapping in active_mappings:",
+        "    for active_mapping in active_mappings[:1]:",
+    ),
+    Mutation(
+        "candidate-clones-only-first-side",
+        "src/verboflex/services/products.py",
+        "                    for side in active_mapping.sides",
+        "                    for side in active_mapping.sides[:1]",
+    ),
+    Mutation(
+        "candidate-clones-only-first-target",
+        "src/verboflex/services/products.py",
+        "                    for target in active_mapping.allowed_targets",
+        "                    for target in active_mapping.allowed_targets[:1]",
+    ),
+    Mutation(
+        "candidate-reuses-active-mapping-id",
+        "src/verboflex/services/products.py",
+        "    mapping_id_map = {mapping.id: uuid4() for mapping in active_mappings}",
+        "    mapping_id_map = {mapping.id: mapping.id for mapping in active_mappings}",
+    ),
+    Mutation(
+        "candidate-layout-selection-cleared",
+        "src/verboflex/services/products.py",
+        "                selected_layout_version=active_mapping.selected_layout_version,",
+        "                selected_layout_version=None,",
+    ),
+    Mutation(
+        "candidate-confirmation-digest-retained",
+        "src/verboflex/services/products.py",
+        "                confirmed_preview_digest=None,",
+        "                confirmed_preview_digest=active_mapping.confirmed_preview_digest,",
+    ),
+    Mutation(
+        "candidate-edit-identity-not-isolated",
+        "src/verboflex/services/products.py",
+        "        display_name=display_name,\n"
+        "        name_key=name_key,\n"
+        "        description=description,\n"
+        "        version=active.version + 1,",
+        "        display_name=active.display_name,\n        name_key=active.name_key,\n"
+        "        description=description,\n        version=active.version + 1,",
+    ),
+    Mutation(
         "candidate-version-or-to-and",
         "src/verboflex/services/products.py",
         "if candidate.is_published or candidate.version != expected_version:",

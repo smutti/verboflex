@@ -73,18 +73,78 @@ MUTATIONS = (
     Mutation(
         "candidate-identity-check-inverted",
         "src/verboflex/services/publication.py",
-        "        if product.candidate_revision_id != candidate_revision_id:\n"
-        '            raise PublicationConflict("revision conflict")',
-        "        if product.candidate_revision_id == candidate_revision_id:\n"
-        '            raise PublicationConflict("revision conflict")',
+        "            if product.candidate_revision_id != candidate_revision_id:\n"
+        '                raise PublicationConflict("revision conflict")',
+        "            if product.candidate_revision_id == candidate_revision_id:\n"
+        '                raise PublicationConflict("revision conflict")',
     ),
     Mutation(
         "candidate-version-check-inverted",
         "src/verboflex/services/publication.py",
-        "        if candidate.is_published or candidate.version != expected_candidate_version:\n"
-        '            raise PublicationConflict("revision conflict")',
-        "        if candidate.is_published or candidate.version == expected_candidate_version:\n"
-        '            raise PublicationConflict("revision conflict")',
+        "                or candidate.version != expected_candidate_version",
+        "                or candidate.version == expected_candidate_version",
+    ),
+    Mutation(
+        "publication-product-lock-bypassed",
+        "src/verboflex/services/publication.py",
+        "        select(Product).where(Product.id == product_id).with_for_update()",
+        "        select(Product).where(Product.id == product_id)",
+    ),
+    Mutation(
+        "candidate-ownership-check-inverted",
+        "src/verboflex/services/publication.py",
+        "                candidate.product_id != product.id",
+        "                candidate.product_id == product.id",
+    ),
+    Mutation(
+        "canonical-candidate-identity-bypassed",
+        "src/verboflex/services/publication.py",
+        "    if canonical_identity != (candidate.display_name, candidate.name_key):",
+        "    if False and canonical_identity != (candidate.display_name, candidate.name_key):",
+    ),
+    Mutation(
+        "publish-name-conflict-misclassified",
+        "src/verboflex/services/publication.py",
+        "    if conflicting_product_id is not None:\n"
+        '        raise PublicationConflict("identity conflict")',
+        "    if conflicting_product_id is not None:\n"
+        '        raise PublicationConflict("revision conflict")',
+    ),
+    Mutation(
+        "candidate-publication-metadata-skipped",
+        "src/verboflex/services/publication.py",
+        "            candidate.is_published = True",
+        "            candidate.is_published = candidate.is_published",
+    ),
+    Mutation(
+        "candidate-display-name-promotion-skipped",
+        "src/verboflex/services/publication.py",
+        "    product.display_name = candidate.display_name",
+        "    product.display_name = product.display_name",
+    ),
+    Mutation(
+        "candidate-name-key-promotion-skipped",
+        "src/verboflex/services/publication.py",
+        "    product.name_key = candidate.name_key",
+        "    product.name_key = product.name_key",
+    ),
+    Mutation(
+        "publication-active-pointer-promotion-skipped",
+        "src/verboflex/services/publication.py",
+        "            product.active_revision_id = candidate.id",
+        "            product.active_revision_id = product.active_revision_id",
+    ),
+    Mutation(
+        "publication-candidate-clear-skipped",
+        "src/verboflex/services/publication.py",
+        "            product.candidate_revision_id = None",
+        "            product.candidate_revision_id = candidate.id",
+    ),
+    Mutation(
+        "publication-activation-skipped",
+        "src/verboflex/services/publication.py",
+        "            product.is_active = True\n            session.flush()",
+        "            product.is_active = product.is_active\n            session.flush()",
     ),
     Mutation(
         "eligibility-blockers-bypassed",

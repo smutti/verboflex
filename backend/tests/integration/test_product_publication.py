@@ -397,7 +397,8 @@ def test_product_lock_linearizes_publish_equal_retry_and_stale_writer(
     """Two sessions produce one pointer swap and one idempotent equal retry."""
     publication = _publication_module()
     product_id, old_active_id, candidate_id, _repository_id = _seed_product_graph(
-        publication_session_factory
+        publication_session_factory,
+        is_active=False,
     )
     assert candidate_id is not None
     barrier = Barrier(2)
@@ -486,6 +487,35 @@ def test_normalized_name_conflict_rolls_back_identity_metadata_and_pointers(
                 is_active=False,
             )
         )
+    before = _graph_snapshot(publication_session_factory, product_id=product_id)
+
+    with (
+        publication_session_factory() as session,
+        pytest.raises(publication.PublicationConflict, match="identity conflict"),
+    ):
+        publication.publish_product_candidate(
+            session,
+            product_id=product_id,
+            candidate_revision_id=candidate_id,
+            expected_candidate_version=7,
+            confirmation_predicate=_always_confirmed,
+        )
+
+    assert _graph_snapshot(publication_session_factory, product_id=product_id) == before
+
+
+def test_noncanonical_candidate_identity_rolls_back_metadata_and_pointers(
+    publication_session_factory: sessionmaker[Session],
+) -> None:
+    """Publication rejects a durable candidate whose display/key pair is not canonical."""
+    publication = _publication_module()
+    product_id, _active_id, candidate_id, _repository_id = _seed_product_graph(
+        publication_session_factory
+    )
+    assert candidate_id is not None
+    with publication_session_factory.begin() as session:
+        candidate = session.get_one(ProductRevision, candidate_id)
+        candidate.display_name = f"  Candidate {product_id}  "
     before = _graph_snapshot(publication_session_factory, product_id=product_id)
 
     with (
