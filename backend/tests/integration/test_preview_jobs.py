@@ -7,10 +7,12 @@ import importlib
 import os
 import time
 from collections.abc import Generator, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from dataclasses import replace as dataclass_replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from threading import Barrier
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
@@ -20,7 +22,7 @@ from alembic.config import Config
 from celery import Celery
 from psycopg import connect, sql
 from pydantic import SecretStr
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
@@ -49,7 +51,9 @@ from verboflex.models.role import Role
 from verboflex.models.user import User
 from verboflex.services.preview_jobs import (
     PreviewJobConflict,
+    PreviewJobIdentity,
     PreviewJobNotFound,
+    PreviewJobRecord,
     _closed_result,
     _complete_sides,
     _current_failure_code,
@@ -612,7 +616,6 @@ def test_production_preview_processor_closes_its_registry_adapter(
         return {"layout_candidates": []}
 
     monkeypatch.setattr(preview_tasks, "get_settings", lambda: object())
-    monkeypatch.setattr(preview_tasks, "get_redis_client", lambda _settings: object())
     monkeypatch.setattr(preview_tasks, "BitbucketOAuthTokenExchange", lambda: object())
     monkeypatch.setattr(
         preview_tasks,
@@ -1213,6 +1216,304 @@ def test_worker_closes_attempt_when_candidate_changes_before_start(
         assert row.error_code == "stale_candidate"
         assert row.finished_at is not None
         assert row.updated_at == row.finished_at
+
+
+def _create_running_attempt(
+    factory: sessionmaker[Session],
+    *,
+    product_id: UUID,
+    mapping_id: UUID,
+    commit_hash: str,
+    started_at: datetime,
+) -> tuple[PreviewJobRecord, PreviewJobIdentity]:
+    """Commit one durable running attempt at an exact watchdog age."""
+    with factory() as session:
+        created = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": commit_hash},
+            enqueuer=lambda _job_id: None,
+        )
+    identity = _start_preview_job(factory, job_id=created.id)
+    assert identity is not None
+    with factory.begin() as session:
+        row = session.get_one(PreviewJob, created.id)
+        row.started_at = started_at
+    return created, identity
+
+
+def test_watchdog_terminalizes_at_exact_hard_limit_plus_grace_threshold(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Threshold-minus-one remains running while the exact threshold times out."""
+    service = importlib.import_module("verboflex.services.preview_jobs")
+    now = datetime(2030, 1, 2, 3, 4, 5, tzinfo=UTC)
+    hard_limit_seconds = 75
+    grace_seconds = 15
+    cutoff = now - timedelta(seconds=hard_limit_seconds + grace_seconds)
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    created, _identity_record = _create_running_attempt(
+        preview_session_factory,
+        product_id=product_id,
+        mapping_id=mapping_id,
+        commit_hash="1" * 40,
+        started_at=cutoff + timedelta(seconds=1),
+    )
+
+    early_count = service.reconcile_stale_preview_jobs(
+        preview_session_factory,
+        hard_time_limit_seconds=hard_limit_seconds,
+        watchdog_grace_seconds=grace_seconds,
+        clock=lambda: now,
+    )
+    with preview_session_factory() as session:
+        early = session.get_one(PreviewJob, created.id)
+        assert early.state == "running"
+        assert early.finished_at is None
+    assert early_count == 0
+
+    with preview_session_factory.begin() as session:
+        row = session.get_one(PreviewJob, created.id)
+        row.started_at = cutoff
+    threshold_count = service.reconcile_stale_preview_jobs(
+        preview_session_factory,
+        hard_time_limit_seconds=hard_limit_seconds,
+        watchdog_grace_seconds=grace_seconds,
+        clock=lambda: now,
+    )
+
+    assert threshold_count == 1
+    with preview_session_factory() as session:
+        terminal = session.get_one(PreviewJob, created.id)
+        assert terminal.state == "timed_out"
+        assert terminal.error_code == "time_limit_exceeded"
+        assert terminal.finished_at == now
+        assert terminal.updated_at == now
+        assert terminal.result is None
+
+
+def test_watchdog_claims_exactly_one_hundred_stale_rows_and_uses_partial_index(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """The Plan 36 access path feeds deterministic 100-row recovery batches."""
+    service = importlib.import_module("verboflex.services.preview_jobs")
+    now = datetime(2030, 2, 3, 4, 5, 6, tzinfo=UTC)
+    cutoff = now - timedelta(seconds=90)
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    for ordinal in range(101):
+        _create_running_attempt(
+            preview_session_factory,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            commit_hash=f"{ordinal + 1:040x}",
+            started_at=cutoff - timedelta(seconds=ordinal),
+        )
+
+    with preview_session_factory.begin() as session:
+        session.execute(text("SET LOCAL enable_seqscan = off"))
+        plan = session.scalar(
+            text(
+                "EXPLAIN (FORMAT JSON) "
+                "SELECT id, state, started_at FROM preview_jobs "
+                "WHERE state = 'running' AND started_at <= :cutoff "
+                "ORDER BY started_at, id LIMIT 100 FOR UPDATE SKIP LOCKED"
+            ),
+            {"cutoff": cutoff},
+        )
+    assert "ix_preview_jobs_watchdog_state_started_at" in str(plan)
+
+    first = service.reconcile_stale_preview_jobs(
+        preview_session_factory,
+        hard_time_limit_seconds=75,
+        watchdog_grace_seconds=15,
+        clock=lambda: now,
+    )
+    with preview_session_factory() as session:
+        assert (
+            session.scalar(
+                select(func.count()).select_from(PreviewJob).where(PreviewJob.state == "timed_out")
+            )
+            == 100
+        )
+        assert (
+            session.scalar(
+                select(func.count()).select_from(PreviewJob).where(PreviewJob.state == "running")
+            )
+            == 1
+        )
+
+    second = service.reconcile_stale_preview_jobs(
+        preview_session_factory,
+        hard_time_limit_seconds=75,
+        watchdog_grace_seconds=15,
+        clock=lambda: now,
+    )
+    assert (first, second) == (100, 1)
+
+
+def test_watchdog_watchdog_and_late_success_race_has_one_legal_terminal_winner(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Duplicate watchdog delivery and a late worker cannot overwrite each other."""
+    service = importlib.import_module("verboflex.services.preview_jobs")
+    now = datetime(2030, 3, 4, 5, 6, 7, tzinfo=UTC)
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    created, identity = _create_running_attempt(
+        preview_session_factory,
+        product_id=product_id,
+        mapping_id=mapping_id,
+        commit_hash="2" * 40,
+        started_at=now - timedelta(seconds=90),
+    )
+    barrier = Barrier(3)
+
+    def reconcile() -> int:
+        barrier.wait()
+        return service.reconcile_stale_preview_jobs(
+            preview_session_factory,
+            hard_time_limit_seconds=75,
+            watchdog_grace_seconds=15,
+            clock=lambda: now,
+        )
+
+    def finish() -> None:
+        barrier.wait()
+        _finish_preview_job(
+            preview_session_factory,
+            identity=identity,
+            state="succeeded",
+            result=_confirmable_processor(identity),
+        )
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = [executor.submit(reconcile), executor.submit(reconcile), executor.submit(finish)]
+        counts = [futures[0].result(), futures[1].result()]
+        futures[2].result()
+
+    assert sum(counts) in {0, 1}
+    with preview_session_factory() as session:
+        terminal = session.get_one(PreviewJob, created.id)
+        assert terminal.state in {"succeeded", "timed_out"}
+        assert terminal.finished_at is not None
+        if terminal.state == "timed_out":
+            assert terminal.error_code == "time_limit_exceeded"
+            assert terminal.result is None
+        else:
+            assert terminal.error_code is None
+            assert terminal.result is not None
+
+
+def test_hard_timeout_and_watchdog_race_share_one_idempotent_terminal_outcome(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Callback timeout and watchdog recovery converge on one closed response."""
+    service = importlib.import_module("verboflex.services.preview_jobs")
+    now = datetime(2030, 4, 5, 6, 7, 8, tzinfo=UTC)
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    created, identity = _create_running_attempt(
+        preview_session_factory,
+        product_id=product_id,
+        mapping_id=mapping_id,
+        commit_hash="3" * 40,
+        started_at=now - timedelta(seconds=90),
+    )
+    barrier = Barrier(2)
+
+    def reconcile() -> int:
+        barrier.wait()
+        return service.reconcile_stale_preview_jobs(
+            preview_session_factory,
+            hard_time_limit_seconds=75,
+            watchdog_grace_seconds=15,
+            clock=lambda: now,
+        )
+
+    def finish_timeout() -> None:
+        barrier.wait()
+        _finish_preview_job(
+            preview_session_factory,
+            identity=identity,
+            state="timed_out",
+            error_code="time_limit_exceeded",
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        watchdog_future = executor.submit(reconcile)
+        timeout_future = executor.submit(finish_timeout)
+        watchdog_count = watchdog_future.result()
+        timeout_future.result()
+
+    assert watchdog_count in {0, 1}
+    with preview_session_factory() as session:
+        terminal = session.get_one(PreviewJob, created.id)
+        assert terminal.state == "timed_out"
+        assert terminal.error_code == "time_limit_exceeded"
+        assert terminal.finished_at is not None
+        assert terminal.result is None
+
+
+def test_retry_after_watchdog_timeout_isolated_from_old_worker_completion(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Retry keeps the timed-out original immutable and succeeds as a new UUID attempt."""
+    service = importlib.import_module("verboflex.services.preview_jobs")
+    now = datetime(2030, 5, 6, 7, 8, 9, tzinfo=UTC)
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    original, original_identity = _create_running_attempt(
+        preview_session_factory,
+        product_id=product_id,
+        mapping_id=mapping_id,
+        commit_hash="4" * 40,
+        started_at=now - timedelta(seconds=90),
+    )
+    assert (
+        service.reconcile_stale_preview_jobs(
+            preview_session_factory,
+            hard_time_limit_seconds=75,
+            watchdog_grace_seconds=15,
+            clock=lambda: now,
+        )
+        == 1
+    )
+
+    with preview_session_factory() as session:
+        retry = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": "4" * 40},
+            enqueuer=lambda _job_id: None,
+        )
+    assert retry.id != original.id
+    assert retry.attempt == original.attempt + 1
+    retry_identity = _start_preview_job(preview_session_factory, job_id=retry.id)
+    assert retry_identity is not None
+
+    _finish_preview_job(
+        preview_session_factory,
+        identity=original_identity,
+        state="succeeded",
+        result=_confirmable_processor(original_identity),
+    )
+    _finish_preview_job(
+        preview_session_factory,
+        identity=retry_identity,
+        state="succeeded",
+        result=_confirmable_processor(retry_identity),
+    )
+
+    with preview_session_factory() as session:
+        original_row = session.get_one(PreviewJob, original.id)
+        retry_row = session.get_one(PreviewJob, retry.id)
+        assert original_row.state == "timed_out"
+        assert original_row.error_code == "time_limit_exceeded"
+        assert original_row.result is None
+        assert retry_row.state == "succeeded"
+        assert retry_row.error_code is None
+        assert retry_row.result is not None
 
 
 def _complete_confirmable_preview(
