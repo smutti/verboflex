@@ -440,6 +440,7 @@ def test_admin_deactivation_revokes_all_authority_on_the_active_transition(
             display_name="Other User",
             hashed_password=target.hashed_password,
             must_change_password=False,
+            roles=list(target.roles),
         )
         session.add(other)
         session.flush()
@@ -571,11 +572,13 @@ def test_cli_deactivation_never_reads_a_password(
     )
 
     output = capsys.readouterr()
-    assert exit_code == 0
-    assert output.out.strip() == "Account deactivated; all sessions revoked."
-    assert output.err == ""
+    assert exit_code == 1
+    assert output.out == ""
+    assert output.err == "user lifecycle conflict\n"
     with auth_session_factory() as session:
-        assert session.get_one(User, user_id).is_active is False
+        user = session.get_one(User, user_id)
+        assert user.is_active is True
+        assert user.token_version == 0
 
 
 def test_cli_bootstrap_reads_secret_outside_argv_and_never_echoes_it(
