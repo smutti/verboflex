@@ -3,16 +3,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict
-
-
-class AdminBitbucketAuthorizationResponse(BaseModel):
-    """One short-lived authorization destination without provider credentials."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    authorization_url: AnyHttpUrl
-    state_expires_in: Literal[600]
+from pydantic import BaseModel, ConfigDict
 
 
 class AdminBitbucketStatusResponse(BaseModel):
@@ -38,4 +29,4 @@ class AdminBitbucketErrorResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    detail: Literal["OAuth callback rejected", "Bitbucket connection unavailable"]
+    detail: Literal["Bitbucket connection unavailable"]

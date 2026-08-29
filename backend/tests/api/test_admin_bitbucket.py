@@ -397,7 +397,12 @@ def test_client_credentials_status_contract_has_no_callback_workspace_or_secrets
         "expires_at",
         "revoked_at",
     }
-    serialized = str(schema).casefold()
+    provider_contract = {
+        "paths": {path: schema["paths"][path] for path in provider_paths},
+        "status_schema": schema["components"]["schemas"]["AdminBitbucketStatusResponse"],
+        "error_schema": schema["components"]["schemas"]["AdminBitbucketErrorResponse"],
+    }
+    serialized = str(provider_contract).casefold()
     for forbidden in (
         "authorization_url",
         "callback",

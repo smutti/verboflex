@@ -1,20 +1,14 @@
 """Administrator lifecycle routes for one organizational Bitbucket connection."""
 
 from typing import Annotated, Any, Literal
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from fastapi.responses import RedirectResponse
-from pydantic import AnyHttpUrl
-from redis import Redis
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from verboflex.auth.principal import Principal, require_roles
-from verboflex.auth.rate_limits import get_redis_client
 from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
 from verboflex.schemas.admin_bitbucket import (
-    AdminBitbucketAuthorizationResponse,
     AdminBitbucketErrorResponse,
     AdminBitbucketStatusResponse,
 )
@@ -24,7 +18,6 @@ from verboflex.services.bitbucket_oauth import (
     BitbucketConnectionPublicStatus,
     BitbucketOAuthService,
     BitbucketOAuthTokenExchange,
-    OAuthCallbackRejected,
     OAuthConnectionUnavailable,
 )
 
@@ -39,10 +32,6 @@ UNAVAILABLE_RESPONSE: dict[int | str, dict[str, Any]] = {
     status.HTTP_503_SERVICE_UNAVAILABLE: {"model": AdminBitbucketErrorResponse},
 }
 PROTECTED_RESPONSES = {**AUTH_RESPONSES, **UNAVAILABLE_RESPONSE}
-CALLBACK_RESPONSES: dict[int | str, dict[str, Any]] = {
-    status.HTTP_400_BAD_REQUEST: {"model": AdminBitbucketErrorResponse},
-    **UNAVAILABLE_RESPONSE,
-}
 PublicConnectionState = Literal[
     "disconnected",
     "connected",
@@ -66,13 +55,11 @@ NO_STORE_HEADERS = {"Cache-Control": "no-store"}
 
 def get_bitbucket_oauth_service(
     settings: Annotated[Settings, Depends(get_settings)],
-    redis_client: Annotated[Redis, Depends(get_redis_client)],
 ) -> BitbucketOAuthService | None:
-    """Build the configured backend-only OAuth authority or report unavailable."""
+    """Build the configured backend-only provider authority or report unavailable."""
     try:
         return BitbucketOAuthService(
             settings=settings,
-            redis_client=redis_client,
             token_exchange=BitbucketOAuthTokenExchange(),
         )
     except ValueError:
@@ -87,22 +74,16 @@ ConfiguredOAuthService = Annotated[
 
 def _configured(service: BitbucketOAuthService | None) -> BitbucketOAuthService:
     if service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Bitbucket connection unavailable",
-            headers=NO_STORE_HEADERS,
-        )
+        raise _unavailable()
     return service
 
 
-def _session_id(principal: Principal) -> UUID:
-    if principal.session_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Bitbucket connection unavailable",
-            headers=NO_STORE_HEADERS,
-        )
-    return principal.session_id
+def _unavailable() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Bitbucket connection unavailable",
+        headers=NO_STORE_HEADERS,
+    )
 
 
 def _status_response(snapshot: BitbucketConnectionPublicStatus) -> AdminBitbucketStatusResponse:
@@ -114,20 +95,21 @@ def _status_response(snapshot: BitbucketConnectionPublicStatus) -> AdminBitbucke
     )
 
 
-def _authorization_response(
-    service: BitbucketOAuthService,
-    session: Session,
+def _connect(
+    *,
+    response: Response,
     principal: Principal,
-) -> AdminBitbucketAuthorizationResponse:
-    state = service.start_current(
-        session,
-        admin_id=principal.user_id,
-        session_id=_session_id(principal),
-    )
-    return AdminBitbucketAuthorizationResponse(
-        authorization_url=AnyHttpUrl(service.authorization_url(state)),
-        state_expires_in=600,
-    )
+    session: Session,
+    service: BitbucketOAuthService | None,
+) -> AdminBitbucketStatusResponse:
+    configured = _configured(service)
+    try:
+        configured.acquire_client_credentials(session, actor_id=principal.user_id)
+        snapshot = configured.public_status(session)
+    except OAuthConnectionUnavailable as error:
+        raise _unavailable() from error
+    response.headers.update(NO_STORE_HEADERS)
+    return _status_response(snapshot)
 
 
 @router.get(
@@ -143,7 +125,7 @@ async def get_admin_bitbucket_status(
     service: ConfiguredOAuthService,
 ) -> AdminBitbucketStatusResponse:
     """Return one no-store status containing no provider credential metadata."""
-    response.headers["Cache-Control"] = "no-store"
+    response.headers.update(NO_STORE_HEADERS)
     if service is None:
         return AdminBitbucketStatusResponse(
             status="Unavailable",
@@ -155,26 +137,30 @@ async def get_admin_bitbucket_status(
 
 
 @router.post(
-    "/oauth/start",
-    operation_id="start_admin_bitbucket_oauth",
-    response_model=AdminBitbucketAuthorizationResponse,
+    "/connect",
+    operation_id="connect_admin_bitbucket_oauth",
+    response_model=AdminBitbucketStatusResponse,
     responses=PROTECTED_RESPONSES,
 )
-async def start_admin_bitbucket_oauth(
+async def connect_admin_bitbucket_oauth(
     response: Response,
     principal: AdminPrincipal,
     session: AdminSession,
     service: ConfiguredOAuthService,
-) -> AdminBitbucketAuthorizationResponse:
-    """Start one exact static-consumer repository-read authorization flow."""
-    response.headers.update(NO_STORE_HEADERS)
-    return _authorization_response(_configured(service), session, principal)
+) -> AdminBitbucketStatusResponse:
+    """Acquire one backend-only, read-only client-credentials generation."""
+    return _connect(
+        response=response,
+        principal=principal,
+        session=session,
+        service=service,
+    )
 
 
 @router.post(
-    "/oauth/reconnect",
+    "/reconnect",
     operation_id="reconnect_admin_bitbucket_oauth",
-    response_model=AdminBitbucketAuthorizationResponse,
+    response_model=AdminBitbucketStatusResponse,
     responses=PROTECTED_RESPONSES,
 )
 async def reconnect_admin_bitbucket_oauth(
@@ -182,52 +168,13 @@ async def reconnect_admin_bitbucket_oauth(
     principal: AdminPrincipal,
     session: AdminSession,
     service: ConfiguredOAuthService,
-) -> AdminBitbucketAuthorizationResponse:
-    """Replace authority only after a new state-bound callback succeeds."""
-    response.headers.update(NO_STORE_HEADERS)
-    return _authorization_response(_configured(service), session, principal)
-
-
-@router.get(
-    "/oauth/callback",
-    operation_id="complete_admin_bitbucket_oauth_callback",
-    status_code=status.HTTP_303_SEE_OTHER,
-    response_class=RedirectResponse,
-    responses=CALLBACK_RESPONSES,
-)
-async def complete_admin_bitbucket_oauth_callback(
-    session: AdminSession,
-    service: ConfiguredOAuthService,
-    settings: Annotated[Settings, Depends(get_settings)],
-    state_value: Annotated[str, Query(alias="state", min_length=1, max_length=512)],
-    code: Annotated[str, Query(min_length=1, max_length=2048)],
-) -> RedirectResponse:
-    """Consume state authority and return through one fixed same-tab redirect."""
-    configured = _configured(service)
-    try:
-        result = configured.complete_callback_from_state(
-            session,
-            state=state_value,
-            code=code,
-            callback_uri=str(settings.bitbucket_oauth_callback_uri),
-            post_callback_path=settings.bitbucket_oauth_post_callback_path,
-        )
-    except OAuthCallbackRejected as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="OAuth callback rejected",
-            headers=NO_STORE_HEADERS,
-        ) from error
-    except OAuthConnectionUnavailable as error:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Bitbucket connection unavailable",
-            headers=NO_STORE_HEADERS,
-        ) from error
-    return RedirectResponse(
-        url=result.redirect_path,
-        status_code=status.HTTP_303_SEE_OTHER,
-        headers=NO_STORE_HEADERS,
+) -> AdminBitbucketStatusResponse:
+    """Replace current authority with one newly acquired access-only generation."""
+    return _connect(
+        response=response,
+        principal=principal,
+        session=session,
+        service=service,
     )
 
 
@@ -245,6 +192,10 @@ async def revoke_admin_bitbucket_connection_locally(
 ) -> AdminBitbucketStatusResponse:
     """Immediately invalidate local credentials without a provider revoke claim."""
     configured = _configured(service)
-    configured.revoke_current(session, actor_id=principal.user_id)
-    response.headers["Cache-Control"] = "no-store"
-    return _status_response(configured.public_status(session))
+    try:
+        configured.revoke_current(session, actor_id=principal.user_id)
+        snapshot = configured.public_status(session)
+    except OAuthConnectionUnavailable as error:
+        raise _unavailable() from error
+    response.headers.update(NO_STORE_HEADERS)
+    return _status_response(snapshot)
