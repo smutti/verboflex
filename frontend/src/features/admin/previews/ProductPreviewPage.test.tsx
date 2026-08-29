@@ -62,6 +62,7 @@ const product: AdminProductResponse = {
     description: "Candidate localization configuration",
     id: "00000000-0000-4000-8000-000000000201",
     is_published: false,
+    name: "Mobile Product",
     version: 5,
   },
   id: "00000000-0000-4000-8000-000000000101",

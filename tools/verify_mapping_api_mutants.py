@@ -105,12 +105,12 @@ MUTATIONS = (
     Mutation(
         "primary-branch-order-descending",
         "src/verboflex/services/mappings.py",
-        "                    primary_side.repository_id,\n"
-        "                    primary_branch,\n"
-        "                    translations_side.repository_id.asc().nulls_last(),",
-        "                    primary_side.repository_id,\n"
-        "                    primary_branch.desc(),\n"
-        "                    translations_side.repository_id.asc().nulls_last(),",
+        "                primary_side.repository_id,\n"
+        "                primary_branch,\n"
+        "                translations_side.repository_id.asc().nulls_last(),",
+        "                primary_side.repository_id,\n"
+        "                primary_branch.desc(),\n"
+        "                translations_side.repository_id.asc().nulls_last(),",
     ),
     Mutation(
         "pagination-lookahead-removed",
@@ -121,8 +121,8 @@ MUTATIONS = (
     Mutation(
         "cursor-candidate-binding-inverted",
         "src/verboflex/services/mappings.py",
-        "position is not None and position.revision_id != candidate.id",
-        "position is not None and position.revision_id == candidate.id",
+        "position is not None and position.revision_id != revision.id",
+        "position is not None and position.revision_id == revision.id",
     ),
     Mutation(
         "normalized-target-noop-inverted",

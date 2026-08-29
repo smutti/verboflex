@@ -49,6 +49,11 @@ EXPECTED_OPERATIONS = {
         {"201", "401", "403", "409", "422"},
         True,
     ),
+    ("/api/v1/admin/repositories/{repository_id}/branch", "get"): (
+        "get_admin_repository_branch",
+        {"200", "401", "403", "404", "409", "422", "503", "504"},
+        True,
+    ),
     ("/api/v1/admin/repositories/{repository_id}/branches", "get"): (
         "list_admin_repository_branches",
         {"200", "401", "403", "404", "409", "422", "503", "504"},
@@ -82,6 +87,14 @@ EXPECTED_OPERATIONS = {
     ("/api/v1/admin/products/{product_id}/candidate/mappings", "post"): (
         "create_admin_candidate_mapping",
         {"201", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings",
+        "get",
+    ): (
+        "list_admin_revision_mappings",
+        {"200", "401", "403", "404", "422"},
         True,
     ),
     (
@@ -618,6 +631,7 @@ def test_admin_product_openapi_is_closed_to_exact_lifecycle_operations() -> None
     assert set(revision["properties"]) == {
         "id",
         "version",
+        "name",
         "description",
         "is_published",
     }
@@ -653,7 +667,11 @@ def test_admin_product_openapi_is_closed_to_exact_lifecycle_operations() -> None
         "/api/v1/admin/products/{product_id}/publish",
         "/api/v1/admin/products/{product_id}/reactivate",
     }
-    assert all("revisions" not in path for path in schema["paths"])
+    revision_paths = {path for path in schema["paths"] if "/revisions/" in path}
+    assert revision_paths == {
+        "/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings"
+    }
+    assert set(schema["paths"][revision_paths.pop()]) == {"get"}
     lifecycle_contract = json.dumps(
         {path: schema["paths"][path] for path in sorted(lifecycle_paths)},
         sort_keys=True,

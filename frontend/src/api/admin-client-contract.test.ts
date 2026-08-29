@@ -180,6 +180,10 @@ const phaseTwoAdminOperationIds = new Map([
     "create_admin_preview_job",
   ],
   [
+    "GET /api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings",
+    "list_admin_revision_mappings",
+  ],
+  [
     "POST /api/v1/admin/products/{product_id}/deactivate",
     "deactivate_admin_product",
   ],
@@ -194,6 +198,10 @@ const phaseTwoAdminOperationIds = new Map([
   ["GET /api/v1/admin/repositories", "list_admin_repositories"],
   ["POST /api/v1/admin/repositories", "create_admin_repository"],
   ["GET /api/v1/admin/repositories/{repository_id}", "get_admin_repository"],
+  [
+    "GET /api/v1/admin/repositories/{repository_id}/branch",
+    "get_admin_repository_branch",
+  ],
   [
     "GET /api/v1/admin/repositories/{repository_id}/branches",
     "list_admin_repository_branches",
@@ -365,7 +373,7 @@ describe("canonical generated Phase 2 admin client", () => {
 
     for (const [path, operation] of Object.entries(openApi.paths).filter(
       ([path]) =>
-        /\/admin\/repositories\/.*\/(?:branches|sources)$/u.test(path),
+        /\/admin\/repositories\/.*\/(?:branch|branches|sources)$/u.test(path),
     )) {
       expect(Object.keys(operation), `${path} must stay read-only`).toEqual([
         "get",

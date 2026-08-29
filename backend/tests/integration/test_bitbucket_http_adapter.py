@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import nullcontext
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -348,6 +349,9 @@ def test_oauth_credential_lease_authority_fails_closed_for_unreadable_rows() -> 
         def begin(self) -> Any:
             return nullcontext()
 
+        def execute(self, _statement: object) -> Any:
+            return SimpleNamespace(scalar_one_or_none=lambda: self.connection)
+
         def get(self, _model: object, _identity: int) -> object | None:
             return self.connection
 
@@ -358,12 +362,15 @@ def test_oauth_credential_lease_authority_fails_closed_for_unreadable_rows() -> 
 
     service = object.__new__(BitbucketOAuthService)
     service._secret_box = ReadableSecretBox()
+    now = datetime.now(UTC)
+    service._clock = lambda: now
     connection = SimpleNamespace(
         generation=7,
         revoked_at=None,
         scope_profile="repository",
         access_token_ciphertext="encrypted-access-token",
-        refresh_token_ciphertext="encrypted-refresh-token",
+        refresh_token_ciphertext=None,
+        provider_expires_at=now + timedelta(hours=1),
     )
     session = FakeSession(connection)
     lease = service.acquire_repository_read_lease(session)  # type: ignore[arg-type]
@@ -380,7 +387,7 @@ def test_oauth_credential_lease_authority_fails_closed_for_unreadable_rows() -> 
         SimpleNamespace(**{**vars(connection), "revoked_at": object()}),
         SimpleNamespace(**{**vars(connection), "scope_profile": "repository:write"}),
         SimpleNamespace(**{**vars(connection), "access_token_ciphertext": None}),
-        SimpleNamespace(**{**vars(connection), "refresh_token_ciphertext": None}),
+        SimpleNamespace(**{**vars(connection), "refresh_token_ciphertext": "legacy-refresh-token"}),
     )
     for unreadable_connection in unreadable_connections:
         with pytest.raises(OAuthConnectionUnavailable, match="connection unavailable"):

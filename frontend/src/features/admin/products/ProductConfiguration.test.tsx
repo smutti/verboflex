@@ -119,12 +119,14 @@ const activeProduct: AdminProductResponse = {
     id: "00000000-0000-4000-8000-000000000201",
     description: "Published mobile strings",
     is_published: true,
+    name: "Zulu Mobile",
     version: 4,
   },
   candidate_revision: {
     id: "00000000-0000-4000-8000-000000000202",
     description: "Candidate mobile strings",
     is_published: false,
+    name: "Zulu Mobile",
     version: 5,
   },
 };
@@ -138,6 +140,7 @@ const candidateOnlyProduct: AdminProductResponse = {
     id: "00000000-0000-4000-8000-000000000203",
     description: null,
     is_published: false,
+    name: "Alpha Embedded",
     version: 1,
   },
 };
@@ -150,6 +153,7 @@ const inactivePublishedProduct: AdminProductResponse = {
     id: "00000000-0000-4000-8000-000000000204",
     description: "Retained published desktop strings",
     is_published: true,
+    name: "Middle Desktop",
     version: 2,
   },
   candidate_revision: null,

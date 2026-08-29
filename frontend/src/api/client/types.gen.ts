@@ -644,6 +644,10 @@ export type AdminProductRevisionSummary = {
      */
     is_published: boolean;
     /**
+     * Name
+     */
+    name: string;
+    /**
      * Version
      */
     version: number;
@@ -1863,6 +1867,61 @@ export type ReactivateAdminProductResponses = {
 
 export type ReactivateAdminProductResponse = ReactivateAdminProductResponses[keyof ReactivateAdminProductResponses];
 
+export type ListAdminRevisionMappingsData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Revision Id
+         */
+        revision_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings';
+};
+
+export type ListAdminRevisionMappingsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ListAdminRevisionMappingsError = ListAdminRevisionMappingsErrors[keyof ListAdminRevisionMappingsErrors];
+
+export type ListAdminRevisionMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminMappingListResponse;
+};
+
+export type ListAdminRevisionMappingsResponse = ListAdminRevisionMappingsResponses[keyof ListAdminRevisionMappingsResponses];
+
 export type ListAdminRepositoriesData = {
     body?: never;
     path?: never;
@@ -1983,6 +2042,71 @@ export type GetAdminRepositoryResponses = {
 };
 
 export type GetAdminRepositoryResponse = GetAdminRepositoryResponses[keyof GetAdminRepositoryResponses];
+
+export type GetAdminRepositoryBranchData = {
+    body?: never;
+    path: {
+        /**
+         * Repository Id
+         */
+        repository_id: string;
+    };
+    query: {
+        /**
+         * Branch Name
+         */
+        branch_name: string;
+    };
+    url: '/api/v1/admin/repositories/{repository_id}/branch';
+};
+
+export type GetAdminRepositoryBranchErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Response 403 Get Admin Repository Branch
+     *
+     * Forbidden
+     */
+    403: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Response 404 Get Admin Repository Branch
+     *
+     * Not Found
+     */
+    404: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminDiscoveryErrorResponse;
+    /**
+     * Response 422 Get Admin Repository Branch
+     *
+     * Unprocessable Content
+     */
+    422: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: AdminDiscoveryErrorResponse;
+    /**
+     * Gateway Timeout
+     */
+    504: AdminDiscoveryErrorResponse;
+};
+
+export type GetAdminRepositoryBranchError = GetAdminRepositoryBranchErrors[keyof GetAdminRepositoryBranchErrors];
+
+export type GetAdminRepositoryBranchResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminBranchResponse;
+};
+
+export type GetAdminRepositoryBranchResponse = GetAdminRepositoryBranchResponses[keyof GetAdminRepositoryBranchResponses];
 
 export type ListAdminRepositoryBranchesData = {
     body?: never;
