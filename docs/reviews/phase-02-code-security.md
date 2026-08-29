@@ -2,8 +2,8 @@
 
 - Review-status: CLOSED
 - Open-critical-high: 0
-- Full-gauntlet-status: PASS
-- Reviewed-source-digest: `9e63e9bcf79d17a990c6b99ae81488177a48f55f5784fa45360646967ebaac7f`
+- Full-gauntlet-status: PENDING
+- Reviewed-source-digest: `28715549ef6f348d1ad8e4455401c9d74d83780812cf433d2664374b0eda2096`
 - Review-standard: OWASP ASVS 5.0 Level 1
 - Review-scope: Complete Phase 2 diff from `ce9fbeef86b00f594d1d06e15d3083d623c54095`
 - Review-date: 2026-08-29
@@ -78,6 +78,15 @@ One Moderate development-only dependency advisory remains explicitly deferred in
 - Verification: Three fail-closed architecture tests, six existing adapter tests, and the authorized live run: 5 GET requests, zero repository writes, 37 branches, 1 tree page, 12 entries, one 106-byte bounded raw read, and successful local generation invalidation. No credential, token, repository path, or raw content was persisted in evidence.
 - Checker note: The dummy `client-secret` fixture is bound to its exact test path, line, and detector type; every unreviewed secret-scan result remains fatal.
 
+### P2-FINAL-04 — host-port selection raced before Compose binding
+
+- Severity: Moderate
+- Status: CLOSED
+- Found by: Exact final Compose/browser gauntlet
+- Risk: A transient process could claim a locally selected ephemeral port before Docker bound it, failing an otherwise valid immutable-source deployment proof.
+- Resolution: Treat only Docker's exact `address already in use` startup failure as a dedicated exit, tear down the isolated attempt, and select fresh ports for at most three complete attempts. Every other startup error remains immediately fatal.
+- Verification: RED/GREEN architecture test, Bash syntax check, focused live-helper/adapter suite, and repeated candidate/final Compose execution.
+
 ## Scope and Capability Diff
 
 - Network: Adds Bitbucket Cloud OAuth and read-only repository/source discovery through one bounded adapter. No provider write verb is approved in Phase 2.
@@ -90,4 +99,4 @@ One Moderate development-only dependency advisory remains explicitly deferred in
 
 - The disposable live Bitbucket smoke ran only after the user confirmed the client-credentials grant and exact `repository` authority. Its evidence is limited to digests, counts, duration, and the zero-write/local-revoke assertions; provider-side revocation is still not claimed.
 - The final differential coverage gate is scoped to Plan 02-20 against `50664a2`; prior Phase 2 plan summaries retain their own 100% changed-production-line and branch proofs. The final full randomized suites still execute the complete accumulated source and test set.
-- The complete 13-layer candidate gauntlet passed after replacing the obsolete checkpoint assertion with the exact live-pass evidence contract. The final exact entry point rechecks the closed review, unchanged source digest, and signed evidence report before closure.
+- The complete candidate gauntlet must be repeated after the bounded port-race correction. The final exact entry point then rechecks the closed review, unchanged source digest, and signed evidence report before closure.
