@@ -161,7 +161,7 @@ def test_cross_entry_cli_and_http_deactivation_preserve_one_active_admin_and_bot
         try:
             with concurrency_session_factory() as session:
                 admin_users.deactivate_user_by_email(session, email=" SECOND@EXAMPLE.COM ")
-        except (admin_users.AdminUserConflict, admin_users.DeactivateUserError):
+        except admin_users.AdminUserConflict, admin_users.DeactivateUserError:
             return "refused"
         return "deactivated"
 
@@ -170,7 +170,7 @@ def test_cross_entry_cli_and_http_deactivation_preserve_one_active_admin_and_bot
         try:
             with concurrency_session_factory() as session:
                 deactivate_http(session, actor_id=second_id, target_id=first_id)
-        except (admin_users.AdminUserAuthorityError, admin_users.AdminUserConflict):
+        except admin_users.AdminUserAuthorityError, admin_users.AdminUserConflict:
             return "refused"
         return "deactivated"
 
@@ -257,7 +257,7 @@ def test_concurrent_cli_lifecycle_and_http_role_mutation_preserve_authority_iden
         try:
             with concurrency_session_factory() as session:
                 admin_users.deactivate_user_by_email(session, email=" FIRST@EXAMPLE.COM ")
-        except (admin_users.AdminUserConflict, admin_users.DeactivateUserError):
+        except admin_users.AdminUserConflict, admin_users.DeactivateUserError:
             return "refused"
         return "deactivated"
 
@@ -272,7 +272,7 @@ def test_concurrent_cli_lifecycle_and_http_role_mutation_preserve_authority_iden
                     display_name="Second",
                     roles=frozenset((RoleName.VIEWER,)),
                 )
-        except (admin_users.AdminUserAuthorityError, admin_users.AdminUserConflict):
+        except admin_users.AdminUserAuthorityError, admin_users.AdminUserConflict:
             return "refused"
         return "updated"
 
@@ -319,9 +319,7 @@ def test_concurrent_normalized_duplicate_creation_has_one_winner_and_one_identit
         return "created"
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        outcomes = list(
-            executor.map(attempt, ("person@example.com", "\t PERSON@EXAMPLE.COM \n"))
-        )
+        outcomes = list(executor.map(attempt, ("person@example.com", "\t PERSON@EXAMPLE.COM \n")))
 
     assert sorted(outcomes) == ["conflict", "created"]
     with concurrency_session_factory() as session:

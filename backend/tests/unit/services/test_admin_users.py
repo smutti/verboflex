@@ -471,9 +471,7 @@ def test_edge_r3_repeated_authority_changes_retry_collisions_and_redact_candidat
                 target_id=target_id,
             )
     except PasswordPolicyError:
-        raise AssertionError(
-            "temporary credential generation did not retry a collision"
-        ) from None
+        raise AssertionError("temporary credential generation did not retry a collision") from None
     with service_session_factory() as session:
         admin_users.deactivate_admin_user(
             session,
@@ -490,13 +488,16 @@ def test_edge_r3_repeated_authority_changes_retry_collisions_and_redact_candidat
     assert first_reset.user.id == target_id
     assert second_reset.user.id == target_id
     assert reactivated.user.id == target_id
-    assert len(
-        {
-            first_reset.temporary_password,
-            second_reset.temporary_password,
-            reactivated.temporary_password,
-        }
-    ) == 3
+    assert (
+        len(
+            {
+                first_reset.temporary_password,
+                second_reset.temporary_password,
+                reactivated.temporary_password,
+            }
+        )
+        == 3
+    )
     with service_session_factory() as session:
         target = session.get_one(User, target_id)
         assert target.id == target_id

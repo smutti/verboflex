@@ -56,17 +56,28 @@ REQUIREMENT_FINGERPRINTS = {
     "UI-03": "80fbae32336a3dae0699",
 }
 DECISION_FINGERPRINTS = {
-    "D-01": "c02d0ece938b11a2c8f2", "D-02": "d0250d5349f744c8c1d8",
-    "D-03": "ca05a0da336d4efe39d1", "D-04": "2533f3934b94fae86976",
-    "D-05": "da3dfaa412b6a2bbd079", "D-06": "e9d64fa6ac2a58923b1e",
-    "D-07": "f1b72e1c4da03906df0a", "D-08": "93fc42cfe0a2a930ef04",
-    "D-09": "35aea318c82d1e969dc4", "D-10": "91514ce3f40ff03239b2",
-    "D-11": "e68553ee16b3fa930e96", "D-12": "2ed1bff2bd0db6b79bdf",
-    "D-13": "9e90e55ec03343b2a9a3", "D-14": "8808557a9f9d10dad20e",
-    "D-15": "6b22ff403f083697e5da", "D-16": "fbb69e9726e6a2e27704",
-    "D-17": "b8b69aab6f99efa07bbf", "D-18": "dad12a4f5c30a3b7a472",
-    "D-19": "9e28611d1bb805082519", "D-20": "f652689e8408eb9aa893",
-    "D-21": "5ae12c59efabd4dc6198", "D-22": "a2f73c024d28f90c5502",
+    "D-01": "c02d0ece938b11a2c8f2",
+    "D-02": "d0250d5349f744c8c1d8",
+    "D-03": "ca05a0da336d4efe39d1",
+    "D-04": "2533f3934b94fae86976",
+    "D-05": "da3dfaa412b6a2bbd079",
+    "D-06": "e9d64fa6ac2a58923b1e",
+    "D-07": "f1b72e1c4da03906df0a",
+    "D-08": "93fc42cfe0a2a930ef04",
+    "D-09": "35aea318c82d1e969dc4",
+    "D-10": "91514ce3f40ff03239b2",
+    "D-11": "e68553ee16b3fa930e96",
+    "D-12": "2ed1bff2bd0db6b79bdf",
+    "D-13": "9e90e55ec03343b2a9a3",
+    "D-14": "8808557a9f9d10dad20e",
+    "D-15": "6b22ff403f083697e5da",
+    "D-16": "fbb69e9726e6a2e27704",
+    "D-17": "b8b69aab6f99efa07bbf",
+    "D-18": "dad12a4f5c30a3b7a472",
+    "D-19": "9e28611d1bb805082519",
+    "D-20": "f652689e8408eb9aa893",
+    "D-21": "5ae12c59efabd4dc6198",
+    "D-22": "a2f73c024d28f90c5502",
     "D-23": "5c7eb766412071140752",
 }
 ASSUMPTION_FINGERPRINTS = {
@@ -75,25 +86,39 @@ ASSUMPTION_FINGERPRINTS = {
     "A-03": "d4a1ec3b3ae25420d767",
 }
 PROHIBITION_FINGERPRINTS = {
-    "P-01": "1c36940fe816794e63d9", "P-02": "40fa166d23abafe15a29",
-    "P-03": "3a0f57b15edd94582224", "P-04": "b6562b02ccfdeed4116e",
-    "P-05": "3debe14aacf5d56474c8", "P-06": "407e3df8bd6d2a3ced1c",
-    "P-07": "1e4cf8c23eb1de66adcb", "P-08": "e8328d4671f73cb62afd",
+    "P-01": "1c36940fe816794e63d9",
+    "P-02": "40fa166d23abafe15a29",
+    "P-03": "3a0f57b15edd94582224",
+    "P-04": "b6562b02ccfdeed4116e",
+    "P-05": "3debe14aacf5d56474c8",
+    "P-06": "407e3df8bd6d2a3ced1c",
+    "P-07": "1e4cf8c23eb1de66adcb",
+    "P-08": "e8328d4671f73cb62afd",
     "P-09": "319428b10514cb23bb09",
 }
 UI_FINGERPRINTS = {
-    "empty": "26933cedbe75742f27cc", "loading": "c39332490004f5436bc7",
-    "error": "c8f0c3b3e0b1643f5f49", "populated": "dcf595280163157c1efe",
-    "partial": "cb5911ca1df274e3acbb", "overflow": "e5ab2bbfe93f7cee748d",
-    "zero-one-many": "9f46932e0eba703925c2", "long-text": "08549ee968721bd5ed52",
+    "empty": "26933cedbe75742f27cc",
+    "loading": "c39332490004f5436bc7",
+    "error": "c8f0c3b3e0b1643f5f49",
+    "populated": "dcf595280163157c1efe",
+    "partial": "cb5911ca1df274e3acbb",
+    "overflow": "e5ab2bbfe93f7cee748d",
+    "zero-one-many": "9f46932e0eba703925c2",
+    "long-text": "08549ee968721bd5ed52",
 }
 REVIEW_FINGERPRINTS = {
-    "CR-01": "76bf59c04b20990f7493", "CR-02": "b7a74b76b17053d90580",
-    "CR-03": "7a69ae3a74e24a168a88", "CR-04": "dbb0ee06729e1762a38d",
-    "CR-05": "4cdaf12bd17a8050c35c", "CR-06": "71fbeecc01b77b8287ae",
-    "CR-07": "56ee67ab0369b8e1c0f0", "CR-08": "25ad14a5778e022ee23b",
-    "CR-09": "4a8bc6f607f609db5466", "CR-10": "04143b19d9c4fefb2b24",
-    "WR-01": "9e3cdfde91a38f904f7a", "WR-02": "b19bdbb44331ed4020f4",
+    "CR-01": "76bf59c04b20990f7493",
+    "CR-02": "b7a74b76b17053d90580",
+    "CR-03": "7a69ae3a74e24a168a88",
+    "CR-04": "dbb0ee06729e1762a38d",
+    "CR-05": "4cdaf12bd17a8050c35c",
+    "CR-06": "71fbeecc01b77b8287ae",
+    "CR-07": "56ee67ab0369b8e1c0f0",
+    "CR-08": "25ad14a5778e022ee23b",
+    "CR-09": "4a8bc6f607f609db5466",
+    "CR-10": "04143b19d9c4fefb2b24",
+    "WR-01": "9e3cdfde91a38f904f7a",
+    "WR-02": "b19bdbb44331ed4020f4",
 }
 VERIFIER_SEMANTICS = {
     "G1": "cross-entry-point admin safety",
@@ -208,10 +233,7 @@ NODE_WORKSPACE = (
 
 GAP_RUNTIME_BINDINGS = {
     "CR-01": {
-        "runtime": (
-            "compose:x-backend-common.environment."
-            "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID"
-        ),
+        "runtime": ("compose:x-backend-common.environment.VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID"),
         "evidence": (
             "backend/tests/architecture/test_phase2_live_provider_smoke.py::"
             "test_base_compose_inherits_exact_provider_settings_without_secret_output"
@@ -267,18 +289,14 @@ GAP_RUNTIME_BINDINGS = {
     },
     "CR-08": {
         "runtime": (
-            "typescript:frontend/src/features/admin/useCursorCollection.ts:"
-            "useCursorCollection"
+            "typescript:frontend/src/features/admin/useCursorCollection.ts:useCursorCollection"
         ),
         "evidence": (
-            "e2e:51st mapping preview readiness consumes terminal cursor before "
-            "lifecycle authority"
+            "e2e:51st mapping preview readiness consumes terminal cursor before lifecycle authority"
         ),
     },
     "CR-09": {
-        "runtime": (
-            "python:verboflex.services.preview_jobs:reconcile_stale_preview_jobs"
-        ),
+        "runtime": ("python:verboflex.services.preview_jobs:reconcile_stale_preview_jobs"),
         "evidence": (
             "backend/tests/integration/test_preview_jobs.py::"
             "test_retry_after_watchdog_timeout_isolated_from_old_worker_completion"
@@ -286,8 +304,7 @@ GAP_RUNTIME_BINDINGS = {
     },
     "CR-10": {
         "runtime": (
-            "python:verboflex.services.admin_users:"
-            "_deactivate_user_under_admin_authority_lock"
+            "python:verboflex.services.admin_users:_deactivate_user_under_admin_authority_lock"
         ),
         "evidence": (
             "backend/tests/test_cli.py::"
@@ -300,14 +317,11 @@ GAP_RUNTIME_BINDINGS = {
             "WorkspaceOverviewPage.tsx:WorkspaceOverviewPage"
         ),
         "evidence": (
-            "e2e:role-aware Workspace navigation stays location-authoritative on "
-            "desktop and mobile"
+            "e2e:role-aware Workspace navigation stays location-authoritative on desktop and mobile"
         ),
     },
     "WR-02": {
-        "runtime": (
-            "migration:backend/alembic/versions/0009_product_graph_integrity.py:upgrade"
-        ),
+        "runtime": ("migration:backend/alembic/versions/0009_product_graph_integrity.py:upgrade"),
         "evidence": (
             "backend/tests/integration/test_migrations.py::"
             "test_product_graph_integrity_upgrade_downgrade_and_reupgrade"
@@ -315,8 +329,7 @@ GAP_RUNTIME_BINDINGS = {
     },
     "G1": {
         "runtime": (
-            "python:verboflex.services.admin_users:"
-            "_deactivate_user_under_admin_authority_lock"
+            "python:verboflex.services.admin_users:_deactivate_user_under_admin_authority_lock"
         ),
         "evidence": (
             "backend/tests/integration/test_admin_user_concurrency.py::"
@@ -331,10 +344,7 @@ GAP_RUNTIME_BINDINGS = {
         ),
     },
     "G3": {
-        "runtime": (
-            "compose:x-backend-common.environment."
-            "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET"
-        ),
+        "runtime": ("compose:x-backend-common.environment.VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET"),
         "evidence": "smoke:--mock-live-provider",
     },
     "G4": {
@@ -345,9 +355,7 @@ GAP_RUNTIME_BINDINGS = {
         "evidence": "e2e:mobile five-step wizard remains reachable at 320 pixels",
     },
     "G5": {
-        "runtime": (
-            "python:verboflex.services.preview_jobs:reconcile_stale_preview_jobs"
-        ),
+        "runtime": ("python:verboflex.services.preview_jobs:reconcile_stale_preview_jobs"),
         "evidence": "smoke:--worker-loss",
     },
 }
@@ -396,9 +404,7 @@ def _decisions() -> dict[str, str]:
     text = CONTEXT_PATH.read_text(encoding="utf-8")
     rows = [
         (match.group("key"), _fingerprint(match.group("meaning")))
-        for match in re.finditer(
-            r"^- \*\*(?P<key>D-\d{2}):\*\* (?P<meaning>.*)$", text, re.M
-        )
+        for match in re.finditer(r"^- \*\*(?P<key>D-\d{2}):\*\* (?P<meaning>.*)$", text, re.M)
     ]
     return _unique(rows, source="decisions")
 
@@ -408,9 +414,7 @@ def _assumptions() -> dict[str, str]:
     rows: list[tuple[str, str]] = []
     for number in range(1, 4):
         key = f"A-{number:02d}"
-        match = re.search(
-            rf"^### {key} .*?\n.*?(?=^### A-0[1-3] |^## )", text, re.M | re.S
-        )
+        match = re.search(rf"^### {key} .*?\n.*?(?=^### A-0[1-3] |^## )", text, re.M | re.S)
         assert match, f"research assumption {key} is absent"
         rows.append((key, _fingerprint(match.group(0))))
     return _unique(rows, source="assumptions")
@@ -435,10 +439,7 @@ def _prohibitions() -> dict[str, str]:
         )
         if row and row[0].startswith("MUST NOT")
     ]
-    return {
-        f"P-{number:02d}": _fingerprint(" | ".join(row))
-        for number, row in enumerate(rows, 1)
-    }
+    return {f"P-{number:02d}": _fingerprint(" | ".join(row)) for number, row in enumerate(rows, 1)}
 
 
 def _ui_considerations() -> dict[str, str]:
@@ -483,9 +484,7 @@ def _review_findings() -> dict[str, str]:
     return _unique(
         [
             (match.group("key"), _fingerprint(match.group("meaning")))
-            for match in re.finditer(
-                r"^### (?P<key>(?:CR|WR)-\d{2}): (?P<meaning>.*)$", text, re.M
-            )
+            for match in re.finditer(r"^### (?P<key>(?:CR|WR)-\d{2}): (?P<meaning>.*)$", text, re.M)
         ],
         source="review findings",
     )
@@ -511,13 +510,20 @@ def _closure(source: str, key: str, value: object) -> dict[str, object]:
         return _closing("02-37", 2, NODE_GAUNTLET)
     if source == "requirements":
         routing = {
-            "AUTH-02": ("02-23", 1, NODE_USER), "AUTH-03": ("02-23", 2, NODE_USER),
-            "PROD-01": ("02-25", 1, NODE_PRODUCT), "PROD-02": ("02-24", 1, NODE_REPOSITORY),
-            "PROD-03": ("02-24", 2, NODE_REPOSITORY), "PROD-04": ("02-24", 2, NODE_REPOSITORY),
-            "PROD-05": ("02-25", 2, NODE_PRODUCT), "PROD-06": ("02-24", 2, NODE_REPOSITORY),
-            "PROD-07": ("02-24", 2, NODE_REPOSITORY), "PROD-08": ("02-29", 2, NODE_PREVIEW),
-            "PROD-09": ("02-25", 2, NODE_PREVIEW), "BITB-01": ("02-35", 2, NODE_OAUTH),
-            "BITB-03": ("02-28", 1, NODE_PAGING), "BITB-04": ("02-21", 2, NODE_OAUTH),
+            "AUTH-02": ("02-23", 1, NODE_USER),
+            "AUTH-03": ("02-23", 2, NODE_USER),
+            "PROD-01": ("02-25", 1, NODE_PRODUCT),
+            "PROD-02": ("02-24", 1, NODE_REPOSITORY),
+            "PROD-03": ("02-24", 2, NODE_REPOSITORY),
+            "PROD-04": ("02-24", 2, NODE_REPOSITORY),
+            "PROD-05": ("02-25", 2, NODE_PRODUCT),
+            "PROD-06": ("02-24", 2, NODE_REPOSITORY),
+            "PROD-07": ("02-24", 2, NODE_REPOSITORY),
+            "PROD-08": ("02-29", 2, NODE_PREVIEW),
+            "PROD-09": ("02-25", 2, NODE_PREVIEW),
+            "BITB-01": ("02-35", 2, NODE_OAUTH),
+            "BITB-03": ("02-28", 1, NODE_PAGING),
+            "BITB-04": ("02-21", 2, NODE_OAUTH),
             "UI-03": ("02-27", 1, NODE_UI),
         }
         return _closing(*routing[key])
@@ -542,9 +548,18 @@ def _closure(source: str, key: str, value: object) -> dict[str, object]:
         assert isinstance(value, dict)
         requirement = key.split("-", 1)[0]
         plan = {
-            "R1": "02-23", "R2": "02-23", "R3": "02-23", "R4": "02-25",
-            "R5": "02-21", "R6": "02-24", "R7": "02-28", "R8": "02-25",
-            "R9": "02-29", "R10": "02-25", "R11": "02-27", "R12": "02-29",
+            "R1": "02-23",
+            "R2": "02-23",
+            "R3": "02-23",
+            "R4": "02-25",
+            "R5": "02-21",
+            "R6": "02-24",
+            "R7": "02-28",
+            "R8": "02-25",
+            "R9": "02-29",
+            "R10": "02-25",
+            "R11": "02-27",
+            "R12": "02-29",
         }[requirement]
         return _closing(plan, 2, value["test_nodes"][0])
     if source == "prohibitions":
@@ -569,19 +584,28 @@ def _closure(source: str, key: str, value: object) -> dict[str, object]:
         return _closing("02-35", 2, NODE_CAPABILITY)
     if source == "review":
         routing = {
-            "CR-01": ("02-35", 1, NODE_CAPABILITY), "CR-02": ("02-21", 1, NODE_OAUTH),
-            "CR-03": ("02-22", 1, NODE_OAUTH), "CR-04": ("02-22", 2, NODE_OAUTH),
-            "CR-05": ("02-24", 2, NODE_PRODUCT), "CR-06": ("02-32", 2, NODE_PREVIEW),
-            "CR-07": ("02-27", 1, NODE_UI), "CR-08": ("02-28", 2, NODE_PAGING),
-            "CR-09": ("02-36", 2, NODE_WORKER), "CR-10": ("02-23", 2, NODE_USER),
-            "WR-01": ("02-33", 2, NODE_WORKSPACE), "WR-02": ("02-24", 1, NODE_PRODUCT),
+            "CR-01": ("02-35", 1, NODE_CAPABILITY),
+            "CR-02": ("02-21", 1, NODE_OAUTH),
+            "CR-03": ("02-22", 1, NODE_OAUTH),
+            "CR-04": ("02-22", 2, NODE_OAUTH),
+            "CR-05": ("02-24", 2, NODE_PRODUCT),
+            "CR-06": ("02-32", 2, NODE_PREVIEW),
+            "CR-07": ("02-27", 1, NODE_UI),
+            "CR-08": ("02-28", 2, NODE_PAGING),
+            "CR-09": ("02-36", 2, NODE_WORKER),
+            "CR-10": ("02-23", 2, NODE_USER),
+            "WR-01": ("02-33", 2, NODE_WORKSPACE),
+            "WR-02": ("02-24", 1, NODE_PRODUCT),
         }
         return _closing(*routing[key])
     if source == "verifier":
         routing = {
-            "G1": ("02-23", 2, NODE_USER), "G2": ("02-24", 2, NODE_PRODUCT),
-            "G3": ("02-35", 2, NODE_CAPABILITY), "G4": ("02-34", 2, NODE_WORKSPACE),
-            "G5": ("02-36", 2, NODE_WORKER), "G6": ("02-37", 2, NODE_GAUNTLET),
+            "G1": ("02-23", 2, NODE_USER),
+            "G2": ("02-24", 2, NODE_PRODUCT),
+            "G3": ("02-35", 2, NODE_CAPABILITY),
+            "G4": ("02-34", 2, NODE_WORKSPACE),
+            "G5": ("02-36", 2, NODE_WORKER),
+            "G6": ("02-37", 2, NODE_GAUNTLET),
         }
         return _closing(*routing[key])
     raise AssertionError(f"unsupported coverage source: {source}")
@@ -590,12 +614,25 @@ def _closure(source: str, key: str, value: object) -> dict[str, object]:
 def _entry(source: str, key: str, semantic: object) -> dict[str, object]:
     return {"semantic": semantic, "closure": _closure(source, key, semantic)}
 
+
 EXPECTED_KEYS = {
     "goal": {"GOAL"},
     "requirements": {
-        "AUTH-02", "AUTH-03", "PROD-01", "PROD-02", "PROD-03",
-        "PROD-04", "PROD-05", "PROD-06", "PROD-07", "PROD-08",
-        "PROD-09", "BITB-01", "BITB-03", "BITB-04", "UI-03",
+        "AUTH-02",
+        "AUTH-03",
+        "PROD-01",
+        "PROD-02",
+        "PROD-03",
+        "PROD-04",
+        "PROD-05",
+        "PROD-06",
+        "PROD-07",
+        "PROD-08",
+        "PROD-09",
+        "BITB-01",
+        "BITB-03",
+        "BITB-04",
+        "UI-03",
     },
     "decisions": {f"D-{number:02d}" for number in range(1, 24)},
     "assumptions": {"A-01", "A-02", "A-03"},
@@ -619,8 +656,14 @@ EXPECTED_KEYS = {
     },
     "prohibitions": {f"P-{number:02d}" for number in range(1, 10)},
     "ui": {
-        "empty", "loading", "error", "populated", "partial", "overflow",
-        "zero-one-many", "long-text",
+        "empty",
+        "loading",
+        "error",
+        "populated",
+        "partial",
+        "overflow",
+        "zero-one-many",
+        "long-text",
     },
     "capabilities": set(CAPABILITY_FINGERPRINTS),
     "review": {*(f"CR-{number:02d}" for number in range(1, 11)), "WR-01", "WR-02"},
@@ -643,10 +686,7 @@ def _multi_source_inventory() -> dict[str, dict[str, object]]:
         "verifier": _verifier_groups(),
     }
     return {
-        source: {
-            key: _entry(source, key, semantic)
-            for key, semantic in source_inventory.items()
-        }
+        source: {key: _entry(source, key, semantic) for key, semantic in source_inventory.items()}
         for source, source_inventory in sources.items()
     }
 
@@ -666,9 +706,7 @@ def _assert_semantics(inventory: dict[str, dict[str, object]]) -> None:
         "prohibitions": PROHIBITION_FINGERPRINTS,
         "ui": UI_FINGERPRINTS,
         "review": REVIEW_FINGERPRINTS,
-        "verifier": {
-            key: _fingerprint(meaning) for key, meaning in VERIFIER_SEMANTICS.items()
-        },
+        "verifier": {key: _fingerprint(meaning) for key, meaning in VERIFIER_SEMANTICS.items()},
     }
     for source, expected in expected_fingerprints.items():
         actual = {key: entry["semantic"] for key, entry in inventory[source].items()}
@@ -680,16 +718,13 @@ def _assert_semantics(inventory: dict[str, dict[str, object]]) -> None:
 
     capabilities = inventory["capabilities"]
     actual_capability_fingerprints = {
-        key: entry["semantic"]["fingerprint"]
-        for key, entry in capabilities.items()
+        key: entry["semantic"]["fingerprint"] for key, entry in capabilities.items()
     }
     assert actual_capability_fingerprints == CAPABILITY_FINGERPRINTS
 
 
 def _assert_capability_rewrite(inventory: dict[str, dict[str, object]]) -> None:
-    capabilities = {
-        key: entry["semantic"] for key, entry in inventory["capabilities"].items()
-    }
+    capabilities = {key: entry["semantic"] for key, entry in inventory["capabilities"].items()}
     replacement_values = set(DECLARED_CREDENTIAL_REWRITE.values())
     identity_keys = set(capabilities) - replacement_values
     assert len(DECLARED_CREDENTIAL_REWRITE) == 3
@@ -697,17 +732,13 @@ def _assert_capability_rewrite(inventory: dict[str, dict[str, object]]) -> None:
     assert set(DECLARED_CREDENTIAL_REWRITE).isdisjoint(capabilities)
     assert replacement_values.issubset(capabilities)
     assert {key: key for key in identity_keys}.keys() == identity_keys
-    assert {
-        key: capabilities[key]["decision"] for key in replacement_values
-    } == {
+    assert {key: capabilities[key]["decision"] for key in replacement_values} == {
         "oauth-client-credentials-acquisition": "INTEGRATE",
         "oauth-client-credentials-reacquisition": "INTEGRATE",
         "oauth-authorization-code-callback-and-refresh-token-flows": "OPT-OUT",
     }
     assert all(
-        record["reason"]
-        for record in capabilities.values()
-        if record["decision"] == "OPT-OUT"
+        record["reason"] for record in capabilities.values() if record["decision"] == "OPT-OUT"
     )
 
 
@@ -757,17 +788,13 @@ def _assert_deferred_scope_rejected(inventory: dict[str, dict[str, object]]) -> 
         for entry in source.values()
     ]
     assert all(
-        forbidden not in target
-        for target in closure_targets
-        for forbidden in forbidden_targets
+        forbidden not in target for target in closure_targets for forbidden in forbidden_targets
     )
 
 
 def _without_comments(source: str, *, shell: bool = False) -> str:
     if shell:
-        return "\n".join(
-            line for line in source.splitlines() if not line.lstrip().startswith("#")
-        )
+        return "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("#"))
     without_blocks = re.sub(r"/\*.*?\*/", "", source, flags=re.S)
     return re.sub(r"//[^\n]*", "", without_blocks)
 
@@ -832,18 +859,12 @@ def _resolve_runtime_binding(reference: str) -> object:
 
 def _assert_executable_evidence(references: list[str]) -> None:
     collectable: list[str] = []
-    normalized_e2e_source = " ".join(
-        FRONTEND_E2E.read_text(encoding="utf-8").split()
-    )
-    smoke_source = _without_comments(
-        SMOKE_HARNESS.read_text(encoding="utf-8"), shell=True
-    )
+    normalized_e2e_source = " ".join(FRONTEND_E2E.read_text(encoding="utf-8").split())
+    smoke_source = _without_comments(SMOKE_HARNESS.read_text(encoding="utf-8"), shell=True)
     for reference in references:
         if reference.startswith("e2e:"):
             title = reference.removeprefix("e2e:")
-            assert f'test("{title}"' in normalized_e2e_source, (
-                f"E2E title is absent: {title}"
-            )
+            assert f'test("{title}"' in normalized_e2e_source, f"E2E title is absent: {title}"
         elif reference.startswith("smoke:"):
             scenario = reference.removeprefix("smoke:")
             assert scenario in smoke_source, f"smoke scenario is absent: {scenario}"
@@ -918,9 +939,7 @@ def test_phase2_gap_authorities_are_wired() -> None:
     for key, binding in GAP_RUNTIME_BINDINGS.items():
         assert set(binding) == {"runtime", "evidence"}, f"incomplete runtime row: {key}"
         _resolve_runtime_binding(binding["runtime"])
-    _assert_executable_evidence(
-        [binding["evidence"] for binding in GAP_RUNTIME_BINDINGS.values()]
-    )
+    _assert_executable_evidence([binding["evidence"] for binding in GAP_RUNTIME_BINDINGS.values()])
 
     from verboflex.schemas.admin_bitbucket import AdminBitbucketStatusResponse
 
@@ -942,36 +961,23 @@ def test_phase2_gap_authorities_are_wired() -> None:
 
     operations = _openapi_operations()
     openapi_schema = operations["get_admin_bitbucket_status"]
-    response_schema = openapi_schema["responses"]["200"]["content"][
-        "application/json"
-    ]["schema"]
-    assert response_schema == {
-        "$ref": "#/components/schemas/AdminBitbucketStatusResponse"
-    }
-    generated = (FRONTEND_SOURCE / "api" / "client" / "types.gen.ts").read_text(
-        encoding="utf-8"
-    )
-    generated_status = generated.split(
-        "export type AdminBitbucketStatusResponse = {", 1
-    )[1].split("\n};", 1)[0]
+    response_schema = openapi_schema["responses"]["200"]["content"]["application/json"]["schema"]
+    assert response_schema == {"$ref": "#/components/schemas/AdminBitbucketStatusResponse"}
+    generated = (FRONTEND_SOURCE / "api" / "client" / "types.gen.ts").read_text(encoding="utf-8")
+    generated_status = generated.split("export type AdminBitbucketStatusResponse = {", 1)[1].split(
+        "\n};", 1
+    )[0]
     assert re.search(r"^\s*status:\s*", generated_status, re.M)
     assert all(repr(value) in generated_status for value in status_values)
     bitbucket_page = _without_comments(
         (
-            FRONTEND_SOURCE
-            / "features"
-            / "admin"
-            / "bitbucket"
-            / "BitbucketConnectionPage.tsx"
+            FRONTEND_SOURCE / "features" / "admin" / "bitbucket" / "BitbucketConnectionPage.tsx"
         ).read_text(encoding="utf-8")
     )
     workspace_page = _without_comments(
-        (
-            FRONTEND_SOURCE
-            / "features"
-            / "workspace"
-            / "WorkspaceOverviewPage.tsx"
-        ).read_text(encoding="utf-8")
+        (FRONTEND_SOURCE / "features" / "workspace" / "WorkspaceOverviewPage.tsx").read_text(
+            encoding="utf-8"
+        )
     )
     assert "connection.status" in bitbucket_page
     assert 'AdminBitbucketStatusResponse["status"]' in workspace_page
@@ -981,9 +987,7 @@ def test_phase2_forbidden_bypasses_are_absent() -> None:
     """Deferred authentication, provider-write, and canonical surfaces stay absent."""
     operations = _openapi_operations()
     bitbucket_operations = {
-        operation_id
-        for operation_id in operations
-        if "bitbucket" in operation_id.casefold()
+        operation_id for operation_id in operations if "bitbucket" in operation_id.casefold()
     }
     assert bitbucket_operations == {
         "get_admin_bitbucket_status",
@@ -998,9 +1002,7 @@ def test_phase2_forbidden_bypasses_are_absent() -> None:
     )
 
     oauth_tree = ast.parse(
-        (BACKEND_SOURCE / "services" / "bitbucket_oauth.py").read_text(
-            encoding="utf-8"
-        )
+        (BACKEND_SOURCE / "services" / "bitbucket_oauth.py").read_text(encoding="utf-8")
     )
     oauth_methods = {
         node.name
@@ -1024,9 +1026,7 @@ def test_phase2_forbidden_bypasses_are_absent() -> None:
             if node.func.attr in {"request", "stream"}:
                 method = node.args[0] if node.args else None
                 if not isinstance(method, ast.Constant) or method.value != "GET":
-                    provider_violations.append(
-                        f"{path.name}:{node.lineno}:non-static-provider-GET"
-                    )
+                    provider_violations.append(f"{path.name}:{node.lineno}:non-static-provider-GET")
     assert provider_violations == []
 
     model_names = {
@@ -1052,9 +1052,7 @@ def test_phase2_forbidden_bypasses_are_absent() -> None:
             f"administrator role dependency is absent: {path.name}:{function.name}"
         )
 
-    router_source = _without_comments(
-        (FRONTEND_SOURCE / "router.tsx").read_text(encoding="utf-8")
-    )
+    router_source = _without_comments((FRONTEND_SOURCE / "router.tsx").read_text(encoding="utf-8"))
     assert "const guardedAdminElement = isAdmin ?" in router_source
     assert '<Route path="/admin/*" element={guardedAdminElement}' in router_source
     assert "<AdminApplicationRoutes" in router_source
