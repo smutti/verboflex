@@ -989,3 +989,17 @@ test("Bitbucket client credentials recover expiry without navigation or credenti
   await expectNoCredentialResidue(page);
   await expectNoPageOverflow(page);
 });
+
+test("published product edit preserves one complete candidate across refresh", async () => {
+  expect(
+    false,
+    "the real-backend published edit journey has not been implemented",
+  ).toBe(true);
+});
+
+test("mobile five-step wizard remains reachable at 320 pixels", async () => {
+  expect(
+    false,
+    "the 320px five-step browser journey has not been implemented",
+  ).toBe(true);
+});
