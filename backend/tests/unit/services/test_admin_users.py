@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
@@ -17,7 +18,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
-from verboflex.auth.passwords import hash_password, verify_password
+from verboflex.auth.passwords import PasswordPolicyError, hash_password, verify_password
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.role import Role
 from verboflex.models.user import User
@@ -209,6 +210,108 @@ def test_identical_normalized_update_is_a_non_mutating_noop(
         assert auth_session.revoked_at is None
 
 
+def test_edge_r1_adjacency_empty_ordering_and_idempotency_preserve_rows(
+    service_session_factory: sessionmaker[Session],
+) -> None:
+    """Normalized duplicates conflict while list pages remain stable and may be empty."""
+    actor_id = _seed_user(
+        service_session_factory,
+        email="middle@example.com",
+        roles=(RoleName.ADMIN,),
+    )
+    _seed_user(
+        service_session_factory,
+        email="zulu@example.com",
+        roles=(RoleName.VIEWER,),
+    )
+    target_id = _seed_user(
+        service_session_factory,
+        email="alpha@example.com",
+        roles=(RoleName.TRANSLATOR,),
+    )
+
+    with (
+        service_session_factory() as session,
+        pytest.raises(admin_users.AdminUserConflict, match="user could not be created"),
+    ):
+        admin_users.create_admin_user(
+            session,
+            actor_id=actor_id,
+            email="\t ALPHA@EXAMPLE.COM \n",
+            display_name="Duplicate identity",
+            roles=frozenset((RoleName.ADMIN,)),
+        )
+
+    with service_session_factory() as session:
+        page = admin_users.list_admin_users(session, actor_id=actor_id, limit=10)
+    identities = tuple((item.email, item.id) for item in page.items)
+    assert identities == tuple(sorted(identities))
+    assert sum(item.id == target_id for item in page.items) == 1
+    last = page.items[-1]
+    after_last_cursor = admin_users._encode_cursor_position(last.email, last.id)
+    with service_session_factory() as session:
+        empty_page = admin_users.list_admin_users(
+            session,
+            actor_id=actor_id,
+            cursor=after_last_cursor,
+        )
+    assert empty_page.items == ()
+    assert empty_page.next_cursor is None
+
+
+def test_edge_r2_role_set_encoding_ordering_and_idempotency_preserve_uuid(
+    service_session_factory: sessionmaker[Session],
+) -> None:
+    """Role membership is one fixed ASCII set on the canonical User UUID."""
+    actor_id = _seed_user(
+        service_session_factory,
+        email="admin@example.com",
+        roles=(RoleName.ADMIN,),
+    )
+    target_id = _seed_user(
+        service_session_factory,
+        email="target@example.com",
+        roles=(RoleName.VIEWER,),
+        token_version=3,
+    )
+    submitted_roles = (RoleName.VIEWER, RoleName.ADMIN, RoleName.VIEWER)
+    role_set = frozenset(submitted_roles)
+
+    with service_session_factory() as session:
+        first = admin_users.update_admin_user(
+            session,
+            actor_id=actor_id,
+            target_id=target_id,
+            display_name="Target",
+            roles=role_set,
+        )
+    with service_session_factory() as session:
+        before_repeat = session.get_one(User, target_id)
+        token_version = before_repeat.token_version
+        updated_at = before_repeat.updated_at
+    with service_session_factory() as session:
+        repeated = admin_users.update_admin_user(
+            session,
+            actor_id=actor_id,
+            target_id=target_id,
+            display_name="  Target  ",
+            roles=frozenset(reversed(submitted_roles)),
+        )
+
+    assert first.id == target_id
+    assert repeated.id == target_id
+    assert first.roles == (RoleName.ADMIN, RoleName.VIEWER)
+    assert repeated.roles == first.roles
+    assert len(first.roles) == 2
+    with pytest.raises(ValueError):
+        RoleName("adm\u00edn")
+    with service_session_factory() as session:
+        target = session.get_one(User, target_id)
+        assert target.id == target_id
+        assert target.token_version == token_version
+        assert target.updated_at == updated_at
+
+
 def test_empty_roles_and_self_admin_removal_fail_without_mutation(
     service_session_factory: sessionmaker[Session],
 ) -> None:
@@ -330,6 +433,79 @@ def test_reset_and_reactivation_always_issue_fresh_credentials_and_revoke_author
         assert verify_password(second_reset.temporary_password, target.hashed_password) is False
         assert target.token_version == 10
         assert session.get_one(AuthSession, third_session_id).revoked_at is not None
+
+
+def test_edge_r3_repeated_authority_changes_retry_collisions_and_redact_candidates(
+    service_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Every reset/reactivation returns fresh authority without logging candidates."""
+    actor_id = _seed_user(
+        service_session_factory,
+        email="admin@example.com",
+        roles=(RoleName.ADMIN,),
+    )
+    target_id = _seed_user(
+        service_session_factory,
+        email="target@example.com",
+        roles=(RoleName.VIEWER,),
+    )
+    candidates = tuple(
+        hashlib.sha256(label).hexdigest() for label in (b"first", b"second", b"third")
+    )
+    generated = iter((candidates[0], candidates[0], candidates[1], candidates[1], candidates[2]))
+    monkeypatch.setattr(admin_users.secrets, "token_urlsafe", lambda _size: next(generated))
+
+    with service_session_factory() as session:
+        first_reset = admin_users.reset_admin_user_password(
+            session,
+            actor_id=actor_id,
+            target_id=target_id,
+        )
+    try:
+        with service_session_factory() as session:
+            second_reset = admin_users.reset_admin_user_password(
+                session,
+                actor_id=actor_id,
+                target_id=target_id,
+            )
+    except PasswordPolicyError:
+        raise AssertionError(
+            "temporary credential generation did not retry a collision"
+        ) from None
+    with service_session_factory() as session:
+        admin_users.deactivate_admin_user(
+            session,
+            actor_id=actor_id,
+            target_id=target_id,
+        )
+    with service_session_factory() as session:
+        reactivated = admin_users.reactivate_admin_user(
+            session,
+            actor_id=actor_id,
+            target_id=target_id,
+        )
+
+    assert first_reset.user.id == target_id
+    assert second_reset.user.id == target_id
+    assert reactivated.user.id == target_id
+    assert len(
+        {
+            first_reset.temporary_password,
+            second_reset.temporary_password,
+            reactivated.temporary_password,
+        }
+    ) == 3
+    with service_session_factory() as session:
+        target = session.get_one(User, target_id)
+        assert target.id == target_id
+        assert target.is_active is True
+        assert verify_password(reactivated.temporary_password, target.hashed_password) is True
+        assert verify_password(first_reset.temporary_password, target.hashed_password) is False
+        assert verify_password(second_reset.temporary_password, target.hashed_password) is False
+    if any(candidate in caplog.text for candidate in candidates):
+        pytest.fail("candidate credential appeared in captured logs")
 
 
 def test_cli_password_and_deactivation_wrappers_reuse_the_shared_service(

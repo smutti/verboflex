@@ -6,6 +6,7 @@ import os
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -138,6 +139,57 @@ def test_concurrent_cross_deactivation_cannot_remove_the_last_active_admin(
         assert active_admins == 1
 
 
+def test_cross_entry_cli_and_http_deactivation_preserve_one_active_admin_and_both_uuids(
+    concurrency_session_factory: sessionmaker[Session],
+) -> None:
+    """CLI email and HTTP UUID adapters serialize through one survivor authority."""
+    deactivate_http = _required_service("deactivate_admin_user")
+    first_id = _seed_user(
+        concurrency_session_factory,
+        email="first@example.com",
+        roles=(RoleName.ADMIN,),
+    )
+    second_id = _seed_user(
+        concurrency_session_factory,
+        email="second@example.com",
+        roles=(RoleName.ADMIN,),
+    )
+    ready = Barrier(2)
+
+    def cli_attempt() -> str:
+        ready.wait()
+        try:
+            with concurrency_session_factory() as session:
+                admin_users.deactivate_user_by_email(session, email=" SECOND@EXAMPLE.COM ")
+        except (admin_users.AdminUserConflict, admin_users.DeactivateUserError):
+            return "refused"
+        return "deactivated"
+
+    def http_attempt() -> str:
+        ready.wait()
+        try:
+            with concurrency_session_factory() as session:
+                deactivate_http(session, actor_id=second_id, target_id=first_id)
+        except (admin_users.AdminUserAuthorityError, admin_users.AdminUserConflict):
+            return "refused"
+        return "deactivated"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = (executor.submit(cli_attempt), executor.submit(http_attempt))
+        outcomes = [future.result() for future in futures]
+
+    assert sorted(outcomes) == ["deactivated", "refused"]
+    with concurrency_session_factory() as session:
+        users = tuple(session.execute(select(User).order_by(User.id)).scalars())
+        active_admins = tuple(
+            user
+            for user in users
+            if user.is_active and RoleName.ADMIN.value in {role.name for role in user.roles}
+        )
+        assert {user.id for user in users} == {first_id, second_id}
+        assert len(active_admins) == 1
+
+
 def test_concurrent_cross_role_removal_cannot_remove_the_last_active_admin(
     concurrency_session_factory: sessionmaker[Session],
 ) -> None:
@@ -183,8 +235,105 @@ def test_concurrent_cross_role_removal_cannot_remove_the_last_active_admin(
         assert active_admins == 1
 
 
+def test_concurrent_cli_lifecycle_and_http_role_mutation_preserve_authority_identity(
+    concurrency_session_factory: sessionmaker[Session],
+) -> None:
+    """Role and lifecycle adapters cannot jointly erase the final admin membership."""
+    update_user = _required_service("update_admin_user")
+    first_id = _seed_user(
+        concurrency_session_factory,
+        email="first@example.com",
+        roles=(RoleName.ADMIN, RoleName.VIEWER),
+    )
+    second_id = _seed_user(
+        concurrency_session_factory,
+        email="second@example.com",
+        roles=(RoleName.ADMIN, RoleName.VIEWER),
+    )
+    ready = Barrier(2)
+
+    def cli_attempt() -> str:
+        ready.wait()
+        try:
+            with concurrency_session_factory() as session:
+                admin_users.deactivate_user_by_email(session, email=" FIRST@EXAMPLE.COM ")
+        except (admin_users.AdminUserConflict, admin_users.DeactivateUserError):
+            return "refused"
+        return "deactivated"
+
+    def role_attempt() -> str:
+        ready.wait()
+        try:
+            with concurrency_session_factory() as session:
+                update_user(
+                    session,
+                    actor_id=first_id,
+                    target_id=second_id,
+                    display_name="Second",
+                    roles=frozenset((RoleName.VIEWER,)),
+                )
+        except (admin_users.AdminUserAuthorityError, admin_users.AdminUserConflict):
+            return "refused"
+        return "updated"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = (executor.submit(cli_attempt), executor.submit(role_attempt))
+        outcomes = [future.result() for future in futures]
+
+    assert sorted(outcomes) in (["deactivated", "refused"], ["refused", "updated"])
+    with concurrency_session_factory() as session:
+        users = tuple(session.execute(select(User).order_by(User.id)).scalars())
+        active_admins = tuple(
+            user
+            for user in users
+            if user.is_active and RoleName.ADMIN.value in {role.name for role in user.roles}
+        )
+        assert {user.id for user in users} == {first_id, second_id}
+        assert len(active_admins) == 1
+
+
+def test_concurrent_normalized_duplicate_creation_has_one_winner_and_one_identity(
+    concurrency_session_factory: sessionmaker[Session],
+) -> None:
+    """Global authority serialization preserves normalized-email uniqueness."""
+    actor_id = _seed_user(
+        concurrency_session_factory,
+        email="admin@example.com",
+        roles=(RoleName.ADMIN,),
+    )
+    ready = Barrier(2)
+
+    def attempt(email: str) -> str:
+        ready.wait()
+        try:
+            with concurrency_session_factory() as session:
+                admin_users.create_admin_user(
+                    session,
+                    actor_id=actor_id,
+                    email=email,
+                    display_name="One identity",
+                    roles=frozenset((RoleName.VIEWER,)),
+                )
+        except admin_users.AdminUserConflict:
+            return "conflict"
+        return "created"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(
+            executor.map(attempt, ("person@example.com", "\t PERSON@EXAMPLE.COM \n"))
+        )
+
+    assert sorted(outcomes) == ["conflict", "created"]
+    with concurrency_session_factory() as session:
+        identities = tuple(
+            session.execute(select(User.id).where(User.email == "person@example.com")).scalars()
+        )
+        assert len(identities) == 1
+
+
 def test_concurrent_resets_serialize_and_only_the_last_committed_secret_is_valid(
     concurrency_session_factory: sessionmaker[Session],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Same-target password authority advances once per committed reset."""
     reset_password = _required_service("reset_admin_user_password")
@@ -213,3 +362,6 @@ def test_concurrent_resets_serialize_and_only_the_last_committed_secret_is_valid
         target = session.get_one(User, target_id)
         assert target.token_version == 11
         assert sum(verify_password(secret, target.hashed_password) for secret in secrets) == 1
+        assert target.id == target_id
+    if any(candidate in caplog.text for candidate in secrets):
+        pytest.fail("candidate credential appeared in captured logs")
