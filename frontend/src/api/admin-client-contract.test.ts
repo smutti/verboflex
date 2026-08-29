@@ -74,6 +74,24 @@ const handwrittenSources = import.meta.glob("/src/**/*.{ts,tsx}", {
 const generatedSdkSource = handwrittenSources["/src/api/client/sdk.gen.ts"];
 const generatedTypesSource = handwrittenSources["/src/api/client/types.gen.ts"];
 
+function createRecordingApiClient(responseBody: unknown) {
+  const requests: Request[] = [];
+  const apiClient = createClient({
+    baseUrl: "https://api.verboflex.test",
+    fetch: async (request) => {
+      requests.push(
+        request instanceof Request ? request : new Request(request),
+      );
+      return new Response(JSON.stringify(responseBody), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    },
+  });
+
+  return { apiClient, requests };
+}
+
 function referencedSchemaName(reference: string): string {
   return reference.slice(reference.lastIndexOf("/") + 1);
 }
@@ -297,19 +315,7 @@ describe("canonical generated Phase 2 admin client", () => {
       ],
       next_cursor: null,
     } satisfies AdminUserListResponse;
-    const requests: Request[] = [];
-    const apiClient = createClient({
-      baseUrl: "https://api.verboflex.test",
-      fetch: async (request) => {
-        requests.push(
-          request instanceof Request ? request : new Request(request),
-        );
-        return new Response(JSON.stringify(responseBody), {
-          headers: { "Content-Type": "application/json" },
-          status: 200,
-        });
-      },
-    });
+    const { apiClient, requests } = createRecordingApiClient(responseBody);
 
     const result = await listAdminUsers({
       auth: "phase-two-memory-bearer",
@@ -338,19 +344,7 @@ describe("canonical generated Phase 2 admin client", () => {
       items: [],
       next_cursor: "vf.cursor/opaque%value?with#reserved",
     } satisfies AdminMappingListResponse;
-    const requests: Request[] = [];
-    const apiClient = createClient({
-      baseUrl: "https://api.verboflex.test",
-      fetch: async (request) => {
-        requests.push(
-          request instanceof Request ? request : new Request(request),
-        );
-        return new Response(JSON.stringify(responseBody), {
-          headers: { "Content-Type": "application/json" },
-          status: 200,
-        });
-      },
-    });
+    const { apiClient, requests } = createRecordingApiClient(responseBody);
     const productId = "10000000-0000-4000-8000-000000000001";
     const revisionId = "20000000-0000-4000-8000-000000000002";
     const cursor = "vf.cursor/incoming%value?with#reserved";
@@ -387,19 +381,7 @@ describe("canonical generated Phase 2 admin client", () => {
       commit_hash: "f".repeat(40),
       name: branchName,
     } satisfies AdminBranchResponse;
-    const requests: Request[] = [];
-    const apiClient = createClient({
-      baseUrl: "https://api.verboflex.test",
-      fetch: async (request) => {
-        requests.push(
-          request instanceof Request ? request : new Request(request),
-        );
-        return new Response(JSON.stringify(responseBody), {
-          headers: { "Content-Type": "application/json" },
-          status: 200,
-        });
-      },
-    });
+    const { apiClient, requests } = createRecordingApiClient(responseBody);
     const repositoryId = "30000000-0000-4000-8000-000000000003";
 
     const result = await getAdminRepositoryBranch({
