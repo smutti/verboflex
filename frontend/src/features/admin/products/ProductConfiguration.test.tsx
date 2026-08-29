@@ -294,6 +294,19 @@ function renderWizard(initialProduct?: AdminProductResponse) {
   );
 }
 
+function renderRouteWizard(accessToken = "memory-only-admin-bearer") {
+  return render(
+    <MemoryRouter initialEntries={[`/admin/products/${activeProduct.id}/edit`]}>
+      <Routes>
+        <Route
+          path="/admin/products/:productId/edit"
+          element={<ProductWizardPage accessToken={accessToken} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 function renderOverview() {
   return render(
     <MemoryRouter>
@@ -913,6 +926,324 @@ describe("administrator product configuration tracer", () => {
       },
       query: { cursor: "opaque-revision-page-2", limit: 50 },
     });
+  });
+
+  it("fails closed across editable-product pagination and cancellation boundaries", async () => {
+    getAdminProductMock.mockResolvedValueOnce(ok(undefined as never));
+    await expect(
+      loadEditableProduct("memory-only-admin-bearer", activeProduct.id),
+    ).rejects.toThrow("product unavailable");
+
+    getAdminProductMock.mockResolvedValueOnce(
+      ok({ ...activeProduct, active_revision: null, candidate_revision: null }),
+    );
+    await expect(
+      loadEditableProduct("memory-only-admin-bearer", activeProduct.id),
+    ).resolves.toEqual({
+      mappedRepositoryIds: [],
+      product: {
+        ...activeProduct,
+        active_revision: null,
+        candidate_revision: null,
+      },
+    });
+
+    const alreadyAborted = new AbortController();
+    alreadyAborted.abort();
+    await expect(
+      loadEditableProduct(
+        "memory-only-admin-bearer",
+        activeProduct.id,
+        alreadyAborted.signal,
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+
+    const abortedDuringPage = new AbortController();
+    listAdminRevisionMappingsMock.mockImplementationOnce(async () => {
+      abortedDuringPage.abort();
+      return ok({ items: [], next_cursor: null });
+    });
+    await expect(
+      loadEditableProduct(
+        "memory-only-admin-bearer",
+        activeProduct.id,
+        abortedDuringPage.signal,
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+
+    listAdminRevisionMappingsMock.mockResolvedValueOnce(ok(undefined as never));
+    await expect(
+      loadEditableProduct("memory-only-admin-bearer", activeProduct.id),
+    ).rejects.toThrow("product mappings unavailable");
+
+    listAdminRevisionMappingsMock
+      .mockResolvedValueOnce(
+        ok({ items: [directMapping], next_cursor: "repeated-cursor" }),
+      )
+      .mockResolvedValueOnce(
+        ok({ items: [directMapping], next_cursor: "repeated-cursor" }),
+      );
+    await expect(
+      loadEditableProduct("memory-only-admin-bearer", activeProduct.id),
+    ).rejects.toThrow("product mappings repeated cursor");
+
+    let page = 0;
+    listAdminRevisionMappingsMock.mockImplementation(async () =>
+      ok({ items: [], next_cursor: `cursor-${++page}` }),
+    );
+    await expect(
+      loadEditableProduct("memory-only-admin-bearer", activeProduct.id),
+    ).rejects.toThrow("product mappings exceeded page limit");
+
+    const abortedAfterCursor = new AbortController();
+    listAdminRevisionMappingsMock.mockReset();
+    listAdminRevisionMappingsMock.mockResolvedValueOnce(
+      ok({
+        items: [],
+        get next_cursor() {
+          abortedAfterCursor.abort();
+          return null;
+        },
+      }),
+    );
+    await expect(
+      loadEditableProduct(
+        "memory-only-admin-bearer",
+        activeProduct.id,
+        abortedAfterCursor.signal,
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("retries a bounded route-load failure and ignores obsolete product authority", async () => {
+    getAdminProductMock
+      .mockRejectedValueOnce(new Error("bounded route failure"))
+      .mockResolvedValueOnce(ok(activeProduct));
+    const failed = renderRouteWizard();
+    expect(await screen.findByText("Product draft unavailable")).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry loading page" }),
+    );
+    expect(await screen.findByRole("textbox", { name: "Name" })).toHaveValue(
+      activeProduct.name,
+    );
+    failed.unmount();
+
+    let resolveObsolete!: (
+      value: ReturnType<typeof ok<AdminProductResponse>>,
+    ) => void;
+    getAdminProductMock
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveObsolete = resolve;
+        }) as never,
+      )
+      .mockResolvedValueOnce(ok(candidateOnlyProduct));
+    const view = renderRouteWizard("obsolete-authority");
+    await waitFor(() => expect(getAdminProductMock).toHaveBeenCalledTimes(3));
+    view.rerender(
+      <MemoryRouter
+        initialEntries={[`/admin/products/${activeProduct.id}/edit`]}
+      >
+        <Routes>
+          <Route
+            path="/admin/products/:productId/edit"
+            element={<ProductWizardPage accessToken="successor-authority" />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("textbox", { name: "Name" })).toHaveValue(
+      candidateOnlyProduct.name,
+    );
+    resolveObsolete(
+      ok({ ...activeProduct, active_revision: null, candidate_revision: null }),
+    );
+    await waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
+        candidateOnlyProduct.name,
+      );
+    });
+  });
+
+  it("guards browser exits while details are dirty", async () => {
+    renderWizard(activeProduct);
+    const description = screen.getByRole("textbox", { name: "Description" });
+    await userEvent.type(description, " changed");
+    const beforeUnload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(beforeUnload);
+    expect(beforeUnload.defaultPrevented).toBe(true);
+
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const forward = vi
+      .spyOn(window.history, "forward")
+      .mockImplementation(() => undefined);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    expect(confirm).toHaveBeenCalledWith(
+      "Leave without saving?\n\nYour unsaved entries on this page will be lost.",
+    );
+    expect(forward).toHaveBeenCalledOnce();
+    confirm.mockReturnValue(true);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    expect(forward).toHaveBeenCalledOnce();
+    confirm.mockRestore();
+    forward.mockRestore();
+  });
+
+  it("cancels a queued route load before it reaches the generated client", async () => {
+    getAdminProductMock.mockClear();
+    const view = renderRouteWizard();
+    view.unmount();
+    await act(async () => Promise.resolve());
+    expect(getAdminProductMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores a rejected route load after authority is replaced", async () => {
+    let rejectObsolete!: (reason: Error) => void;
+    getAdminProductMock
+      .mockReturnValueOnce(
+        new Promise((_resolve, reject) => {
+          rejectObsolete = reject;
+        }) as never,
+      )
+      .mockResolvedValueOnce(ok(candidateOnlyProduct));
+    const view = renderRouteWizard("obsolete-authority");
+    await waitFor(() => expect(getAdminProductMock).toHaveBeenCalledOnce());
+    view.rerender(
+      <MemoryRouter
+        initialEntries={[`/admin/products/${activeProduct.id}/edit`]}
+      >
+        <Routes>
+          <Route
+            path="/admin/products/:productId/edit"
+            element={<ProductWizardPage accessToken="successor-authority" />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("textbox", { name: "Name" })).toHaveValue(
+      candidateOnlyProduct.name,
+    );
+    rejectObsolete(new Error("stale route failure"));
+    await act(async () => Promise.resolve());
+    expect(
+      screen.queryByText("Product draft unavailable"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("bounds products without revisions and responses without candidate authority", async () => {
+    const orphan = {
+      ...activeProduct,
+      active_revision: null,
+      candidate_revision: null,
+    };
+    const first = renderWizard(orphan);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save and continue" }),
+    );
+    expect(await screen.findByText("Draft not saved")).toBeVisible();
+    expect(updateAdminProductCandidateMock).not.toHaveBeenCalled();
+    first.unmount();
+
+    updateAdminProductCandidateMock.mockResolvedValueOnce(
+      ok(activeWithoutCandidateProduct),
+    );
+    renderWizard(activeWithoutCandidateProduct);
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Name" }),
+      " changed",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save and continue" }),
+    );
+    expect(await screen.findByText("Draft not saved")).toBeVisible();
+  });
+
+  it("uses mobile next and back controls with repository step validation", async () => {
+    exposeTask2Repositories();
+    updateAdminProductCandidateMock.mockResolvedValueOnce(ok(activeProduct));
+    renderWizard(activeProduct);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Next: Repositories" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Repositories" }),
+    ).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("textbox", { name: "Name" })).toBeVisible();
+
+    await userEvent.click(
+      screen
+        .getByRole("navigation", { name: "Product setup steps" })
+        .querySelectorAll("button")[1],
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Next: Mappings" }),
+    );
+    expect(await screen.findByText("Complete this step")).toBeVisible();
+    await userEvent.click(
+      (
+        await screen.findAllByRole("button", {
+          name: "Use Mobile application source",
+        })
+      )[0],
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Next: Mappings" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Mappings" }),
+    ).toBeVisible();
+
+    await userEvent.click(
+      screen
+        .getByRole("navigation", { name: "Product setup steps" })
+        .querySelectorAll("button")[4],
+    );
+    const terminalNext = screen.getByRole("button", { name: "Next" });
+    expect(terminalNext).toBeDisabled();
+    expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
+      "Step 5 of 5",
+    );
+
+    await userEvent.click(
+      screen
+        .getByRole("navigation", { name: "Product setup steps" })
+        .querySelectorAll("button")[0],
+    );
+    const firstBack = screen.getByRole("button", { name: "Back" });
+    expect(firstBack).toBeDisabled();
+    expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
+      "Step 1 of 5",
+    );
+  });
+
+  it("deduplicates both sides of separate mappings", async () => {
+    listAdminRevisionMappingsMock.mockResolvedValueOnce(
+      ok({
+        items: [
+          directMapping,
+          {
+            ...directMapping,
+            id: "00000000-0000-4000-8000-000000000499",
+            topology: "separate",
+            translations_repository_id: translationRepository.id,
+            translations_source_branch: "translations/main",
+          },
+        ],
+        next_cursor: null,
+      }),
+    );
+
+    const loaded = await loadEditableProduct(
+      "memory-only-admin-bearer",
+      activeProduct.id,
+    );
+    expect(loaded.mappedRepositoryIds).toEqual([
+      applicationRepository.id,
+      translationRepository.id,
+    ]);
   });
 
   it("keeps all five wizard steps reachable through persistent 320px keyboard and pointer controls", async () => {

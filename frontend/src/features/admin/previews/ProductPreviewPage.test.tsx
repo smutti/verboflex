@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import {
+  act,
   cleanup,
   render,
   screen,
@@ -284,6 +285,79 @@ describe("administrator product preview and publication page", () => {
     renderPage();
     expect(await screen.findByText("Validation has not run")).toBeVisible();
     expect(screen.getByText(/Run validation to detect files/)).toBeVisible();
+  });
+
+  it("fails closed on missing product and revision data, then retries the same page", async () => {
+    getProductMock
+      .mockResolvedValueOnce(ok(undefined as never))
+      .mockResolvedValueOnce(
+        ok({ ...product, candidate_revision: null, is_active: true }),
+      )
+      .mockResolvedValueOnce(ok(product));
+    renderPage();
+
+    expect(
+      await screen.findByText("Product preview unavailable"),
+    ).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry loading page" }),
+    );
+    await waitFor(() => expect(getProductMock).toHaveBeenCalledTimes(2));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry loading page" }),
+    );
+    expect(await screen.findByText("Validation has not run")).toBeVisible();
+  });
+
+  it("renders mapping loading and bounded retry states", async () => {
+    let rejectMappings!: (reason: Error) => void;
+    listRevisionMappingsMock.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectMappings = reject;
+      }) as never,
+    );
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Loading product preview",
+      );
+    });
+    await waitFor(() =>
+      expect(listRevisionMappingsMock).toHaveBeenCalledOnce(),
+    );
+    rejectMappings(new Error("bounded mapping failure"));
+    expect(
+      await screen.findByText("Product preview unavailable"),
+    ).toBeVisible();
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [mapping], next_cursor: null }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry loading page" }),
+    );
+    expect(await screen.findByText("Validation has not run")).toBeVisible();
+  });
+
+  it("admits only one pending validation submission", async () => {
+    let resolveJob!: (
+      value: ReturnType<typeof ok<AdminPreviewJobResponse>>,
+    ) => void;
+    createJobMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveJob = resolve;
+      }) as never,
+    );
+    renderPage();
+    const run = await screen.findByRole("button", { name: "Run validation" });
+    await waitFor(() => expect(run).toBeEnabled());
+    act(() => {
+      run.click();
+      run.click();
+    });
+    await waitFor(() => expect(createJobMock).toHaveBeenCalledOnce());
+    resolveJob(ok(previewJob(), 202));
+    expect(await screen.findByText("Succeeded")).toBeVisible();
   });
 
   it.each([0, 1, 50, 51])(
@@ -785,9 +859,10 @@ describe("administrator product preview and publication page", () => {
 
     releaseProduct();
 
-    expect(
-      await screen.findByRole("button", { name: "Reactivate product" }),
-    ).toBeEnabled();
+    const reactivate = await screen.findByRole("button", {
+      name: "Reactivate product",
+    });
+    await waitFor(() => expect(reactivate).toBeEnabled());
     expect(listRevisionMappingsMock).toHaveBeenCalledTimes(1);
     expect(listRevisionMappingsMock).toHaveBeenCalledWith({
       auth: "memory-only-admin-bearer",
@@ -935,5 +1010,110 @@ describe("administrator product preview and publication page", () => {
     expect(await screen.findByText("Active")).toBeVisible();
     expect(listCandidateMappingsMock).not.toHaveBeenCalled();
     expect(updateProductMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores superseded lifecycle results and bounds current transport failures", async () => {
+    const successorProduct = {
+      ...inactiveActiveOnlyProduct,
+      id: "00000000-0000-4000-8000-000000000199",
+    };
+    let resolveObsolete!: (
+      value: ReturnType<typeof ok<AdminProductResponse>>,
+    ) => void;
+    getProductMock
+      .mockResolvedValueOnce(ok(inactiveActiveOnlyProduct))
+      .mockResolvedValueOnce(ok(successorProduct));
+    listRevisionMappingsMock.mockResolvedValue(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+    reactivateMock
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveObsolete = resolve;
+        }) as never,
+      )
+      .mockRejectedValueOnce(new Error("bounded lifecycle failure"));
+    const view = renderPage(inactiveActiveOnlyProduct.id);
+    const first = await screen.findByRole("button", {
+      name: "Reactivate product",
+    });
+    await waitFor(() => expect(first).toBeEnabled());
+    await userEvent.click(first);
+    await userEvent.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", {
+        name: "Reactivate product",
+      }),
+    );
+
+    view.rerender(
+      <MemoryRouter>
+        <ProductPreviewPage
+          accessToken="successor-admin-bearer"
+          productId={successorProduct.id}
+        />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(getProductMock).toHaveBeenCalledTimes(2));
+    resolveObsolete(ok({ ...inactiveActiveOnlyProduct, is_active: true }));
+    await waitFor(() => expect(screen.getByText("Inactive")).toBeVisible());
+
+    view.unmount();
+    getProductMock.mockResolvedValueOnce(ok(successorProduct));
+    renderPage(successorProduct.id);
+    const successor = await screen.findByRole("button", {
+      name: "Reactivate product",
+    });
+    await waitFor(() => expect(successor).toBeEnabled());
+
+    await userEvent.click(successor);
+    await userEvent.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", {
+        name: "Reactivate product",
+      }),
+    );
+    expect(
+      await screen.findByText("Publication did not complete"),
+    ).toBeVisible();
+    expect(screen.getByText("Inactive")).toBeVisible();
+  });
+
+  it("ignores a rejected lifecycle request after product authority changes", async () => {
+    let rejectObsolete!: (reason: Error) => void;
+    getProductMock
+      .mockResolvedValueOnce(ok(inactiveActiveOnlyProduct))
+      .mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValue(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+    reactivateMock.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectObsolete = reject;
+      }) as never,
+    );
+    const view = renderPage(inactiveActiveOnlyProduct.id);
+    const reactivate = await screen.findByRole("button", {
+      name: "Reactivate product",
+    });
+    await waitFor(() => expect(reactivate).toBeEnabled());
+    await userEvent.click(reactivate);
+    await userEvent.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", {
+        name: "Reactivate product",
+      }),
+    );
+    view.rerender(
+      <MemoryRouter>
+        <ProductPreviewPage
+          accessToken="successor-lifecycle-authority"
+          productId={inactiveActiveOnlyProduct.id}
+        />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(getProductMock).toHaveBeenCalledTimes(2));
+    rejectObsolete(new Error("stale lifecycle failure"));
+    await act(async () => Promise.resolve());
+    expect(
+      screen.queryByText("Publication did not complete"),
+    ).not.toBeInTheDocument();
   });
 });

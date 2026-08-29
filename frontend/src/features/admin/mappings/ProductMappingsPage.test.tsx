@@ -13,6 +13,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createAdminCandidateMapping,
   getAdminProduct,
   getAdminRepositoryBranch,
   listAdminCandidateMappings,
@@ -29,6 +30,7 @@ vi.mock("../../../api/client", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../../api/client")>();
   return {
     ...original,
+    createAdminCandidateMapping: vi.fn(),
     getAdminProduct: vi.fn(),
     getAdminRepositoryBranch: vi.fn(),
     listAdminCandidateMappings: vi.fn(),
@@ -37,6 +39,7 @@ vi.mock("../../../api/client", async (importOriginal) => {
   };
 });
 
+const createAdminCandidateMappingMock = vi.mocked(createAdminCandidateMapping);
 const getAdminProductMock = vi.mocked(getAdminProduct);
 const getAdminRepositoryBranchMock = vi.mocked(getAdminRepositoryBranch);
 const listAdminCandidateMappingsMock = vi.mocked(listAdminCandidateMappings);
@@ -113,8 +116,20 @@ function renderMappings(productId = "product-one") {
   );
 }
 
+function renderMappingsWithServerVersion(productId = "product-one") {
+  return render(
+    <MemoryRouter>
+      <ProductMappingsPage
+        accessToken="memory-only-admin-bearer"
+        productId={productId}
+      />
+    </MemoryRouter>,
+  );
+}
+
 describe("administrator mapping cursor collections", () => {
   beforeEach(() => {
+    createAdminCandidateMappingMock.mockReset();
     getAdminProductMock.mockReset();
     getAdminRepositoryBranchMock.mockReset();
     listAdminCandidateMappingsMock.mockReset();
@@ -308,5 +323,252 @@ describe("administrator mapping cursor collections", () => {
     expect(await screen.findByText("All 101 branches loaded")).toBeVisible();
     expect(sourceBranch).toHaveTextContent(configuredBranch);
     expect(getAdminRepositoryBranchMock).toHaveBeenCalledOnce();
+  });
+
+  it("fails closed on missing collection and version payloads, then retries all authorities", async () => {
+    listAdminRepositoriesMock
+      .mockResolvedValueOnce(ok(undefined as never))
+      .mockResolvedValueOnce(ok({ items: [repository], next_cursor: null }));
+    listAdminCandidateMappingsMock
+      .mockResolvedValueOnce(ok(undefined as never))
+      .mockResolvedValueOnce(ok({ items: [], next_cursor: null }));
+    getAdminProductMock
+      .mockResolvedValueOnce(ok(undefined as never))
+      .mockResolvedValueOnce(
+        ok({ candidate_revision: { version: 5 } } as never),
+      );
+    renderMappingsWithServerVersion();
+
+    expect(await screen.findByText("Mappings unavailable")).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry loading page" }),
+    );
+    expect(await screen.findByText("No mappings configured")).toBeVisible();
+    expect(listAdminRepositoriesMock).toHaveBeenCalledTimes(2);
+    expect(listAdminCandidateMappingsMock).toHaveBeenCalledTimes(2);
+    expect(getAdminProductMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps configured branches absent when provider results are missing", async () => {
+    const configured = mapping(7, "release/configured");
+    listAdminCandidateMappingsMock.mockResolvedValueOnce(
+      ok({ items: [configured], next_cursor: null }),
+    );
+    listAdminRepositoryBranchesMock.mockResolvedValueOnce(
+      ok(undefined as never),
+    );
+    getAdminRepositoryBranchMock.mockResolvedValueOnce(ok(undefined as never));
+    renderMappings();
+
+    await userEvent.click(
+      (await screen.findAllByRole("button", { name: "Edit mapping" }))[0],
+    );
+    expect(await screen.findByText("Branches unavailable")).toBeVisible();
+    expect(
+      screen.getByRole("combobox", { name: "Source branch" }),
+    ).not.toHaveTextContent("release/configured");
+  });
+
+  it("drops queued loads superseded before their microtasks run", async () => {
+    listAdminCandidateMappingsMock.mockResolvedValue(
+      ok({ items: [], next_cursor: null }),
+    );
+    getAdminProductMock.mockResolvedValue(
+      ok({ candidate_revision: { version: 5 } } as never),
+    );
+    const view = renderMappings("obsolete-product");
+    view.rerender(
+      <MemoryRouter>
+        <ProductMappingsPage
+          accessToken="successor-authority"
+          productId="successor-product"
+        />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("No mappings configured")).toBeVisible();
+    expect(getAdminProductMock).toHaveBeenCalledOnce();
+  });
+
+  it("loads separate mapping sides and validates the live translations branch", async () => {
+    const translationsRepository = {
+      ...repository,
+      id: "00000000-0000-4000-8000-000000000302",
+      descriptive_name: "Translations source",
+      repository_slug: "translations",
+    };
+    const separateMapping: AdminMappingResponse = {
+      ...mapping(8, "keys/main"),
+      topology: "separate",
+      translations_repository_id: translationsRepository.id,
+      translations_source_branch: "translations/main",
+      allowed_target_branches: ["release/2026"],
+      default_target_branch: "release/2026",
+    };
+    listAdminRepositoriesMock.mockResolvedValueOnce(
+      ok({ items: [repository, translationsRepository], next_cursor: null }),
+    );
+    listAdminCandidateMappingsMock.mockResolvedValueOnce(
+      ok({ items: [separateMapping], next_cursor: null }),
+    );
+    listAdminRepositoryBranchesMock.mockResolvedValue(
+      ok({
+        items: [
+          { name: "keys/main", commit_hash: "a".repeat(40) },
+          { name: "translations/main", commit_hash: "b".repeat(40) },
+          { name: "release/2026", commit_hash: "c".repeat(40) },
+        ],
+        next_cursor: null,
+      }),
+    );
+    getAdminRepositoryBranchMock.mockImplementation(async (options) => {
+      const branch = {
+        name: options.query.branch_name,
+        commit_hash: "d".repeat(40),
+      };
+      const response = ok(branch);
+      let reads = 0;
+      Object.defineProperty(response, "data", {
+        get: () => (++reads === 1 ? branch : undefined),
+      });
+      return response;
+    });
+    createAdminCandidateMappingMock.mockResolvedValueOnce(ok(separateMapping));
+    renderMappings();
+
+    await userEvent.click(
+      (await screen.findAllByRole("button", { name: "Edit mapping" }))[0],
+    );
+    expect(screen.getByRole("radio", { name: "Separate" })).toBeChecked();
+    await waitFor(() => {
+      expect(
+        screen.getByRole("combobox", { name: "Translations source branch" }),
+      ).toHaveTextContent("translations/main");
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Cancel edit" }));
+
+    await userEvent.click(screen.getByRole("radio", { name: "Separate" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Change topology" }),
+    );
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Keys repository" }),
+    );
+    await userEvent.click(
+      screen.getByRole("option", { name: /Application source/ }),
+    );
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Translations repository" }),
+    );
+    await userEvent.click(
+      screen.getByRole("option", { name: /Translations source/ }),
+    );
+    await waitFor(() =>
+      expect(listAdminRepositoryBranchesMock).toHaveBeenCalled(),
+    );
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Keys source branch" }),
+    );
+    await userEvent.click(screen.getByRole("option", { name: "keys/main" }));
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Translations source branch" }),
+    );
+    await userEvent.click(
+      screen.getByRole("option", { name: "translations/main" }),
+    );
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Allow target release/2026" }),
+    );
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Default target" }),
+    );
+    await userEvent.click(screen.getByRole("option", { name: "release/2026" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save mapping" }));
+    await waitFor(() =>
+      expect(createAdminCandidateMappingMock).toHaveBeenCalledOnce(),
+    );
+  });
+
+  it("maps rejected server-version loads to the bounded page error", async () => {
+    listAdminCandidateMappingsMock.mockResolvedValueOnce(
+      ok({ items: [], next_cursor: null }),
+    );
+    getAdminProductMock.mockRejectedValueOnce(
+      new Error("private version failure"),
+    );
+    renderMappingsWithServerVersion();
+    expect(await screen.findByText("Mappings unavailable")).toBeVisible();
+  });
+
+  it("ignores a rejected version load after authority is replaced", async () => {
+    let rejectObsolete!: (reason: Error) => void;
+    getAdminProductMock
+      .mockReturnValueOnce(
+        new Promise((_resolve, reject) => {
+          rejectObsolete = reject;
+        }) as never,
+      )
+      .mockResolvedValueOnce(
+        ok({ candidate_revision: { version: 5 } } as never),
+      );
+    listAdminCandidateMappingsMock.mockResolvedValue(
+      ok({ items: [], next_cursor: null }),
+    );
+    const view = renderMappingsWithServerVersion("obsolete-product");
+    await waitFor(() => expect(getAdminProductMock).toHaveBeenCalledOnce());
+    view.rerender(
+      <MemoryRouter>
+        <ProductMappingsPage
+          accessToken="successor-authority"
+          productId="successor-product"
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("No mappings configured")).toBeVisible();
+    rejectObsolete(new Error("stale version failure"));
+    await act(async () => Promise.resolve());
+    expect(screen.queryByText("Mappings unavailable")).not.toBeInTheDocument();
+  });
+
+  it("ignores a successful version load after authority is replaced", async () => {
+    let resolveObsolete!: (value: ReturnType<typeof ok<unknown>>) => void;
+    getAdminProductMock
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveObsolete = resolve;
+        }) as never,
+      )
+      .mockResolvedValueOnce(
+        ok({ candidate_revision: { version: 5 } } as never),
+      );
+    listAdminCandidateMappingsMock.mockResolvedValue(
+      ok({ items: [], next_cursor: null }),
+    );
+    const view = renderMappingsWithServerVersion("obsolete-product");
+    await waitFor(() => expect(getAdminProductMock).toHaveBeenCalledOnce());
+    view.rerender(
+      <MemoryRouter>
+        <ProductMappingsPage
+          accessToken="successor-authority"
+          productId="successor-product"
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("No mappings configured")).toBeVisible();
+    resolveObsolete(ok({ candidate_revision: { version: 99 } }));
+    await act(async () => Promise.resolve());
+    expect(screen.queryByText("Mappings unavailable")).not.toBeInTheDocument();
+  });
+
+  it("rejects an incomplete mapping before any mutation", async () => {
+    listAdminCandidateMappingsMock.mockResolvedValueOnce(
+      ok({ items: [], next_cursor: null }),
+    );
+    renderMappings();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Save mapping" }),
+    );
+    expect(await screen.findByText("Mapping not saved")).toBeVisible();
+    expect(createAdminCandidateMappingMock).not.toHaveBeenCalled();
   });
 });

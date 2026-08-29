@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -121,6 +121,36 @@ describe("administrator Bitbucket connection page", () => {
       screen.getByRole("button", { name: "Retry loading page" }),
     );
     expect(await screen.findByText("Disconnected")).toBeVisible();
+  });
+
+  it("rejects missing status data and ignores an obsolete successful load", async () => {
+    getStatusMock.mockResolvedValueOnce(ok(undefined as never));
+    const first = renderPage();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We could not load this page",
+    );
+    first.unmount();
+
+    const obsolete =
+      deferred<ReturnType<typeof ok<AdminBitbucketStatusResponse>>>();
+    getStatusMock
+      .mockReturnValueOnce(obsolete.promise as never)
+      .mockResolvedValueOnce(ok(disconnected));
+    const view = render(
+      <BitbucketConnectionPage accessToken="first-admin-bearer" />,
+    );
+    await waitFor(() => expect(getStatusMock).toHaveBeenCalledTimes(2));
+    view.rerender(
+      <BitbucketConnectionPage accessToken="successor-admin-bearer" />,
+    );
+    await waitFor(() => expect(getStatusMock).toHaveBeenCalledTimes(3));
+    expect(await screen.findByText("Disconnected")).toBeVisible();
+    obsolete.resolve(ok(connected));
+    await waitFor(() => {
+      expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+      expect(screen.getByText("Disconnected")).toBeVisible();
+    });
   });
 
   it.each([
@@ -302,6 +332,43 @@ describe("administrator Bitbucket connection page", () => {
         forbidden,
       );
     }
+  });
+
+  it("bounds duplicate connection actions and every failure boundary", async () => {
+    getStatusMock
+      .mockResolvedValueOnce(ok(disconnected))
+      .mockResolvedValueOnce(ok(undefined as never));
+    const pending =
+      deferred<ReturnType<typeof ok<AdminBitbucketStatusResponse>>>();
+    connectMock
+      .mockReturnValueOnce(pending.promise as never)
+      .mockResolvedValueOnce(ok(undefined as never))
+      .mockResolvedValueOnce(ok(connected))
+      .mockRejectedValueOnce(new Error("bounded connection failure"));
+    renderPage();
+
+    const connect = await screen.findByRole("button", {
+      name: "Connect Bitbucket",
+    });
+    act(() => {
+      connect.click();
+      connect.click();
+    });
+    expect(connectMock).toHaveBeenCalledTimes(1);
+    pending.resolve(ok(undefined as never));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Bitbucket connection unavailable",
+    );
+
+    await userEvent.click(connect);
+    await waitFor(() => expect(connectMock).toHaveBeenCalledTimes(2));
+
+    await userEvent.click(connect);
+    await waitFor(() => expect(getStatusMock).toHaveBeenCalledTimes(2));
+
+    await userEvent.click(connect);
+    await waitFor(() => expect(screen.getByRole("alert")).toBeVisible());
+    expect(connectMock).toHaveBeenCalledTimes(4);
   });
 
   it("revokes only after named confirmation and keeps server authority on failure", async () => {
