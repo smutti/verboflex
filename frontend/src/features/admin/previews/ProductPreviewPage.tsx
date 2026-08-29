@@ -766,7 +766,7 @@ export function ProductPreviewPage({
   }, [accessToken, resolvedProductId]);
 
   const loadMappingPage = useCallback(
-    async (cursor: string | null, signal: AbortSignal) => {
+    async (cursor: string | null) => {
       if (pageState.status !== "ready") {
         return { items: [], next_cursor: null };
       }
@@ -777,7 +777,6 @@ export function ProductPreviewPage({
           revision_id: pageState.revisionId,
         },
         query: { cursor, limit: 50 },
-        signal,
       });
       if (result.data === undefined) {
         throw new Error("mapping page unavailable");

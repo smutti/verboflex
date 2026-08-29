@@ -796,7 +796,6 @@ describe("administrator product preview and publication page", () => {
         revision_id: inactiveActiveOnlyProduct.active_revision!.id,
       },
       query: { cursor: null, limit: 50 },
-      signal: expect.any(AbortSignal),
     });
     expect(listCandidateMappingsMock).not.toHaveBeenCalled();
     expect(updateProductMock).not.toHaveBeenCalled();
