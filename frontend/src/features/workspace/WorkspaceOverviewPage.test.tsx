@@ -110,11 +110,7 @@ beforeEach(() => {
 });
 
 describe("role-aware Workspace overview", () => {
-  it.each<RoleName>([
-    "product_manager_reviewer",
-    "translator",
-    "viewer",
-  ])(
+  it.each<RoleName>(["product_manager_reviewer", "translator", "viewer"])(
     "keeps %s on ordinary identity and status operations through error and retry",
     async (role) => {
       const principal = authenticateAs(role);
