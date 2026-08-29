@@ -1855,3 +1855,33 @@ test("unchanged active revision reactivation uses real backend state and blocks 
     cleanupRealReactivationFixtures(fixture);
   }
 });
+
+test("51st mapping preview readiness consumes terminal cursor before lifecycle authority", async ({
+  page,
+}) => {
+  const productId = realEnvironment("E2E_MAPPING_51_PRODUCT_ID");
+  await signInToRealBackend(page);
+  const cursorTrace: Array<string | null> = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (
+      request.method() === "GET" &&
+      url.pathname.startsWith(
+        `/api/v1/admin/products/${productId}/revisions/`,
+      ) &&
+      url.pathname.endsWith("/mappings")
+    ) {
+      cursorTrace.push(url.searchParams.get("cursor"));
+    }
+  });
+
+  await page.goto(`/admin/products/${productId}/preview`);
+
+  await expect(page.getByRole("heading", { name: "Mapping 51" })).toBeVisible();
+  expect(cursorTrace).toHaveLength(2);
+  expect(cursorTrace[0]).toBeNull();
+  expect(cursorTrace[1]).not.toBeNull();
+  await expect(
+    page.getByRole("button", { name: "Reactivate product" }),
+  ).toBeDisabled();
+});
