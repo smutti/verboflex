@@ -474,12 +474,26 @@ def test_repository_api_is_closed_credential_free_and_provider_read_free(
     repository_paths = {
         path for path in app.openapi()["paths"] if path.startswith(ADMIN_REPOSITORIES_PATH)
     }
+    exact_branch_path = f"{ADMIN_REPOSITORIES_PATH}/{{repository_id}}/branch"
     assert repository_paths == {
         ADMIN_REPOSITORIES_PATH,
         f"{ADMIN_REPOSITORIES_PATH}/{{repository_id}}",
+        exact_branch_path,
         f"{ADMIN_REPOSITORIES_PATH}/{{repository_id}}/branches",
         f"{ADMIN_REPOSITORIES_PATH}/{{repository_id}}/sources",
     }
+    exact_branch_methods = app.openapi()["paths"][exact_branch_path]
+    assert set(exact_branch_methods) == {"get"}
+    exact_branch_operation = exact_branch_methods["get"]
+    branch_name_parameter = next(
+        parameter
+        for parameter in exact_branch_operation["parameters"]
+        if parameter["name"] == "branch_name"
+    )
+    assert branch_name_parameter["in"] == "query"
+    assert branch_name_parameter["required"] is True
+    assert branch_name_parameter["schema"]["minLength"] == 1
+    assert branch_name_parameter["schema"]["maxLength"] == 255
     request_schema = app.openapi()["components"]["schemas"]["AdminRepositoryCreateRequest"]
     response_schema = app.openapi()["components"]["schemas"]["AdminRepositoryResponse"]
     assert request_schema["additionalProperties"] is False
