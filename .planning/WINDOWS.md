@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 0
 waived_count: 0
-fixed_count: 29
-total_count: 29
-last_updated: 2026-08-29T15:48:31.840Z
+fixed_count: 32
+total_count: 32
+last_updated: 2026-08-29T17:49:54.522Z
 ---
 
 # Broken Windows Ledger
@@ -44,6 +44,9 @@ last_updated: 2026-08-29T15:48:31.840Z
 | 27 | 02 | deviation | tools/phase2_smoke.sh |  | Added a bounded exact-address-in-use Compose retry after a transient host-port race. | fixed |  | 2026-08-29T09:57:06.841Z | 2026-08-29T09:57:06.951Z |
 | 28 | 02 | deviation | frontend/src/api/admin-client-contract.test.ts |  | Scoped the generated credential-surface assertion to Bitbucket aliases after the initial full-client scan produced unrelated false positives. | fixed |  | 2026-08-29T15:48:27.121Z | 2026-08-29T15:48:31.780Z |
 | 29 | 02 | deviation | frontend/src/api/client/index.ts |  | Included the canonical generator-owned client barrel omitted from the plan file list. | fixed |  | 2026-08-29T15:48:27.185Z | 2026-08-29T15:48:31.840Z |
+| 30 | 02 | deviation | tools/verify_mapping_api_mutants.py |  | Realigned mapping mutation subjects with the shared owned-revision paginator. | fixed |  | 2026-08-29T17:49:48.066Z | 2026-08-29T17:49:54.400Z |
+| 31 | 02 | deviation | backend/tests/integration/test_bitbucket_http_adapter.py |  | Updated the stale credential fixture to the expiry-safe lease contract required by the acceptance gate. | fixed |  | 2026-08-29T17:49:48.147Z | 2026-08-29T17:49:54.461Z |
+| 32 | 02 | deviation | frontend/src/features/admin/products/ProductConfiguration.test.tsx |  | Aligned existing frontend revision fixtures with the canonical required revision name. | fixed |  | 2026-08-29T17:49:48.220Z | 2026-08-29T17:49:54.522Z |
 
 ````json
 [
@@ -394,6 +397,42 @@ last_updated: 2026-08-29T15:48:31.840Z
     "reason": "",
     "recorded_at": "2026-08-29T15:48:27.185Z",
     "resolved_at": "2026-08-29T15:48:31.840Z"
+  },
+  {
+    "id": 30,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "tools/verify_mapping_api_mutants.py",
+    "line": null,
+    "description": "Realigned mapping mutation subjects with the shared owned-revision paginator.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-29T17:49:48.066Z",
+    "resolved_at": "2026-08-29T17:49:54.400Z"
+  },
+  {
+    "id": 31,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "backend/tests/integration/test_bitbucket_http_adapter.py",
+    "line": null,
+    "description": "Updated the stale credential fixture to the expiry-safe lease contract required by the acceptance gate.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-29T17:49:48.147Z",
+    "resolved_at": "2026-08-29T17:49:54.461Z"
+  },
+  {
+    "id": 32,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "frontend/src/features/admin/products/ProductConfiguration.test.tsx",
+    "line": null,
+    "description": "Aligned existing frontend revision fixtures with the canonical required revision name.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-29T17:49:48.220Z",
+    "resolved_at": "2026-08-29T17:49:54.522Z"
   }
 ]
 ````
