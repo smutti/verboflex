@@ -39,10 +39,10 @@
 
 ### Bitbucket Cloud Integration
 
-- [ ] **BITB-01**: Admin can connect, reconnect, revoke, and view bounded status for the single organization-wide Bitbucket Cloud OAuth 2.0 connection used for repository access.
+- [x] **BITB-01**: Admin can connect, reconnect, revoke, and view bounded status for the single organization-wide Bitbucket Cloud OAuth 2.0 connection used for repository access.
 - [ ] **BITB-02**: System validates and reports Bitbucket Cloud capabilities required by configured read/import operations and the later write/pull-request profile without silently expanding OAuth scopes.
-- [ ] **BITB-03**: System can list configured repository branches from Bitbucket Cloud.
-- [ ] **BITB-04**: System can read configured localization files from the configured Bitbucket Cloud source branch.
+- [x] **BITB-03**: System can list configured repository branches from Bitbucket Cloud.
+- [x] **BITB-04**: System can read configured localization files from the configured Bitbucket Cloud source branch.
 - [ ] **BITB-05**: System stores the source commit hash and file reference used for each import.
 - [ ] **BITB-06**: System reports Bitbucket connection, permission, and import errors in a way admins can act on.
 
@@ -195,10 +195,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROD-07 | Phase 2 | Gaps Found |
 | PROD-08 | Phase 2 | Gaps Found |
 | PROD-09 | Phase 2 | Gaps Found |
-| BITB-01 | Phase 2 | Gaps Found |
+| BITB-01 | Phase 2 | Complete |
 | BITB-02 | Phase 3 | Pending |
-| BITB-03 | Phase 2 | Gaps Found |
-| BITB-04 | Phase 2 | Gaps Found |
+| BITB-03 | Phase 2 | Complete |
+| BITB-04 | Phase 2 | Complete |
 | BITB-05 | Phase 3 | Pending |
 | BITB-06 | Phase 3 | Pending |
 | FMT-01 | Phase 4 | Pending |
