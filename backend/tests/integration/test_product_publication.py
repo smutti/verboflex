@@ -320,7 +320,7 @@ def _confirm_revision_mappings(
         connection = session.get_one(BitbucketConnection, 1)
         connection.generation = 7
         connection.access_token_ciphertext = "encrypted-access"
-        connection.refresh_token_ciphertext = "encrypted-refresh"
+        connection.refresh_token_ciphertext = None
         connection.scope_profile = "repository"
         connection.provider_expires_at = now + timedelta(hours=1)
         connection.connected_at = now
