@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  connectAdminBitbucketOauth,
   getAdminBitbucketStatus,
   reconnectAdminBitbucketOauth,
   revokeAdminBitbucketConnectionLocally,
-  startAdminBitbucketOauth,
   type AdminBitbucketStatusResponse,
 } from "../../../api/client";
 import {
@@ -27,7 +27,6 @@ import { Skeleton } from "../../../components/ui/skeleton";
 
 export interface BitbucketConnectionPageProps {
   accessToken: string;
-  navigateTo?: (url: string) => void;
 }
 
 type LoadState =
@@ -35,7 +34,7 @@ type LoadState =
   | { status: "error" }
   | { status: "ready"; connection: AdminBitbucketStatusResponse };
 
-type AuthorizationAction = "connect" | "reconnect";
+type ConnectionAction = "connect" | "reconnect";
 
 const timestampFormatter = new Intl.DateTimeFormat("en-GB", {
   day: "2-digit",
@@ -58,24 +57,6 @@ function boundedTimestamp(value: string | null) {
     : timestampFormatter.format(timestamp);
 }
 
-function defaultNavigateTo(url: string) {
-  window.location.assign(url);
-}
-
-function safeAuthorizationDestination(value: string) {
-  try {
-    const destination = new URL(value);
-    return destination.protocol === "https:" &&
-      destination.username === "" &&
-      destination.password === "" &&
-      destination.hash === ""
-      ? destination.href
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 function ConnectionTimestamp({
   label,
   value,
@@ -96,39 +77,48 @@ function ConnectionTimestamp({
 
 export function BitbucketConnectionPage({
   accessToken,
-  navigateTo = defaultNavigateTo,
 }: BitbucketConnectionPageProps) {
   const loadGenerationRef = useRef(0);
-  const authorizationPendingRef = useRef(false);
+  const connectionPendingRef = useRef(false);
   const revokePendingRef = useRef(false);
   const revokeErrorRef = useRef<HTMLDivElement>(null);
   const revokeTriggerRef = useRef<HTMLButtonElement>(null);
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
-  const [authorizationPending, setAuthorizationPending] =
-    useState<AuthorizationAction | null>(null);
-  const [authorizationError, setAuthorizationError] = useState(false);
+  const [connectionPending, setConnectionPending] =
+    useState<ConnectionAction | null>(null);
+  const [connectionError, setConnectionError] = useState(false);
+  const [connectionAnnouncement, setConnectionAnnouncement] = useState<
+    string | null
+  >(null);
   const [revokeOpen, setRevokeOpen] = useState(false);
   const [revokePending, setRevokePending] = useState(false);
   const [revokeError, setRevokeError] = useState(false);
 
-  const loadConnection = useCallback(async () => {
-    const generation = ++loadGenerationRef.current;
-    setLoadState({ status: "loading" });
-    try {
-      const result = await getAdminBitbucketStatus({ auth: accessToken });
-      if (generation !== loadGenerationRef.current) {
-        return;
+  const loadConnection = useCallback(
+    async (showLoading = true) => {
+      const generation = ++loadGenerationRef.current;
+      if (showLoading) {
+        setLoadState({ status: "loading" });
       }
-      if (result.data === undefined) {
-        throw new Error();
+      try {
+        const result = await getAdminBitbucketStatus({ auth: accessToken });
+        if (generation !== loadGenerationRef.current) {
+          return false;
+        }
+        if (result.data === undefined) {
+          throw new Error();
+        }
+        setLoadState({ status: "ready", connection: result.data });
+        return true;
+      } catch {
+        if (generation === loadGenerationRef.current && showLoading) {
+          setLoadState({ status: "error" });
+        }
+        return false;
       }
-      setLoadState({ status: "ready", connection: result.data });
-    } catch {
-      if (generation === loadGenerationRef.current) {
-        setLoadState({ status: "error" });
-      }
-    }
-  }, [accessToken]);
+    },
+    [accessToken],
+  );
 
   useEffect(() => {
     let active = true;
@@ -149,31 +139,35 @@ export function BitbucketConnectionPage({
     }
   }, [revokeError]);
 
-  async function beginAuthorization(action: AuthorizationAction) {
-    if (authorizationPendingRef.current) {
+  async function submitConnection(action: ConnectionAction) {
+    if (connectionPendingRef.current) {
       return;
     }
-    authorizationPendingRef.current = true;
-    setAuthorizationPending(action);
-    setAuthorizationError(false);
+    connectionPendingRef.current = true;
+    setConnectionPending(action);
+    setConnectionError(false);
+    setConnectionAnnouncement(null);
     try {
       const result = await (action === "connect"
-        ? startAdminBitbucketOauth({ auth: accessToken })
+        ? connectAdminBitbucketOauth({ auth: accessToken })
         : reconnectAdminBitbucketOauth({ auth: accessToken }));
-      const destination =
-        result.data === undefined
-          ? null
-          : safeAuthorizationDestination(result.data.authorization_url);
-      if (destination === null) {
-        setAuthorizationError(true);
+      if (result.data === undefined) {
+        setConnectionError(true);
         return;
       }
-      navigateTo(destination);
+      const refreshed = await loadConnection(false);
+      if (!refreshed) {
+        setConnectionError(true);
+        return;
+      }
+      setConnectionAnnouncement(
+        action === "connect" ? "Bitbucket connected" : "Bitbucket reconnected",
+      );
     } catch {
-      setAuthorizationError(true);
+      setConnectionError(true);
     } finally {
-      authorizationPendingRef.current = false;
-      setAuthorizationPending(null);
+      connectionPendingRef.current = false;
+      setConnectionPending(null);
     }
   }
 
@@ -270,14 +264,28 @@ export function BitbucketConnectionPage({
         </p>
       </div>
 
-      {authorizationError ? (
+      {connectionError ? (
         <Alert variant="destructive">
-          <AlertTitle>Connection could not start</AlertTitle>
+          <AlertTitle>Bitbucket connection unavailable</AlertTitle>
           <AlertDescription>
-            Bitbucket connection unavailable. Try again without leaving this
-            page.
+            Verify the server configuration, then try again. The current
+            connection status is unchanged.
           </AlertDescription>
         </Alert>
+      ) : null}
+
+      {connectionPending !== null || connectionAnnouncement !== null ? (
+        <div
+          role="status"
+          aria-label="Bitbucket connection mutation"
+          aria-live="polite"
+        >
+          {connectionPending === "connect"
+            ? "Connecting Bitbucket"
+            : connectionPending === "reconnect"
+              ? "Reconnecting Bitbucket"
+              : connectionAnnouncement}
+        </div>
       ) : null}
 
       <section
@@ -314,9 +322,9 @@ export function BitbucketConnectionPage({
           {connection.status === "Disconnected" ? (
             <Button
               type="button"
-              disabled={authorizationPending !== null}
-              aria-busy={authorizationPending === "connect"}
-              onClick={() => void beginAuthorization("connect")}
+              disabled={connectionPending === "connect"}
+              aria-busy={connectionPending === "connect"}
+              onClick={() => void submitConnection("connect")}
             >
               Connect Bitbucket
             </Button>
@@ -324,9 +332,9 @@ export function BitbucketConnectionPage({
           {reconnect ? (
             <Button
               type="button"
-              disabled={authorizationPending !== null}
-              aria-busy={authorizationPending === "reconnect"}
-              onClick={() => void beginAuthorization("reconnect")}
+              disabled={connectionPending === "reconnect"}
+              aria-busy={connectionPending === "reconnect"}
+              onClick={() => void submitConnection("reconnect")}
             >
               Reconnect Bitbucket
             </Button>
@@ -336,7 +344,6 @@ export function BitbucketConnectionPage({
               ref={revokeTriggerRef}
               type="button"
               variant="destructive"
-              disabled={authorizationPending !== null}
               onClick={() => setRevokeOpen(true)}
             >
               Revoke connection
