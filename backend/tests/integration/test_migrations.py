@@ -12,7 +12,7 @@ import pytest
 from alembic.config import Config
 from psycopg import connect, sql
 from sqlalchemy import Engine, create_engine, inspect, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from alembic import command
 
@@ -297,3 +297,214 @@ def test_client_credentials_credential_state_upgrade_downgrade_and_reupgrade(
             )
         ).one()
     assert paired_after_reupgrade == paired
+
+
+def test_product_graph_integrity_upgrade_downgrade_and_reupgrade(
+    migrated_database: tuple[Config, Engine],
+) -> None:
+    """Backfill revision identity and restore every graph guard reversibly."""
+    config, engine = migrated_database
+    command.upgrade(config, "0008_bitbucket_client_credentials")
+
+    product_id = uuid4()
+    active_revision_id = uuid4()
+    candidate_revision_id = uuid4()
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO products "
+                "(id, display_name, name_key, is_active) "
+                "VALUES (:id, 'Migration Product', 'migration product', true)"
+            ),
+            {"id": product_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO product_revisions "
+                "(id, product_id, description, version, is_published, published_at) VALUES "
+                "(:active_id, :product_id, 'active', 4, true, CURRENT_TIMESTAMP), "
+                "(:candidate_id, :product_id, 'candidate', 5, false, NULL)"
+            ),
+            {
+                "active_id": active_revision_id,
+                "candidate_id": candidate_revision_id,
+                "product_id": product_id,
+            },
+        )
+        connection.execute(
+            text(
+                "UPDATE products SET active_revision_id = :active_id, "
+                "candidate_revision_id = :candidate_id WHERE id = :product_id"
+            ),
+            {
+                "active_id": active_revision_id,
+                "candidate_id": candidate_revision_id,
+                "product_id": product_id,
+            },
+        )
+
+    command.upgrade(config, "head")
+    revision_columns = {
+        column["name"]: column for column in inspect(engine).get_columns("product_revisions")
+    }
+    assert revision_columns["display_name"]["nullable"] is False
+    assert revision_columns["name_key"]["nullable"] is False
+    with engine.connect() as connection:
+        identities = connection.execute(
+            text(
+                "SELECT id, display_name, name_key FROM product_revisions "
+                "WHERE product_id = :product_id ORDER BY id"
+            ),
+            {"product_id": product_id},
+        ).all()
+    assert identities == sorted(
+        (
+            (active_revision_id, "Migration Product", "migration product"),
+            (candidate_revision_id, "Migration Product", "migration product"),
+        )
+    )
+
+    assert {
+        constraint["name"]
+        for constraint in inspect(engine).get_unique_constraints("product_revisions")
+    } >= {"uq_product_revisions_product_id_id"}
+    assert {
+        constraint["name"]
+        for constraint in inspect(engine).get_unique_constraints("product_repository_mappings")
+    } >= {"uq_product_mappings_revision_id_id"}
+    assert {
+        foreign_key["name"] for foreign_key in inspect(engine).get_foreign_keys("products")
+    } >= {
+        "fk_products_active_owned_revision",
+        "fk_products_candidate_owned_revision",
+    }
+    assert {
+        foreign_key["name"] for foreign_key in inspect(engine).get_foreign_keys("preview_jobs")
+    } >= {
+        "fk_preview_jobs_owned_revision",
+        "fk_preview_jobs_owned_mapping",
+    }
+
+    with engine.connect() as connection:
+        assert set(
+            connection.execute(
+                text(
+                    "SELECT tgname FROM pg_trigger "
+                    "WHERE NOT tgisinternal AND tgname LIKE 'trg_guard_active_%'"
+                )
+            ).scalars()
+        ) == {
+            "trg_guard_active_product_revisions",
+            "trg_guard_active_product_mappings",
+            "trg_guard_active_mapping_sides",
+            "trg_guard_active_mapping_targets",
+        }
+
+    command.downgrade(config, "0008_bitbucket_client_credentials")
+    assert "display_name" not in {
+        column["name"] for column in inspect(engine).get_columns("product_revisions")
+    }
+    assert {
+        foreign_key["name"] for foreign_key in inspect(engine).get_foreign_keys("products")
+    } >= {
+        "fk_products_active_revision_id_product_revisions",
+        "fk_products_candidate_revision_id_product_revisions",
+    }
+    assert {
+        foreign_key["name"] for foreign_key in inspect(engine).get_foreign_keys("preview_jobs")
+    } >= {
+        "fk_preview_jobs_product_id_products",
+        "fk_preview_jobs_candidate_revision_id_product_revisions",
+        "fk_preview_jobs_mapping_id_product_repository_mappings",
+    }
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                text(
+                    "SELECT count(*) FROM pg_proc "
+                    "WHERE proname = 'verboflex_guard_active_revision_child'"
+                )
+            ).scalar_one()
+            == 0
+        )
+        assert (
+            connection.execute(
+                text(
+                    "SELECT count(*) FROM pg_trigger "
+                    "WHERE NOT tgisinternal "
+                    "AND tgname = 'trg_product_revisions_immutable_published'"
+                )
+            ).scalar_one()
+            == 1
+        )
+
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                text("SELECT display_name FROM product_revisions WHERE id = :revision_id"),
+                {"revision_id": candidate_revision_id},
+            ).scalar_one()
+            == "Migration Product"
+        )
+
+
+def test_product_graph_integrity_migration_rejects_legacy_cross_ownership(
+    migrated_database: tuple[Config, Engine],
+) -> None:
+    """Legacy corruption fails with one bounded message and is never reparented."""
+    config, engine = migrated_database
+    command.upgrade(config, "0008_bitbucket_client_credentials")
+
+    first_product_id = uuid4()
+    second_product_id = uuid4()
+    first_revision_id = uuid4()
+    second_revision_id = uuid4()
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO products (id, display_name, name_key) VALUES "
+                "(:first_id, 'First', 'first'), (:second_id, 'Second', 'second')"
+            ),
+            {"first_id": first_product_id, "second_id": second_product_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO product_revisions "
+                "(id, product_id, description, version, is_published) VALUES "
+                "(:first_revision, :first_product, 'first', 1, false), "
+                "(:second_revision, :second_product, 'second', 1, false)"
+            ),
+            {
+                "first_revision": first_revision_id,
+                "first_product": first_product_id,
+                "second_revision": second_revision_id,
+                "second_product": second_product_id,
+            },
+        )
+        connection.execute(
+            text(
+                "UPDATE products SET candidate_revision_id = :foreign_revision "
+                "WHERE id = :product_id"
+            ),
+            {"foreign_revision": second_revision_id, "product_id": first_product_id},
+        )
+
+    with pytest.raises(DBAPIError, match="legacy product graph ownership violation"):
+        command.upgrade(config, "head")
+
+    with engine.connect() as connection:
+        assert (
+            connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+            == "0008_bitbucket_client_credentials"
+        )
+        assert (
+            connection.execute(
+                text("SELECT candidate_revision_id FROM products WHERE id = :product_id"),
+                {"product_id": first_product_id},
+            ).scalar_one()
+            == second_revision_id
+        )
+    assert "display_name" not in {
+        column["name"] for column in inspect(engine).get_columns("product_revisions")
+    }
