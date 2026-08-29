@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from psycopg import connect, sql
 from sqlalchemy import Engine, create_engine, inspect, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -41,6 +43,7 @@ EXPECTED_ROLES = {
     "translator",
     "viewer",
 }
+PREVIEW_WATCHDOG_INDEX = "ix_preview_jobs_watchdog_state_started_at"
 
 
 @pytest.fixture
@@ -151,6 +154,7 @@ def assert_complete_schema(engine: Engine) -> None:
         "ix_preview_jobs_candidate_revision_id",
         "ix_preview_jobs_mapping_digest_attempt",
         "ix_preview_jobs_product_id",
+        PREVIEW_WATCHDOG_INDEX,
         "ix_product_repository_mappings_revision_id",
         "ix_product_revisions_product_id",
         "uq_product_mapping_allowed_targets_one_default",
@@ -507,4 +511,280 @@ def test_product_graph_integrity_migration_rejects_legacy_cross_ownership(
         )
     assert "display_name" not in {
         column["name"] for column in inspect(engine).get_columns("product_revisions")
+    }
+
+
+def _constraint_names(engine: Engine, table_name: str) -> set[str]:
+    inspector = inspect(engine)
+    names = {
+        constraint["name"]
+        for constraint in inspector.get_check_constraints(table_name)
+        + inspector.get_foreign_keys(table_name)
+        + inspector.get_unique_constraints(table_name)
+        if constraint.get("name") is not None
+    }
+    primary_key = inspector.get_pk_constraint(table_name).get("name")
+    if primary_key is not None:
+        names.add(primary_key)
+    return names
+
+
+def _normalized_running_predicate(raw_predicate: str) -> str:
+    return (
+        raw_predicate.replace("::character varying", "")
+        .replace("::text", "")
+        .replace("(", "")
+        .replace(")", "")
+        .strip()
+    )
+
+
+def _seed_preview_watchdog_rows(
+    engine: Engine,
+) -> tuple[datetime, tuple[object, ...], tuple[object, ...]]:
+    """Seed every persisted state, including more than one watchdog batch."""
+    product_id = uuid4()
+    revision_id = uuid4()
+    mapping_id = uuid4()
+    cutoff = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
+    rows: list[dict[str, object]] = []
+
+    for ordinal in range(125):
+        rows.append(
+            {
+                "id": uuid4(),
+                "input_digest": hashlib.sha256(f"running-{ordinal}".encode()).hexdigest(),
+                "attempt": 1,
+                "state": "running",
+                "product_id": product_id,
+                "revision_id": revision_id,
+                "mapping_id": mapping_id,
+                "started_at": cutoff - timedelta(hours=2, seconds=ordinal // 2),
+                "finished_at": None,
+                "result": None,
+                "error_code": None,
+            }
+        )
+
+    rows.append(
+        {
+            "id": uuid4(),
+            "input_digest": hashlib.sha256(b"running-fresh").hexdigest(),
+            "attempt": 1,
+            "state": "running",
+            "product_id": product_id,
+            "revision_id": revision_id,
+            "mapping_id": mapping_id,
+            "started_at": cutoff + timedelta(seconds=1),
+            "finished_at": None,
+            "result": None,
+            "error_code": None,
+        }
+    )
+    for ordinal, state in enumerate(("queued", "succeeded", "failed", "timed_out"), 1):
+        terminal = state in {"succeeded", "failed", "timed_out"}
+        rows.append(
+            {
+                "id": uuid4(),
+                "input_digest": hashlib.sha256(f"{state}-{ordinal}".encode()).hexdigest(),
+                "attempt": 1,
+                "state": state,
+                "product_id": product_id,
+                "revision_id": revision_id,
+                "mapping_id": mapping_id,
+                "started_at": None if state == "queued" else cutoff - timedelta(hours=4),
+                "finished_at": cutoff if terminal else None,
+                "result": '{"digest": "retained"}' if state == "succeeded" else None,
+                "error_code": (
+                    "processing_failed"
+                    if state == "failed"
+                    else "time_limit_exceeded"
+                    if state == "timed_out"
+                    else None
+                ),
+            }
+        )
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO products (id, display_name, name_key) "
+                "VALUES (:id, 'Watchdog Product', :name_key)"
+            ),
+            {"id": product_id, "name_key": f"watchdog-{product_id}"},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO product_revisions "
+                "(id, product_id, display_name, name_key, description, version, "
+                "is_published, published_at) VALUES "
+                "(:id, :product_id, 'Watchdog Product', :name_key, "
+                "'candidate', 1, false, NULL)"
+            ),
+            {
+                "id": revision_id,
+                "product_id": product_id,
+                "name_key": f"watchdog-{product_id}",
+            },
+        )
+        connection.execute(
+            text("UPDATE products SET candidate_revision_id = :revision_id WHERE id = :product_id"),
+            {"revision_id": revision_id, "product_id": product_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO product_repository_mappings "
+                "(id, revision_id, topology, identity_key) "
+                "VALUES (:id, :revision_id, 'direct', 'watchdog')"
+            ),
+            {"id": mapping_id, "revision_id": revision_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO preview_jobs "
+                "(id, input_digest, attempt, state, product_id, candidate_revision_id, "
+                "candidate_revision_version, mapping_id, topology, connection_generation, "
+                "detector_version, layout_identity, repository_sides, started_at, "
+                "finished_at, result, error_code) VALUES "
+                "(:id, :input_digest, :attempt, :state, :product_id, :revision_id, 1, "
+                ":mapping_id, 'direct', 0, 'preview-v1', 'automatic', "
+                "CAST('[]' AS jsonb), :started_at, :finished_at, "
+                "CAST(:result AS jsonb), :error_code)"
+            ),
+            rows,
+        )
+
+    stale_running = tuple(
+        row["id"]
+        for row in sorted(
+            (
+                row
+                for row in rows
+                if row["state"] == "running"
+                and isinstance(row["started_at"], datetime)
+                and row["started_at"] <= cutoff
+            ),
+            key=lambda row: (row["started_at"], row["id"]),
+        )
+    )
+    return cutoff, tuple(row["id"] for row in rows), stale_running
+
+
+def test_preview_watchdog_index_upgrade_downgrade_and_reupgrade_preserves_rows(
+    migrated_database: tuple[Config, Engine],
+) -> None:
+    """Revision 0010 adds and removes only the running-preview access path."""
+    config, engine = migrated_database
+    command.upgrade(config, "0009_product_graph_integrity")
+    _cutoff, expected_ids, _stale_running = _seed_preview_watchdog_rows(engine)
+
+    indexes_before = {index["name"] for index in inspect(engine).get_indexes("preview_jobs")}
+    constraints_before = _constraint_names(engine, "preview_jobs")
+    script = ScriptDirectory.from_config(config)
+    revision = script.get_revision("0010_preview_watchdog_index")
+    assert revision is not None
+    assert revision.down_revision == "0009_product_graph_integrity"
+
+    command.upgrade(config, "0010_preview_watchdog_index")
+    indexes_after = {index["name"] for index in inspect(engine).get_indexes("preview_jobs")}
+    assert indexes_after - indexes_before == {PREVIEW_WATCHDOG_INDEX}
+    watchdog_index = next(
+        index
+        for index in inspect(engine).get_indexes("preview_jobs")
+        if index["name"] == PREVIEW_WATCHDOG_INDEX
+    )
+    assert watchdog_index["column_names"] == ["state", "started_at"]
+    predicate = watchdog_index["dialect_options"]["postgresql_where"]
+    assert _normalized_running_predicate(predicate) == "state = 'running'"
+
+    preview_columns = {column["name"] for column in inspect(engine).get_columns("preview_jobs")}
+    assert "task_id" not in preview_columns
+    assert inspect(engine).get_pk_constraint("preview_jobs")["constrained_columns"] == ["id"]
+    with engine.connect() as connection:
+        assert set(connection.execute(text("SELECT id FROM preview_jobs")).scalars()) == set(
+            expected_ids
+        )
+
+    command.downgrade(config, "0009_product_graph_integrity")
+    assert {index["name"] for index in inspect(engine).get_indexes("preview_jobs")} == (
+        indexes_before
+    )
+    assert _constraint_names(engine, "preview_jobs") == constraints_before
+    with engine.connect() as connection:
+        assert set(connection.execute(text("SELECT id FROM preview_jobs")).scalars()) == set(
+            expected_ids
+        )
+
+    command.upgrade(config, "0010_preview_watchdog_index")
+    assert {index["name"] for index in inspect(engine).get_indexes("preview_jobs")} == (
+        indexes_after
+    )
+    assert _constraint_names(engine, "preview_jobs") == constraints_before
+    with engine.connect() as connection:
+        assert set(connection.execute(text("SELECT id FROM preview_jobs")).scalars()) == set(
+            expected_ids
+        )
+
+
+def test_preview_job_identity_remains_uuid_without_task_id() -> None:
+    """The existing PreviewJob UUID stays the sole durable Celery identity."""
+    from verboflex.models.preview_job import PreviewJob
+
+    watchdog_indexes = [
+        index for index in PreviewJob.__table__.indexes if index.name == PREVIEW_WATCHDOG_INDEX
+    ]
+    assert len(watchdog_indexes) == 1
+    watchdog_index = watchdog_indexes[0]
+    assert [column.name for column in watchdog_index.expressions] == ["state", "started_at"]
+    assert str(watchdog_index.dialect_options["postgresql"]["where"]) == "state = 'running'"
+    assert list(PreviewJob.__table__.primary_key.columns.keys()) == ["id"]
+    assert "task_id" not in PreviewJob.__table__.columns
+    assert not hasattr(PreviewJob, "task_id")
+
+
+def test_preview_watchdog_explain_reaches_partial_index_and_bounded_selector(
+    migrated_database: tuple[Config, Engine],
+) -> None:
+    """The exact stale-running selector can reach the partial index without widening."""
+    config, engine = migrated_database
+    command.upgrade(config, "0009_product_graph_integrity")
+    cutoff, expected_ids, stale_running = _seed_preview_watchdog_rows(engine)
+    command.upgrade(config, "0010_preview_watchdog_index")
+
+    selector = (
+        "SELECT id, state, started_at FROM preview_jobs "
+        "WHERE state = 'running' AND started_at <= :cutoff "
+        "ORDER BY started_at, id LIMIT 100 FOR UPDATE SKIP LOCKED"
+    )
+    with engine.begin() as connection:
+        connection.execute(text("SET LOCAL enable_seqscan = off"))
+        explain = connection.execute(
+            text(f"EXPLAIN (FORMAT JSON, COSTS OFF) {selector}"),
+            {"cutoff": cutoff},
+        ).scalar_one()
+        selected = connection.execute(text(selector), {"cutoff": cutoff}).all()
+
+    root = explain[0]["Plan"]
+    pending = [root]
+    index_names: set[str] = set()
+    while pending:
+        node = pending.pop()
+        index_name = node.get("Index Name")
+        if index_name is not None:
+            index_names.add(index_name)
+        pending.extend(node.get("Plans", []))
+
+    assert PREVIEW_WATCHDOG_INDEX in index_names
+    assert len(selected) == 100
+    assert all(row.state == "running" and row.started_at <= cutoff for row in selected)
+    assert tuple(row.id for row in selected) == stale_running[:100]
+    with engine.connect() as connection:
+        retained = connection.execute(text("SELECT id, state FROM preview_jobs ORDER BY id")).all()
+    assert {row.id for row in retained} == set(expected_ids)
+    assert {row.state for row in retained} == {
+        "queued",
+        "running",
+        "succeeded",
+        "failed",
+        "timed_out",
     }
