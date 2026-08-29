@@ -7,17 +7,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   changePassword as generatedChangePassword,
+  getAdminProduct,
   issueToken,
+  listAdminRevisionMappings,
   readCurrentUser,
   readSystemStatus,
 } from "./api/client";
 import { ProductDetailLayout } from "./features/admin/products/ProductDetailLayout";
 import { SessionProvider } from "./features/auth/session";
-import { AppRouter, SessionRoutes } from "./router";
+import { AdminApplicationRoutes, AppRouter, SessionRoutes } from "./router";
 
 vi.mock("./api/client", () => ({
   changePassword: vi.fn(),
+  getAdminProduct: vi.fn(),
   issueToken: vi.fn(),
+  listAdminRevisionMappings: vi.fn(),
   logout: vi.fn(),
   readCurrentUser: vi.fn(),
   readHealth: vi.fn(),
@@ -27,6 +31,8 @@ vi.mock("./api/client", () => ({
 
 const issueTokenMock = vi.mocked(issueToken);
 const changePasswordMock = vi.mocked(generatedChangePassword);
+const getAdminProductMock = vi.mocked(getAdminProduct);
+const listAdminRevisionMappingsMock = vi.mocked(listAdminRevisionMappings);
 const readCurrentUserMock = vi.mocked(readCurrentUser);
 const readSystemStatusMock = vi.mocked(readSystemStatus);
 
@@ -50,6 +56,8 @@ afterEach(() => {
 beforeEach(() => {
   issueTokenMock.mockReset();
   changePasswordMock.mockReset();
+  getAdminProductMock.mockReset();
+  listAdminRevisionMappingsMock.mockReset();
   readCurrentUserMock.mockReset();
   readSystemStatusMock.mockReset();
   readSystemStatusMock.mockReturnValue(new Promise<never>(() => undefined));
@@ -89,6 +97,70 @@ function renderRoutes(
 }
 
 describe("session routes", () => {
+  it("deep-links an existing product candidate through the explicit edit route", async () => {
+    const productId = "00000000-0000-4000-8000-000000000101";
+    const candidateId = "00000000-0000-4000-8000-000000000202";
+    getAdminProductMock.mockResolvedValue({
+      data: {
+        id: productId,
+        name: "Published product name",
+        is_active: true,
+        active_revision: {
+          id: "00000000-0000-4000-8000-000000000201",
+          description: "Published description",
+          is_published: true,
+          name: "Published product name",
+          version: 4,
+        },
+        candidate_revision: {
+          id: candidateId,
+          description: "Candidate description",
+          is_published: false,
+          name: "Candidate product name",
+          version: 5,
+        },
+      },
+      error: undefined,
+    });
+    listAdminRevisionMappingsMock.mockResolvedValue({
+      data: { items: [], next_cursor: null },
+      error: undefined,
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/products/${productId}/edit`]}>
+        <AdminApplicationRoutes
+          accessToken="memory-only-admin-bearer"
+          currentUserId={adminPrincipal.id}
+        />
+        <LocationMarker />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Published product name" }),
+    ).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
+      "Candidate product name",
+    );
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue(
+      "Candidate description",
+    );
+    expect(screen.getByTestId("current-route")).toHaveTextContent(
+      `/products/${productId}/edit`,
+    );
+    expect(getAdminProductMock).toHaveBeenCalledOnce();
+    expect(getAdminProductMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: { product_id: productId },
+    });
+    expect(listAdminRevisionMappingsMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: { product_id: productId, revision_id: candidateId },
+      query: { cursor: null, limit: 50 },
+    });
+  });
+
   it("shows the approved session loading state while server authority is checked", () => {
     renderRoutes({ status: "checking_session" });
 

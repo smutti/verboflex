@@ -24,6 +24,7 @@ import {
   listAdminProducts,
   listAdminRepositories,
   listAdminRepositoryBranches,
+  listAdminRevisionMappings,
   readSystemStatus,
   updateAdminProductCandidate,
   type AdminMappingResponse,
@@ -83,6 +84,7 @@ vi.mock("../../../api/client", async (importOriginal) => {
     listAdminProducts: vi.fn(),
     listAdminRepositories: vi.fn(),
     listAdminRepositoryBranches: vi.fn(),
+    listAdminRevisionMappings: vi.fn(),
     readSystemStatus: vi.fn(),
     updateAdminProductCandidate: vi.fn(),
   };
@@ -106,6 +108,7 @@ const listAdminCandidateMappingsMock = vi.mocked(listAdminCandidateMappings);
 const listAdminProductsMock = vi.mocked(listAdminProducts);
 const listAdminRepositoriesMock = vi.mocked(listAdminRepositories);
 const listAdminRepositoryBranchesMock = vi.mocked(listAdminRepositoryBranches);
+const listAdminRevisionMappingsMock = vi.mocked(listAdminRevisionMappings);
 const readSystemStatusMock = vi.mocked(readSystemStatus);
 const useSessionMock = vi.mocked(useSession);
 const updateAdminProductCandidateMock = vi.mocked(updateAdminProductCandidate);
@@ -320,6 +323,10 @@ describe("administrator product configuration tracer", () => {
     );
     listAdminRepositoryBranchesMock.mockReset();
     listAdminRepositoryBranchesMock.mockResolvedValue(ok(liveBranches));
+    listAdminRevisionMappingsMock.mockReset();
+    listAdminRevisionMappingsMock.mockResolvedValue(
+      ok({ items: [directMapping], next_cursor: null }),
+    );
     readSystemStatusMock.mockReset();
     readSystemStatusMock.mockReturnValue(new Promise<never>(() => undefined));
     useSessionMock.mockReset();
@@ -861,6 +868,81 @@ describe("administrator product configuration tracer", () => {
     ).toBe(true);
   });
 
+  it("keeps all five wizard steps reachable through persistent 320px keyboard and pointer controls", async () => {
+    exposeTask2Repositories();
+    renderWizard(activeProduct);
+    const user = userEvent.setup();
+
+    const wizard = screen
+      .getByRole("heading", { name: activeProduct.name })
+      .closest("section");
+    expect(wizard).toHaveClass(
+      "min-w-0",
+      "max-w-3xl",
+      "overflow-x-clip",
+    );
+    const mobileNavigation = screen.getByRole("navigation", {
+      name: "Wizard navigation",
+    });
+    expect(mobileNavigation).toHaveClass("md:hidden");
+    expect(
+      within(mobileNavigation).getByRole("button", { name: "Back" }),
+    ).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Repositories" }));
+    const nextToMappings = within(mobileNavigation).getByRole("button", {
+      name: "Next: Mappings",
+    });
+    nextToMappings.focus();
+    await user.keyboard("{Enter}");
+    const validationAlert = await screen.findByRole("alert", {
+      name: "Wizard step incomplete",
+    });
+    expect(validationAlert).toHaveTextContent(
+      "Select or register a repository before continuing.",
+    );
+    expect(validationAlert).toHaveFocus();
+    expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
+      "Step 2 of 5Repositories",
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Use Mobile application source" }),
+    );
+    await user.click(nextToMappings);
+    expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
+      "Step 3 of 5Mappings",
+    );
+
+    await user.keyboard("{Tab}");
+    await user.click(
+      within(mobileNavigation).getByRole("button", { name: "Next: Preview" }),
+    );
+    expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
+      "Step 4 of 5Preview",
+    );
+    await user.click(
+      within(mobileNavigation).getByRole("button", {
+        name: "Next: Review and publish",
+      }),
+    );
+    expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
+      "Step 5 of 5Review and publish",
+    );
+    expect(
+      within(mobileNavigation).getByRole("button", { name: "Next" }),
+    ).toBeDisabled();
+
+    for (const expectedStep of [4, 3, 2, 1]) {
+      await user.click(
+        within(mobileNavigation).getByRole("button", { name: "Back" }),
+      );
+      expect(
+        screen.getByLabelText("Product setup progress"),
+      ).toHaveTextContent(`Step ${expectedStep} of 5`);
+    }
+  });
+
   it("navigates unchanged details directly and guards name-only edits", async () => {
     renderWizard(activeProduct);
     const user = userEvent.setup();
@@ -1269,6 +1351,10 @@ describe("administrator product configuration tracer", () => {
     expect(
       within(detailNavigation).getAllByRole("link", { current: "page" }),
     ).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Edit draft" })).toHaveAttribute(
+      "href",
+      `/admin/products/${activeProduct.id}/edit`,
+    );
   });
 
   it("renders the default product detail title and nested outlet contract", () => {
