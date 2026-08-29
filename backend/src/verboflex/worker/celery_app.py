@@ -5,6 +5,9 @@ from celery import Celery  # type: ignore[import-untyped]
 from verboflex.core.config import Settings, get_settings
 from verboflex.schemas.system import ServiceState
 
+PREVIEW_RUN_TASK_NAME = "verboflex.preview.run"
+PREVIEW_RECONCILE_TASK_NAME = "verboflex.preview.reconcile_stale_jobs"
+
 
 def create_celery_app(settings: Settings | None = None) -> Celery:
     """Create one JSON-only worker application from typed settings."""
@@ -33,6 +36,21 @@ def create_celery_app(settings: Settings | None = None) -> Celery:
         result_backend_max_retries=1,
         result_expires=300,
         worker_hijack_root_logger=False,
+        task_annotations={
+            PREVIEW_RUN_TASK_NAME: {
+                "acks_late": True,
+                "reject_on_worker_lost": True,
+                "soft_time_limit": configured.preview_soft_time_limit_seconds,
+                "time_limit": configured.preview_hard_time_limit_seconds,
+            }
+        },
+        beat_schedule={
+            "preview-stale-job-watchdog": {
+                "task": PREVIEW_RECONCILE_TASK_NAME,
+                "schedule": float(configured.preview_watchdog_interval_seconds),
+            }
+        },
+        beat_max_loop_interval=configured.preview_watchdog_interval_seconds,
     )
     return application
 

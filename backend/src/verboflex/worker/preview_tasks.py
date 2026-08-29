@@ -16,12 +16,11 @@ from verboflex.services.bitbucket_oauth import (
     BitbucketOAuthTokenExchange,
 )
 from verboflex.services.preview_jobs import (
-    PREVIEW_HARD_TIME_LIMIT_SECONDS,
-    PREVIEW_SOFT_TIME_LIMIT_SECONDS,
     PreviewJobIdentity,
     PreviewJobTimedOut,
     PreviewProcessor,
     execute_preview_job,
+    reconcile_stale_preview_jobs,
 )
 from verboflex.services.repository_discovery import (
     SourceDiscoveryAdapter,
@@ -120,6 +119,7 @@ def production_preview_processor(identity: PreviewJobIdentity) -> Mapping[str, o
 
 
 preview_processor: PreviewProcessor = production_preview_processor
+_preview_task_settings = get_settings()
 
 
 def _bounded_processor(identity: PreviewJobIdentity) -> dict[str, object]:
@@ -131,8 +131,10 @@ def _bounded_processor(identity: PreviewJobIdentity) -> dict[str, object]:
 
 @app.task(
     name="verboflex.preview.run",
-    soft_time_limit=PREVIEW_SOFT_TIME_LIMIT_SECONDS,
-    time_limit=PREVIEW_HARD_TIME_LIMIT_SECONDS,
+    soft_time_limit=_preview_task_settings.preview_soft_time_limit_seconds,
+    time_limit=_preview_task_settings.preview_hard_time_limit_seconds,
+    acks_late=True,
+    reject_on_worker_lost=True,
     serializer="json",
     ignore_result=True,
 )  # type: ignore[untyped-decorator]
@@ -146,4 +148,19 @@ def run_preview_job(job_id: str) -> None:
         SessionFactory,
         job_id=durable_job_id,
         processor=_bounded_processor,
+    )
+
+
+@app.task(
+    name="verboflex.preview.reconcile_stale_jobs",
+    serializer="json",
+    ignore_result=True,
+)  # type: ignore[untyped-decorator]
+def reconcile_stale_jobs() -> int:
+    """Run one bounded, idempotent stale-attempt recovery batch."""
+    settings = get_settings()
+    return reconcile_stale_preview_jobs(
+        SessionFactory,
+        hard_time_limit_seconds=settings.preview_hard_time_limit_seconds,
+        watchdog_grace_seconds=settings.preview_watchdog_grace_seconds,
     )

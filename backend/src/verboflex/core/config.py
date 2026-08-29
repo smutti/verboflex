@@ -14,6 +14,8 @@ from pydantic import (
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+PREVIEW_MAX_TERMINALIZATION_SECONDS = 300
+
 
 class Settings(BaseSettings):
     """Settings shared by the API scaffold."""
@@ -40,6 +42,10 @@ class Settings(BaseSettings):
     bitbucket_http_read_timeout_seconds: Literal[10] = 10
     bitbucket_http_write_timeout_seconds: Literal[10] = 10
     bitbucket_http_pool_timeout_seconds: Literal[3] = 3
+    preview_soft_time_limit_seconds: int = Field(default=60, gt=0, le=300)
+    preview_hard_time_limit_seconds: int = Field(default=75, gt=0, le=300)
+    preview_watchdog_grace_seconds: int = Field(default=15, gt=0, le=300)
+    preview_watchdog_interval_seconds: int = Field(default=5, gt=0, le=300)
 
     model_config = SettingsConfigDict(
         env_prefix="VERBOFLEX_",
@@ -89,6 +95,26 @@ class Settings(BaseSettings):
         ):
             raise ValueError("CORS allowlist must contain exact HTTP origins")
         return origins
+
+    @model_validator(mode="after")
+    def validate_preview_recovery_limits(self) -> Self:
+        """Keep the watchdog inside one explicit finite terminalization bound."""
+        if self.preview_soft_time_limit_seconds >= self.preview_hard_time_limit_seconds:
+            raise ValueError("preview soft time limit must be below the hard time limit")
+        if self.preview_watchdog_interval_seconds >= self.preview_watchdog_grace_seconds:
+            raise ValueError("preview watchdog interval must be shorter than its grace")
+        if self.preview_max_terminalization_seconds > PREVIEW_MAX_TERMINALIZATION_SECONDS:
+            raise ValueError("preview maximum terminalization bound exceeds 300 seconds")
+        return self
+
+    @property
+    def preview_max_terminalization_seconds(self) -> int:
+        """Maximum age plus one scheduler scan before durable terminalization."""
+        return (
+            self.preview_hard_time_limit_seconds
+            + self.preview_watchdog_grace_seconds
+            + self.preview_watchdog_interval_seconds
+        )
 
     @model_validator(mode="after")
     def validate_deployment_security(self) -> Self:

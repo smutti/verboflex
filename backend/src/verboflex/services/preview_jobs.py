@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import func, null, select, update
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
+from verboflex.core.config import get_settings
 from verboflex.localization.preview.core import validate_layout_candidate_mappings
 from verboflex.models.bitbucket_connection import BitbucketConnection
 from verboflex.models.preview_job import PreviewJob
@@ -22,8 +23,6 @@ from verboflex.models.product_mapping import ProductRepositoryMapping
 PREVIEW_TASK_NAME = "verboflex.preview.run"
 PREVIEW_DETECTOR_VERSION = "preview-skeleton-v1"
 PREVIEW_LAYOUT_IDENTITY = "automatic-layout-discovery-v1"
-PREVIEW_SOFT_TIME_LIMIT_SECONDS = 60
-PREVIEW_HARD_TIME_LIMIT_SECONDS = 75
 PREVIEW_WATCHDOG_BATCH_SIZE = 100
 MAX_RESULT_BYTES = 1_048_576
 
@@ -485,13 +484,14 @@ def enqueue_preview_job(job_id: UUID) -> None:
     """Send one JSON task containing only the durable job UUID."""
     from verboflex.worker.celery_app import app
 
+    settings = get_settings()
     app.send_task(
         PREVIEW_TASK_NAME,
         args=[str(job_id)],
         task_id=str(job_id),
         serializer="json",
-        soft_time_limit=PREVIEW_SOFT_TIME_LIMIT_SECONDS,
-        time_limit=PREVIEW_HARD_TIME_LIMIT_SECONDS,
+        soft_time_limit=settings.preview_soft_time_limit_seconds,
+        time_limit=settings.preview_hard_time_limit_seconds,
     )
 
 
