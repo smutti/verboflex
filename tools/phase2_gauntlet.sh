@@ -15,6 +15,7 @@ readonly BACKEND_JUNIT="/tmp/verboflex-phase02-backend-junit.xml"
 readonly FRONTEND_COVERAGE_DIR="/tmp/verboflex-phase02-frontend-coverage"
 readonly FRONTEND_COVERAGE_NORMALIZED="/tmp/verboflex-phase02-frontend-coverage.xml"
 readonly STRYKER_REPORT="/tmp/verboflex-phase02-stryker.json"
+readonly PHASE_SECRET_SCAN="/tmp/verboflex-phase02-secrets.json"
 readonly EVIDENCE_PATH="$REPO_ROOT/docs/evidence/phase-02.md"
 
 readonly EXPECTED_CANDIDATE_LAYERS="source-state
@@ -190,6 +191,7 @@ cleanup_test_infra() {
   fi
   [ -z "$TEST_WORKER_LOG" ] || rm -f "$TEST_WORKER_LOG"
   [ -z "$TEST_WORKER_PING" ] || rm -f "$TEST_WORKER_PING"
+  rm -f "$PHASE_SECRET_SCAN"
   TEST_WORKER_PID=""
   TEST_POSTGRES_NAME=""
   TEST_REDIS_NAME=""
@@ -284,6 +286,10 @@ PY
   set -e
   [ "$rc" -ne 0 ] \
     || { rm -rf "$fixture"; die "secret policy negative control passed"; }
+  printf '%s\n' 'detector-metadata-fixture' >"$PHASE_SECRET_SCAN"
+  cleanup_test_infra
+  [ ! -e "$PHASE_SECRET_SCAN" ] \
+    || { rm -rf "$fixture"; die "secret scan cleanup self-test failed"; }
   rm -rf "$fixture"
   printf 'checker negative controls: PASS\n'
 }
@@ -339,6 +345,8 @@ assert_gap_resource_cleanup() {
   if compgen -G '/tmp/verboflex-phase02-37.*' >/dev/null; then
     die "gap-closure owner-only runtime directory remains"
   fi
+  [ ! -e "$PHASE_SECRET_SCAN" ] \
+    || die "gap-closure temporary secret scan remains"
   printf 'gap-closure cleanup: PASS (zero containers, networks, volumes, images, secret files)\n'
 }
 
@@ -601,12 +609,13 @@ scan_phase_secrets() {
   (
     cd "$BACKEND_ROOT"
     uv run detect-secrets scan $(sed 's#^#../#' "$files") \
-      > /tmp/verboflex-phase02-secrets.json
+      >"$PHASE_SECRET_SCAN"
     uv run python -c \
       'import json,sys; d=json.load(open(sys.argv[1])); print("\n".join(sorted(f"{p}|{x[chr(108)+chr(105)+chr(110)+chr(101)+chr(95)+chr(110)+chr(117)+chr(109)+chr(98)+chr(101)+chr(114)]}|{x[chr(116)+chr(121)+chr(112)+chr(101)]}" for p,v in d["results"].items() for x in v)))' \
-      /tmp/verboflex-phase02-secrets.json >"$findings"
+      "$PHASE_SECRET_SCAN" >"$findings"
   )
   assert_phase_secret_findings "$findings"
+  rm -f "$PHASE_SECRET_SCAN"
   rm -f "$files" "$findings"
 }
 
