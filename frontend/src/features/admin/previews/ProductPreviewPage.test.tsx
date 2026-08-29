@@ -106,8 +106,7 @@ const inactiveActiveOnlyProduct: AdminProductResponse = {
 const confirmedActiveMapping: AdminMappingResponse = {
   ...mapping,
   candidate_version: inactiveActiveOnlyProduct.active_revision!.version,
-  selected_layout_candidate_id:
-    "00000000-0000-4000-8000-000000000501",
+  selected_layout_candidate_id: "00000000-0000-4000-8000-000000000501",
   selected_layout_version: 1,
 };
 
@@ -489,12 +488,14 @@ describe("administrator product preview and publication page", () => {
   });
 
   it("loads Product before the exact active revision and never creates candidate state", async () => {
-    let resolveProduct!: (value: ReturnType<typeof ok<AdminProductResponse>>) => void;
-    getProductMock.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveProduct = resolve;
-      }),
-    );
+    let releaseProduct!: () => void;
+    const productGate = new Promise<void>((resolve) => {
+      releaseProduct = resolve;
+    });
+    getProductMock.mockImplementationOnce(async () => {
+      await productGate;
+      return ok(inactiveActiveOnlyProduct);
+    });
     listRevisionMappingsMock.mockResolvedValueOnce(
       ok({ items: [confirmedActiveMapping], next_cursor: null }),
     );
@@ -503,7 +504,7 @@ describe("administrator product preview and publication page", () => {
     await waitFor(() => expect(getProductMock).toHaveBeenCalledTimes(1));
     expect(listRevisionMappingsMock).not.toHaveBeenCalled();
 
-    resolveProduct(ok(inactiveActiveOnlyProduct));
+    releaseProduct();
 
     expect(
       await screen.findByRole("button", { name: "Reactivate product" }),
@@ -524,7 +525,10 @@ describe("administrator product preview and publication page", () => {
   });
 
   it.each([
-    ["missing", { ...confirmedActiveMapping, selected_layout_candidate_id: null }],
+    [
+      "missing",
+      { ...confirmedActiveMapping, selected_layout_candidate_id: null },
+    ],
     ["stale", { ...confirmedActiveMapping, selected_layout_version: null }],
     [
       "failed",
@@ -545,9 +549,7 @@ describe("administrator product preview and publication page", () => {
       renderPage();
 
       expect(
-        await screen.findByText(
-          "Mapping 1: Preview confirmation required",
-        ),
+        await screen.findByText("Mapping 1: Preview confirmation required"),
       ).toBeVisible();
       expect(
         screen.getByRole("button", { name: "Reactivate product" }),
@@ -598,21 +600,26 @@ describe("administrator product preview and publication page", () => {
   });
 
   it("deduplicates pending reactivation and retries a 409 against the unchanged active revision", async () => {
-    let resolveConflict!: (
-      value: ReturnType<
-        typeof failure<AdminProductLifecycleConflictResponse>
-      >,
-    ) => void;
+    let releaseConflict!: () => void;
+    const conflictGate = new Promise<void>((resolve) => {
+      releaseConflict = resolve;
+    });
+    const conflictResponse = failure<AdminProductLifecycleConflictResponse>(
+      {
+        blockers: ["preview_confirmation_required"],
+        detail: "Product publication blocked",
+      },
+      409,
+    );
     getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
     listRevisionMappingsMock.mockResolvedValueOnce(
       ok({ items: [confirmedActiveMapping], next_cursor: null }),
     );
     reactivateMock
-      .mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolveConflict = resolve;
-        }),
-      )
+      .mockImplementationOnce(async () => {
+        await conflictGate;
+        return conflictResponse;
+      })
       .mockResolvedValueOnce(
         ok({ ...inactiveActiveOnlyProduct, is_active: true }),
       );
@@ -629,15 +636,7 @@ describe("administrator product preview and publication page", () => {
     await userEvent.click(confirm);
     expect(reactivateMock).toHaveBeenCalledTimes(1);
 
-    resolveConflict(
-      failure(
-        {
-          blockers: ["preview_confirmation_required"],
-          detail: "Product publication blocked",
-        },
-        409,
-      ),
-    );
+    releaseConflict();
     expect(
       await screen.findByRole("alert", { name: "Publication blocked" }),
     ).toHaveTextContent("Preview confirmation required");

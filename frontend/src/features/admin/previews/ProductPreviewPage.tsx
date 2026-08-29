@@ -12,7 +12,7 @@ import {
   confirmAdminPreviewJob,
   createAdminPreviewJob,
   getAdminProduct,
-  listAdminCandidateMappings,
+  listAdminRevisionMappings,
   listAdminRepositoryBranches,
   publishAdminProductCandidate,
   reactivateAdminProduct,
@@ -131,6 +131,13 @@ function publicationBlockers(error: unknown): PublicationBlocker[] {
       blocker === "mappings_required" ||
       blocker === "preview_confirmation_required" ||
       blocker === "target_configuration_invalid",
+  );
+}
+
+function hasPublishedPreviewConfirmation(mapping: AdminMappingResponse) {
+  return (
+    mapping.selected_layout_candidate_id !== null &&
+    mapping.selected_layout_version !== null
   );
 }
 
@@ -684,24 +691,37 @@ export function ProductPreviewPage({
       return;
     }
     try {
-      const [productResult, mappingResult] = await Promise.all([
-        getAdminProduct({
-          auth: accessToken,
-          path: { product_id: resolvedProductId },
-        }),
-        listAdminCandidateMappings({
-          auth: accessToken,
-          path: { product_id: resolvedProductId },
-          query: { cursor: null, limit: 50 },
-        }),
-      ]);
+      const productResult = await getAdminProduct({
+        auth: accessToken,
+        path: { product_id: resolvedProductId },
+      });
       if (generation !== loadGenerationRef.current) {
         return;
       }
-      if (
-        productResult.data === undefined ||
-        mappingResult.data === undefined
-      ) {
+      if (productResult.data === undefined) {
+        setPageState({ status: "error" });
+        return;
+      }
+      const product = productResult.data;
+      const revision =
+        product.candidate_revision ??
+        (!product.is_active ? product.active_revision : null);
+      if (revision === null) {
+        setPageState({ status: "error" });
+        return;
+      }
+      const mappingResult = await listAdminRevisionMappings({
+        auth: accessToken,
+        path: {
+          product_id: resolvedProductId,
+          revision_id: revision.id,
+        },
+        query: { cursor: null, limit: 50 },
+      });
+      if (generation !== loadGenerationRef.current) {
+        return;
+      }
+      if (mappingResult.data === undefined) {
         setPageState({ status: "error" });
         return;
       }
@@ -709,7 +729,7 @@ export function ProductPreviewPage({
       setPageState({
         status: "ready",
         mappings: mappingResult.data.items,
-        product: productResult.data,
+        product,
         productId: resolvedProductId,
       });
     } catch {
@@ -779,13 +799,17 @@ export function ProductPreviewPage({
 
   const { mappings, product: currentProduct } = pageState;
   const readyState = pageState;
-  const allConfirmed =
-    mappings.length > 0 &&
-    mappings.every((mapping) => confirmationState[mapping.id] === true);
   const isReactivation =
     !currentProduct.is_active &&
     currentProduct.active_revision !== null &&
     currentProduct.candidate_revision === null;
+  const allConfirmed =
+    mappings.length > 0 &&
+    mappings.every((mapping) =>
+      isReactivation
+        ? hasPublishedPreviewConfirmation(mapping)
+        : confirmationState[mapping.id] === true,
+    );
   const publishLabel =
     currentProduct.active_revision === null
       ? "Publish product"
@@ -849,8 +873,9 @@ export function ProductPreviewPage({
         <div className="grid min-w-0 gap-2">
           <h1 className="text-display font-semibold">Preview</h1>
           <p className="break-words text-muted-foreground">
-            Validate and explicitly confirm the current draft for{" "}
-            {currentProduct.name}.
+            {isReactivation
+              ? `Review the confirmed published configuration for ${currentProduct.name}.`
+              : `Validate and explicitly confirm the current draft for ${currentProduct.name}.`}
           </p>
         </div>
         <Badge variant="outline" className="w-fit rounded-md">
@@ -866,16 +891,45 @@ export function ProductPreviewPage({
           </AlertDescription>
         </Alert>
       ) : (
-        mappings.map((mapping, index) => (
-          <MappingPreview
-            key={mapping.id}
-            accessToken={accessToken}
-            index={index}
-            mapping={mapping}
-            onConfirmed={updateConfirmation}
-            productId={readyState.productId}
-          />
-        ))
+        mappings.map((mapping, index) =>
+          isReactivation ? (
+            <section
+              id={`preview-${mapping.id}`}
+              key={mapping.id}
+              className="grid gap-3 rounded-lg border bg-secondary p-6"
+              aria-labelledby={`preview-title-${mapping.id}`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="grid gap-1">
+                  <h2
+                    id={`preview-title-${mapping.id}`}
+                    className="text-heading font-semibold"
+                  >
+                    Mapping {index + 1}
+                  </h2>
+                  <p className="text-muted-foreground">
+                    {mapping.topology === "direct" ? "Direct" : "Separate"}{" "}
+                    published mapping
+                  </p>
+                </div>
+                <Badge variant="outline" className="w-fit rounded-md">
+                  {hasPublishedPreviewConfirmation(mapping)
+                    ? "Confirmed"
+                    : "Preview confirmation required"}
+                </Badge>
+              </div>
+            </section>
+          ) : (
+            <MappingPreview
+              key={mapping.id}
+              accessToken={accessToken}
+              index={index}
+              mapping={mapping}
+              onConfirmed={updateConfirmation}
+              productId={readyState.productId}
+            />
+          ),
+        )
       )}
 
       {publicationError ? (
@@ -914,16 +968,20 @@ export function ProductPreviewPage({
           <h2 className="text-heading font-semibold">Review and publish</h2>
           {!allConfirmed ? (
             <ul className="grid gap-2">
-              {mappings.map((mapping, index) => (
-                <li key={mapping.id}>
-                  <a
-                    className="text-accent underline"
-                    href={`#preview-${mapping.id}`}
-                  >
-                    Mapping {index + 1}: Preview confirmation required
-                  </a>
-                </li>
-              ))}
+              {mappings.map((mapping, index) =>
+                (isReactivation && hasPublishedPreviewConfirmation(mapping)) ||
+                (!isReactivation &&
+                  confirmationState[mapping.id] === true) ? null : (
+                  <li key={mapping.id}>
+                    <a
+                      className="text-accent underline"
+                      href={`#preview-${mapping.id}`}
+                    >
+                      Mapping {index + 1}: Preview confirmation required
+                    </a>
+                  </li>
+                ),
+              )}
             </ul>
           ) : null}
           <Button
