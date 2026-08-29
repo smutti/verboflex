@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-19-PLAN.md
-last_updated: "2026-08-28T19:48:53.555Z"
+stopped_at: Completed 02-20-PLAN.md
+last_updated: "2026-08-29T09:57:21.456Z"
 last_activity: 2026-08-28
 last_activity_desc: Completed Plan 02-19
-state_head: d2e1181bffabfe98e1e6adea8ecad89bfb4d431d
+state_head: f7068c19985099f4e34ef3d942c094884d9c156d
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 35
-  completed_plans: 34
+  completed_plans: 35
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 19 of 20
+Plan: 20 of 20
 Status: Ready to execute
 Last activity: 2026-08-28 — Completed Plan 02-19
 
@@ -92,6 +92,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P17 | 42min | 2 tasks | 11 files |
 | Phase 02 P18 | 1h22m | 2 tasks | 10 files |
 | Phase 02 P19 | 32min | 3 tasks | 9 files |
+| Phase 02 P20 | 13h40min | 3 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -223,6 +224,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Accept only transient HTTPS OAuth destinations without user info or fragments and navigate in the same tab.
 - [Phase 02]: Use the complete preview authority tuple as polling identity so stale jobs cannot replace current state.
 - [Phase 02]: Require explicit current exact-layout confirmation and backend success before publication changes UI lifecycle state.
+- [Phase 02]: Issue live Bitbucket authority only through client credentials and accept it only when effective scope is exactly repository.
+- [Phase 02]: Keep live credentials in an ignored owner-only file, tokens memory-only, and evidence limited to counts, timings, and SHA-256 identities.
+- [Phase 02]: Retry only Docker's exact address-in-use race with at most three complete isolated attempts; every other failure remains fatal.
 
 ### Pending Todos
 
@@ -261,6 +265,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-28T19:48:12.393Z
-Stopped at: Completed 02-19-PLAN.md
+Last session: 2026-08-29T09:57:21.401Z
+Stopped at: Completed 02-20-PLAN.md
 Resume file: None

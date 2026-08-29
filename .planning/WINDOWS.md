@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 0
 waived_count: 0
-fixed_count: 25
-total_count: 25
-last_updated: 2026-08-28T21:00:00.000Z
+fixed_count: 27
+total_count: 27
+last_updated: 2026-08-29T09:57:06.951Z
 ---
 
 # Broken Windows Ledger
@@ -40,6 +40,8 @@ last_updated: 2026-08-28T21:00:00.000Z
 | 23 | 02 | deviation | tools/verify_ios_preview_mutants.py |  | Added a drift-checked iOS parser and registry mutation proof after the planned gauntlet lacked format-specific mutation evidence. | fixed |  | 2026-08-27T19:53:44.141Z | 2026-08-27T19:53:48.678Z |
 | 24 | 02 | deviation | backend/tests/unit/localization/preview/test_ios_strings.py |  | Closed detector and worker branch-coverage gaps and removed unreachable guards after the first changed-line gate reported 87 percent. | fixed |  | 2026-08-27T19:53:44.204Z | 2026-08-27T19:53:48.740Z |
 | 25 | 02 | unmet-truth | docker/frontend.Dockerfile |  | Frontend container smoke cannot typecheck the Plan 02-15 admin client contract because frontend/openapi.json is not copied into the image build context. | fixed |  | 2026-08-28T07:58:44.977Z | 2026-08-28T15:52:44Z |
+| 26 | 02 | deviation | tools/phase2_gauntlet.sh |  | Bound the exact dummy live credential fixture and replaced the obsolete live checkpoint assertion. | fixed |  | 2026-08-29T09:55:47.879Z | 2026-08-29T09:57:06.774Z |
+| 27 | 02 | deviation | tools/phase2_smoke.sh |  | Added a bounded exact-address-in-use Compose retry after a transient host-port race. | fixed |  | 2026-08-29T09:57:06.841Z | 2026-08-29T09:57:06.951Z |
 
 ````json
 [
@@ -342,6 +344,30 @@ last_updated: 2026-08-28T21:00:00.000Z
     "reason": "",
     "recorded_at": "2026-08-28T07:58:44.977Z",
     "resolved_at": "2026-08-28T15:52:44Z"
+  },
+  {
+    "id": 26,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "tools/phase2_gauntlet.sh",
+    "line": null,
+    "description": "Bound the exact dummy live credential fixture and replaced the obsolete live checkpoint assertion.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-29T09:55:47.879Z",
+    "resolved_at": "2026-08-29T09:57:06.774Z"
+  },
+  {
+    "id": 27,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "tools/phase2_smoke.sh",
+    "line": null,
+    "description": "Added a bounded exact-address-in-use Compose retry after a transient host-port race.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-29T09:57:06.841Z",
+    "resolved_at": "2026-08-29T09:57:06.951Z"
   }
 ]
 ````
