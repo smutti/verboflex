@@ -162,9 +162,7 @@ describe("authenticated application shell", () => {
       />,
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Checking service status",
-    );
+    expect(screen.getByText("Checking service status")).toBeVisible();
     expect(readSystemStatusMock).toHaveBeenCalledWith({
       auth: "ordinary-server-token",
     });
@@ -306,9 +304,7 @@ describe("authenticated application shell", () => {
     });
 
     expect(screen.queryByText("API online")).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Checking service status",
-    );
+    expect(screen.getByText("Checking service status")).toBeVisible();
 
     await act(async () => {
       current.resolve({
@@ -368,9 +364,7 @@ describe("authenticated application shell", () => {
     });
 
     expect(screen.queryByText("Redis unavailable")).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Checking service status",
-    );
+    expect(screen.getByText("Checking service status")).toBeVisible();
 
     await act(async () => {
       current.resolve({

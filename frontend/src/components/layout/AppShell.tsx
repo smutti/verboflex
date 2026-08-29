@@ -1,4 +1,4 @@
-import type { CurrentUserResponse, RoleName } from "../../api/client";
+import type { CurrentUserResponse } from "../../api/client";
 import {
   Boxes,
   Cloud,
@@ -8,9 +8,8 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Link, useInRouterContext, useLocation } from "react-router-dom";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
   Sheet,
@@ -25,8 +24,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../ui/tooltip";
-import { Dashboard } from "../../pages/Dashboard";
-import { ServiceStatus } from "./ServiceStatus";
+import { WorkspaceOverviewPage } from "../../features/workspace/WorkspaceOverviewPage";
 
 export interface AppShellProps {
   accessToken: string;
@@ -35,26 +33,25 @@ export interface AppShellProps {
   principal: CurrentUserResponse;
 }
 
-const ROLE_LABELS: Record<RoleName, string> = {
-  admin: "Administrator",
-  product_manager_reviewer: "Product manager / reviewer",
-  translator: "Translator",
-  viewer: "Viewer",
-};
-
 interface WorkspaceNavigationProps {
   administrationLabelId: string;
-  onNavigate?: () => void;
+  onNavigate?: (destination: NavigationDestination) => void;
   showAdministration: boolean;
 }
 
-interface AdministrationDestination {
+interface NavigationDestination {
   icon: LucideIcon;
   label: string;
   to: string;
 }
 
-const ADMINISTRATION_DESTINATIONS: AdministrationDestination[] = [
+const WORKSPACE_DESTINATION: NavigationDestination = {
+  icon: LayoutDashboard,
+  label: "Workspace",
+  to: "/",
+};
+
+const ADMINISTRATION_DESTINATIONS: NavigationDestination[] = [
   { icon: Boxes, label: "Products", to: "/admin/products" },
   { icon: Users, label: "Users", to: "/admin/users" },
   { icon: Cloud, label: "Bitbucket", to: "/admin/bitbucket" },
@@ -63,7 +60,7 @@ const ADMINISTRATION_DESTINATIONS: AdministrationDestination[] = [
 function DestinationContent({
   icon: Icon,
   label,
-}: Pick<AdministrationDestination, "icon" | "label">) {
+}: Pick<NavigationDestination, "icon" | "label">) {
   return (
     <>
       <Icon aria-hidden="true" />
@@ -74,17 +71,19 @@ function DestinationContent({
   );
 }
 
-function RoutedAdministrationDestination({
+function RoutedDestination({
   destination,
   onNavigate,
 }: {
-  destination: AdministrationDestination;
-  onNavigate?: () => void;
+  destination: NavigationDestination;
+  onNavigate?: (destination: NavigationDestination) => void;
 }) {
   const location = useLocation();
   const isCurrent =
-    location.pathname === destination.to ||
-    location.pathname.startsWith(`${destination.to}/`);
+    destination.to === "/"
+      ? location.pathname === "/"
+      : location.pathname === destination.to ||
+        location.pathname.startsWith(`${destination.to}/`);
 
   return (
     <Button
@@ -95,7 +94,7 @@ function RoutedAdministrationDestination({
     >
       <Link
         to={destination.to}
-        onClick={onNavigate}
+        onClick={() => onNavigate?.(destination)}
         aria-current={isCurrent ? "page" : undefined}
       >
         <DestinationContent {...destination} />
@@ -104,21 +103,18 @@ function RoutedAdministrationDestination({
   );
 }
 
-function AdministrationDestinationLink({
+function DestinationLink({
   destination,
   onNavigate,
 }: {
-  destination: AdministrationDestination;
-  onNavigate?: () => void;
+  destination: NavigationDestination;
+  onNavigate?: (destination: NavigationDestination) => void;
 }) {
   const isWithinRouter = useInRouterContext();
 
   if (isWithinRouter) {
     return (
-      <RoutedAdministrationDestination
-        destination={destination}
-        onNavigate={onNavigate}
-      />
+      <RoutedDestination destination={destination} onNavigate={onNavigate} />
     );
   }
 
@@ -129,7 +125,7 @@ function AdministrationDestinationLink({
       className="h-auto min-h-9 w-full min-w-0 max-w-full justify-start whitespace-normal"
       asChild
     >
-      <a href={destination.to} onClick={onNavigate}>
+      <a href={destination.to} onClick={() => onNavigate?.(destination)}>
         <DestinationContent {...destination} />
       </a>
     </Button>
@@ -147,15 +143,10 @@ function WorkspaceNavigation({
       className="grid w-full content-start gap-6"
     >
       <div>
-        <Button
-          type="button"
-          variant="ghost"
-          className="w-full justify-start"
-          aria-current="page"
-        >
-          <LayoutDashboard aria-hidden="true" />
-          Workspace overview
-        </Button>
+        <DestinationLink
+          destination={WORKSPACE_DESTINATION}
+          onNavigate={onNavigate}
+        />
       </div>
       {showAdministration ? (
         <section className="grid gap-2" aria-labelledby={administrationLabelId}>
@@ -166,7 +157,7 @@ function WorkspaceNavigation({
             Administration
           </h2>
           {ADMINISTRATION_DESTINATIONS.map((destination) => (
-            <AdministrationDestinationLink
+            <DestinationLink
               key={destination.to}
               destination={destination}
               onNavigate={onNavigate}
@@ -178,46 +169,6 @@ function WorkspaceNavigation({
   );
 }
 
-function WorkspaceOverviewContent({
-  accessToken,
-  principal,
-}: Pick<AppShellProps, "accessToken" | "principal">) {
-  return (
-    <>
-      <section
-        aria-labelledby="workspace-overview-title"
-        className="grid gap-4"
-      >
-        <div className="grid gap-2">
-          <h1
-            id="workspace-overview-title"
-            className="text-display font-semibold"
-          >
-            Workspace overview
-          </h1>
-          <p className="text-muted-foreground">
-            Your review workspace will appear here as products and repositories
-            are configured.
-          </p>
-        </div>
-        <div className="grid gap-2">
-          <p className="font-semibold">{principal.display_name}</p>
-          <p className="text-muted-foreground">{principal.email}</p>
-          <div className="flex flex-wrap gap-2" aria-label="Assigned roles">
-            {principal.roles.map((role) => (
-              <Badge key={role} variant="outline" className="rounded-md">
-                {ROLE_LABELS[role]}
-              </Badge>
-            ))}
-          </div>
-        </div>
-      </section>
-      <ServiceStatus accessToken={accessToken} />
-      <Dashboard />
-    </>
-  );
-}
-
 export function AppShell({
   accessToken,
   children,
@@ -225,7 +176,12 @@ export function AppShell({
   principal,
 }: AppShellProps) {
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const pendingWorkspaceFocus = useRef(false);
   const showAdministration = principal.roles.includes("admin");
+  const handleMobileNavigate = (destination: NavigationDestination) => {
+    pendingWorkspaceFocus.current = destination.to === "/";
+    setNavigationOpen(false);
+  };
 
   return (
     <div
@@ -258,6 +214,13 @@ export function AppShell({
             <SheetContent
               side="left"
               className="w-72 max-w-[calc(100vw-32px)] motion-reduce:animate-none motion-reduce:transition-none"
+              onCloseAutoFocus={(event) => {
+                if (pendingWorkspaceFocus.current) {
+                  event.preventDefault();
+                  pendingWorkspaceFocus.current = false;
+                  document.getElementById("workspace-title")?.focus();
+                }
+              }}
             >
               <SheetHeader>
                 <SheetTitle>Navigation</SheetTitle>
@@ -266,7 +229,7 @@ export function AppShell({
                 <WorkspaceNavigation
                   administrationLabelId="mobile-administration-nav-title"
                   showAdministration={showAdministration}
-                  onNavigate={() => setNavigationOpen(false)}
+                  onNavigate={handleMobileNavigate}
                 />
               </div>
             </SheetContent>
@@ -307,7 +270,7 @@ export function AppShell({
           className="grid min-w-0 max-w-full content-start gap-8 px-6 py-8 md:px-8"
         >
           {children === undefined ? (
-            <WorkspaceOverviewContent
+            <WorkspaceOverviewPage
               accessToken={accessToken}
               principal={principal}
             />

@@ -576,7 +576,9 @@ async function installRoleAwareWorkspaceApi(
   role: NonAdminRole,
   adminRequestTrace: string[],
 ) {
-  let statusFailures = 1;
+  // React StrictMode mounts effects twice in development, so both initial
+  // status probes fail before the user-authorized retry succeeds.
+  let statusFailures = 2;
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const { pathname } = new URL(request.url());
