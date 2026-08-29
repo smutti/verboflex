@@ -21,7 +21,7 @@ import pytest
 from alembic.config import Config
 from celery import Celery
 from psycopg import connect, sql
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -1514,6 +1514,154 @@ def test_retry_after_watchdog_timeout_isolated_from_old_worker_completion(
         assert retry_row.state == "succeeded"
         assert retry_row.error_code is None
         assert retry_row.result is not None
+
+
+def test_preview_watchdog_settings_define_one_finite_terminalization_bound() -> None:
+    """Central defaults retain the exact 60/75/15/5 second recovery contract."""
+    settings = Settings()
+
+    assert settings.preview_soft_time_limit_seconds == 60
+    assert settings.preview_hard_time_limit_seconds == 75
+    assert settings.preview_watchdog_grace_seconds == 15
+    assert settings.preview_watchdog_interval_seconds == 5
+    assert settings.preview_max_terminalization_seconds == 95
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"preview_soft_time_limit_seconds": 0},
+        {"preview_hard_time_limit_seconds": 0},
+        {"preview_watchdog_grace_seconds": 0},
+        {"preview_watchdog_interval_seconds": 0},
+        {
+            "preview_soft_time_limit_seconds": 75,
+            "preview_hard_time_limit_seconds": 75,
+        },
+        {
+            "preview_soft_time_limit_seconds": 76,
+            "preview_hard_time_limit_seconds": 75,
+        },
+        {
+            "preview_watchdog_grace_seconds": 5,
+            "preview_watchdog_interval_seconds": 5,
+        },
+        {
+            "preview_hard_time_limit_seconds": 280,
+            "preview_watchdog_grace_seconds": 15,
+            "preview_watchdog_interval_seconds": 10,
+        },
+    ],
+)
+def test_preview_watchdog_settings_reject_unbounded_or_inverted_limits(
+    overrides: dict[str, int],
+) -> None:
+    """Every configured limit is positive, ordered, and below the documented cap."""
+    with pytest.raises(ValidationError):
+        Settings(**overrides)
+
+
+def test_preview_watchdog_schedule_uses_validated_interval_and_named_task() -> None:
+    """Celery beat delivers the named idempotent command within the grace window."""
+    celery_app = importlib.import_module("verboflex.worker.celery_app")
+    settings = Settings(
+        preview_soft_time_limit_seconds=10,
+        preview_hard_time_limit_seconds=20,
+        preview_watchdog_grace_seconds=8,
+        preview_watchdog_interval_seconds=2,
+    )
+
+    application = celery_app.create_celery_app(settings)
+    entry = application.conf.beat_schedule["preview-stale-job-watchdog"]
+
+    assert entry == {
+        "task": "verboflex.preview.reconcile_stale_jobs",
+        "schedule": 2.0,
+    }
+    assert application.conf.beat_max_loop_interval == 2
+    annotations = application.conf.task_annotations
+    assert annotations["verboflex.preview.run"] == {
+        "acks_late": True,
+        "reject_on_worker_lost": True,
+        "soft_time_limit": 10,
+        "time_limit": 20,
+    }
+    application.close()
+
+
+def test_preview_task_delivery_uses_central_limits_and_worker_loss_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """UUID delivery and execution share Settings-owned limits and late acknowledgement."""
+    service = importlib.import_module("verboflex.services.preview_jobs")
+    celery_app = importlib.import_module("verboflex.worker.celery_app")
+    preview_tasks = importlib.import_module("verboflex.worker.preview_tasks")
+    settings = Settings(
+        preview_soft_time_limit_seconds=11,
+        preview_hard_time_limit_seconds=21,
+        preview_watchdog_grace_seconds=8,
+        preview_watchdog_interval_seconds=2,
+    )
+    sent: list[tuple[str, tuple[str], dict[str, object]]] = []
+
+    class RecordingApp:
+        def send_task(self, name: str, args: list[str], **kwargs: object) -> None:
+            sent.append((name, tuple(args), kwargs))
+
+    monkeypatch.setattr(service, "get_settings", lambda: settings)
+    monkeypatch.setattr(celery_app, "app", RecordingApp())
+    job_id = uuid4()
+
+    service.enqueue_preview_job(job_id)
+
+    assert sent == [
+        (
+            "verboflex.preview.run",
+            (str(job_id),),
+            {
+                "task_id": str(job_id),
+                "serializer": "json",
+                "soft_time_limit": 11,
+                "time_limit": 21,
+            },
+        )
+    ]
+    assert preview_tasks.run_preview_job.acks_late is True
+    assert preview_tasks.run_preview_job.reject_on_worker_lost is True
+    assert preview_tasks.run_preview_job.soft_time_limit == 60
+    assert preview_tasks.run_preview_job.time_limit == 75
+
+
+def test_named_watchdog_task_passes_validated_threshold_to_reconciler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The scheduler task delegates once to the fixed-batch database authority."""
+    preview_tasks = importlib.import_module("verboflex.worker.preview_tasks")
+    settings = Settings(
+        preview_soft_time_limit_seconds=12,
+        preview_hard_time_limit_seconds=22,
+        preview_watchdog_grace_seconds=9,
+        preview_watchdog_interval_seconds=3,
+    )
+    calls: list[tuple[object, int, int]] = []
+
+    def reconcile(
+        factory: object,
+        *,
+        hard_time_limit_seconds: int,
+        watchdog_grace_seconds: int,
+    ) -> int:
+        calls.append((factory, hard_time_limit_seconds, watchdog_grace_seconds))
+        return 100
+
+    factory = object()
+    monkeypatch.setattr(preview_tasks, "get_settings", lambda: settings)
+    monkeypatch.setattr(preview_tasks, "SessionFactory", factory)
+    monkeypatch.setattr(preview_tasks, "reconcile_stale_preview_jobs", reconcile)
+
+    assert preview_tasks.reconcile_stale_jobs.run() == 100
+    assert calls == [(factory, 22, 9)]
+    assert preview_tasks.reconcile_stale_jobs.name == "verboflex.preview.reconcile_stale_jobs"
 
 
 def _complete_confirmable_preview(
