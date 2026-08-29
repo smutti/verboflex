@@ -188,11 +188,15 @@ def _collected_backend_nodes(nodes: tuple[str, ...]) -> set[str]:
         timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    return {
-        f"backend/{line.strip()}"
-        for line in result.stdout.splitlines()
-        if "::" in line and not line.startswith("=")
-    }
+    collected: set[str] = set()
+    for line in result.stdout.splitlines():
+        if "::" not in line or line.startswith("="):
+            continue
+        # Pytest expands parametrized nodes during collection.  The registry
+        # deliberately names the stable executable function rather than every
+        # generated parameter id, so fold each collected case to that function.
+        collected.add(f"backend/{line.strip().split('[', 1)[0]}")
+    return collected
 
 
 @cache

@@ -1,0 +1,545 @@
+[
+  {
+    "edge_id": "R1-adjacency",
+    "category": "adjacency",
+    "requirement": "R1",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Duplicate normalized email is a conflict; user rows never merge.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R1-adjacency",
+    "test_nodes": ["backend/tests/api/test_admin_users.py::test_duplicate_normalized_email_conflicts_without_enumeration_or_secret"]
+  },
+  {
+    "edge_id": "R1-empty",
+    "category": "empty",
+    "requirement": "R1",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Empty result is a valid list response, but mutations cannot create a zero-admin authority state.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R1-empty",
+    "test_nodes": ["backend/tests/integration/test_admin_user_concurrency.py::test_concurrent_cross_deactivation_cannot_remove_the_last_active_admin"]
+  },
+  {
+    "edge_id": "R1-ordering",
+    "category": "ordering",
+    "requirement": "R1",
+    "source_status": "covered",
+    "source_resolution_or_reason": "User lists use deterministic normalized-email order with UUID tie-break.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R1-ordering",
+    "test_nodes": ["backend/tests/api/test_admin_users.py::test_user_list_has_stable_opaque_default_and_maximum_pagination"]
+  },
+  {
+    "edge_id": "R1-idempotency",
+    "category": "idempotency",
+    "requirement": "R1",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Repeated identical update is a no-op; repeated create conflicts without mutation.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R1-idempotency",
+    "test_nodes": ["backend/tests/api/test_admin_users.py::test_admin_updates_roles_then_resets_deactivates_and_reactivates_one_identity"]
+  },
+  {
+    "edge_id": "R1-concurrency",
+    "category": "concurrency",
+    "requirement": "R1",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Uniqueness and administrator authority changes are transactionally serialized.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R1-concurrency",
+    "test_nodes": ["backend/tests/integration/test_admin_user_concurrency.py::test_concurrent_cross_role_removal_cannot_remove_the_last_active_admin"]
+  },
+  {
+    "edge_id": "R2-adjacency",
+    "category": "adjacency",
+    "requirement": "R2",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Duplicate role names have set semantics and cannot add duplicate authority.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R2-adjacency",
+    "test_nodes": ["backend/tests/api/test_admin_users.py::test_role_input_must_be_a_non_empty_subset_of_the_fixed_vocabulary"]
+  },
+  {
+    "edge_id": "R2-empty",
+    "category": "empty",
+    "requirement": "R2",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Zero assigned roles is rejected.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R2-empty",
+    "test_nodes": ["backend/tests/api/test_admin_users.py::test_role_input_must_be_a_non_empty_subset_of_the_fixed_vocabulary"]
+  },
+  {
+    "edge_id": "R2-encoding",
+    "category": "encoding",
+    "requirement": "R2",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Email reuses Phase 1 ASCII-trim/lower normalization; role names are fixed ASCII enums.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R2-encoding",
+    "test_nodes": ["backend/tests/api/test_admin_users.py::test_duplicate_normalized_email_conflicts_without_enumeration_or_secret"]
+  },
+  {
+    "edge_id": "R2-ordering",
+    "category": "ordering",
+    "requirement": "R2",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Roles are projected in stable enum order.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R2-ordering",
+    "test_nodes": ["backend/tests/api/test_admin_users.py::test_admin_updates_roles_then_resets_deactivates_and_reactivates_one_identity"]
+  },
+  {
+    "edge_id": "R2-idempotency",
+    "category": "idempotency",
+    "requirement": "R2",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Identical role/display update is non-mutating; an authority change advances revocation state once.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R2-idempotency",
+    "test_nodes": ["backend/tests/api/test_admin_users.py::test_admin_updates_roles_then_resets_deactivates_and_reactivates_one_identity"]
+  },
+  {
+    "edge_id": "R2-concurrency",
+    "category": "concurrency",
+    "requirement": "R2",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Races cannot remove the last active admin or bypass self-protection.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R2-concurrency",
+    "test_nodes": ["backend/tests/integration/test_admin_user_concurrency.py::test_concurrent_cross_role_removal_cannot_remove_the_last_active_admin"]
+  },
+  {
+    "edge_id": "R3-idempotency",
+    "category": "idempotency",
+    "requirement": "R3",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Every repeated reset/reactivation issues a fresh secret and invalidates every earlier one.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R3-idempotency",
+    "test_nodes": ["backend/tests/integration/test_admin_user_concurrency.py::test_concurrent_resets_serialize_and_only_the_last_committed_secret_is_valid"]
+  },
+  {
+    "edge_id": "R3-concurrency",
+    "category": "concurrency",
+    "requirement": "R3",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Same-user authority mutations serialize; only the final committed state remains valid.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R3-concurrency",
+    "test_nodes": ["backend/tests/integration/test_admin_user_concurrency.py::test_concurrent_resets_serialize_and_only_the_last_committed_secret_is_valid"]
+  },
+  {
+    "edge_id": "R4-empty",
+    "category": "empty",
+    "requirement": "R4",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Product name is required; description may be empty.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R4-empty",
+    "test_nodes": ["backend/tests/unit/test_product_names.py::test_a01_normalizes_display_and_global_identity_key"]
+  },
+  {
+    "edge_id": "R4-encoding",
+    "category": "encoding",
+    "requirement": "R4",
+    "source_status": "UNRESOLVED",
+    "source_resolution_or_reason": "Exact Unicode normalization, case sensitivity, and global uniqueness of product names remain A-01.",
+    "phase_disposition": "resolved-A-01",
+    "must_have": "EDGE-R4-encoding",
+    "test_nodes": ["backend/tests/unit/test_product_names.py::test_a01_normalizes_display_and_global_identity_key"]
+  },
+  {
+    "edge_id": "R4-idempotency",
+    "category": "idempotency",
+    "requirement": "R4",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Identical candidate save/publish does not create another effective revision.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R4-idempotency",
+    "test_nodes": ["backend/tests/api/test_admin_products.py::test_expected_version_conflicts_duplicate_name_and_identical_save_are_atomic"]
+  },
+  {
+    "edge_id": "R4-concurrency",
+    "category": "concurrency",
+    "requirement": "R4",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Revision comparison yields one atomic winner and bounded stale conflicts.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R4-concurrency",
+    "test_nodes": ["backend/tests/integration/test_product_publication.py::test_product_lock_linearizes_publish_equal_retry_and_stale_writer"]
+  },
+  {
+    "edge_id": "R5-idempotency",
+    "category": "idempotency",
+    "requirement": "R5",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Repeated callback/revoke/reconnect is safe and never resurrects superseded tokens.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R5-idempotency",
+    "test_nodes": ["backend/tests/integration/test_bitbucket_oauth.py::test_client_credentials_repetition_never_resurrects_generation"]
+  },
+  {
+    "edge_id": "R5-concurrency",
+    "category": "concurrency",
+    "requirement": "R5",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Token rotation and revocation serialize; revoked generations are rejected.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R5-concurrency",
+    "test_nodes": ["backend/tests/integration/test_bitbucket_oauth.py::test_client_credentials_rotation_and_revoke_serialize"]
+  },
+  {
+    "edge_id": "R6-adjacency",
+    "category": "adjacency",
+    "requirement": "R6",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Equal normalized workspace+slug denotes one repository; duplicates conflict.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R6-adjacency",
+    "test_nodes": ["backend/tests/integration/test_repository_registry.py::test_repository_identity_normalizes_lowercase_and_rejects_path_like_input"]
+  },
+  {
+    "edge_id": "R6-empty",
+    "category": "empty",
+    "requirement": "R6",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Blank workspace or slug is rejected.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R6-empty",
+    "test_nodes": ["backend/tests/integration/test_repository_registry.py::test_repository_identity_normalizes_lowercase_and_rejects_path_like_input"]
+  },
+  {
+    "edge_id": "R6-encoding",
+    "category": "encoding",
+    "requirement": "R6",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Provider identifiers are ASCII-trimmed/lowercased and verified against Bitbucket canonical identity.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R6-encoding",
+    "test_nodes": ["backend/tests/integration/test_repository_registry.py::test_repository_identity_normalizes_lowercase_and_rejects_path_like_input"]
+  },
+  {
+    "edge_id": "R6-ordering",
+    "category": "ordering",
+    "requirement": "R6",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Repository lists sort by descriptive name fallback then workspace/slug.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R6-ordering",
+    "test_nodes": ["backend/tests/api/test_admin_repositories.py::test_repository_collection_is_empty_bounded_opaque_and_exactly_server_ordered"]
+  },
+  {
+    "edge_id": "R6-idempotency",
+    "category": "idempotency",
+    "requirement": "R6",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Repeated registration cannot create another row.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R6-idempotency",
+    "test_nodes": ["backend/tests/integration/test_repository_registry.py::test_sequential_duplicate_conflicts_and_uuid_reuse_is_a_separate_lookup"]
+  },
+  {
+    "edge_id": "R6-concurrency",
+    "category": "concurrency",
+    "requirement": "R6",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Database composite uniqueness closes racing registrations.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R6-concurrency",
+    "test_nodes": ["backend/tests/integration/test_repository_registry.py::test_two_session_registration_race_has_one_201_one_409_and_one_row"]
+  },
+  {
+    "edge_id": "R7-adjacency",
+    "category": "adjacency",
+    "requirement": "R7",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Duplicate allowed-target inputs normalize and collapse deterministically to one set member; the default must belong to that normalized set, while duplicate mapping identity is rejected.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R7-adjacency",
+    "test_nodes": ["backend/tests/unit/services/test_mappings.py::test_target_set_rejects_empty_malformed_or_nonmember_default_without_mutation"]
+  },
+  {
+    "edge_id": "R7-empty",
+    "category": "empty",
+    "requirement": "R7",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Missing required repository side or target set is rejected.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R7-empty",
+    "test_nodes": ["backend/tests/unit/services/test_mappings.py::test_separate_mapping_requires_exact_keys_and_translations_sides"]
+  },
+  {
+    "edge_id": "R7-encoding",
+    "category": "encoding",
+    "requirement": "R7",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Provider branch names remain exact opaque provider values; format/topology are fixed enums.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R7-encoding",
+    "test_nodes": ["backend/tests/unit/services/test_mappings.py::test_branches_must_match_current_live_discovery_exactly"]
+  },
+  {
+    "edge_id": "R7-ordering",
+    "category": "ordering",
+    "requirement": "R7",
+    "source_status": "dismissed",
+    "source_resolution_or_reason": "Allowed targets are a set and default is explicit; input order has no semantic meaning.",
+    "phase_disposition": "dismissed",
+    "must_have": "EDGE-R7-ordering",
+    "test_nodes": ["backend/tests/unit/services/test_mappings.py::test_target_set_rejects_empty_malformed_or_nonmember_default_without_mutation"]
+  },
+  {
+    "edge_id": "R7-idempotency",
+    "category": "idempotency",
+    "requirement": "R7",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Repeating the identical normalized mapping configuration is a non-mutating no-op.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R7-idempotency",
+    "test_nodes": ["backend/tests/unit/services/test_mappings.py::test_duplicate_identity_conflicts_while_identical_update_is_a_true_noop"]
+  },
+  {
+    "edge_id": "R7-concurrency",
+    "category": "concurrency",
+    "requirement": "R7",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Candidate revision conflicts prevent silent last-writer overwrite.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R7-concurrency",
+    "test_nodes": ["backend/tests/unit/services/test_mappings.py::test_duplicate_identity_conflicts_while_identical_update_is_a_true_noop"]
+  },
+  {
+    "edge_id": "R8-adjacency",
+    "category": "adjacency",
+    "requirement": "R8",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Exact repository+target equality joins; either difference splits.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R8-adjacency",
+    "test_nodes": ["backend/tests/unit/services/test_pr_grouping.py::test_only_exact_repository_and_target_branch_determine_group_identity"]
+  },
+  {
+    "edge_id": "R8-empty",
+    "category": "empty",
+    "requirement": "R8",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Empty future change input produces no group.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R8-empty",
+    "test_nodes": ["backend/tests/unit/services/test_pr_grouping.py::test_empty_input_is_empty_and_grouping_has_no_provider_or_persistence_capability"]
+  },
+  {
+    "edge_id": "R8-ordering",
+    "category": "ordering",
+    "requirement": "R8",
+    "source_status": "dismissed",
+    "source_resolution_or_reason": "Language/file order cannot alter group identity.",
+    "phase_disposition": "dismissed",
+    "must_have": "EDGE-R8-ordering",
+    "test_nodes": ["backend/tests/unit/services/test_pr_grouping.py::test_mapping_file_and_language_permutations_leave_groups_invariant"]
+  },
+  {
+    "edge_id": "R8-idempotency",
+    "category": "idempotency",
+    "requirement": "R8",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Repeated grouping over the same identities is stable.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R8-idempotency",
+    "test_nodes": ["backend/tests/unit/services/test_pr_grouping.py::test_mapping_file_and_language_permutations_leave_groups_invariant"]
+  },
+  {
+    "edge_id": "R8-concurrency",
+    "category": "concurrency",
+    "requirement": "R8",
+    "source_status": "dismissed",
+    "source_resolution_or_reason": "Phase 2 stores the grouping contract but executes no PR jobs; Phase 8 owns concurrent submission.",
+    "phase_disposition": "dismissed",
+    "must_have": "EDGE-R8-concurrency",
+    "test_nodes": ["backend/tests/unit/services/test_pr_grouping.py::test_empty_input_is_empty_and_grouping_has_no_provider_or_persistence_capability"]
+  },
+  {
+    "edge_id": "R9-adjacency",
+    "category": "adjacency",
+    "requirement": "R9",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Multiple detected layouts stay separate candidates; collisions are ambiguous and fail closed.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R9-adjacency",
+    "test_nodes": ["backend/tests/integration/test_preview_jobs.py::test_all_four_formats_return_separate_exact_layout_candidates"]
+  },
+  {
+    "edge_id": "R9-empty",
+    "category": "empty",
+    "requirement": "R9",
+    "source_status": "covered",
+    "source_resolution_or_reason": "No supported localization candidate is a blocking preview result.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R9-empty",
+    "test_nodes": ["backend/tests/unit/localization/preview/test_android_xml.py::test_android_empty_names_and_unrelated_files_never_confirm_or_interfere"]
+  },
+  {
+    "edge_id": "R9-encoding",
+    "category": "encoding",
+    "requirement": "R9",
+    "source_status": "UNRESOLVED",
+    "source_resolution_or_reason": "Exact supported file encodings and JSON shapes remain A-02.",
+    "phase_disposition": "resolved-A-02",
+    "must_have": "EDGE-R9-encoding",
+    "test_nodes": [
+      "backend/tests/unit/localization/preview/test_json.py::test_json_unsupported_shapes_never_confirm",
+      "backend/tests/unit/localization/preview/test_json.py::test_json_invalid_encodings_never_confirm"
+    ]
+  },
+  {
+    "edge_id": "R9-ordering",
+    "category": "ordering",
+    "requirement": "R9",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Files, languages, and samples have deterministic order.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R9-ordering",
+    "test_nodes": ["backend/tests/unit/localization/preview/test_json.py::test_json_file_order_does_not_change_candidate_identity_or_output"]
+  },
+  {
+    "edge_id": "R9-idempotency",
+    "category": "idempotency",
+    "requirement": "R9",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Same commit+revision+layout has stable preview identity and output.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R9-idempotency",
+    "test_nodes": ["backend/tests/integration/test_preview_jobs.py::test_succeeded_result_remains_inspectable_but_is_not_current_after_revision_change"]
+  },
+  {
+    "edge_id": "R9-concurrency",
+    "category": "concurrency",
+    "requirement": "R9",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Jobs bind commit/revision; stale completion cannot confirm a newer candidate.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R9-concurrency",
+    "test_nodes": ["backend/tests/integration/test_preview_jobs.py::test_new_commit_makes_an_inflight_completion_stale_and_nonconfirmable"]
+  },
+  {
+    "edge_id": "R10-adjacency",
+    "category": "adjacency",
+    "requirement": "R10",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Publication requires every mapping, never a valid subset.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R10-adjacency",
+    "test_nodes": ["backend/tests/integration/test_product_publication.py::test_every_mapping_requires_one_current_exact_confirmation"]
+  },
+  {
+    "edge_id": "R10-empty",
+    "category": "empty",
+    "requirement": "R10",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Zero mappings cannot activate or publish.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R10-empty",
+    "test_nodes": ["backend/tests/integration/test_product_publication.py::test_closed_blockers_leave_active_and_candidate_graphs_unchanged"]
+  },
+  {
+    "edge_id": "R10-ordering",
+    "category": "ordering",
+    "requirement": "R10",
+    "source_status": "dismissed",
+    "source_resolution_or_reason": "All-mappings validity is order-independent.",
+    "phase_disposition": "dismissed",
+    "must_have": "EDGE-R10-ordering",
+    "test_nodes": ["backend/tests/integration/test_product_publication.py::test_every_mapping_requires_one_current_exact_confirmation"]
+  },
+  {
+    "edge_id": "R10-idempotency",
+    "category": "idempotency",
+    "requirement": "R10",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Re-publishing the active revision is a no-op.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R10-idempotency",
+    "test_nodes": ["backend/tests/integration/test_product_publication.py::test_product_lock_linearizes_publish_equal_retry_and_stale_writer"]
+  },
+  {
+    "edge_id": "R10-concurrency",
+    "category": "concurrency",
+    "requirement": "R10",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Compare-and-publish produces one atomic winner.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R10-concurrency",
+    "test_nodes": ["backend/tests/integration/test_product_publication.py::test_product_lock_linearizes_publish_equal_retry_and_stale_writer"]
+  },
+  {
+    "edge_id": "R11-adjacency",
+    "category": "adjacency",
+    "requirement": "R11",
+    "source_status": "dismissed",
+    "source_resolution_or_reason": "UI sections are independent routes/panels and have no merge/touch semantics.",
+    "phase_disposition": "dismissed",
+    "must_have": "EDGE-R11-adjacency",
+    "test_nodes": ["frontend/src/router.test.tsx::keeps product navigation URL-backed, ordered, singular, and locally contained"]
+  },
+  {
+    "edge_id": "R11-empty",
+    "category": "empty",
+    "requirement": "R11",
+    "source_status": "covered",
+    "source_resolution_or_reason": "User, product, repository, mapping, and preview collections have explicit empty states.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R11-empty",
+    "test_nodes": ["frontend/src/features/admin/products/ProductConfiguration.test.tsx::renders stable loading, bounded retry, and exact empty collection states"]
+  },
+  {
+    "edge_id": "R11-ordering",
+    "category": "ordering",
+    "requirement": "R11",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Admin lists reflect their resource's deterministic API order.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R11-ordering",
+    "test_nodes": ["frontend/src/features/admin/users/UsersPage.test.tsx::preserves API order and cursor pagination without client re-sorting or de-duplicating"]
+  },
+  {
+    "edge_id": "R11-idempotency",
+    "category": "idempotency",
+    "requirement": "R11",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Repeated submission is visibly pending and delegates mutation semantics to the API.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R11-idempotency",
+    "test_nodes": ["frontend/src/features/admin/users/UsersPage.test.tsx::prevents duplicate pending user submissions and sanitizes failure"]
+  },
+  {
+    "edge_id": "R11-concurrency",
+    "category": "concurrency",
+    "requirement": "R11",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Stale conflict is shown without overwriting the user's recoverable form state.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R11-concurrency",
+    "test_nodes": ["frontend/src/features/admin/products/ProductConfiguration.test.tsx::uses expected candidate version and preserves edits on conflict or failure"]
+  },
+  {
+    "edge_id": "R12-idempotency",
+    "category": "idempotency",
+    "requirement": "R12",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Repeating preview/quality checks cannot create provider or canonical writes.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R12-idempotency",
+    "test_nodes": ["backend/tests/architecture/test_phase2_scope.py::test_provider_integration_contains_no_dynamic_or_mutating_http_verbs"]
+  },
+  {
+    "edge_id": "R12-concurrency",
+    "category": "concurrency",
+    "requirement": "R12",
+    "source_status": "covered",
+    "source_resolution_or_reason": "Concurrent preview paths remain read-only and revision-bound.",
+    "phase_disposition": "tested",
+    "must_have": "EDGE-R12-concurrency",
+    "test_nodes": ["backend/tests/architecture/test_phase2_scope.py::test_provider_integration_contains_no_dynamic_or_mutating_http_verbs"]
+  }
+]
