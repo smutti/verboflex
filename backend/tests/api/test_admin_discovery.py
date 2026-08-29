@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -153,11 +153,16 @@ def _repository(factory: sessionmaker[Session]) -> UUID:
     return repository_id
 
 
-async def _request(path: str, *, token: str | None) -> httpx.Response:
+async def _request(
+    path: str,
+    *,
+    token: str | None,
+    params: Mapping[str, str] | None = None,
+) -> httpx.Response:
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     headers = {"Authorization": f"Bearer {token}"} if token is not None else None
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        return await client.get(path, headers=headers)
+        return await client.get(path, headers=headers, params=params)
 
 
 @dataclass
@@ -165,6 +170,7 @@ class FakeDiscoveryAdapter:
     branches: tuple[FakeBranch, ...]
     failure_kind: str | None = None
     calls: list[tuple[str, str]] = field(default_factory=list)
+    resolve_calls: list[tuple[str, str, str]] = field(default_factory=list)
     source_bodies: dict[str, bytes] = field(default_factory=dict)
     source_calls: list[str] = field(default_factory=list)
 
@@ -190,6 +196,7 @@ class FakeDiscoveryAdapter:
         repository_slug: str,
         branch: str,
     ) -> BitbucketBranch:
+        self.resolve_calls.append((workspace, repository_slug, branch))
         self.source_calls.append(f"resolve:{workspace}/{repository_slug}:{branch}")
         if self.failure_kind is not None:
             raise BitbucketProviderReadError(kind=self.failure_kind)
@@ -226,6 +233,128 @@ class FakeDiscoveryAdapter:
 class FakeBranch:
     name: str
     commit_hash: str
+
+
+@pytest.mark.parametrize(
+    "branch_name",
+    [
+        "feature/foo",
+        "percent%branch",
+        "unicodé/分支",
+        "space branch",
+        "what?branch",
+        "hash#branch",
+        "reserved:[]@!$&'()*+,;=",
+    ],
+)
+def test_exact_branch_query_round_trips_opaque_names_without_list_scans(
+    discovery_session_factory: sessionmaker[Session],
+    branch_name: str,
+) -> None:
+    """Configured branch lookup uses one exact safe-adapter detail request."""
+    branches = tuple(
+        FakeBranch(name=f"listed-{index:03d}", commit_hash=f"{index:040x}") for index in range(100)
+    ) + (FakeBranch(name=branch_name, commit_hash="f" * 40),)
+    adapter = FakeDiscoveryAdapter(branches=branches)
+    _configure(discovery_session_factory, adapter)
+    token = _authority(
+        discovery_session_factory,
+        role="admin",
+        email=f"exact-{uuid4()}@example.com",
+    )
+    repository_id = _repository(discovery_session_factory)
+    path = f"{DISCOVERY_PATH}/{repository_id}/branch"
+
+    response = asyncio.run(
+        _request(
+            path,
+            token=token,
+            params={"branch_name": branch_name},
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"name": branch_name, "commit_hash": "a" * 40}
+    assert set(response.json()) == {"name", "commit_hash"}
+    assert adapter.resolve_calls == [("acme", "mobile", branch_name)]
+    assert adapter.calls == []
+
+
+@pytest.mark.parametrize(
+    ("failure_kind", "status_code"),
+    [
+        ("not_found", 404),
+        ("reauthorization_required", 409),
+        ("invalid_source", 422),
+        ("limit_exceeded", 422),
+    ],
+)
+def test_exact_branch_query_is_required_owned_and_bounded(
+    discovery_session_factory: sessionmaker[Session],
+    failure_kind: str,
+    status_code: int,
+) -> None:
+    """Missing repositories and safe-adapter failures retain the closed contract."""
+    adapter = FakeDiscoveryAdapter(branches=(), failure_kind=failure_kind)
+    _configure(discovery_session_factory, adapter)
+    token = _authority(
+        discovery_session_factory,
+        role="admin",
+        email=f"exact-failure-{failure_kind}@example.com",
+    )
+    repository_id = _repository(discovery_session_factory)
+    path = f"{DISCOVERY_PATH}/{repository_id}/branch"
+
+    failure = asyncio.run(_request(path, token=token, params={"branch_name": "configured/exact"}))
+    assert failure.status_code == status_code
+    assert failure.json() == {
+        "detail": "Bitbucket discovery unavailable",
+        "state": failure_kind,
+    }
+    assert adapter.resolve_calls == [("acme", "mobile", "configured/exact")]
+    assert adapter.calls == []
+
+    missing_repository = asyncio.run(
+        _request(
+            f"{DISCOVERY_PATH}/{uuid4()}/branch",
+            token=token,
+            params={"branch_name": "configured/exact"},
+        )
+    )
+    assert missing_repository.status_code == 404
+    assert missing_repository.json() == {"detail": "Repository unavailable"}
+    assert len(adapter.resolve_calls) == 1
+
+    calls_before_invalid = len(adapter.resolve_calls)
+    assert asyncio.run(_request(path, token=token)).status_code == 422
+    assert asyncio.run(_request(path, token=token, params={"branch_name": ""})).status_code == 422
+    assert (
+        asyncio.run(_request(path, token=token, params={"branch_name": "x" * 256})).status_code
+        == 422
+    )
+    assert len(adapter.resolve_calls) == calls_before_invalid
+
+
+def test_discovery_openapi_keeps_exact_branch_and_cursor_contracts_closed() -> None:
+    """Exact lookup is required while collection continuations stay application-owned."""
+    openapi = app.openapi()
+    exact_operation = openapi["paths"]["/api/v1/admin/repositories/{repository_id}/branch"]["get"]
+    branch_parameter = next(
+        parameter
+        for parameter in exact_operation["parameters"]
+        if parameter["name"] == "branch_name"
+    )
+    assert branch_parameter["in"] == "query"
+    assert branch_parameter["required"] is True
+    assert branch_parameter["schema"]["minLength"] == 1
+    assert branch_parameter["schema"]["maxLength"] == 255
+    assert exact_operation["operationId"] == "get_admin_repository_branch"
+
+    branch_list_schema = openapi["components"]["schemas"]["AdminBranchListResponse"]
+    assert set(branch_list_schema["properties"]) == {"items", "next_cursor"}
+    assert branch_list_schema["required"] == ["items", "next_cursor"]
+    assert "provider" not in str(branch_list_schema).casefold()
+    assert "url" not in str(branch_list_schema).casefold()
 
 
 def test_admin_branch_collection_is_exact_bounded_and_application_opaque(
