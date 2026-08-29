@@ -11,6 +11,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+import yaml
 from cryptography.fernet import Fernet
 
 from verboflex.core.config import Settings
@@ -414,3 +415,51 @@ def test_mock_provider_smoke_retries_only_the_bounded_port_binding_race() -> Non
     assert 'if [ "$rc" -ne 75 ]' in source
     assert 'grep -Fq "address already in use"' in source
     assert "return 75" in source
+
+
+def test_compose_runs_preview_scheduler_as_a_separate_shared_service() -> None:
+    """Beat is isolated from worker loss while sharing its durable dependencies."""
+    compose = yaml.safe_load(BASE_COMPOSE.read_text(encoding="utf-8"))
+    services = compose["services"]
+    backend = services["backend"]
+    worker = services["worker"]
+    scheduler = services["scheduler"]
+
+    assert scheduler["environment"] == worker["environment"] == backend["environment"]
+    assert scheduler["depends_on"] == worker["depends_on"]
+    assert scheduler["build"] == worker["build"]
+    assert scheduler["command"] == [
+        "celery",
+        "-A",
+        "verboflex.worker.celery_app",
+        "beat",
+        "--loglevel=INFO",
+    ]
+    assert "beat" not in worker["command"]
+
+
+def test_worker_loss_smoke_proves_bounded_terminalization_and_retry() -> None:
+    """The smoke kills only after durable running and retains the old terminal row."""
+    source = SMOKE_HARNESS.read_text(encoding="utf-8")
+
+    assert "--worker-loss" in source
+    assert "run_worker_loss()" in source
+    worker_loss = source.split("run_worker_loss()", 1)[1].split(
+        "\nrun_mock_provider_with_port_retry()", 1
+    )[0]
+    required = (
+        "wait_for_preview_state",
+        '"running"',
+        "docker kill --signal=KILL",
+        "preview_max_terminalization_seconds",
+        '"timed_out"',
+        '"time_limit_exceeded"',
+        "compose_active up -d worker",
+        "retry_preview_job",
+        '"succeeded"',
+        "assert_original_preview_unchanged",
+    )
+
+    assert all(fragment in worker_loss for fragment in required)
+    assert "deadline=" in worker_loss
+    assert "sleep 10" not in worker_loss
