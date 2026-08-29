@@ -2,6 +2,16 @@
 
 ## Open
 
+- **Plan 02-24 — pre-existing full-suite failures outside the product-graph scope:** the
+  719-test backend sweep reached 711 passes and 8 failures. Two product-schema/order
+  regressions caused by Plan 02-24 were fixed and now pass. The six remaining failures
+  are unchanged preview-worker adapter wiring (`get_redis_client` absent at the starting
+  revision), two test-infrastructure checks for the unpublished Redis test port 56379,
+  one Bitbucket credential-row expectation, and two legacy CLI deactivation expectations
+  that conflict with the already-present last-admin survivor invariant. All Plan 02-24
+  task, migration, graph, publication, repository, static, and targeted regression gates
+  pass; these unrelated failures were not modified.
+
 - **Plan 02-07 — pre-existing development-only `qs` advisory:** `npm audit` reports
   GHSA-q8mj-m7cp-5q26 at moderate severity through
   `@stryker-mutator/core -> typed-rest-client@2.3.1 -> qs@6.15.1`. The dependency graph
