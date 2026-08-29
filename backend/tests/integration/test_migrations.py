@@ -7,7 +7,8 @@ import os
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import uuid4
+from typing import cast
+from uuid import UUID, uuid4
 
 import pytest
 from alembic.config import Config
@@ -541,7 +542,7 @@ def _normalized_running_predicate(raw_predicate: str) -> str:
 
 def _seed_preview_watchdog_rows(
     engine: Engine,
-) -> tuple[datetime, tuple[object, ...], tuple[object, ...]]:
+) -> tuple[datetime, tuple[UUID, ...], tuple[UUID, ...]]:
     """Seed every persisted state, including more than one watchdog batch."""
     product_id = uuid4()
     revision_id = uuid4()
@@ -655,7 +656,7 @@ def _seed_preview_watchdog_rows(
         )
 
     stale_running = tuple(
-        row["id"]
+        cast(UUID, row["id"])
         for row in sorted(
             (
                 row
@@ -667,7 +668,27 @@ def _seed_preview_watchdog_rows(
             key=lambda row: (row["started_at"], row["id"]),
         )
     )
-    return cutoff, tuple(row["id"] for row in rows), stale_running
+    return cutoff, tuple(cast(UUID, row["id"]) for row in rows), stale_running
+
+
+def _preview_job_ids(engine: Engine) -> set[UUID]:
+    with engine.connect() as connection:
+        return set(connection.execute(text("SELECT id FROM preview_jobs")).scalars())
+
+
+def _explain_index_names(explain: list[dict[str, object]]) -> set[str]:
+    pending = [explain[0]["Plan"]]
+    index_names: set[str] = set()
+    while pending:
+        node = pending.pop()
+        assert isinstance(node, dict)
+        index_name = node.get("Index Name")
+        if isinstance(index_name, str):
+            index_names.add(index_name)
+        plans = node.get("Plans", [])
+        assert isinstance(plans, list)
+        pending.extend(plans)
+    return index_names
 
 
 def test_preview_watchdog_index_upgrade_downgrade_and_reupgrade_preserves_rows(
@@ -700,30 +721,21 @@ def test_preview_watchdog_index_upgrade_downgrade_and_reupgrade_preserves_rows(
     preview_columns = {column["name"] for column in inspect(engine).get_columns("preview_jobs")}
     assert "task_id" not in preview_columns
     assert inspect(engine).get_pk_constraint("preview_jobs")["constrained_columns"] == ["id"]
-    with engine.connect() as connection:
-        assert set(connection.execute(text("SELECT id FROM preview_jobs")).scalars()) == set(
-            expected_ids
-        )
+    assert _preview_job_ids(engine) == set(expected_ids)
 
     command.downgrade(config, "0009_product_graph_integrity")
     assert {index["name"] for index in inspect(engine).get_indexes("preview_jobs")} == (
         indexes_before
     )
     assert _constraint_names(engine, "preview_jobs") == constraints_before
-    with engine.connect() as connection:
-        assert set(connection.execute(text("SELECT id FROM preview_jobs")).scalars()) == set(
-            expected_ids
-        )
+    assert _preview_job_ids(engine) == set(expected_ids)
 
     command.upgrade(config, "0010_preview_watchdog_index")
     assert {index["name"] for index in inspect(engine).get_indexes("preview_jobs")} == (
         indexes_after
     )
     assert _constraint_names(engine, "preview_jobs") == constraints_before
-    with engine.connect() as connection:
-        assert set(connection.execute(text("SELECT id FROM preview_jobs")).scalars()) == set(
-            expected_ids
-        )
+    assert _preview_job_ids(engine) == set(expected_ids)
 
 
 def test_preview_job_identity_remains_uuid_without_task_id() -> None:
@@ -764,17 +776,7 @@ def test_preview_watchdog_explain_reaches_partial_index_and_bounded_selector(
         ).scalar_one()
         selected = connection.execute(text(selector), {"cutoff": cutoff}).all()
 
-    root = explain[0]["Plan"]
-    pending = [root]
-    index_names: set[str] = set()
-    while pending:
-        node = pending.pop()
-        index_name = node.get("Index Name")
-        if index_name is not None:
-            index_names.add(index_name)
-        pending.extend(node.get("Plans", []))
-
-    assert PREVIEW_WATCHDOG_INDEX in index_names
+    assert PREVIEW_WATCHDOG_INDEX in _explain_index_names(explain)
     assert len(selected) == 100
     assert all(row.state == "running" and row.started_at <= cutoff for row in selected)
     assert tuple(row.id for row in selected) == stale_running[:100]
