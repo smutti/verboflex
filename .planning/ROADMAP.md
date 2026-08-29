@@ -85,7 +85,7 @@ Plans:
   7. Guided shadcn admin screens provide actionable user, repository, mapping, OAuth, validation, and background-job states.
   8. Phase quality gate passes with RED→GREEN TDD evidence, code review, and backend/frontend/worker/deploy smoke verification.
 
-**Plans**: 20/20 plans executed
+**Plans**: 30 plans (20 executed, 10 gap-closure plans pending)
 
 Plans:
 **Wave 1**
@@ -167,6 +167,34 @@ Plans:
 **Wave 20** *(blocked on Wave 19 completion)*
 
 - [x] 02-20-PLAN.md — Phase quality gate, review, mutations, and deploy smoke
+
+**Wave 21** *(gap closure; blocked on Wave 20 completion)*
+
+- [ ] 02-21-PLAN.md — Production client-credentials OAuth tracer, Compose wiring, expiry recovery, and API coverage
+
+**Wave 22** *(gap closure; blocked on Wave 21 completion)*
+
+- [ ] 02-22-PLAN.md — Generated OAuth client and secret-free administrator recovery UI
+- [ ] 02-23-PLAN.md — CLI last-active-admin authority and role-identity invariant
+- [ ] 02-24-PLAN.md — Product graph ownership and published-child database immutability
+- [ ] 02-29-PLAN.md — Durable preview worker-loss and hard-timeout recovery
+
+**Wave 23** *(gap closure; blocked on Wave 22 completion)*
+
+- [ ] 02-25-PLAN.md — Complete active-to-candidate clone and atomic identity publication
+- [ ] 02-26-PLAN.md — Revision-scoped mapping reads, exact branches, and cursor-faithful contracts
+
+**Wave 24** *(gap closure; blocked on Wave 23 completion)*
+
+- [ ] 02-27-PLAN.md — Routed published edit, real reactivation, mobile wizard, and Workspace overview
+
+**Wave 25** *(gap closure; blocked on Wave 24 completion)*
+
+- [ ] 02-28-PLAN.md — Repository, mapping, branch, and preview pagination completion
+
+**Wave 26** *(gap closure; blocked on Waves 21-25 completion)*
+
+- [ ] 02-30-PLAN.md — Full gap gauntlet, fresh review, verifier, and unchanged-source evidence
 
 ### Phase 3: Bitbucket Import Integration
 
