@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-26-PLAN.md
-last_updated: "2026-08-29T17:50:22.840Z"
+stopped_at: Completed 02-36-PLAN.md
+last_updated: "2026-08-29T18:03:05.776Z"
 last_activity: 2026-08-29
 last_activity_desc: Phase 02 execution started
-state_head: b562efecc74d7fc5946d5c3ad526de839292dbd6
+state_head: 1ae01298f679f017aa866c64c6a55bb9fd53fb6d
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 53
-  completed_plans: 42
+  completed_plans: 43
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 27 of 38
+Plan: 28 of 38
 Status: Ready to execute
 Last activity: 2026-08-29 — Phase 02 execution started
 
@@ -100,6 +100,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02-admin-configuration P35 | 29min | 2 tasks | 7 files |
 | Phase 02-admin-configuration P25 | 21min | 2 tasks | 9 files |
 | Phase 02-admin-configuration P26 | 2h 20m | 2 tasks | 16 files |
+| Phase 02 P36 | 6min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -255,6 +256,8 @@ Recent decisions affecting current work:
 - [Phase 02-admin-configuration]: Authorize revision mapping reads only through both the Product active/candidate pointer and the ProductRevision owner; reads never lock, clone, or mutate the graph.
 - [Phase 02-admin-configuration]: Treat branch_name as a required opaque query value and resolve it through exactly one expiry-safe adapter detail request without listing or normalization.
 - [Phase 02-admin-configuration]: Keep provider continuation URLs server-side while preserving deterministic application items and next_cursor through OpenAPI and generated clients.
+- [Phase 02]: Index only running PreviewJob rows by state and started_at while retaining id as the deterministic query tiebreaker and sole Celery identity. — This matches the bounded watchdog predicate without inventing task_id or widening identity.
+- [Phase 02]: Use transaction-local sequential-scan disabling for watchdog EXPLAIN coverage. — This proves the named partial index is usable without relying on a brittle global PostgreSQL planner choice.
 
 ### Pending Todos
 
@@ -293,6 +296,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-29T17:50:22.789Z
-Stopped at: Completed 02-26-PLAN.md
+Last session: 2026-08-29T18:03:05.727Z
+Stopped at: Completed 02-36-PLAN.md
 Resume file: None
