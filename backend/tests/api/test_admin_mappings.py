@@ -673,6 +673,16 @@ def test_revision_mapping_read_is_owned_cursor_faithful_and_mutation_free(
     assert [item["id"] for item in second_page.json()["items"]] == [str(mapping_ids[2])]
     assert second_page.json()["next_cursor"] is None
 
+    invalid_cursor = asyncio.run(
+        _request(
+            "GET",
+            path=_revision_mapping_path(product_id, candidate_id) + "?cursor=not-a-cursor",
+            access_token=admin_token,
+        )
+    )
+    assert invalid_cursor.status_code == 422
+    assert invalid_cursor.json() == {"detail": "Invalid cursor"}
+
     candidate_active = asyncio.run(
         _request(
             "GET",

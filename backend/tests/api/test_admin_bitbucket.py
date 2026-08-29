@@ -31,7 +31,10 @@ from verboflex.models.auth_session import AuthSession
 from verboflex.models.bitbucket_connection import BitbucketConnection
 from verboflex.models.role import Role
 from verboflex.models.user import User
-from verboflex.services.bitbucket_oauth import BitbucketOAuthService
+from verboflex.services.bitbucket_oauth import (
+    BitbucketOAuthService,
+    OAuthConnectionUnavailable,
+)
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 ADMIN_DATABASE_URL = os.environ.get(
@@ -184,7 +187,7 @@ def create_authority(
 
 def configure_dependencies(
     factory: sessionmaker[Session],
-    service: BitbucketOAuthService,
+    service: BitbucketOAuthService | None,
 ) -> None:
     """Wire principal, provider, and route sessions to controlled boundaries."""
 
@@ -416,6 +419,7 @@ def test_client_credentials_status_contract_has_no_callback_workspace_or_secrets
 
 def test_client_credentials_connect_failure_is_bounded(
     bitbucket_api_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Provider diagnostics never escape direct connection failures."""
     _admin_id, admin_token = create_authority(
@@ -434,3 +438,34 @@ def test_client_credentials_connect_failure_is_bounded(
     assert failed.json() == {"detail": "Bitbucket connection unavailable"}
     assert failed.headers["cache-control"] == "no-store"
     assert "provider-body" not in failed.text
+
+    configure_dependencies(bitbucket_api_session_factory, None)
+    for action in ("connect", "revoke"):
+        unavailable = asyncio.run(
+            bitbucket_request(
+                "POST",
+                path=f"{BITBUCKET_PATH}/{action}",
+                access_token=admin_token,
+            )
+        )
+        assert unavailable.status_code == 503
+        assert unavailable.json() == {"detail": "Bitbucket connection unavailable"}
+        assert unavailable.headers["cache-control"] == "no-store"
+
+    configure_dependencies(bitbucket_api_session_factory, service)
+
+    def fail_revoke(_session: Session, *, actor_id: UUID) -> None:
+        assert actor_id == _admin_id
+        raise OAuthConnectionUnavailable("provider detail must remain bounded")
+
+    monkeypatch.setattr(service, "revoke_current", fail_revoke)
+    revoke_failure = asyncio.run(
+        bitbucket_request(
+            "POST",
+            path=f"{BITBUCKET_PATH}/revoke",
+            access_token=admin_token,
+        )
+    )
+    assert revoke_failure.status_code == 503
+    assert revoke_failure.json() == {"detail": "Bitbucket connection unavailable"}
+    assert "provider detail" not in revoke_failure.text

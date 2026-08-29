@@ -169,6 +169,7 @@ async def _request(
 class FakeDiscoveryAdapter:
     branches: tuple[FakeBranch, ...]
     failure_kind: str | None = None
+    resolved_branch_name: str | None = None
     calls: list[tuple[str, str]] = field(default_factory=list)
     resolve_calls: list[tuple[str, str, str]] = field(default_factory=list)
     source_bodies: dict[str, bytes] = field(default_factory=dict)
@@ -200,7 +201,7 @@ class FakeDiscoveryAdapter:
         self.source_calls.append(f"resolve:{workspace}/{repository_slug}:{branch}")
         if self.failure_kind is not None:
             raise BitbucketProviderReadError(kind=self.failure_kind)
-        return BitbucketBranch(name=branch, commit_hash="a" * 40)
+        return BitbucketBranch(name=self.resolved_branch_name or branch, commit_hash="a" * 40)
 
     async def list_repository_source_page(
         self,
@@ -333,6 +334,39 @@ def test_exact_branch_query_is_required_owned_and_bounded(
         == 422
     )
     assert len(adapter.resolve_calls) == calls_before_invalid
+
+
+def test_exact_branch_query_rejects_missing_adapter_and_provider_name_drift(
+    discovery_session_factory: sessionmaker[Session],
+) -> None:
+    """Configured lookup fails closed before use and on provider branch substitution."""
+    token = _authority(
+        discovery_session_factory,
+        role="admin",
+        email="exact-closed@example.com",
+    )
+    repository_id = _repository(discovery_session_factory)
+    path = f"{DISCOVERY_PATH}/{repository_id}/branch"
+
+    _configure(discovery_session_factory, None)
+    unavailable = asyncio.run(
+        _request(path, token=token, params={"branch_name": "configured/exact"})
+    )
+    assert unavailable.status_code == 503
+    assert unavailable.json() == {
+        "detail": "Bitbucket discovery unavailable",
+        "state": "unavailable",
+    }
+
+    adapter = FakeDiscoveryAdapter(branches=(), resolved_branch_name="provider/substitution")
+    _configure(discovery_session_factory, adapter)
+    mismatch = asyncio.run(_request(path, token=token, params={"branch_name": "configured/exact"}))
+    assert mismatch.status_code == 422
+    assert mismatch.json() == {
+        "detail": "Bitbucket discovery unavailable",
+        "state": "invalid_source",
+    }
+    assert adapter.resolve_calls == [("acme", "mobile", "configured/exact")]
 
 
 def test_discovery_openapi_keeps_exact_branch_and_cursor_contracts_closed() -> None:
