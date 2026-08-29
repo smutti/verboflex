@@ -1,7 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const temporaryPassword = "VF-once-only-secret-29";
-const providerSecret = "provider-refresh-secret-never-render";
 const now = "2026-08-28T19:30:00Z";
 
 type ConnectionStatus =
@@ -23,6 +22,9 @@ interface Product {
 }
 
 interface AdminMockState {
+  connectionDelayMs: number;
+  connectionFailures: number;
+  connectionMutations: string[];
   connectionStatus: ConnectionStatus;
   deactivateFailures: number;
   mappings: Array<Record<string, unknown>>;
@@ -95,6 +97,9 @@ const separateMapping = {
 function defaultState(): AdminMockState {
   const current = product();
   return {
+    connectionDelayMs: 0,
+    connectionFailures: 0,
+    connectionMutations: [],
     connectionStatus: "Connected",
     deactivateFailures: 0,
     mappings: [directMapping, separateMapping],
@@ -533,14 +538,23 @@ async function installAdminApi(page: Page, state: AdminMockState) {
       state.connectionStatus = "Disconnected";
       return json(route, connection(state));
     }
-    if (
-      /\/bitbucket\/oauth\/(?:start|reconnect)$/.test(pathname) &&
-      method === "POST"
-    ) {
-      return json(route, {
-        authorization_url: `https://bitbucket.org/site/oauth2/authorize?state=opaque&provider_hint=${providerSecret}`,
-        state_expires_in: 600,
-      });
+    const connectionMutation = pathname.match(
+      /^\/api\/v1\/admin\/bitbucket\/(connect|reconnect)$/,
+    );
+    if (connectionMutation !== null && method === "POST") {
+      const action = connectionMutation[1];
+      state.connectionMutations.push(action);
+      if (state.connectionDelayMs > 0) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, state.connectionDelayMs),
+        );
+      }
+      if (state.connectionFailures > 0) {
+        state.connectionFailures -= 1;
+        return json(route, { detail: "Bitbucket connection unavailable" }, 503);
+      }
+      state.connectionStatus = "Connected";
+      return json(route, connection(state));
     }
 
     return json(
@@ -563,6 +577,7 @@ async function expectNoPageOverflow(page: Page) {
 
 async function expectNoCredentialResidue(page: Page) {
   const residue = await page.evaluate(() => ({
+    historyState: history.state,
     localStorage: Object.entries(localStorage),
     sessionStorage: Object.entries(sessionStorage),
     text: document.body.innerText,
@@ -571,9 +586,17 @@ async function expectNoCredentialResidue(page: Page) {
   expect(residue.localStorage).toEqual([]);
   expect(residue.sessionStorage).toEqual([]);
   expect(residue.url).not.toContain(temporaryPassword);
-  expect(residue.url).not.toContain(providerSecret);
   expect(residue.text).not.toContain(temporaryPassword);
-  expect(residue.text).not.toContain(providerSecret);
+  const serialized = JSON.stringify(residue).toLowerCase();
+  for (const forbidden of [
+    "authorization_url",
+    "callback",
+    "client_secret",
+    "ciphertext",
+    "refresh_token",
+  ]) {
+    expect(serialized).not.toContain(forbidden);
+  }
 }
 
 async function chooseSelect(page: Page, label: string, option: string) {
@@ -822,42 +845,93 @@ test("product lifecycle remains backend-authoritative for deactivate and reactiv
   ).toHaveCount(0);
 });
 
-test("OAuth states and preview polling expose bounded state without provider or credential residue", async ({
+test("Bitbucket client credentials recover expiry without navigation or credential residue", async ({
   page,
 }) => {
   const state = defaultState();
+  state.connectionStatus = "Disconnected";
+  state.connectionDelayMs = 150;
+  const consoleMessages: string[] = [];
+  page.on("console", (message) => consoleMessages.push(message.text()));
   await installAdminApi(page, state);
   await page.setViewportSize({ width: 320, height: 900 });
   await page.goto("/admin/bitbucket");
+  const initialNavigation = await page.evaluate(() => ({
+    href: location.href,
+    length: history.length,
+  }));
 
-  for (const status of [
-    "Connected",
-    "Reauthorization required",
-    "Unavailable",
-    "Disconnected",
-  ] as const) {
-    state.connectionStatus = status;
-    await page.reload();
-    await expect(page.getByLabel("Bitbucket connection status")).toContainText(
-      status,
-    );
-    await expect(
-      page.getByText("Read-only repository access", { exact: true }),
-    ).toBeVisible();
-    await expectNoPageOverflow(page);
-  }
-
-  state.connectionStatus = "Connected";
-  await page.reload();
-  await page.getByRole("button", { name: "Revoke connection" }).click();
-  const revokeDialog = page.getByRole("alertdialog", {
-    name: "Revoke the Bitbucket connection?",
-  });
-  await revokeDialog.getByRole("button", { name: "Revoke connection" }).click();
+  const connect = page.getByRole("button", { name: "Connect Bitbucket" });
+  await connect.click();
+  await expect(connect).toBeDisabled();
+  await expect(connect).toHaveAttribute("aria-busy", "true");
+  await expect(
+    page.getByRole("status", { name: "Bitbucket connection mutation" }),
+  ).toContainText("Connecting Bitbucket");
   await expect(page.getByLabel("Bitbucket connection status")).toContainText(
-    "Disconnected",
+    "Connected",
+  );
+  await expect(
+    page.getByText("Read-only repository access", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("28 Sept 2026, 19:30 UTC")).toBeVisible();
+  await expect(
+    page.getByLabel("Bitbucket connection status"),
+  ).not.toContainText("workspace");
+  expect(state.connectionMutations).toEqual(["connect"]);
+  expect(await page.evaluate(() => location.href)).toBe(initialNavigation.href);
+  expect(await page.evaluate(() => history.length)).toBe(
+    initialNavigation.length,
+  );
+
+  state.connectionStatus = "Reauthorization required";
+  await page.reload();
+  await expect(page.getByLabel("Bitbucket connection status")).toContainText(
+    "Reauthorization required",
+  );
+  state.connectionFailures = 1;
+  state.connectionDelayMs = 0;
+  const reconnect = page.getByRole("button", {
+    name: "Reconnect Bitbucket",
+  });
+  await reconnect.click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Verify the server configuration, then try again. The current connection status is unchanged.",
+  );
+  await expect(page.getByLabel("Bitbucket connection status")).toContainText(
+    "Reauthorization required",
+  );
+  await expect(reconnect).toBeEnabled();
+  expect(state.connectionMutations).toEqual(["connect", "reconnect"]);
+
+  await reconnect.click();
+  await expect(page.getByLabel("Bitbucket connection status")).toContainText(
+    "Connected",
+  );
+  await expect(
+    page.getByRole("status", { name: "Bitbucket connection mutation" }),
+  ).toContainText("Bitbucket reconnected");
+  expect(state.connectionMutations).toEqual([
+    "connect",
+    "reconnect",
+    "reconnect",
+  ]);
+  expect(await page.evaluate(() => location.href)).toBe(initialNavigation.href);
+  expect(await page.evaluate(() => history.length)).toBe(
+    initialNavigation.length,
   );
   await expectNoCredentialResidue(page);
+  const serializedConsole = consoleMessages.join("\n").toLowerCase();
+  for (const forbidden of [
+    "authorization_url",
+    "callback",
+    "client_secret",
+    "ciphertext",
+    "refresh_token",
+  ]) {
+    expect(serializedConsole).not.toContain(forbidden);
+  }
+  await expectNoPageOverflow(page);
 
   state.product = product();
   state.mappings = [directMapping];

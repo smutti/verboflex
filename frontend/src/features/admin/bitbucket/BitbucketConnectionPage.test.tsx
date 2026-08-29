@@ -6,10 +6,10 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  connectAdminBitbucketOauth,
   getAdminBitbucketStatus,
   reconnectAdminBitbucketOauth,
   revokeAdminBitbucketConnectionLocally,
-  startAdminBitbucketOauth,
   type AdminBitbucketStatusResponse,
 } from "../../../api/client";
 import { AdminApplicationRoutes } from "../../../router";
@@ -20,17 +20,17 @@ vi.mock("../../../api/client", async (importOriginal) => {
 
   return {
     ...original,
+    connectAdminBitbucketOauth: vi.fn(),
     getAdminBitbucketStatus: vi.fn(),
     reconnectAdminBitbucketOauth: vi.fn(),
     revokeAdminBitbucketConnectionLocally: vi.fn(),
-    startAdminBitbucketOauth: vi.fn(),
   };
 });
 
+const connectMock = vi.mocked(connectAdminBitbucketOauth);
 const getStatusMock = vi.mocked(getAdminBitbucketStatus);
 const reconnectMock = vi.mocked(reconnectAdminBitbucketOauth);
 const revokeMock = vi.mocked(revokeAdminBitbucketConnectionLocally);
-const startMock = vi.mocked(startAdminBitbucketOauth);
 
 const disconnected: AdminBitbucketStatusResponse = {
   connected_at: null,
@@ -60,18 +60,23 @@ function ok<T>(data: T, status = 200) {
 function failure(status = 503) {
   return {
     data: undefined,
-    error: { detail: "provider_token=secret-provider-body" },
+    error: { detail: "Bitbucket connection unavailable" },
     request: new Request("http://localhost/api/v1/admin/bitbucket"),
     response: new Response(null, { status }),
   };
 }
 
-function renderPage(navigateTo: (url: string) => void = vi.fn()) {
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
+
+function renderPage() {
   return render(
-    <BitbucketConnectionPage
-      accessToken="memory-only-admin-bearer"
-      navigateTo={navigateTo}
-    />,
+    <BitbucketConnectionPage accessToken="memory-only-admin-bearer" />,
   );
 }
 
@@ -79,9 +84,9 @@ describe("administrator Bitbucket connection page", () => {
   beforeEach(() => {
     getStatusMock.mockReset();
     getStatusMock.mockResolvedValue(ok(disconnected));
+    connectMock.mockReset();
     reconnectMock.mockReset();
     revokeMock.mockReset();
-    startMock.mockReset();
     localStorage.clear();
     sessionStorage.clear();
   });
@@ -103,9 +108,7 @@ describe("administrator Bitbucket connection page", () => {
     });
 
     view.unmount();
-    getStatusMock.mockRejectedValueOnce(
-      new Error("refresh_token=secret-provider-body"),
-    );
+    getStatusMock.mockRejectedValueOnce(new Error("bounded status failure"));
     getStatusMock.mockResolvedValueOnce(ok(disconnected));
     renderPage();
 
@@ -172,64 +175,134 @@ describe("administrator Bitbucket connection page", () => {
   });
 
   it.each([
-    ["Connect Bitbucket", startMock],
-    ["Reconnect Bitbucket", reconnectMock],
-  ])(
-    "%s uses one generated start operation and same-tab top-level navigation",
-    async (actionLabel, operation) => {
+    ["Connect Bitbucket", "connect", connectMock],
+    ["Reconnect Bitbucket", "reconnect", reconnectMock],
+  ] as const)(
+    "%s uses one direct mutation, remains in the SPA, and refetches public status",
+    async (actionLabel, actionName, operation) => {
       const status =
         actionLabel === "Connect Bitbucket"
           ? disconnected
           : { ...connected, status: "Reauthorization required" as const };
-      getStatusMock.mockResolvedValueOnce(ok(status));
-      let resolveOperation:
-        | ((
-            value: ReturnType<
-              typeof ok<{
-                authorization_url: string;
-                state_expires_in: 600;
-              }>
-            >,
-          ) => void)
-        | undefined;
-      const pendingOperation = new Promise<
-        ReturnType<
-          typeof ok<{
-            authorization_url: string;
-            state_expires_in: 600;
-          }>
-        >
-      >((resolve) => {
-        resolveOperation = resolve;
-      });
-      operation.mockReturnValueOnce(pendingOperation as never);
-      const navigateTo = vi.fn();
-      renderPage(navigateTo);
+      getStatusMock
+        .mockResolvedValueOnce(ok(status))
+        .mockResolvedValueOnce(ok(connected));
+      const mutation =
+        deferred<ReturnType<typeof ok<AdminBitbucketStatusResponse>>>();
+      operation.mockReturnValueOnce(mutation.promise as never);
+      const initialLocation = window.location.href;
+      const initialHistoryLength = window.history.length;
+      renderPage();
 
       const action = await screen.findByRole("button", { name: actionLabel });
       await userEvent.click(action);
       expect(action).toBeDisabled();
       expect(action).toHaveAttribute("aria-busy", "true");
       expect(operation).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByRole("status", { name: "Bitbucket connection mutation" }),
+      ).toHaveTextContent(
+        actionName === "connect"
+          ? "Connecting Bitbucket"
+          : "Reconnecting Bitbucket",
+      );
 
-      const authorizationUrl =
-        "https://bitbucket.org/site/oauth2/authorize?state=opaque-state&provider_secret=never-render";
-      resolveOperation?.(
-        ok({ authorization_url: authorizationUrl, state_expires_in: 600 }),
-      );
+      mutation.resolve(ok(connected));
+      expect((await screen.findAllByText("Connected"))[0]).toBeVisible();
       await waitFor(() => {
-        expect(navigateTo).toHaveBeenCalledWith(authorizationUrl);
+        expect(getStatusMock).toHaveBeenCalledTimes(2);
       });
-      expect(document.body).not.toHaveTextContent("opaque-state");
-      expect(document.body).not.toHaveTextContent("never-render");
-      expect(JSON.stringify(Object.entries(localStorage))).not.toContain(
-        authorizationUrl,
+      expect(
+        screen.getByRole("status", { name: "Bitbucket connection mutation" }),
+      ).toHaveTextContent(
+        actionName === "connect"
+          ? "Bitbucket connected"
+          : "Bitbucket reconnected",
       );
-      expect(JSON.stringify(Object.entries(sessionStorage))).not.toContain(
-        authorizationUrl,
-      );
+      const statusPanel = screen.getByRole("region", {
+        name: "Bitbucket connection status",
+      });
+      expect(statusPanel).toHaveTextContent("Read-only repository access");
+      expect(statusPanel).toHaveTextContent("27 Sept 2026, 12:34 UTC");
+      expect(statusPanel).not.toHaveTextContent("workspace");
+      expect(window.location.href).toBe(initialLocation);
+      expect(window.history.length).toBe(initialHistoryLength);
+      expect(localStorage).toHaveLength(0);
+      expect(sessionStorage).toHaveLength(0);
     },
   );
+
+  it("keeps only reconnect pending, announces recovery, and preserves revoke availability", async () => {
+    getStatusMock
+      .mockResolvedValueOnce(
+        ok({ ...connected, status: "Reauthorization required" }),
+      )
+      .mockResolvedValueOnce(ok(connected));
+    const mutation =
+      deferred<ReturnType<typeof ok<AdminBitbucketStatusResponse>>>();
+    reconnectMock.mockReturnValueOnce(mutation.promise as never);
+    renderPage();
+
+    const reconnect = await screen.findByRole("button", {
+      name: "Reconnect Bitbucket",
+    });
+    await userEvent.click(reconnect);
+
+    expect(reconnect).toBeDisabled();
+    expect(reconnect).toHaveAttribute("aria-busy", "true");
+    expect(
+      screen.getByRole("button", { name: "Revoke connection" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("status", { name: "Bitbucket connection mutation" }),
+    ).toHaveTextContent("Reconnecting Bitbucket");
+    expect(reconnectMock).toHaveBeenCalledTimes(1);
+
+    mutation.resolve(ok(connected));
+    expect((await screen.findAllByText("Connected"))[0]).toBeVisible();
+    expect(reconnectMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a failed direct recovery on the page with bounded retry guidance", async () => {
+    getStatusMock.mockResolvedValueOnce(
+      ok({ ...connected, status: "Reauthorization required" }),
+    );
+    reconnectMock.mockResolvedValueOnce(failure() as never);
+    const initialLocation = window.location.href;
+    renderPage();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Reconnect Bitbucket" }),
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Bitbucket connection unavailable");
+    expect(alert).toHaveTextContent(
+      "Verify the server configuration, then try again. The current connection status is unchanged.",
+    );
+    expect(screen.getAllByText("Reauthorization required")[0]).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Reconnect Bitbucket" }),
+    ).toBeEnabled();
+    expect(reconnectMock).toHaveBeenCalledTimes(1);
+    expect(window.location.href).toBe(initialLocation);
+    for (const forbidden of [
+      "authorization_url",
+      "callback",
+      "client_secret",
+      "ciphertext",
+      "refresh_token",
+    ]) {
+      expect(document.body.innerHTML).not.toContain(forbidden);
+      expect(JSON.stringify(window.history.state)).not.toContain(forbidden);
+      expect(JSON.stringify(Object.entries(localStorage))).not.toContain(
+        forbidden,
+      );
+      expect(JSON.stringify(Object.entries(sessionStorage))).not.toContain(
+        forbidden,
+      );
+    }
+  });
 
   it("revokes only after named confirmation and keeps server authority on failure", async () => {
     getStatusMock.mockResolvedValueOnce(ok(connected));
