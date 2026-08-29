@@ -433,6 +433,7 @@ scan_phase_secrets() {
     'src/verboflex/auth/principal.py|28|Secret Keyword' \
     'src/verboflex/auth/principal.py|29|Secret Keyword' \
     'tests/api/test_admin_users.py|192|Secret Keyword' \
+    'tests/architecture/test_phase2_live_provider_smoke.py|36|Secret Keyword' \
     'tests/integration/test_bitbucket_discovery.py|735|Base64 High Entropy String' \
     'tests/unit/services/test_admin_users.py|335|Secret Keyword' \
     | sort >"$expected"
