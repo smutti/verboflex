@@ -30,6 +30,7 @@ Every phase must complete these checks before it can be marked complete:
 3. **Deploy/build verification completed:** Verify the current app slice builds and starts in the closest available deployment-like path, such as Docker Compose, local production build, or staging deployment.
 4. **Smoke check documented:** Record the commands/results or manual smoke checks used to verify the phase.
 5. **Blocking findings resolved:** Fix critical review, test, security, or deploy failures before moving to the next phase.
+6. **Fresh closeout authority:** Keep the phase incomplete until its newest code review records zero unresolved Critical findings and its newest independent verifier frontmatter is exactly `status: passed`; both must bind to the same post-gauntlet source digest.
 
 ## Phase Details
 
@@ -85,7 +86,7 @@ Plans:
   7. Guided shadcn admin screens provide actionable user, repository, mapping, OAuth, validation, and background-job states.
   8. Phase quality gate passes with RED→GREEN TDD evidence, code review, and backend/frontend/worker/deploy smoke verification.
 
-**Plans**: 36 plans (20 executed, 16 gap-closure plans pending)
+**Plans**: 38 plans (20 executed, 18 gap-closure plans pending)
 
 Plans:
 **Wave 1**
@@ -207,9 +208,17 @@ Plans:
 
 - [ ] 02-34-PLAN.md — Complete preview pagination and mapping-51 lifecycle gating
 
-**Wave 29** *(gap closure; blocked on Waves 21-28 completion)*
+**Wave 29** *(gap closure traceability; blocked on Waves 21-28 completion)*
 
-- [ ] 02-30-PLAN.md — Literal 54-row SPEC traceability, full gap gauntlet, fresh review, verifier, and unchanged-source evidence
+- [ ] 02-30-PLAN.md — Literal multi-source semantic traceability and deterministic coverage-audit contracts
+
+**Wave 30** *(gap closure runtime gate; blocked on Wave 29 completion)*
+
+- [ ] 02-37-PLAN.md — Full architecture, E2E, Compose, worker-loss, security, and unchanged-source gauntlet expansion
+
+**Wave 31** *(gap closure final authority; blocked on every Plan 02-21 through 02-37)*
+
+- [ ] 02-38-PLAN.md — Fresh critical-zero ASVS L1 review and independent `status: passed` verifier closeout
 
 ### Phase 3: Bitbucket Import Integration
 
