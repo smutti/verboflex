@@ -206,6 +206,26 @@ async def list_live_repository_branches(
     return BranchPage(items=items, next_cursor=next_cursor)
 
 
+async def resolve_configured_repository_branch(
+    session: Session,
+    *,
+    repository_id: UUID,
+    branch_name: str,
+    adapter: SourceDiscoveryAdapter,
+) -> BitbucketBranch:
+    """Resolve one registered repository branch through the exact safe-adapter read."""
+    repository = get_repository(session, repository_id=repository_id)
+    resolved = await adapter.resolve_repository_branch(
+        session,
+        workspace=repository.workspace,
+        repository_slug=repository.repository_slug,
+        branch=branch_name,
+    )
+    if resolved.name != branch_name:
+        raise BitbucketProviderReadError(kind="invalid_source")
+    return resolved
+
+
 async def discover_repository_sources_for_record(
     session: Session,
     *,

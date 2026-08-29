@@ -27,6 +27,7 @@ from verboflex.services.repository_discovery import (
     InvalidBranchCursor,
     discover_live_repository_sources,
     list_live_repository_branches,
+    resolve_configured_repository_branch,
 )
 
 router = APIRouter(prefix="/admin/repositories", tags=["admin-discovery"])
@@ -114,6 +115,39 @@ async def list_admin_repository_branches(
         ],
         next_cursor=page.next_cursor,
     )
+
+
+@router.get(
+    "/{repository_id}/branch",
+    operation_id="get_admin_repository_branch",
+    response_model=AdminBranchResponse,
+    responses=DISCOVERY_RESPONSES,
+)
+async def get_admin_repository_branch(
+    repository_id: UUID,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+    adapter: DiscoveryAdapter,
+    branch_name: Annotated[str, Query(min_length=1, max_length=255)],
+) -> AdminBranchResponse | JSONResponse:
+    """Resolve one opaque configured branch through the exact provider detail read."""
+    if adapter is None:
+        return _failure_response(BitbucketProviderReadError(kind="unavailable"))
+    try:
+        branch = await resolve_configured_repository_branch(
+            session,
+            repository_id=repository_id,
+            branch_name=branch_name,
+            adapter=adapter,
+        )
+    except RepositoryNotFound as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository unavailable",
+        ) from error
+    except BitbucketProviderReadError as error:
+        return _failure_response(error)
+    return AdminBranchResponse(name=branch.name, commit_hash=branch.commit_hash)
 
 
 @router.get(
