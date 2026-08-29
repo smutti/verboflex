@@ -1,16 +1,21 @@
 import {
+  useCallback,
+  useEffect,
   useId,
   useRef,
   useState,
   type FormEvent,
   type MouseEvent,
 } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import {
   createAdminProduct,
+  getAdminProduct,
+  listAdminRevisionMappings,
   updateAdminProductCandidate,
+  type AdminMappingResponse,
   type AdminProductResponse,
 } from "../../../api/client";
 import {
@@ -30,6 +35,7 @@ import {
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import { Skeleton } from "../../../components/ui/skeleton";
 import { Textarea } from "../../../components/ui/textarea";
 import { ProductMappingsPage } from "../mappings/ProductMappingsPage";
 import { ProductRepositoriesPage } from "../repositories/ProductRepositoriesPage";
@@ -52,13 +58,105 @@ interface PendingNavigation {
   step: number;
 }
 
+interface EditableProductLoad {
+  mappedRepositoryIds: string[];
+  product: AdminProductResponse;
+}
+
+export interface MobileWizardNavigation {
+  backDisabled: boolean;
+  nextDisabled: boolean;
+  nextLabel: string;
+}
+
+// Exported for focused behavior tests; production consumes the same pure navigation contract.
+// eslint-disable-next-line react-refresh/only-export-components
+export function mobileWizardNavigation(
+  currentStep: number,
+  productAvailable: boolean,
+): MobileWizardNavigation {
+  return {
+    backDisabled: currentStep === 1,
+    nextDisabled:
+      currentStep === PRODUCT_STEPS.length ||
+      (currentStep > 1 && !productAvailable),
+    nextLabel:
+      currentStep === PRODUCT_STEPS.length
+        ? "Next"
+        : `Next: ${PRODUCT_STEPS[currentStep]}`,
+  };
+}
+
+function mappedRepositoryIds(mappings: readonly AdminMappingResponse[]) {
+  return Array.from(
+    new Set(
+      mappings.flatMap((mapping) =>
+        mapping.translations_repository_id === null
+          ? [mapping.primary_repository_id]
+          : [mapping.primary_repository_id, mapping.translations_repository_id],
+      ),
+    ),
+  );
+}
+
+// Exported for route-level generated-client contract tests.
+// eslint-disable-next-line react-refresh/only-export-components
+export async function loadEditableProduct(
+  accessToken: string,
+  productId: string,
+): Promise<EditableProductLoad> {
+  const productResult = await getAdminProduct({
+    auth: accessToken,
+    path: { product_id: productId },
+  });
+  if (productResult.data === undefined) {
+    throw new Error("product unavailable");
+  }
+
+  const product = productResult.data;
+  const editableRevision =
+    product.candidate_revision ?? product.active_revision;
+  if (editableRevision === null) {
+    return { mappedRepositoryIds: [], product };
+  }
+
+  const mappingsResult = await listAdminRevisionMappings({
+    auth: accessToken,
+    path: {
+      product_id: productId,
+      revision_id: editableRevision.id,
+    },
+    query: { cursor: null, limit: 50 },
+  });
+  if (mappingsResult.data === undefined) {
+    throw new Error("product mappings unavailable");
+  }
+  return {
+    mappedRepositoryIds: mappedRepositoryIds(mappingsResult.data.items),
+    product,
+  };
+}
+
 function responseStatus(result: { response?: Response }) {
   // Stryker disable next-line OptionalChaining: a missing generated response and a thrown status access both map to the same bounded generic failure.
   return result.response?.status;
 }
 
 function savedDescription(product: AdminProductResponse | undefined) {
-  return product?.candidate_revision?.description ?? "";
+  return (
+    product?.candidate_revision?.description ??
+    product?.active_revision?.description ??
+    ""
+  );
+}
+
+function savedName(product: AdminProductResponse | undefined) {
+  return (
+    product?.candidate_revision?.name ??
+    product?.active_revision?.name ??
+    product?.name ??
+    ""
+  );
 }
 
 function FutureStep({ productId, step }: { productId: string; step: number }) {
@@ -106,18 +204,34 @@ export function ProductWizardPage({
   accessToken,
   initialProduct,
 }: ProductWizardPageProps) {
+  const routeProductId = useParams<"productId">().productId;
   const nameId = useId();
   const descriptionId = useId();
   const nameRef = useRef<HTMLInputElement>(null);
+  const detailsFormRef = useRef<HTMLFormElement>(null);
+  const routeLoadGenerationRef = useRef(0);
+  const stepErrorRef = useRef<HTMLDivElement>(null);
   const submitPendingRef = useRef(false);
   const [product, setProduct] = useState(initialProduct);
-  const [savedName, setSavedName] = useState(initialProduct?.name ?? "");
+  const [savedNameValue, setSavedNameValue] = useState(
+    savedName(initialProduct),
+  );
   const [savedDescriptionValue, setSavedDescriptionValue] = useState(
     savedDescription(initialProduct),
   );
-  const [name, setName] = useState(savedName);
+  const [name, setName] = useState(savedNameValue);
   const [description, setDescription] = useState(savedDescriptionValue);
   const [currentStep, setCurrentStep] = useState(1);
+  const [routeLoadState, setRouteLoadState] = useState<
+    "error" | "loading" | "ready"
+  >(
+    routeProductId === undefined || initialProduct !== undefined
+      ? "ready"
+      : "loading",
+  );
+  const [selectedRepositoryIds, setSelectedRepositoryIds] = useState<
+    Set<string>
+  >(() => new Set());
   const [pending, setPending] = useState(false);
   const [nameError, setNameError] = useState<"required" | "duplicate" | null>(
     null,
@@ -125,8 +239,81 @@ export function ProductWizardPage({
   const [submissionError, setSubmissionError] = useState(false);
   const [pendingNavigation, setPendingNavigation] =
     useState<PendingNavigation | null>(null);
+  const [stepError, setStepError] = useState<string | null>(null);
 
-  const dirty = name !== savedName || description !== savedDescriptionValue;
+  const dirty =
+    name !== savedNameValue || description !== savedDescriptionValue;
+
+  const loadRouteProduct = useCallback(async () => {
+    if (routeProductId === undefined || initialProduct !== undefined) {
+      return;
+    }
+    const generation = ++routeLoadGenerationRef.current;
+    setRouteLoadState("loading");
+    try {
+      const loaded = await loadEditableProduct(accessToken, routeProductId);
+      if (generation !== routeLoadGenerationRef.current) {
+        return;
+      }
+      const loadedName = savedName(loaded.product);
+      const loadedDescription = savedDescription(loaded.product);
+      setProduct(loaded.product);
+      setSavedNameValue(loadedName);
+      setSavedDescriptionValue(loadedDescription);
+      setName(loadedName);
+      setDescription(loadedDescription);
+      setSelectedRepositoryIds(new Set(loaded.mappedRepositoryIds));
+      setRouteLoadState("ready");
+    } catch {
+      if (generation === routeLoadGenerationRef.current) {
+        setRouteLoadState("error");
+      }
+    }
+  }, [accessToken, initialProduct, routeProductId]);
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (active) {
+        void loadRouteProduct();
+      }
+    });
+    return () => {
+      active = false;
+      routeLoadGenerationRef.current += 1;
+    };
+  }, [loadRouteProduct]);
+
+  useEffect(() => {
+    if (stepError !== null) {
+      stepErrorRef.current?.focus();
+    }
+  }, [stepError]);
+
+  useEffect(() => {
+    if (!dirty) {
+      return;
+    }
+    const confirmDirtyExit = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const confirmHistoryExit = () => {
+      if (
+        !window.confirm(
+          "Leave without saving?\n\nYour unsaved entries on this page will be lost.",
+        )
+      ) {
+        window.history.forward();
+      }
+    };
+    window.addEventListener("beforeunload", confirmDirtyExit);
+    window.addEventListener("popstate", confirmHistoryExit);
+    return () => {
+      window.removeEventListener("beforeunload", confirmDirtyExit);
+      window.removeEventListener("popstate", confirmHistoryExit);
+    };
+  }, [dirty]);
 
   function requestStep(step: number, event: MouseEvent<HTMLButtonElement>) {
     if (step === currentStep) {
@@ -145,7 +332,7 @@ export function ProductWizardPage({
   }
 
   function discardAndNavigate(navigation: PendingNavigation) {
-    setName(savedName);
+    setName(savedNameValue);
     setDescription(savedDescriptionValue);
     setNameError(null);
     setSubmissionError(false);
@@ -165,7 +352,11 @@ export function ProductWizardPage({
       return;
     }
     // Stryker disable next-line ConditionalExpression,BlockStatement: removal reaches the same caught generic failure without invoking a generated operation.
-    if (product !== undefined && product.candidate_revision === null) {
+    if (
+      product !== undefined &&
+      product.candidate_revision === null &&
+      product.active_revision === null
+    ) {
       setSubmissionError(true);
       return;
     }
@@ -178,6 +369,8 @@ export function ProductWizardPage({
       description.trim().length === 0 ? null : description;
 
     try {
+      const expectedRevision =
+        product?.candidate_revision ?? product?.active_revision;
       const result =
         product === undefined
           ? await createAdminProduct({
@@ -190,17 +383,25 @@ export function ProductWizardPage({
               body: {
                 name,
                 description: normalizedDescription,
-                expected_candidate_version: product.candidate_revision!.version,
+                expected_candidate_version: expectedRevision!.version,
               },
             });
 
       if (result.data !== undefined) {
         const responseProduct = result.data;
+        if (
+          product !== undefined &&
+          responseProduct.candidate_revision === null
+        ) {
+          setSubmissionError(true);
+          return;
+        }
         const responseDescription = savedDescription(responseProduct);
+        const responseName = savedName(responseProduct);
         setProduct(responseProduct);
-        setSavedName(responseProduct.name);
+        setSavedNameValue(responseName);
         setSavedDescriptionValue(responseDescription);
-        setName(responseProduct.name);
+        setName(responseName);
         setDescription(responseDescription);
         toast.success("Draft saved");
         setCurrentStep(2);
@@ -235,13 +436,83 @@ export function ProductWizardPage({
     );
   }
 
+  function selectRepository(repositoryId: string) {
+    setSelectedRepositoryIds((current) => new Set(current).add(repositoryId));
+    setStepError(null);
+  }
+
+  function goBack() {
+    if (currentStep > 1) {
+      setStepError(null);
+      setCurrentStep((step) => step - 1);
+    }
+  }
+
+  function goForward() {
+    setStepError(null);
+    if (currentStep === 1) {
+      detailsFormRef.current?.requestSubmit();
+      return;
+    }
+    if (currentStep === 2 && selectedRepositoryIds.size === 0) {
+      setStepError("Select or register a repository before continuing.");
+      return;
+    }
+    if (currentStep < PRODUCT_STEPS.length) {
+      setCurrentStep((step) => step + 1);
+    }
+  }
+
+  if (routeLoadState === "loading") {
+    return (
+      <section
+        className="grid max-w-3xl gap-4"
+        role="status"
+        aria-live="polite"
+      >
+        <Skeleton className="h-9 w-64 max-w-full" />
+        <Skeleton className="h-48 w-full" />
+        <span>Loading product draft</span>
+      </section>
+    );
+  }
+
+  if (routeLoadState === "error") {
+    return (
+      <Alert variant="destructive" className="max-w-3xl">
+        <AlertTitle>Product draft unavailable</AlertTitle>
+        <AlertDescription>
+          <p>
+            We could not load this page. Retry without leaving the
+            administration area.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void loadRouteProduct()}
+          >
+            Retry loading page
+          </Button>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  const mobileNavigation = mobileWizardNavigation(
+    currentStep,
+    product !== undefined,
+  );
+
   return (
     <section
       className="mx-auto grid w-full min-w-0 max-w-3xl gap-8 overflow-x-clip"
       aria-labelledby="product-wizard-title"
     >
       <div className="grid gap-2">
-        <h1 id="product-wizard-title" className="text-display font-semibold">
+        <h1
+          id="product-wizard-title"
+          className="break-words text-display font-semibold [overflow-wrap:anywhere]"
+        >
           {product === undefined ? "Create product" : product.name}
         </h1>
         <p className="text-muted-foreground">
@@ -273,6 +544,7 @@ export function ProductWizardPage({
 
       <p
         aria-label="Product setup progress"
+        aria-live="polite"
         className="grid gap-1 rounded-lg border bg-secondary p-4 md:hidden"
       >
         <span className="text-label font-semibold">
@@ -283,6 +555,7 @@ export function ProductWizardPage({
 
       {currentStep === 1 ? (
         <form
+          ref={detailsFormRef}
           className="grid gap-6 rounded-lg border bg-secondary p-6"
           onSubmit={(event) => void submitDetails(event)}
         >
@@ -341,7 +614,12 @@ export function ProductWizardPage({
           </div>
         </form>
       ) : currentStep === 2 && product !== undefined ? (
-        <ProductRepositoriesPage accessToken={accessToken} embedded />
+        <ProductRepositoriesPage
+          accessToken={accessToken}
+          embedded
+          selectedRepositoryIds={Array.from(selectedRepositoryIds)}
+          onRepositorySelected={(repository) => selectRepository(repository.id)}
+        />
       ) : currentStep === 3 &&
         product !== undefined &&
         product.candidate_revision !== null ? (
@@ -355,6 +633,43 @@ export function ProductWizardPage({
       ) : product !== undefined ? (
         <FutureStep productId={product.id} step={currentStep} />
       ) : null}
+
+      {stepError !== null ? (
+        <Alert
+          ref={stepErrorRef}
+          tabIndex={-1}
+          variant="destructive"
+          aria-label="Wizard step incomplete"
+        >
+          <AlertTitle>Complete this step</AlertTitle>
+          <AlertDescription>{stepError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <nav
+        aria-label="Wizard navigation"
+        className="grid min-w-0 grid-cols-2 gap-3 md:hidden"
+      >
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 min-w-0"
+          disabled={mobileNavigation.backDisabled}
+          onClick={goBack}
+        >
+          Back
+        </Button>
+        <Button
+          type="button"
+          className="min-h-11 min-w-0 whitespace-normal"
+          aria-label={mobileNavigation.nextLabel}
+          disabled={mobileNavigation.nextDisabled || pending}
+          aria-busy={pending}
+          onClick={goForward}
+        >
+          Next
+        </Button>
+      </nav>
 
       {pendingNavigation !== null ? (
         <AlertDialog

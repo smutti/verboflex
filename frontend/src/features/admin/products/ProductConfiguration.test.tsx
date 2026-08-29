@@ -876,11 +876,7 @@ describe("administrator product configuration tracer", () => {
     const wizard = screen
       .getByRole("heading", { name: activeProduct.name })
       .closest("section");
-    expect(wizard).toHaveClass(
-      "min-w-0",
-      "max-w-3xl",
-      "overflow-x-clip",
-    );
+    expect(wizard).toHaveClass("min-w-0", "max-w-3xl", "overflow-x-clip");
     const mobileNavigation = screen.getByRole("navigation", {
       name: "Wizard navigation",
     });
@@ -907,7 +903,9 @@ describe("administrator product configuration tracer", () => {
     );
 
     await user.click(
-      screen.getByRole("button", { name: "Use Mobile application source" }),
+      screen.getAllByRole("button", {
+        name: "Use Mobile application source",
+      })[0],
     );
     await user.click(nextToMappings);
     expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
@@ -937,9 +935,9 @@ describe("administrator product configuration tracer", () => {
       await user.click(
         within(mobileNavigation).getByRole("button", { name: "Back" }),
       );
-      expect(
-        screen.getByLabelText("Product setup progress"),
-      ).toHaveTextContent(`Step ${expectedStep} of 5`);
+      expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
+        `Step ${expectedStep} of 5`,
+      );
     }
   });
 
@@ -970,6 +968,7 @@ describe("administrator product configuration tracer", () => {
       candidate_revision: {
         ...candidateOnlyProduct.candidate_revision!,
         description: "Canonical server description",
+        name: "Canonical Embedded Product",
       },
     };
     let resolveCreate:
@@ -1212,25 +1211,46 @@ describe("administrator product configuration tracer", () => {
     );
   });
 
-  it("fails closed when a generated product has no editable candidate", async () => {
+  it("creates one candidate from an active revision only after a real details mutation", async () => {
+    const createdCandidate = {
+      ...inactivePublishedProduct,
+      candidate_revision: {
+        id: "00000000-0000-4000-8000-000000000205",
+        description: inactivePublishedProduct.active_revision!.description,
+        is_published: false,
+        name: `${inactivePublishedProduct.name} candidate`,
+        version: 3,
+      },
+    };
+    updateAdminProductCandidateMock.mockResolvedValueOnce(ok(createdCandidate));
     renderWizard(inactivePublishedProduct);
     const user = userEvent.setup();
     expect(
       screen.getByRole("heading", { name: inactivePublishedProduct.name }),
     ).toBeVisible();
     expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue(
-      "",
+      inactivePublishedProduct.active_revision?.description,
     );
+    expect(updateAdminProductCandidateMock).not.toHaveBeenCalled();
     await user.type(
       screen.getByRole("textbox", { name: "Name" }),
       " candidate",
     );
     await user.click(screen.getByRole("button", { name: "Save and continue" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "We could not save this draft. Your entries are still here. Review the error and try again.",
+    expect(updateAdminProductCandidateMock).toHaveBeenCalledOnce();
+    expect(updateAdminProductCandidateMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: { product_id: inactivePublishedProduct.id },
+      body: {
+        description: inactivePublishedProduct.active_revision?.description,
+        expected_candidate_version: 2,
+        name: `${inactivePublishedProduct.name} candidate`,
+      },
+    });
+    expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
+      "Step 2 of 5Repositories",
     );
-    expect(updateAdminProductCandidateMock).not.toHaveBeenCalled();
   });
 
   it("clears duplicate ownership when conflicted edits are discarded", async () => {

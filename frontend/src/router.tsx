@@ -169,6 +169,10 @@ export function AdminApplicationRoutes({
         element={<ProductOverviewPage accessToken={accessToken} />}
       />
       <Route
+        path="products/:productId/edit"
+        element={<ProductWizardPage accessToken={accessToken} />}
+      />
+      <Route
         path="products/:productId/repositories"
         element={
           <ProductDetailLayout hideTitle>

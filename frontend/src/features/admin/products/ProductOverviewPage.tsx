@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import {
   deactivateAdminProduct,
@@ -233,17 +233,29 @@ export function ProductOverviewPage({
               {product.is_active ? "Active" : "Inactive"}
             </Badge>
           </div>
-          {product.is_active ? (
-            <Button
-              ref={deactivateTriggerRef}
-              type="button"
-              variant="destructive"
-              className="w-full sm:w-auto"
-              onClick={() => setDeactivateOpen(true)}
-            >
-              Deactivate product
-            </Button>
-          ) : null}
+          <div className="flex w-full flex-wrap gap-3 sm:w-auto">
+            {product.active_revision !== null ||
+            product.candidate_revision !== null ? (
+              <Button asChild variant="outline" className="w-full sm:w-auto">
+                <Link
+                  to={`/admin/products/${encodeURIComponent(loadState.productId)}/edit`}
+                >
+                  Edit draft
+                </Link>
+              </Button>
+            ) : null}
+            {product.is_active ? (
+              <Button
+                ref={deactivateTriggerRef}
+                type="button"
+                variant="destructive"
+                className="w-full sm:w-auto"
+                onClick={() => setDeactivateOpen(true)}
+              >
+                Deactivate product
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         {product.is_active && product.candidate_revision !== null ? (
