@@ -1785,6 +1785,9 @@ describe("administrator product configuration tracer", () => {
   });
 
   it("mounts the product collection, new wizard, and URL-backed overview routes inside the guarded shell", async () => {
+    listAdminRevisionMappingsMock.mockResolvedValue(
+      ok({ items: [], next_cursor: null }),
+    );
     const collectionView = render(
       <MemoryRouter initialEntries={["/admin/products"]}>
         <AppRouter />
@@ -1850,6 +1853,9 @@ describe("administrator product configuration tracer", () => {
         "Add a mapping that represents one localization format and layout.",
       ),
     ).toBeVisible();
+    getAdminProductMock.mockClear();
+    listAdminCandidateMappingsMock.mockClear();
+    listAdminRevisionMappingsMock.mockClear();
     await userEvent.click(screen.getByRole("link", { name: "Preview" }));
     expect(
       await screen.findByRole("heading", { name: "Preview" }),
@@ -1862,6 +1868,22 @@ describe("administrator product configuration tracer", () => {
         "Add a mapping that represents one localization format and layout.",
       ),
     ).toBeVisible();
+    expect(getAdminProductMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: { product_id: activeProduct.id },
+    });
+    expect(listAdminRevisionMappingsMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: {
+        product_id: activeProduct.id,
+        revision_id: activeProduct.candidate_revision!.id,
+      },
+      query: { cursor: null, limit: 50 },
+    });
+    expect(getAdminProductMock.mock.invocationCallOrder[0]).toBeLessThan(
+      listAdminRevisionMappingsMock.mock.invocationCallOrder[0],
+    );
+    expect(listAdminCandidateMappingsMock).not.toHaveBeenCalled();
   });
 
   it("reuses or registers credential-free repositories with responsive API ordering", async () => {
