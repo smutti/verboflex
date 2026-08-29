@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -210,3 +211,89 @@ def test_declarative_metadata_contains_every_auth_model() -> None:
     from verboflex.db.base import Base
 
     assert set(Base.metadata.tables) >= EXPECTED_TABLES
+
+
+def test_client_credentials_credential_state_upgrade_downgrade_and_reupgrade(
+    migrated_database: tuple[Config, Engine],
+) -> None:
+    """Permit access-only authority while every downgrade fails closed."""
+    config, engine = migrated_database
+    command.upgrade(config, "head")
+
+    constraint_names = {
+        constraint["name"]
+        for constraint in inspect(engine).get_check_constraints("bitbucket_connections")
+    }
+    assert "ck_bitbucket_connections_credential_state" in constraint_names
+    assert "ck_bitbucket_connections_credential_pair_state" not in constraint_names
+
+    expires_at = datetime(2026, 8, 29, 16, 0, tzinfo=UTC)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE bitbucket_connections SET "
+                "generation = 1, access_token_ciphertext = 'encrypted-access', "
+                "refresh_token_ciphertext = NULL, scope_profile = 'repository', "
+                "provider_expires_at = :expires_at, connected_at = :connected_at, "
+                "revoked_at = NULL WHERE id = 1"
+            ),
+            {"expires_at": expires_at, "connected_at": expires_at},
+        )
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE bitbucket_connections SET "
+                "access_token_ciphertext = NULL, refresh_token_ciphertext = 'refresh-only' "
+                "WHERE id = 1"
+            )
+        )
+
+    command.downgrade(config, "0007_preview_confirmations")
+    with engine.connect() as connection:
+        downgraded = connection.execute(
+            text(
+                "SELECT generation, access_token_ciphertext, refresh_token_ciphertext, "
+                "scope_profile, provider_expires_at, connected_at, revoked_at "
+                "FROM bitbucket_connections WHERE id = 1"
+            )
+        ).one()
+    assert downgraded[0] == 2
+    assert downgraded[1:6] == (None, None, None, None, None)
+    assert downgraded[6] is not None
+    assert {
+        constraint["name"]
+        for constraint in inspect(engine).get_check_constraints("bitbucket_connections")
+    } >= {"ck_bitbucket_connections_credential_pair_state"}
+
+    command.upgrade(config, "head")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE bitbucket_connections SET "
+                "generation = 3, access_token_ciphertext = 'legacy-access', "
+                "refresh_token_ciphertext = 'legacy-refresh', scope_profile = 'repository', "
+                "provider_expires_at = :expires_at, connected_at = :connected_at, "
+                "revoked_at = NULL WHERE id = 1"
+            ),
+            {"expires_at": expires_at, "connected_at": expires_at},
+        )
+    command.downgrade(config, "0007_preview_confirmations")
+    with engine.connect() as connection:
+        paired = connection.execute(
+            text(
+                "SELECT generation, access_token_ciphertext, refresh_token_ciphertext "
+                "FROM bitbucket_connections WHERE id = 1"
+            )
+        ).one()
+    assert paired == (3, "legacy-access", "legacy-refresh")
+
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        paired_after_reupgrade = connection.execute(
+            text(
+                "SELECT generation, access_token_ciphertext, refresh_token_ciphertext "
+                "FROM bitbucket_connections WHERE id = 1"
+            )
+        ).one()
+    assert paired_after_reupgrade == paired

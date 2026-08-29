@@ -9,6 +9,7 @@ import os
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Event
 from typing import Any
@@ -40,6 +41,7 @@ REFRESH_TOKEN = "provider-refresh-token-must-never-leak"
 ROTATED_ACCESS_TOKEN = "rotated-access-token-must-never-leak"
 ROTATED_REFRESH_TOKEN = "rotated-refresh-token-must-never-leak"
 PROVIDER_ERROR_BODY = "provider-body-must-never-leak"
+CLIENT_CREDENTIALS_NOW = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
 
 
 @dataclass
@@ -82,10 +84,37 @@ class FakeTokenExchange:
     calls: list[dict[str, str]] = field(default_factory=list)
     refresh_calls: list[dict[str, str]] = field(default_factory=list)
     provider_revoke_calls: int = 0
+    client_credentials_calls: list[dict[str, str]] = field(default_factory=list)
     scope: str = "repository"
     error: Exception | None = None
     refresh_started: Event | None = None
     release_refresh: Event | None = None
+    client_credentials_started: Event | None = None
+    release_client_credentials: Event | None = None
+
+    def exchange_client_credentials(
+        self,
+        *,
+        client_id: str,
+        client_secret: str,
+    ) -> dict[str, Any]:
+        """Return one access-only exact-scope generation."""
+        self.client_credentials_calls.append(
+            {"client_id": client_id, "client_secret": client_secret}
+        )
+        if self.client_credentials_started is not None:
+            self.client_credentials_started.set()
+        if self.release_client_credentials is not None:
+            assert self.release_client_credentials.wait(timeout=5)
+        if self.error is not None:
+            raise self.error
+        return {
+            "access_token": ACCESS_TOKEN,
+            "token_type": "bearer",
+            "scope": self.scope,
+            "expires_in": 3600,
+            "provider_debug_body": PROVIDER_ERROR_BODY,
+        }
 
     def exchange_authorization_code(
         self,
@@ -932,6 +961,152 @@ def test_bitbucket_singleton_metadata_survives_postgresql_rehearsal(
             connection.exec_driver_sql("SELECT count(*) FROM bitbucket_connections").scalar_one()
             == 1
         )
+
+
+def test_client_credentials_persists_access_only_encrypted_generation(
+    oauth_session_factory: sessionmaker[Session],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Acquire one exact-scope access-only generation without leaking secrets."""
+    from verboflex.models.bitbucket_connection import BitbucketConnection
+    from verboflex.security.secret_box import SecretBox
+    from verboflex.services.bitbucket_oauth import BitbucketOAuthService
+
+    exchange = FakeTokenExchange()
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        redis_client=FakeRedis(),
+        token_exchange=exchange,
+        clock=lambda: CLIENT_CREDENTIALS_NOW,
+    )
+
+    with oauth_session_factory() as session:
+        status = service.acquire_client_credentials(session, actor_id=ADMIN_ID)
+
+    assert status.state == "connected"
+    assert status.generation == 1
+    assert exchange.client_credentials_calls == [
+        {
+            "client_id": "verboflex-test-client",
+            "client_secret": "backend-only-client-secret",  # pragma: allowlist secret
+        }
+    ]
+
+    secret_box = SecretBox.from_keyring(FERNET_KEY)
+    with oauth_session_factory() as session:
+        connection = session.execute(select(BitbucketConnection)).scalar_one()
+        assert connection.generation == 1
+        assert connection.access_token_ciphertext not in (None, ACCESS_TOKEN)
+        assert connection.refresh_token_ciphertext is None
+        assert connection.provider_expires_at == CLIENT_CREDENTIALS_NOW.replace(
+            hour=13
+        )
+        assert connection.connected_at == CLIENT_CREDENTIALS_NOW
+        assert connection.scope_profile == "repository"
+        assert secret_box.decrypt(connection.access_token_ciphertext) == ACCESS_TOKEN
+        ciphertext = connection.access_token_ciphertext
+
+    for forbidden in (
+        ACCESS_TOKEN,
+        "backend-only-client-secret",
+        FERNET_KEY,
+        ciphertext,
+    ):
+        assert forbidden not in caplog.text
+
+
+def test_client_credentials_repetition_never_resurrects_generation(
+    oauth_session_factory: sessionmaker[Session],
+) -> None:
+    """Repeated connect, revoke, and reconnect leave only the final generation live."""
+    from verboflex.services.bitbucket_oauth import (
+        BitbucketOAuthService,
+        OAuthGenerationRejected,
+    )
+
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        redis_client=FakeRedis(),
+        token_exchange=FakeTokenExchange(),
+        clock=lambda: CLIENT_CREDENTIALS_NOW,
+    )
+    with oauth_session_factory() as session:
+        first = service.acquire_client_credentials(session, actor_id=ADMIN_ID)
+    with oauth_session_factory() as session:
+        first_lease = service.acquire_repository_read_lease(session)
+    with oauth_session_factory() as session:
+        second = service.acquire_client_credentials(session, actor_id=ADMIN_ID)
+    with oauth_session_factory() as session:
+        revoked = service.revoke_current(session, actor_id=ADMIN_ID)
+    with oauth_session_factory() as session:
+        final = service.acquire_client_credentials(session, actor_id=ADMIN_ID)
+
+    assert (first.generation, second.generation, revoked.generation, final.generation) == (
+        1,
+        2,
+        3,
+        4,
+    )
+    with (
+        oauth_session_factory() as session,
+        pytest.raises(OAuthGenerationRejected),
+    ):
+        service.require_current_repository_read_lease(session, first_lease)
+    with oauth_session_factory() as session:
+        final_lease = service.acquire_repository_read_lease(session)
+    assert final_lease.generation == 4
+
+
+def test_client_credentials_rotation_and_revoke_serialize(
+    oauth_session_factory: sessionmaker[Session],
+) -> None:
+    """A revoke waiting on one acquisition wins and rejects every stale lease."""
+    from verboflex.services.bitbucket_oauth import (
+        BitbucketOAuthService,
+        OAuthConnectionUnavailable,
+        OAuthGenerationRejected,
+    )
+
+    exchange = FakeTokenExchange()
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        redis_client=FakeRedis(),
+        token_exchange=exchange,
+        clock=lambda: CLIENT_CREDENTIALS_NOW,
+    )
+    with oauth_session_factory() as session:
+        service.acquire_client_credentials(session, actor_id=ADMIN_ID)
+    with oauth_session_factory() as session:
+        stale_lease = service.acquire_repository_read_lease(session)
+
+    exchange.client_credentials_started = Event()
+    exchange.release_client_credentials = Event()
+
+    def rotate() -> Any:
+        with oauth_session_factory() as session:
+            return service.acquire_client_credentials(session, actor_id=ADMIN_ID)
+
+    def revoke() -> Any:
+        with oauth_session_factory() as session:
+            return service.revoke_current(session, actor_id=ADMIN_ID)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        rotate_future = executor.submit(rotate)
+        assert exchange.client_credentials_started.wait(timeout=5)
+        revoke_future = executor.submit(revoke)
+        exchange.release_client_credentials.set()
+        rotated = rotate_future.result(timeout=5)
+        revoked = revoke_future.result(timeout=5)
+
+    assert rotated.generation == 2
+    assert revoked.generation == 3
+    with (
+        oauth_session_factory() as session,
+        pytest.raises(OAuthGenerationRejected),
+    ):
+        service.require_current_repository_read_lease(session, stale_lease)
+    with oauth_session_factory() as session, pytest.raises(OAuthConnectionUnavailable):
+        service.acquire_repository_read_lease(session)
 
     command.downgrade(config, "0003_repositories")
     assert "bitbucket_connections" not in inspect(engine).get_table_names()
