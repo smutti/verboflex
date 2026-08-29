@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-36-PLAN.md
-last_updated: "2026-08-29T18:03:05.776Z"
+stopped_at: Completed 02-29-PLAN.md
+last_updated: "2026-08-29T18:49:14.366Z"
 last_activity: 2026-08-29
 last_activity_desc: Phase 02 execution started
-state_head: 1ae01298f679f017aa866c64c6a55bb9fd53fb6d
+state_head: 5cdcd1040c7fdde107b870246124e3ea5f502de9
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 53
-  completed_plans: 43
+  completed_plans: 44
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 28 of 38
+Plan: 29 of 38
 Status: Ready to execute
 Last activity: 2026-08-29 — Phase 02 execution started
 
@@ -101,6 +101,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02-admin-configuration P25 | 21min | 2 tasks | 9 files |
 | Phase 02-admin-configuration P26 | 2h 20m | 2 tasks | 16 files |
 | Phase 02 P36 | 6min | 2 tasks | 3 files |
+| Phase 02 P29 | 35min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -258,6 +259,10 @@ Recent decisions affecting current work:
 - [Phase 02-admin-configuration]: Keep provider continuation URLs server-side while preserving deterministic application items and next_cursor through OpenAPI and generated clients.
 - [Phase 02]: Index only running PreviewJob rows by state and started_at while retaining id as the deterministic query tiebreaker and sole Celery identity. — This matches the bounded watchdog predicate without inventing task_id or widening identity.
 - [Phase 02]: Use transaction-local sequential-scan disabling for watchdog EXPLAIN coverage. — This proves the named partial index is usable without relying on a brittle global PostgreSQL planner choice.
+- [Phase 02]: Terminalize only exact running PreviewJob UUID, attempt, and connection-generation identities; PreviewJob.id remains the sole Celery identity.
+- [Phase 02]: Use hard limit plus grace as the inclusive stale threshold with a validated scan interval and finite terminalization bound.
+- [Phase 02]: Run Celery Beat separately from worker capacity so process loss cannot remove durable reconciliation.
+- [Phase 02]: Treat access-only unexpired client-credentials generations as the current Bitbucket preview credential shape.
 
 ### Pending Todos
 
@@ -296,6 +301,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-29T18:03:05.727Z
-Stopped at: Completed 02-36-PLAN.md
+Last session: 2026-08-29T18:49:14.314Z
+Stopped at: Completed 02-29-PLAN.md
 Resume file: None
