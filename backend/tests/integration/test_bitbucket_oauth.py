@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import inspect as python_inspect
 import json
 import os
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Event
 from typing import Any
@@ -42,6 +43,16 @@ ROTATED_ACCESS_TOKEN = "rotated-access-token-must-never-leak"
 ROTATED_REFRESH_TOKEN = "rotated-refresh-token-must-never-leak"
 PROVIDER_ERROR_BODY = "provider-body-must-never-leak"
 CLIENT_CREDENTIALS_NOW = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
+
+
+@dataclass
+class MutableClock:
+    """Deterministic provider-authority clock."""
+
+    current: datetime
+
+    def __call__(self) -> datetime:
+        return self.current
 
 
 @dataclass
@@ -1114,3 +1125,118 @@ def test_client_credentials_rotation_and_revoke_serialize(
         service.require_current_repository_read_lease(session, stale_lease)
     with oauth_session_factory() as session, pytest.raises(OAuthConnectionUnavailable):
         service.acquire_repository_read_lease(session)
+
+
+def test_client_credentials_expiry_renews_once_for_concurrent_leases(
+    oauth_session_factory: sessionmaker[Session],
+) -> None:
+    """Two callers at exact expiry share one new generation and one exchange."""
+    from verboflex.services.bitbucket_oauth import BitbucketOAuthService
+
+    clock = MutableClock(CLIENT_CREDENTIALS_NOW)
+    exchange = FakeTokenExchange()
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        redis_client=FakeRedis(),
+        token_exchange=exchange,
+        clock=clock,
+    )
+    with oauth_session_factory() as session:
+        service.acquire_client_credentials(session, actor_id=ADMIN_ID)
+
+    clock.current = CLIENT_CREDENTIALS_NOW + timedelta(hours=1)
+    with oauth_session_factory() as session:
+        assert service.public_status(session).state == "reauthorization_required"
+
+    exchange.client_credentials_started = Event()
+    exchange.release_client_credentials = Event()
+
+    def acquire_lease() -> Any:
+        with oauth_session_factory() as session:
+            return service.acquire_repository_read_lease(session)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first_future = executor.submit(acquire_lease)
+        assert exchange.client_credentials_started.wait(timeout=5)
+        second_future = executor.submit(acquire_lease)
+        exchange.release_client_credentials.set()
+        first = first_future.result(timeout=5)
+        second = second_future.result(timeout=5)
+
+    assert first.generation == second.generation == 2
+    assert len(exchange.client_credentials_calls) == 2
+    with oauth_session_factory() as session:
+        assert service.public_status(session).state == "connected"
+
+
+def test_client_credentials_renewal_failure_invalidates_expired_generation(
+    oauth_session_factory: sessionmaker[Session],
+) -> None:
+    """Failed or incomplete renewal cannot lease stale expired authority."""
+    from verboflex.services.bitbucket_oauth import (
+        BitbucketOAuthService,
+        OAuthConnectionUnavailable,
+    )
+
+    clock = MutableClock(CLIENT_CREDENTIALS_NOW)
+    exchange = FakeTokenExchange()
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        redis_client=FakeRedis(),
+        token_exchange=exchange,
+        clock=clock,
+    )
+    with oauth_session_factory() as session:
+        service.acquire_client_credentials(session, actor_id=ADMIN_ID)
+    with oauth_session_factory() as session:
+        stale_lease = service.acquire_repository_read_lease(session)
+
+    clock.current += timedelta(hours=1)
+    exchange.error = RuntimeError(PROVIDER_ERROR_BODY)
+    with oauth_session_factory() as session, pytest.raises(OAuthConnectionUnavailable):
+        service.acquire_repository_read_lease(session)
+    with oauth_session_factory() as session:
+        failed_status = service.public_status(session)
+        assert failed_status.state == "reauthorization_required"
+        assert set(failed_status.__dataclass_fields__) == {
+            "state",
+            "connected_at",
+            "expires_at",
+            "revoked_at",
+        }
+        with pytest.raises(OAuthConnectionUnavailable):
+            service.require_current_repository_read_lease(session, stale_lease)
+
+    snapshot = _connection_snapshot(oauth_session_factory)
+    assert snapshot[0] == 2
+    assert snapshot[1:3] == (None, None)
+
+    exchange.error = None
+    exchange.scope = "repository"
+    with oauth_session_factory() as session:
+        service.acquire_client_credentials(session, actor_id=ADMIN_ID)
+    clock.current += timedelta(hours=1)
+    exchange.scope = "repository:write"
+    with oauth_session_factory() as session, pytest.raises(OAuthConnectionUnavailable):
+        service.acquire_repository_read_lease(session)
+    with oauth_session_factory() as session:
+        assert service.public_status(session).state == "reauthorization_required"
+
+
+def test_client_credentials_service_has_no_callback_or_refresh_authority() -> None:
+    """Production settings and service own client credentials only."""
+    from verboflex.services import bitbucket_oauth
+
+    assert "bitbucket_oauth_callback_uri" not in Settings.model_fields
+    assert "bitbucket_oauth_post_callback_path" not in Settings.model_fields
+    source = python_inspect.getsource(bitbucket_oauth)
+    for forbidden in (
+        "RedisOAuthStateClient",
+        "OAuthCallbackRejected",
+        "exchange_authorization_code",
+        "refresh_tokens",
+        "complete_callback",
+        "authorization_url",
+        "oauth-state",
+    ):
+        assert forbidden not in source
