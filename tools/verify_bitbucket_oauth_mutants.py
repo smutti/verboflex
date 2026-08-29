@@ -38,16 +38,16 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
-        "oauth-state-digest-disabled",
+        "partial-client-credentials-settings-accepted",
         "src/verboflex/services/bitbucket_oauth.py",
-        "digest = hashlib.sha256(state.encode()).hexdigest()",
-        "digest = state",
+        "if client_id is None or client_secret is None:",
+        "if client_id is None and client_secret is None:",
     ),
     Mutation(
         "generation-comparison-inverted",
         "src/verboflex/services/bitbucket_oauth.py",
-        "if connection.generation != binding.expected_generation:",
-        "if connection.generation == binding.expected_generation:",
+        "if connection.generation != lease.generation:",
+        "if connection.generation == lease.generation:",
     ),
     Mutation(
         "repository-scope-comparison-inverted",
@@ -58,18 +58,14 @@ MUTATIONS = (
     Mutation(
         "access-token-persisted-in-plaintext",
         "src/verboflex/services/bitbucket_oauth.py",
-        "connection.access_token_ciphertext = self._secret_box.encrypt(access_token)\n"
-        "            connection.refresh_token_ciphertext = "
-        "self._secret_box.encrypt(refresh_token)",
-        "connection.access_token_ciphertext = access_token\n"
-        "            connection.refresh_token_ciphertext = "
-        "self._secret_box.encrypt(refresh_token)",
+        "connection.access_token_ciphertext = self._secret_box.encrypt(access_token)",
+        "connection.access_token_ciphertext = access_token",
     ),
     Mutation(
-        "invalid-token-authentication-failure-escapes",
-        "src/verboflex/security/secret_box.py",
-        "except AttributeError, InvalidToken, TypeError, UnicodeDecodeError, UnicodeEncodeError:",
-        "except AttributeError, TypeError, UnicodeDecodeError, UnicodeEncodeError:",
+        "token-renewal-boundary-inverted",
+        "src/verboflex/services/bitbucket_oauth.py",
+        "if connection.provider_expires_at > renewed_at + timedelta(",
+        "if connection.provider_expires_at < renewed_at + timedelta(",
     ),
     Mutation(
         "admin-guard-to-viewer",
@@ -78,26 +74,26 @@ MUTATIONS = (
         "AdminPrincipal = Annotated[Principal, Depends(require_roles(RoleName.VIEWER))]",
     ),
     Mutation(
-        "callback-requires-ambient-admin-bearer",
+        "configured-service-guard-inverted",
         "src/verboflex/api/v1/routes/admin_bitbucket.py",
-        "async def complete_admin_bitbucket_oauth_callback(\n    session: AdminSession,",
-        "async def complete_admin_bitbucket_oauth_callback(\n"
-        "    _principal: AdminPrincipal,\n"
-        "    session: AdminSession,",
+        "def _configured(service: BitbucketOAuthService | None) -> BitbucketOAuthService:\n"
+        "    if service is None:\n"
+        "        raise _unavailable()",
+        "def _configured(service: BitbucketOAuthService | None) -> BitbucketOAuthService:\n"
+        "    if service is not None:\n"
+        "        raise _unavailable()",
     ),
     Mutation(
-        "repository-write-scope-expanded",
+        "client-credentials-grant-changed",
         "src/verboflex/services/bitbucket_oauth.py",
-        '                "response_type": "code",\n                "state": state,',
-        '                "response_type": "code",\n'
-        '                "scope": "repository:write",\n'
-        '                "state": state,',
+        'data=urlencode({"grant_type": "client_credentials"}).encode("ascii"),',
+        'data=urlencode({"grant_type": "password"}).encode("ascii"),',
     ),
     Mutation(
-        "callback-redirects-to-attacker-path",
+        "connection-status-becomes-cacheable",
         "src/verboflex/api/v1/routes/admin_bitbucket.py",
-        "post_callback_path=settings.bitbucket_oauth_post_callback_path,",
-        'post_callback_path="/attacker",',
+        'NO_STORE_HEADERS = {"Cache-Control": "no-store"}',
+        'NO_STORE_HEADERS = {"Cache-Control": "public"}',
     ),
     Mutation(
         "local-revoke-skipped",
@@ -106,13 +102,13 @@ MUTATIONS = (
         "configured.public_status(session)",
     ),
     Mutation(
-        "authorization-response-allows-extra-fields",
+        "status-response-allows-extra-fields",
         "src/verboflex/schemas/admin_bitbucket.py",
-        "class AdminBitbucketAuthorizationResponse(BaseModel):\n"
-        '    """One short-lived authorization destination without provider credentials."""\n\n'
+        "class AdminBitbucketStatusResponse(BaseModel):\n"
+        '    """Bounded connection state safe for browser projection."""\n\n'
         '    model_config = ConfigDict(extra="forbid")',
-        "class AdminBitbucketAuthorizationResponse(BaseModel):\n"
-        '    """One short-lived authorization destination without provider credentials."""\n\n'
+        "class AdminBitbucketStatusResponse(BaseModel):\n"
+        '    """Bounded connection state safe for browser projection."""\n\n'
         '    model_config = ConfigDict(extra="ignore")',
     ),
 )
