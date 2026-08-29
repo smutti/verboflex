@@ -1297,3 +1297,112 @@ test("mobile five-step wizard remains reachable at 320 pixels", async ({
     candidate.candidate_revision!.name,
   );
 });
+
+test("unchanged active revision reactivation uses real backend state and blocks stale confirmation", async ({
+  page,
+}) => {
+  const productId = realEnvironment("E2E_REACTIVATION_PRODUCT_ID");
+  const staleProductId = realEnvironment("E2E_STALE_REACTIVATION_PRODUCT_ID");
+  const { password } = await signInToRealBackend(page);
+  const writes: Array<{ body: unknown; method: string; pathname: string }> = [];
+  page.on("request", (request) => {
+    const method = request.method();
+    const pathname = new URL(request.url()).pathname;
+    if (pathname.startsWith("/api/v1/") && method !== "GET") {
+      writes.push({
+        body: request.postDataJSON(),
+        method,
+        pathname,
+      });
+    }
+  });
+
+  const productLoaded = page.waitForResponse(productResponse(productId));
+  const mappingsLoaded = page.waitForResponse(
+    revisionMappingsResponse(productId),
+  );
+  await page.goto(`/admin/products/${productId}/preview`);
+  const initial = (await (await productLoaded).json()) as RealProduct;
+  const mappingResponse = await mappingsLoaded;
+  expect(initial.is_active).toBe(false);
+  expect(initial.candidate_revision).toBeNull();
+  expect(initial.active_revision).not.toBeNull();
+  expect(new URL(mappingResponse.url()).pathname).toBe(
+    `/api/v1/admin/products/${productId}/revisions/${initial.active_revision!.id}/mappings`,
+  );
+  await expect(page.getByText("Confirmed", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Reactivate product" }),
+  ).toBeEnabled();
+  expect(
+    writes.filter(({ pathname }) =>
+      pathname.includes(`/admin/products/${productId}/candidate`),
+    ),
+  ).toEqual([]);
+
+  const reactivateResponse = page.waitForResponse((response) => {
+    const request = response.request();
+    return (
+      request.method() === "POST" &&
+      new URL(response.url()).pathname ===
+        `/api/v1/admin/products/${productId}/reactivate`
+    );
+  });
+  await page.getByRole("button", { name: "Reactivate product" }).click();
+  await page
+    .getByRole("alertdialog", {
+      name: `Reactivate ${initial.name}?`,
+    })
+    .getByRole("button", { name: "Reactivate product" })
+    .click();
+  const terminal = (await (await reactivateResponse).json()) as RealProduct;
+  expect(terminal).toMatchObject({
+    active_revision: { id: initial.active_revision!.id },
+    candidate_revision: null,
+    id: productId,
+    is_active: true,
+  });
+  expect(writes).toEqual([
+    {
+      body: {
+        active_revision_id: initial.active_revision!.id,
+        expected_active_version: initial.active_revision!.version,
+      },
+      method: "POST",
+      pathname: `/api/v1/admin/products/${productId}/reactivate`,
+    },
+  ]);
+  await expect(page.getByText("Active", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Reactivate product" }),
+  ).toHaveCount(0);
+
+  const staleProductLoaded = page.waitForResponse(
+    productResponse(staleProductId),
+  );
+  const staleMappingsLoaded = page.waitForResponse(
+    revisionMappingsResponse(staleProductId),
+  );
+  await page.goto(`/admin/products/${staleProductId}/preview`);
+  const staleProduct = (await (await staleProductLoaded).json()) as RealProduct;
+  const staleMappingResponse = await staleMappingsLoaded;
+  expect(staleProduct.is_active).toBe(false);
+  expect(staleProduct.candidate_revision).toBeNull();
+  expect(staleProduct.active_revision).not.toBeNull();
+  expect(new URL(staleMappingResponse.url()).pathname).toBe(
+    `/api/v1/admin/products/${staleProductId}/revisions/${staleProduct.active_revision!.id}/mappings`,
+  );
+  await expect(
+    page.getByText("Preview confirmation required", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Reactivate product" }),
+  ).toBeDisabled();
+  expect(
+    writes.filter(
+      ({ pathname }) =>
+        pathname === `/api/v1/admin/products/${staleProductId}/reactivate`,
+    ),
+  ).toEqual([]);
+  await expectNoSeededSecret(page, password);
+});
