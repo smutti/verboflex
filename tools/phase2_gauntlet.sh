@@ -247,6 +247,34 @@ checker_self_tests() {
   printf '%s\n' 'frontend/src/features/admin/previews/usePreviewPolling.ts' >"$expected"
   cmp -s "$expected" "$actual" \
     || { rm -rf "$fixture"; die "frontend production-path classifier drifted"; }
+  "$BACKEND_ROOT/.venv/bin/python" - <<'PY'
+from pathlib import PurePosixPath
+
+
+def normalized_frontend_path(filename: str) -> str:
+    candidate = PurePosixPath(filename)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        raise ValueError(filename)
+    if filename == "openapi.json" or filename.startswith("src/"):
+        return f"frontend/{filename}"
+    raise ValueError(filename)
+
+
+assert normalized_frontend_path("openapi.json") == "frontend/openapi.json"
+assert normalized_frontend_path("src/App.tsx") == "frontend/src/App.tsx"
+for forbidden in (
+    "/src/App.tsx",
+    "../src/App.tsx",
+    "src/../openapi.json",
+    "frontend/src/App.tsx",
+    "other.json",
+):
+    try:
+        normalized_frontend_path(forbidden)
+    except ValueError:
+        continue
+    raise AssertionError(f"accepted non-canonical coverage path: {forbidden}")
+PY
   rm -rf "$fixture"
   printf 'checker negative controls: PASS\n'
 }
@@ -386,9 +414,12 @@ sources[0].text = "."
 for item in classes:
     filename = item.get("filename", "")
     candidate = PurePosixPath(filename)
-    if candidate.is_absolute() or ".." in candidate.parts or not filename.startswith("src/"):
+    if candidate.is_absolute() or ".." in candidate.parts:
         raise SystemExit("non-canonical frontend Cobertura filename")
-    item.set("filename", f"frontend/{filename}")
+    if filename == "openapi.json" or filename.startswith("src/"):
+        item.set("filename", f"frontend/{filename}")
+    else:
+        raise SystemExit("non-canonical frontend Cobertura filename")
 tree.write(destination, encoding="utf-8", xml_declaration=True)
 PY
 }
