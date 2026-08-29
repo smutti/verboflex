@@ -29,22 +29,6 @@ export type AccessTokenResponse = {
 };
 
 /**
- * AdminBitbucketAuthorizationResponse
- *
- * One short-lived authorization destination without provider credentials.
- */
-export type AdminBitbucketAuthorizationResponse = {
-    /**
-     * Authorization Url
-     */
-    authorization_url: string;
-    /**
-     * State Expires In
-     */
-    state_expires_in: 600;
-};
-
-/**
  * AdminBitbucketErrorResponse
  *
  * Stable integration failures without provider diagnostic material.
@@ -53,7 +37,7 @@ export type AdminBitbucketErrorResponse = {
     /**
      * Detail
      */
-    detail: 'OAuth callback rejected' | 'Bitbucket connection unavailable';
+    detail: 'Bitbucket connection unavailable';
 };
 
 /**
@@ -1152,44 +1136,44 @@ export type GetAdminBitbucketStatusResponses = {
 
 export type GetAdminBitbucketStatusResponse = GetAdminBitbucketStatusResponses[keyof GetAdminBitbucketStatusResponses];
 
-export type CompleteAdminBitbucketOauthCallbackData = {
+export type ConnectAdminBitbucketOauthData = {
     body?: never;
     path?: never;
-    query: {
-        /**
-         * State
-         */
-        state: string;
-        /**
-         * Code
-         */
-        code: string;
-    };
-    url: '/api/v1/admin/bitbucket/oauth/callback';
+    query?: never;
+    url: '/api/v1/admin/bitbucket/connect';
 };
 
-export type CompleteAdminBitbucketOauthCallbackErrors = {
+export type ConnectAdminBitbucketOauthErrors = {
     /**
-     * Bad Request
+     * Unauthorized
      */
-    400: AdminBitbucketErrorResponse;
+    401: ErrorResponse;
     /**
-     * Validation Error
+     * Forbidden
      */
-    422: HttpValidationError;
+    403: ErrorResponse;
     /**
      * Service Unavailable
      */
     503: AdminBitbucketErrorResponse;
 };
 
-export type CompleteAdminBitbucketOauthCallbackError = CompleteAdminBitbucketOauthCallbackErrors[keyof CompleteAdminBitbucketOauthCallbackErrors];
+export type ConnectAdminBitbucketOauthError = ConnectAdminBitbucketOauthErrors[keyof ConnectAdminBitbucketOauthErrors];
+
+export type ConnectAdminBitbucketOauthResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminBitbucketStatusResponse;
+};
+
+export type ConnectAdminBitbucketOauthResponse = ConnectAdminBitbucketOauthResponses[keyof ConnectAdminBitbucketOauthResponses];
 
 export type ReconnectAdminBitbucketOauthData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/v1/admin/bitbucket/oauth/reconnect';
+    url: '/api/v1/admin/bitbucket/reconnect';
 };
 
 export type ReconnectAdminBitbucketOauthErrors = {
@@ -1213,43 +1197,10 @@ export type ReconnectAdminBitbucketOauthResponses = {
     /**
      * Successful Response
      */
-    200: AdminBitbucketAuthorizationResponse;
+    200: AdminBitbucketStatusResponse;
 };
 
 export type ReconnectAdminBitbucketOauthResponse = ReconnectAdminBitbucketOauthResponses[keyof ReconnectAdminBitbucketOauthResponses];
-
-export type StartAdminBitbucketOauthData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/admin/bitbucket/oauth/start';
-};
-
-export type StartAdminBitbucketOauthErrors = {
-    /**
-     * Unauthorized
-     */
-    401: ErrorResponse;
-    /**
-     * Forbidden
-     */
-    403: ErrorResponse;
-    /**
-     * Service Unavailable
-     */
-    503: AdminBitbucketErrorResponse;
-};
-
-export type StartAdminBitbucketOauthError = StartAdminBitbucketOauthErrors[keyof StartAdminBitbucketOauthErrors];
-
-export type StartAdminBitbucketOauthResponses = {
-    /**
-     * Successful Response
-     */
-    200: AdminBitbucketAuthorizationResponse;
-};
-
-export type StartAdminBitbucketOauthResponse = StartAdminBitbucketOauthResponses[keyof StartAdminBitbucketOauthResponses];
 
 export type RevokeAdminBitbucketConnectionLocallyData = {
     body?: never;

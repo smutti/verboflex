@@ -116,6 +116,28 @@ function typeMemberNames(members: ts.NodeArray<ts.TypeElement>): string[] {
     .sort();
 }
 
+function generatedTypeAliasesWithPrefix(
+  sourceText: string,
+  prefix: string,
+): string {
+  const source = ts.createSourceFile(
+    "types.gen.ts",
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+
+  return source.statements
+    .filter(
+      (statement): statement is ts.TypeAliasDeclaration =>
+        ts.isTypeAliasDeclaration(statement) &&
+        statement.name.text.startsWith(prefix),
+    )
+    .map((statement) => statement.getText(source))
+    .join("\n");
+}
+
 const forbiddenWireShapes = [
   ["items", "next_cursor"],
   ["display_name", "email", "id", "is_active", "must_change_password", "roles"],
@@ -367,10 +389,10 @@ describe("canonical generated Phase 2 admin client", () => {
     expect(generatedTypesSource).toContain("expires_at: string | null");
     expect(generatedTypesSource).toContain("'Reauthorization required'");
 
-    const bitbucketGeneratedTypes = generatedTypesSource
-      ?.split("export type AdminBitbucket")
-      .slice(1)
-      .join("export type AdminBitbucket");
+    const bitbucketGeneratedTypes = generatedTypeAliasesWithPrefix(
+      generatedTypesSource,
+      "AdminBitbucket",
+    );
     expect(bitbucketGeneratedTypes).not.toMatch(
       /(?:authorization_url|workspace|client_secret|access_token|refresh_token|ciphertext)/u,
     );
