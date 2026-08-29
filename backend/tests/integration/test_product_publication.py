@@ -141,6 +141,8 @@ def _seed_product_graph(
         active_revision = ProductRevision(
             id=active_id,
             product_id=product_id,
+            display_name=f"Product {product_id}",
+            name_key=f"product {product_id}",
             description="published",
             version=6,
             is_published=False,
@@ -151,6 +153,8 @@ def _seed_product_graph(
                 ProductRevision(
                     id=candidate_id,
                     product_id=product_id,
+                    display_name=f"Candidate {product_id}",
+                    name_key=f"candidate {product_id}",
                     description="candidate",
                     version=7,
                     is_published=False,
@@ -219,6 +223,8 @@ def _graph_snapshot(
                 select(
                     ProductRevision.id,
                     ProductRevision.version,
+                    ProductRevision.display_name,
+                    ProductRevision.name_key,
                     ProductRevision.description,
                     ProductRevision.is_published,
                     ProductRevision.published_at,
@@ -429,6 +435,8 @@ def test_product_lock_linearizes_publish_equal_retry_and_stale_writer(
         assert product.active_revision_id == candidate_id
         assert product.candidate_revision_id is None
         assert product.is_active is True
+        assert product.display_name == f"Candidate {product_id}"
+        assert product.name_key == f"candidate {product_id}"
         assert published.is_published is True
         assert published.published_at is not None
         assert published.version == 7
@@ -459,6 +467,128 @@ def test_product_lock_linearizes_publish_equal_retry_and_stale_writer(
             confirmation_predicate=_always_confirmed,
         )
     assert _graph_snapshot(publication_session_factory, product_id=product_id) == winner_snapshot
+
+
+def test_normalized_name_conflict_rolls_back_identity_metadata_and_pointers(
+    publication_session_factory: sessionmaker[Session],
+) -> None:
+    """Publish-time A-01 uniqueness is bounded and leaves the full graph unchanged."""
+    publication = _publication_module()
+    product_id, _active_id, candidate_id, _repository_id = _seed_product_graph(
+        publication_session_factory
+    )
+    assert candidate_id is not None
+    with publication_session_factory.begin() as session:
+        session.add(
+            Product(
+                display_name=f"Ｃandidate {product_id}",
+                name_key=f"candidate {product_id}",
+                is_active=False,
+            )
+        )
+    before = _graph_snapshot(publication_session_factory, product_id=product_id)
+
+    with (
+        publication_session_factory() as session,
+        pytest.raises(publication.PublicationConflict, match="identity conflict"),
+    ):
+        publication.publish_product_candidate(
+            session,
+            product_id=product_id,
+            candidate_revision_id=candidate_id,
+            expected_candidate_version=7,
+            confirmation_predicate=_always_confirmed,
+        )
+
+    assert _graph_snapshot(publication_session_factory, product_id=product_id) == before
+
+
+@pytest.mark.parametrize("failed_flush", (1, 2, 3))
+def test_fault_at_publication_identity_or_pointer_flush_rolls_back_every_step(
+    publication_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+    failed_flush: int,
+) -> None:
+    """Failure after each promotion step preserves original identity and graph."""
+    publication = _publication_module()
+    product_id, _active_id, candidate_id, _repository_id = _seed_product_graph(
+        publication_session_factory
+    )
+    assert candidate_id is not None
+    before = _graph_snapshot(publication_session_factory, product_id=product_id)
+
+    with publication_session_factory() as session:
+        original_flush = session.flush
+        flush_count = 0
+
+        def injected_flush(*args: Any, **kwargs: Any) -> None:
+            nonlocal flush_count
+            flush_count += 1
+            original_flush(*args, **kwargs)
+            if flush_count == failed_flush:
+                raise RuntimeError(f"forced promotion failure {failed_flush}")
+
+        monkeypatch.setattr(session, "flush", injected_flush)
+        with pytest.raises(RuntimeError, match=f"forced promotion failure {failed_flush}"):
+            publication.publish_product_candidate(
+                session,
+                product_id=product_id,
+                candidate_revision_id=candidate_id,
+                expected_candidate_version=7,
+                confirmation_predicate=_always_confirmed,
+            )
+
+    assert _graph_snapshot(publication_session_factory, product_id=product_id) == before
+
+
+def test_new_active_mapping_children_remain_database_immutable_after_publication(
+    publication_session_factory: sessionmaker[Session],
+) -> None:
+    """Publication never bypasses Plan 24's active-child guards."""
+    publication = _publication_module()
+    product_id, _active_id, candidate_id, _repository_id = _seed_product_graph(
+        publication_session_factory
+    )
+    assert candidate_id is not None
+    with publication_session_factory() as session:
+        publication.publish_product_candidate(
+            session,
+            product_id=product_id,
+            candidate_revision_id=candidate_id,
+            expected_candidate_version=7,
+            confirmation_predicate=_always_confirmed,
+        )
+    with publication_session_factory() as session:
+        mapping_id = session.scalar(
+            select(ProductRepositoryMapping.id).where(
+                ProductRepositoryMapping.revision_id == candidate_id
+            )
+        )
+    assert mapping_id is not None
+
+    with (
+        pytest.raises(Exception, match="active product revision graph is immutable"),
+        publication_session_factory.begin() as session,
+    ):
+        session.execute(
+            text(
+                "UPDATE product_repository_mappings "
+                "SET identity_key = identity_key || '-forbidden' WHERE id = :mapping_id"
+            ),
+            {"mapping_id": mapping_id},
+        )
+    with (
+        pytest.raises(Exception, match="active product revision graph is immutable"),
+        publication_session_factory.begin() as session,
+    ):
+        side = session.scalar(
+            select(ProductMappingRepositorySide).where(
+                ProductMappingRepositorySide.mapping_id == mapping_id
+            )
+        )
+        assert side is not None
+        side.source_branch = "forbidden"
+        session.flush()
 
 
 @pytest.mark.parametrize(

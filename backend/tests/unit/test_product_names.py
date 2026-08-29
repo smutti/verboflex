@@ -234,6 +234,8 @@ def _product_graph(factory: sessionmaker[Session], product_id: UUID) -> tuple[ob
             session.execute(
                 select(
                     ProductRevision.id,
+                    ProductRevision.display_name,
+                    ProductRevision.name_key,
                     ProductRevision.description,
                     ProductRevision.version,
                     ProductRevision.is_published,
@@ -281,9 +283,13 @@ def test_active_revision_is_immutable_and_stale_candidate_writes_roll_back(
         candidate = session.get(ProductRevision, updated.candidate_revision_id)
         assert active is not None and candidate is not None
         assert active.description == "published description"
+        assert active.display_name == "Desktop"
+        assert active.name_key == "desktop"
         assert active.is_published is True
         assert active.version == active_version
         assert candidate.description == "candidate description"
+        assert candidate.display_name == "Desktop"
+        assert candidate.name_key == "desktop"
         assert candidate.is_published is False
         assert candidate.version == active_version + 1
 
