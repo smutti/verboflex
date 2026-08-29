@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
@@ -82,6 +83,12 @@ class PreviewJob(Base):
             "mapping_id",
             "input_digest",
             "attempt",
+        ),
+        Index(
+            "ix_preview_jobs_watchdog_state_started_at",
+            "state",
+            "started_at",
+            postgresql_where=text("state = 'running'"),
         ),
     )
 
