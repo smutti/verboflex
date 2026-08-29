@@ -491,6 +491,69 @@ describe("administrator product preview and publication page", () => {
     expect(screen.getByRole("heading", { name: "Mapping 1" })).toBeVisible();
   });
 
+  it("ignores a late preview poll from a superseded product and revision generation", async () => {
+    const nextProduct: AdminProductResponse = {
+      ...product,
+      candidate_revision: {
+        ...product.candidate_revision!,
+        id: "00000000-0000-4000-8000-000000000298",
+      },
+      id: "00000000-0000-4000-8000-000000000198",
+      name: "Polling Successor",
+    };
+    const queuedJob = previewJob({
+      created_at: new Date().toISOString(),
+      finished_at: null,
+      result: null,
+      started_at: null,
+      state: "queued",
+    });
+    let releaseStalePoll!: () => void;
+    const stalePollGate = new Promise<void>((resolve) => {
+      releaseStalePoll = resolve;
+    });
+    getProductMock
+      .mockResolvedValueOnce(ok(product))
+      .mockResolvedValueOnce(ok(nextProduct));
+    listRevisionMappingsMock
+      .mockResolvedValueOnce(ok({ items: [mapping], next_cursor: null }))
+      .mockResolvedValueOnce(ok({ items: [mappingAt(2)], next_cursor: null }));
+    createJobMock.mockResolvedValueOnce(ok(queuedJob, 202));
+    getJobMock.mockImplementationOnce(async () => {
+      await stalePollGate;
+      return ok(previewJob());
+    });
+
+    const view = renderPage(product.id);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Run validation" }),
+    );
+    expect(await screen.findByText("Queued", { exact: true })).toBeVisible();
+    await waitFor(() => expect(getJobMock).toHaveBeenCalledTimes(1), {
+      timeout: 3_000,
+    });
+
+    view.rerender(
+      <MemoryRouter>
+        <ProductPreviewPage
+          accessToken="memory-only-admin-bearer"
+          productId={nextProduct.id}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText(/Polling Successor/)).toBeVisible();
+    releaseStalePoll();
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Succeeded", { exact: true }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Confirm preview" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("resolves exact commits and renders every four-format layout as a separate radio", async () => {
     renderPage();
     await runValidation();
@@ -733,6 +796,7 @@ describe("administrator product preview and publication page", () => {
         revision_id: inactiveActiveOnlyProduct.active_revision!.id,
       },
       query: { cursor: null, limit: 50 },
+      signal: expect.any(AbortSignal),
     });
     expect(listCandidateMappingsMock).not.toHaveBeenCalled();
     expect(updateProductMock).not.toHaveBeenCalled();

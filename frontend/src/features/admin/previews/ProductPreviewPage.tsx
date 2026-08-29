@@ -48,6 +48,7 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
+import { useCursorCollection } from "../useCursorCollection";
 import { previewJobIdentity, usePreviewPolling } from "./usePreviewPolling";
 
 export interface ProductPreviewPageProps {
@@ -60,9 +61,10 @@ type PageState =
   | { status: "error" }
   | {
       status: "ready";
-      mappings: AdminMappingResponse[];
       product: AdminProductResponse;
       productId: string;
+      revisionId: string;
+      revisionVersion: number;
     };
 
 type PublicationBlocker =
@@ -548,12 +550,14 @@ function PreviewJobView({
 
 function MappingPreview({
   accessToken,
+  collectionReady,
   index,
   mapping,
   onConfirmed,
   productId,
 }: {
   accessToken: string;
+  collectionReady: boolean;
   index: number;
   mapping: AdminMappingResponse;
   onConfirmed: (mappingId: string, confirmed: boolean) => void;
@@ -573,7 +577,7 @@ function MappingPreview({
   );
 
   async function runValidation() {
-    if (runPendingRef.current) {
+    if (runPendingRef.current || !collectionReady) {
       return;
     }
     const generation = ++runGenerationRef.current;
@@ -631,7 +635,7 @@ function MappingPreview({
         </div>
         <Button
           type="button"
-          disabled={runPending}
+          disabled={runPending || !collectionReady}
           aria-busy={runPending}
           onClick={() => void runValidation()}
         >
@@ -746,27 +750,13 @@ export function ProductPreviewPage({
         setPageState({ status: "error" });
         return;
       }
-      const mappingResult = await listAdminRevisionMappings({
-        auth: accessToken,
-        path: {
-          product_id: resolvedProductId,
-          revision_id: revision.id,
-        },
-        query: { cursor: null, limit: 50 },
-      });
-      if (generation !== loadGenerationRef.current) {
-        return;
-      }
-      if (mappingResult.data === undefined) {
-        setPageState({ status: "error" });
-        return;
-      }
       setConfirmationState({});
       setPageState({
         status: "ready",
-        mappings: mappingResult.data.items,
         product,
         productId: resolvedProductId,
+        revisionId: revision.id,
+        revisionVersion: revision.version,
       });
     } catch {
       if (generation === loadGenerationRef.current) {
@@ -774,6 +764,70 @@ export function ProductPreviewPage({
       }
     }
   }, [accessToken, resolvedProductId]);
+
+  const loadMappingPage = useCallback(
+    async (cursor: string | null, signal: AbortSignal) => {
+      if (pageState.status !== "ready") {
+        return { items: [], next_cursor: null };
+      }
+      const result = await listAdminRevisionMappings({
+        auth: accessToken,
+        path: {
+          product_id: pageState.productId,
+          revision_id: pageState.revisionId,
+        },
+        query: { cursor, limit: 50 },
+        signal,
+      });
+      if (result.data === undefined) {
+        throw new Error("mapping page unavailable");
+      }
+      return result.data;
+    },
+    [accessToken, pageState],
+  );
+  const mappingQueryKey =
+    pageState.status === "ready"
+      ? JSON.stringify([
+          "preview-revision-mappings",
+          accessToken,
+          pageState.productId,
+          pageState.revisionId,
+          pageState.revisionVersion,
+        ])
+      : `preview-revision-mappings:${pageState.status}`;
+  const mappingCollection = useCursorCollection({
+    getItemId: (mapping: AdminMappingResponse) => mapping.id,
+    loadPage: loadMappingPage,
+    queryKey: mappingQueryKey,
+  });
+  const {
+    isEnd: mappingCollectionComplete,
+    items: collectedMappings,
+    loadMore: loadMoreMappings,
+    loadMoreError: mappingLoadMoreError,
+    loadingMore: mappingLoadingMore,
+    nextCursor: mappingNextCursor,
+    reload: reloadMappings,
+    status: mappingCollectionStatus,
+  } = mappingCollection;
+
+  useEffect(() => {
+    if (
+      mappingCollectionStatus === "ready" &&
+      mappingNextCursor !== null &&
+      !mappingLoadingMore &&
+      !mappingLoadMoreError
+    ) {
+      void loadMoreMappings();
+    }
+  }, [
+    loadMoreMappings,
+    mappingCollectionStatus,
+    mappingLoadMoreError,
+    mappingLoadingMore,
+    mappingNextCursor,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -833,13 +887,50 @@ export function ProductPreviewPage({
     );
   }
 
-  const { mappings, product: currentProduct } = pageState;
+  if (mappingCollectionStatus === "loading") {
+    return (
+      <section className="grid gap-6">
+        <h1 className="text-display font-semibold">Preview</h1>
+        <div className="grid gap-4" role="status" aria-live="polite">
+          <Skeleton className="h-8 w-48 max-w-full" />
+          <Skeleton className="h-56 w-full" />
+          <span>Loading product preview</span>
+        </div>
+      </section>
+    );
+  }
+
+  if (mappingCollectionStatus === "error") {
+    return (
+      <section className="grid gap-6">
+        <h1 className="text-display font-semibold">Preview</h1>
+        <PreviewAlert title="Product preview unavailable">
+          <p>
+            We could not load this page. Retry without leaving the
+            administration area.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void reloadMappings()}
+          >
+            Retry loading page
+          </Button>
+        </PreviewAlert>
+      </section>
+    );
+  }
+
+  const mappings = collectedMappings;
+  const { product: currentProduct } = pageState;
   const readyState = pageState;
+  const collectionReady = mappingCollectionComplete;
   const isReactivation =
     !currentProduct.is_active &&
     currentProduct.active_revision !== null &&
     currentProduct.candidate_revision === null;
   const allConfirmed =
+    collectionReady &&
     mappings.length > 0 &&
     mappings.every((mapping) =>
       isReactivation
@@ -859,6 +950,7 @@ export function ProductPreviewPage({
       return;
     }
     publicationPendingRef.current = true;
+    const submissionGeneration = loadGenerationRef.current;
     setPublicationPending(true);
     setPublicationError(false);
     setBlockers([]);
@@ -881,6 +973,9 @@ export function ProductPreviewPage({
             },
             path: { product_id: readyState.productId },
           });
+      if (submissionGeneration !== loadGenerationRef.current) {
+        return;
+      }
       if (result.data === undefined) {
         if (responseStatus(result) === 409) {
           setBlockers(publicationBlockers(result.error));
@@ -896,10 +991,14 @@ export function ProductPreviewPage({
         isReactivation ? "Product reactivated" : "Product published",
       );
     } catch {
-      setPublicationError(true);
+      if (submissionGeneration === loadGenerationRef.current) {
+        setPublicationError(true);
+      }
     } finally {
       publicationPendingRef.current = false;
-      setPublicationPending(false);
+      if (submissionGeneration === loadGenerationRef.current) {
+        setPublicationPending(false);
+      }
     }
   }
 
@@ -919,7 +1018,39 @@ export function ProductPreviewPage({
         </Badge>
       </div>
 
-      {mappings.length === 0 ? (
+      {!collectionReady && !mappingLoadMoreError ? (
+        <Alert aria-label="Loading complete mapping set">
+          <AlertTitle>Loading all mappings</AlertTitle>
+          <AlertDescription>
+            Loading complete mapping set: {mappings.length}{" "}
+            {mappings.length === 1 ? "mapping" : "mappings"} loaded.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {mappingLoadMoreError ? (
+        <Alert variant="destructive" aria-label="Mapping collection incomplete">
+          <AlertTitle>Mapping collection incomplete</AlertTitle>
+          <AlertDescription>
+            <p>
+              {mappings.length} {mappings.length === 1 ? "mapping" : "mappings"}{" "}
+              loaded. The complete revision mapping set is required before
+              validation or lifecycle actions are available.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={mappingLoadingMore}
+              aria-busy={mappingLoadingMore}
+              onClick={() => void loadMoreMappings()}
+            >
+              Retry loading mappings
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {collectionReady && mappings.length === 0 ? (
         <Alert>
           <AlertTitle>No mappings configured</AlertTitle>
           <AlertDescription>
@@ -938,6 +1069,7 @@ export function ProductPreviewPage({
             <MappingPreview
               key={mapping.id}
               accessToken={accessToken}
+              collectionReady={collectionReady}
               index={index}
               mapping={mapping}
               onConfirmed={updateConfirmation}
