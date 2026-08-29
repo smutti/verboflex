@@ -1,9 +1,17 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { toast } from "sonner";
 
 import {
   createAdminCandidateMapping,
   getAdminProduct,
+  getAdminRepositoryBranch,
   listAdminCandidateMappings,
   listAdminRepositories,
   listAdminRepositoryBranches,
@@ -48,13 +56,13 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
+import {
+  useCursorCollection,
+  type CursorCollectionState,
+} from "../useCursorCollection";
 
 type Topology = "direct" | "separate";
 type RepositorySide = "direct" | "keys" | "translations";
-type PageState = "error" | "loading" | "ready";
-type BranchState =
-  | { status: "idle" | "loading" | "error"; items: AdminBranchResponse[] }
-  | { status: "ready"; items: AdminBranchResponse[] };
 type MappingConflictField =
   | "allowed_target_branches"
   | "candidate_version"
@@ -70,8 +78,6 @@ export interface ProductMappingsPageProps {
   onCandidateVersionChange?: (version: number) => void;
   productId: string;
 }
-
-const EMPTY_BRANCH_STATE: BranchState = { status: "idle", items: [] };
 
 function repositoryLabel(repository: AdminRepositoryResponse) {
   const providerIdentity = `${repository.workspace}/${repository.repository_slug}`;
@@ -155,6 +161,131 @@ function MappingBranchDetails({ mapping }: { mapping: AdminMappingResponse }) {
   );
 }
 
+function mergeBranches(
+  listed: readonly AdminBranchResponse[],
+  exact: readonly AdminBranchResponse[],
+) {
+  const seen = new Set(listed.map((branch) => branch.name));
+  return [
+    ...listed,
+    ...exact.filter((branch) => {
+      if (seen.has(branch.name)) {
+        return false;
+      }
+      seen.add(branch.name);
+      return true;
+    }),
+  ];
+}
+
+function useRepositoryBranchCollection({
+  accessToken,
+  productId,
+  repositoryId,
+  side,
+}: {
+  accessToken: string;
+  productId: string;
+  repositoryId: string;
+  side: RepositorySide;
+}) {
+  const loadPage = useCallback(
+    async (cursor: string | null, signal: AbortSignal) => {
+      if (repositoryId.length === 0) {
+        return { items: [], next_cursor: null };
+      }
+      const result = await listAdminRepositoryBranches({
+        auth: accessToken,
+        path: { repository_id: repositoryId },
+        query: { cursor, limit: 100 },
+        signal,
+      });
+      if (result.data === undefined) {
+        throw new Error("branches unavailable");
+      }
+      return result.data;
+    },
+    [accessToken, repositoryId],
+  );
+
+  return useCursorCollection({
+    getItemId: (branch: AdminBranchResponse) => branch.name,
+    loadPage,
+    queryKey: `branches:${productId}:${side}:${repositoryId}:${accessToken}`,
+  });
+}
+
+function useExactConfiguredBranches({
+  accessToken,
+  branchNames,
+  productId,
+  repositoryId,
+  side,
+}: {
+  accessToken: string;
+  branchNames: readonly string[];
+  productId: string;
+  repositoryId: string;
+  side: RepositorySide;
+}) {
+  const generationRef = useRef(0);
+  const [items, setItems] = useState<readonly AdminBranchResponse[]>([]);
+  const namesKey = Array.from(new Set(branchNames.filter(Boolean))).join(
+    "\u0000",
+  );
+
+  useEffect(() => {
+    const generation = ++generationRef.current;
+    const controller = new AbortController();
+    const names = namesKey.length === 0 ? [] : namesKey.split("\u0000");
+
+    queueMicrotask(async () => {
+      if (generationRef.current !== generation) {
+        return;
+      }
+      setItems([]);
+      if (repositoryId.length === 0 || names.length === 0) {
+        return;
+      }
+      try {
+        const results = await Promise.all(
+          names.map((branchName) =>
+            getAdminRepositoryBranch({
+              auth: accessToken,
+              path: { repository_id: repositoryId },
+              query: { branch_name: branchName },
+              signal: controller.signal,
+            }),
+          ),
+        );
+        if (
+          controller.signal.aborted ||
+          generationRef.current !== generation ||
+          results.some((result) => result.data === undefined)
+        ) {
+          return;
+        }
+        setItems(
+          results.flatMap((result) =>
+            result.data === undefined ? [] : [result.data],
+          ),
+        );
+      } catch {
+        // Exact configured values fail closed by remaining absent from live controls.
+      }
+    });
+
+    return () => {
+      if (generationRef.current === generation) {
+        generationRef.current += 1;
+      }
+      controller.abort();
+    };
+  }, [accessToken, namesKey, productId, repositoryId, side]);
+
+  return items;
+}
+
 export function ProductMappingsPage({
   accessToken,
   candidateVersion: candidateVersionProp,
@@ -165,20 +296,14 @@ export function ProductMappingsPage({
   const directId = useId();
   const separateId = useId();
   const defaultTargetId = useId();
-  const pageGenerationRef = useRef(0);
-  const branchGenerationRef = useRef<Record<RepositorySide, number>>({
-    direct: 0,
-    keys: 0,
-    translations: 0,
-  });
+  const versionControllerRef = useRef<AbortController | null>(null);
+  const versionGenerationRef = useRef(0);
   const submitPendingRef = useRef(false);
-  const [pageState, setPageState] = useState<PageState>("loading");
-  const [repositories, setRepositories] = useState<AdminRepositoryResponse[]>(
-    [],
-  );
-  const [mappings, setMappings] = useState<AdminMappingResponse[]>([]);
   const [currentCandidateVersion, setCurrentCandidateVersion] =
     useState(candidateVersionProp);
+  const [versionState, setVersionState] = useState<
+    "error" | "loading" | "ready"
+  >(candidateVersionProp === undefined ? "loading" : "ready");
   const [topology, setTopology] = useState<Topology>("direct");
   const [pendingTopology, setPendingTopology] = useState<Topology | null>(null);
   const [directRepositoryId, setDirectRepositoryId] = useState("");
@@ -191,13 +316,14 @@ export function ProductMappingsPage({
     [],
   );
   const [defaultTargetBranch, setDefaultTargetBranch] = useState("");
-  const [branches, setBranches] = useState<Record<RepositorySide, BranchState>>(
-    {
-      direct: EMPTY_BRANCH_STATE,
-      keys: EMPTY_BRANCH_STATE,
-      translations: EMPTY_BRANCH_STATE,
-    },
-  );
+  const [configuredDirectBranches, setConfiguredDirectBranches] = useState<
+    string[]
+  >([]);
+  const [configuredKeysBranches, setConfiguredKeysBranches] = useState<
+    string[]
+  >([]);
+  const [configuredTranslationsBranches, setConfiguredTranslationsBranches] =
+    useState<string[]>([]);
   const [editingMapping, setEditingMapping] =
     useState<AdminMappingResponse | null>(null);
   const [submitPending, setSubmitPending] = useState(false);
@@ -207,108 +333,152 @@ export function ProductMappingsPage({
     | null
   >(null);
 
-  function loadPage() {
-    const generation = ++pageGenerationRef.current;
+  const loadRepositoryPage = useCallback(
+    async (cursor: string | null, signal: AbortSignal) => {
+      const result = await listAdminRepositories({
+        auth: accessToken,
+        query: { cursor, limit: 50 },
+        signal,
+      });
+      if (result.data === undefined) {
+        throw new Error("repositories unavailable");
+      }
+      return result.data;
+    },
+    [accessToken],
+  );
+  const repositoryCollection = useCursorCollection({
+    getItemId: (repository: AdminRepositoryResponse) => repository.id,
+    loadPage: loadRepositoryPage,
+    queryKey: `mapping-repositories:${productId}:${accessToken}`,
+  });
 
+  const loadMappingPage = useCallback(
+    async (cursor: string | null, signal: AbortSignal) => {
+      const result = await listAdminCandidateMappings({
+        auth: accessToken,
+        path: { product_id: productId },
+        query: { cursor, limit: 50 },
+        signal,
+      });
+      if (result.data === undefined) {
+        throw new Error("mappings unavailable");
+      }
+      return result.data;
+    },
+    [accessToken, productId],
+  );
+  const mappingCollection = useCursorCollection({
+    getItemId: (mapping: AdminMappingResponse) => mapping.id,
+    loadPage: loadMappingPage,
+    queryKey: `candidate-mappings:${productId}:current-candidate:${accessToken}`,
+  });
+
+  const directBranches = useRepositoryBranchCollection({
+    accessToken,
+    productId,
+    repositoryId: directRepositoryId,
+    side: "direct",
+  });
+  const keysBranches = useRepositoryBranchCollection({
+    accessToken,
+    productId,
+    repositoryId: keysRepositoryId,
+    side: "keys",
+  });
+  const translationsBranches = useRepositoryBranchCollection({
+    accessToken,
+    productId,
+    repositoryId: translationsRepositoryId,
+    side: "translations",
+  });
+  const exactDirectBranches = useExactConfiguredBranches({
+    accessToken,
+    branchNames: configuredDirectBranches,
+    productId,
+    repositoryId: directRepositoryId,
+    side: "direct",
+  });
+  const exactKeysBranches = useExactConfiguredBranches({
+    accessToken,
+    branchNames: configuredKeysBranches,
+    productId,
+    repositoryId: keysRepositoryId,
+    side: "keys",
+  });
+  const exactTranslationsBranches = useExactConfiguredBranches({
+    accessToken,
+    branchNames: configuredTranslationsBranches,
+    productId,
+    repositoryId: translationsRepositoryId,
+    side: "translations",
+  });
+
+  const loadCandidateVersion = useCallback(() => {
+    const generation = ++versionGenerationRef.current;
+    versionControllerRef.current?.abort();
+    const controller = new AbortController();
+    versionControllerRef.current = controller;
     queueMicrotask(async () => {
-      if (pageGenerationRef.current !== generation) {
+      if (versionGenerationRef.current !== generation) {
         return;
       }
-      setPageState("loading");
+      if (candidateVersionProp !== undefined) {
+        setCurrentCandidateVersion(candidateVersionProp);
+        setVersionState("ready");
+        return;
+      }
+      setVersionState("loading");
       try {
-        const [repositoryResult, mappingResult, productResult] =
-          await Promise.all([
-            listAdminRepositories({
-              auth: accessToken,
-              query: { cursor: null, limit: 50 },
-            }),
-            listAdminCandidateMappings({
-              auth: accessToken,
-              path: { product_id: productId },
-              query: { cursor: null, limit: 50 },
-            }),
-            candidateVersionProp === undefined
-              ? getAdminProduct({
-                  auth: accessToken,
-                  path: { product_id: productId },
-                })
-              : Promise.resolve(null),
-          ]);
-        if (pageGenerationRef.current !== generation) {
-          return;
-        }
+        const result = await getAdminProduct({
+          auth: accessToken,
+          path: { product_id: productId },
+          signal: controller.signal,
+        });
         if (
-          repositoryResult.data === undefined ||
-          mappingResult.data === undefined ||
-          (productResult !== null && productResult.data === undefined)
+          controller.signal.aborted ||
+          versionGenerationRef.current !== generation
         ) {
-          setPageState("error");
           return;
         }
-        const loadedVersion =
-          candidateVersionProp ??
-          productResult?.data?.candidate_revision?.version ??
-          undefined;
-        if (loadedVersion === undefined) {
-          setPageState("error");
+        const version = result.data?.candidate_revision?.version;
+        if (version === undefined) {
+          setVersionState("error");
           return;
         }
-        setRepositories(repositoryResult.data.items);
-        setMappings(mappingResult.data.items);
-        setCurrentCandidateVersion(loadedVersion);
-        setPageState("ready");
+        setCurrentCandidateVersion(version);
+        setVersionState("ready");
       } catch {
-        if (pageGenerationRef.current === generation) {
-          setPageState("error");
+        if (
+          !controller.signal.aborted &&
+          versionGenerationRef.current === generation
+        ) {
+          setVersionState("error");
         }
       }
     });
-  }
+  }, [accessToken, candidateVersionProp, productId]);
 
   useEffect(() => {
-    const branchGenerations = branchGenerationRef.current;
-    loadPage();
+    loadCandidateVersion();
     return () => {
-      pageGenerationRef.current += 1;
-      branchGenerations.direct += 1;
-      branchGenerations.keys += 1;
-      branchGenerations.translations += 1;
+      versionGenerationRef.current += 1;
+      versionControllerRef.current?.abort();
     };
-    // loadPage is deliberately generation-bound to these exact authorities.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken, productId]);
+  }, [loadCandidateVersion]);
 
-  async function requestBranches(side: RepositorySide, repositoryId: string) {
-    const generation = ++branchGenerationRef.current[side];
-    setBranches((current) => ({
-      ...current,
-      [side]: { status: "loading", items: [] },
-    }));
-    try {
-      const result = await listAdminRepositoryBranches({
-        auth: accessToken,
-        path: { repository_id: repositoryId },
-        query: { cursor: null, limit: 100 },
-      });
-      if (branchGenerationRef.current[side] !== generation) {
-        return;
-      }
-      setBranches((current) => ({
-        ...current,
-        [side]:
-          result.data === undefined
-            ? { status: "error", items: [] }
-            : { status: "ready", items: result.data.items },
-      }));
-    } catch {
-      if (branchGenerationRef.current[side] === generation) {
-        setBranches((current) => ({
-          ...current,
-          [side]: { status: "error", items: [] },
-        }));
-      }
-    }
-  }
+  const pageState =
+    repositoryCollection.status === "error" ||
+    mappingCollection.status === "error" ||
+    versionState === "error"
+      ? "error"
+      : repositoryCollection.status === "loading" ||
+          mappingCollection.status === "loading" ||
+          versionState === "loading"
+        ? "loading"
+        : "ready";
+  const repositories = repositoryCollection.items;
+  const mappings = mappingCollection.items;
 
   function chooseRepository(side: RepositorySide, repositoryId: string) {
     setFormError(null);
@@ -317,22 +487,18 @@ export function ProductMappingsPage({
       setDirectSourceBranch("");
       setAllowedTargetBranches([]);
       setDefaultTargetBranch("");
+      setConfiguredDirectBranches([]);
     } else if (side === "keys") {
       setKeysRepositoryId(repositoryId);
       setKeysSourceBranch("");
+      setConfiguredKeysBranches([]);
     } else {
       setTranslationsRepositoryId(repositoryId);
       setTranslationsSourceBranch("");
       setAllowedTargetBranches([]);
       setDefaultTargetBranch("");
+      setConfiguredTranslationsBranches([]);
     }
-    void requestBranches(side, repositoryId);
-  }
-
-  function invalidateBranchRequests() {
-    branchGenerationRef.current.direct += 1;
-    branchGenerationRef.current.keys += 1;
-    branchGenerationRef.current.translations += 1;
   }
 
   function clearMappingSelection() {
@@ -344,18 +510,15 @@ export function ProductMappingsPage({
     setTranslationsSourceBranch("");
     setAllowedTargetBranches([]);
     setDefaultTargetBranch("");
-    setBranches({
-      direct: EMPTY_BRANCH_STATE,
-      keys: EMPTY_BRANCH_STATE,
-      translations: EMPTY_BRANCH_STATE,
-    });
+    setConfiguredDirectBranches([]);
+    setConfiguredKeysBranches([]);
+    setConfiguredTranslationsBranches([]);
   }
 
   function applyTopologyChange() {
     if (pendingTopology === null) {
       return;
     }
-    invalidateBranchRequests();
     setTopology(pendingTopology);
     clearMappingSelection();
     setFormError(null);
@@ -389,7 +552,12 @@ export function ProductMappingsPage({
       setTranslationsRepositoryId("");
       setKeysSourceBranch("");
       setTranslationsSourceBranch("");
-      void requestBranches("direct", mapping.primary_repository_id);
+      setConfiguredDirectBranches([
+        mapping.primary_source_branch,
+        ...mapping.allowed_target_branches,
+      ]);
+      setConfiguredKeysBranches([]);
+      setConfiguredTranslationsBranches([]);
     } else {
       setDirectRepositoryId("");
       setDirectSourceBranch("");
@@ -397,18 +565,16 @@ export function ProductMappingsPage({
       setKeysSourceBranch(mapping.primary_source_branch);
       setTranslationsRepositoryId(mapping.translations_repository_id ?? "");
       setTranslationsSourceBranch(mapping.translations_source_branch ?? "");
-      void requestBranches("keys", mapping.primary_repository_id);
-      if (mapping.translations_repository_id !== null) {
-        void requestBranches(
-          "translations",
-          mapping.translations_repository_id,
-        );
-      }
+      setConfiguredDirectBranches([]);
+      setConfiguredKeysBranches([mapping.primary_source_branch]);
+      setConfiguredTranslationsBranches([
+        mapping.translations_source_branch ?? "",
+        ...mapping.allowed_target_branches,
+      ]);
     }
   }
 
   function resetForm(version = currentCandidateVersion) {
-    invalidateBranchRequests();
     setEditingMapping(null);
     setTopology("direct");
     clearMappingSelection();
@@ -421,18 +587,32 @@ export function ProductMappingsPage({
     if (submitPendingRef.current) {
       return;
     }
-    const targetIsMember = allowedTargetBranches.includes(defaultTargetBranch);
+    const normalizedAllowedTargetBranches = Array.from(
+      new Set(allowedTargetBranches),
+    );
+    const targetIsMember =
+      normalizedAllowedTargetBranches.includes(defaultTargetBranch);
+    const allowedTargetsAreLive = normalizedAllowedTargetBranches.every(
+      (branch) => targetBranchItems.some((item) => item.name === branch),
+    );
     const valid =
       currentCandidateVersion !== undefined &&
-      allowedTargetBranches.length > 0 &&
+      normalizedAllowedTargetBranches.length > 0 &&
       defaultTargetBranch.length > 0 &&
       targetIsMember &&
+      allowedTargetsAreLive &&
       (topology === "direct"
-        ? directRepositoryId.length > 0 && directSourceBranch.length > 0
+        ? directRepositoryId.length > 0 &&
+          directSourceBranch.length > 0 &&
+          directBranchItems.some((branch) => branch.name === directSourceBranch)
         : keysRepositoryId.length > 0 &&
           keysSourceBranch.length > 0 &&
+          keysBranchItems.some((branch) => branch.name === keysSourceBranch) &&
           translationsRepositoryId.length > 0 &&
-          translationsSourceBranch.length > 0);
+          translationsSourceBranch.length > 0 &&
+          translationsBranchItems.some(
+            (branch) => branch.name === translationsSourceBranch,
+          ));
     if (!valid || currentCandidateVersion === undefined) {
       setFormError({ kind: "invalid" });
       return;
@@ -445,7 +625,7 @@ export function ProductMappingsPage({
             topology: "direct",
             repository_id: directRepositoryId,
             source_branch: directSourceBranch,
-            allowed_target_branches: allowedTargetBranches,
+            allowed_target_branches: normalizedAllowedTargetBranches,
             default_target_branch: defaultTargetBranch,
             expected_candidate_version: currentCandidateVersion,
           }
@@ -463,7 +643,7 @@ export function ProductMappingsPage({
                 source_branch: translationsSourceBranch,
               },
             ],
-            allowed_target_branches: allowedTargetBranches,
+            allowed_target_branches: normalizedAllowedTargetBranches,
             default_target_branch: defaultTargetBranch,
             expected_candidate_version: currentCandidateVersion,
           };
@@ -489,13 +669,7 @@ export function ProductMappingsPage({
             });
       if (result.data !== undefined) {
         const savedMapping = result.data;
-        setMappings((current) =>
-          editingMapping === null
-            ? [...current, savedMapping]
-            : current.map((mapping) =>
-                mapping.id === savedMapping.id ? savedMapping : mapping,
-              ),
-        );
+        mappingCollection.upsertItems([savedMapping]);
         onCandidateVersionChange?.(savedMapping.candidate_version);
         resetForm(savedMapping.candidate_version);
         toast.success("Draft saved");
@@ -517,9 +691,26 @@ export function ProductMappingsPage({
     }
   }
 
-  const targetBranches =
-    topology === "direct" ? branches.direct : branches.translations;
+  const directBranchItems = mergeBranches(
+    directBranches.items,
+    exactDirectBranches,
+  );
+  const keysBranchItems = mergeBranches(keysBranches.items, exactKeysBranches);
+  const translationsBranchItems = mergeBranches(
+    translationsBranches.items,
+    exactTranslationsBranches,
+  );
+  const targetBranchCollection =
+    topology === "direct" ? directBranches : translationsBranches;
+  const targetBranchItems =
+    topology === "direct" ? directBranchItems : translationsBranchItems;
   const Heading = embedded ? "h2" : "h1";
+
+  function retryPage() {
+    void repositoryCollection.reload();
+    void mappingCollection.reload();
+    loadCandidateVersion();
+  }
 
   function repositoryName(repositoryId: string) {
     return (
@@ -562,7 +753,7 @@ export function ProductMappingsPage({
               We could not load this page. Retry without leaving the
               administration area.
             </p>
-            <Button type="button" variant="outline" onClick={loadPage}>
+            <Button type="button" variant="outline" onClick={retryPage}>
               Retry loading page
             </Button>
           </AlertDescription>
@@ -579,7 +770,7 @@ export function ProductMappingsPage({
       ) : null}
 
       {pageState === "ready" && mappings.length > 0 ? (
-        <section className="min-w-0 max-w-full overflow-x-clip">
+        <section className="grid min-w-0 max-w-full gap-4 overflow-x-clip">
           <div className="hidden md:block">
             <Table aria-label="Mappings">
               <TableHeader>
@@ -649,6 +840,11 @@ export function ProductMappingsPage({
               </article>
             ))}
           </div>
+          <CursorCollectionControls
+            collection={mappingCollection}
+            noun="mapping"
+            loadMoreLabel="Load more mappings"
+          />
         </section>
       ) : null}
 
@@ -664,6 +860,11 @@ export function ProductMappingsPage({
             <p className="text-muted-foreground">
               Branch controls contain only current live provider results.
             </p>
+            <CursorCollectionControls
+              collection={repositoryCollection}
+              noun="repository"
+              loadMoreLabel="Load more repositories for mappings"
+            />
           </div>
 
           <fieldset className="grid gap-3">
@@ -698,7 +899,9 @@ export function ProductMappingsPage({
               />
               <BranchSelect
                 label="Source branch"
-                branchState={branches.direct}
+                branchItems={directBranchItems}
+                collection={directBranches}
+                repositorySelected={directRepositoryId.length > 0}
                 value={directSourceBranch}
                 onValueChange={(value) => {
                   setDirectSourceBranch(value);
@@ -720,7 +923,9 @@ export function ProductMappingsPage({
                 />
                 <BranchSelect
                   label="Keys source branch"
-                  branchState={branches.keys}
+                  branchItems={keysBranchItems}
+                  collection={keysBranches}
+                  repositorySelected={keysRepositoryId.length > 0}
                   value={keysSourceBranch}
                   onValueChange={(value) => {
                     setKeysSourceBranch(value);
@@ -742,7 +947,9 @@ export function ProductMappingsPage({
                 />
                 <BranchSelect
                   label="Translations source branch"
-                  branchState={branches.translations}
+                  branchItems={translationsBranchItems}
+                  collection={translationsBranches}
+                  repositorySelected={translationsRepositoryId.length > 0}
                   value={translationsSourceBranch}
                   onValueChange={(value) => {
                     setTranslationsSourceBranch(value);
@@ -755,10 +962,10 @@ export function ProductMappingsPage({
 
           <fieldset className="grid gap-3">
             <legend className="text-sm font-semibold">Allowed targets</legend>
-            {targetBranches.status === "loading" ? (
+            {targetBranchCollection.status === "loading" ? (
               <p role="status">Loading live branches</p>
             ) : null}
-            {targetBranches.status === "error" ? (
+            {targetBranchCollection.status === "error" ? (
               <Alert variant="destructive">
                 <AlertTitle>Branches unavailable</AlertTitle>
                 <AlertDescription>
@@ -767,9 +974,9 @@ export function ProductMappingsPage({
                 </AlertDescription>
               </Alert>
             ) : null}
-            {targetBranches.status === "ready" ? (
+            {targetBranchCollection.status === "ready" ? (
               <div className="grid gap-2">
-                {targetBranches.items.map((branch) => {
+                {targetBranchItems.map((branch) => {
                   const checkboxId = `${defaultTargetId}-${branch.name}`;
                   return (
                     <div
@@ -894,7 +1101,7 @@ function RepositorySelect({
 }: {
   label: string;
   onValueChange: (value: string) => void;
-  repositories: AdminRepositoryResponse[];
+  repositories: readonly AdminRepositoryResponse[];
   value: string;
 }) {
   const id = useId();
@@ -917,15 +1124,68 @@ function RepositorySelect({
   );
 }
 
+function CursorCollectionControls<TItem>({
+  collection,
+  loadMoreLabel,
+  noun,
+}: {
+  collection: CursorCollectionState<TItem>;
+  loadMoreLabel: string;
+  noun: string;
+}) {
+  if (collection.status !== "ready") {
+    return null;
+  }
+  const pluralNoun = noun.endsWith("y")
+    ? `${noun.slice(0, -1)}ies`
+    : /(ch|sh|s|x|z)$/.test(noun)
+      ? `${noun}es`
+      : `${noun}s`;
+  const itemNoun = collection.items.length === 1 ? noun : pluralNoun;
+  return (
+    <div className="grid min-w-0 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
+      <p className="min-w-0 text-sm text-muted-foreground" aria-live="polite">
+        {collection.isPartial
+          ? `${collection.items.length} ${itemNoun} loaded — more available`
+          : `All ${collection.items.length} ${itemNoun} loaded`}
+      </p>
+      {collection.isPartial ? (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={collection.loadingMore}
+          aria-busy={collection.loadingMore}
+          aria-label={loadMoreLabel}
+          onClick={() => void collection.loadMore()}
+        >
+          Load more
+        </Button>
+      ) : null}
+      {collection.loadMoreError ? (
+        <Alert variant="destructive" className="sm:basis-full">
+          <AlertTitle>More {noun}s unavailable</AlertTitle>
+          <AlertDescription>
+            The items already loaded are unchanged. Retry this page only.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+    </div>
+  );
+}
+
 function BranchSelect({
-  branchState,
+  branchItems,
+  collection,
   label,
   onValueChange,
+  repositorySelected,
   value,
 }: {
-  branchState: BranchState;
+  branchItems: readonly AdminBranchResponse[];
+  collection: CursorCollectionState<AdminBranchResponse>;
   label: string;
   onValueChange: (value: string) => void;
+  repositorySelected: boolean;
   value: string;
 }) {
   const id = useId();
@@ -933,27 +1193,45 @@ function BranchSelect({
     <div className="grid min-w-0 gap-2">
       <Label htmlFor={id}>{label}</Label>
       <Select
+        key={`${value}:${branchItems.some((branch) => branch.name === value) ? "live" : "missing"}`}
         value={value}
-        disabled={branchState.status !== "ready"}
+        disabled={!repositorySelected || collection.status !== "ready"}
         onValueChange={onValueChange}
       >
         <SelectTrigger id={id} className="w-full min-w-0">
           <SelectValue
             placeholder={
-              branchState.status === "loading"
+              repositorySelected && collection.status === "loading"
                 ? "Loading live branches"
                 : "Select a live branch"
             }
-          />
+          >
+            {value.length > 0 &&
+            branchItems.some((branch) => branch.name === value)
+              ? value
+              : undefined}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
-          {branchState.items.map((branch) => (
+          {branchItems.map((branch) => (
             <SelectItem key={branch.name} value={branch.name}>
               {branch.name}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
+      {repositorySelected ? (
+        <CursorCollectionControls
+          collection={collection}
+          noun="branch"
+          loadMoreLabel={`Load more branches for ${label}`}
+        />
+      ) : null}
+      {repositorySelected && collection.status === "error" ? (
+        <p className="text-sm text-destructive">
+          Live branches are unavailable for this repository.
+        </p>
+      ) : null}
     </div>
   );
 }

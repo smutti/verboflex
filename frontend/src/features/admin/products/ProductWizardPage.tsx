@@ -14,6 +14,7 @@ import {
   createAdminProduct,
   getAdminProduct,
   listAdminRevisionMappings,
+  type AdminMappingListResponse,
   updateAdminProductCandidate,
   type AdminMappingResponse,
   type AdminProductResponse,
@@ -63,6 +64,8 @@ interface EditableProductLoad {
   product: AdminProductResponse;
 }
 
+const MAX_REVISION_MAPPING_PAGES = 50;
+
 export interface MobileWizardNavigation {
   backDisabled: boolean;
   nextDisabled: boolean;
@@ -104,6 +107,7 @@ function mappedRepositoryIds(mappings: readonly AdminMappingResponse[]) {
 export async function loadEditableProduct(
   accessToken: string,
   productId: string,
+  signal = new AbortController().signal,
 ): Promise<EditableProductLoad> {
   const productResult = await getAdminProduct({
     auth: accessToken,
@@ -120,19 +124,54 @@ export async function loadEditableProduct(
     return { mappedRepositoryIds: [], product };
   }
 
-  const mappingsResult = await listAdminRevisionMappings({
-    auth: accessToken,
-    path: {
-      product_id: productId,
-      revision_id: editableRevision.id,
-    },
-    query: { cursor: null, limit: 50 },
-  });
-  if (mappingsResult.data === undefined) {
-    throw new Error("product mappings unavailable");
+  const mappings: AdminMappingResponse[] = [];
+  const mappingIds = new Set<string>();
+  const consumedCursors = new Set<string>();
+  let cursor: string | null = null;
+  let pageCount = 0;
+  do {
+    if (signal.aborted) {
+      throw new DOMException("The operation was aborted", "AbortError");
+    }
+    if (pageCount >= MAX_REVISION_MAPPING_PAGES) {
+      throw new Error("product mappings exceeded page limit");
+    }
+    const mappingsResult: { data?: AdminMappingListResponse } =
+      await listAdminRevisionMappings({
+        auth: accessToken,
+        path: {
+          product_id: productId,
+          revision_id: editableRevision.id,
+        },
+        query: { cursor, limit: 50 },
+      });
+    if (signal.aborted) {
+      throw new DOMException("The operation was aborted", "AbortError");
+    }
+    if (mappingsResult.data === undefined) {
+      throw new Error("product mappings unavailable");
+    }
+    for (const mapping of mappingsResult.data.items) {
+      if (!mappingIds.has(mapping.id)) {
+        mappingIds.add(mapping.id);
+        mappings.push(mapping);
+      }
+    }
+    cursor = mappingsResult.data.next_cursor;
+    pageCount += 1;
+    if (cursor !== null) {
+      if (consumedCursors.has(cursor)) {
+        throw new Error("product mappings repeated cursor");
+      }
+      consumedCursors.add(cursor);
+    }
+  } while (cursor !== null);
+
+  if (signal.aborted) {
+    throw new DOMException("The operation was aborted", "AbortError");
   }
   return {
-    mappedRepositoryIds: mappedRepositoryIds(mappingsResult.data.items),
+    mappedRepositoryIds: mappedRepositoryIds(mappings),
     product,
   };
 }
@@ -209,6 +248,7 @@ export function ProductWizardPage({
   const descriptionId = useId();
   const nameRef = useRef<HTMLInputElement>(null);
   const detailsFormRef = useRef<HTMLFormElement>(null);
+  const routeLoadControllerRef = useRef<AbortController | null>(null);
   const routeLoadGenerationRef = useRef(0);
   const stepErrorRef = useRef<HTMLDivElement>(null);
   const submitPendingRef = useRef(false);
@@ -249,10 +289,20 @@ export function ProductWizardPage({
       return;
     }
     const generation = ++routeLoadGenerationRef.current;
+    routeLoadControllerRef.current?.abort();
+    const controller = new AbortController();
+    routeLoadControllerRef.current = controller;
     setRouteLoadState("loading");
     try {
-      const loaded = await loadEditableProduct(accessToken, routeProductId);
-      if (generation !== routeLoadGenerationRef.current) {
+      const loaded = await loadEditableProduct(
+        accessToken,
+        routeProductId,
+        controller.signal,
+      );
+      if (
+        controller.signal.aborted ||
+        generation !== routeLoadGenerationRef.current
+      ) {
         return;
       }
       const loadedName = savedName(loaded.product);
@@ -265,7 +315,10 @@ export function ProductWizardPage({
       setSelectedRepositoryIds(new Set(loaded.mappedRepositoryIds));
       setRouteLoadState("ready");
     } catch {
-      if (generation === routeLoadGenerationRef.current) {
+      if (
+        !controller.signal.aborted &&
+        generation === routeLoadGenerationRef.current
+      ) {
         setRouteLoadState("error");
       }
     }
@@ -281,6 +334,7 @@ export function ProductWizardPage({
     return () => {
       active = false;
       routeLoadGenerationRef.current += 1;
+      routeLoadControllerRef.current?.abort();
     };
   }, [loadRouteProduct]);
 

@@ -904,7 +904,6 @@ describe("administrator product configuration tracer", () => {
         revision_id: activeProduct.candidate_revision!.id,
       },
       query: { cursor: null, limit: 50 },
-      signal: expect.any(AbortSignal),
     });
     expect(listAdminRevisionMappingsMock).toHaveBeenNthCalledWith(2, {
       auth: "memory-only-admin-bearer",
@@ -913,7 +912,6 @@ describe("administrator product configuration tracer", () => {
         revision_id: activeProduct.candidate_revision!.id,
       },
       query: { cursor: "opaque-revision-page-2", limit: 50 },
-      signal: expect.any(AbortSignal),
     });
   });
 

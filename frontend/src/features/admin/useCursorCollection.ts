@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export interface CursorCollectionPage<TItem> {
+type CursorSlice<TItem> = Readonly<{
   items: readonly TItem[];
   next_cursor: string | null;
-}
+}>;
 
 export interface CursorCollectionOptions<TItem> {
   getItemId: (item: TItem) => string;
   loadPage: (
     cursor: string | null,
     signal: AbortSignal,
-  ) => Promise<CursorCollectionPage<TItem>>;
+  ) => Promise<CursorSlice<TItem>>;
   queryKey: string;
 }
 
@@ -28,6 +28,7 @@ export interface CursorCollectionState<TItem> {
   nextCursor: string | null;
   reload: () => Promise<void>;
   status: CursorCollectionStatus;
+  upsertItems: (items: readonly TItem[]) => void;
 }
 
 interface InternalState<TItem> {
@@ -53,6 +54,26 @@ function mergeByStableIdentity<TItem>(
     }
   }
   return merged;
+}
+
+function upsertByStableIdentity<TItem>(
+  current: readonly TItem[],
+  incoming: readonly TItem[],
+  getItemId: (item: TItem) => string,
+) {
+  const replacements = new Map(incoming.map((item) => [getItemId(item), item]));
+  const seen = new Set(current.map(getItemId));
+  return [
+    ...current.map((item) => replacements.get(getItemId(item)) ?? item),
+    ...incoming.filter((item) => {
+      const identity = getItemId(item);
+      if (seen.has(identity)) {
+        return false;
+      }
+      seen.add(identity);
+      return true;
+    }),
+  ];
 }
 
 export function useCursorCollection<TItem>({
@@ -187,6 +208,13 @@ export function useCursorCollection<TItem>({
     }));
   }, []);
 
+  const upsertItems = useCallback((items: readonly TItem[]) => {
+    setState((current) => ({
+      ...current,
+      items: upsertByStableIdentity(current.items, items, getItemIdRef.current),
+    }));
+  }, []);
+
   return {
     appendItems,
     isEmpty: state.status === "ready" && state.items.length === 0,
@@ -199,5 +227,6 @@ export function useCursorCollection<TItem>({
     nextCursor: state.nextCursor,
     reload,
     status: state.status,
+    upsertItems,
   };
 }
