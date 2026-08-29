@@ -8,10 +8,11 @@ import importlib
 import json
 import os
 from collections.abc import Iterator, Sequence
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
-from types import ModuleType
-from typing import Any
+from types import ModuleType, SimpleNamespace
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -384,6 +385,13 @@ def test_mapping_list_rejects_unbounded_or_unavailable_candidates(
         for limit in (0, 101):
             with pytest.raises(ValueError, match="invalid page size"):
                 module.list_candidate_mappings(session, product_id=uuid4(), limit=limit)
+            with pytest.raises(ValueError, match="invalid page size"):
+                module.list_revision_mappings(
+                    session,
+                    product_id=uuid4(),
+                    revision_id=uuid4(),
+                    limit=limit,
+                )
         with pytest.raises(module.MappingNotFound):
             module.list_candidate_mappings(session, product_id=uuid4())
 
@@ -394,6 +402,29 @@ def test_mapping_list_rejects_unbounded_or_unavailable_candidates(
         candidate.published_at = datetime.now(UTC)
     with factory() as session, pytest.raises(module.MappingNotFound):
         module.list_candidate_mappings(session, product_id=product_id)
+
+    missing_revision_id = uuid4()
+
+    class MissingRevisionSession:
+        def begin(self) -> Any:
+            return nullcontext()
+
+        def get(self, _model: object, _identity: UUID) -> object:
+            return SimpleNamespace(
+                id=product_id,
+                active_revision_id=missing_revision_id,
+                candidate_revision_id=None,
+            )
+
+        def scalar(self, _statement: object) -> None:
+            return None
+
+    with pytest.raises(module.MappingNotFound, match="revision unavailable"):
+        module.list_revision_mappings(
+            cast(Session, MissingRevisionSession()),
+            product_id=product_id,
+            revision_id=missing_revision_id,
+        )
 
 
 def test_mapping_projection_rejects_unknown_persisted_topology() -> None:

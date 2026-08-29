@@ -509,6 +509,67 @@ def test_edge_r3_repeated_authority_changes_retry_collisions_and_redact_candidat
         pytest.fail("candidate credential appeared in captured logs")
 
 
+def test_temporary_credential_generation_is_bounded_when_every_candidate_reuses_authority(
+    service_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Repeated password collisions terminate without mutating durable authority."""
+    actor_id = _seed_user(
+        service_session_factory,
+        email="admin@example.com",
+        roles=(RoleName.ADMIN,),
+    )
+    target_email = "target@example.com"
+    target_id = _seed_user(
+        service_session_factory,
+        email=target_email,
+        roles=(RoleName.VIEWER,),
+        token_version=4,
+    )
+    reused_password = f"initial password for {target_email}!"
+    attempts = 0
+
+    def reuse_current_password(_size: int) -> str:
+        nonlocal attempts
+        attempts += 1
+        return reused_password
+
+    monkeypatch.setattr(admin_users.secrets, "token_urlsafe", reuse_current_password)
+    with (
+        service_session_factory() as session,
+        pytest.raises(RuntimeError, match="temporary credential generation unavailable"),
+    ):
+        admin_users.reset_admin_user_password(
+            session,
+            actor_id=actor_id,
+            target_id=target_id,
+        )
+
+    assert attempts == admin_users._MAX_TEMPORARY_CREDENTIAL_ATTEMPTS
+    with service_session_factory() as session:
+        target = session.get_one(User, target_id)
+        assert target.token_version == 4
+        assert verify_password(reused_password, target.hashed_password) is True
+
+
+def test_locked_deactivation_requires_exactly_one_target_identity(
+    service_session_factory: sessionmaker[Session],
+) -> None:
+    """The shared authority lock cannot be entered with ambiguous target coordinates."""
+    with service_session_factory() as session:
+        for target_id, normalized_email in (
+            (None, None),
+            (uuid4(), "target@example.com"),
+        ):
+            with pytest.raises(ValueError, match="exactly one target identity is required"):
+                admin_users._deactivate_user_under_admin_authority_lock(
+                    session,
+                    deactivated_at=datetime.now(UTC),
+                    target_id=target_id,
+                    normalized_email=normalized_email,
+                )
+
+
 def test_cli_password_and_deactivation_wrappers_reuse_the_shared_service(
     service_session_factory: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,

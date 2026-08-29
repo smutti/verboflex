@@ -7,11 +7,13 @@ import inspect as python_inspect
 import os
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Event
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 from urllib.error import URLError
 from uuid import UUID, uuid4
 
@@ -19,7 +21,7 @@ import pytest
 from alembic.config import Config
 from psycopg import connect, sql
 from pydantic import SecretStr
-from sqlalchemy import Engine, create_engine, select
+from sqlalchemy import Engine, create_engine, delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
@@ -404,6 +406,90 @@ def test_client_credentials_expiry_boundary_is_authoritative(
             )
 
 
+def test_client_credentials_malformed_durable_states_and_clock_fail_closed(
+    oauth_session_factory: sessionmaker[Session],
+) -> None:
+    """Missing, legacy, scope-drifted, and naive-time authority never becomes readable."""
+    from verboflex.models.bitbucket_connection import BitbucketConnection
+    from verboflex.services.bitbucket_oauth import (
+        BitbucketCredentialLease,
+        BitbucketOAuthService,
+        OAuthConnectionUnavailable,
+    )
+
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        token_exchange=FakeTokenExchange(),
+        clock=lambda: CLIENT_CREDENTIALS_NOW,
+    )
+    with oauth_session_factory.begin() as session:
+        session.execute(delete(BitbucketConnection))
+    with oauth_session_factory() as session:
+        assert service.public_status(session).state == "unavailable"
+    with (
+        oauth_session_factory() as session,
+        pytest.raises(OAuthConnectionUnavailable, match="connection unavailable"),
+    ):
+        service.require_current_repository_read_lease(
+            session,
+            BitbucketCredentialLease(generation=0, access_token="unused"),
+        )
+
+    class StatusSession:
+        def __init__(self, connection: object) -> None:
+            self.connection = connection
+
+        def begin(self) -> Any:
+            return nullcontext()
+
+        def get(self, _model: object, _identity: int) -> object:
+            return self.connection
+
+    def connection(**overrides: object) -> object:
+        return SimpleNamespace(
+            access_token_ciphertext=overrides.get("access_token_ciphertext"),
+            refresh_token_ciphertext=overrides.get("refresh_token_ciphertext"),
+            scope_profile=overrides.get("scope_profile", "repository"),
+            provider_expires_at=overrides.get("provider_expires_at"),
+            connected_at=overrides.get("connected_at"),
+            revoked_at=overrides.get("revoked_at"),
+        )
+
+    malformed_states = (
+        (connection(refresh_token_ciphertext="legacy-refresh"), "unavailable"),
+        (
+            connection(
+                access_token_ciphertext="legacy-access",
+                refresh_token_ciphertext="legacy-refresh",
+                provider_expires_at=CLIENT_CREDENTIALS_NOW + timedelta(hours=1),
+            ),
+            "reauthorization_required",
+        ),
+        (
+            connection(
+                access_token_ciphertext="legacy-access",
+                scope_profile="repository:write",
+                provider_expires_at=CLIENT_CREDENTIALS_NOW + timedelta(hours=1),
+            ),
+            "unavailable",
+        ),
+    )
+    for durable_state, expected in malformed_states:
+        status_session = cast(Session, StatusSession(durable_state))
+        assert service.public_status(status_session).state == expected
+
+    naive_clock_service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        token_exchange=FakeTokenExchange(),
+        clock=lambda: datetime(2026, 8, 29, 12, 0),
+    )
+    with (
+        oauth_session_factory() as session,
+        pytest.raises(OAuthConnectionUnavailable, match="connection unavailable"),
+    ):
+        naive_clock_service.acquire_client_credentials(session)
+
+
 def test_client_credentials_service_has_no_callback_or_refresh_authority() -> None:
     """Production settings and service own client credentials only."""
     from verboflex.services import bitbucket_oauth
@@ -477,6 +563,9 @@ def test_client_credentials_provider_exchange_is_exact_and_bounded() -> None:
     with pytest.raises(OAuthConnectionUnavailable, match="connection unavailable"):
         exchange.exchange_client_credentials(client_id="client-id", client_secret="secret")
     opener.payload = b"not-json"
+    with pytest.raises(OAuthConnectionUnavailable, match="connection unavailable"):
+        exchange.exchange_client_credentials(client_id="client-id", client_secret="secret")
+    opener.payload = b"[]"
     with pytest.raises(OAuthConnectionUnavailable, match="connection unavailable"):
         exchange.exchange_client_credentials(client_id="client-id", client_secret="secret")
     opener.error = URLError(PROVIDER_ERROR_BODY)
