@@ -24,18 +24,13 @@ EXPECTED_OPERATIONS = {
         {"200", "401", "403", "503"},
         True,
     ),
-    ("/api/v1/admin/bitbucket/oauth/callback", "get"): (
-        "complete_admin_bitbucket_oauth_callback",
-        {"303", "400", "422", "503"},
-        False,
-    ),
-    ("/api/v1/admin/bitbucket/oauth/reconnect", "post"): (
-        "reconnect_admin_bitbucket_oauth",
+    ("/api/v1/admin/bitbucket/connect", "post"): (
+        "connect_admin_bitbucket_oauth",
         {"200", "401", "403", "503"},
         True,
     ),
-    ("/api/v1/admin/bitbucket/oauth/start", "post"): (
-        "start_admin_bitbucket_oauth",
+    ("/api/v1/admin/bitbucket/reconnect", "post"): (
+        "reconnect_admin_bitbucket_oauth",
         {"200", "401", "403", "503"},
         True,
     ),
@@ -240,8 +235,8 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
 
     error_response_codes = {
         ("/api/v1/admin/bitbucket", "get"): {"401", "403"},
-        ("/api/v1/admin/bitbucket/oauth/reconnect", "post"): {"401", "403"},
-        ("/api/v1/admin/bitbucket/oauth/start", "post"): {"401", "403"},
+        ("/api/v1/admin/bitbucket/connect", "post"): {"401", "403"},
+        ("/api/v1/admin/bitbucket/reconnect", "post"): {"401", "403"},
         ("/api/v1/admin/bitbucket/revoke", "post"): {"401", "403"},
         ("/api/v1/admin/repositories", "get"): {"401", "403", "422"},
         ("/api/v1/admin/repositories", "post"): {"401", "403", "409", "422"},
@@ -366,12 +361,10 @@ def test_admin_bitbucket_openapi_is_closed_bounded_and_secret_free() -> None:
     """Expose only approved lifecycle state and exact repository read scope."""
     schema = app.openapi()
     schemas = schema["components"]["schemas"]
-    authorization = schemas["AdminBitbucketAuthorizationResponse"]
     connection_status = schemas["AdminBitbucketStatusResponse"]
     integration_error = schemas["AdminBitbucketErrorResponse"]
 
-    assert authorization["additionalProperties"] is False
-    assert set(authorization["properties"]) == {"authorization_url", "state_expires_in"}
+    assert "AdminBitbucketAuthorizationResponse" not in schemas
     assert connection_status["additionalProperties"] is False
     assert set(connection_status["properties"]) == {
         "status",
@@ -392,18 +385,35 @@ def test_admin_bitbucket_openapi_is_closed_bounded_and_secret_free() -> None:
         "Read-only repository access"
     )
     assert integration_error["additionalProperties"] is False
-    assert integration_error["properties"]["detail"]["enum"] == [
-        "OAuth callback rejected",
-        "Bitbucket connection unavailable",
-    ]
+    assert integration_error["properties"]["detail"]["const"] == (
+        "Bitbucket connection unavailable"
+    )
+
+    bitbucket_paths = {
+        path: value
+        for path, value in schema["paths"].items()
+        if path.startswith("/api/v1/admin/bitbucket")
+    }
+    assert set(bitbucket_paths) == {
+        "/api/v1/admin/bitbucket",
+        "/api/v1/admin/bitbucket/connect",
+        "/api/v1/admin/bitbucket/reconnect",
+        "/api/v1/admin/bitbucket/revoke",
+    }
+    assert {
+        operation["operationId"]
+        for path_item in bitbucket_paths.values()
+        for operation in path_item.values()
+    } == {
+        "get_admin_bitbucket_status",
+        "connect_admin_bitbucket_oauth",
+        "reconnect_admin_bitbucket_oauth",
+        "revoke_admin_bitbucket_connection_locally",
+    }
 
     bitbucket_contract = json.dumps(
         {
-            "paths": {
-                path: value
-                for path, value in schema["paths"].items()
-                if path.startswith("/api/v1/admin/bitbucket")
-            },
+            "paths": bitbucket_paths,
             "schemas": {
                 name: value for name, value in schemas.items() if name.startswith("AdminBitbucket")
             },
@@ -412,6 +422,10 @@ def test_admin_bitbucket_openapi_is_closed_bounded_and_secret_free() -> None:
     ).casefold()
     for forbidden in (
         "access_token",
+        "authorization_url",
+        "callback",
+        "ciphertext",
+        "client_id",
         "refresh_token",
         "encryption_key",
         "client_secret",
@@ -420,6 +434,8 @@ def test_admin_bitbucket_openapi_is_closed_bounded_and_secret_free() -> None:
         "pullrequest",
         "webhook",
         "provider_revoke",
+        "state_expires_in",
+        "workspace",
     ):
         assert forbidden not in bitbucket_contract
 

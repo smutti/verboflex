@@ -34,6 +34,7 @@ const openApi = openApiDocument as OpenApiDocument;
 const sensitiveAdminProperties = new Set([
   "access_token",
   "access_token_ciphertext",
+  "authorization_url",
   "client_secret",
   "encryption_key",
   "provider_body",
@@ -41,6 +42,7 @@ const sensitiveAdminProperties = new Set([
   "refresh_token",
   "refresh_token_ciphertext",
   "source_bytes",
+  "state_expires_in",
   "temporary_password",
   "token_ciphertext",
 ]);
@@ -50,6 +52,9 @@ const handwrittenSources = import.meta.glob("/src/**/*.{ts,tsx}", {
   query: "?raw",
   import: "default",
 }) as Record<string, string>;
+
+const generatedSdkSource = handwrittenSources["/src/api/client/sdk.gen.ts"];
+const generatedTypesSource = handwrittenSources["/src/api/client/types.gen.ts"];
 
 function referencedSchemaName(reference: string): string {
   return reference.slice(reference.lastIndexOf("/") + 1);
@@ -118,15 +123,8 @@ const forbiddenWireShapes = [
 
 const phaseTwoAdminOperationIds = new Map([
   ["GET /api/v1/admin/bitbucket", "get_admin_bitbucket_status"],
-  [
-    "GET /api/v1/admin/bitbucket/oauth/callback",
-    "complete_admin_bitbucket_oauth_callback",
-  ],
-  [
-    "POST /api/v1/admin/bitbucket/oauth/reconnect",
-    "reconnect_admin_bitbucket_oauth",
-  ],
-  ["POST /api/v1/admin/bitbucket/oauth/start", "start_admin_bitbucket_oauth"],
+  ["POST /api/v1/admin/bitbucket/connect", "connect_admin_bitbucket_oauth"],
+  ["POST /api/v1/admin/bitbucket/reconnect", "reconnect_admin_bitbucket_oauth"],
   [
     "POST /api/v1/admin/bitbucket/revoke",
     "revoke_admin_bitbucket_connection_locally",
@@ -305,14 +303,26 @@ describe("canonical generated Phase 2 admin client", () => {
       );
       expect(leaked, `${schemaName} leaked credential material`).toEqual([]);
     }
+
+    const bitbucketStatus =
+      openApi.components.schemas.AdminBitbucketStatusResponse;
+    expect(bitbucketStatus).toBeDefined();
+    expect(Object.keys(bitbucketStatus?.properties ?? {}).sort()).toEqual([
+      "connected_at",
+      "expires_at",
+      "revoked_at",
+      "scope_label",
+      "scope_profile",
+      "status",
+    ]);
+    expect(bitbucketStatus?.properties).not.toHaveProperty("workspace");
   });
 
-  it("exposes metadata reads and bounded OAuth controls but no provider write surface", () => {
+  it("exposes direct connection controls but no callback or provider write surface", () => {
     const allowedProviderOperations = new Map([
       ["/api/v1/admin/bitbucket", ["get"]],
-      ["/api/v1/admin/bitbucket/oauth/callback", ["get"]],
-      ["/api/v1/admin/bitbucket/oauth/reconnect", ["post"]],
-      ["/api/v1/admin/bitbucket/oauth/start", ["post"]],
+      ["/api/v1/admin/bitbucket/connect", ["post"]],
+      ["/api/v1/admin/bitbucket/reconnect", ["post"]],
       ["/api/v1/admin/bitbucket/revoke", ["post"]],
     ]);
 
@@ -325,6 +335,12 @@ describe("canonical generated Phase 2 admin client", () => {
       }
     }
 
+    expect(
+      Object.keys(openApi.paths).filter((path) =>
+        /(?:callback|oauth\/start)/u.test(path),
+      ),
+    ).toEqual([]);
+
     for (const [path, operation] of Object.entries(openApi.paths).filter(
       ([path]) =>
         /\/admin\/repositories\/.*\/(?:branches|sources)$/u.test(path),
@@ -333,6 +349,31 @@ describe("canonical generated Phase 2 admin client", () => {
         "get",
       ]);
     }
+  });
+
+  it("generates direct expiry-aware operations without a credential transport type", () => {
+    expect(generatedSdkSource).toContain(
+      "export const connectAdminBitbucketOauth",
+    );
+    expect(generatedSdkSource).toContain(
+      "export const reconnectAdminBitbucketOauth",
+    );
+    expect(generatedSdkSource).toContain(
+      "export const getAdminBitbucketStatus",
+    );
+    expect(generatedSdkSource).not.toMatch(
+      /(?:completeAdminBitbucketOauthCallback|startAdminBitbucketOauth)/u,
+    );
+    expect(generatedTypesSource).toContain("expires_at: string | null");
+    expect(generatedTypesSource).toContain("'Reauthorization required'");
+
+    const bitbucketGeneratedTypes = generatedTypesSource
+      ?.split("export type AdminBitbucket")
+      .slice(1)
+      .join("export type AdminBitbucket");
+    expect(bitbucketGeneratedTypes).not.toMatch(
+      /(?:authorization_url|workspace|client_secret|access_token|refresh_token|ciphertext)/u,
+    );
   });
 
   it("freezes every Phase 2 admin operation ID", () => {
