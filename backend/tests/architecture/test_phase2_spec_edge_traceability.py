@@ -139,7 +139,8 @@ def _assert_source_matrix_equal(matrix: list[dict[str, Any]]) -> None:
 
 def _plan_edge_truths() -> dict[str, dict[str, str]]:
     pattern = re.compile(
-        r'^\s*- "\[EDGE-(?P<edge_id>R\d+-(?:adjacency|empty|encoding|ordering|idempotency|concurrency))'
+        r'^\s*- "\[EDGE-(?P<edge_id>R\d+-(?:adjacency|empty|encoding|ordering|'
+        r"idempotency|concurrency))"
         r" source=(?P<source>covered|dismissed|UNRESOLVED)"
         r'(?: disposition=(?P<disposition>[^\]]+))?\](?P<text>.*)"$'
     )
@@ -147,7 +148,9 @@ def _plan_edge_truths() -> dict[str, dict[str, str]]:
     for line in PLAN_PATH.read_text(encoding="utf-8").splitlines():
         match = pattern.match(line)
         if match:
-            truths.append({key: _normalize(value or "") for key, value in match.groupdict().items()})
+            truths.append(
+                {key: _normalize(value or "") for key, value in match.groupdict().items()}
+            )
     return _keyed(truths, label="PLAN must-have")
 
 
@@ -243,9 +246,9 @@ def test_phase2_literal_spec_edge_contract() -> None:
     assert set(SOURCE_UNRESOLVED) == {
         row["edge_id"] for row in matrix if row["source_status"] == "UNRESOLVED"
     }
-    assert DISMISSED_EDGE_IDS == {
+    assert {
         row["edge_id"] for row in matrix if row["source_status"] == "dismissed"
-    }
+    } == DISMISSED_EDGE_IDS
 
 
 def test_edge_contract_rejects_count_preserving_semantic_mutations() -> None:
