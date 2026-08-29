@@ -132,3 +132,14 @@ def test_local_generation_revoke_erases_token_and_rejects_existing_lease() -> No
         authority.require_current_repository_read_lease(object(), lease)
     with pytest.raises(live_smoke.OAuthConnectionUnavailable):
         authority.acquire_repository_read_lease(object())
+
+
+def test_mock_provider_smoke_retries_only_the_bounded_port_binding_race() -> None:
+    """A transient host-port race gets a bounded fresh isolated smoke attempt."""
+    source = (REPOSITORY_ROOT / "tools" / "phase2_smoke.sh").read_text()
+
+    assert "run_mock_provider_with_port_retry()" in source
+    assert "for attempt in 1 2 3" in source
+    assert 'if [ "$rc" -ne 75 ]' in source
+    assert 'grep -Fq "address already in use"' in source
+    assert "return 75" in source
