@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import inspect
 import os
 import time
 from collections.abc import Generator, Iterator
@@ -1242,6 +1243,22 @@ def _create_running_attempt(
         row = session.get_one(PreviewJob, created.id)
         row.started_at = started_at
     return created, identity
+
+
+def test_reconciler_source_keeps_skip_locked_and_complete_cas_identity() -> None:
+    """Mutation armor preserves the lock policy and exact attempt ownership CAS."""
+    service = importlib.import_module("verboflex.services.preview_jobs")
+    reconcile_source = inspect.getsource(service.reconcile_stale_preview_jobs)
+    claim_source = inspect.getsource(service._claim_current_running_attempt)
+
+    assert ".with_for_update(skip_locked=True)" in reconcile_source
+    assert 'PreviewJob.state == "running"' in reconcile_source
+    assert "PreviewJob.started_at <= cutoff" in reconcile_source
+    assert "PreviewJob.id == job_id" in claim_source
+    assert "PreviewJob.attempt == attempt" in claim_source
+    assert "PreviewJob.connection_generation == connection_generation" in claim_source
+    assert 'PreviewJob.state == "running"' in claim_source
+    assert "finished_at=finished_at" in claim_source
 
 
 def test_watchdog_terminalizes_at_exact_hard_limit_plus_grace_threshold(

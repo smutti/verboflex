@@ -31,6 +31,50 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        "watchdog-threshold-excludes-exact-boundary",
+        "src/verboflex/services/preview_jobs.py",
+        "                PreviewJob.started_at <= cutoff,\n",
+        "                PreviewJob.started_at < cutoff,\n",
+    ),
+    Mutation(
+        "watchdog-selects-queued-instead-of-running",
+        "src/verboflex/services/preview_jobs.py",
+        '                PreviewJob.state == "running",\n'
+        "                PreviewJob.started_at <= cutoff,\n",
+        '                PreviewJob.state == "queued",\n'
+        "                PreviewJob.started_at <= cutoff,\n",
+    ),
+    Mutation(
+        "watchdog-removes-skip-locked",
+        "src/verboflex/services/preview_jobs.py",
+        "            .with_for_update(skip_locked=True)\n",
+        "            .with_for_update()\n",
+    ),
+    Mutation(
+        "watchdog-cas-ignores-generation",
+        "src/verboflex/services/preview_jobs.py",
+        "            PreviewJob.connection_generation == connection_generation,\n",
+        "            PreviewJob.connection_generation >= 0,\n",
+    ),
+    Mutation(
+        "watchdog-omits-terminal-timestamp",
+        "src/verboflex/services/preview_jobs.py",
+        "            finished_at=finished_at,\n            updated_at=finished_at,\n",
+        "            finished_at=None,\n            updated_at=finished_at,\n",
+    ),
+    Mutation(
+        "watchdog-schedule-registration-renamed",
+        "src/verboflex/worker/celery_app.py",
+        '            "preview-stale-job-watchdog": {\n',
+        '            "preview-stale-job-watchdog-disabled": {\n',
+    ),
+    Mutation(
+        "retry-reuses-terminal-attempt-number",
+        "src/verboflex/services/preview_jobs.py",
+        "                attempt=1 if latest is None else latest.attempt + 1,\n",
+        "                attempt=1 if latest is None else latest.attempt,\n",
+    ),
+    Mutation(
         "result-envelope-allows-extra-fields",
         "src/verboflex/services/preview_jobs.py",
         "    if set(raw_result) != _PREVIEW_RESULT_FIELDS:\n"
