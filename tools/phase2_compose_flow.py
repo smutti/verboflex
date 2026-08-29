@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -11,6 +12,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from http import HTTPStatus
+from pathlib import Path
 from typing import Any
 
 COMMIT_HASH = "0123456789abcdef0123456789abcdef01234567"
@@ -133,7 +135,218 @@ def confirm_first_candidate(api: Api, token: str, preview: dict[str, Any]) -> No
     assert response["preview_digest"] == result["digest"]
 
 
+def _ordinary_admin_token(
+    api: Api,
+    email: str,
+    password: str,
+    *,
+    new_password: str | None = None,
+) -> str:
+    authority = login(api, email, password).json()
+    if authority["must_change_password"]:
+        if new_password is None:
+            raise AssertionError("ordinary administrator password required")
+        api.request(
+            "POST",
+            "/api/v1/auth/change-password",
+            token=authority["access_token"],
+            json_body={"current_password": password, "new_password": new_password},
+            expected=HTTPStatus.NO_CONTENT,
+        )
+        authority = login(api, email, new_password).json()
+    assert authority["must_change_password"] is False
+    return str(authority["access_token"])
+
+
+def wait_for_preview_state(
+    api: Api,
+    token: str,
+    job_id: str,
+    expected_state: str,
+    *,
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    """Poll one durable job state under a caller-owned monotonic deadline."""
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        payload = api.request("GET", f"/api/v1/admin/preview-jobs/{job_id}", token=token).json()
+        if payload["state"] == expected_state:
+            return payload
+        if payload["state"] in {"failed", "timed_out", "succeeded"}:
+            raise AssertionError(f"preview reached {payload['state']} before {expected_state}")
+        time.sleep(0.1)
+    raise AssertionError(f"preview did not reach {expected_state} within the bound")
+
+
+def _write_worker_loss_state(path: Path, payload: dict[str, Any]) -> None:
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as destination:
+        json.dump(payload, destination, separators=(",", ":"), sort_keys=True)
+
+
+def _read_worker_loss_state(path: Path) -> dict[str, Any]:
+    if path.stat().st_mode & 0o077:
+        raise AssertionError("worker-loss state must be owner-only")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise AssertionError("worker-loss state is invalid")
+    return payload
+
+
+def worker_loss_setup(
+    base_url: str,
+    email: str,
+    temporary_password: str,
+    new_password: str,
+    state_path: Path,
+) -> None:
+    """Create one direct preview and return only after running is durable."""
+    api = Api(base_url)
+    token = _ordinary_admin_token(
+        api,
+        email,
+        temporary_password,
+        new_password=new_password,
+    )
+    api.request("POST", "/api/v1/admin/bitbucket/connect", token=token)
+    repository = api.request(
+        "POST",
+        "/api/v1/admin/repositories",
+        token=token,
+        json_body={
+            "workspace": "verboflex-smoke",
+            "repository_slug": "translations",
+            "descriptive_name": "Worker loss translations",
+        },
+        expected=HTTPStatus.CREATED,
+    ).json()
+    product = api.request(
+        "POST",
+        "/api/v1/admin/products",
+        token=token,
+        json_body={"name": "Worker Loss Product", "description": "Process-loss smoke"},
+        expected=HTTPStatus.CREATED,
+    ).json()
+    product_id = product["id"]
+    mappings_path = f"/api/v1/admin/products/{product_id}/candidate/mappings"
+    mapping = api.request(
+        "POST",
+        mappings_path,
+        token=token,
+        json_body={
+            "topology": "direct",
+            "repository_id": repository["id"],
+            "source_branch": "main",
+            "allowed_target_branches": ["main"],
+            "default_target_branch": "main",
+            "expected_candidate_version": 1,
+        },
+        expected=HTTPStatus.CREATED,
+    ).json()
+    request_body = {
+        "expected_candidate_version": mapping["candidate_version"],
+        "commits": [{"role": "direct", "commit_hash": COMMIT_HASH}],
+    }
+    preview_path = f"{mappings_path}/{mapping['id']}/preview-jobs"
+    job = api.request(
+        "POST",
+        preview_path,
+        token=token,
+        json_body=request_body,
+        expected=HTTPStatus.ACCEPTED,
+    ).json()
+    running = wait_for_preview_state(api, token, job["id"], "running", timeout_seconds=30)
+    assert running["started_at"] is not None
+    _write_worker_loss_state(
+        state_path,
+        {
+            "job_id": job["id"],
+            "attempt": job["attempt"],
+            "preview_path": preview_path,
+            "request_body": request_body,
+        },
+    )
+
+
+def worker_loss_terminal(
+    base_url: str,
+    email: str,
+    password: str,
+    state_path: Path,
+    timeout_seconds: int,
+) -> None:
+    """Observe watchdog terminalization without relying on a task callback."""
+    api = Api(base_url)
+    token = _ordinary_admin_token(api, email, password)
+    state = _read_worker_loss_state(state_path)
+    terminal = wait_for_preview_state(
+        api,
+        token,
+        state["job_id"],
+        "timed_out",
+        timeout_seconds=timeout_seconds,
+    )
+    assert terminal["error_code"] == "time_limit_exceeded"
+    assert terminal["finished_at"] is not None
+    assert terminal["result"] is None
+    state["terminal_finished_at"] = terminal["finished_at"]
+    state_path.write_text(
+        json.dumps(state, separators=(",", ":"), sort_keys=True), encoding="utf-8"
+    )
+    state_path.chmod(0o600)
+
+
+def retry_preview_job(
+    base_url: str,
+    email: str,
+    password: str,
+    state_path: Path,
+) -> None:
+    """Retry as a new attempt and prove the original terminal row is immutable."""
+    api = Api(base_url)
+    token = _ordinary_admin_token(api, email, password)
+    state = _read_worker_loss_state(state_path)
+    retry = api.request(
+        "POST",
+        state["preview_path"],
+        token=token,
+        json_body=state["request_body"],
+        expected=HTTPStatus.ACCEPTED,
+    ).json()
+    assert retry["id"] != state["job_id"]
+    assert retry["attempt"] == state["attempt"] + 1
+    succeeded = wait_for_preview_state(api, token, retry["id"], "succeeded", timeout_seconds=60)
+    assert succeeded["result"] is not None
+    original = api.request(
+        "GET", f"/api/v1/admin/preview-jobs/{state['job_id']}", token=token
+    ).json()
+    assert original["state"] == "timed_out"
+    assert original["error_code"] == "time_limit_exceeded"
+    assert original["finished_at"] == state["terminal_finished_at"]
+    assert original["result"] is None
+
+
 def main() -> None:
+    if len(sys.argv) >= 2 and sys.argv[1] == "--worker-loss-setup":
+        if len(sys.argv) != 7:
+            raise SystemExit("invalid worker-loss setup arguments")
+        worker_loss_setup(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], Path(sys.argv[6]))
+        print("phase2 worker-loss setup: PASS (running durable, provider blocked)")
+        return
+    if len(sys.argv) >= 2 and sys.argv[1] == "--worker-loss-terminal":
+        if len(sys.argv) != 7:
+            raise SystemExit("invalid worker-loss terminal arguments")
+        worker_loss_terminal(
+            sys.argv[2], sys.argv[3], sys.argv[4], Path(sys.argv[5]), int(sys.argv[6])
+        )
+        print("phase2 worker-loss terminalization: PASS (time_limit_exceeded)")
+        return
+    if len(sys.argv) >= 2 and sys.argv[1] == "--worker-loss-retry":
+        if len(sys.argv) != 6:
+            raise SystemExit("invalid worker-loss retry arguments")
+        retry_preview_job(sys.argv[2], sys.argv[3], sys.argv[4], Path(sys.argv[5]))
+        print("phase2 worker-loss retry: PASS (new attempt succeeded, original immutable)")
+        return
     if len(sys.argv) != 4:
         raise SystemExit("usage: phase2_compose_flow.py BACKEND_URL EMAIL TEMP_PASSWORD")
     api = Api(sys.argv[1])

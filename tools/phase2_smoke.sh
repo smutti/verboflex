@@ -19,6 +19,9 @@ SMOKE_NEW_PASSWORD=""
 SMOKE_CLIENT_SECRET=""
 SMOKE_ACCESS_TOKEN=""
 SMOKE_KEYRING=""
+SMOKE_WORKER_LOSS_STATE=""
+SMOKE_BLOCK_FILE=""
+SMOKE_BLOCK_STARTED_FILE=""
 
 die() {
   printf 'phase2-smoke error: %s\n' "$1" >&2
@@ -117,6 +120,31 @@ wait_for_worker() {
   die "Celery worker readiness timed out"
 }
 
+wait_for_scheduler() {
+  local deadline
+  deadline=$((SECONDS + 180))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if [ "$(compose_active ps --status running -q scheduler | wc -l | tr -d ' ')" = "1" ] \
+      && compose_active exec -T scheduler python -c \
+        'from verboflex.worker.celery_app import app; assert "preview-stale-job-watchdog" in app.conf.beat_schedule' \
+        >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  die "Celery scheduler readiness timed out"
+}
+
+wait_for_file() {
+  local path=$1 label=$2 deadline
+  deadline=$((SECONDS + 30))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if [ -f "$path" ]; then return 0; fi
+    sleep 1
+  done
+  die "$label timed out"
+}
+
 wait_for_mock_provider() {
   local deadline
   deadline=$((SECONDS + 180))
@@ -194,6 +222,9 @@ initialize_runtime() {
   SMOKE_NEW_PASSWORD="PhaseTwoOrdinary-$(openssl rand -hex 10)!"
   SMOKE_CLIENT_SECRET="mock-client-secret-$(openssl rand -hex 24)"
   SMOKE_ACCESS_TOKEN="mock-provider-bearer-$(openssl rand -hex 24)"
+  SMOKE_WORKER_LOSS_STATE="$SMOKE_RUNTIME_DIR/worker-loss-state.json"
+  SMOKE_BLOCK_FILE="$SMOKE_RUNTIME_DIR/preview-worker-block"
+  SMOKE_BLOCK_STARTED_FILE="$SMOKE_RUNTIME_DIR/preview-worker-blocked"
   SMOKE_KEYRING=$(
     cd "$BACKEND_ROOT"
     uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
@@ -206,7 +237,11 @@ initialize_runtime() {
     "VERBOFLEX_BITBUCKET_TOKEN_ENCRYPTION_KEYRING=$SMOKE_KEYRING" \
     "PHASE2_RUNTIME_DIR=$SMOKE_RUNTIME_DIR" \
     "PHASE2_REPO_ROOT=$REPO_ROOT" \
-    "MOCK_ACCESS_TOKEN=$SMOKE_ACCESS_TOKEN" >"$SMOKE_ENV_FILE"
+    "MOCK_ACCESS_TOKEN=$SMOKE_ACCESS_TOKEN" \
+    'VERBOFLEX_PREVIEW_SOFT_TIME_LIMIT_SECONDS=5' \
+    'VERBOFLEX_PREVIEW_HARD_TIME_LIMIT_SECONDS=8' \
+    'VERBOFLEX_PREVIEW_WATCHDOG_GRACE_SECONDS=3' \
+    'VERBOFLEX_PREVIEW_WATCHDOG_INTERVAL_SECONDS=1' >"$SMOKE_ENV_FILE"
   chmod 600 "$SMOKE_ENV_FILE"
   : >"$SMOKE_RUNTIME_DIR/stdout.log"
   : >"$SMOKE_RUNTIME_DIR/stderr.log"
@@ -228,6 +263,9 @@ configure_mock_provider() {
     '      MOCK_CLIENT_SECRET: ${VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET}' \
     '      MOCK_TLS_CERT: /run/phase2/server.pem' \
     '      MOCK_TLS_KEY: /run/phase2/server.key' \
+    '      MOCK_BLOCK_FILE: /run/phase2/preview-worker-block' \
+    '      MOCK_BLOCK_STARTED_FILE: /run/phase2/preview-worker-blocked' \
+    '      MOCK_BLOCK_TIMEOUT_SECONDS: "120"' \
     '    command: ["python", "/mock/phase2_mock_provider.py"]' \
     '    volumes:' \
     '      - ${PHASE2_REPO_ROOT}/tools/phase2_mock_provider.py:/mock/phase2_mock_provider.py:ro' \
@@ -245,6 +283,15 @@ configure_mock_provider() {
     '      mock-bitbucket:' \
     '        condition: service_started' \
     '  worker:' \
+    '    environment:' \
+    '      SSL_CERT_FILE: /run/phase2/ca.pem' \
+    '    volumes:' \
+    '      - ${PHASE2_RUNTIME_DIR}/ca.pem:/run/phase2/ca.pem:ro' \
+    '      - ${PHASE2_RUNTIME_DIR}/ca.pem:/opt/venv/lib/python3.14/site-packages/certifi/cacert.pem:ro' \
+    '    depends_on:' \
+    '      mock-bitbucket:' \
+    '        condition: service_started' \
+    '  scheduler:' \
     '    environment:' \
     '      SSL_CERT_FILE: /run/phase2/ca.pem' \
     '    volumes:' \
@@ -273,7 +320,8 @@ preflight() {
   docker info >/dev/null 2>&1 || die "Docker daemon is unavailable"
   (
     cd "$BACKEND_ROOT"
-    uv run python -m py_compile ../tools/phase2_live_provider.py ../tools/phase2_mock_provider.py
+    uv run python -m py_compile ../tools/phase2_live_provider.py \
+      ../tools/phase2_mock_provider.py ../tools/phase2_compose_flow.py
   )
   compose_active config --quiet >"$SMOKE_RUNTIME_DIR/stdout.log" \
     2>"$SMOKE_RUNTIME_DIR/stderr.log"
@@ -286,7 +334,7 @@ prepare_base_stack() {
   compose_active up -d postgres redis >/dev/null
   compose_active run --rm -T backend alembic upgrade head >/dev/null
   set +e
-  compose_active up -d backend worker >"$compose_start_log" 2>&1
+  compose_active up -d backend worker scheduler >"$compose_start_log" 2>&1
   rc=$?
   set -e
   if [ "$rc" -ne 0 ]; then
@@ -297,6 +345,7 @@ prepare_base_stack() {
   fi
   wait_for_url "$SMOKE_BACKEND_URL/api/v1/health" 200 backend
   wait_for_worker
+  wait_for_scheduler
 }
 
 verify_provider_ready() {
@@ -306,8 +355,10 @@ verify_provider_ready() {
     >>"$SMOKE_RUNTIME_DIR/stdout.log" 2>>"$SMOKE_RUNTIME_DIR/stderr.log"
   compose_active exec -T worker python -c "$ready_code" \
     >>"$SMOKE_RUNTIME_DIR/stdout.log" 2>>"$SMOKE_RUNTIME_DIR/stderr.log"
-  [ "$(grep -Fc 'provider-ready' "$SMOKE_RUNTIME_DIR/stdout.log")" = "2" ] \
-    || die "backend and worker did not both become provider-ready"
+  compose_active exec -T scheduler python -c "$ready_code" \
+    >>"$SMOKE_RUNTIME_DIR/stdout.log" 2>>"$SMOKE_RUNTIME_DIR/stderr.log"
+  [ "$(grep -Fc 'provider-ready' "$SMOKE_RUNTIME_DIR/stdout.log")" = "3" ] \
+    || die "backend, worker, and scheduler did not all become provider-ready"
 }
 
 bootstrap_admin() {
@@ -404,6 +455,91 @@ run_mock_live_provider() {
   printf 'phase2 mocked live-provider production API smoke: PASS\n'
 }
 
+preview_max_terminalization_seconds() {
+  compose_active exec -T scheduler python -c \
+    'from verboflex.core.config import get_settings; print(get_settings().preview_max_terminalization_seconds)'
+}
+
+wait_for_preview_state() {
+  local expected=$1 timeout_seconds=${2:-30}
+  case "$expected" in
+    "running")
+      [ -f "$SMOKE_WORKER_LOSS_STATE" ] \
+        || die "running preview evidence is unavailable"
+      ;;
+    "timed_out")
+      if ! "$BACKEND_ROOT/.venv/bin/python" "$REPO_ROOT/tools/phase2_compose_flow.py" \
+        --worker-loss-terminal "$SMOKE_BACKEND_URL" "$SMOKE_EMAIL" "$SMOKE_NEW_PASSWORD" \
+        "$SMOKE_WORKER_LOSS_STATE" "$timeout_seconds" \
+        >>"$SMOKE_RUNTIME_DIR/stdout.log" 2>>"$SMOKE_RUNTIME_DIR/stderr.log"; then
+        tail -n 1 "$SMOKE_RUNTIME_DIR/stderr.log" >&2
+        die "worker-loss terminal-state probe failed"
+      fi
+      ;;
+    "succeeded")
+      grep -Fq 'phase2 worker-loss retry: PASS' "$SMOKE_RUNTIME_DIR/stdout.log" \
+        || die "replacement worker retry did not succeed"
+      ;;
+    *) die "unsupported worker-loss preview state" ;;
+  esac
+}
+
+retry_preview_job() {
+  if ! "$BACKEND_ROOT/.venv/bin/python" "$REPO_ROOT/tools/phase2_compose_flow.py" \
+    --worker-loss-retry "$SMOKE_BACKEND_URL" "$SMOKE_EMAIL" "$SMOKE_NEW_PASSWORD" \
+    "$SMOKE_WORKER_LOSS_STATE" \
+    >>"$SMOKE_RUNTIME_DIR/stdout.log" 2>>"$SMOKE_RUNTIME_DIR/stderr.log"; then
+    tail -n 1 "$SMOKE_RUNTIME_DIR/stderr.log" >&2
+    die "worker-loss retry probe failed"
+  fi
+}
+
+assert_original_preview_unchanged() {
+  grep -Fq 'new attempt succeeded, original immutable' "$SMOKE_RUNTIME_DIR/stdout.log" \
+    || die "retry did not preserve the original timed-out preview"
+}
+
+run_worker_loss() {
+  local worker_container max_bound deadline remaining terminal_error="time_limit_exceeded"
+  SMOKE_MODE="mock-live-provider"
+  trap cleanup EXIT INT TERM
+  initialize_runtime
+  configure_mock_provider
+  preflight
+  prepare_base_stack
+  wait_for_mock_provider
+  bootstrap_admin
+  : >"$SMOKE_BLOCK_FILE"
+  chmod 600 "$SMOKE_BLOCK_FILE"
+  if ! "$BACKEND_ROOT/.venv/bin/python" "$REPO_ROOT/tools/phase2_compose_flow.py" \
+    --worker-loss-setup "$SMOKE_BACKEND_URL" "$SMOKE_EMAIL" "$SMOKE_TEMP_PASSWORD" \
+    "$SMOKE_NEW_PASSWORD" "$SMOKE_WORKER_LOSS_STATE" \
+    >>"$SMOKE_RUNTIME_DIR/stdout.log" 2>>"$SMOKE_RUNTIME_DIR/stderr.log"; then
+    tail -n 1 "$SMOKE_RUNTIME_DIR/stderr.log" >&2
+    die "worker-loss durable-running setup failed"
+  fi
+  wait_for_preview_state "running"
+  wait_for_file "$SMOKE_BLOCK_STARTED_FILE" "preview provider fault gate"
+  worker_container=$(compose_active ps -q worker)
+  [ -n "$worker_container" ] || die "owning worker container is unavailable"
+  docker kill --signal=KILL "$worker_container" >/dev/null
+  rm -f "$SMOKE_BLOCK_FILE"
+  compose_active rm -f worker >/dev/null
+  compose_active up -d worker >/dev/null
+  wait_for_worker
+  max_bound=$(preview_max_terminalization_seconds)
+  deadline=$((SECONDS + max_bound + 5))
+  remaining=$((deadline - SECONDS))
+  wait_for_preview_state "timed_out" "$remaining"
+  grep -Fq "$terminal_error" "$SMOKE_RUNTIME_DIR/stdout.log" \
+    || die "watchdog terminal error code was not observed"
+  retry_preview_job
+  wait_for_preview_state "succeeded" 60
+  assert_original_preview_unchanged
+  verify_no_secret_surfaces
+  printf 'phase2 worker-loss smoke: PASS (timed_out/time_limit_exceeded, replacement retry succeeded)\n'
+}
+
 run_mock_provider_with_port_retry() {
   local attempt rc
   for attempt in 1 2 3; do
@@ -421,6 +557,19 @@ run_mock_provider_with_port_retry() {
   die "host-port binding remained unavailable after three isolated attempts"
 }
 
+run_worker_loss_with_port_retry() {
+  local attempt rc
+  for attempt in 1 2 3; do
+    set +e
+    "$SCRIPT_DIR/phase2_smoke.sh" --worker-loss-once
+    rc=$?
+    set -e
+    if [ "$rc" -eq 0 ]; then return 0; fi
+    if [ "$rc" -ne 75 ]; then return "$rc"; fi
+  done
+  die "worker-loss host-port binding remained unavailable after three isolated attempts"
+}
+
 live_provider_gate() {
   local live_env_file="${VERBOFLEX_PHASE2_LIVE_ENV_FILE:-$REPO_ROOT/.env.phase2-live}"
   if [ "${VERBOFLEX_PHASE2_LIVE_OPT_IN:-}" != "production-api-read-only-confirmed" ] \
@@ -431,11 +580,13 @@ live_provider_gate() {
   "$BACKEND_ROOT/.venv/bin/python" "$REPO_ROOT/tools/phase2_live_provider.py" "$live_env_file"
 }
 
-case "${1:-}" in
-  --base-client-credentials) run_base_client_credentials ;;
-  --mock-live-provider) run_mock_provider_with_port_retry ;;
-  --mock-live-provider-once) run_mock_live_provider ;;
-  --mock-provider) run_mock_provider_with_port_retry ;;
-  --live-provider-read-only) live_provider_gate ;;
-  *) die "usage: tools/phase2_smoke.sh --base-client-credentials|--mock-live-provider|--live-provider-read-only" ;;
+case "${1:-}:${2:-}" in
+  --mock-provider:--worker-loss) run_worker_loss_with_port_retry ;;
+  --worker-loss-once:) run_worker_loss ;;
+  --base-client-credentials:) run_base_client_credentials ;;
+  --mock-live-provider:) run_mock_provider_with_port_retry ;;
+  --mock-live-provider-once:) run_mock_live_provider ;;
+  --mock-provider:) run_mock_provider_with_port_retry ;;
+  --live-provider-read-only:) live_provider_gate ;;
+  *) die "usage: tools/phase2_smoke.sh --base-client-credentials|--mock-live-provider|--mock-provider --worker-loss|--live-provider-read-only" ;;
 esac

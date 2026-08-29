@@ -21,6 +21,10 @@ x-backend-common: &backend-common
     VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID: ${VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID:?VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID is required}
     VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET: ${VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET:?VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET is required}
     VERBOFLEX_BITBUCKET_TOKEN_ENCRYPTION_KEYRING: ${VERBOFLEX_BITBUCKET_TOKEN_ENCRYPTION_KEYRING:?VERBOFLEX_BITBUCKET_TOKEN_ENCRYPTION_KEYRING is required}
+    VERBOFLEX_PREVIEW_SOFT_TIME_LIMIT_SECONDS: ${VERBOFLEX_PREVIEW_SOFT_TIME_LIMIT_SECONDS:-60}
+    VERBOFLEX_PREVIEW_HARD_TIME_LIMIT_SECONDS: ${VERBOFLEX_PREVIEW_HARD_TIME_LIMIT_SECONDS:-75}
+    VERBOFLEX_PREVIEW_WATCHDOG_GRACE_SECONDS: ${VERBOFLEX_PREVIEW_WATCHDOG_GRACE_SECONDS:-15}
+    VERBOFLEX_PREVIEW_WATCHDOG_INTERVAL_SECONDS: ${VERBOFLEX_PREVIEW_WATCHDOG_INTERVAL_SECONDS:-5}
   depends_on:
     postgres:
       condition: service_healthy
@@ -88,6 +92,19 @@ services:
       timeout: 10s
       retries: 5
       start_period: 15s
+
+  scheduler:
+    <<: *backend-common
+    init: true
+    command:
+      [
+        "celery",
+        "-A",
+        "verboflex.worker.celery_app",
+        "beat",
+        "--loglevel=INFO",
+        "--schedule=/tmp/celerybeat-schedule",
+      ]
 
   frontend:
     build:

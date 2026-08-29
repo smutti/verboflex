@@ -428,8 +428,10 @@ def _connected_generation(session: Session) -> int:
     if (
         connection is None
         or connection.access_token_ciphertext is None
-        or connection.refresh_token_ciphertext is None
+        or connection.refresh_token_ciphertext is not None
         or connection.scope_profile != "repository"
+        or connection.provider_expires_at is None
+        or connection.provider_expires_at <= datetime.now(UTC)
         or connection.revoked_at is not None
     ):
         raise PreviewConnectionUnavailable("preview connection unavailable")
@@ -835,8 +837,10 @@ def _current_connection(
         connection is None
         or connection.generation != row.connection_generation
         or connection.access_token_ciphertext is None
-        or connection.refresh_token_ciphertext is None
+        or connection.refresh_token_ciphertext is not None
         or connection.scope_profile != "repository"
+        or connection.provider_expires_at is None
+        or connection.provider_expires_at <= datetime.now(UTC)
         or connection.revoked_at is not None
     ):
         return None

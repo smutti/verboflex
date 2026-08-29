@@ -22,9 +22,7 @@ LIVE_SMOKE_HELPER = REPOSITORY_ROOT / "tools" / "phase2_live_provider.py"
 BASE_COMPOSE = REPOSITORY_ROOT / "docker-compose.yml"
 SMOKE_HARNESS = REPOSITORY_ROOT / "tools" / "phase2_smoke.sh"
 MOCK_PROVIDER = REPOSITORY_ROOT / "tools" / "phase2_mock_provider.py"
-COVERAGE_PATH = (
-    REPOSITORY_ROOT / ".planning" / "phases" / "02-admin-configuration" / "COVERAGE.md"
-)
+COVERAGE_PATH = REPOSITORY_ROOT / ".planning" / "phases" / "02-admin-configuration" / "COVERAGE.md"
 EXACT_PROVIDER_SETTINGS = {
     "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID",
     "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET",
@@ -198,9 +196,7 @@ def test_base_compose_inherits_exact_provider_settings_without_secret_output(
 
     settings = Settings(
         bitbucket_oauth_client_id=sentinels["VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID"],
-        bitbucket_oauth_client_secret=sentinels[
-            "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET"
-        ],
+        bitbucket_oauth_client_secret=sentinels["VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET"],
         bitbucket_token_encryption_keyring=sentinels[
             "VERBOFLEX_BITBUCKET_TOKEN_ENCRYPTION_KEYRING"
         ],
@@ -270,7 +266,7 @@ def test_mock_provider_audit_is_exact_scope_five_gets_and_zero_writes() -> None:
     assert '"grant_type": "client_credentials"' in provider_source
     assert "CALLBACK_URL" not in provider_source
     assert "REFRESH_TOKEN" not in provider_source
-    assert 'assert len(repository_reads) == 5' in smoke_source
+    assert "assert len(repository_reads) == 5" in smoke_source
     assert 'assert all(row["method"] == "GET"' in smoke_source
     assert 'assert not [row for row in rows if row["category"] == "forbidden-mutation"]' in (
         smoke_source
@@ -284,9 +280,9 @@ def test_repeated_probe_uses_serialized_api_lifecycle_and_three_generations() ->
     """Connect/reconnect/revoke/reacquire stays behind the production API boundary."""
     probe_source = LIVE_SMOKE_HELPER.read_text(encoding="utf-8")
     smoke_source = SMOKE_HARNESS.read_text(encoding="utf-8")
-    run_source = probe_source.split("def run(path: Path) -> None:", 1)[1].split(
-        "\ndef main()", 1
-    )[0]
+    run_source = probe_source.split("def run(path: Path) -> None:", 1)[1].split("\ndef main()", 1)[
+        0
+    ]
 
     assert run_source.count('"/api/v1/admin/bitbucket/connect"') == 2
     assert run_source.count('"/api/v1/admin/bitbucket/reconnect"') == 1
@@ -303,9 +299,7 @@ def test_coverage_rewrites_exactly_three_keys_without_semantic_loss() -> None:
     rows = _coverage_rows()
     decisions = {key: decision for key, decision, _reason in rows}
     reasons = {key: reason for key, _decision, reason in rows}
-    expected = {
-        IDENTITY_REWRITE[key]: PRE_REWRITE_DECISIONS[key] for key in IDENTITY_REWRITE
-    }
+    expected = {IDENTITY_REWRITE[key]: PRE_REWRITE_DECISIONS[key] for key in IDENTITY_REWRITE}
     expected.update(
         {
             "oauth-client-credentials-acquisition": "INTEGRATE",
@@ -349,12 +343,10 @@ def test_smoke_contract_scans_all_evidence_and_always_tears_down() -> None:
     assert "compose down --volumes --remove-orphans" in source
     assert 'docker ps -aq --filter "label=com.docker.compose.project=$SMOKE_PROJECT"' in source
     assert (
-        'docker volume ls -q --filter "label=com.docker.compose.project=$SMOKE_PROJECT"'
-        in source
+        'docker volume ls -q --filter "label=com.docker.compose.project=$SMOKE_PROJECT"' in source
     )
     assert (
-        'docker network ls -q --filter "label=com.docker.compose.project=$SMOKE_PROJECT"'
-        in source
+        'docker network ls -q --filter "label=com.docker.compose.project=$SMOKE_PROJECT"' in source
     )
 
 
@@ -434,6 +426,7 @@ def test_compose_runs_preview_scheduler_as_a_separate_shared_service() -> None:
         "verboflex.worker.celery_app",
         "beat",
         "--loglevel=INFO",
+        "--schedule=/tmp/celerybeat-schedule",
     ]
     assert "beat" not in worker["command"]
 

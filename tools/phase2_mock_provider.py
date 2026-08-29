@@ -8,6 +8,7 @@ import json
 import os
 import ssl
 import threading
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -34,6 +35,11 @@ AUDIT_FILE = Path(os.environ["MOCK_AUDIT_FILE"])
 ACCESS_TOKEN = os.environ["MOCK_ACCESS_TOKEN"]
 CLIENT_ID = os.environ["MOCK_CLIENT_ID"]
 CLIENT_SECRET = os.environ["MOCK_CLIENT_SECRET"]
+BLOCK_FILE = Path(os.environ["MOCK_BLOCK_FILE"]) if os.getenv("MOCK_BLOCK_FILE") else None
+BLOCK_STARTED_FILE = (
+    Path(os.environ["MOCK_BLOCK_STARTED_FILE"]) if os.getenv("MOCK_BLOCK_STARTED_FILE") else None
+)
+BLOCK_TIMEOUT_SECONDS = int(os.environ.get("MOCK_BLOCK_TIMEOUT_SECONDS", "120"))
 CLIENT_CREDENTIALS_AUDIT = {
     "effective_scope": "repository",
     "grant_type": "client_credentials",
@@ -79,7 +85,10 @@ class MockBitbucketHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-OAuth-Scopes", "repository")
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except BrokenPipeError, ConnectionResetError:
+            return
 
     def _bytes(self, status: HTTPStatus, payload: bytes) -> None:
         self.send_response(status)
@@ -88,7 +97,24 @@ class MockBitbucketHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-OAuth-Scopes", "repository")
         self.end_headers()
-        self.wfile.write(payload)
+        try:
+            self.wfile.write(payload)
+        except BrokenPipeError, ConnectionResetError:
+            return
+
+    def _wait_for_worker_loss_release(self) -> bool:
+        """Hold preview source reads behind an owner-controlled bounded fault gate."""
+        if BLOCK_FILE is None or not BLOCK_FILE.exists():
+            return True
+        if BLOCK_STARTED_FILE is not None:
+            BLOCK_STARTED_FILE.touch(mode=0o600, exist_ok=True)
+        deadline = time.monotonic() + BLOCK_TIMEOUT_SECONDS
+        while BLOCK_FILE.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        if BLOCK_FILE.exists():
+            self._json(HTTPStatus.GATEWAY_TIMEOUT, {"error": "fault_gate_timeout"})
+            return False
+        return True
 
     def _authorized(self) -> bool:
         if self.headers.get("Authorization") == f"Bearer {ACCESS_TOKEN}":
@@ -213,6 +239,8 @@ class MockBitbucketHandler(BaseHTTPRequestHandler):
     ) -> None:
         if not resource or resource[0] != COMMIT_HASH:
             self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            return
+        if not self._wait_for_worker_loss_release():
             return
         repository_path = "/".join(resource[1:]).strip("/")
         if "pagelen" not in query:
