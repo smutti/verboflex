@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-31-PLAN.md
-last_updated: "2026-08-29T19:02:42.266Z"
+stopped_at: Completed 02-27-PLAN.md
+last_updated: "2026-08-29T19:43:16.228Z"
 last_activity: 2026-08-29
 last_activity_desc: Phase 02 execution started
-state_head: 1858f096b6c175fe68dfc133486bdbf787cd7a1e
+state_head: 57b06cf2556ad6dbb717ec2cca27a7e9c2653e28
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 53
-  completed_plans: 45
+  completed_plans: 46
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 30 of 38
+Plan: 31 of 38
 Status: Ready to execute
 Last activity: 2026-08-29 — Phase 02 execution started
 
@@ -103,6 +103,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P36 | 6min | 2 tasks | 3 files |
 | Phase 02 P29 | 35min | 3 tasks | 12 files |
 | Phase 02-admin-configuration P31 | 10min | 2 tasks | 2 files |
+| Phase 02-admin-configuration P27 | 33m | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -267,6 +268,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Treat the Plan 26 schema and generated operations as inherited canonical behavior; do not fabricate a RED gate by reverting or hand-editing generated artifacts.
 - [Phase 02]: Prove reserved branch spelling at the generated runtime URL boundary by decoding branch_name from the query while asserting the pathname contains only repository identity.
 - [Phase 02]: Keep provider continuation and credential exclusions property-based so the legitimate repository workspace field remains available while Bitbucket status workspace stays forbidden.
+- [Phase 02]: Plan 02-27: Existing-product edit loads are read-only; active-only products create exactly one candidate only through a genuinely changed details PATCH.
+- [Phase 02]: Plan 02-27: Candidate and mapping identities remain server-owned and are restored unchanged across deep-link, refresh, and browser history traversal.
+- [Phase 02]: Plan 02-27: Mobile wizard targets use literal 44px minimums and Playwright-native ARIA, keyboard, overflow, and 200% reflow verification.
 
 ### Pending Todos
 
@@ -305,6 +309,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-29T19:02:42.212Z
-Stopped at: Completed 02-31-PLAN.md
+Last session: 2026-08-29T19:43:16.175Z
+Stopped at: Completed 02-27-PLAN.md
 Resume file: None

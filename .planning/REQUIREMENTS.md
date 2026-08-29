@@ -28,13 +28,13 @@
 ### Product and Repository Configuration
 
 - [ ] **PROD-01**: Admin can create and edit a product record with name, description, and active/inactive status.
-- [ ] **PROD-02**: Admin can configure one or more Bitbucket Cloud repositories for a product.
-- [ ] **PROD-03**: Admin can configure the source branch the platform reads from for each repository mapping.
-- [ ] **PROD-04**: Admin can configure allowed target branches for translation pull requests.
-- [ ] **PROD-05**: Admin can configure product-specific pull request grouping behavior.
-- [ ] **PROD-06**: Admin can configure whether translations live directly in the product repository or in a linked translation repository.
-- [ ] **PROD-07**: Admin can configure links between a repository containing translation keys and a separate Bitbucket project/repository containing translated values.
-- [ ] **PROD-08**: Admin can validate a repository mapping by previewing detected files, languages, sample keys, and sample translations before enabling imports.
+- [x] **PROD-02**: Admin can configure one or more Bitbucket Cloud repositories for a product.
+- [x] **PROD-03**: Admin can configure the source branch the platform reads from for each repository mapping.
+- [x] **PROD-04**: Admin can configure allowed target branches for translation pull requests.
+- [x] **PROD-05**: Admin can configure product-specific pull request grouping behavior.
+- [x] **PROD-06**: Admin can configure whether translations live directly in the product repository or in a linked translation repository.
+- [x] **PROD-07**: Admin can configure links between a repository containing translation keys and a separate Bitbucket project/repository containing translated values.
+- [x] **PROD-08**: Admin can validate a repository mapping by previewing detected files, languages, sample keys, and sample translations before enabling imports.
 - [x] **PROD-09**: Admin can configure the localization file format used by each mapping.
 
 ### Bitbucket Cloud Integration
@@ -113,7 +113,7 @@
 
 - [x] **UI-01**: Frontend uses shadcn/ui primitives for core controls such as buttons, inputs, selects, dialogs, sheets, badges, tooltips, tabs, tables, sidebars, and toasts.
 - [ ] **UI-02**: Review workspace presents filters, results, translation detail, comments, state controls, and constraint status in a dense task-focused layout.
-- [ ] **UI-03**: Admin configuration screens provide clear validation feedback for repository, branch, mapping, and credential setup.
+- [x] **UI-03**: Admin configuration screens provide clear validation feedback for repository, branch, mapping, and credential setup.
 - [ ] **UI-04**: Frontend shows background job status for imports and PR submissions without blocking the user interface.
 
 ## v2 Requirements
@@ -187,13 +187,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-05 | Phase 9 | Pending |
 | AUTH-06 | Phase 9 | Pending |
 | PROD-01 | Phase 2 | Gaps Found |
-| PROD-02 | Phase 2 | Gaps Found |
-| PROD-03 | Phase 2 | Gaps Found |
-| PROD-04 | Phase 2 | Gaps Found |
-| PROD-05 | Phase 2 | Gaps Found |
-| PROD-06 | Phase 2 | Gaps Found |
-| PROD-07 | Phase 2 | Gaps Found |
-| PROD-08 | Phase 2 | Gaps Found |
+| PROD-02 | Phase 2 | Complete |
+| PROD-03 | Phase 2 | Complete |
+| PROD-04 | Phase 2 | Complete |
+| PROD-05 | Phase 2 | Complete |
+| PROD-06 | Phase 2 | Complete |
+| PROD-07 | Phase 2 | Complete |
+| PROD-08 | Phase 2 | Complete |
 | PROD-09 | Phase 2 | Complete |
 | BITB-01 | Phase 2 | Complete |
 | BITB-02 | Phase 3 | Pending |
@@ -248,7 +248,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PR-11 | Phase 8 | Pending |
 | UI-01 | Phase 1 | Complete |
 | UI-02 | Phase 6 | Pending |
-| UI-03 | Phase 2 | Gaps Found |
+| UI-03 | Phase 2 | Complete |
 | UI-04 | Phase 8 | Pending |
 
 **Coverage:**
