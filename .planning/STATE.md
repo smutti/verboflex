@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-21-PLAN.md
-last_updated: "2026-08-29T15:05:01.557Z"
+stopped_at: Completed 02-23-PLAN.md
+last_updated: "2026-08-29T15:23:39.537Z"
 last_activity: 2026-08-29
 last_activity_desc: Phase 02 execution started
-state_head: d8e07157643883fc6d92a1202c321fd61dbca811
+state_head: 37b8c8eeb0bee0f98051e782cc0701d5bf5ed6ec
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 53
-  completed_plans: 36
+  completed_plans: 37
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 21 of 38
+Plan: 22 of 38
 Status: Ready to execute
 Last activity: 2026-08-29 — Phase 02 execution started
 
@@ -94,6 +94,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P19 | 32min | 3 tasks | 9 files |
 | Phase 02 P20 | 13h40min | 3 tasks | 19 files |
 | Phase 02-admin-configuration P21 | 26min | 3 tasks | 12 files |
+| Phase 02-admin-configuration P23 | 13min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -231,6 +232,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Persist client-credentials authority as encrypted access-only material while retaining legacy paired rows only for reversible migration compatibility.
 - [Phase 02]: Treat provider expiry as authoritative and serialize renewal under the singleton lock; failed renewal advances and clears the expired generation.
 - [Phase 02]: Expose direct administrator connect and reconnect with a six-field no-store status and no callback, workspace, generation, or credential surface.
+- [Phase 02]: Preserve the canonical User UUID across role plurality and concurrency — Roles remain fixed-vocabulary set membership and never create role-specific identity.
+- [Phase 02]: Route HTTP and CLI deactivation through one survivor authority — The global advisory lock, target lock, and prospective survivor predicate now guard both entry points.
+- [Phase 02]: Retry generated credential policy collisions within a bounded loop — Rejected candidates never mutate authority or appear in responses or logs.
 
 ### Pending Todos
 
@@ -269,6 +273,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-29T15:05:01.499Z
-Stopped at: Completed 02-21-PLAN.md
+Last session: 2026-08-29T15:23:39.489Z
+Stopped at: Completed 02-23-PLAN.md
 Resume file: None
