@@ -57,6 +57,7 @@ def _revision_response(
     return AdminProductRevisionSummary(
         id=revision.id,
         version=revision.version,
+        name=revision.name,
         description=revision.description,
         is_published=revision.is_published,
     )

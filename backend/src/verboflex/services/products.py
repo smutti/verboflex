@@ -14,6 +14,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from verboflex.models.product import Product, ProductRevision
+from verboflex.models.product_mapping import (
+    ProductMappingAllowedTarget,
+    ProductMappingRepositorySide,
+    ProductRepositoryMapping,
+)
 
 
 class ProductNameConflict(ValueError):
@@ -44,6 +49,7 @@ class ProductRevisionRecord:
 
     id: UUID
     version: int
+    name: str
     description: str | None
     is_published: bool
 
@@ -113,6 +119,8 @@ def create_product(
                 ProductRevision(
                     id=revision_id,
                     product_id=product_id,
+                    display_name=display_name,
+                    name_key=name_key,
                     description=description,
                     version=1,
                     is_published=False,
@@ -142,7 +150,6 @@ def _locked_revision(session: Session, revision_id: UUID) -> ProductRevision:
 
 
 def _matches_revision_input(
-    product: Product,
     revision: ProductRevision,
     *,
     display_name: str,
@@ -150,15 +157,96 @@ def _matches_revision_input(
     description: str | None,
 ) -> bool:
     return (
-        product.display_name == display_name
-        and product.name_key == name_key
+        revision.display_name == display_name
+        and revision.name_key == name_key
         and revision.description == description
     )
 
 
-def _set_product_identity(product: Product, *, display_name: str, name_key: str) -> None:
-    product.display_name = display_name
-    product.name_key = name_key
+def _require_product_name_available(
+    session: Session,
+    *,
+    product_id: UUID,
+    name_key: str,
+) -> None:
+    conflicting_id = session.scalar(
+        select(Product.id).where(
+            Product.name_key == name_key,
+            Product.id != product_id,
+        )
+    )
+    if conflicting_id is not None:
+        raise ProductNameConflict("product name is unavailable")
+
+
+def _clone_active_revision_graph(
+    session: Session,
+    *,
+    active: ProductRevision,
+    display_name: str,
+    name_key: str,
+    description: str | None,
+) -> ProductRevision:
+    """Deep-clone one complete published graph with fresh candidate identities."""
+    active_mappings = tuple(
+        session.execute(
+            select(ProductRepositoryMapping)
+            .options(
+                selectinload(ProductRepositoryMapping.sides),
+                selectinload(ProductRepositoryMapping.allowed_targets),
+            )
+            .where(ProductRepositoryMapping.revision_id == active.id)
+            .order_by(ProductRepositoryMapping.id)
+        ).scalars()
+    )
+    candidate = ProductRevision(
+        id=uuid4(),
+        product_id=active.product_id,
+        display_name=display_name,
+        name_key=name_key,
+        description=description,
+        version=active.version + 1,
+        is_published=False,
+    )
+    session.add(candidate)
+    session.flush()
+
+    mapping_id_map = {mapping.id: uuid4() for mapping in active_mappings}
+    for active_mapping in active_mappings:
+        candidate_mapping_id = mapping_id_map[active_mapping.id]
+        session.add(
+            ProductRepositoryMapping(
+                id=candidate_mapping_id,
+                revision_id=candidate.id,
+                topology=active_mapping.topology,
+                identity_key=active_mapping.identity_key,
+                selected_layout_candidate_id=active_mapping.selected_layout_candidate_id,
+                selected_layout_version=active_mapping.selected_layout_version,
+                confirmed_preview_job_id=None,
+                confirmed_preview_digest=None,
+                preview_confirmed_by=None,
+                preview_confirmed_at=None,
+                sides=[
+                    ProductMappingRepositorySide(
+                        mapping_id=candidate_mapping_id,
+                        role=side.role,
+                        repository_id=side.repository_id,
+                        source_branch=side.source_branch,
+                    )
+                    for side in active_mapping.sides
+                ],
+                allowed_targets=[
+                    ProductMappingAllowedTarget(
+                        mapping_id=candidate_mapping_id,
+                        branch=target.branch,
+                        is_default=target.is_default,
+                    )
+                    for target in active_mapping.allowed_targets
+                ],
+            )
+        )
+    session.flush()
+    return candidate
 
 
 def save_product_candidate(
@@ -176,17 +264,22 @@ def save_product_candidate(
             product = _locked_product(session, product_id)
             if product.candidate_revision_id is not None:
                 candidate = _locked_revision(session, product.candidate_revision_id)
-                if candidate.is_published or candidate.version != expected_version:
-                    raise ProductVersionConflict("candidate version conflict")
                 if _matches_revision_input(
-                    product,
                     candidate,
                     display_name=display_name,
                     name_key=name_key,
                     description=description,
                 ):
                     return product
-                _set_product_identity(product, display_name=display_name, name_key=name_key)
+                if candidate.is_published or candidate.version != expected_version:
+                    raise ProductVersionConflict("candidate version conflict")
+                _require_product_name_available(
+                    session,
+                    product_id=product.id,
+                    name_key=name_key,
+                )
+                candidate.display_name = display_name
+                candidate.name_key = name_key
                 candidate.description = description
                 candidate.version += 1
                 session.flush()
@@ -198,7 +291,6 @@ def save_product_candidate(
             if not active.is_published or active.version != expected_version:
                 raise ProductVersionConflict("candidate version conflict")
             if _matches_revision_input(
-                product,
                 active,
                 display_name=display_name,
                 name_key=name_key,
@@ -206,15 +298,18 @@ def save_product_candidate(
             ):
                 return product
 
-            candidate = ProductRevision(
+            _require_product_name_available(
+                session,
                 product_id=product.id,
-                description=description,
-                version=active.version + 1,
-                is_published=False,
+                name_key=name_key,
             )
-            session.add(candidate)
-            session.flush()
-            _set_product_identity(product, display_name=display_name, name_key=name_key)
+            candidate = _clone_active_revision_graph(
+                session,
+                active=active,
+                display_name=display_name,
+                name_key=name_key,
+                description=description,
+            )
             product.candidate_revision_id = candidate.id
             session.flush()
             return product
@@ -228,6 +323,7 @@ def _revision_record(revision: ProductRevision | None) -> ProductRevisionRecord 
     return ProductRevisionRecord(
         id=revision.id,
         version=revision.version,
+        name=revision.display_name,
         description=revision.description,
         is_published=revision.is_published,
     )

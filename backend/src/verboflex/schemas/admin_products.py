@@ -50,6 +50,7 @@ class AdminProductRevisionSummary(BaseModel):
 
     id: UUID
     version: int
+    name: str
     description: str | None
     is_published: bool
 
