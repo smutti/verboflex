@@ -1,11 +1,24 @@
 import "@testing-library/jest-dom/vitest";
 
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { readSystemStatus, type CurrentUserResponse } from "../../api/client";
+import {
+  getAdminBitbucketStatus,
+  listAdminProducts,
+  listAdminUsers,
+  readSystemStatus,
+  type CurrentUserResponse,
+} from "../../api/client";
 import { App } from "../../App";
 import { useSession } from "../../features/auth/session";
 import { AppShell } from "./AppShell";
@@ -14,6 +27,9 @@ vi.mock("../../api/client", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../api/client")>();
   return {
     ...original,
+    getAdminBitbucketStatus: vi.fn(),
+    listAdminProducts: vi.fn(),
+    listAdminUsers: vi.fn(),
     readHealth: vi.fn(),
     readSystemStatus: vi.fn(),
   };
@@ -23,6 +39,9 @@ vi.mock("../../features/auth/session", () => ({
   useSession: vi.fn(),
 }));
 
+const getAdminBitbucketStatusMock = vi.mocked(getAdminBitbucketStatus);
+const listAdminProductsMock = vi.mocked(listAdminProducts);
+const listAdminUsersMock = vi.mocked(listAdminUsers);
 const readSystemStatusMock = vi.mocked(readSystemStatus);
 const useSessionMock = vi.mocked(useSession);
 type ReadSystemStatusResult = Awaited<
@@ -92,13 +111,21 @@ afterEach(() => {
 
 beforeEach(() => {
   setViewportWidth(1440);
+  getAdminBitbucketStatusMock.mockReset();
+  getAdminBitbucketStatusMock.mockReturnValue(
+    new Promise<never>(() => undefined),
+  );
+  listAdminProductsMock.mockReset();
+  listAdminProductsMock.mockReturnValue(new Promise<never>(() => undefined));
+  listAdminUsersMock.mockReset();
+  listAdminUsersMock.mockReturnValue(new Promise<never>(() => undefined));
   readSystemStatusMock.mockReset();
   readSystemStatusMock.mockReturnValue(new Promise<never>(() => undefined));
   useSessionMock.mockReset();
 });
 
 describe("authenticated application shell", () => {
-  it("shows server identity, human role labels, and the approved neutral workspace copy", () => {
+  it("shows server identity, human role labels, and the approved role-aware workspace copy", () => {
     render(
       <AppShell
         accessToken="ordinary-server-token"
@@ -108,7 +135,7 @@ describe("authenticated application shell", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "Workspace overview", level: 1 }),
+      screen.getByRole("heading", { name: "Workspace", level: 1 }),
     ).toBeVisible();
     expect(screen.getByText("Person Example")).toBeVisible();
     expect(screen.getByText("person@example.com")).toBeVisible();
@@ -118,18 +145,11 @@ describe("authenticated application shell", () => {
     expect(screen.getByText("Viewer")).toBeVisible();
     expect(
       screen.getByText(
-        "Your review workspace will appear here as products and repositories are configured.",
+        "Review your authenticated identity and the current VerboFlex service status.",
       ),
     ).toBeVisible();
     expect(
-      screen.getByRole("heading", {
-        name: "Workspace ready for configuration",
-      }),
-    ).toBeVisible();
-    expect(
-      screen.getByText(
-        "Phase 1 confirms the platform shell, session, and services. Product and translation workflows will appear after configuration is added.",
-      ),
+      screen.getByRole("heading", { name: "Administration summary" }),
     ).toBeVisible();
   });
 
@@ -402,9 +422,7 @@ describe("authenticated application shell", () => {
 
     render(<App />);
 
-    expect(
-      screen.getByRole("heading", { name: "Workspace overview" }),
-    ).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Workspace" })).toBeVisible();
     expect(screen.getByText("Person Example")).toBeVisible();
     expect(readSystemStatusMock).toHaveBeenCalledWith({
       auth: "ordinary-server-token",
@@ -413,20 +431,23 @@ describe("authenticated application shell", () => {
 
   it("exposes a quiet desktop navigation landmark with only the current workspace", () => {
     render(
-      <AppShell
-        accessToken="ordinary-server-token"
-        onLogout={vi.fn()}
-        principal={principal}
-      />,
+      <MemoryRouter initialEntries={["/"]}>
+        <AppShell
+          accessToken="ordinary-server-token"
+          onLogout={vi.fn()}
+          principal={ordinaryPrincipal}
+        />
+      </MemoryRouter>,
     );
 
     const navigation = screen.getByRole("navigation", {
       name: "Primary navigation",
     });
     expect(navigation).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Workspace overview" }),
-    ).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Workspace" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
     expect(screen.queryByRole("button", { name: /product/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /repository/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /review/i })).toBeNull();
@@ -437,11 +458,13 @@ describe("authenticated application shell", () => {
     setViewportWidth(375);
     const user = userEvent.setup();
     render(
-      <AppShell
-        accessToken="ordinary-server-token"
-        onLogout={vi.fn()}
-        principal={principal}
-      />,
+      <MemoryRouter initialEntries={["/"]}>
+        <AppShell
+          accessToken="ordinary-server-token"
+          onLogout={vi.fn()}
+          principal={ordinaryPrincipal}
+        />
+      </MemoryRouter>,
     );
 
     const trigger = screen.getByRole("button", { name: "Open navigation" });
@@ -459,7 +482,7 @@ describe("authenticated application shell", () => {
       within(sheet).getByRole("navigation", { name: "Primary navigation" }),
     ).toBeVisible();
     expect(
-      within(sheet).getByRole("button", { name: "Workspace overview" }),
+      within(sheet).getByRole("link", { name: "Workspace" }),
     ).toHaveAttribute("aria-current", "page");
 
     await user.keyboard("{Escape}");
@@ -503,7 +526,7 @@ describe("authenticated application shell", () => {
       within(navigation)
         .getAllByRole("link")
         .map((link) => link.textContent?.trim()),
-    ).toEqual(["Products", "Users", "Bitbucket"]);
+    ).toEqual(["Workspace", "Products", "Users", "Bitbucket"]);
 
     await user.click(within(navigation).getByRole("link", { name: "Users" }));
 
@@ -559,6 +582,89 @@ describe("authenticated application shell", () => {
     );
     expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
     expect(trigger).toHaveFocus();
+  });
+
+  it.each([
+    ["/", "Workspace"],
+    ["/admin/products", "Products"],
+    ["/admin/products/product-123/preview", "Products"],
+    ["/admin/users", "Users"],
+    ["/admin/bitbucket", "Bitbucket"],
+  ])("marks only %s as the current primary destination", (path, label) => {
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <AppShell
+          accessToken="admin-server-token"
+          onLogout={vi.fn()}
+          principal={principal}
+        >
+          <h1>Current destination</h1>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const navigation = screen.getByRole("navigation", {
+      name: "Primary navigation",
+    });
+    const currentLinks = within(navigation).getAllByRole("link", {
+      current: "page",
+    });
+    expect(currentLinks).toHaveLength(1);
+    expect(currentLinks[0]).toHaveAccessibleName(label);
+  });
+
+  it("closes mobile navigation and focuses the Workspace heading after selection", async () => {
+    setViewportWidth(320);
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={["/admin/users"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <AppShell
+                accessToken="admin-server-token"
+                onLogout={vi.fn()}
+                principal={principal}
+              />
+            }
+          />
+          <Route
+            path="/admin/*"
+            element={
+              <AppShell
+                accessToken="admin-server-token"
+                onLogout={vi.fn()}
+                principal={principal}
+              >
+                <h1>Users</h1>
+              </AppShell>
+            }
+          />
+        </Routes>
+        <LocationMarker />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open navigation" }));
+    const sheet = await screen.findByRole("dialog", { name: "Navigation" });
+    expect(
+      within(sheet).getAllByRole("link", { current: "page" }),
+    ).toHaveLength(1);
+    expect(
+      within(sheet).getByRole("link", { name: "Users", current: "page" }),
+    ).toBeVisible();
+
+    await user.click(within(sheet).getByRole("link", { name: "Workspace" }));
+
+    expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
+    expect(screen.getByTestId("shell-current-route")).toHaveTextContent("/");
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "Workspace", level: 1 }),
+      ).toHaveFocus();
+    });
   });
 
   it("freezes the 320, 768, 1024, and wide shell containment contracts", () => {

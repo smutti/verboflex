@@ -12,6 +12,7 @@ import {
   listAdminRevisionMappings,
   readCurrentUser,
   readSystemStatus,
+  type RoleName,
 } from "./api/client";
 import { ProductDetailLayout } from "./features/admin/products/ProductDetailLayout";
 import { SessionProvider } from "./features/auth/session";
@@ -284,37 +285,50 @@ describe("session routes", () => {
     expect(adminRequest).toHaveBeenCalledOnce();
   });
 
-  it("denies every direct administrator route before mounting admin requests", async () => {
-    const adminRequest = vi.fn();
-    const user = userEvent.setup();
+  it.each<[RoleName, string]>([
+    ["product_manager_reviewer", "/admin/products/private-candidate"],
+    ["translator", "/admin/users"],
+    ["viewer", "/admin/bitbucket"],
+  ])(
+    "denies direct %s navigation to %s before and after returning to Workspace",
+    async (role, initialEntry) => {
+      const adminRequest = vi.fn();
+      const user = userEvent.setup();
 
-    renderRoutes(
-      {
-        status: "authenticated",
-        accessToken: "ordinary-server-token",
-        principal: ordinaryPrincipal,
-      },
-      "/admin/products/private-candidate",
-      adminRequest,
-    );
+      renderRoutes(
+        {
+          status: "authenticated",
+          accessToken: `${role}-server-token`,
+          principal: { ...ordinaryPrincipal, roles: [role] },
+        },
+        initialEntry,
+        adminRequest,
+      );
 
-    const heading = await screen.findByRole("heading", {
-      name: "Administrator access required",
-    });
-    expect(heading).toHaveFocus();
-    expect(
-      screen.getByText(
-        "Your account does not have permission to open administration.",
-      ),
-    ).toBeVisible();
-    expect(adminRequest).not.toHaveBeenCalled();
-    expect(screen.getByTestId("current-route")).toHaveTextContent(
-      "/admin/products/private-candidate",
-    );
+      const heading = await screen.findByRole("heading", {
+        name: "Administrator access required",
+      });
+      expect(heading).toHaveFocus();
+      expect(
+        screen.getByText(
+          "Your account does not have permission to open administration.",
+        ),
+      ).toBeVisible();
+      expect(adminRequest).not.toHaveBeenCalled();
+      expect(screen.getByTestId("current-route")).toHaveTextContent(
+        initialEntry,
+      );
 
-    await user.click(screen.getByRole("link", { name: "Return to workspace" }));
-    expect(screen.getByTestId("current-route")).toHaveTextContent("/");
-  });
+      await user.click(
+        screen.getByRole("link", { name: "Return to workspace" }),
+      );
+      expect(screen.getByTestId("current-route")).toHaveTextContent("/");
+      expect(
+        screen.getByRole("heading", { name: "Ordinary route" }),
+      ).toBeVisible();
+      expect(adminRequest).not.toHaveBeenCalled();
+    },
+  );
 
   it("announces administrator loading without mounting protected content", () => {
     const adminRequest = vi.fn();
@@ -519,7 +533,7 @@ describe("session routes", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: "Workspace overview" }),
+      await screen.findByRole("heading", { name: "Workspace" }),
     ).toBeVisible();
     await user.click(screen.getByRole("link", { name: "Users" }));
     expect(

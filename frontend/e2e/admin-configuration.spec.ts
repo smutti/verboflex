@@ -569,6 +569,63 @@ async function installAdminApi(page: Page, state: AdminMockState) {
   });
 }
 
+type NonAdminRole = "product_manager_reviewer" | "translator" | "viewer";
+
+async function installRoleAwareWorkspaceApi(
+  page: Page,
+  role: NonAdminRole,
+  adminRequestTrace: string[],
+) {
+  let statusFailures = 1;
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const { pathname } = new URL(request.url());
+    const method = request.method();
+
+    if (pathname === "/api/v1/auth/refresh" && method === "POST") {
+      return json(route, {
+        access_token: `${role}-memory-only-access-token`,
+        expires_in: 900,
+        must_change_password: false,
+        token_type: "bearer",
+      });
+    }
+    if (pathname === "/api/v1/users/me" && method === "GET") {
+      return json(route, {
+        display_name: `${role} e2e user`,
+        email: `${role}@verboflex.test`,
+        id: `${role}-user`,
+        is_active: true,
+        must_change_password: false,
+        roles: [role],
+      });
+    }
+    if (pathname === "/api/v1/system/status" && method === "GET") {
+      if (statusFailures > 0) {
+        statusFailures -= 1;
+        return json(route, { detail: "bounded status failure" }, 503);
+      }
+      return json(route, {
+        api: "online",
+        checked_at: now,
+        database: "online",
+        redis: "online",
+        worker: "online",
+      });
+    }
+    if (pathname.startsWith("/api/v1/admin/")) {
+      adminRequestTrace.push(`${method} ${pathname}`);
+      return json(route, { detail: "Forbidden" }, 403);
+    }
+
+    return json(
+      route,
+      { detail: `Unhandled role-aware route: ${method} ${pathname}` },
+      501,
+    );
+  });
+}
+
 async function expectNoPageOverflow(page: Page) {
   const widths = await page.evaluate(() => ({
     body: document.body.scrollWidth,
@@ -606,6 +663,94 @@ async function expectNoCredentialResidue(page: Page) {
 async function chooseSelect(page: Page, label: string, option: string) {
   await page.getByLabel(label, { exact: true }).click();
   await page.getByRole("option", { name: option, exact: true }).click();
+}
+
+test("role-aware Workspace navigation stays location-authoritative on desktop and mobile", async ({
+  page,
+}) => {
+  const state = defaultState();
+  await installAdminApi(page, state);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/admin/users");
+  await expect(
+    page.getByRole("heading", { name: "Users", level: 1 }),
+  ).toBeVisible();
+
+  const desktopNavigation = page
+    .locator("aside")
+    .getByRole("navigation", { name: "Primary navigation" });
+  await expect(desktopNavigation.locator('[aria-current="page"]')).toHaveCount(
+    1,
+  );
+  await expect(
+    desktopNavigation.getByRole("link", { name: "Users" }),
+  ).toHaveAttribute("aria-current", "page");
+  const desktopWorkspace = desktopNavigation.getByRole("link", {
+    name: "Workspace",
+  });
+  await expect(desktopWorkspace).toHaveAttribute("href", "/");
+  await desktopWorkspace.click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(
+    page.getByRole("heading", { name: "Workspace", level: 1 }),
+  ).toBeVisible();
+  await expect(
+    desktopNavigation.getByRole("link", { name: "Workspace" }),
+  ).toHaveAttribute("aria-current", "page");
+
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/admin/bitbucket");
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  const sheet = page.getByRole("dialog", { name: "Navigation" });
+  await expect(sheet.locator('[aria-current="page"]')).toHaveCount(1);
+  await expect(sheet.getByRole("link", { name: "Bitbucket" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await sheet.getByRole("link", { name: "Workspace" }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(page).toHaveURL(/\/$/);
+  await expect(
+    page.getByRole("heading", { name: "Workspace", level: 1 }),
+  ).toBeFocused();
+  await expectNoPageOverflow(page);
+});
+
+for (const role of [
+  "product_manager_reviewer",
+  "translator",
+  "viewer",
+] as const) {
+  test(`non-admin admin-request denial: ${role} is denied before child loaders and after Workspace retry`, async ({
+    page,
+  }) => {
+    const adminRequestTrace: string[] = [];
+    await installRoleAwareWorkspaceApi(page, role, adminRequestTrace);
+    await page.goto("/admin/products/private-candidate");
+
+    await expect(
+      page.getByRole("heading", {
+        name: "Administrator access required",
+        level: 1,
+      }),
+    ).toBeFocused();
+    expect(adminRequestTrace).toEqual([]);
+
+    await page.getByRole("link", { name: "Return to workspace" }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(
+      page.getByRole("heading", { name: "Workspace", level: 1 }),
+    ).toBeVisible();
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText(
+      "We could not reach the API. Check that the backend is running, then retry the connection.",
+    );
+    expect(adminRequestTrace).toEqual([]);
+
+    await page.getByRole("button", { name: "Retry connection" }).click();
+    await expect(page.getByText("API online")).toBeVisible();
+    expect(adminRequestTrace).toEqual([]);
+  });
 }
 
 test("product collection preserves API order across all states and responsive projections", async ({
