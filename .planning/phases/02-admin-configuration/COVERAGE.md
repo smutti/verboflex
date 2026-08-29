@@ -4,9 +4,9 @@
 
 | capability | decision | reason |
 |---|---|---|
-| oauth-authorization-code-start | INTEGRATE | |
-| oauth-authorization-code-exchange | INTEGRATE | |
-| oauth-refresh-token-exchange-and-rotation | INTEGRATE | |
+| oauth-client-credentials-acquisition | INTEGRATE | |
+| oauth-client-credentials-reacquisition | INTEGRATE | |
+| oauth-authorization-code-callback-and-refresh-token-flows | OPT-OUT | Server-to-server client credentials has no browser authorization-code redirect or callback code exchange and grants no refresh-token authority; reacquisition uses a new client_credentials exchange. |
 | oauth-effective-scope-inspection | INTEGRATE | |
 | repository-metadata-by-workspace-and-slug | INTEGRATE | |
 | branch-listing-with-provider-pagination | INTEGRATE | |

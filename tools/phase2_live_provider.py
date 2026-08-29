@@ -33,6 +33,7 @@ _REQUIRED_KEYS = (
     "BITBUCKET_REPOSITORY_SLUG",
     "BITBUCKET_BRANCH",
 )
+_DIAGNOSTIC_STAGE = "configuration"
 
 
 class LiveSmokeRejected(RuntimeError):
@@ -49,7 +50,7 @@ class _RejectRedirects(HTTPRedirectHandler):
 
 
 def _reject() -> NoReturn:
-    raise LiveSmokeRejected("local production API smoke rejected")
+    raise LiveSmokeRejected(f"local production API smoke rejected during {_DIAGNOSTIC_STAGE}")
 
 
 def _skip() -> NoReturn:
@@ -321,15 +322,20 @@ def _repository_id(api: LocalApi, config: LiveSmokeConfig, session_token: str) -
 
 
 def run(path: Path) -> None:
+    global _DIAGNOSTIC_STAGE
+
     config = LiveSmokeConfig.from_dotenv(path)
     api = LocalApi(config.base_url)
+    _DIAGNOSTIC_STAGE = "administrator-login"
     session_token = _login(api, config)
+    _DIAGNOSTIC_STAGE = "initial-connect"
     connected = api.request(
         "POST",
         "/api/v1/admin/bitbucket/connect",
         session_token=session_token,
     ).json()
     _assert_connection(connected, "Connected")
+    _DIAGNOSTIC_STAGE = "initial-status"
     _assert_connection(
         api.request(
             "GET",
@@ -338,7 +344,63 @@ def run(path: Path) -> None:
         ).json(),
         "Connected",
     )
+    _DIAGNOSTIC_STAGE = "reconnect"
+    _assert_connection(
+        api.request(
+            "POST",
+            "/api/v1/admin/bitbucket/reconnect",
+            session_token=session_token,
+        ).json(),
+        "Connected",
+    )
+    _DIAGNOSTIC_STAGE = "reconnect-status"
+    _assert_connection(
+        api.request(
+            "GET",
+            "/api/v1/admin/bitbucket",
+            session_token=session_token,
+        ).json(),
+        "Connected",
+    )
+    _DIAGNOSTIC_STAGE = "first-revoke"
+    _assert_connection(
+        api.request(
+            "POST",
+            "/api/v1/admin/bitbucket/revoke",
+            session_token=session_token,
+        ).json(),
+        "Disconnected",
+    )
+    _DIAGNOSTIC_STAGE = "revoked-status"
+    _assert_connection(
+        api.request(
+            "GET",
+            "/api/v1/admin/bitbucket",
+            session_token=session_token,
+        ).json(),
+        "Disconnected",
+    )
+    _DIAGNOSTIC_STAGE = "reacquire"
+    _assert_connection(
+        api.request(
+            "POST",
+            "/api/v1/admin/bitbucket/connect",
+            session_token=session_token,
+        ).json(),
+        "Connected",
+    )
+    _DIAGNOSTIC_STAGE = "reacquired-status"
+    _assert_connection(
+        api.request(
+            "GET",
+            "/api/v1/admin/bitbucket",
+            session_token=session_token,
+        ).json(),
+        "Connected",
+    )
+    _DIAGNOSTIC_STAGE = "repository-registration"
     repository_id = _repository_id(api, config, session_token)
+    _DIAGNOSTIC_STAGE = "branch-list"
     branches = api.request(
         "GET",
         f"/api/v1/admin/repositories/{repository_id}/branches?limit=100",
@@ -349,6 +411,7 @@ def run(path: Path) -> None:
         item.get("name") for item in items if isinstance(item, dict)
     }:
         _reject()
+    _DIAGNOSTIC_STAGE = "source-read"
     sources = api.request(
         "GET",
         (
@@ -359,6 +422,7 @@ def run(path: Path) -> None:
     ).json()
     if not isinstance(sources.get("commit_hash"), str) or not sources.get("files"):
         _reject()
+    _DIAGNOSTIC_STAGE = "final-revoke"
     _assert_connection(
         api.request(
             "POST",
@@ -367,18 +431,11 @@ def run(path: Path) -> None:
         ).json(),
         "Disconnected",
     )
+    _DIAGNOSTIC_STAGE = "terminal-status"
     _assert_connection(
         api.request(
-            "POST",
-            "/api/v1/admin/bitbucket/reconnect",
-            session_token=session_token,
-        ).json(),
-        "Connected",
-    )
-    _assert_connection(
-        api.request(
-            "POST",
-            "/api/v1/admin/bitbucket/revoke",
+            "GET",
+            "/api/v1/admin/bitbucket",
             session_token=session_token,
         ).json(),
         "Disconnected",
@@ -394,6 +451,9 @@ def main() -> int:
     except LiveSmokeSkipped:
         print("phase2-live SKIP: opt-in or local server configuration is unavailable")
         return 0
+    except LiveSmokeRejected as error:
+        print(f"phase2-live error: {error}", file=sys.stderr)
+        return 1
     except Exception:
         print("phase2-live error: production API smoke rejected", file=sys.stderr)
         return 1

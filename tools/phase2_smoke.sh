@@ -117,6 +117,20 @@ wait_for_worker() {
   die "Celery worker readiness timed out"
 }
 
+wait_for_mock_provider() {
+  local deadline
+  deadline=$((SECONDS + 180))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if compose_active exec -T backend python -c \
+      'from urllib.request import urlopen; raise SystemExit(0 if urlopen("https://bitbucket.org/_health", timeout=2).status == 200 else 1)' \
+      >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  die "mock provider readiness timed out"
+}
+
 make_tls_material() {
   local config="$SMOKE_RUNTIME_DIR/openssl.cnf"
   printf '%s\n' \
@@ -128,7 +142,9 @@ make_tls_material() {
     'CN = VerboFlex Phase 2 Smoke CA' \
     '[v3_ca]' \
     'basicConstraints = critical,CA:TRUE' \
-    'keyUsage = critical,keyCertSign,cRLSign' >"$config"
+    'keyUsage = critical,keyCertSign,cRLSign' \
+    'subjectKeyIdentifier = hash' \
+    'authorityKeyIdentifier = keyid:always' >"$config"
   openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
     -keyout "$SMOKE_RUNTIME_DIR/ca.key" -out "$SMOKE_RUNTIME_DIR/ca.pem" \
     -config "$config" >/dev/null 2>&1
@@ -145,6 +161,7 @@ make_tls_material() {
     'basicConstraints = critical,CA:FALSE' \
     'keyUsage = critical,digitalSignature,keyEncipherment' \
     'extendedKeyUsage = serverAuth' \
+    'authorityKeyIdentifier = keyid,issuer' \
     'subjectAltName = @alt_names' \
     '[alt_names]' \
     'DNS.1 = api.bitbucket.org' \
@@ -155,7 +172,8 @@ make_tls_material() {
   openssl x509 -req -days 1 -sha256 \
     -in "$SMOKE_RUNTIME_DIR/server.csr" \
     -CA "$SMOKE_RUNTIME_DIR/ca.pem" -CAkey "$SMOKE_RUNTIME_DIR/ca.key" \
-    -CAcreateserial -out "$SMOKE_RUNTIME_DIR/server.pem" \
+    -CAcreateserial -CAserial "$SMOKE_RUNTIME_DIR/ca.srl" \
+    -out "$SMOKE_RUNTIME_DIR/server.pem" \
     -extensions server_ext -extfile "$config" >/dev/null 2>&1
   chmod 600 "$SMOKE_RUNTIME_DIR"/*.key "$SMOKE_RUNTIME_DIR"/*.pem
 }
@@ -312,7 +330,7 @@ import sys
 rows = [json.loads(line) for line in open(sys.argv[1], encoding="utf-8") if line.strip()]
 assert rows, "provider audit is empty"
 exchanges = [row for row in rows if row["category"] == "oauth-token-exchange"]
-assert len(exchanges) == 2
+assert len(exchanges) == 3
 assert all(row["grant_type"] == "client_credentials" for row in exchanges)
 assert all(row["effective_scope"] == "repository" for row in exchanges)
 assert not [row for row in rows if row["category"] == "forbidden-mutation"]
@@ -371,10 +389,14 @@ run_mock_live_provider() {
   configure_mock_provider
   preflight
   prepare_base_stack
+  wait_for_mock_provider
   bootstrap_admin
-  "$BACKEND_ROOT/.venv/bin/python" "$REPO_ROOT/tools/phase2_live_provider.py" \
+  if ! "$BACKEND_ROOT/.venv/bin/python" "$REPO_ROOT/tools/phase2_live_provider.py" \
     "$SMOKE_PROBE_ENV_FILE" >"$SMOKE_RUNTIME_DIR/stdout.log" \
-    2>"$SMOKE_RUNTIME_DIR/stderr.log"
+    2>"$SMOKE_RUNTIME_DIR/stderr.log"; then
+    sed -n '1p' "$SMOKE_RUNTIME_DIR/stderr.log" >&2
+    die "production API provider probe rejected"
+  fi
   grep -Fq 'phase2 live provider production API smoke: PASS' "$SMOKE_RUNTIME_DIR/stdout.log" \
     || die "production API provider probe did not pass"
   verify_mock_audit
