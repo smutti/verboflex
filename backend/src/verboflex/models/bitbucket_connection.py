@@ -25,8 +25,10 @@ class BitbucketConnection(Base):
         CheckConstraint("id = 1", name="singleton_id"),
         CheckConstraint("generation >= 0", name="generation_non_negative"),
         CheckConstraint(
-            "(access_token_ciphertext IS NULL) = (refresh_token_ciphertext IS NULL)",
-            name="credential_pair_state",
+            "(access_token_ciphertext IS NULL AND refresh_token_ciphertext IS NULL) OR "
+            "(access_token_ciphertext IS NOT NULL AND refresh_token_ciphertext IS NULL) OR "
+            "(access_token_ciphertext IS NOT NULL AND refresh_token_ciphertext IS NOT NULL)",
+            name="credential_state",
         ),
     )
 

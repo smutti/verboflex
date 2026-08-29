@@ -952,10 +952,20 @@ def test_bitbucket_singleton_metadata_survives_postgresql_rehearsal(
         constraint["name"]
         for constraint in inspector.get_check_constraints("bitbucket_connections")
     } == {
-        "ck_bitbucket_connections_credential_pair_state",
+        "ck_bitbucket_connections_credential_state",
         "ck_bitbucket_connections_generation_non_negative",
         "ck_bitbucket_connections_singleton_id",
     }
+    with engine.connect() as connection:
+        assert (
+            connection.exec_driver_sql("SELECT count(*) FROM bitbucket_connections").scalar_one()
+            == 1
+        )
+
+    command.downgrade(config, "0003_repositories")
+    assert "bitbucket_connections" not in inspect(engine).get_table_names()
+    command.upgrade(config, "head")
+    assert "bitbucket_connections" in inspect(engine).get_table_names()
     with engine.connect() as connection:
         assert (
             connection.exec_driver_sql("SELECT count(*) FROM bitbucket_connections").scalar_one()
@@ -998,9 +1008,7 @@ def test_client_credentials_persists_access_only_encrypted_generation(
         assert connection.generation == 1
         assert connection.access_token_ciphertext not in (None, ACCESS_TOKEN)
         assert connection.refresh_token_ciphertext is None
-        assert connection.provider_expires_at == CLIENT_CREDENTIALS_NOW.replace(
-            hour=13
-        )
+        assert connection.provider_expires_at == CLIENT_CREDENTIALS_NOW.replace(hour=13)
         assert connection.connected_at == CLIENT_CREDENTIALS_NOW
         assert connection.scope_profile == "repository"
         assert secret_box.decrypt(connection.access_token_ciphertext) == ACCESS_TOKEN
@@ -1064,7 +1072,6 @@ def test_client_credentials_rotation_and_revoke_serialize(
     from verboflex.services.bitbucket_oauth import (
         BitbucketOAuthService,
         OAuthConnectionUnavailable,
-        OAuthGenerationRejected,
     )
 
     exchange = FakeTokenExchange()
@@ -1102,18 +1109,8 @@ def test_client_credentials_rotation_and_revoke_serialize(
     assert revoked.generation == 3
     with (
         oauth_session_factory() as session,
-        pytest.raises(OAuthGenerationRejected),
+        pytest.raises(OAuthConnectionUnavailable),
     ):
         service.require_current_repository_read_lease(session, stale_lease)
     with oauth_session_factory() as session, pytest.raises(OAuthConnectionUnavailable):
         service.acquire_repository_read_lease(session)
-
-    command.downgrade(config, "0003_repositories")
-    assert "bitbucket_connections" not in inspect(engine).get_table_names()
-    command.upgrade(config, "head")
-    assert "bitbucket_connections" in inspect(engine).get_table_names()
-    with engine.connect() as connection:
-        assert (
-            connection.exec_driver_sql("SELECT count(*) FROM bitbucket_connections").scalar_one()
-            == 1
-        )

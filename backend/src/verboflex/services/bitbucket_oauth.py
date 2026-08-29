@@ -62,7 +62,16 @@ class RedisOAuthStateClient(Protocol):
 
 
 class TokenExchange(Protocol):
-    """Backend-only authorization-code exchange boundary."""
+    """Backend-only provider token exchange boundary."""
+
+    def exchange_client_credentials(
+        self,
+        *,
+        client_id: str,
+        client_secret: str,
+    ) -> Mapping[str, object]:
+        """Acquire one access-only organizational credential."""
+        ...
 
     def exchange_authorization_code(
         self,
@@ -118,6 +127,18 @@ class BitbucketOAuthTokenExchange:
 
     def __init__(self, *, opener: OpenerDirector | None = None) -> None:
         self._opener = opener or build_opener(_RejectRedirects())
+
+    def exchange_client_credentials(
+        self,
+        *,
+        client_id: str,
+        client_secret: str,
+    ) -> Mapping[str, object]:
+        return self._exchange(
+            fields={"grant_type": "client_credentials"},
+            client_id=client_id,
+            client_secret=client_secret,
+        )
 
     def exchange_authorization_code(
         self,
@@ -247,12 +268,14 @@ class BitbucketOAuthService:
         token_exchange: TokenExchange,
         random_bytes: Callable[[int], bytes] = secrets.token_bytes,
         audit_emitter: AuditEventEmitter = emit_audit_event,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._settings = settings
         self._redis = redis_client
         self._token_exchange = token_exchange
         self._random_bytes = random_bytes
         self._audit_emitter = audit_emitter
+        self._clock = clock
         self._client_id, self._client_secret, self._callback_uri = self._require_oauth_settings(
             settings
         )
@@ -358,7 +381,7 @@ class BitbucketOAuthService:
                 )
             has_access = connection.access_token_ciphertext is not None
             has_refresh = connection.refresh_token_ciphertext is not None
-            if has_access != has_refresh:
+            if has_refresh and not has_access:
                 state: Literal[
                     "disconnected",
                     "connected",
@@ -392,6 +415,51 @@ class BitbucketOAuthService:
                 access_token=access_token,
             )
 
+    def acquire_client_credentials(
+        self,
+        session: Session,
+        *,
+        actor_id: UUID | None = None,
+    ) -> BitbucketConnectionStatus:
+        """Acquire and persist one encrypted access-only generation under row lock."""
+        connected_at = self._clock()
+        with session.begin():
+            connection = self._lock_connection(session)
+            try:
+                token_response = self._token_exchange.exchange_client_credentials(
+                    client_id=self._client_id,
+                    client_secret=self._client_secret,
+                )
+                access_token, expires_in = self._require_client_credentials_response(token_response)
+            except OAuthCallbackRejected:
+                raise
+            except Exception as error:
+                raise OAuthConnectionUnavailable(CONNECTION_UNAVAILABLE_MESSAGE) from error
+
+            previous_generation = connection.generation
+            connection.generation += 1
+            connection.access_token_ciphertext = self._secret_box.encrypt(access_token)
+            connection.refresh_token_ciphertext = None
+            connection.scope_profile = REPOSITORY_SCOPE
+            connection.provider_expires_at = connected_at + timedelta(seconds=expires_in)
+            connection.connected_at = connected_at
+            connection.revoked_at = None
+            session.flush()
+            status = BitbucketConnectionStatus(
+                state="connected",
+                generation=connection.generation,
+                scope_profile=REPOSITORY_SCOPE,
+            )
+        if actor_id is not None:
+            self._emit_lifecycle_event(
+                action="bitbucket.connected",
+                actor_id=actor_id,
+                from_generation=previous_generation,
+                to_generation=status.generation,
+                occurred_at=connected_at,
+            )
+        return status
+
     @staticmethod
     def require_current_repository_read_lease(
         session: Session,
@@ -412,7 +480,6 @@ class BitbucketOAuthService:
             or connection.revoked_at is not None
             or connection.scope_profile != REPOSITORY_SCOPE
             or connection.access_token_ciphertext is None
-            or connection.refresh_token_ciphertext is None
         ):
             raise OAuthConnectionUnavailable(CONNECTION_UNAVAILABLE_MESSAGE)
 
@@ -758,3 +825,24 @@ class BitbucketOAuthService:
         ):
             raise OAuthCallbackRejected(CALLBACK_REJECTED_MESSAGE)
         return access_token, refresh_token, expires_in
+
+    @staticmethod
+    def _require_client_credentials_response(
+        token_response: Mapping[str, object],
+    ) -> tuple[str, int]:
+        access_token = token_response.get("access_token")
+        token_type = token_response.get("token_type")
+        scope = token_response.get("scope")
+        expires_in = token_response.get("expires_in")
+        if (
+            not isinstance(access_token, str)
+            or not access_token
+            or not isinstance(token_type, str)
+            or token_type.casefold() != "bearer"
+            or scope != REPOSITORY_SCOPE
+            or not isinstance(expires_in, int)
+            or isinstance(expires_in, bool)
+            or expires_in < 1
+        ):
+            raise OAuthCallbackRejected(CALLBACK_REJECTED_MESSAGE)
+        return access_token, expires_in
