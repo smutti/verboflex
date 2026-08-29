@@ -3,7 +3,7 @@
 ## Outcome
 
 - Gauntlet-status: PASS
-- Source-digest: `ef16933ac828d1448a9b5633343e0c92a51e5297ace503f62e836e451a1c6740`
+- Source-digest: `839c73e40eaa1e7835413b712dfe860b8c97b9c9334715b1a5ba999d43c87cec`
 - Review-status: CLOSED
 - Open-critical-high: 0
 - Live-provider-smoke: PASS — EXACT REPOSITORY SCOPE, 5 GET, ZERO WRITES, LOCAL REVOKE PASS
@@ -27,11 +27,11 @@ is source-bound and closed with no Critical or High blocker.
 - Complete Phase 2 review base: `ce9fbeef86b00f594d1d06e15d3083d623c54095`
 - Canonical source manifest: `tools/phase2_source_manifest.txt`
 - Review artifact: `docs/reviews/phase-02-code-security.md`
-- Review-mode digest: `9e63e9bcf79d17a990c6b99ae81488177a48f55f5784fa45360646967ebaac7f`
+- Review-mode digest: `28715549ef6f348d1ad8e4455401c9d74d83780812cf433d2664374b0eda2096`
 - Candidate canonical digest before the review PASS annotation:
-  `69dcd6bad76cf269981c13068b3ecffc80cf7d08b5a415f1b17e2cd53fc7ca65`
+  `c628cbd7444ef2440a9e4b4c9edccb2e37bfc792fc9cb7b0bcaed41507953166`
 - Final canonical digest after the source-bound review was closed:
-  `ef16933ac828d1448a9b5633343e0c92a51e5297ace503f62e836e451a1c6740`
+  `839c73e40eaa1e7835413b712dfe860b8c97b9c9334715b1a5ba999d43c87cec`
 
 The manifest includes implementation, tests, migrations, deployment contracts,
 lockfiles, verifier scripts, and the closed review. It excludes this evidence report
@@ -59,7 +59,7 @@ exact final command) evidence verification.
 
 | Surface | Result |
 | --- | --- |
-| Backend randomized regression | 706 passed, 0 failures/errors/skips; 49.34 s in the source-identical candidate run |
+| Backend randomized regression | 707 passed, 0 failures/errors/skips; 46.851 s in the source-identical candidate run |
 | Frontend unit/component | 16 files, 183 passed, shuffled seed 220 |
 | Backend type/static | mypy clean across 81 source files; Ruff and Ruff format clean |
 | Frontend type/static/build | TypeScript, ESLint with zero warnings, Prettier, and Vite production build passed |
@@ -70,7 +70,7 @@ exact final command) evidence verification.
 | Frontend polling mutation | 30/30 Stryker mutants killed in the critical delay and stale-authority ranges |
 | Migration and schema | 3 migration tests passed; disposable PostgreSQL upgrade -> downgrade to base -> re-upgrade passed |
 | OpenAPI/generated client | Canonical regeneration/drift check passed |
-| Architecture/provider boundary | 31 architecture, provider-adapter, and OpenAPI tests passed |
+| Architecture/provider boundary | 32 architecture, provider-adapter, and OpenAPI tests passed |
 | Mock provider deployment | 3 repositories, 2 mappings, all 4 formats; 48 GET reads and zero writes |
 | Browser deployment journey | Playwright 4/4 at the 320, 768, 1024, and 1440 width contracts |
 
@@ -115,6 +115,10 @@ following checker defects were exposed and corrected before the recorded candida
   authority boundaries, and focused polling mutation added the exact 29-second edge;
 - a non-contractual complexity gate was removed after it flagged previously approved
   Phase 2 code despite green coverage, mutation, types, and static quality gates.
+- the exact final Compose run exposed an ephemeral host-port selection race; RED/GREEN
+  coverage now retries only Docker's exact address-in-use failure, tears down each
+  isolated attempt, and remains bounded to three attempts while every other error is
+  immediately fatal.
 
 The mocked deployment smoke also exposed a real High-severity defect before closure:
 lease acquisition after a local Bitbucket disconnect escaped bounded adapter error
