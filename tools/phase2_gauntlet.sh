@@ -275,6 +275,15 @@ for forbidden in (
         continue
     raise AssertionError(f"accepted non-canonical coverage path: {forbidden}")
 PY
+  write_phase_secret_policy >"$actual"
+  assert_phase_secret_findings "$actual"
+  printf '%s\n' 'tests/new_surface.py|1|Secret Keyword' >>"$actual"
+  set +e
+  (assert_phase_secret_findings "$actual") >/dev/null 2>&1
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] \
+    || { rm -rf "$fixture"; die "secret policy negative control passed"; }
   rm -rf "$fixture"
   printf 'checker negative controls: PASS\n'
 }
@@ -535,11 +544,57 @@ migrations_openapi() {
   (cd "$FRONTEND_ROOT" && npm run api:check)
 }
 
+write_phase_secret_policy() {
+  {
+    printf '%s\n' \
+      'src/verboflex/auth/principal.py|28|Secret Keyword' \
+      'src/verboflex/auth/principal.py|29|Secret Keyword' \
+      'tests/api/test_admin_users.py|192|Secret Keyword' \
+      'tests/architecture/test_phase2_live_provider_smoke.py|107|Secret Keyword' \
+      'tests/architecture/test_phase2_live_provider_smoke.py|108|Secret Keyword' \
+      'tests/architecture/test_phase2_live_provider_smoke.py|146|Secret Keyword' \
+      'tests/auth/test_bootstrap_admin.py|137|Secret Keyword' \
+      'tests/auth/test_bootstrap_admin.py|148|Secret Keyword' \
+      'tests/auth/test_bootstrap_admin.py|236|Secret Keyword' \
+      'tests/auth/test_bootstrap_admin.py|296|Secret Keyword' \
+      'tests/auth/test_bootstrap_admin.py|411|Secret Keyword' \
+      'tests/auth/test_bootstrap_admin.py|589|Secret Keyword' \
+      'tests/auth/test_bootstrap_admin.py|692|Secret Keyword' \
+      'tests/auth/test_bootstrap_admin.py|770|Secret Keyword' \
+      'tests/integration/test_bitbucket_discovery.py|735|Base64 High Entropy String' \
+      'tests/unit/services/test_admin_users.py|596|Secret Keyword'
+    for line in \
+      40 42 43 44 45 46 47 48 50 51 52 54 55 56 \
+      59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 \
+      76 77 78 79 80 81 84 85 86 89 90 91 92 93 94 95 \
+      96 97 100 101 102 103 104 105 106 107 110 111 112 \
+      113 114 115 116 117 118 119 120 121 132 133 134 135 \
+      136 137 138 139 140 143 144 145 146 147 148 149 150 \
+      151 152 153 154 155 156 157 158 159 160 161 162 163 \
+      164 165 166 167 168 169 170 171 172 173 174 175; do
+      printf '%s|%s|%s\n' \
+        'tests/architecture/test_phase2_gap_closure.py' \
+        "$line" \
+        'Hex High Entropy String'
+    done
+  } | sort
+}
+
+assert_phase_secret_findings() {
+  local findings=$1 expected
+  expected=$(mktemp)
+  write_phase_secret_policy >"$expected"
+  if ! diff -u "$expected" "$findings"; then
+    rm -f "$expected"
+    die "secret findings drifted outside the reviewed false-positive set"
+  fi
+  rm -f "$expected"
+}
+
 scan_phase_secrets() {
-  local files findings expected
+  local files findings
   files=$(mktemp)
   findings=$(mktemp)
-  expected=$(mktemp)
   git -C "$REPO_ROOT" diff --name-only "$PHASE_BASE_COMMIT"..HEAD \
     | grep -Ev '^(backend/uv.lock|frontend/package-lock.json|\.planning/)' >"$files"
   [ -s "$files" ] || die "Phase 2 secret scan selected no files"
@@ -551,19 +606,8 @@ scan_phase_secrets() {
       'import json,sys; d=json.load(open(sys.argv[1])); print("\n".join(sorted(f"{p}|{x[chr(108)+chr(105)+chr(110)+chr(101)+chr(95)+chr(110)+chr(117)+chr(109)+chr(98)+chr(101)+chr(114)]}|{x[chr(116)+chr(121)+chr(112)+chr(101)]}" for p,v in d["results"].items() for x in v)))' \
       /tmp/verboflex-phase02-secrets.json >"$findings"
   )
-  printf '%s\n' \
-    'src/verboflex/auth/principal.py|28|Secret Keyword' \
-    'src/verboflex/auth/principal.py|29|Secret Keyword' \
-    'tests/api/test_admin_users.py|192|Secret Keyword' \
-    'tests/architecture/test_phase2_live_provider_smoke.py|36|Secret Keyword' \
-    'tests/integration/test_bitbucket_discovery.py|735|Base64 High Entropy String' \
-    'tests/unit/services/test_admin_users.py|335|Secret Keyword' \
-    | sort >"$expected"
-  if ! diff -u "$expected" "$findings"; then
-    rm -f "$files" "$findings" "$expected"
-    die "secret findings drifted outside the reviewed false-positive set"
-  fi
-  rm -f "$files" "$findings" "$expected"
+  assert_phase_secret_findings "$findings"
+  rm -f "$files" "$findings"
 }
 
 supply_chain_secrets_licenses() {
