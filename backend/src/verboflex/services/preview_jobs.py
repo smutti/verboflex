@@ -6,11 +6,11 @@ import hashlib
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal, Protocol, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, null, select, update
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from verboflex.localization.preview.core import validate_layout_candidate_mappings
@@ -24,6 +24,7 @@ PREVIEW_DETECTOR_VERSION = "preview-skeleton-v1"
 PREVIEW_LAYOUT_IDENTITY = "automatic-layout-discovery-v1"
 PREVIEW_SOFT_TIME_LIMIT_SECONDS = 60
 PREVIEW_HARD_TIME_LIMIT_SECONDS = 75
+PREVIEW_WATCHDOG_BATCH_SIZE = 100
 MAX_RESULT_BYTES = 1_048_576
 
 PreviewJobState = Literal["queued", "running", "succeeded", "failed", "timed_out"]
@@ -138,6 +139,7 @@ class PreviewJobRecord:
 
 
 PreviewProcessor = Callable[[PreviewJobIdentity], Mapping[str, object]]
+PreviewClock = Callable[[], datetime]
 
 
 def _exact_commit_hash(raw: object) -> str:
@@ -284,6 +286,79 @@ def _matches_started_identity(row: PreviewJob, identity: PreviewJobIdentity) -> 
         return _identity(row) == identity
     except PreviewJobConflict:
         return False
+
+
+def _claim_current_running_attempt(
+    session: Session,
+    *,
+    job_id: UUID,
+    attempt: int,
+    connection_generation: int,
+    finished_at: datetime,
+) -> bool:
+    """Terminalize one exact running UUID/attempt/generation through a database CAS."""
+    terminal_id = session.scalar(
+        update(PreviewJob)
+        .where(
+            PreviewJob.id == job_id,
+            PreviewJob.attempt == attempt,
+            PreviewJob.connection_generation == connection_generation,
+            PreviewJob.state == "running",
+        )
+        .values(
+            state="timed_out",
+            result=null(),
+            error_code="time_limit_exceeded",
+            finished_at=finished_at,
+            updated_at=finished_at,
+        )
+        .returning(PreviewJob.id)
+        .execution_options(synchronize_session=False)
+    )
+    return terminal_id is not None
+
+
+def reconcile_stale_preview_jobs(
+    factory: sessionmaker[Session],
+    *,
+    hard_time_limit_seconds: int,
+    watchdog_grace_seconds: int,
+    clock: PreviewClock = lambda: datetime.now(UTC),
+) -> int:
+    """Claim one indexed batch of stale running attempts and time them out durably."""
+    if hard_time_limit_seconds <= 0 or watchdog_grace_seconds <= 0:
+        raise ValueError("preview watchdog limits must be positive")
+    finished_at = clock()
+    if finished_at.tzinfo is None or finished_at.utcoffset() is None:
+        raise ValueError("preview watchdog clock must be timezone-aware")
+    finished_at = finished_at.astimezone(UTC)
+    cutoff = finished_at - timedelta(seconds=hard_time_limit_seconds + watchdog_grace_seconds)
+    reconciled = 0
+    with factory.begin() as session:
+        attempts = session.execute(
+            select(
+                PreviewJob.id,
+                PreviewJob.attempt,
+                PreviewJob.connection_generation,
+            )
+            .where(
+                PreviewJob.state == "running",
+                PreviewJob.started_at <= cutoff,
+            )
+            .order_by(PreviewJob.started_at, PreviewJob.id)
+            .limit(PREVIEW_WATCHDOG_BATCH_SIZE)
+            .with_for_update(skip_locked=True)
+        ).all()
+        for job_id, attempt, connection_generation in attempts:
+            if _claim_current_running_attempt(
+                session,
+                job_id=job_id,
+                attempt=attempt,
+                connection_generation=connection_generation,
+                finished_at=finished_at,
+            ):
+                reconciled += 1
+    return reconciled
 
 
 def _canonical_identity(
