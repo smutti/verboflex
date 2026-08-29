@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-24-PLAN.md
-last_updated: "2026-08-29T16:22:28.587Z"
+stopped_at: Completed 02-35-PLAN.md
+last_updated: "2026-08-29T16:56:21.053Z"
 last_activity: 2026-08-29
 last_activity_desc: Phase 02 execution started
-state_head: 3f76950c7370079b69c45267116efae4a991f0fc
+state_head: 6c6845affa428af1ff237826c3a9bd5cce7c3ffd
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 53
-  completed_plans: 39
+  completed_plans: 40
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 24 of 38
+Plan: 25 of 38
 Status: Ready to execute
 Last activity: 2026-08-29 — Phase 02 execution started
 
@@ -97,6 +97,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02-admin-configuration P23 | 13min | 2 tasks | 5 files |
 | Phase 02-admin-configuration P22 | 19min | 2 tasks | 9 files |
 | Phase 02-admin-configuration P24 | 25min | 2 tasks | 10 files |
+| Phase 02-admin-configuration P35 | 29min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -244,6 +245,8 @@ Recent decisions affecting current work:
 - [Phase 02]: Keep active and published historical revision graphs immutable with no trigger bypass. — Old and new published configurations must remain authoritative regardless of caller or pointer changes.
 - [Phase 02]: Lock affected revisions then owning Products in stable order before child mutation. — This serializes candidate edits with publication without caller-specific settings.
 - [Phase 02]: Flush publication metadata before switching Product pointers inside the same transaction. — The database trigger sees a candidate metadata transition while rollback preserves atomic publication.
+- [Phase 02]: Keep the live provider probe behind authenticated VerboFlex APIs; only production service code may acquire or hold a provider token.
+- [Phase 02]: Replace exactly three obsolete OAuth coverage keys while preserving the other 41 keys and dispositions.
 
 ### Pending Todos
 
@@ -282,6 +285,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-29T16:22:28.455Z
-Stopped at: Completed 02-24-PLAN.md
+Last session: 2026-08-29T16:56:21.004Z
+Stopped at: Completed 02-35-PLAN.md
 Resume file: None
