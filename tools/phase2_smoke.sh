@@ -353,12 +353,10 @@ run_mock_provider() {
 }
 
 live_provider_gate() {
-  [ "${VERBOFLEX_CONSUMER_VERIFIED:-}" = "consumer verified" ] \
-    || die "live provider smoke requires exact VERBOFLEX_CONSUMER_VERIFIED='consumer verified' authorization"
-  [ -n "${BITBUCKET_CLIENT_ID:-}" ] || die "BITBUCKET_CLIENT_ID is required"
-  [ -n "${BITBUCKET_CLIENT_SECRET:-}" ] || die "BITBUCKET_CLIENT_SECRET is required"
-  [ -n "${BITBUCKET_CALLBACK_URL:-}" ] || die "BITBUCKET_CALLBACK_URL is required"
-  die "live provider smoke remains blocked until the Task 3 continuation supplies its disposable repository identity"
+  local live_env_file="${VERBOFLEX_PHASE2_LIVE_ENV_FILE:-$REPO_ROOT/.env.phase2-live}"
+  [ -x "$BACKEND_ROOT/.venv/bin/python" ] || die "backend Python environment is unavailable"
+  [ -f "$live_env_file" ] || die "secure live provider environment file is unavailable"
+  "$BACKEND_ROOT/.venv/bin/python" "$REPO_ROOT/tools/phase2_live_provider.py" "$live_env_file"
 }
 
 case "${1:-}" in

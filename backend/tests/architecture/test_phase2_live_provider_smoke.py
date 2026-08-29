@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -23,6 +24,7 @@ def _load_live_smoke() -> ModuleType:
     )
     assert specification is not None and specification.loader is not None
     module = importlib.util.module_from_spec(specification)
+    sys.modules[specification.name] = module
     specification.loader.exec_module(module)
     return module
 
@@ -82,12 +84,14 @@ def test_provider_transport_allows_get_only_and_audits_mutation_attempts() -> No
 
     async def exercise() -> None:
         inner = httpx.MockTransport(
-            lambda request: delegated.append(request)
-            or httpx.Response(
-                200,
-                json={"uuid": "{repository-uuid}"},
-                headers={"x-oauth-scopes": "repository"},
-                request=request,
+            lambda request: (
+                delegated.append(request)
+                or httpx.Response(
+                    200,
+                    json={"uuid": "{repository-uuid}"},
+                    headers={"x-oauth-scopes": "repository"},
+                    request=request,
+                )
             )
         )
         audit = live_smoke.ProviderReadAudit()
