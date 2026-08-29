@@ -33,12 +33,13 @@ from verboflex.services.mappings import (
     create_direct_mapping,
     create_separate_mapping,
     list_candidate_mappings,
+    list_revision_mappings,
     update_direct_mapping,
     update_separate_mapping,
 )
 
 router = APIRouter(
-    prefix="/admin/products/{product_id}/candidate/mappings",
+    prefix="/admin/products/{product_id}",
     tags=["admin-mappings"],
 )
 AdminPrincipal = Annotated[Principal, Depends(require_roles(RoleName.ADMIN))]
@@ -127,7 +128,7 @@ def _mutation_error_response(error: MappingMutationError) -> JSONResponse:
 
 
 @router.get(
-    "",
+    "/candidate/mappings",
     operation_id="list_admin_candidate_mappings",
     response_model=AdminMappingListResponse,
     responses=COLLECTION_RESPONSES,
@@ -160,8 +161,47 @@ async def list_admin_candidate_mappings(
     )
 
 
+@router.get(
+    "/revisions/{revision_id}/mappings",
+    operation_id="list_admin_revision_mappings",
+    response_model=AdminMappingListResponse,
+    responses=COLLECTION_RESPONSES,
+)
+async def list_admin_revision_mappings(
+    product_id: UUID,
+    revision_id: UUID,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: str | None = None,
+) -> AdminMappingListResponse:
+    """List one explicitly owned active or candidate revision without mutation."""
+    try:
+        page = list_revision_mappings(
+            session,
+            product_id=product_id,
+            revision_id=revision_id,
+            limit=limit,
+            cursor=cursor,
+        )
+    except InvalidMappingCursor as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid cursor",
+        ) from error
+    except MappingNotFound as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Mapping revision unavailable",
+        ) from error
+    return AdminMappingListResponse(
+        items=[_response(record) for record in page.items],
+        next_cursor=page.next_cursor,
+    )
+
+
 @router.post(
-    "",
+    "/candidate/mappings",
     operation_id="create_admin_candidate_mapping",
     status_code=status.HTTP_201_CREATED,
     response_model=AdminMappingResponse,
@@ -218,7 +258,7 @@ async def create_admin_candidate_mapping(
 
 
 @router.patch(
-    "/{mapping_id}",
+    "/candidate/mappings/{mapping_id}",
     operation_id="update_admin_candidate_mapping",
     response_model=AdminMappingResponse,
     responses=MUTATION_RESPONSES,

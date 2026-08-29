@@ -665,8 +665,7 @@ def test_revision_mapping_read_is_owned_cursor_faithful_and_mutation_free(
     second_page = asyncio.run(
         _request(
             "GET",
-            path=_revision_mapping_path(product_id, candidate_id)
-            + f"?limit=1&cursor={cursor}",
+            path=_revision_mapping_path(product_id, candidate_id) + f"?limit=1&cursor={cursor}",
             access_token=admin_token,
         )
     )

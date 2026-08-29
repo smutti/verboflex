@@ -430,17 +430,13 @@ def _nullable_after(
     )
 
 
-def list_candidate_mappings(
+def _list_revision_mapping_page(
     session: Session,
     *,
-    product_id: UUID,
-    limit: int = DEFAULT_MAPPING_PAGE_SIZE,
-    cursor: str | None = None,
+    revision: ProductRevision,
+    limit: int,
+    position: _MappingCursor | None,
 ) -> MappingPage:
-    """List the current candidate in the exact topology/repository/branch tuple order."""
-    if not 1 <= limit <= MAX_MAPPING_PAGE_SIZE:
-        raise ValueError("invalid page size")
-    position = _decode_cursor(cursor) if cursor is not None else None
     primary_side = aliased(ProductMappingRepositorySide, name="primary_mapping_side")
     translations_side = aliased(
         ProductMappingRepositorySide,
@@ -452,7 +448,103 @@ def list_candidate_mappings(
     )
     primary_branch = primary_side.source_branch.collate("C")
     translations_branch = translations_side.source_branch.collate("C")
+    if position is not None and position.revision_id != revision.id:
+        raise InvalidMappingCursor("invalid cursor")
 
+    statement = (
+        _mapping_statement()
+        .join(
+            primary_side,
+            and_(
+                primary_side.mapping_id == ProductRepositoryMapping.id,
+                or_(
+                    and_(
+                        ProductRepositoryMapping.topology == "direct",
+                        primary_side.role == "direct",
+                    ),
+                    and_(
+                        ProductRepositoryMapping.topology == "separate",
+                        primary_side.role == "keys",
+                    ),
+                ),
+            ),
+        )
+        .outerjoin(
+            translations_side,
+            and_(
+                translations_side.mapping_id == ProductRepositoryMapping.id,
+                translations_side.role == "translations",
+            ),
+        )
+        .where(ProductRepositoryMapping.revision_id == revision.id)
+    )
+    if position is not None:
+        after_mapping_id = ProductRepositoryMapping.id > position.mapping_id
+        after_translations_branch = _nullable_after(
+            translations_branch,
+            position.translations_source_branch,
+            after_mapping_id,
+        )
+        after_translations_repository = _nullable_after(
+            cast(ColumnElement[Any], translations_side.repository_id),
+            position.translations_repository_id,
+            after_translations_branch,
+        )
+        after_primary_branch = or_(
+            primary_branch > position.primary_source_branch,
+            and_(
+                primary_branch == position.primary_source_branch,
+                after_translations_repository,
+            ),
+        )
+        after_primary_repository = or_(
+            primary_side.repository_id > position.primary_repository_id,
+            and_(
+                primary_side.repository_id == position.primary_repository_id,
+                after_primary_branch,
+            ),
+        )
+        statement = statement.where(
+            or_(
+                topology_rank > position.topology_rank,
+                and_(
+                    topology_rank == position.topology_rank,
+                    after_primary_repository,
+                ),
+            )
+        )
+    mappings = list(
+        session.execute(
+            statement.order_by(
+                topology_rank,
+                primary_side.repository_id,
+                primary_branch,
+                translations_side.repository_id.asc().nulls_last(),
+                translations_branch.asc().nulls_last(),
+                ProductRepositoryMapping.id,
+            ).limit(limit + 1)
+        )
+        .unique()
+        .scalars()
+    )
+    records = tuple(
+        _record(mapping, candidate_version=revision.version) for mapping in mappings[:limit]
+    )
+    next_cursor = _encode_cursor(_cursor_for_record(records[-1])) if len(mappings) > limit else None
+    return MappingPage(items=records, next_cursor=next_cursor)
+
+
+def list_candidate_mappings(
+    session: Session,
+    *,
+    product_id: UUID,
+    limit: int = DEFAULT_MAPPING_PAGE_SIZE,
+    cursor: str | None = None,
+) -> MappingPage:
+    """List the current candidate in the exact topology/repository/branch tuple order."""
+    if not 1 <= limit <= MAX_MAPPING_PAGE_SIZE:
+        raise ValueError("invalid page size")
+    position = _decode_cursor(cursor) if cursor is not None else None
     with session.begin():
         product = session.get(Product, product_id)
         if product is None or product.candidate_revision_id is None:
@@ -460,92 +552,47 @@ def list_candidate_mappings(
         candidate = session.get(ProductRevision, product.candidate_revision_id)
         if candidate is None or candidate.is_published:
             raise MappingNotFound("candidate unavailable")
-        if position is not None and position.revision_id != candidate.id:
-            raise InvalidMappingCursor("invalid cursor")
+        return _list_revision_mapping_page(
+            session,
+            revision=candidate,
+            limit=limit,
+            position=position,
+        )
 
-        statement = (
-            _mapping_statement()
-            .join(
-                primary_side,
-                and_(
-                    primary_side.mapping_id == ProductRepositoryMapping.id,
-                    or_(
-                        and_(
-                            ProductRepositoryMapping.topology == "direct",
-                            primary_side.role == "direct",
-                        ),
-                        and_(
-                            ProductRepositoryMapping.topology == "separate",
-                            primary_side.role == "keys",
-                        ),
-                    ),
-                ),
+
+def list_revision_mappings(
+    session: Session,
+    *,
+    product_id: UUID,
+    revision_id: UUID,
+    limit: int = DEFAULT_MAPPING_PAGE_SIZE,
+    cursor: str | None = None,
+) -> MappingPage:
+    """List one explicitly owned active or candidate revision without mutation."""
+    if not 1 <= limit <= MAX_MAPPING_PAGE_SIZE:
+        raise ValueError("invalid page size")
+    position = _decode_cursor(cursor) if cursor is not None else None
+    with session.begin():
+        product = session.get(Product, product_id)
+        if product is None or revision_id not in {
+            product.active_revision_id,
+            product.candidate_revision_id,
+        }:
+            raise MappingNotFound("revision unavailable")
+        revision = session.scalar(
+            select(ProductRevision).where(
+                ProductRevision.id == revision_id,
+                ProductRevision.product_id == product.id,
             )
-            .outerjoin(
-                translations_side,
-                and_(
-                    translations_side.mapping_id == ProductRepositoryMapping.id,
-                    translations_side.role == "translations",
-                ),
-            )
-            .where(ProductRepositoryMapping.revision_id == candidate.id)
         )
-        if position is not None:
-            after_mapping_id = ProductRepositoryMapping.id > position.mapping_id
-            after_translations_branch = _nullable_after(
-                translations_branch,
-                position.translations_source_branch,
-                after_mapping_id,
-            )
-            after_translations_repository = _nullable_after(
-                cast(ColumnElement[Any], translations_side.repository_id),
-                position.translations_repository_id,
-                after_translations_branch,
-            )
-            after_primary_branch = or_(
-                primary_branch > position.primary_source_branch,
-                and_(
-                    primary_branch == position.primary_source_branch,
-                    after_translations_repository,
-                ),
-            )
-            after_primary_repository = or_(
-                primary_side.repository_id > position.primary_repository_id,
-                and_(
-                    primary_side.repository_id == position.primary_repository_id,
-                    after_primary_branch,
-                ),
-            )
-            statement = statement.where(
-                or_(
-                    topology_rank > position.topology_rank,
-                    and_(
-                        topology_rank == position.topology_rank,
-                        after_primary_repository,
-                    ),
-                )
-            )
-        mappings = list(
-            session.execute(
-                statement.order_by(
-                    topology_rank,
-                    primary_side.repository_id,
-                    primary_branch,
-                    translations_side.repository_id.asc().nulls_last(),
-                    translations_branch.asc().nulls_last(),
-                    ProductRepositoryMapping.id,
-                ).limit(limit + 1)
-            )
-            .unique()
-            .scalars()
+        if revision is None:
+            raise MappingNotFound("revision unavailable")
+        return _list_revision_mapping_page(
+            session,
+            revision=revision,
+            limit=limit,
+            position=position,
         )
-        records = tuple(
-            _record(mapping, candidate_version=candidate.version) for mapping in mappings[:limit]
-        )
-        next_cursor = (
-            _encode_cursor(_cursor_for_record(records[-1])) if len(mappings) > limit else None
-        )
-    return MappingPage(items=records, next_cursor=next_cursor)
 
 
 async def create_direct_mapping(
