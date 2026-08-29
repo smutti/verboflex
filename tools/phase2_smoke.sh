@@ -13,6 +13,7 @@ SMOKE_OVERRIDE_FILE=""
 SMOKE_PROBE_ENV_FILE=""
 SMOKE_IMAGE_TAG=""
 SMOKE_BACKEND_URL=""
+SMOKE_FRONTEND_URL=""
 SMOKE_EMAIL="phase02-smoke@example.com"
 SMOKE_TEMP_PASSWORD=""
 SMOKE_NEW_PASSWORD=""
@@ -77,6 +78,7 @@ cleanup() {
   fi
   if [ -n "$SMOKE_IMAGE_TAG" ]; then
     docker image rm "verboflex-backend:$SMOKE_IMAGE_TAG" >/dev/null 2>&1 || true
+    docker image rm "verboflex-frontend:$SMOKE_IMAGE_TAG" >/dev/null 2>&1 || true
   fi
   if [ -n "$runtime_dir" ] && [ -d "$runtime_dir" ]; then
     rm -rf "$runtime_dir"
@@ -207,17 +209,19 @@ make_tls_material() {
 }
 
 initialize_runtime() {
-  local backend_port suffix
+  local backend_port frontend_port suffix
   suffix="$$-$(date +%s)"
-  SMOKE_PROJECT="verboflex_phase02_35_${suffix//-/_}"
-  SMOKE_RUNTIME_DIR=$(mktemp -d /tmp/verboflex-phase02-35.XXXXXX)
+  SMOKE_PROJECT="verboflex_phase02_37_${suffix//-/_}"
+  SMOKE_RUNTIME_DIR=$(mktemp -d /tmp/verboflex-phase02-37.XXXXXX)
   SMOKE_ENV_FILE="$SMOKE_RUNTIME_DIR/owner-only.env"
   SMOKE_OVERRIDE_FILE="$SMOKE_RUNTIME_DIR/mock-provider.yml"
   SMOKE_PROBE_ENV_FILE="$SMOKE_RUNTIME_DIR/local-api-probe.env"
-  SMOKE_IMAGE_TAG="phase02-35-$suffix"
+  SMOKE_IMAGE_TAG="phase02-37-$suffix"
   chmod 700 "$SMOKE_RUNTIME_DIR"
   backend_port=$(random_port)
+  frontend_port=$(random_port)
   SMOKE_BACKEND_URL="http://localhost:$backend_port"
+  SMOKE_FRONTEND_URL="http://localhost:$frontend_port"
   SMOKE_TEMP_PASSWORD="PhaseTwoTemporary-$(openssl rand -hex 10)!"
   SMOKE_NEW_PASSWORD="PhaseTwoOrdinary-$(openssl rand -hex 10)!"
   SMOKE_CLIENT_SECRET="mock-client-secret-$(openssl rand -hex 24)"
@@ -231,12 +235,15 @@ initialize_runtime() {
   )
   printf '%s\n' \
     "VERBOFLEX_BACKEND_PORT=$backend_port" \
+    "VERBOFLEX_FRONTEND_PORT=$frontend_port" \
     "VERBOFLEX_IMAGE_TAG=$SMOKE_IMAGE_TAG" \
+    "VITE_API_BASE_URL=$SMOKE_BACKEND_URL" \
     'VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID=phase2-mock-consumer' \
     "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET=$SMOKE_CLIENT_SECRET" \
     "VERBOFLEX_BITBUCKET_TOKEN_ENCRYPTION_KEYRING=$SMOKE_KEYRING" \
     "PHASE2_RUNTIME_DIR=$SMOKE_RUNTIME_DIR" \
     "PHASE2_REPO_ROOT=$REPO_ROOT" \
+    "PHASE2_FRONTEND_ORIGIN=$SMOKE_FRONTEND_URL" \
     "MOCK_ACCESS_TOKEN=$SMOKE_ACCESS_TOKEN" \
     'VERBOFLEX_PREVIEW_SOFT_TIME_LIMIT_SECONDS=5' \
     'VERBOFLEX_PREVIEW_HARD_TIME_LIMIT_SECONDS=8' \
@@ -275,6 +282,7 @@ configure_mock_provider() {
     '        aliases: [bitbucket.org, api.bitbucket.org]' \
     '  backend:' \
     '    environment:' \
+    '      VERBOFLEX_CORS_ORIGINS: '\''["${PHASE2_FRONTEND_ORIGIN}"]'\''' \
     '      SSL_CERT_FILE: /run/phase2/ca.pem' \
     '    volumes:' \
     '      - ${PHASE2_RUNTIME_DIR}/ca.pem:/run/phase2/ca.pem:ro' \
@@ -330,11 +338,11 @@ preflight() {
 
 prepare_base_stack() {
   local compose_start_log="$SMOKE_RUNTIME_DIR/compose-start.log" rc
-  compose_active build backend >/dev/null
+  compose_active build backend frontend >/dev/null
   compose_active up -d postgres redis >/dev/null
   compose_active run --rm -T backend alembic upgrade head >/dev/null
   set +e
-  compose_active up -d backend worker scheduler >"$compose_start_log" 2>&1
+  compose_active up -d backend worker scheduler frontend >"$compose_start_log" 2>&1
   rc=$?
   set -e
   if [ "$rc" -ne 0 ]; then
@@ -344,8 +352,13 @@ prepare_base_stack() {
     return "$rc"
   fi
   wait_for_url "$SMOKE_BACKEND_URL/api/v1/health" 200 backend
+  wait_for_url "$SMOKE_FRONTEND_URL" 200 frontend
   wait_for_worker
   wait_for_scheduler
+  for service in postgres redis backend worker scheduler frontend; do
+    [ "$(compose_active ps --status running -q "$service" | wc -l | tr -d ' ')" = "1" ] \
+      || die "$service did not remain ready"
+  done
 }
 
 verify_provider_ready() {
@@ -413,6 +426,10 @@ verify_no_secret_surfaces() {
         die "captured evidence exposed seeded secret material"
       fi
     done
+    if [ -d "$SMOKE_RUNTIME_DIR/playwright" ] \
+      && grep -R -a -Fq -- "$secret" "$SMOKE_RUNTIME_DIR/playwright"; then
+      die "Playwright evidence exposed seeded secret material"
+    fi
   done
   for surface in "${traceback_surfaces[@]}"; do
     if [ -f "$surface" ] \
@@ -420,6 +437,44 @@ verify_no_secret_surfaces() {
       die "captured evidence contains credential or ciphertext shaped material"
     fi
   done
+  if [ -d "$SMOKE_RUNTIME_DIR/playwright" ] \
+    && grep -R -a -Eiq \
+      '(VF e2e (reactivation|terminal cursor)|authorization:[[:space:]]*(bearer|basic)|client_secret|refresh_token|gAAAAA[A-Za-z0-9_-]+)' \
+      "$SMOKE_RUNTIME_DIR/playwright"; then
+    die "Playwright evidence contains seeded or credential-shaped material"
+  fi
+}
+
+run_gap_playwright() {
+  local backend_container grep_expression
+  backend_container=$(compose_active ps -q backend)
+  [ -n "$backend_container" ] || die "real backend container is unavailable to Playwright"
+  grep_expression='role-aware Workspace navigation stays location-authoritative|non-admin admin-request denial|100/101 exact branches stay fail-closed|gap-closure mobile wizard traverses|unchanged active revision reactivation uses real backend state|51st mapping preview readiness consumes terminal cursor'
+  (
+    cd "$REPO_ROOT/frontend"
+    PLAYWRIGHT_BASE_URL="$SMOKE_FRONTEND_URL" \
+    PLAYWRIGHT_OUTPUT_DIR="$SMOKE_RUNTIME_DIR/playwright" \
+    E2E_BACKEND_CONTAINER="$backend_container" \
+    E2E_EMAIL="$SMOKE_EMAIL" E2E_TEMP_PASSWORD="$SMOKE_TEMP_PASSWORD" \
+    E2E_PASSWORD="$SMOKE_NEW_PASSWORD" \
+      npm run e2e -- --grep "$grep_expression"
+  )
+}
+
+run_gap_boundaries() {
+  if ! "$BACKEND_ROOT/.venv/bin/python" "$REPO_ROOT/tools/phase2_compose_flow.py" \
+    --gap-boundaries "$SMOKE_BACKEND_URL" "$SMOKE_EMAIL" "$SMOKE_NEW_PASSWORD" \
+    >>"$SMOKE_RUNTIME_DIR/stdout.log" 2>>"$SMOKE_RUNTIME_DIR/stderr.log"; then
+    tail -n 1 "$SMOKE_RUNTIME_DIR/stderr.log" >&2
+    die "0/1/50/51 Compose boundary probe failed"
+  fi
+  grep -Fq 'phase2 gap boundaries: PASS' "$SMOKE_RUNTIME_DIR/stdout.log" \
+    || die "Compose boundary probe did not pass"
+}
+
+reset_provider_fixture_for_e2e() {
+  compose_active exec -T backend python -c \
+    'from verboflex.db.session import SessionFactory; from verboflex.models.bitbucket_connection import BitbucketConnection; session=SessionFactory(); connection=session.get_one(BitbucketConnection, 1); connection.generation=0; connection.access_token_ciphertext=None; connection.refresh_token_ciphertext=None; connection.scope_profile=None; connection.provider_expires_at=None; connection.connected_at=None; connection.revoked_at=None; session.commit(); session.close()'
 }
 
 run_base_client_credentials() {
@@ -451,8 +506,12 @@ run_mock_live_provider() {
   grep -Fq 'phase2 live provider production API smoke: PASS' "$SMOKE_RUNTIME_DIR/stdout.log" \
     || die "production API provider probe did not pass"
   verify_mock_audit
+  run_gap_boundaries
+  verify_mock_audit
+  reset_provider_fixture_for_e2e
+  run_gap_playwright
   verify_no_secret_surfaces
-  printf 'phase2 mocked live-provider production API smoke: PASS\n'
+  printf 'phase2 mocked live-provider production API and browser smoke: PASS\n'
 }
 
 preview_max_terminalization_seconds() {
@@ -477,7 +536,7 @@ wait_for_preview_state() {
       fi
       ;;
     "succeeded")
-      grep -Fq 'phase2 worker-loss retry: PASS' "$SMOKE_RUNTIME_DIR/stdout.log" \
+      grep -Fq 'phase2 worker-loss recovery: PASS' "$SMOKE_RUNTIME_DIR/stdout.log" \
         || die "replacement worker retry did not succeed"
       ;;
     *) die "unsupported worker-loss preview state" ;;
@@ -485,17 +544,18 @@ wait_for_preview_state() {
 }
 
 retry_preview_job() {
+  local timeout_seconds=$1
   if ! "$BACKEND_ROOT/.venv/bin/python" "$REPO_ROOT/tools/phase2_compose_flow.py" \
-    --worker-loss-retry "$SMOKE_BACKEND_URL" "$SMOKE_EMAIL" "$SMOKE_NEW_PASSWORD" \
-    "$SMOKE_WORKER_LOSS_STATE" \
+    --worker-loss-recovery "$SMOKE_BACKEND_URL" "$SMOKE_EMAIL" "$SMOKE_NEW_PASSWORD" \
+    "$SMOKE_WORKER_LOSS_STATE" "$timeout_seconds" \
     >>"$SMOKE_RUNTIME_DIR/stdout.log" 2>>"$SMOKE_RUNTIME_DIR/stderr.log"; then
     tail -n 1 "$SMOKE_RUNTIME_DIR/stderr.log" >&2
-    die "worker-loss retry probe failed"
+    die "worker-loss watchdog and replacement recovery failed"
   fi
 }
 
 assert_original_preview_unchanged() {
-  grep -Fq 'new attempt succeeded, original immutable' "$SMOKE_RUNTIME_DIR/stdout.log" \
+  grep -Fq 'watchdog terminalized, replacement isolated' "$SMOKE_RUNTIME_DIR/stdout.log" \
     || die "retry did not preserve the original timed-out preview"
 }
 
@@ -533,7 +593,7 @@ run_worker_loss() {
   wait_for_preview_state "timed_out" "$remaining"
   grep -Fq "$terminal_error" "$SMOKE_RUNTIME_DIR/stdout.log" \
     || die "watchdog terminal error code was not observed"
-  retry_preview_job
+  retry_preview_job "$remaining"
   wait_for_preview_state "succeeded" 60
   assert_original_preview_unchanged
   verify_no_secret_surfaces
@@ -580,6 +640,14 @@ live_provider_gate() {
   "$BACKEND_ROOT/.venv/bin/python" "$REPO_ROOT/tools/phase2_live_provider.py" "$live_env_file"
 }
 
+run_gap_closure() {
+  "$SCRIPT_DIR/phase2_smoke.sh" --base-client-credentials
+  "$SCRIPT_DIR/phase2_smoke.sh" --mock-live-provider
+  "$SCRIPT_DIR/phase2_smoke.sh" --mock-provider --worker-loss
+  "$SCRIPT_DIR/phase2_smoke.sh" --live-provider-read-only
+  printf 'phase2 deployment gap closure: PASS (base, mock, worker-loss; live gate evaluated)\n'
+}
+
 case "${1:-}:${2:-}" in
   --mock-provider:--worker-loss) run_worker_loss_with_port_retry ;;
   --worker-loss-once:) run_worker_loss ;;
@@ -587,6 +655,7 @@ case "${1:-}:${2:-}" in
   --mock-live-provider:) run_mock_provider_with_port_retry ;;
   --mock-live-provider-once:) run_mock_live_provider ;;
   --mock-provider:) run_mock_provider_with_port_retry ;;
+  --gap-closure:) run_gap_closure ;;
   --live-provider-read-only:) live_provider_gate ;;
-  *) die "usage: tools/phase2_smoke.sh --base-client-credentials|--mock-live-provider|--mock-provider --worker-loss|--live-provider-read-only" ;;
+  *) die "usage: tools/phase2_smoke.sh --gap-closure|--base-client-credentials|--mock-live-provider|--mock-provider --worker-loss|--live-provider-read-only" ;;
 esac

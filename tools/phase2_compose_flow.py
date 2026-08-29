@@ -71,7 +71,9 @@ class Api:
             response = Response(error.code, error.headers, error.read())
         allowed = (expected,) if isinstance(expected, int) else expected
         if response.status not in allowed:
-            raise AssertionError(f"{method} {path} expected HTTP {allowed}, got {response.status}")
+            raise AssertionError(
+                f"{method} {path} expected HTTP {allowed}, got {response.status}"
+            )
         return response
 
 
@@ -85,7 +87,13 @@ def login(api: Api, email: str, password: str, *, expected: int = 200) -> Respon
 
 
 def assert_public_oauth_shape(payload: dict[str, object]) -> None:
-    forbidden = {"access_token", "refresh_token", "scope", "client_secret", "generation"}
+    forbidden = {
+        "access_token",
+        "refresh_token",
+        "scope",
+        "client_secret",
+        "generation",
+    }
     assert forbidden.isdisjoint(payload)
     assert set(payload) == {
         "connected_at",
@@ -102,7 +110,9 @@ def assert_public_oauth_shape(payload: dict[str, object]) -> None:
 def poll_preview(api: Api, token: str, job_id: str) -> dict[str, Any]:
     deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
-        payload = api.request("GET", f"/api/v1/admin/preview-jobs/{job_id}", token=token).json()
+        payload = api.request(
+            "GET", f"/api/v1/admin/preview-jobs/{job_id}", token=token
+        ).json()
         if payload["state"] == "succeeded":
             return payload
         if payload["state"] in {"failed", "timed_out"}:
@@ -119,7 +129,9 @@ def confirm_first_candidate(api: Api, token: str, preview: dict[str, Any]) -> No
         else "translations"
     )
     candidate = next(
-        item for item in result["layout_candidates"] if item["repository_side"] == expected_side
+        item
+        for item in result["layout_candidates"]
+        if item["repository_side"] == expected_side
     )
     response = api.request(
         "POST",
@@ -169,11 +181,15 @@ def wait_for_preview_state(
     """Poll one durable job state under a caller-owned monotonic deadline."""
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        payload = api.request("GET", f"/api/v1/admin/preview-jobs/{job_id}", token=token).json()
+        payload = api.request(
+            "GET", f"/api/v1/admin/preview-jobs/{job_id}", token=token
+        ).json()
         if payload["state"] == expected_state:
             return payload
         if payload["state"] in {"failed", "timed_out", "succeeded"}:
-            raise AssertionError(f"preview reached {payload['state']} before {expected_state}")
+            raise AssertionError(
+                f"preview reached {payload['state']} before {expected_state}"
+            )
         time.sleep(0.1)
     raise AssertionError(f"preview did not reach {expected_state} within the bound")
 
@@ -255,7 +271,9 @@ def worker_loss_setup(
         json_body=request_body,
         expected=HTTPStatus.ACCEPTED,
     ).json()
-    running = wait_for_preview_state(api, token, job["id"], "running", timeout_seconds=30)
+    running = wait_for_preview_state(
+        api, token, job["id"], "running", timeout_seconds=30
+    )
     assert running["started_at"] is not None
     _write_worker_loss_state(
         state_path,
@@ -315,7 +333,9 @@ def retry_preview_job(
     ).json()
     assert retry["id"] != state["job_id"]
     assert retry["attempt"] == state["attempt"] + 1
-    succeeded = wait_for_preview_state(api, token, retry["id"], "succeeded", timeout_seconds=60)
+    succeeded = wait_for_preview_state(
+        api, token, retry["id"], "succeeded", timeout_seconds=60
+    )
     assert succeeded["result"] is not None
     original = api.request(
         "GET", f"/api/v1/admin/preview-jobs/{state['job_id']}", token=token
@@ -326,11 +346,106 @@ def retry_preview_job(
     assert original["result"] is None
 
 
+def _assert_cursor_boundary(
+    api: Api,
+    token: str,
+    path: str,
+    *,
+    expected_count: int,
+) -> None:
+    first = api.request("GET", f"{path}?limit=50", token=token).json()
+    assert len(first["items"]) == min(expected_count, 50)
+    if expected_count <= 50:
+        assert first["next_cursor"] is None
+    else:
+        assert isinstance(first["next_cursor"], str) and first["next_cursor"]
+        second_query = urllib.parse.urlencode(
+            {"limit": 50, "cursor": first["next_cursor"]}
+        )
+        second = api.request("GET", f"{path}?{second_query}", token=token).json()
+        assert len(second["items"]) == expected_count - 50
+        assert second["next_cursor"] is None
+    maximum = api.request("GET", f"{path}?limit=100", token=token).json()
+    assert len(maximum["items"]) == expected_count
+    assert maximum["next_cursor"] is None
+    api.request(
+        "GET",
+        f"{path}?limit=101",
+        token=token,
+        expected=HTTPStatus.UNPROCESSABLE_ENTITY,
+    )
+
+
+def run_gap_boundaries(base_url: str, email: str, password: str) -> None:
+    """Exercise disposable 0/1/50/51 collection edges without provider writes."""
+    api = Api(base_url)
+    token = _ordinary_admin_token(api, email, password)
+    status = api.request("GET", "/api/v1/admin/bitbucket", token=token).json()
+    assert_public_oauth_shape(status)
+    assert status["status"] == "Disconnected"
+
+    products_path = "/api/v1/admin/products"
+    assert api.request("GET", products_path, token=token).json() == {
+        "items": [],
+        "next_cursor": None,
+    }
+    for index in range(1, 52):
+        api.request(
+            "POST",
+            products_path,
+            token=token,
+            json_body={
+                "name": f"Gap Boundary Product {index:02d}",
+                "description": "Disposable 0/1/50/51 Compose proof",
+            },
+            expected=HTTPStatus.CREATED,
+        )
+    _assert_cursor_boundary(api, token, products_path, expected_count=51)
+
+    repositories_path = "/api/v1/admin/repositories"
+    initial_repositories = api.request("GET", repositories_path, token=token).json()
+    assert len(initial_repositories["items"]) == 1
+    assert initial_repositories["next_cursor"] is None
+    for index in range(1, 51):
+        api.request(
+            "POST",
+            repositories_path,
+            token=token,
+            json_body={
+                "workspace": "verboflex-gap-closure",
+                "repository_slug": f"repository-{index:02d}",
+                "descriptive_name": f"Gap repository {index:02d}",
+            },
+            expected=HTTPStatus.CREATED,
+        )
+    _assert_cursor_boundary(api, token, repositories_path, expected_count=51)
+    print("phase2 gap boundaries: PASS (0/1/50/51 and maximum 100, 101 rejected)")
+
+
+def run_worker_loss_recovery(
+    base_url: str,
+    email: str,
+    password: str,
+    state_path: Path,
+    timeout_seconds: int,
+) -> None:
+    """Terminalize the killed attempt, then prove isolated replacement success."""
+    worker_loss_terminal(base_url, email, password, state_path, timeout_seconds)
+    retry_preview_job(base_url, email, password, state_path)
+
+
 def main() -> None:
+    if len(sys.argv) >= 2 and sys.argv[1] == "--gap-boundaries":
+        if len(sys.argv) != 5:
+            raise SystemExit("invalid gap-boundary arguments")
+        run_gap_boundaries(sys.argv[2], sys.argv[3], sys.argv[4])
+        return
     if len(sys.argv) >= 2 and sys.argv[1] == "--worker-loss-setup":
         if len(sys.argv) != 7:
             raise SystemExit("invalid worker-loss setup arguments")
-        worker_loss_setup(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], Path(sys.argv[6]))
+        worker_loss_setup(
+            sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], Path(sys.argv[6])
+        )
         print("phase2 worker-loss setup: PASS (running durable, provider blocked)")
         return
     if len(sys.argv) >= 2 and sys.argv[1] == "--worker-loss-terminal":
@@ -345,10 +460,25 @@ def main() -> None:
         if len(sys.argv) != 6:
             raise SystemExit("invalid worker-loss retry arguments")
         retry_preview_job(sys.argv[2], sys.argv[3], sys.argv[4], Path(sys.argv[5]))
-        print("phase2 worker-loss retry: PASS (new attempt succeeded, original immutable)")
+        print(
+            "phase2 worker-loss retry: PASS (new attempt succeeded, original immutable)"
+        )
+        return
+    if len(sys.argv) >= 2 and sys.argv[1] == "--worker-loss-recovery":
+        if len(sys.argv) != 7:
+            raise SystemExit("invalid worker-loss recovery arguments")
+        run_worker_loss_recovery(
+            sys.argv[2], sys.argv[3], sys.argv[4], Path(sys.argv[5]), int(sys.argv[6])
+        )
+        print(
+            "phase2 worker-loss recovery: PASS "
+            "(time_limit_exceeded watchdog terminalized, replacement isolated)"
+        )
         return
     if len(sys.argv) != 4:
-        raise SystemExit("usage: phase2_compose_flow.py BACKEND_URL EMAIL TEMP_PASSWORD")
+        raise SystemExit(
+            "usage: phase2_compose_flow.py BACKEND_URL EMAIL TEMP_PASSWORD"
+        )
     api = Api(sys.argv[1])
     email, temporary_password = sys.argv[2:]
     new_password = "PhaseTwoOrdinary-9d81f73b-Strong!"
@@ -357,7 +487,9 @@ def main() -> None:
     restricted = login(api, email, temporary_password).json()
     assert restricted["must_change_password"] is True
     restricted_token = restricted["access_token"]
-    api.request("GET", "/api/v1/users/me", token=restricted_token, expected=HTTPStatus.FORBIDDEN)
+    api.request(
+        "GET", "/api/v1/users/me", token=restricted_token, expected=HTTPStatus.FORBIDDEN
+    )
     api.request(
         "POST",
         "/api/v1/auth/change-password",
@@ -390,13 +522,19 @@ def main() -> None:
     assert created_user_response.headers.get("Cache-Control") == "no-store"
     assert len(created_user["temporary_password"]) >= 12
     users = api.request("GET", "/api/v1/admin/users", token=token).json()
-    assert any(user["email"] == "phase02-reviewer@example.com" for user in users["items"])
+    assert any(
+        user["email"] == "phase02-reviewer@example.com" for user in users["items"]
+    )
     assert all("temporary_password" not in user for user in users["items"])
 
-    oauth_start = api.request("POST", "/api/v1/admin/bitbucket/oauth/start", token=token).json()
+    oauth_start = api.request(
+        "POST", "/api/v1/admin/bitbucket/oauth/start", token=token
+    ).json()
     authorization_url = oauth_start["authorization_url"]
     assert authorization_url.startswith("https://bitbucket.org/site/oauth2/authorize?")
-    state = urllib.parse.parse_qs(urllib.parse.urlsplit(authorization_url).query)["state"][0]
+    state = urllib.parse.parse_qs(urllib.parse.urlsplit(authorization_url).query)[
+        "state"
+    ][0]
     callback_query = urllib.parse.urlencode({"state": state, "code": "mock-code"})
     callback = api.request(
         "GET",
@@ -499,17 +637,24 @@ def main() -> None:
     assert separate["candidate_version"] == 3
 
     current_mappings = api.request("GET", mappings_path, token=token).json()["items"]
-    assert {mapping["topology"] for mapping in current_mappings} == {"direct", "separate"}
+    assert {mapping["topology"] for mapping in current_mappings} == {
+        "direct",
+        "separate",
+    }
     previews: list[dict[str, Any]] = []
     for mapping in current_mappings:
-        roles = ["direct"] if mapping["topology"] == "direct" else ["keys", "translations"]
+        roles = (
+            ["direct"] if mapping["topology"] == "direct" else ["keys", "translations"]
+        )
         created_preview = api.request(
             "POST",
             f"{mappings_path}/{mapping['id']}/preview-jobs",
             token=token,
             json_body={
                 "expected_candidate_version": 3,
-                "commits": [{"role": role, "commit_hash": COMMIT_HASH} for role in roles],
+                "commits": [
+                    {"role": role, "commit_hash": COMMIT_HASH} for role in roles
+                ],
             },
             expected=HTTPStatus.ACCEPTED,
         ).json()
@@ -520,16 +665,23 @@ def main() -> None:
         previews.append(preview)
 
     direct_preview = next(
-        preview for preview in previews if preview["repository_sides"][0]["role"] == "direct"
+        preview
+        for preview in previews
+        if preview["repository_sides"][0]["role"] == "direct"
     )
-    assert {candidate["format"] for candidate in direct_preview["result"]["layout_candidates"]} == {
+    assert {
+        candidate["format"]
+        for candidate in direct_preview["result"]["layout_candidates"]
+    } == {
         "android_xml",
         "qt_ts",
         "json",
         "ios_strings",
     }
 
-    current_product = api.request("GET", f"/api/v1/admin/products/{product_id}", token=token).json()
+    current_product = api.request(
+        "GET", f"/api/v1/admin/products/{product_id}", token=token
+    ).json()
     candidate = current_product["candidate_revision"]
     published = api.request(
         "POST",

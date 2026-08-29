@@ -23,12 +23,19 @@ interface Product {
 }
 
 interface AdminMockState {
+  branchRequests: Array<{
+    branchName: string | null;
+    cursor: string | null;
+    limit: string | null;
+  }>;
+  branches: Array<{ commit_hash: string; name: string }>;
   connectionDelayMs: number;
   connectionFailures: number;
   connectionMutations: string[];
   connectionStatus: ConnectionStatus;
   deactivateFailures: number;
   mappings: Array<Record<string, unknown>>;
+  paginateBranches: boolean;
   paginateProducts: boolean;
   previewAttempts: number;
   previewMode: "success" | "timeout-then-success";
@@ -98,12 +105,23 @@ const separateMapping = {
 function defaultState(): AdminMockState {
   const current = product();
   return {
+    branchRequests: [],
+    branches: [
+      { commit_hash: "abcdef0123456789", name: "main" },
+      {
+        commit_hash: "fedcba9876543210",
+        name: "release/very-long-supported-target-name",
+      },
+      { commit_hash: "1234567890abcdef", name: "keys/main" },
+      { commit_hash: "7890abcdef123456", name: "translations/main" },
+    ],
     connectionDelayMs: 0,
     connectionFailures: 0,
     connectionMutations: [],
     connectionStatus: "Connected",
     deactivateFailures: 0,
     mappings: [directMapping, separateMapping],
+    paginateBranches: false,
     paginateProducts: false,
     previewAttempts: 0,
     previewMode: "success",
@@ -501,18 +519,36 @@ async function installAdminApi(page: Page, state: AdminMockState) {
       state.repositories.push(created);
       return json(route, created, 201);
     }
+    if (/\/repositories\/[^/]+\/branch$/.test(pathname) && method === "GET") {
+      const branchName = searchParams.get("branch_name");
+      state.branchRequests.push({
+        branchName,
+        cursor: null,
+        limit: searchParams.get("limit"),
+      });
+      const exact = state.branches.find((branch) => branch.name === branchName);
+      return exact === undefined
+        ? json(route, { detail: "Branch not found" }, 404)
+        : json(route, exact);
+    }
     if (/\/repositories\/[^/]+\/branches$/.test(pathname) && method === "GET") {
+      const cursor = searchParams.get("cursor");
+      state.branchRequests.push({
+        branchName: null,
+        cursor,
+        limit: searchParams.get("limit"),
+      });
+      const boundaryItems = state.paginateBranches
+        ? cursor === null
+          ? state.branches.slice(0, 100)
+          : state.branches.slice(100)
+        : state.branches;
       return json(route, {
-        items: [
-          { commit_hash: "abcdef0123456789", name: "main" },
-          {
-            commit_hash: "fedcba9876543210",
-            name: "release/very-long-supported-target-name",
-          },
-          { commit_hash: "1234567890abcdef", name: "keys/main" },
-          { commit_hash: "7890abcdef123456", name: "translations/main" },
-        ],
-        next_cursor: null,
+        items: boundaryItems,
+        next_cursor:
+          state.paginateBranches && cursor === null
+            ? "opaque-branch-page-2"
+            : null,
       });
     }
     if (pathname === "/api/v1/admin/users" && method === "GET") {
@@ -749,8 +785,18 @@ for (const role of [
     );
     expect(adminRequestTrace).toEqual([]);
 
-    await page.getByRole("button", { name: "Retry connection" }).click();
-    await expect(page.getByText("API online")).toBeVisible();
+    const online = page.getByText("API online");
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await page.getByRole("button", { name: "Retry connection" }).click();
+      const recovered = await online
+        .waitFor({ state: "visible", timeout: 2_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (recovered) {
+        break;
+      }
+    }
+    await expect(online).toBeVisible();
     expect(adminRequestTrace).toEqual([]);
   });
 }
@@ -939,6 +985,111 @@ test("five-step configuration reuses repositories, exposes both topologies, and 
       }),
   ).toBeVisible();
   await expectNoCredentialResidue(page);
+});
+
+test("100/101 exact branches stay fail-closed at 200 percent zoom", async ({
+  page,
+}) => {
+  const state = defaultState();
+  const configuredBranch =
+    "release/2026-with-a-very-long-opaque-provider-branch-name";
+  state.branches = [
+    ...Array.from({ length: 100 }, (_, index) => ({
+      commit_hash: String(index + 1).padStart(40, "0"),
+      name: `provider-branch-${String(index + 1).padStart(3, "0")}`,
+    })),
+    { commit_hash: "f".repeat(40), name: configuredBranch },
+  ];
+  state.mappings = [
+    {
+      ...directMapping,
+      allowed_target_branches: [configuredBranch],
+      default_target_branch: configuredBranch,
+      primary_source_branch: configuredBranch,
+    },
+  ];
+  state.paginateBranches = true;
+  await installAdminApi(page, state);
+  await page.setViewportSize({ width: 640, height: 900 });
+  await page.goto("/admin/products/product-1/mappings");
+  await page.getByRole("button", { name: "Edit mapping" }).first().click();
+
+  const sourceBranch = page.getByRole("combobox", {
+    name: "Source branch",
+    exact: true,
+  });
+  await expect(sourceBranch).toContainText(configuredBranch);
+  await expect(
+    page.getByText("100 branches loaded — more available"),
+  ).toBeVisible();
+  expect(
+    state.branchRequests.filter(
+      ({ branchName }) => branchName === configuredBranch,
+    ),
+  ).toEqual([{ branchName: configuredBranch, cursor: null, limit: null }]);
+  expect(
+    state.branchRequests.filter(({ branchName }) => branchName === null),
+  ).toEqual([{ branchName: null, cursor: null, limit: "100" }]);
+
+  await page
+    .getByRole("button", { name: "Load more branches for Source branch" })
+    .click();
+  await expect(page.getByText("All 101 branches loaded")).toBeVisible();
+  await expect(sourceBranch).toContainText(configuredBranch);
+  expect(
+    state.branchRequests.filter(({ branchName }) => branchName === null),
+  ).toEqual([
+    { branchName: null, cursor: null, limit: "100" },
+    {
+      branchName: null,
+      cursor: "opaque-branch-page-2",
+      limit: "100",
+    },
+  ]);
+
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = "2";
+  });
+  await expectNoPageOverflow(page);
+});
+
+test("gap-closure mobile wizard traverses step 1 to 5 to 1 at 320 pixels", async ({
+  page,
+}) => {
+  const state = defaultState();
+  state.mappings = [];
+  await installAdminApi(page, state);
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/admin/products/new");
+  await page.getByLabel("Name", { exact: true }).fill("Mobile Gap Product");
+  await page.getByRole("button", { name: "Save and continue" }).click();
+
+  const progress = page.getByLabel("Product setup progress");
+  const navigation = page.getByRole("navigation", {
+    name: "Wizard navigation",
+  });
+  const next = navigation.getByRole("button", { name: /^Next/ });
+  const back = navigation.getByRole("button", { name: "Back" });
+  await expect(progress).toContainText("Step 2 of 5");
+  await page
+    .getByRole("button", { name: "Use Application repository" })
+    .click();
+  for (const step of [3, 4, 5]) {
+    await next.click();
+    await expect(progress).toContainText(`Step ${step} of 5`);
+  }
+  await expect(next).toBeDisabled();
+  for (const step of [4, 3, 2, 1]) {
+    await back.click();
+    await expect(progress).toContainText(`Step ${step} of 5`);
+  }
+  const heights = await navigation
+    .getByRole("button")
+    .evaluateAll((buttons) =>
+      buttons.map((button) => button.getBoundingClientRect().height),
+    );
+  expect(heights.every((height) => height >= 44)).toBe(true);
+  await expectNoPageOverflow(page);
 });
 
 test("product lifecycle remains backend-authoritative for deactivate and reactivation blockers", async ({

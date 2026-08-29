@@ -34,6 +34,25 @@ final-source-state"
 readonly EXPECTED_FINAL_LAYERS="$EXPECTED_CANDIDATE_LAYERS
 evidence-report"
 
+readonly EXPECTED_GAP_LAYERS="source-state
+checker-self-tests
+semantic-runtime-closure
+backend-tests-coverage
+frontend-tests-coverage
+types-lint-format-build
+property-suites
+changed-scope-coverage
+mutation-authority-detectors-polling
+migrations-openapi
+supply-chain-secrets-licenses
+architecture-provider-spy
+base-compose-smoke
+mock-provider-browser-smoke
+worker-loss-smoke
+live-provider-optional
+resource-cleanup
+final-source-state"
+
 export VERBOFLEX_SOURCE_MANIFEST="tools/phase2_source_manifest.txt"
 export VERBOFLEX_REVIEW_PATH="docs/reviews/phase-02-code-security.md"
 export VERBOFLEX_EVIDENCE_PATH="docs/evidence/phase-02.md"
@@ -42,6 +61,8 @@ export VERBOFLEX_GAUNTLET_DIGEST_FILE="$DIGEST_RECORD"
 TEST_POSTGRES_NAME=""
 TEST_REDIS_NAME=""
 TEST_WORKER_PID=""
+TEST_WORKER_LOG=""
+TEST_WORKER_PING=""
 
 die() {
   printf 'phase2-gauntlet error: %s\n' "$1" >&2
@@ -100,11 +121,12 @@ wait_for_container_command() {
 }
 
 start_test_infra() {
-  local suffix postgres_port redis_port worker_log deadline
+  local suffix postgres_port redis_port deadline
   suffix="$$-$RANDOM"
   TEST_POSTGRES_NAME="verboflex-phase2-postgres-$suffix"
   TEST_REDIS_NAME="verboflex-phase2-redis-$suffix"
-  worker_log="/tmp/verboflex-phase02-worker-$suffix.log"
+  TEST_WORKER_LOG="/tmp/verboflex-phase02-worker-$suffix.log"
+  TEST_WORKER_PING="/tmp/verboflex-phase02-worker-ping-$suffix.log"
   docker run -d --rm --name "$TEST_POSTGRES_NAME" -e POSTGRES_HOST_AUTH_METHOD=trust \
     -p 127.0.0.1::5432 postgres:18-alpine >/dev/null
   docker run -d --rm --name "$TEST_REDIS_NAME" -p 127.0.0.1::6379 redis:7-alpine >/dev/null
@@ -122,7 +144,7 @@ start_test_infra() {
       exec "$BACKEND_ROOT/.venv/bin/celery" -A verboflex.worker.celery_app \
       worker --loglevel=WARNING --pool=solo --concurrency=1 \
       --hostname="verboflex-phase2-$suffix@%h"
-  ) >"$worker_log" 2>&1 &
+  ) >"$TEST_WORKER_LOG" 2>&1 &
   TEST_WORKER_PID=$!
   deadline=$((SECONDS + 60))
   while [ "$SECONDS" -lt "$deadline" ]; do
@@ -130,15 +152,15 @@ start_test_infra() {
       cd "$BACKEND_ROOT"
       VERBOFLEX_REDIS_URL="$VERBOFLEX_TEST_CELERY_REDIS_URL" \
         uv run celery -A verboflex.worker.celery_app inspect ping --timeout 1
-    ) >/tmp/verboflex-phase02-worker-ping.log 2>&1 \
-      && grep -Fq '1 node online' /tmp/verboflex-phase02-worker-ping.log; then
+    ) >"$TEST_WORKER_PING" 2>&1 \
+      && grep -Fq '1 node online' "$TEST_WORKER_PING"; then
       return 0
     fi
     kill -0 "$TEST_WORKER_PID" 2>/dev/null \
-      || { sed -n '1,120p' "$worker_log" >&2; die "Celery worker exited before readiness"; }
+      || { sed -n '1,120p' "$TEST_WORKER_LOG" >&2; die "Celery worker exited before readiness"; }
     sleep 1
   done
-  sed -n '1,120p' "$worker_log" >&2
+  sed -n '1,120p' "$TEST_WORKER_LOG" >&2
   die "Celery worker readiness timed out"
 }
 
@@ -166,9 +188,13 @@ cleanup_test_infra() {
     set -e
     [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ] || die "Redis cleanup failed"
   fi
+  [ -z "$TEST_WORKER_LOG" ] || rm -f "$TEST_WORKER_LOG"
+  [ -z "$TEST_WORKER_PING" ] || rm -f "$TEST_WORKER_PING"
   TEST_WORKER_PID=""
   TEST_POSTGRES_NAME=""
   TEST_REDIS_NAME=""
+  TEST_WORKER_LOG=""
+  TEST_WORKER_PING=""
 }
 
 with_test_infra() {
@@ -236,6 +262,58 @@ gap_closure_contract() {
   grep -Fq 'run_gap_closure' "$GAUNTLET_DIR/phase2_smoke.sh" \
     || die "smoke gap-closure composition is absent"
   printf 'gap-closure contract: PASS\n'
+}
+
+gap_source_state() {
+  local digest
+  digest=$("$GAUNTLET_DIR/source_state.sh" --digest)
+  [ "${#digest}" -eq 64 ] || die "gap-closure source digest is malformed"
+  printf '%s\n' "$digest" >"$DIGEST_RECORD"
+  printf 'gap-closure source digest captured: %s\n' "$digest"
+}
+
+semantic_runtime_closure() {
+  (
+    cd "$BACKEND_ROOT"
+    uv run pytest \
+      tests/architecture/test_phase2_spec_edge_traceability.py \
+      tests/architecture/test_phase2_gap_closure.py \
+      tests/architecture/test_phase2_scope.py \
+      tests/architecture/test_phase2_live_provider_smoke.py \
+      tests/architecture/test_provider_boundaries.py -x
+  )
+}
+
+assert_gap_resource_cleanup() {
+  local resource_pattern='^verboflex_phase02_37_'
+  if docker ps -a --format '{{.Names}}' | grep -Eq "$resource_pattern"; then
+    die "gap-closure Compose containers remain"
+  fi
+  if docker network ls --format '{{.Name}}' | grep -Eq "$resource_pattern"; then
+    die "gap-closure Compose networks remain"
+  fi
+  if docker volume ls --format '{{.Name}}' | grep -Eq "$resource_pattern"; then
+    die "gap-closure Compose volumes remain"
+  fi
+  if docker image ls --format '{{.Repository}}:{{.Tag}}' \
+    | grep -Eq '^verboflex-(backend|frontend):phase02-37-'; then
+    die "gap-closure disposable images remain"
+  fi
+  if compgen -G '/tmp/verboflex-phase02-37.*' >/dev/null; then
+    die "gap-closure owner-only runtime directory remains"
+  fi
+  printf 'gap-closure cleanup: PASS (zero containers, networks, volumes, images, secret files)\n'
+}
+
+gap_final_source_state() {
+  local expected actual
+  [ -f "$DIGEST_RECORD" ] || die "gap-closure digest record is missing"
+  expected=$(sed -n '1p' "$DIGEST_RECORD")
+  [ "${#expected}" -eq 64 ] || die "gap-closure digest record is malformed"
+  actual=$("$GAUNTLET_DIR/source_state.sh" --digest)
+  [ "$actual" = "$expected" ] \
+    || die "gap-closure source digest changed: expected $expected, got $actual"
+  printf 'gap-closure source digest unchanged: %s\n' "$actual"
 }
 
 backend_tests_coverage_body() {
@@ -528,10 +606,38 @@ run_gauntlet() {
   trap - EXIT INT TERM
 }
 
+run_gap_gauntlet() {
+  : >"$LAYER_RECORD"
+  trap cleanup_test_infra EXIT INT TERM
+  run_layer source-state gap_source_state
+  run_layer checker-self-tests checker_self_tests
+  run_layer semantic-runtime-closure semantic_runtime_closure
+  run_layer backend-tests-coverage backend_tests_coverage
+  run_layer frontend-tests-coverage frontend_tests_coverage
+  run_layer types-lint-format-build types_lint_format_build
+  run_layer property-suites property_suites
+  run_layer changed-scope-coverage changed_scope_coverage
+  run_layer mutation-authority-detectors-polling mutation_authority_detectors_polling
+  run_layer migrations-openapi migrations_openapi
+  run_layer supply-chain-secrets-licenses supply_chain_secrets_licenses
+  run_layer architecture-provider-spy architecture_provider_spy
+  run_layer base-compose-smoke "$GAUNTLET_DIR/phase2_smoke.sh" --base-client-credentials
+  run_layer mock-provider-browser-smoke "$GAUNTLET_DIR/phase2_smoke.sh" --mock-live-provider
+  run_layer worker-loss-smoke "$GAUNTLET_DIR/phase2_smoke.sh" --mock-provider --worker-loss
+  run_layer live-provider-optional "$GAUNTLET_DIR/phase2_smoke.sh" --live-provider-read-only
+  run_layer resource-cleanup assert_gap_resource_cleanup
+  run_layer final-source-state gap_final_source_state
+  assert_exact_layers "$EXPECTED_GAP_LAYERS"
+  cleanup_test_infra
+  trap - EXIT INT TERM
+  printf '\nPHASE 2 GAP-CLOSURE GAUNTLET: PASS (18/18 layers)\n'
+}
+
 case "${1:-}" in
   '') run_gauntlet final ;;
   --candidate) run_gauntlet candidate ;;
+  --gap-closure) run_gap_gauntlet ;;
   --gap-closure-contract) gap_closure_contract ;;
-  -h|--help) printf 'usage: tools/phase2_gauntlet.sh [--candidate]\n' ;;
+  -h|--help) printf 'usage: tools/phase2_gauntlet.sh [--candidate|--gap-closure]\n' ;;
   *) die "unknown argument: $1" ;;
 esac
