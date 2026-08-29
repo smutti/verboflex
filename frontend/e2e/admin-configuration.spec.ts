@@ -1182,6 +1182,16 @@ interface RealReactivationFixtures {
   userId: string;
 }
 
+interface RealMapping51Fixtures {
+  blockedActiveProductId: string;
+  candidateBoundaryMappingId: string;
+  candidateProductId: string;
+  email: string;
+  password: string;
+  readyActiveProductId: string;
+  userId: string;
+}
+
 const realReactivationSeed = String.raw`
 import json
 import sys
@@ -1393,6 +1403,285 @@ with SessionFactory.begin() as session:
     connection.revoked_at = None
 `;
 
+const realMapping51Seed = String.raw`
+import json
+from datetime import UTC, datetime, timedelta
+from uuid import UUID, uuid4
+
+from sqlalchemy import select
+
+from verboflex.auth.passwords import hash_password
+from verboflex.db.session import SessionFactory
+from verboflex.localization.preview.core import build_layout_candidate
+from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.models.preview_job import PreviewJob
+from verboflex.models.product import Product, ProductRevision
+from verboflex.models.product_mapping import (
+    ProductMappingAllowedTarget,
+    ProductMappingRepositorySide,
+    ProductRepositoryMapping,
+)
+from verboflex.models.repository import Repository
+from verboflex.models.role import Role
+from verboflex.models.user import User
+from verboflex.services.preview_jobs import (
+    PREVIEW_DETECTOR_VERSION,
+    PREVIEW_LAYOUT_IDENTITY,
+    _canonical_identity,
+    _closed_result,
+    _complete_sides,
+    _identity,
+)
+
+now = datetime.now(UTC)
+user_id = uuid4()
+password = f"VF e2e terminal cursor {uuid4().hex}!"
+email = f"terminal-cursor-{user_id.hex}@example.com"
+
+with SessionFactory.begin() as session:
+    connection = session.get_one(BitbucketConnection, 1)
+    if not (
+        connection.generation == 0
+        and connection.access_token_ciphertext is None
+        and connection.refresh_token_ciphertext is None
+        and connection.scope_profile is None
+        and connection.provider_expires_at is None
+        and connection.connected_at is None
+        and connection.revoked_at is None
+    ):
+        raise RuntimeError("real-backend E2E requires the disconnected local fixture stack")
+    connection.generation = 1
+    connection.access_token_ciphertext = "e2e-non-provider-ciphertext"
+    connection.refresh_token_ciphertext = None
+    connection.scope_profile = "repository"
+    connection.provider_expires_at = now + timedelta(hours=1)
+    connection.connected_at = now
+    connection.revoked_at = None
+
+    admin_role = session.scalar(select(Role).where(Role.name == "admin"))
+    if admin_role is None:
+        raise RuntimeError("admin role unavailable")
+    user = User(
+        id=user_id,
+        email=email,
+        display_name="Terminal Cursor E2E Admin",
+        hashed_password=hash_password(password),
+        is_active=True,
+        must_change_password=False,
+    )
+    user.roles = [admin_role]
+    session.add(user)
+
+    def confirm_mapping(*, mapping, product_id, revision, source_ref):
+        repository_sides = _complete_sides(mapping, {"direct": source_ref})
+        _encoded, input_digest = _canonical_identity(
+            product_id=product_id,
+            revision=revision,
+            mapping=mapping,
+            connection_generation=connection.generation,
+            repository_sides=repository_sides,
+        )
+        job = PreviewJob(
+            id=uuid4(),
+            input_digest=input_digest,
+            attempt=1,
+            state="succeeded",
+            product_id=product_id,
+            candidate_revision_id=revision.id,
+            candidate_revision_version=revision.version,
+            mapping_id=mapping.id,
+            topology="direct",
+            connection_generation=connection.generation,
+            detector_version=PREVIEW_DETECTOR_VERSION,
+            layout_identity=PREVIEW_LAYOUT_IDENTITY,
+            repository_sides=repository_sides,
+            result={},
+            started_at=now,
+            finished_at=now,
+        )
+        candidate = build_layout_candidate(
+            repository_side="direct",
+            format="android_xml",
+            layout_identity=f"mobile/{mapping.id}/src/main/res",
+            files=(f"mobile/{mapping.id}/src/main/res/values/strings.xml",),
+            values={"default": {"hello": "Hello"}},
+        ).to_mapping()
+        job.result = _closed_result(
+            _identity(job),
+            {
+                "detector_version": PREVIEW_DETECTOR_VERSION,
+                "digest": input_digest,
+                "layout_candidates": [candidate],
+            },
+        )
+        session.add(job)
+        mapping.selected_layout_candidate_id = UUID(str(candidate["id"]))
+        mapping.selected_layout_version = 1
+        mapping.confirmed_preview_job_id = job.id
+        mapping.confirmed_preview_digest = str(job.result["digest"])
+        mapping.preview_confirmed_by = user_id
+        mapping.preview_confirmed_at = now
+
+    def seed_product(*, candidate, boundary_confirmed):
+        product_id = uuid4()
+        revision_id = uuid4()
+        repository_id = uuid4()
+        name = f"Terminal Cursor {product_id.hex[:12]}"
+        product = Product(
+            id=product_id,
+            display_name=name,
+            name_key=name.casefold(),
+            is_active=False,
+        )
+        revision = ProductRevision(
+            id=revision_id,
+            product_id=product_id,
+            display_name=name,
+            name_key=name.casefold(),
+            description="Fifty-one mapping terminal cursor fixture",
+            version=7,
+            is_published=False,
+        )
+        repository = Repository(
+            id=repository_id,
+            workspace="verboflex-e2e",
+            repository_slug=f"terminal-cursor-{repository_id.hex[:12]}",
+        )
+        session.add(product)
+        session.flush()
+        session.add_all([revision, repository])
+        session.flush()
+
+        boundary_mapping_id = None
+        for index in range(1, 52):
+            mapping_id = uuid4()
+            branch = f"branch-{index:02d}"
+            mapping = ProductRepositoryMapping(
+                id=mapping_id,
+                revision_id=revision_id,
+                topology="direct",
+                identity_key=json.dumps(
+                    ["direct", str(repository_id), branch],
+                    separators=(",", ":"),
+                ),
+            )
+            mapping.sides = [
+                ProductMappingRepositorySide(
+                    role="direct",
+                    repository_id=repository_id,
+                    source_branch=branch,
+                )
+            ]
+            mapping.allowed_targets = [
+                ProductMappingAllowedTarget(branch=branch, is_default=True)
+            ]
+            session.add(mapping)
+            session.flush()
+            confirm_mapping(
+                mapping=mapping,
+                product_id=product_id,
+                revision=revision,
+                source_ref=f"{index:040x}",
+            )
+            if index == 51:
+                boundary_mapping_id = mapping_id
+                if not boundary_confirmed:
+                    if not candidate:
+                        mapping.selected_layout_candidate_id = None
+                        mapping.selected_layout_version = None
+                    mapping.confirmed_preview_job_id = None
+                    mapping.confirmed_preview_digest = None
+                    mapping.preview_confirmed_by = None
+                    mapping.preview_confirmed_at = None
+            session.flush()
+
+        if candidate:
+            product.candidate_revision_id = revision_id
+        else:
+            revision.is_published = True
+            revision.published_at = now
+            session.flush()
+            product.active_revision_id = revision_id
+        session.flush()
+        return str(product_id), str(boundary_mapping_id)
+
+    blocked_active_product_id, _blocked_boundary = seed_product(
+        candidate=False,
+        boundary_confirmed=False,
+    )
+    ready_active_product_id, _ready_boundary = seed_product(
+        candidate=False,
+        boundary_confirmed=True,
+    )
+    candidate_product_id, candidate_boundary_mapping_id = seed_product(
+        candidate=True,
+        boundary_confirmed=False,
+    )
+
+print(json.dumps({
+    "blockedActiveProductId": blocked_active_product_id,
+    "candidateBoundaryMappingId": candidate_boundary_mapping_id,
+    "candidateProductId": candidate_product_id,
+    "email": email,
+    "password": password,
+    "readyActiveProductId": ready_active_product_id,
+    "userId": str(user_id),
+}))
+`;
+
+const realMapping51ConfirmCandidate = String.raw`
+import json
+import sys
+from datetime import UTC, datetime
+from uuid import UUID
+
+from sqlalchemy import select
+
+from verboflex.db.session import SessionFactory
+from verboflex.models.preview_job import PreviewJob
+from verboflex.models.product_mapping import ProductRepositoryMapping
+
+fixture = json.load(sys.stdin)
+mapping_id = UUID(fixture["candidateBoundaryMappingId"])
+with SessionFactory.begin() as session:
+    mapping = session.get_one(ProductRepositoryMapping, mapping_id)
+    job = session.scalar(
+        select(PreviewJob)
+        .where(PreviewJob.mapping_id == mapping_id)
+        .order_by(PreviewJob.attempt.desc())
+    )
+    if job is None or job.result is None:
+        raise RuntimeError("candidate boundary preview unavailable")
+    layout_candidates = job.result.get("layout_candidates", [])
+    if len(layout_candidates) != 1:
+        raise RuntimeError("candidate boundary layout unavailable")
+    mapping.selected_layout_candidate_id = UUID(str(layout_candidates[0]["id"]))
+    mapping.selected_layout_version = 1
+    mapping.confirmed_preview_job_id = job.id
+    mapping.confirmed_preview_digest = str(job.result["digest"])
+    mapping.preview_confirmed_by = UUID(fixture["userId"])
+    mapping.preview_confirmed_at = datetime.now(UTC)
+`;
+
+const realMapping51Cleanup = String.raw`
+import json
+import sys
+
+from verboflex.db.session import SessionFactory
+from verboflex.models.bitbucket_connection import BitbucketConnection
+
+json.load(sys.stdin)
+with SessionFactory.begin() as session:
+    connection = session.get_one(BitbucketConnection, 1)
+    connection.generation = 0
+    connection.access_token_ciphertext = None
+    connection.refresh_token_ciphertext = None
+    connection.scope_profile = None
+    connection.provider_expires_at = None
+    connection.connected_at = None
+    connection.revoked_at = None
+`;
+
 function realBackendContainer() {
   const configured = process.env.E2E_BACKEND_CONTAINER?.trim();
   if (configured) {
@@ -1444,6 +1733,19 @@ function seedRealReactivationFixtures(): RealReactivationFixtures {
 
 function cleanupRealReactivationFixtures(fixture: RealReactivationFixtures) {
   runRealBackendPython(realReactivationCleanup, JSON.stringify(fixture));
+}
+
+function seedRealMapping51Fixtures(): RealMapping51Fixtures {
+  const output = runRealBackendPython(realMapping51Seed);
+  return JSON.parse(output.trim()) as RealMapping51Fixtures;
+}
+
+function confirmRealMapping51Candidate(fixture: RealMapping51Fixtures) {
+  runRealBackendPython(realMapping51ConfirmCandidate, JSON.stringify(fixture));
+}
+
+function cleanupRealMapping51Fixtures(fixture: RealMapping51Fixtures) {
+  runRealBackendPython(realMapping51Cleanup, JSON.stringify(fixture));
 }
 
 function realEnvironment(name: string) {
@@ -1859,29 +2161,208 @@ test("unchanged active revision reactivation uses real backend state and blocks 
 test("51st mapping preview readiness consumes terminal cursor before lifecycle authority", async ({
   page,
 }) => {
-  const productId = realEnvironment("E2E_MAPPING_51_PRODUCT_ID");
-  await signInToRealBackend(page);
-  const cursorTrace: Array<string | null> = [];
-  page.on("request", (request) => {
-    const url = new URL(request.url());
-    if (
-      request.method() === "GET" &&
-      url.pathname.startsWith(
-        `/api/v1/admin/products/${productId}/revisions/`,
-      ) &&
-      url.pathname.endsWith("/mappings")
-    ) {
-      cursorTrace.push(url.searchParams.get("cursor"));
-    }
-  });
+  const fixture = seedRealMapping51Fixtures();
+  const cursorTrace = new Map<string, Array<string | null>>();
+  const browserWrites: Array<{ method: string; pathname: string }> = [];
+  let failCandidatePageTwo = true;
+  try {
+    const tokenResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/v1/auth/token",
+    );
+    await signInWithRealBackendCredentials(
+      page,
+      fixture.email,
+      fixture.password,
+    );
+    const tokenPayload = (await (await tokenResponse).json()) as {
+      access_token: string;
+    };
 
-  await page.goto(`/admin/products/${productId}/preview`);
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      const productMatch = url.pathname.match(
+        /^\/api\/v1\/admin\/products\/([^/]+)\/revisions\/[^/]+\/mappings$/,
+      );
+      if (request.method() === "GET" && productMatch !== null) {
+        const productId = productMatch[1];
+        cursorTrace.set(productId, [
+          ...(cursorTrace.get(productId) ?? []),
+          url.searchParams.get("cursor"),
+        ]);
+      }
+      if (
+        request.method() !== "GET" &&
+        url.pathname.startsWith("/api/v1/admin/")
+      ) {
+        browserWrites.push({
+          method: request.method(),
+          pathname: url.pathname,
+        });
+      }
+    });
+    await page.route(
+      `**/api/v1/admin/products/${fixture.candidateProductId}/revisions/*/mappings**`,
+      async (route) => {
+        const cursor = new URL(route.request().url()).searchParams.get(
+          "cursor",
+        );
+        if (cursor !== null && failCandidatePageTwo) {
+          failCandidatePageTwo = false;
+          await route.fulfill({
+            body: JSON.stringify({ detail: "bounded page-two failure" }),
+            contentType: "application/json",
+            status: 503,
+          });
+          return;
+        }
+        await route.continue();
+      },
+    );
 
-  await expect(page.getByRole("heading", { name: "Mapping 51" })).toBeVisible();
-  expect(cursorTrace).toHaveLength(2);
-  expect(cursorTrace[0]).toBeNull();
-  expect(cursorTrace[1]).not.toBeNull();
-  await expect(
-    page.getByRole("button", { name: "Reactivate product" }),
-  ).toBeDisabled();
+    const candidateLoaded = page.waitForResponse(
+      productResponse(fixture.candidateProductId),
+    );
+    await page.goto(`/admin/products/${fixture.candidateProductId}/preview`);
+    const candidateResponse = await candidateLoaded;
+    const candidate = (await candidateResponse.json()) as RealProduct;
+    const backendOrigin = new URL(candidateResponse.url()).origin;
+    expect(candidate.active_revision).toBeNull();
+    expect(candidate.candidate_revision).not.toBeNull();
+    const incomplete = page.getByRole("alert", {
+      name: "Mapping collection incomplete",
+    });
+    await expect(incomplete).toContainText("50 mappings loaded");
+    await expect(
+      page.getByRole("heading", { name: "Mapping 50" }),
+    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Mapping 51" })).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByRole("button", { name: "Run validation" }),
+    ).toHaveCount(50);
+    await expect(
+      page.getByRole("button", { name: "Run validation" }).first(),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Publish product" }),
+    ).toBeDisabled();
+    expect(browserWrites).toEqual([]);
+
+    await incomplete
+      .getByRole("button", { name: "Retry loading mappings" })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Mapping 51" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /^Mapping \d+$/ }),
+    ).toHaveCount(51);
+    await expect(
+      page.getByRole("button", { name: "Run validation" }),
+    ).toHaveCount(51);
+    await expect(
+      page.getByRole("button", { name: "Run validation" }).first(),
+    ).toBeEnabled();
+    const candidateCursors = cursorTrace.get(fixture.candidateProductId);
+    expect(candidateCursors).toHaveLength(3);
+    expect(candidateCursors?.[0]).toBeNull();
+    expect(candidateCursors?.[1]).not.toBeNull();
+    expect(candidateCursors?.[2]).toBe(candidateCursors?.[1]);
+    await expect(
+      page.getByRole("button", { name: "Publish product" }),
+    ).toBeDisabled();
+    expect(browserWrites).toEqual([]);
+
+    const publishBody = {
+      candidate_revision_id: candidate.candidate_revision!.id,
+      expected_candidate_version: candidate.candidate_revision!.version,
+    };
+    const blockedPublication = await page.request.post(
+      `${backendOrigin}/api/v1/admin/products/${fixture.candidateProductId}/publish`,
+      {
+        data: publishBody,
+        headers: { Authorization: `Bearer ${tokenPayload.access_token}` },
+      },
+    );
+    expect(blockedPublication.status()).toBe(409);
+    expect(await blockedPublication.json()).toMatchObject({
+      blockers: expect.arrayContaining(["preview_confirmation_required"]),
+    });
+    confirmRealMapping51Candidate(fixture);
+    const publishedResponse = await page.request.post(
+      `${backendOrigin}/api/v1/admin/products/${fixture.candidateProductId}/publish`,
+      {
+        data: publishBody,
+        headers: { Authorization: `Bearer ${tokenPayload.access_token}` },
+      },
+    );
+    expect(publishedResponse.status()).toBe(200);
+    expect(await publishedResponse.json()).toMatchObject({
+      active_revision: { id: candidate.candidate_revision!.id },
+      candidate_revision: null,
+      id: fixture.candidateProductId,
+      is_active: true,
+    });
+
+    await page.goto(
+      `/admin/products/${fixture.blockedActiveProductId}/preview`,
+    );
+    await expect(
+      page.getByRole("heading", { name: "Mapping 51" }),
+    ).toBeVisible();
+    expect(cursorTrace.get(fixture.blockedActiveProductId)).toEqual([
+      null,
+      expect.any(String),
+    ]);
+    await expect(
+      page.getByRole("button", { name: "Reactivate product" }),
+    ).toBeDisabled();
+    expect(
+      browserWrites.filter(({ pathname }) => pathname.endsWith("/reactivate")),
+    ).toEqual([]);
+
+    const readyLoaded = page.waitForResponse(
+      productResponse(fixture.readyActiveProductId),
+    );
+    await page.goto(`/admin/products/${fixture.readyActiveProductId}/preview`);
+    const ready = (await (await readyLoaded).json()) as RealProduct;
+    await expect(
+      page.getByRole("heading", { name: "Mapping 51" }),
+    ).toBeVisible();
+    expect(cursorTrace.get(fixture.readyActiveProductId)).toEqual([
+      null,
+      expect.any(String),
+    ]);
+    await expect(
+      page.getByRole("button", { name: "Reactivate product" }),
+    ).toBeEnabled();
+    const reactivationResponse = page.waitForResponse((response) => {
+      return (
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname ===
+          `/api/v1/admin/products/${fixture.readyActiveProductId}/reactivate`
+      );
+    });
+    await page.getByRole("button", { name: "Reactivate product" }).click();
+    await page
+      .getByRole("alertdialog", { name: `Reactivate ${ready.name}?` })
+      .getByRole("button", { name: "Reactivate product" })
+      .click();
+    expect((await reactivationResponse).status()).toBe(200);
+    await expect(page.getByText("Active", { exact: true })).toBeVisible();
+    expect(
+      browserWrites.filter(({ pathname }) => pathname.endsWith("/reactivate")),
+    ).toEqual([
+      {
+        method: "POST",
+        pathname: `/api/v1/admin/products/${fixture.readyActiveProductId}/reactivate`,
+      },
+    ]);
+    await expectNoSeededSecret(page, fixture.password);
+  } finally {
+    cleanupRealMapping51Fixtures(fixture);
+  }
 });
