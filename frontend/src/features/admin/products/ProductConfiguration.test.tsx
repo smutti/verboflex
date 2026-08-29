@@ -20,6 +20,7 @@ import {
   createAdminRepository,
   deactivateAdminProduct,
   getAdminProduct,
+  getAdminRepositoryBranch,
   listAdminCandidateMappings,
   listAdminProducts,
   listAdminRepositories,
@@ -35,6 +36,7 @@ import { useSession } from "../../auth/session";
 import { ProductOverviewPage } from "./ProductOverviewPage";
 import { ProductsPage } from "./ProductsPage";
 import { ProductWizardPage } from "./ProductWizardPage";
+import { loadEditableProduct } from "./ProductWizardPage";
 import { ProductDetailLayout } from "./ProductDetailLayout";
 import { AppRouter } from "../../../router";
 
@@ -80,6 +82,7 @@ vi.mock("../../../api/client", async (importOriginal) => {
     createAdminRepository: vi.fn(),
     deactivateAdminProduct: vi.fn(),
     getAdminProduct: vi.fn(),
+    getAdminRepositoryBranch: vi.fn(),
     listAdminCandidateMappings: vi.fn(),
     listAdminProducts: vi.fn(),
     listAdminRepositories: vi.fn(),
@@ -104,6 +107,7 @@ const createAdminProductMock = vi.mocked(createAdminProduct);
 const createAdminRepositoryMock = vi.mocked(createAdminRepository);
 const deactivateAdminProductMock = vi.mocked(deactivateAdminProduct);
 const getAdminProductMock = vi.mocked(getAdminProduct);
+const getAdminRepositoryBranchMock = vi.mocked(getAdminRepositoryBranch);
 const listAdminCandidateMappingsMock = vi.mocked(listAdminCandidateMappings);
 const listAdminProductsMock = vi.mocked(listAdminProducts);
 const listAdminRepositoriesMock = vi.mocked(listAdminRepositories);
@@ -309,6 +313,7 @@ describe("administrator product configuration tracer", () => {
     deactivateAdminProductMock.mockReset();
     getAdminProductMock.mockReset();
     getAdminProductMock.mockResolvedValue(ok(activeProduct));
+    getAdminRepositoryBranchMock.mockReset();
     listAdminCandidateMappingsMock.mockReset();
     listAdminCandidateMappingsMock.mockResolvedValue(
       ok({ items: [], next_cursor: null }),
@@ -866,6 +871,50 @@ describe("administrator product configuration tracer", () => {
         .slice(0, 4)
         .every((step) => step.dataset.completed === "true"),
     ).toBe(true);
+  });
+
+  it("loads every revision mapping cursor before restoring wizard repository selections", async () => {
+    const firstPage = Array.from({ length: 50 }, (_, index) => ({
+      ...directMapping,
+      id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      primary_repository_id: `repository-${String(index + 1).padStart(3, "0")}`,
+    }));
+    const finalMapping = {
+      ...directMapping,
+      id: "00000000-0000-4000-8000-000000000451",
+      primary_repository_id: "repository-051",
+    };
+    listAdminRevisionMappingsMock
+      .mockResolvedValueOnce(
+        ok({ items: firstPage, next_cursor: "opaque-revision-page-2" }),
+      )
+      .mockResolvedValueOnce(ok({ items: [finalMapping], next_cursor: null }));
+
+    const loaded = await loadEditableProduct(
+      "memory-only-admin-bearer",
+      activeProduct.id,
+    );
+
+    expect(loaded.mappedRepositoryIds).toHaveLength(51);
+    expect(loaded.mappedRepositoryIds.at(-1)).toBe("repository-051");
+    expect(listAdminRevisionMappingsMock).toHaveBeenNthCalledWith(1, {
+      auth: "memory-only-admin-bearer",
+      path: {
+        product_id: activeProduct.id,
+        revision_id: activeProduct.candidate_revision!.id,
+      },
+      query: { cursor: null, limit: 50 },
+      signal: expect.any(AbortSignal),
+    });
+    expect(listAdminRevisionMappingsMock).toHaveBeenNthCalledWith(2, {
+      auth: "memory-only-admin-bearer",
+      path: {
+        product_id: activeProduct.id,
+        revision_id: activeProduct.candidate_revision!.id,
+      },
+      query: { cursor: "opaque-revision-page-2", limit: 50 },
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it("keeps all five wizard steps reachable through persistent 320px keyboard and pointer controls", async () => {
@@ -1922,6 +1971,7 @@ describe("administrator product configuration tracer", () => {
       auth: "memory-only-admin-bearer",
       path: { repository_id: applicationRepository.id },
       query: { cursor: null, limit: 100 },
+      signal: expect.any(AbortSignal),
     });
 
     const sourceBranch = await screen.findByRole("combobox", {
