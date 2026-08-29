@@ -481,8 +481,8 @@ evidence_report() {
   [ -f "$EVIDENCE_PATH" ] || die "Phase 2 evidence report is missing"
   grep -Fq -- '- Gauntlet-status: PASS' "$EVIDENCE_PATH" \
     || die "evidence does not record a passing gauntlet"
-  grep -Fq -- '- Live-provider-smoke: NOT RUN — BLOCKING HUMAN CHECKPOINT' "$EVIDENCE_PATH" \
-    || die "evidence does not preserve the live-provider checkpoint"
+  grep -Fq -- '- Live-provider-smoke: PASS — EXACT REPOSITORY SCOPE, 5 GET, ZERO WRITES, LOCAL REVOKE PASS' "$EVIDENCE_PATH" \
+    || die "evidence does not record the exact live-provider result"
   "$GAUNTLET_DIR/source_state.sh" --verify-report-digest
 }
 
