@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-27-PLAN.md
-last_updated: "2026-08-29T19:43:16.228Z"
+stopped_at: Completed 02-28-PLAN.md
+last_updated: "2026-08-29T20:13:51.502Z"
 last_activity: 2026-08-29
 last_activity_desc: Phase 02 execution started
-state_head: 57b06cf2556ad6dbb717ec2cca27a7e9c2653e28
+state_head: 3257895716f74c933ef44af1c2f07b6968163c5a
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 53
-  completed_plans: 46
+  completed_plans: 47
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 31 of 38
+Plan: 32 of 38
 Status: Ready to execute
 Last activity: 2026-08-29 — Phase 02 execution started
 
@@ -104,6 +104,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P29 | 35min | 3 tasks | 12 files |
 | Phase 02-admin-configuration P31 | 10min | 2 tasks | 2 files |
 | Phase 02-admin-configuration P27 | 33m | 2 tasks | 6 files |
+| Phase 02-admin-configuration P28 | 24m | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -271,6 +272,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Plan 02-27: Existing-product edit loads are read-only; active-only products create exactly one candidate only through a genuinely changed details PATCH.
 - [Phase 02]: Plan 02-27: Candidate and mapping identities remain server-owned and are restored unchanged across deep-link, refresh, and browser history traversal.
 - [Phase 02]: Plan 02-27: Mobile wizard targets use literal 44px minimums and Playwright-native ARIA, keyboard, overflow, and 200% reflow verification.
+- [Phase 02]: Treat the product current-candidate endpoint as the mapping query identity so a successful local version increment does not invalidate its own saved row.
+- [Phase 02]: Resolve configured branches through one exact generated-client request per unique opaque value and merge them after listed API order without changing paged loaded counts.
+- [Phase 02]: Bound automatic wizard revision-mapping restoration to 50 pages and fail closed on repeated cursors or page-limit exhaustion.
 
 ### Pending Todos
 
@@ -309,6 +313,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-29T19:43:16.175Z
-Stopped at: Completed 02-27-PLAN.md
+Last session: 2026-08-29T20:13:51.433Z
+Stopped at: Completed 02-28-PLAN.md
 Resume file: None

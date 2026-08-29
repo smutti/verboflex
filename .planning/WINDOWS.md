@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 0
 waived_count: 0
-fixed_count: 32
-total_count: 32
-last_updated: 2026-08-29T17:49:54.522Z
+fixed_count: 35
+total_count: 35
+last_updated: 2026-08-29T20:13:36.042Z
 ---
 
 # Broken Windows Ledger
@@ -47,6 +47,9 @@ last_updated: 2026-08-29T17:49:54.522Z
 | 30 | 02 | deviation | tools/verify_mapping_api_mutants.py |  | Realigned mapping mutation subjects with the shared owned-revision paginator. | fixed |  | 2026-08-29T17:49:48.066Z | 2026-08-29T17:49:54.400Z |
 | 31 | 02 | deviation | backend/tests/integration/test_bitbucket_http_adapter.py |  | Updated the stale credential fixture to the expiry-safe lease contract required by the acceptance gate. | fixed |  | 2026-08-29T17:49:48.147Z | 2026-08-29T17:49:54.461Z |
 | 32 | 02 | deviation | frontend/src/features/admin/products/ProductConfiguration.test.tsx |  | Aligned existing frontend revision fixtures with the canonical required revision name. | fixed |  | 2026-08-29T17:49:48.220Z | 2026-08-29T17:49:54.522Z |
+| 33 | 02 | deviation | frontend/src/features/admin/mappings/ProductMappingsPage.tsx |  | Prevented a successful mapping save from invalidating its own current-candidate collection | fixed |  | 2026-08-29T20:13:15.806Z | 2026-08-29T20:13:35.915Z |
+| 34 | 02 | deviation | frontend/src/features/admin/useCursorCollection.ts |  | Preserved generated wire-shape authority for the generic cursor slice | fixed |  | 2026-08-29T20:13:15.871Z | 2026-08-29T20:13:35.980Z |
+| 35 | 02 | deviation | frontend/e2e/admin-configuration.spec.ts |  | Verified current-source browser journeys after detecting a stale default nginx asset | fixed |  | 2026-08-29T20:13:15.939Z | 2026-08-29T20:13:36.042Z |
 
 ````json
 [
@@ -433,6 +436,42 @@ last_updated: 2026-08-29T17:49:54.522Z
     "reason": "",
     "recorded_at": "2026-08-29T17:49:48.220Z",
     "resolved_at": "2026-08-29T17:49:54.522Z"
+  },
+  {
+    "id": 33,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "frontend/src/features/admin/mappings/ProductMappingsPage.tsx",
+    "line": null,
+    "description": "Prevented a successful mapping save from invalidating its own current-candidate collection",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-29T20:13:15.806Z",
+    "resolved_at": "2026-08-29T20:13:35.915Z"
+  },
+  {
+    "id": 34,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "frontend/src/features/admin/useCursorCollection.ts",
+    "line": null,
+    "description": "Preserved generated wire-shape authority for the generic cursor slice",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-29T20:13:15.871Z",
+    "resolved_at": "2026-08-29T20:13:35.980Z"
+  },
+  {
+    "id": 35,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "frontend/e2e/admin-configuration.spec.ts",
+    "line": null,
+    "description": "Verified current-source browser journeys after detecting a stale default nginx asset",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-29T20:13:15.939Z",
+    "resolved_at": "2026-08-29T20:13:36.042Z"
   }
 ]
 ````
