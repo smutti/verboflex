@@ -246,6 +246,29 @@ def test_empty_roles_and_self_admin_removal_fail_without_mutation(
         ) == before
 
 
+def test_cli_email_deactivation_uses_the_http_last_admin_domain_conflict(
+    service_session_factory: sessionmaker[Session],
+) -> None:
+    """The privileged email adapter cannot bypass the shared survivor invariant."""
+    actor_id = _seed_user(
+        service_session_factory,
+        email="admin@example.com",
+        roles=(RoleName.ADMIN,),
+        token_version=5,
+    )
+
+    with (
+        service_session_factory() as session,
+        pytest.raises(admin_users.AdminUserConflict, match="user lifecycle conflict"),
+    ):
+        admin_users.deactivate_user_by_email(session, email=" ADMIN@EXAMPLE.COM ")
+
+    with service_session_factory() as session:
+        actor = session.get_one(User, actor_id)
+        assert actor.is_active is True
+        assert actor.token_version == 5
+
+
 def test_reset_and_reactivation_always_issue_fresh_credentials_and_revoke_authority(
     service_session_factory: sessionmaker[Session],
 ) -> None:
