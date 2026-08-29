@@ -15,7 +15,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from verboflex.auth.identity import ASCII_WHITESPACE, normalize_email
-from verboflex.auth.passwords import hash_password, validate_password_for_user
+from verboflex.auth.passwords import (
+    PasswordPolicyError,
+    hash_password,
+    validate_password_for_user,
+)
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.role import Role
 from verboflex.models.user import User
@@ -26,6 +30,7 @@ DEFAULT_ADMIN_USER_PAGE_SIZE = 50
 MAX_ADMIN_USER_PAGE_SIZE = 100
 _CURSOR_VERSION = 1
 _FIXED_ROLE_ORDER = tuple(RoleName)
+_MAX_TEMPORARY_CREDENTIAL_ATTEMPTS = 8
 
 
 class AdminUserAuthorityError(PermissionError):
@@ -239,15 +244,20 @@ def _replace_password_authority(
 
 
 def _generate_temporary_credential(session: Session, user: User) -> CreatedAdminUser:
-    temporary_password = secrets.token_urlsafe(24)
-    _replace_password_authority(
-        session,
-        user,
-        password=temporary_password,
-        revoked_at=datetime.now(UTC),
-    )
-    session.flush()
-    return CreatedAdminUser(user=_to_record(user), temporary_password=temporary_password)
+    for _attempt in range(_MAX_TEMPORARY_CREDENTIAL_ATTEMPTS):
+        temporary_password = secrets.token_urlsafe(24)
+        try:
+            _replace_password_authority(
+                session,
+                user,
+                password=temporary_password,
+                revoked_at=datetime.now(UTC),
+            )
+        except PasswordPolicyError:
+            continue
+        session.flush()
+        return CreatedAdminUser(user=_to_record(user), temporary_password=temporary_password)
+    raise RuntimeError("temporary credential generation unavailable")
 
 
 def create_admin_user(
