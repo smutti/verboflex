@@ -3,9 +3,21 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import openApiDocument from "../../openapi.json";
 import { createClient } from "./client/client";
-import { listAdminUsers } from "./client/sdk.gen";
+import {
+  getAdminRepositoryBranch,
+  listAdminRevisionMappings,
+  listAdminUsers,
+} from "./client/sdk.gen";
 import type {
+  AdminBranchListResponse,
+  AdminBranchResponse,
+  AdminMappingListResponse,
+  AdminRepositoryListResponse,
   AdminUserListResponse,
+  GetAdminRepositoryBranchData,
+  GetAdminRepositoryBranchResponse,
+  ListAdminRevisionMappingsData,
+  ListAdminRevisionMappingsResponse,
   ListAdminUsersResponse,
 } from "./client/types.gen";
 
@@ -36,8 +48,14 @@ const sensitiveAdminProperties = new Set([
   "access_token_ciphertext",
   "authorization_url",
   "client_secret",
+  "credentials",
   "encryption_key",
+  "next",
+  "next_url",
   "provider_body",
+  "provider_next",
+  "provider_next_url",
+  "provider_url",
   "raw_body",
   "refresh_token",
   "refresh_token_ciphertext",
@@ -315,11 +333,132 @@ describe("canonical generated Phase 2 admin client", () => {
     expect(requests[0]?.body).toBeNull();
   });
 
+  it("calls the owned revision mapping operation with exact path IDs and an opaque cursor", async () => {
+    const responseBody = {
+      items: [],
+      next_cursor: "vf.cursor/opaque%value?with#reserved",
+    } satisfies AdminMappingListResponse;
+    const requests: Request[] = [];
+    const apiClient = createClient({
+      baseUrl: "https://api.verboflex.test",
+      fetch: async (request) => {
+        requests.push(
+          request instanceof Request ? request : new Request(request),
+        );
+        return new Response(JSON.stringify(responseBody), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      },
+    });
+    const productId = "10000000-0000-4000-8000-000000000001";
+    const revisionId = "20000000-0000-4000-8000-000000000002";
+    const cursor = "vf.cursor/incoming%value?with#reserved";
+
+    const result = await listAdminRevisionMappings({
+      auth: "phase-two-memory-bearer",
+      client: apiClient,
+      path: { product_id: productId, revision_id: revisionId },
+      query: { cursor, limit: 100 },
+    });
+
+    expectTypeOf(result.data).toEqualTypeOf<
+      ListAdminRevisionMappingsResponse | undefined
+    >();
+    expect(result.data).toEqual(responseBody);
+    expect(requests).toHaveLength(1);
+    const requestUrl = new URL(requests[0]!.url);
+    expect(requestUrl.pathname).toBe(
+      `/api/v1/admin/products/${productId}/revisions/${revisionId}/mappings`,
+    );
+    expect(requestUrl.searchParams.get("cursor")).toBe(cursor);
+    expect(requestUrl.searchParams.get("limit")).toBe("100");
+    expect(requestUrl.searchParams.get("product_id")).toBeNull();
+    expect(requestUrl.searchParams.get("revision_id")).toBeNull();
+    expect(requests[0]?.headers.get("Authorization")).toBe(
+      "Bearer phase-two-memory-bearer",
+    );
+  });
+
+  it("round-trips reserved branch characters through the required query input", async () => {
+    const branchName =
+      "release/slash%2F Unicode à?hash#colon:@amp&equals=plus+$comma,semi;[]";
+    const responseBody = {
+      commit_hash: "f".repeat(40),
+      name: branchName,
+    } satisfies AdminBranchResponse;
+    const requests: Request[] = [];
+    const apiClient = createClient({
+      baseUrl: "https://api.verboflex.test",
+      fetch: async (request) => {
+        requests.push(
+          request instanceof Request ? request : new Request(request),
+        );
+        return new Response(JSON.stringify(responseBody), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      },
+    });
+    const repositoryId = "30000000-0000-4000-8000-000000000003";
+
+    const result = await getAdminRepositoryBranch({
+      auth: "phase-two-memory-bearer",
+      client: apiClient,
+      path: { repository_id: repositoryId },
+      query: { branch_name: branchName },
+    });
+
+    expectTypeOf(result.data).toEqualTypeOf<
+      GetAdminRepositoryBranchResponse | undefined
+    >();
+    expect(result.data).toEqual(responseBody);
+    expect(requests).toHaveLength(1);
+    const requestUrl = new URL(requests[0]!.url);
+    expect(requestUrl.pathname).toBe(
+      `/api/v1/admin/repositories/${repositoryId}/branch`,
+    );
+    expect(requestUrl.searchParams.get("branch_name")).toBe(branchName);
+    expect(requestUrl.pathname).not.toContain("release");
+    expect(requestUrl.hash).toBe("");
+    expect(requests[0]?.headers.get("Authorization")).toBe(
+      "Bearer phase-two-memory-bearer",
+    );
+  });
+
+  it("keeps generated path, query, and cursor types exact", () => {
+    expectTypeOf<ListAdminRevisionMappingsData["path"]>().toEqualTypeOf<{
+      product_id: string;
+      revision_id: string;
+    }>();
+    expectTypeOf<
+      NonNullable<ListAdminRevisionMappingsData["query"]>
+    >().toEqualTypeOf<{
+      cursor?: string | null;
+      limit?: number;
+    }>();
+    expectTypeOf<GetAdminRepositoryBranchData["path"]>().toEqualTypeOf<{
+      repository_id: string;
+    }>();
+    expectTypeOf<GetAdminRepositoryBranchData["query"]>().toEqualTypeOf<{
+      branch_name: string;
+    }>();
+    expectTypeOf<AdminRepositoryListResponse["next_cursor"]>().toEqualTypeOf<
+      string | null
+    >();
+    expectTypeOf<AdminBranchListResponse["next_cursor"]>().toEqualTypeOf<
+      string | null
+    >();
+    expectTypeOf<AdminMappingListResponse["next_cursor"]>().toEqualTypeOf<
+      string | null
+    >();
+  });
+
   it("keeps list and provider-facing admin schemas free of credential material", () => {
     const guardedSchemas = [
       "AdminUserListResponse",
       ...Object.keys(openApi.components.schemas).filter((name) =>
-        /^(?:AdminBitbucket|AdminBranch|AdminDiscovery|AdminRepository|AdminSource)/u.test(
+        /^(?:AdminBitbucket|AdminBranch|AdminDiscovery|AdminMapping|AdminRepository|AdminSource)/u.test(
           name,
         ),
       ),
