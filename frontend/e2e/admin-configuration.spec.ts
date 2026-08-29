@@ -990,16 +990,310 @@ test("Bitbucket client credentials recover expiry without navigation or credenti
   await expectNoPageOverflow(page);
 });
 
-test("published product edit preserves one complete candidate across refresh", async () => {
+interface RealRevision {
+  description: string | null;
+  id: string;
+  is_published: boolean;
+  name: string;
+  version: number;
+}
+
+interface RealProduct {
+  active_revision: RealRevision | null;
+  candidate_revision: RealRevision | null;
+  id: string;
+  is_active: boolean;
+  name: string;
+}
+
+interface RealMappingPage {
+  items: Array<{
+    allowed_target_branches: string[];
+    default_target_branch: string;
+    primary_repository_id: string;
+    primary_source_branch: string;
+    topology: string;
+    translations_repository_id: string | null;
+    translations_source_branch: string | null;
+  }>;
+  next_cursor: string | null;
+}
+
+function realEnvironment(name: string) {
+  const value = process.env[name];
+  if (value === undefined || value.length === 0) {
+    throw new Error(`${name} must be set for the real-backend admin test`);
+  }
+  return value;
+}
+
+async function signInToRealBackend(page: Page) {
+  const email = realEnvironment("E2E_EMAIL");
+  const password = realEnvironment("E2E_PASSWORD");
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in to VerboFlex" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  return { email, password };
+}
+
+function productResponse(productId: string, method = "GET") {
+  return (response: {
+    request: () => { method: () => string };
+    url: () => string;
+  }) =>
+    response.request().method() === method &&
+    new URL(response.url()).pathname === `/api/v1/admin/products/${productId}`;
+}
+
+function revisionMappingsResponse(productId: string) {
+  return (response: {
+    request: () => { method: () => string };
+    url: () => string;
+  }) => {
+    const pathname = new URL(response.url()).pathname;
+    return (
+      response.request().method() === "GET" &&
+      pathname.startsWith(`/api/v1/admin/products/${productId}/revisions/`) &&
+      pathname.endsWith("/mappings")
+    );
+  };
+}
+
+function mappingFingerprint(page: RealMappingPage) {
+  return page.items.map((mapping) => ({
+    allowed_target_branches: mapping.allowed_target_branches,
+    default_target_branch: mapping.default_target_branch,
+    primary_repository_id: mapping.primary_repository_id,
+    primary_source_branch: mapping.primary_source_branch,
+    topology: mapping.topology,
+    translations_repository_id: mapping.translations_repository_id,
+    translations_source_branch: mapping.translations_source_branch,
+  }));
+}
+
+async function expectNoSeededSecret(page: Page, secret: string) {
+  const residue = await page.evaluate(() => ({
+    history: JSON.stringify(history.state),
+    local: JSON.stringify(Object.entries(localStorage)),
+    session: JSON.stringify(Object.entries(sessionStorage)),
+    text: document.body.innerText,
+    url: location.href,
+  }));
+  expect(JSON.stringify(residue)).not.toContain(secret);
+}
+
+async function openPublishedEdit(page: Page, productId: string) {
+  const overviewResponse = page.waitForResponse(productResponse(productId));
+  await page.goto(`/admin/products/${productId}/overview`);
+  const published = (await (await overviewResponse).json()) as RealProduct;
+  expect(published.active_revision).not.toBeNull();
+  expect(published.candidate_revision).toBeNull();
+
+  const editProductResponse = page.waitForResponse(productResponse(productId));
+  const editMappingsResponse = page.waitForResponse(
+    revisionMappingsResponse(productId),
+  );
+  await page.getByRole("link", { name: "Edit draft" }).click();
+  const [loadedProduct, loadedMappings] = await Promise.all([
+    editProductResponse,
+    editMappingsResponse,
+  ]);
+  await expect(page).toHaveURL(`/admin/products/${productId}/edit`);
+  return {
+    mappings: (await loadedMappings.json()) as RealMappingPage,
+    product: (await loadedProduct.json()) as RealProduct,
+  };
+}
+
+test("published product edit preserves one complete candidate across refresh", async ({
+  page,
+}) => {
+  const productId = realEnvironment("E2E_PUBLISHED_PRODUCT_ID");
+  const { password } = await signInToRealBackend(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const initial = await openPublishedEdit(page, productId);
+  const activeId = initial.product.active_revision?.id;
+  expect(activeId).toBeTruthy();
+  expect(initial.product.candidate_revision).toBeNull();
+  expect(initial.mappings.items.length).toBeGreaterThan(0);
+  expect(initial.mappings.next_cursor).toBeNull();
+
+  const productMutations: string[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "PATCH" &&
+      new URL(request.url()).pathname === `/api/v1/admin/products/${productId}`
+    ) {
+      productMutations.push(request.url());
+    }
+  });
+  await page
+    .getByLabel("Description")
+    .fill(`Real routed edit ${Date.now().toString(36)}`);
+  const candidateResponse = page.waitForResponse(
+    productResponse(productId, "PATCH"),
+  );
+  await page.getByRole("button", { name: "Save and continue" }).click();
+  const candidate = (await (await candidateResponse).json()) as RealProduct;
+  expect(candidate.active_revision?.id).toBe(activeId);
+  expect(candidate.candidate_revision).not.toBeNull();
+  expect(candidate.candidate_revision?.id).not.toBe(activeId);
+  const candidateId = candidate.candidate_revision!.id;
+  await expect(
+    page.getByRole("heading", { name: "Repositories" }),
+  ).toBeVisible();
+
+  const refreshedProductResponse = page.waitForResponse(
+    productResponse(productId),
+  );
+  const refreshedMappingsResponse = page.waitForResponse(
+    revisionMappingsResponse(productId),
+  );
+  await page.reload();
+  const [refreshedProductRaw, refreshedMappingsRaw] = await Promise.all([
+    refreshedProductResponse,
+    refreshedMappingsResponse,
+  ]);
+  const refreshed = (await refreshedProductRaw.json()) as RealProduct;
+  const refreshedMappings =
+    (await refreshedMappingsRaw.json()) as RealMappingPage;
+  expect(refreshed.active_revision?.id).toBe(activeId);
+  expect(refreshed.candidate_revision?.id).toBe(candidateId);
+  expect(mappingFingerprint(refreshedMappings)).toEqual(
+    mappingFingerprint(initial.mappings),
+  );
+  expect(productMutations).toHaveLength(1);
+
+  const overviewAgain = page.waitForResponse(productResponse(productId));
+  await page.goBack();
   expect(
-    false,
-    "the real-backend published edit journey has not been implemented",
-  ).toBe(true);
+    ((await (await overviewAgain).json()) as RealProduct).active_revision?.id,
+  ).toBe(activeId);
+  await expect(page).toHaveURL(`/admin/products/${productId}/overview`);
+  const forwardProduct = page.waitForResponse(productResponse(productId));
+  const forwardMappings = page.waitForResponse(
+    revisionMappingsResponse(productId),
+  );
+  await page.goForward();
+  const [forwardProductRaw] = await Promise.all([
+    forwardProduct,
+    forwardMappings,
+  ]);
+  const restored = (await forwardProductRaw.json()) as RealProduct;
+  expect(restored.active_revision?.id).toBe(activeId);
+  expect(restored.candidate_revision?.id).toBe(candidateId);
+  expect(productMutations).toHaveLength(1);
+  await expectNoPageOverflow(page);
+  await expectNoSeededSecret(page, password);
 });
 
-test("mobile five-step wizard remains reachable at 320 pixels", async () => {
-  expect(
-    false,
-    "the 320px five-step browser journey has not been implemented",
-  ).toBe(true);
+test("mobile five-step wizard remains reachable at 320 pixels", async ({
+  page,
+}) => {
+  const productId = realEnvironment("E2E_MOBILE_PRODUCT_ID");
+  const { password } = await signInToRealBackend(page);
+  await page.setViewportSize({ width: 320, height: 720 });
+  await openPublishedEdit(page, productId);
+  await expectNoPageOverflow(page);
+
+  const candidateResponse = page.waitForResponse(
+    productResponse(productId, "PATCH"),
+  );
+  await page
+    .getByLabel("Description")
+    .fill(`Mobile routed edit ${Date.now().toString(36)}`);
+  await page.getByRole("button", { name: "Save and continue" }).click();
+  const candidate = (await (await candidateResponse).json()) as RealProduct;
+  expect(candidate.candidate_revision).not.toBeNull();
+  const progress = page.getByLabel("Product setup progress");
+  const navigation = page.getByRole("navigation", {
+    name: "Wizard navigation",
+  });
+  const next = navigation.getByRole("button", { name: /^Next/ });
+  const back = navigation.getByRole("button", { name: "Back" });
+
+  await expect(progress).toContainText("Step 2 of 5");
+  await next.focus();
+  await expect(next).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(progress).toContainText("Step 3 of 5");
+  await next.click();
+  await expect(progress).toContainText("Step 4 of 5");
+  await next.focus();
+  await page.keyboard.press("Enter");
+  await expect(progress).toContainText("Step 5 of 5");
+  await expect(next).toBeDisabled();
+
+  await back.click();
+  await expect(progress).toContainText("Step 4 of 5");
+  await back.focus();
+  await page.keyboard.press("Enter");
+  await expect(progress).toContainText("Step 3 of 5");
+  await back.click();
+  await expect(progress).toContainText("Step 2 of 5");
+  await back.click();
+  await expect(progress).toContainText("Step 1 of 5");
+  await expectNoPageOverflow(page);
+
+  const navigationSnapshot = await navigation.ariaSnapshot();
+  expect(navigationSnapshot).toContain("Back");
+  expect(navigationSnapshot).toContain("Next: Repositories");
+  const buttonSizes = await navigation
+    .getByRole("button")
+    .evaluateAll((buttons) =>
+      buttons.map((button) => button.getBoundingClientRect().height),
+    );
+  for (const height of buttonSizes) {
+    expect(height).toBeGreaterThanOrEqual(44);
+  }
+
+  const dirtyName = `${candidate.candidate_revision!.name} unsaved`;
+  await page.getByLabel("Name", { exact: true }).fill(dirtyName);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  const cancelDialog = page.waitForEvent("dialog");
+  void page.reload().catch(() => null);
+  const cancel = await cancelDialog;
+  expect(cancel.type()).toBe("beforeunload");
+  await cancel.dismiss();
+  await expect(page).toHaveURL(`/admin/products/${productId}/edit`);
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue(dirtyName);
+
+  await page.setViewportSize({ width: 640, height: 720 });
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = "2";
+  });
+  await expectNoPageOverflow(page);
+  await expectNoSeededSecret(page, password);
+
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = "1";
+  });
+  await page.setViewportSize({ width: 320, height: 720 });
+  const acceptedProductResponse = page.waitForResponse(
+    productResponse(productId),
+  );
+  const acceptedMappingsResponse = page.waitForResponse(
+    revisionMappingsResponse(productId),
+  );
+  const acceptDialog = page.waitForEvent("dialog");
+  const acceptedReload = page.reload();
+  const accept = await acceptDialog;
+  expect(accept.type()).toBe("beforeunload");
+  await accept.accept();
+  await Promise.all([
+    acceptedReload,
+    acceptedProductResponse,
+    acceptedMappingsResponse,
+  ]);
+  await expect(page).toHaveURL(`/admin/products/${productId}/edit`);
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue(
+    candidate.candidate_revision!.name,
+  );
 });

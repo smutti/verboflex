@@ -653,7 +653,7 @@ export function ProductWizardPage({
         <Button
           type="button"
           variant="outline"
-          className="min-h-11 min-w-0"
+          className="min-h-[44px] min-w-0"
           disabled={mobileNavigation.backDisabled}
           onClick={goBack}
         >
@@ -661,7 +661,7 @@ export function ProductWizardPage({
         </Button>
         <Button
           type="button"
-          className="min-h-11 min-w-0 whitespace-normal"
+          className="min-h-[44px] min-w-0 whitespace-normal"
           aria-label={mobileNavigation.nextLabel}
           disabled={mobileNavigation.nextDisabled || pending}
           aria-busy={pending}
