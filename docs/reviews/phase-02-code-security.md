@@ -3,7 +3,7 @@
 - Review-status: CLOSED
 - Open-critical-high: 0
 - Full-gauntlet-status: PENDING
-- Reviewed-source-digest: `a6486afd844d4a6f0e1edc2de01f3d80df0a6ac5e8213ff9c7ae1e2459e10239`
+- Reviewed-source-digest: `d4e93b89849df359d5aec6c44f661318a006c1a71be8b349ea69563b6b5510da`
 - Review-standard: OWASP ASVS 5.0 Level 1
 - Review-scope: Complete Phase 2 diff from `ce9fbeef86b00f594d1d06e15d3083d623c54095`
 - Review-date: 2026-08-29
@@ -76,6 +76,7 @@ One Moderate development-only dependency advisory remains explicitly deferred in
 - Risk: Loading credentials or calling a representative repository without an exact-scope, GET-only, bounded, non-secret harness could broaden authority or leak source/token material.
 - Resolution: Add a mode-0600 owner-only dotenv parser, exact callback and token-scope checks, redirect rejection for the token exchange, a validated GET-only audit transport, fixed A-03 page/entry/depth/raw-size ceilings, digest/count-only output, and an in-memory generation revoke that erases the token and rejects the prior lease.
 - Verification: Three fail-closed architecture tests, six existing adapter tests, and the authorized live run: 5 GET requests, zero repository writes, 37 branches, 1 tree page, 12 entries, one 106-byte bounded raw read, and successful local generation invalidation. No credential, token, repository path, or raw content was persisted in evidence.
+- Checker note: The dummy `client-secret` fixture is bound to its exact test path, line, and detector type; every unreviewed secret-scan result remains fatal.
 
 ## Scope and Capability Diff
 
