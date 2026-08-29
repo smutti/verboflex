@@ -225,6 +225,19 @@ checker_self_tests() {
   printf 'checker negative controls: PASS\n'
 }
 
+gap_closure_contract() {
+  grep -Fq 'def run_gap_boundaries(' "$GAUNTLET_DIR/phase2_compose_flow.py" \
+    || die "gap boundary driver is absent"
+  grep -Fq 'def run_worker_loss_recovery(' "$GAUNTLET_DIR/phase2_compose_flow.py" \
+    || die "worker-loss recovery driver is absent"
+  grep -Fq '100/101 exact branches stay fail-closed' \
+    "$FRONTEND_ROOT/e2e/admin-configuration.spec.ts" \
+    || die "100/101 branch E2E is absent"
+  grep -Fq 'run_gap_closure' "$GAUNTLET_DIR/phase2_smoke.sh" \
+    || die "smoke gap-closure composition is absent"
+  printf 'gap-closure contract: PASS\n'
+}
+
 backend_tests_coverage_body() {
   (
     cd "$BACKEND_ROOT"
@@ -518,6 +531,7 @@ run_gauntlet() {
 case "${1:-}" in
   '') run_gauntlet final ;;
   --candidate) run_gauntlet candidate ;;
+  --gap-closure-contract) gap_closure_contract ;;
   -h|--help) printf 'usage: tools/phase2_gauntlet.sh [--candidate]\n' ;;
   *) die "unknown argument: $1" ;;
 esac
