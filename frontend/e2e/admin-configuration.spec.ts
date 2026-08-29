@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { execFileSync } from "node:child_process";
 
 const temporaryPassword = "VF-once-only-secret-29";
 const now = "2026-08-28T19:30:00Z";
@@ -417,6 +418,9 @@ async function installAdminApi(page: Page, state: AdminMockState) {
       state.product = { ...state.product, is_active: true };
       return json(route, state.product);
     }
+    if (/\/revisions\/[^/]+\/mappings$/.test(pathname) && method === "GET") {
+      return json(route, { items: state.mappings, next_cursor: null });
+    }
     if (/\/candidate\/mappings$/.test(pathname) && method === "GET") {
       return json(route, { items: state.mappings, next_cursor: null });
     }
@@ -812,13 +816,16 @@ test("product lifecycle remains backend-authoritative for deactivate and reactiv
   await expect(page.getByText("Inactive", { exact: true })).toBeVisible();
 
   state.product = product({ candidate_revision: null, is_active: false });
-  state.mappings = [directMapping];
-  state.previewMode = "success";
+  state.mappings = [
+    {
+      ...directMapping,
+      candidate_version: publishedRevision.version,
+      selected_layout_candidate_id: "published-layout",
+      selected_layout_version: 1,
+    },
+  ];
   state.reactivationConflicts = 1;
   await page.goto("/admin/products/product-1/preview");
-  await page.getByRole("button", { name: "Run validation" }).click();
-  await page.getByRole("radio", { name: "Android XML — Android XML" }).check();
-  await page.getByRole("button", { name: "Confirm preview" }).click();
   await expect(page.getByText("Confirmed", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Reactivate product" }).click();
   const reactivateDialog = page.getByRole("alertdialog", {
@@ -1019,6 +1026,279 @@ interface RealMappingPage {
   next_cursor: string | null;
 }
 
+interface RealReactivationFixtures {
+  currentProductId: string;
+  email: string;
+  password: string;
+  repositoryIds: string[];
+  staleProductId: string;
+  userId: string;
+}
+
+const realReactivationSeed = String.raw`
+import json
+import sys
+from datetime import UTC, datetime, timedelta
+from uuid import UUID, uuid4
+
+from sqlalchemy import select
+
+from verboflex.auth.passwords import hash_password
+from verboflex.db.session import SessionFactory
+from verboflex.localization.preview.core import build_layout_candidate
+from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.models.preview_job import PreviewJob
+from verboflex.models.product import Product, ProductRevision
+from verboflex.models.product_mapping import (
+    ProductMappingAllowedTarget,
+    ProductMappingRepositorySide,
+    ProductRepositoryMapping,
+)
+from verboflex.models.repository import Repository
+from verboflex.models.role import Role
+from verboflex.models.user import User
+from verboflex.services.preview_jobs import (
+    PREVIEW_DETECTOR_VERSION,
+    PREVIEW_LAYOUT_IDENTITY,
+    _canonical_identity,
+    _closed_result,
+    _complete_sides,
+    _identity,
+)
+
+now = datetime.now(UTC)
+user_id = uuid4()
+password = f"VF e2e reactivation {uuid4().hex}!"
+email = f"reactivation-{user_id.hex}@example.com"
+repository_ids = []
+
+with SessionFactory.begin() as session:
+    connection = session.get_one(BitbucketConnection, 1)
+    if not (
+        connection.generation == 0
+        and connection.access_token_ciphertext is None
+        and connection.refresh_token_ciphertext is None
+        and connection.scope_profile is None
+        and connection.provider_expires_at is None
+        and connection.connected_at is None
+        and connection.revoked_at is None
+    ):
+        raise RuntimeError("real-backend E2E requires the disconnected local fixture stack")
+    connection.generation = 1
+    connection.access_token_ciphertext = "e2e-non-provider-ciphertext"
+    connection.refresh_token_ciphertext = None
+    connection.scope_profile = "repository"
+    connection.provider_expires_at = now + timedelta(hours=1)
+    connection.connected_at = now
+    connection.revoked_at = None
+
+    admin_role = session.scalar(select(Role).where(Role.name == "admin"))
+    if admin_role is None:
+        raise RuntimeError("admin role unavailable")
+    user = User(
+        id=user_id,
+        email=email,
+        display_name="Reactivation E2E Admin",
+        hashed_password=hash_password(password),
+        is_active=True,
+        must_change_password=False,
+    )
+    user.roles = [admin_role]
+    session.add(user)
+
+    def seed_product(*, stale_confirmation):
+        product_id = uuid4()
+        revision_id = uuid4()
+        repository_id = uuid4()
+        mapping_id = uuid4()
+        name = f"Reactivation {product_id.hex[:12]}"
+        product = Product(
+            id=product_id,
+            display_name=name,
+            name_key=name.casefold(),
+            is_active=False,
+        )
+        session.add(product)
+        session.flush()
+        revision = ProductRevision(
+            id=revision_id,
+            product_id=product_id,
+            display_name=name,
+            name_key=name.casefold(),
+            description="Published active-only E2E revision",
+            version=6,
+            is_published=False,
+        )
+        repository = Repository(
+            id=repository_id,
+            workspace="verboflex-e2e",
+            repository_slug=f"reactivation-{repository_id.hex[:12]}",
+        )
+        mapping = ProductRepositoryMapping(
+            id=mapping_id,
+            revision_id=revision_id,
+            topology="direct",
+            identity_key=f'["direct","{repository_id}","main"]',
+        )
+        mapping.sides = [
+            ProductMappingRepositorySide(
+                role="direct",
+                repository_id=repository_id,
+                source_branch="main",
+            )
+        ]
+        mapping.allowed_targets = [
+            ProductMappingAllowedTarget(branch="main", is_default=True)
+        ]
+        session.add_all([revision, repository, mapping])
+        session.flush()
+
+        repository_sides = _complete_sides(mapping, {"direct": "a" * 40})
+        _encoded, input_digest = _canonical_identity(
+            product_id=product_id,
+            revision=revision,
+            mapping=mapping,
+            connection_generation=connection.generation,
+            repository_sides=repository_sides,
+        )
+        job = PreviewJob(
+            id=uuid4(),
+            input_digest=input_digest,
+            attempt=1,
+            state="succeeded",
+            product_id=product_id,
+            candidate_revision_id=revision_id,
+            candidate_revision_version=revision.version,
+            mapping_id=mapping_id,
+            topology="direct",
+            connection_generation=connection.generation,
+            detector_version=PREVIEW_DETECTOR_VERSION,
+            layout_identity=PREVIEW_LAYOUT_IDENTITY,
+            repository_sides=repository_sides,
+            result={},
+            started_at=now,
+            finished_at=now,
+        )
+        candidate = build_layout_candidate(
+            repository_side="direct",
+            format="android_xml",
+            layout_identity=f"mobile/{mapping_id}/src/main/res",
+            files=(f"mobile/{mapping_id}/src/main/res/values/strings.xml",),
+            values={"default": {"hello": "Hello"}},
+        ).to_mapping()
+        job.result = _closed_result(
+            _identity(job),
+            {
+                "detector_version": PREVIEW_DETECTOR_VERSION,
+                "digest": input_digest,
+                "layout_candidates": [candidate],
+            },
+        )
+        session.add(job)
+        mapping.selected_layout_candidate_id = UUID(str(candidate["id"]))
+        mapping.selected_layout_version = 1
+        mapping.confirmed_preview_job_id = job.id
+        mapping.confirmed_preview_digest = str(job.result["digest"])
+        mapping.preview_confirmed_by = user_id
+        mapping.preview_confirmed_at = now
+        if stale_confirmation:
+            mapping.selected_layout_candidate_id = None
+            mapping.selected_layout_version = None
+        session.flush()
+        revision.is_published = True
+        revision.published_at = now
+        session.flush()
+        product.active_revision_id = revision_id
+        product.candidate_revision_id = None
+        session.flush()
+        repository_ids.append(str(repository_id))
+        return str(product_id)
+
+    current_product_id = seed_product(stale_confirmation=False)
+    stale_product_id = seed_product(stale_confirmation=True)
+
+print(json.dumps({
+    "currentProductId": current_product_id,
+    "email": email,
+    "password": password,
+    "repositoryIds": repository_ids,
+    "staleProductId": stale_product_id,
+    "userId": str(user_id),
+}))
+`;
+
+const realReactivationCleanup = String.raw`
+import json
+import sys
+
+from verboflex.db.session import SessionFactory
+from verboflex.models.bitbucket_connection import BitbucketConnection
+
+json.load(sys.stdin)
+with SessionFactory.begin() as session:
+    connection = session.get_one(BitbucketConnection, 1)
+    connection.generation = 0
+    connection.access_token_ciphertext = None
+    connection.refresh_token_ciphertext = None
+    connection.scope_profile = None
+    connection.provider_expires_at = None
+    connection.connected_at = None
+    connection.revoked_at = None
+`;
+
+function realBackendContainer() {
+  const configured = process.env.E2E_BACKEND_CONTAINER?.trim();
+  if (configured) {
+    return configured;
+  }
+  const matches = execFileSync(
+    "docker",
+    [
+      "ps",
+      "--filter",
+      "label=com.docker.compose.service=backend",
+      "--format",
+      "{{.Names}}",
+    ],
+    { encoding: "utf8" },
+  )
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  if (matches.length !== 1) {
+    throw new Error(
+      "E2E_BACKEND_CONTAINER must identify one running real backend",
+    );
+  }
+  return matches[0];
+}
+
+function runRealBackendPython(script: string, input?: string) {
+  const python = process.env.E2E_BACKEND_PYTHON?.trim();
+  if (python) {
+    return execFileSync(python, ["-c", script], {
+      cwd: new URL("../../backend/", import.meta.url),
+      encoding: "utf8",
+      env: process.env,
+      input,
+    });
+  }
+  return execFileSync(
+    "docker",
+    ["exec", "-i", realBackendContainer(), "python", "-c", script],
+    { encoding: "utf8", input },
+  );
+}
+
+function seedRealReactivationFixtures(): RealReactivationFixtures {
+  const output = runRealBackendPython(realReactivationSeed);
+  return JSON.parse(output.trim()) as RealReactivationFixtures;
+}
+
+function cleanupRealReactivationFixtures(fixture: RealReactivationFixtures) {
+  runRealBackendPython(realReactivationCleanup, JSON.stringify(fixture));
+}
+
 function realEnvironment(name: string) {
   const value = process.env[name];
   if (value === undefined || value.length === 0) {
@@ -1027,15 +1307,25 @@ function realEnvironment(name: string) {
   return value;
 }
 
-async function signInToRealBackend(page: Page) {
-  const email = realEnvironment("E2E_EMAIL");
-  const password = realEnvironment("E2E_PASSWORD");
+async function signInWithRealBackendCredentials(
+  page: Page,
+  email: string,
+  password: string,
+) {
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in to VerboFlex" }).click();
   await expect(page).toHaveURL(/\/$/);
   return { email, password };
+}
+
+async function signInToRealBackend(page: Page) {
+  return signInWithRealBackendCredentials(
+    page,
+    realEnvironment("E2E_EMAIL"),
+    realEnvironment("E2E_PASSWORD"),
+  );
 }
 
 function productResponse(productId: string, method = "GET") {
@@ -1301,108 +1591,120 @@ test("mobile five-step wizard remains reachable at 320 pixels", async ({
 test("unchanged active revision reactivation uses real backend state and blocks stale confirmation", async ({
   page,
 }) => {
-  const productId = realEnvironment("E2E_REACTIVATION_PRODUCT_ID");
-  const staleProductId = realEnvironment("E2E_STALE_REACTIVATION_PRODUCT_ID");
-  const { password } = await signInToRealBackend(page);
-  const writes: Array<{ body: unknown; method: string; pathname: string }> = [];
-  page.on("request", (request) => {
-    const method = request.method();
-    const pathname = new URL(request.url()).pathname;
-    if (pathname.startsWith("/api/v1/") && method !== "GET") {
-      writes.push({
-        body: request.postDataJSON(),
-        method,
-        pathname,
-      });
-    }
-  });
-
-  const productLoaded = page.waitForResponse(productResponse(productId));
-  const mappingsLoaded = page.waitForResponse(
-    revisionMappingsResponse(productId),
-  );
-  await page.goto(`/admin/products/${productId}/preview`);
-  const initial = (await (await productLoaded).json()) as RealProduct;
-  const mappingResponse = await mappingsLoaded;
-  expect(initial.is_active).toBe(false);
-  expect(initial.candidate_revision).toBeNull();
-  expect(initial.active_revision).not.toBeNull();
-  expect(new URL(mappingResponse.url()).pathname).toBe(
-    `/api/v1/admin/products/${productId}/revisions/${initial.active_revision!.id}/mappings`,
-  );
-  await expect(page.getByText("Confirmed", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Reactivate product" }),
-  ).toBeEnabled();
-  expect(
-    writes.filter(({ pathname }) =>
-      pathname.includes(`/admin/products/${productId}/candidate`),
-    ),
-  ).toEqual([]);
-
-  const reactivateResponse = page.waitForResponse((response) => {
-    const request = response.request();
-    return (
-      request.method() === "POST" &&
-      new URL(response.url()).pathname ===
-        `/api/v1/admin/products/${productId}/reactivate`
+  const fixture = seedRealReactivationFixtures();
+  const productId = fixture.currentProductId;
+  const staleProductId = fixture.staleProductId;
+  try {
+    const { password } = await signInWithRealBackendCredentials(
+      page,
+      fixture.email,
+      fixture.password,
     );
-  });
-  await page.getByRole("button", { name: "Reactivate product" }).click();
-  await page
-    .getByRole("alertdialog", {
-      name: `Reactivate ${initial.name}?`,
-    })
-    .getByRole("button", { name: "Reactivate product" })
-    .click();
-  const terminal = (await (await reactivateResponse).json()) as RealProduct;
-  expect(terminal).toMatchObject({
-    active_revision: { id: initial.active_revision!.id },
-    candidate_revision: null,
-    id: productId,
-    is_active: true,
-  });
-  expect(writes).toEqual([
-    {
-      body: {
-        active_revision_id: initial.active_revision!.id,
-        expected_active_version: initial.active_revision!.version,
-      },
-      method: "POST",
-      pathname: `/api/v1/admin/products/${productId}/reactivate`,
-    },
-  ]);
-  await expect(page.getByText("Active", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Reactivate product" }),
-  ).toHaveCount(0);
+    const writes: Array<{ body: unknown; method: string; pathname: string }> =
+      [];
+    page.on("request", (request) => {
+      const method = request.method();
+      const pathname = new URL(request.url()).pathname;
+      if (pathname.startsWith("/api/v1/admin/") && method !== "GET") {
+        writes.push({
+          body: request.postDataJSON(),
+          method,
+          pathname,
+        });
+      }
+    });
 
-  const staleProductLoaded = page.waitForResponse(
-    productResponse(staleProductId),
-  );
-  const staleMappingsLoaded = page.waitForResponse(
-    revisionMappingsResponse(staleProductId),
-  );
-  await page.goto(`/admin/products/${staleProductId}/preview`);
-  const staleProduct = (await (await staleProductLoaded).json()) as RealProduct;
-  const staleMappingResponse = await staleMappingsLoaded;
-  expect(staleProduct.is_active).toBe(false);
-  expect(staleProduct.candidate_revision).toBeNull();
-  expect(staleProduct.active_revision).not.toBeNull();
-  expect(new URL(staleMappingResponse.url()).pathname).toBe(
-    `/api/v1/admin/products/${staleProductId}/revisions/${staleProduct.active_revision!.id}/mappings`,
-  );
-  await expect(
-    page.getByText("Preview confirmation required", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Reactivate product" }),
-  ).toBeDisabled();
-  expect(
-    writes.filter(
-      ({ pathname }) =>
-        pathname === `/api/v1/admin/products/${staleProductId}/reactivate`,
-    ),
-  ).toEqual([]);
-  await expectNoSeededSecret(page, password);
+    const productLoaded = page.waitForResponse(productResponse(productId));
+    const mappingsLoaded = page.waitForResponse(
+      revisionMappingsResponse(productId),
+    );
+    await page.goto(`/admin/products/${productId}/preview`);
+    const initial = (await (await productLoaded).json()) as RealProduct;
+    const mappingResponse = await mappingsLoaded;
+    expect(initial.is_active).toBe(false);
+    expect(initial.candidate_revision).toBeNull();
+    expect(initial.active_revision).not.toBeNull();
+    expect(new URL(mappingResponse.url()).pathname).toBe(
+      `/api/v1/admin/products/${productId}/revisions/${initial.active_revision!.id}/mappings`,
+    );
+    await expect(page.getByText("Confirmed", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Reactivate product" }),
+    ).toBeEnabled();
+    expect(
+      writes.filter(({ pathname }) =>
+        pathname.includes(`/admin/products/${productId}/candidate`),
+      ),
+    ).toEqual([]);
+
+    const reactivateResponse = page.waitForResponse((response) => {
+      const request = response.request();
+      return (
+        request.method() === "POST" &&
+        new URL(response.url()).pathname ===
+          `/api/v1/admin/products/${productId}/reactivate`
+      );
+    });
+    await page.getByRole("button", { name: "Reactivate product" }).click();
+    await page
+      .getByRole("alertdialog", {
+        name: `Reactivate ${initial.name}?`,
+      })
+      .getByRole("button", { name: "Reactivate product" })
+      .click();
+    const terminal = (await (await reactivateResponse).json()) as RealProduct;
+    expect(terminal).toMatchObject({
+      active_revision: { id: initial.active_revision!.id },
+      candidate_revision: null,
+      id: productId,
+      is_active: true,
+    });
+    expect(writes).toEqual([
+      {
+        body: {
+          active_revision_id: initial.active_revision!.id,
+          expected_active_version: initial.active_revision!.version,
+        },
+        method: "POST",
+        pathname: `/api/v1/admin/products/${productId}/reactivate`,
+      },
+    ]);
+    await expect(page.getByText("Active", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Reactivate product" }),
+    ).toHaveCount(0);
+
+    const staleProductLoaded = page.waitForResponse(
+      productResponse(staleProductId),
+    );
+    const staleMappingsLoaded = page.waitForResponse(
+      revisionMappingsResponse(staleProductId),
+    );
+    await page.goto(`/admin/products/${staleProductId}/preview`);
+    const staleProduct = (await (
+      await staleProductLoaded
+    ).json()) as RealProduct;
+    const staleMappingResponse = await staleMappingsLoaded;
+    expect(staleProduct.is_active).toBe(false);
+    expect(staleProduct.candidate_revision).toBeNull();
+    expect(staleProduct.active_revision).not.toBeNull();
+    expect(new URL(staleMappingResponse.url()).pathname).toBe(
+      `/api/v1/admin/products/${staleProductId}/revisions/${staleProduct.active_revision!.id}/mappings`,
+    );
+    await expect(
+      page.getByText("Preview confirmation required", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Reactivate product" }),
+    ).toBeDisabled();
+    expect(
+      writes.filter(
+        ({ pathname }) =>
+          pathname === `/api/v1/admin/products/${staleProductId}/reactivate`,
+      ),
+    ).toEqual([]);
+    await expectNoSeededSecret(page, password);
+  } finally {
+    cleanupRealReactivationFixtures(fixture);
+  }
 });
