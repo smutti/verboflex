@@ -17,6 +17,7 @@ import pytest
 from alembic.config import Config
 from psycopg import connect, sql
 from sqlalchemy import create_engine, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from alembic import command
@@ -285,6 +286,54 @@ def _graph_snapshot(
     return (tuple(product), revisions, mappings, sides, targets)
 
 
+def test_revision_insert_snapshots_only_each_missing_identity_component(
+    publication_session_factory: sessionmaker[Session],
+) -> None:
+    """Legacy construction fills either absent identity field without replacing its peer."""
+    product_id = uuid4()
+    display_only_id = uuid4()
+    key_only_id = uuid4()
+    with publication_session_factory.begin() as session:
+        session.add(
+            Product(
+                id=product_id,
+                display_name="Canonical Product",
+                name_key="canonical product",
+                is_active=False,
+            )
+        )
+        session.flush()
+        session.add_all(
+            [
+                ProductRevision(
+                    id=display_only_id,
+                    product_id=product_id,
+                    display_name=None,
+                    name_key="preserved-key",
+                    description="display snapshot",
+                ),
+                ProductRevision(
+                    id=key_only_id,
+                    product_id=product_id,
+                    display_name="Preserved Display",
+                    name_key=None,
+                    description="key snapshot",
+                ),
+            ]
+        )
+    with publication_session_factory() as session:
+        display_only = session.get_one(ProductRevision, display_only_id)
+        key_only = session.get_one(ProductRevision, key_only_id)
+        assert (display_only.display_name, display_only.name_key) == (
+            "Canonical Product",
+            "preserved-key",
+        )
+        assert (key_only.display_name, key_only.name_key) == (
+            "Preserved Display",
+            "canonical product",
+        )
+
+
 def _preview_candidate(mapping_id: UUID) -> dict[str, object]:
     return build_layout_candidate(
         repository_side="direct",
@@ -529,6 +578,71 @@ def test_noncanonical_candidate_identity_rolls_back_metadata_and_pointers(
             expected_candidate_version=7,
             confirmation_predicate=_always_confirmed,
         )
+
+    assert _graph_snapshot(publication_session_factory, product_id=product_id) == before
+
+
+def test_unsupported_candidate_identity_is_bounded_and_rolls_back(
+    publication_session_factory: sessionmaker[Session],
+) -> None:
+    """Non-printable durable identity is projected as one bounded publication conflict."""
+    publication = _publication_module()
+    product_id, _active_id, candidate_id, _repository_id = _seed_product_graph(
+        publication_session_factory
+    )
+    assert candidate_id is not None
+    with publication_session_factory.begin() as session:
+        candidate = session.get_one(ProductRevision, candidate_id)
+        candidate.display_name = "unsupported\x01identity"
+    before = _graph_snapshot(publication_session_factory, product_id=product_id)
+
+    with (
+        publication_session_factory() as session,
+        pytest.raises(publication.PublicationConflict, match="identity conflict"),
+    ):
+        publication.publish_product_candidate(
+            session,
+            product_id=product_id,
+            candidate_revision_id=candidate_id,
+            expected_candidate_version=7,
+            confirmation_predicate=_always_confirmed,
+        )
+
+    assert _graph_snapshot(publication_session_factory, product_id=product_id) == before
+
+
+def test_publication_maps_commit_time_identity_integrity_race_to_conflict(
+    publication_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A database uniqueness race remains bounded and rolls back the full graph."""
+    publication = _publication_module()
+    product_id, _active_id, candidate_id, _repository_id = _seed_product_graph(
+        publication_session_factory
+    )
+    assert candidate_id is not None
+    before = _graph_snapshot(publication_session_factory, product_id=product_id)
+
+    with publication_session_factory() as session:
+        original_flush = session.flush
+        flush_count = 0
+
+        def inject_identity_race(*args: Any, **kwargs: Any) -> None:
+            nonlocal flush_count
+            flush_count += 1
+            if flush_count == 2:
+                raise IntegrityError("UPDATE products", {}, RuntimeError("unique race"))
+            original_flush(*args, **kwargs)
+
+        monkeypatch.setattr(session, "flush", inject_identity_race)
+        with pytest.raises(publication.PublicationConflict, match="identity conflict"):
+            publication.publish_product_candidate(
+                session,
+                product_id=product_id,
+                candidate_revision_id=candidate_id,
+                expected_candidate_version=7,
+                confirmation_predicate=_always_confirmed,
+            )
 
     assert _graph_snapshot(publication_session_factory, product_id=product_id) == before
 

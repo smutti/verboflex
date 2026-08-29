@@ -14,7 +14,7 @@ from dataclasses import replace as dataclass_replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Barrier
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
 import httpx
@@ -1259,6 +1259,62 @@ def test_reconciler_source_keeps_skip_locked_and_complete_cas_identity() -> None
     assert "PreviewJob.connection_generation == connection_generation" in claim_source
     assert 'PreviewJob.state == "running"' in claim_source
     assert "finished_at=finished_at" in claim_source
+
+
+def test_watchdog_rejects_invalid_bounds_and_naive_clock_before_database_access() -> None:
+    """Finite positive limits and timezone-aware time are mandatory inputs."""
+    service = importlib.import_module("verboflex.services.preview_jobs")
+
+    def forbidden_factory() -> Session:
+        raise AssertionError("invalid watchdog inputs must fail before database access")
+
+    factory = cast(sessionmaker[Session], forbidden_factory)
+    for hard_limit_seconds, grace_seconds in ((0, 1), (1, 0), (-1, 1), (1, -1)):
+        with pytest.raises(ValueError, match="watchdog limits must be positive"):
+            service.reconcile_stale_preview_jobs(
+                factory,
+                hard_time_limit_seconds=hard_limit_seconds,
+                watchdog_grace_seconds=grace_seconds,
+            )
+    with pytest.raises(ValueError, match="watchdog clock must be timezone-aware"):
+        service.reconcile_stale_preview_jobs(
+            factory,
+            hard_time_limit_seconds=75,
+            watchdog_grace_seconds=15,
+            clock=lambda: datetime(2030, 1, 2, 3, 4, 5),
+        )
+
+
+def test_watchdog_lost_claim_leaves_the_current_running_attempt_unchanged(
+    preview_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A CAS loser does not count or terminalize authority owned by another actor."""
+    service = importlib.import_module("verboflex.services.preview_jobs")
+    now = datetime(2030, 1, 2, 3, 4, 5, tzinfo=UTC)
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    created, _identity_record = _create_running_attempt(
+        preview_session_factory,
+        product_id=product_id,
+        mapping_id=mapping_id,
+        commit_hash="0" * 40,
+        started_at=now - timedelta(seconds=90),
+    )
+    monkeypatch.setattr(service, "_claim_current_running_attempt", lambda *_args, **_kwargs: False)
+
+    assert (
+        service.reconcile_stale_preview_jobs(
+            preview_session_factory,
+            hard_time_limit_seconds=75,
+            watchdog_grace_seconds=15,
+            clock=lambda: now,
+        )
+        == 0
+    )
+    with preview_session_factory() as session:
+        running = session.get_one(PreviewJob, created.id)
+        assert running.state == "running"
+        assert running.finished_at is None
 
 
 def test_watchdog_terminalizes_at_exact_hard_limit_plus_grace_threshold(
