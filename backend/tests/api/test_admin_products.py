@@ -283,6 +283,9 @@ def test_admin_create_and_detail_return_closed_active_and_candidate_summaries(
     product_paths = {
         path for path in app.openapi()["paths"] if path.startswith(ADMIN_PRODUCTS_PATH)
     }
+    revision_mappings_path = (
+        f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/revisions/{{revision_id}}/mappings"
+    )
     assert product_paths == {
         ADMIN_PRODUCTS_PATH,
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}",
@@ -292,7 +295,9 @@ def test_admin_create_and_detail_return_closed_active_and_candidate_summaries(
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/candidate/mappings",
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/candidate/mappings/{{mapping_id}}",
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/candidate/mappings/{{mapping_id}}/preview-jobs",
+        revision_mappings_path,
     }
+    assert set(app.openapi()["paths"][revision_mappings_path]) == {"get"}
     assert "delete" not in app.openapi()["paths"][f"{ADMIN_PRODUCTS_PATH}/{{product_id}}"]
     assert "post" not in app.openapi()["paths"][f"{ADMIN_PRODUCTS_PATH}/{{product_id}}"]
 
