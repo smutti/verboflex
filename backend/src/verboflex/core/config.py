@@ -35,8 +35,6 @@ class Settings(BaseSettings):
     refresh_cookie_secure: bool = True
     bitbucket_oauth_client_id: str | None = None
     bitbucket_oauth_client_secret: SecretStr | None = None
-    bitbucket_oauth_callback_uri: AnyHttpUrl | None = None
-    bitbucket_oauth_post_callback_path: Literal["/admin/bitbucket"] = "/admin/bitbucket"
     bitbucket_token_encryption_keyring: SecretStr | None = None
     bitbucket_http_connect_timeout_seconds: Literal[3] = 3
     bitbucket_http_read_timeout_seconds: Literal[10] = 10

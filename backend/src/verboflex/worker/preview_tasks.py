@@ -7,7 +7,6 @@ from uuid import UUID
 from billiard.exceptions import SoftTimeLimitExceeded  # type: ignore[import-untyped]
 from sqlalchemy.orm import Session, sessionmaker
 
-from verboflex.auth.rate_limits import get_redis_client
 from verboflex.core.config import get_settings
 from verboflex.db.session import SessionFactory
 from verboflex.integrations.bitbucket.client import BitbucketHttpAdapter
@@ -99,7 +98,6 @@ async def _production_preview(identity: PreviewJobIdentity) -> dict[str, object]
     settings = get_settings()
     oauth_service = BitbucketOAuthService(
         settings=settings,
-        redis_client=get_redis_client(settings),
         token_exchange=BitbucketOAuthTokenExchange(),
     )
     adapter = BitbucketHttpAdapter(

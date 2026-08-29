@@ -7,7 +7,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from verboflex.api.v1.router import api_router
-from verboflex.auth.rate_limits import get_redis_client
 from verboflex.core.config import get_settings
 from verboflex.integrations.bitbucket.client import BitbucketHttpAdapter
 from verboflex.services.bitbucket_oauth import (
@@ -24,7 +23,6 @@ async def _application_lifespan(application: FastAPI) -> AsyncIterator[None]:
     try:
         oauth_service = BitbucketOAuthService(
             settings=settings,
-            redis_client=get_redis_client(settings),
             token_exchange=BitbucketOAuthTokenExchange(),
         )
         adapter = BitbucketHttpAdapter(
