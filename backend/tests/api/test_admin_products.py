@@ -21,7 +21,7 @@ from alembic.config import Config
 from psycopg import connect, sql
 from pydantic import SecretStr
 from sqlalchemy import create_engine, delete, func, select, text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, selectinload, sessionmaker
 from sqlalchemy.sql import Executable
 
 from alembic import command
@@ -32,6 +32,7 @@ from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
 from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
+from verboflex.models.preview_job import PreviewJob
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
     ProductMappingAllowedTarget,
@@ -203,6 +204,8 @@ def _product_graph(factory: sessionmaker[Session]) -> tuple[object, ...]:
                 select(
                     ProductRevision.id,
                     ProductRevision.product_id,
+                    ProductRevision.display_name,
+                    ProductRevision.name_key,
                     ProductRevision.description,
                     ProductRevision.version,
                     ProductRevision.is_published,
@@ -252,6 +255,7 @@ def test_admin_create_and_detail_return_closed_active_and_candidate_summaries(
         "candidate_revision": {
             "id": body["candidate_revision"]["id"],
             "version": 1,
+            "name": "Mobile Suite",
             "description": "Mobile translations",
             "is_published": False,
         },
@@ -439,6 +443,7 @@ def test_expected_version_conflicts_duplicate_name_and_identical_save_are_atomic
     assert updated.json()["candidate_revision"] == {
         "id": candidate_before["id"],
         "version": 2,
+        "name": "Alpha Product Renamed",
         "description": "candidate edit",
         "is_published": False,
     }
@@ -581,6 +586,347 @@ def _seed_active_product(
         product.active_revision_id = revision_id
         session.flush()
     return product_id, revision_id
+
+
+def _seed_published_mapping_graph(
+    factory: sessionmaker[Session],
+    *,
+    confirmed_by: UUID,
+) -> tuple[UUID, UUID]:
+    """Seed one immutable active graph containing both mapping topologies."""
+    now = datetime.now(UTC)
+    product_id = uuid4()
+    revision_id = uuid4()
+    direct_repository_id = uuid4()
+    keys_repository_id = uuid4()
+    translations_repository_id = uuid4()
+    with factory.begin() as session:
+        product = Product(
+            id=product_id,
+            display_name="Published Graph",
+            name_key="published graph",
+            is_active=True,
+        )
+        revision = ProductRevision(
+            id=revision_id,
+            product_id=product_id,
+            display_name="Published Graph",
+            name_key="published graph",
+            description="published graph description",
+            version=4,
+            is_published=False,
+        )
+        session.add(product)
+        session.flush()
+        session.add(revision)
+        session.add_all(
+            [
+                Repository(
+                    id=direct_repository_id,
+                    workspace="clone-team",
+                    repository_slug=f"direct-{direct_repository_id.hex[:12]}",
+                ),
+                Repository(
+                    id=keys_repository_id,
+                    workspace="clone-team",
+                    repository_slug=f"keys-{keys_repository_id.hex[:12]}",
+                ),
+                Repository(
+                    id=translations_repository_id,
+                    workspace="clone-team",
+                    repository_slug=f"translations-{translations_repository_id.hex[:12]}",
+                ),
+            ]
+        )
+        session.flush()
+        product.candidate_revision_id = revision_id
+        session.flush()
+
+        direct_mapping = ProductRepositoryMapping(
+            revision_id=revision_id,
+            topology="direct",
+            identity_key=f'["direct","{direct_repository_id}","main"]',
+            selected_layout_candidate_id=uuid4(),
+            selected_layout_version=3,
+            sides=[
+                ProductMappingRepositorySide(
+                    role="direct",
+                    repository_id=direct_repository_id,
+                    source_branch="main",
+                )
+            ],
+            allowed_targets=[
+                ProductMappingAllowedTarget(branch="release/1", is_default=True),
+                ProductMappingAllowedTarget(branch="release/2", is_default=False),
+            ],
+        )
+        separate_mapping = ProductRepositoryMapping(
+            revision_id=revision_id,
+            topology="separate",
+            identity_key=(
+                f'["separate","{keys_repository_id}","main",'
+                f'"{translations_repository_id}","translations"]'
+            ),
+            selected_layout_candidate_id=uuid4(),
+            selected_layout_version=8,
+            sides=[
+                ProductMappingRepositorySide(
+                    role="keys",
+                    repository_id=keys_repository_id,
+                    source_branch="main",
+                ),
+                ProductMappingRepositorySide(
+                    role="translations",
+                    repository_id=translations_repository_id,
+                    source_branch="translations",
+                ),
+            ],
+            allowed_targets=[ProductMappingAllowedTarget(branch="release/l10n", is_default=True)],
+        )
+        session.add_all([direct_mapping, separate_mapping])
+        session.flush()
+
+        for index, mapping in enumerate((direct_mapping, separate_mapping), start=1):
+            digest = f"{index}" * 64
+            preview_job = PreviewJob(
+                id=uuid4(),
+                input_digest=digest,
+                attempt=1,
+                state="succeeded",
+                product_id=product_id,
+                candidate_revision_id=revision_id,
+                candidate_revision_version=revision.version,
+                mapping_id=mapping.id,
+                topology=mapping.topology,
+                connection_generation=12,
+                detector_version="clone-fixture-v1",
+                layout_identity="one-format-layout",
+                repository_sides=[
+                    {
+                        "role": side.role,
+                        "repository_id": str(side.repository_id),
+                        "source_branch": side.source_branch,
+                        "commit": f"{index}" * 40,
+                    }
+                    for side in mapping.sides
+                ],
+                result={"digest": digest, "layout_candidates": []},
+                started_at=now,
+                finished_at=now,
+            )
+            session.add(preview_job)
+            mapping.confirmed_preview_job_id = preview_job.id
+            mapping.confirmed_preview_digest = digest
+            mapping.preview_confirmed_by = confirmed_by
+            mapping.preview_confirmed_at = now
+        session.flush()
+
+        revision.is_published = True
+        revision.published_at = now
+        session.flush()
+        product.active_revision_id = revision_id
+        product.candidate_revision_id = None
+        session.flush()
+    return product_id, revision_id
+
+
+def _revision_mapping_graph(
+    session: Session,
+    *,
+    revision_id: UUID,
+) -> tuple[ProductRepositoryMapping, ...]:
+    return tuple(
+        session.execute(
+            select(ProductRepositoryMapping)
+            .options(
+                selectinload(ProductRepositoryMapping.sides),
+                selectinload(ProductRepositoryMapping.allowed_targets),
+            )
+            .where(ProductRepositoryMapping.revision_id == revision_id)
+            .order_by(ProductRepositoryMapping.identity_key)
+        ).scalars()
+    )
+
+
+def test_existing_product_edit_clones_complete_graph_once_and_isolates_candidate_identity(
+    product_session_factory: sessionmaker[Session],
+) -> None:
+    """Concurrent published edits converge on one deep-cloned candidate graph."""
+    admin_id, admin_token = create_authority(
+        product_session_factory,
+        email="admin@example.com",
+        roles=("admin",),
+    )
+    product_id, active_id = _seed_published_mapping_graph(
+        product_session_factory,
+        confirmed_by=admin_id,
+    )
+    configure_dependencies(product_session_factory)
+    barrier = Barrier(2)
+
+    def edit_once(_index: int) -> httpx.Response:
+        barrier.wait(timeout=5)
+        return asyncio.run(
+            product_request(
+                "PATCH",
+                access_token=admin_token,
+                path=f"{ADMIN_PRODUCTS_PATH}/{product_id}",
+                json_body={
+                    "name": "Candidate Graph",
+                    "description": "",
+                    "expected_candidate_version": 4,
+                },
+            )
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(edit_once, range(2)))
+
+    assert [response.status_code for response in responses] == [200, 200]
+    response_candidates = {response.json()["candidate_revision"]["id"] for response in responses}
+    assert len(response_candidates) == 1
+    assert {response.json()["name"] for response in responses} == {"Published Graph"}
+    assert {response.json()["candidate_revision"]["name"] for response in responses} == {
+        "Candidate Graph"
+    }
+    candidate_id = UUID(response_candidates.pop())
+
+    with product_session_factory() as session:
+        product = session.get_one(Product, product_id)
+        active = session.get_one(ProductRevision, active_id)
+        candidate = session.get_one(ProductRevision, candidate_id)
+        active_graph = _revision_mapping_graph(session, revision_id=active_id)
+        candidate_graph = _revision_mapping_graph(session, revision_id=candidate_id)
+
+        assert product.display_name == "Published Graph"
+        assert product.name_key == "published graph"
+        assert product.active_revision_id == active_id
+        assert product.candidate_revision_id == candidate_id
+        assert active.display_name == "Published Graph"
+        assert active.name_key == "published graph"
+        assert active.description == "published graph description"
+        assert candidate.display_name == "Candidate Graph"
+        assert candidate.name_key == "candidate graph"
+        assert candidate.description == ""
+        assert candidate.version == 5
+        assert len(tuple(session.scalars(select(ProductRevision)))) == 2
+
+        assert len(active_graph) == len(candidate_graph) == 2
+        assert {mapping.id for mapping in active_graph}.isdisjoint(
+            mapping.id for mapping in candidate_graph
+        )
+        for active_mapping, candidate_mapping in zip(active_graph, candidate_graph, strict=True):
+            assert (
+                candidate_mapping.topology,
+                candidate_mapping.identity_key,
+                candidate_mapping.selected_layout_candidate_id,
+                candidate_mapping.selected_layout_version,
+            ) == (
+                active_mapping.topology,
+                active_mapping.identity_key,
+                active_mapping.selected_layout_candidate_id,
+                active_mapping.selected_layout_version,
+            )
+            assert candidate_mapping.id != active_mapping.id
+            assert [
+                (side.role, side.repository_id, side.source_branch)
+                for side in candidate_mapping.sides
+            ] == [
+                (side.role, side.repository_id, side.source_branch) for side in active_mapping.sides
+            ]
+            assert [
+                (target.branch, target.is_default) for target in candidate_mapping.allowed_targets
+            ] == [(target.branch, target.is_default) for target in active_mapping.allowed_targets]
+            assert {(side.mapping_id, side.role) for side in active_mapping.sides}.isdisjoint(
+                (side.mapping_id, side.role) for side in candidate_mapping.sides
+            )
+            assert {
+                (target.mapping_id, target.branch) for target in active_mapping.allowed_targets
+            }.isdisjoint(
+                (target.mapping_id, target.branch) for target in candidate_mapping.allowed_targets
+            )
+            assert active_mapping.confirmed_preview_job_id is not None
+            assert active_mapping.confirmed_preview_digest is not None
+            assert active_mapping.preview_confirmed_by == admin_id
+            assert active_mapping.preview_confirmed_at is not None
+            assert candidate_mapping.confirmed_preview_job_id is None
+            assert candidate_mapping.confirmed_preview_digest is None
+            assert candidate_mapping.preview_confirmed_by is None
+            assert candidate_mapping.preview_confirmed_at is None
+
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(PreviewJob)
+                .where(PreviewJob.candidate_revision_id == candidate_id)
+            )
+            == 0
+        )
+
+
+def test_zero_mapping_edit_is_repeatable_but_remains_ineligible_for_publication(
+    product_session_factory: sessionmaker[Session],
+) -> None:
+    """An empty active graph clones as empty without becoming publishable."""
+    _admin_id, admin_token = create_authority(
+        product_session_factory,
+        email="admin@example.com",
+        roles=("admin",),
+    )
+    product_id, active_id = _seed_active_product(
+        product_session_factory,
+        name="Empty Published",
+        description="active",
+    )
+    configure_dependencies(product_session_factory)
+    payload = {
+        "name": "Empty Candidate",
+        "description": "",
+        "expected_candidate_version": 1,
+    }
+
+    first = asyncio.run(
+        product_request(
+            "PATCH",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{product_id}",
+            json_body=payload,
+        )
+    )
+    repeated = asyncio.run(
+        product_request(
+            "PATCH",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{product_id}",
+            json_body=payload,
+        )
+    )
+
+    assert first.status_code == repeated.status_code == 200
+    assert repeated.json() == first.json()
+    assert first.json()["name"] == "Empty Published"
+    assert first.json()["active_revision"]["id"] == str(active_id)
+    assert first.json()["candidate_revision"]["name"] == "Empty Candidate"
+    candidate_id = UUID(first.json()["candidate_revision"]["id"])
+    with product_session_factory() as session:
+        assert _revision_mapping_graph(session, revision_id=candidate_id) == ()
+
+    blocked = asyncio.run(
+        product_request(
+            "POST",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{product_id}/publish",
+            json_body={
+                "candidate_revision_id": str(candidate_id),
+                "expected_candidate_version": 2,
+            },
+        )
+    )
+    assert blocked.status_code == 409
+    assert blocked.json() == {
+        "detail": "Product publication blocked",
+        "blockers": ["mappings_required"],
+    }
 
 
 def _add_publishable_mapping(
@@ -1170,6 +1516,7 @@ def test_publish_route_projects_only_the_committed_active_summary(
     assert body["active_revision"] == {
         "id": str(candidate_id),
         "version": 7,
+        "name": "Lifecycle " + str(product_id),
         "description": "candidate",
         "is_published": True,
     }
