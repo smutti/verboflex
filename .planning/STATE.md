@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: executing
-stopped_at: Completed 02-29-PLAN.md
-last_updated: "2026-08-29T18:49:14.366Z"
+stopped_at: Completed 02-31-PLAN.md
+last_updated: "2026-08-29T19:02:42.266Z"
 last_activity: 2026-08-29
 last_activity_desc: Phase 02 execution started
-state_head: 5cdcd1040c7fdde107b870246124e3ea5f502de9
+state_head: 1858f096b6c175fe68dfc133486bdbf787cd7a1e
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 53
-  completed_plans: 44
+  completed_plans: 45
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — EXECUTING
-Plan: 29 of 38
+Plan: 30 of 38
 Status: Ready to execute
 Last activity: 2026-08-29 — Phase 02 execution started
 
@@ -102,6 +102,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02-admin-configuration P26 | 2h 20m | 2 tasks | 16 files |
 | Phase 02 P36 | 6min | 2 tasks | 3 files |
 | Phase 02 P29 | 35min | 3 tasks | 12 files |
+| Phase 02-admin-configuration P31 | 10min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -263,6 +264,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Use hard limit plus grace as the inclusive stale threshold with a validated scan interval and finite terminalization bound.
 - [Phase 02]: Run Celery Beat separately from worker capacity so process loss cannot remove durable reconciliation.
 - [Phase 02]: Treat access-only unexpired client-credentials generations as the current Bitbucket preview credential shape.
+- [Phase 02]: Treat the Plan 26 schema and generated operations as inherited canonical behavior; do not fabricate a RED gate by reverting or hand-editing generated artifacts.
+- [Phase 02]: Prove reserved branch spelling at the generated runtime URL boundary by decoding branch_name from the query while asserting the pathname contains only repository identity.
+- [Phase 02]: Keep provider continuation and credential exclusions property-based so the legitimate repository workspace field remains available while Bitbucket status workspace stays forbidden.
 
 ### Pending Todos
 
@@ -301,6 +305,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-29T18:49:14.314Z
-Stopped at: Completed 02-29-PLAN.md
+Last session: 2026-08-29T19:02:42.212Z
+Stopped at: Completed 02-31-PLAN.md
 Resume file: None
