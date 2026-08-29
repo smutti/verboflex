@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
-    ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -65,6 +65,18 @@ class PreviewJob(Base):
             "attempt",
             name="uq_preview_jobs_digest_attempt",
         ),
+        ForeignKeyConstraint(
+            ["product_id", "candidate_revision_id"],
+            ["product_revisions.product_id", "product_revisions.id"],
+            name="fk_preview_jobs_owned_revision",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["candidate_revision_id", "mapping_id"],
+            ["product_repository_mappings.revision_id", "product_repository_mappings.id"],
+            name="fk_preview_jobs_owned_mapping",
+            ondelete="CASCADE",
+        ),
         Index(
             "ix_preview_jobs_mapping_digest_attempt",
             "mapping_id",
@@ -83,20 +95,17 @@ class PreviewJob(Base):
     state: Mapped[str] = mapped_column(String(16), nullable=False)
     product_id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True),
-        ForeignKey("products.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     candidate_revision_id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True),
-        ForeignKey("product_revisions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     candidate_revision_version: Mapped[int] = mapped_column(Integer, nullable=False)
     mapping_id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True),
-        ForeignKey("product_repository_mappings.id", ondelete="CASCADE"),
         nullable=False,
     )
     topology: Mapped[str] = mapped_column(String(16), nullable=False)

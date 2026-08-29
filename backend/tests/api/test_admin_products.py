@@ -625,16 +625,16 @@ def _seed_product_lifecycle_graph(
         )
         session.add(product)
         session.flush()
+        active_revision = ProductRevision(
+            id=active_id,
+            product_id=product_id,
+            description="active",
+            version=6,
+            is_published=False,
+        )
         session.add_all(
             [
-                ProductRevision(
-                    id=active_id,
-                    product_id=product_id,
-                    description="active",
-                    version=6,
-                    is_published=True,
-                    published_at=datetime.now(UTC),
-                ),
+                active_revision,
                 ProductRevision(
                     id=candidate_id,
                     product_id=product_id,
@@ -660,6 +660,9 @@ def _seed_product_lifecycle_graph(
             revision_id=candidate_id,
             repository_id=repository_id,
         )
+        session.flush()
+        active_revision.is_published = True
+        active_revision.published_at = datetime.now(UTC)
         session.flush()
         product.active_revision_id = active_id
         product.candidate_revision_id = candidate_id

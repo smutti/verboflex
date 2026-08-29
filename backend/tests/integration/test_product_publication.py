@@ -138,16 +138,14 @@ def _seed_product_graph(
         )
         session.add(product)
         session.flush()
-        session.add(
-            ProductRevision(
-                id=active_id,
-                product_id=product_id,
-                description="published",
-                version=6,
-                is_published=True,
-                published_at=datetime.now(UTC),
-            )
+        active_revision = ProductRevision(
+            id=active_id,
+            product_id=product_id,
+            description="published",
+            version=6,
+            is_published=False,
         )
+        session.add(active_revision)
         if candidate_id is not None:
             session.add(
                 ProductRevision(
@@ -190,6 +188,9 @@ def _seed_product_graph(
                     repository_id=candidate_repository_id,
                     state=candidate_mapping_state,
                 )
+        session.flush()
+        active_revision.is_published = True
+        active_revision.published_at = datetime.now(UTC)
         session.flush()
         product.active_revision_id = active_id
         product.candidate_revision_id = candidate_id

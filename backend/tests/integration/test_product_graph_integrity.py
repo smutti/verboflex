@@ -113,12 +113,12 @@ def _seed_graph(engine: Engine) -> dict[str, Any]:
                     "(id, product_id, display_name, name_key, description, version, "
                     "is_published, published_at) VALUES "
                     "(:active_revision, :product, :product_display_name, :product_name_key, "
-                    "'active', 4, true, :now), "
+                    "'active', 4, false, NULL), "
                     "(:candidate_revision, :product, :candidate_display_name, "
                     ":candidate_name_key, "
                     "'candidate', 5, false, NULL), "
                     "(:foreign_revision, :foreign_product, :foreign_display_name, "
-                    ":foreign_name_key, 'foreign', 2, true, :now)"
+                    ":foreign_name_key, 'foreign', 2, false, NULL)"
                 ),
                 {**identities, "now": now},
             )
@@ -128,26 +128,12 @@ def _seed_graph(engine: Engine) -> dict[str, Any]:
                     "INSERT INTO product_revisions "
                     "(id, product_id, description, version, is_published, published_at) "
                     "VALUES "
-                    "(:active_revision, :product, 'active', 4, true, :now), "
+                    "(:active_revision, :product, 'active', 4, false, NULL), "
                     "(:candidate_revision, :product, 'candidate', 5, false, NULL), "
-                    "(:foreign_revision, :foreign_product, 'foreign', 2, true, :now)"
+                    "(:foreign_revision, :foreign_product, 'foreign', 2, false, NULL)"
                 ),
                 {**identities, "now": now},
             )
-        connection.execute(
-            text(
-                "UPDATE products SET active_revision_id = :active_revision, "
-                "candidate_revision_id = :candidate_revision WHERE id = :product"
-            ),
-            identities,
-        )
-        connection.execute(
-            text(
-                "UPDATE products SET active_revision_id = :foreign_revision "
-                "WHERE id = :foreign_product"
-            ),
-            identities,
-        )
         connection.execute(
             text(
                 "INSERT INTO repositories (id, workspace, repository_slug) VALUES "
@@ -203,6 +189,27 @@ def _seed_graph(engine: Engine) -> dict[str, Any]:
                 ),
                 {"mapping_id": identities[f"{prefix}_mapping"]},
             )
+        connection.execute(
+            text(
+                "UPDATE product_revisions SET is_published = true, published_at = :now "
+                "WHERE id IN (:active_revision, :foreign_revision)"
+            ),
+            {**identities, "now": now},
+        )
+        connection.execute(
+            text(
+                "UPDATE products SET active_revision_id = :active_revision, "
+                "candidate_revision_id = :candidate_revision WHERE id = :product"
+            ),
+            identities,
+        )
+        connection.execute(
+            text(
+                "UPDATE products SET active_revision_id = :foreign_revision "
+                "WHERE id = :foreign_product"
+            ),
+            identities,
+        )
         connection.execute(
             text(
                 "INSERT INTO preview_jobs "
@@ -318,7 +325,19 @@ def test_published_graph_is_immutable_but_candidate_graph_remains_editable(
             {**ids, "new_id": uuid4(), "digest": ids["candidate_digest"]},
         )
 
+    temporary_mapping_id = uuid4()
     with graph_engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE product_revisions SET display_name = :display_name, "
+                "name_key = :name_key WHERE id = :candidate_revision"
+            ),
+            {
+                **ids,
+                "display_name": f"Edited {ids['candidate_revision']}",
+                "name_key": f"edited {ids['candidate_revision']}",
+            },
+        )
         connection.execute(
             text(
                 "UPDATE product_revisions SET description = 'candidate edited' "
@@ -336,8 +355,24 @@ def test_published_graph_is_immutable_but_candidate_graph_remains_editable(
         )
         connection.execute(
             text(
+                "INSERT INTO product_repository_mappings "
+                "(id, revision_id, topology, identity_key) VALUES "
+                "(:new_mapping, :candidate_revision, 'direct', 'candidate temporary')"
+            ),
+            {**ids, "new_mapping": temporary_mapping_id},
+        )
+        connection.execute(
+            text(
                 "UPDATE product_mapping_repository_sides SET source_branch = 'develop' "
                 "WHERE mapping_id = :candidate_mapping AND role = 'direct'"
+            ),
+            ids,
+        )
+        connection.execute(
+            text(
+                "INSERT INTO product_mapping_repository_sides "
+                "(mapping_id, role, repository_id, source_branch) VALUES "
+                "(:candidate_mapping, 'keys', :repository, 'main')"
             ),
             ids,
         )
@@ -358,6 +393,17 @@ def test_published_graph_is_immutable_but_candidate_graph_remains_editable(
                 "WHERE id = :candidate_mapping"
             ),
             {**ids, "digest": ids["candidate_digest"]},
+        )
+        connection.execute(
+            text(
+                "DELETE FROM product_mapping_repository_sides "
+                "WHERE mapping_id = :candidate_mapping AND role = 'keys'"
+            ),
+            ids,
+        )
+        connection.execute(
+            text("DELETE FROM product_repository_mappings WHERE id = :mapping_id"),
+            {"mapping_id": temporary_mapping_id},
         )
         connection.execute(
             text(

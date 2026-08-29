@@ -193,6 +193,7 @@ def publish_product_candidate(
         )
         candidate.is_published = True
         candidate.published_at = datetime.now(UTC)
+        session.flush()
         product.active_revision_id = candidate.id
         product.candidate_revision_id = None
         product.is_active = True

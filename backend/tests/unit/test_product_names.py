@@ -136,6 +136,8 @@ def test_product_schema_registers_global_identity_and_revision_guards(
     assert {column["name"] for column in inspector.get_columns("product_revisions")} == {
         "id",
         "product_id",
+        "display_name",
+        "name_key",
         "description",
         "version",
         "is_published",
@@ -146,10 +148,19 @@ def test_product_schema_registers_global_identity_and_revision_guards(
     product_indexes = {index["name"] for index in inspector.get_indexes("products")}
     assert "uq_products_name_key" in product_indexes
     foreign_keys = {
-        foreign_key["constrained_columns"][0]: (foreign_key.get("options") or {}).get("ondelete")
+        foreign_key["name"]: (
+            foreign_key["constrained_columns"],
+            (foreign_key.get("options") or {}).get("ondelete"),
+        )
         for foreign_key in inspector.get_foreign_keys("products")
     }
-    assert foreign_keys == {"active_revision_id": "RESTRICT", "candidate_revision_id": "RESTRICT"}
+    assert foreign_keys == {
+        "fk_products_active_owned_revision": (["id", "active_revision_id"], "RESTRICT"),
+        "fk_products_candidate_owned_revision": (
+            ["id", "candidate_revision_id"],
+            "RESTRICT",
+        ),
+    }
     revision_foreign_key = inspector.get_foreign_keys("product_revisions")[0]
     assert revision_foreign_key["constrained_columns"] == ["product_id"]
     assert (revision_foreign_key.get("options") or {}).get("ondelete") == "CASCADE"
@@ -158,7 +169,7 @@ def test_product_schema_registers_global_identity_and_revision_guards(
         trigger_count = connection.execute(
             text(
                 "SELECT count(*) FROM pg_trigger "
-                "WHERE tgname = 'trg_product_revisions_immutable_published' "
+                "WHERE tgname = 'trg_guard_active_product_revisions' "
                 "AND NOT tgisinternal"
             )
         ).scalar_one()
@@ -205,6 +216,7 @@ def _publish_initial_candidate(
         assert revision is not None
         revision.is_published = True
         revision.published_at = datetime.now(UTC)
+        session.flush()
         product.active_revision_id = revision.id
         product.candidate_revision_id = None
         product.is_active = True
@@ -287,7 +299,7 @@ def test_active_revision_is_immutable_and_stale_candidate_writes_roll_back(
     assert _product_graph(factory, product.id) == before_conflict
 
     with (
-        pytest.raises(Exception, match="published product revision is immutable"),
+        pytest.raises(Exception, match="active product revision graph is immutable"),
         factory.begin() as session,
     ):
         active = session.get(ProductRevision, active_id)

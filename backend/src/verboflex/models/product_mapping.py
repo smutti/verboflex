@@ -55,6 +55,11 @@ class ProductRepositoryMapping(Base):
             name="uq_product_repository_mappings_revision_identity",
         ),
         UniqueConstraint(
+            "revision_id",
+            "id",
+            name="uq_product_mappings_revision_id_id",
+        ),
+        UniqueConstraint(
             "confirmed_preview_job_id",
             name="uq_product_repository_mappings_confirmed_preview_job",
         ),
@@ -108,12 +113,14 @@ class ProductRepositoryMapping(Base):
     sides: Mapped[list[ProductMappingRepositorySide]] = relationship(
         back_populates="mapping",
         cascade="all, delete-orphan",
+        single_parent=True,
         passive_deletes=True,
         order_by="ProductMappingRepositorySide.role",
     )
     allowed_targets: Mapped[list[ProductMappingAllowedTarget]] = relationship(
         back_populates="mapping",
         cascade="all, delete-orphan",
+        single_parent=True,
         passive_deletes=True,
         order_by="ProductMappingAllowedTarget.branch",
     )
