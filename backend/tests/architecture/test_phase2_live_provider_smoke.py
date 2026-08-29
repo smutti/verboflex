@@ -21,10 +21,69 @@ LIVE_SMOKE_HELPER = REPOSITORY_ROOT / "tools" / "phase2_live_provider.py"
 BASE_COMPOSE = REPOSITORY_ROOT / "docker-compose.yml"
 SMOKE_HARNESS = REPOSITORY_ROOT / "tools" / "phase2_smoke.sh"
 MOCK_PROVIDER = REPOSITORY_ROOT / "tools" / "phase2_mock_provider.py"
+COVERAGE_PATH = (
+    REPOSITORY_ROOT / ".planning" / "phases" / "02-admin-configuration" / "COVERAGE.md"
+)
 EXACT_PROVIDER_SETTINGS = {
     "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID",
     "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET",
     "VERBOFLEX_BITBUCKET_TOKEN_ENCRYPTION_KEYRING",
+}
+PRE_REWRITE_DECISIONS = {
+    "oauth-authorization-code-start": "INTEGRATE",
+    "oauth-authorization-code-exchange": "INTEGRATE",
+    "oauth-refresh-token-exchange-and-rotation": "INTEGRATE",
+    "oauth-effective-scope-inspection": "INTEGRATE",
+    "repository-metadata-by-workspace-and-slug": "INTEGRATE",
+    "branch-listing-with-provider-pagination": "INTEGRATE",
+    "branch-to-commit-resolution": "INTEGRATE",
+    "source-tree-directory-pagination": "INTEGRATE",
+    "raw-source-file-read-at-commit": "INTEGRATE",
+    "provider-next-url-validation": "INTEGRATE",
+    "oauth-provider-side-token-revocation": "OPT-OUT",
+    "repository-listing-and-search": "OPT-OUT",
+    "account-profile-and-email": "OPT-OUT",
+    "workspace-membership-and-permissions": "OPT-OUT",
+    "project-listing-and-metadata": "OPT-OUT",
+    "workspace-and-project-administration": "OPT-OUT",
+    "tag-listing-and-other-ref-discovery": "OPT-OUT",
+    "commit-history-listing-and-search": "OPT-OUT",
+    "commit-diff-diffstat-and-patch-read": "OPT-OUT",
+    "commit-status-read-and-write": "OPT-OUT",
+    "source-file-create-update-delete": "OPT-OUT",
+    "branch-create-update-delete": "OPT-OUT",
+    "tag-create-update-delete": "OPT-OUT",
+    "commit-create": "OPT-OUT",
+    "pull-request-list-and-read": "OPT-OUT",
+    "pull-request-create-and-update": "OPT-OUT",
+    "pull-request-merge-decline-and-approve": "OPT-OUT",
+    "pull-request-comments-tasks-and-activity": "OPT-OUT",
+    "pull-request-diff-and-diffstat": "OPT-OUT",
+    "repository-webhook-list-and-read": "OPT-OUT",
+    "repository-webhook-create-update-delete": "OPT-OUT",
+    "repository-settings-and-permissions-admin": "OPT-OUT",
+    "branch-restrictions-and-merge-checks-admin": "OPT-OUT",
+    "deploy-keys-access-keys-and-ssh-keys-admin": "OPT-OUT",
+    "pipelines-list-and-read": "OPT-OUT",
+    "pipelines-run-stop-and-manage": "OPT-OUT",
+    "deployments-and-environments": "OPT-OUT",
+    "issues-list-and-read": "OPT-OUT",
+    "issues-create-update-delete-and-comments": "OPT-OUT",
+    "downloads-list-and-read": "OPT-OUT",
+    "downloads-upload-and-delete": "OPT-OUT",
+    "wiki-read-and-write": "OPT-OUT",
+    "snippets-read-and-write": "OPT-OUT",
+    "code-search": "OPT-OUT",
+}
+DECLARED_CREDENTIAL_REWRITE = {
+    "oauth-authorization-code-start": "oauth-client-credentials-acquisition",
+    "oauth-authorization-code-exchange": "oauth-client-credentials-reacquisition",
+    "oauth-refresh-token-exchange-and-rotation": (
+        "oauth-authorization-code-callback-and-refresh-token-flows"
+    ),
+}
+IDENTITY_REWRITE = {
+    key: key for key in PRE_REWRITE_DECISIONS if key not in DECLARED_CREDENTIAL_REWRITE
 }
 
 
@@ -55,6 +114,17 @@ def _write_live_env(path: Path, **overrides: str) -> None:
     values.update(overrides)
     path.write_text("".join(f'{key}="{value}"\n' for key, value in values.items()))
     path.chmod(0o600)
+
+
+def _coverage_rows() -> list[tuple[str, str, str]]:
+    rows: list[tuple[str, str, str]] = []
+    for line in COVERAGE_PATH.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) == 3 and cells[1] in {"INTEGRATE", "OPT-OUT"}:
+            rows.append((cells[0].strip("`"), cells[1], cells[2]))
+    return rows
 
 
 class _UnusedTokenExchange:
@@ -207,6 +277,62 @@ def test_mock_provider_audit_is_exact_scope_five_gets_and_zero_writes() -> None:
     assert 'allowed_keys = {"category", "effective_scope", "grant_type", "method"}' in (
         smoke_source
     )
+
+
+def test_repeated_probe_uses_serialized_api_lifecycle_and_three_generations() -> None:
+    """Connect/reconnect/revoke/reacquire stays behind the production API boundary."""
+    probe_source = LIVE_SMOKE_HELPER.read_text(encoding="utf-8")
+    smoke_source = SMOKE_HARNESS.read_text(encoding="utf-8")
+    run_source = probe_source.split("def run(path: Path) -> None:", 1)[1].split(
+        "\ndef main()", 1
+    )[0]
+
+    assert run_source.count('"/api/v1/admin/bitbucket/connect"') == 2
+    assert run_source.count('"/api/v1/admin/bitbucket/reconnect"') == 1
+    assert run_source.count('"/api/v1/admin/bitbucket/revoke"') == 2
+    assert run_source.count('"/api/v1/admin/bitbucket"') >= 2
+    assert run_source.rstrip().endswith('"Disconnected",\n    )')
+    assert "ciphertext" not in run_source.casefold()
+    assert "provider_token" not in run_source.casefold()
+    assert "assert len(exchanges) == 3" in smoke_source
+
+
+def test_coverage_rewrites_exactly_three_keys_without_semantic_loss() -> None:
+    """The 44-row provider ledger changes only the declared grant-model decisions."""
+    rows = _coverage_rows()
+    decisions = {key: decision for key, decision, _reason in rows}
+    reasons = {key: reason for key, _decision, reason in rows}
+    expected = {
+        IDENTITY_REWRITE[key]: PRE_REWRITE_DECISIONS[key] for key in IDENTITY_REWRITE
+    }
+    expected.update(
+        {
+            "oauth-client-credentials-acquisition": "INTEGRATE",
+            "oauth-client-credentials-reacquisition": "INTEGRATE",
+            "oauth-authorization-code-callback-and-refresh-token-flows": "OPT-OUT",
+        }
+    )
+
+    assert len(PRE_REWRITE_DECISIONS) == 44
+    assert len(IDENTITY_REWRITE) == 41
+    assert len(rows) == 44
+    assert len(decisions) == 44
+    assert decisions == expected
+    assert set(DECLARED_CREDENTIAL_REWRITE) == {
+        "oauth-authorization-code-start",
+        "oauth-authorization-code-exchange",
+        "oauth-refresh-token-exchange-and-rotation",
+    }
+    assert all(old not in decisions for old in DECLARED_CREDENTIAL_REWRITE)
+    assert all(new in decisions for new in DECLARED_CREDENTIAL_REWRITE.values())
+    assert decisions["oauth-effective-scope-inspection"] == "INTEGRATE"
+    assert all(reasons[key] for key, decision in decisions.items() if decision == "OPT-OUT")
+    consolidated_reason = reasons[
+        "oauth-authorization-code-callback-and-refresh-token-flows"
+    ].casefold()
+    assert "authorization-code" in consolidated_reason
+    assert "callback" in consolidated_reason
+    assert "refresh-token" in consolidated_reason
 
 
 def test_smoke_contract_scans_all_evidence_and_always_tears_down() -> None:

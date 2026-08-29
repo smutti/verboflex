@@ -12,9 +12,8 @@ CLIENT_PATH = (
 COVERAGE_PATH = REPOSITORY_ROOT / ".planning" / "phases" / "02-admin-configuration" / "COVERAGE.md"
 
 EXPECTED_INTEGRATED_CAPABILITIES = {
-    "oauth-authorization-code-start",
-    "oauth-authorization-code-exchange",
-    "oauth-refresh-token-exchange-and-rotation",
+    "oauth-client-credentials-acquisition",
+    "oauth-client-credentials-reacquisition",
     "oauth-effective-scope-inspection",
     "repository-metadata-by-workspace-and-slug",
     "branch-listing-with-provider-pagination",
