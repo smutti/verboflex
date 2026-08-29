@@ -52,6 +52,10 @@ class DeactivateUserError(RuntimeError):
     """Raised when the privileged CLI cannot deactivate its selected account."""
 
 
+class _AdminUserAlreadyInactive(ValueError):
+    """Internal distinction mapped by each lifecycle adapter."""
+
+
 class InvalidAdminUserCursor(ValueError):
     """Raised when a list cursor is not one emitted by this service."""
 
@@ -125,6 +129,18 @@ def _load_current_admin(session: Session, actor_id: UUID, *, lock: bool) -> User
 def _load_target_user(session: Session, target_id: UUID) -> User:
     target = session.execute(
         select(User).where(User.id == target_id).options(selectinload(User.roles)).with_for_update()
+    ).scalar_one_or_none()
+    if target is None:
+        raise AdminUserNotFound("user unavailable")
+    return target
+
+
+def _load_target_user_by_email(session: Session, normalized_email: str) -> User:
+    target = session.execute(
+        select(User)
+        .where(User.email == normalized_email)
+        .options(selectinload(User.roles))
+        .with_for_update()
     ).scalar_one_or_none()
     if target is None:
         raise AdminUserNotFound("user unavailable")
@@ -348,25 +364,53 @@ def deactivate_admin_user(
 ) -> AdminUserRecord:
     """Deactivate one user and revoke its durable authority exactly once."""
     deactivated_at = now or datetime.now(UTC)
-    with session.begin():
-        _lock_admin_authority(session)
-        _load_current_admin(session, actor_id, lock=True)
-        target = _load_target_user(session, target_id)
-        if not target.is_active:
-            raise AdminUserConflict("user lifecycle conflict")
-        current_roles = frozenset(_ordered_roles(target.roles))
-        _require_admin_survivor(
-            session,
-            target,
-            prospective_roles=current_roles,
-            prospective_active=False,
-        )
-        target.is_active = False
-        target.token_version += 1
-        _revoke_live_sessions(session, target.id, revoked_at=deactivated_at)
-        session.flush()
-        result = _to_record(target)
+    try:
+        with session.begin():
+            result = _deactivate_user_under_admin_authority_lock(
+                session,
+                actor_id=actor_id,
+                target_id=target_id,
+                deactivated_at=deactivated_at,
+            )
+    except _AdminUserAlreadyInactive as error:
+        raise AdminUserConflict("user lifecycle conflict") from error
     return result
+
+
+def _deactivate_user_under_admin_authority_lock(
+    session: Session,
+    *,
+    deactivated_at: datetime,
+    actor_id: UUID | None = None,
+    target_id: UUID | None = None,
+    normalized_email: str | None = None,
+) -> AdminUserRecord:
+    """Serialize every deactivation before locking and changing its target."""
+    if (target_id is None) == (normalized_email is None):
+        raise ValueError("exactly one target identity is required")
+
+    _lock_admin_authority(session)
+    if actor_id is not None:
+        _load_current_admin(session, actor_id, lock=True)
+    target = (
+        _load_target_user(session, target_id)
+        if target_id is not None
+        else _load_target_user_by_email(session, normalized_email or "")
+    )
+    if not target.is_active:
+        raise _AdminUserAlreadyInactive
+    current_roles = frozenset(_ordered_roles(target.roles))
+    _require_admin_survivor(
+        session,
+        target,
+        prospective_roles=current_roles,
+        prospective_active=False,
+    )
+    target.is_active = False
+    target.token_version += 1
+    _revoke_live_sessions(session, target.id, revoked_at=deactivated_at)
+    session.flush()
+    return _to_record(target)
 
 
 def reactivate_admin_user(
@@ -419,16 +463,15 @@ def deactivate_user_by_email(
     """Retain the privileged Phase 1 CLI deactivation through shared revocation mechanics."""
     normalized_email = normalize_email(email)
     deactivated_at = now or datetime.now(UTC)
-    with session.begin():
-        user = session.execute(
-            select(User).where(User.email == normalized_email).with_for_update()
-        ).scalar_one_or_none()
-        if user is None or not user.is_active:
-            raise DeactivateUserError("deactivation refused: account unavailable")
-        user.is_active = False
-        user.token_version += 1
-        _revoke_live_sessions(session, user.id, revoked_at=deactivated_at)
-        session.flush()
+    try:
+        with session.begin():
+            _deactivate_user_under_admin_authority_lock(
+                session,
+                normalized_email=normalized_email,
+                deactivated_at=deactivated_at,
+            )
+    except (AdminUserNotFound, _AdminUserAlreadyInactive) as error:
+        raise DeactivateUserError("deactivation refused: account unavailable") from error
 
 
 def _encode_cursor_position(email: str, user_id: UUID) -> str:

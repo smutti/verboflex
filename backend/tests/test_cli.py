@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import os
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager
@@ -182,3 +183,6 @@ def test_cli_adapter_invokes_the_shared_service_command(
     cli.deactivate_user(session, email=" target@example.com ")
 
     assert calls == [(session, " target@example.com ")]
+    source = inspect.getsource(cli.deactivate_user)
+    assert ".is_active" not in source
+    assert ".begin(" not in source

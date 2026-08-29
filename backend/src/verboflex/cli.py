@@ -169,6 +169,7 @@ def main(
                 reset_user_password(session, email=arguments.email, password=password)
                 print("Password reset completed; password change is required.")
     except (
+        admin_user_service.AdminUserConflict,
         BootstrapAdminError,
         DeactivateUserError,
         PasswordPolicyError,
