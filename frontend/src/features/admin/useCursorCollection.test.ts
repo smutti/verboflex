@@ -38,11 +38,7 @@ describe("useCursorCollection", () => {
       await result.current.loadMore();
     });
 
-    expect(loadPage).toHaveBeenNthCalledWith(
-      1,
-      null,
-      expect.any(AbortSignal),
-    );
+    expect(loadPage).toHaveBeenNthCalledWith(1, null, expect.any(AbortSignal));
     expect(loadPage).toHaveBeenNthCalledWith(
       2,
       "opaque-page-2",

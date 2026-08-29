@@ -1840,6 +1840,7 @@ describe("administrator product configuration tracer", () => {
     expect(listAdminRepositoriesMock).toHaveBeenCalledWith({
       auth: "memory-only-admin-bearer",
       query: { cursor: null, limit: 50 },
+      signal: expect.any(AbortSignal),
     });
     expect(
       within(table)

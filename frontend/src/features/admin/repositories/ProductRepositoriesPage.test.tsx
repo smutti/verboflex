@@ -46,28 +46,31 @@ describe("ProductRepositoriesPage cursor boundaries", () => {
     [0, "No repositories added"],
     [1, "All 1 repository loaded"],
     [50, "All 50 repositories loaded"],
-  ])("renders the complete %i-item first page in one request", async (count, copy) => {
-    listRepositoriesMock.mockResolvedValue(
-      ok({
-        items: Array.from({ length: count }, (_, index) =>
-          repository(index + 1),
-        ),
-        next_cursor: null,
-      }),
-    );
+  ])(
+    "renders the complete %i-item first page in one request",
+    async (count, copy) => {
+      listRepositoriesMock.mockResolvedValue(
+        ok({
+          items: Array.from({ length: count }, (_, index) =>
+            repository(index + 1),
+          ),
+          next_cursor: null,
+        }),
+      );
 
-    render(
-      <ProductRepositoriesPage accessToken="memory-only-admin-bearer" />,
-    );
+      render(
+        <ProductRepositoriesPage accessToken="memory-only-admin-bearer" />,
+      );
 
-    expect(await screen.findByText(copy)).toBeInTheDocument();
-    expect(listRepositoriesMock).toHaveBeenCalledTimes(1);
-    expect(listRepositoriesMock).toHaveBeenCalledWith({
-      auth: "memory-only-admin-bearer",
-      query: { cursor: null, limit: 50 },
-      signal: expect.any(AbortSignal),
-    });
-  });
+      expect(await screen.findByText(copy)).toBeInTheDocument();
+      expect(listRepositoriesMock).toHaveBeenCalledTimes(1);
+      expect(listRepositoriesMock).toHaveBeenCalledWith({
+        auth: "memory-only-admin-bearer",
+        query: { cursor: null, limit: 50 },
+        signal: expect.any(AbortSignal),
+      });
+    },
+  );
 
   it("loads repository 51 with one opaque-cursor request and no duplicate identity", async () => {
     const firstPage = Array.from({ length: 50 }, (_, index) =>
@@ -82,16 +85,18 @@ describe("ProductRepositoriesPage cursor boundaries", () => {
       );
     const user = userEvent.setup();
 
-    render(
-      <ProductRepositoriesPage accessToken="memory-only-admin-bearer" />,
-    );
+    render(<ProductRepositoriesPage accessToken="memory-only-admin-bearer" />);
 
     expect(
       await screen.findByText("50 repositories loaded — more available"),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Load more repositories" }));
+    await user.click(
+      screen.getByRole("button", { name: "Load more repositories" }),
+    );
 
-    expect(await screen.findByText("All 51 repositories loaded")).toBeInTheDocument();
+    expect(
+      await screen.findByText("All 51 repositories loaded"),
+    ).toBeInTheDocument();
     expect(listRepositoriesMock).toHaveBeenCalledTimes(2);
     expect(listRepositoriesMock).toHaveBeenNthCalledWith(2, {
       auth: "memory-only-admin-bearer",

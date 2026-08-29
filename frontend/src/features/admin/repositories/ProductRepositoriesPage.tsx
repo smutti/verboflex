@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useCallback, useId, useRef, useState, type FormEvent } from "react";
 
 import {
   createAdminRepository,
@@ -22,8 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-
-type CollectionState = "error" | "loading" | "ready";
+import { useCursorCollection } from "../useCursorCollection";
 
 export interface ProductRepositoriesPageProps {
   accessToken: string;
@@ -64,12 +63,6 @@ export function ProductRepositoriesPage({
   const descriptiveNameId = useId();
   const workspaceRef = useRef<HTMLInputElement>(null);
   const registerPendingRef = useRef(false);
-  const loadGenerationRef = useRef(0);
-  const [collectionState, setCollectionState] =
-    useState<CollectionState>("loading");
-  const [repositories, setRepositories] = useState<AdminRepositoryResponse[]>(
-    [],
-  );
   const [selectedIds, setSelectedIds] = useState(
     () => new Set(selectedRepositoryIds),
   );
@@ -82,44 +75,26 @@ export function ProductRepositoriesPage({
   const [registerError, setRegisterError] = useState(false);
   const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
 
-  function loadRepositories() {
-    const generation = ++loadGenerationRef.current;
-
-    queueMicrotask(async () => {
-      if (loadGenerationRef.current !== generation) {
-        return;
+  const loadRepositoryPage = useCallback(
+    async (cursor: string | null, signal: AbortSignal) => {
+      const result = await listAdminRepositories({
+        auth: accessToken,
+        query: { cursor, limit: 50 },
+        signal,
+      });
+      if (result.data === undefined) {
+        throw new Error("Repository page rejected");
       }
-      setCollectionState("loading");
-      try {
-        const result = await listAdminRepositories({
-          auth: accessToken,
-          query: { cursor: null, limit: 50 },
-        });
-        if (loadGenerationRef.current !== generation) {
-          return;
-        }
-        if (result.data === undefined) {
-          setCollectionState("error");
-          return;
-        }
-        setRepositories(result.data.items);
-        setCollectionState("ready");
-      } catch {
-        if (loadGenerationRef.current === generation) {
-          setCollectionState("error");
-        }
-      }
-    });
-  }
-
-  useEffect(() => {
-    loadRepositories();
-    return () => {
-      loadGenerationRef.current += 1;
-    };
-    // loadRepositories is deliberately generation-bound to the current token.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken]);
+      return result.data;
+    },
+    [accessToken],
+  );
+  const repositoryCollection = useCursorCollection({
+    getItemId: (repository: AdminRepositoryResponse) => repository.id,
+    loadPage: loadRepositoryPage,
+    queryKey: JSON.stringify(["repositories", accessToken]),
+  });
+  const repositories = repositoryCollection.items;
 
   function selectRepository(repository: AdminRepositoryResponse) {
     setSelectedIds((current) => new Set(current).add(repository.id));
@@ -163,7 +138,7 @@ export function ProductRepositoriesPage({
       }
 
       const registered = result.data;
-      setRepositories((current) => [...current, registered]);
+      repositoryCollection.appendItems([registered]);
       selectRepository(registered);
       setWorkspace("");
       setRepositorySlug("");
@@ -196,7 +171,7 @@ export function ProductRepositoriesPage({
         </p>
       </div>
 
-      {collectionState === "loading" ? (
+      {repositoryCollection.status === "loading" ? (
         <section className="grid gap-3" role="status" aria-live="polite">
           <Skeleton className="h-12 w-full" />
           <Skeleton className="h-12 w-full" />
@@ -204,7 +179,7 @@ export function ProductRepositoriesPage({
         </section>
       ) : null}
 
-      {collectionState === "error" ? (
+      {repositoryCollection.status === "error" ? (
         <Alert variant="destructive">
           <AlertTitle>Repositories unavailable</AlertTitle>
           <AlertDescription>
@@ -212,14 +187,18 @@ export function ProductRepositoriesPage({
               We could not load this page. Retry without leaving the
               administration area.
             </p>
-            <Button type="button" variant="outline" onClick={loadRepositories}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void repositoryCollection.reload()}
+            >
               Retry loading page
             </Button>
           </AlertDescription>
         </Alert>
       ) : null}
 
-      {collectionState === "ready" && repositories.length === 0 ? (
+      {repositoryCollection.isEmpty ? (
         <section className="grid gap-2 rounded-lg border bg-secondary p-6">
           <h3 className="text-heading font-semibold">No repositories added</h3>
           <p className="text-muted-foreground">
@@ -228,7 +207,7 @@ export function ProductRepositoriesPage({
         </section>
       ) : null}
 
-      {collectionState === "ready" && repositories.length > 0 ? (
+      {repositoryCollection.status === "ready" && repositories.length > 0 ? (
         <section
           className="min-w-0 max-w-full overflow-x-clip"
           aria-label="Reusable repositories"
@@ -303,6 +282,45 @@ export function ProductRepositoriesPage({
               );
             })}
           </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground" aria-live="polite">
+              {repositoryCollection.isPartial
+                ? `${repositories.length} repositories loaded — more available`
+                : `All ${repositories.length} ${repositories.length === 1 ? "repository" : "repositories"} loaded`}
+            </p>
+            {repositoryCollection.isPartial ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={repositoryCollection.loadingMore}
+                aria-busy={repositoryCollection.loadingMore}
+                aria-label="Load more repositories"
+                onClick={() => void repositoryCollection.loadMore()}
+              >
+                {repositoryCollection.loadingMore
+                  ? "Loading more repositories"
+                  : "Load more"}
+              </Button>
+            ) : null}
+          </div>
+          {repositoryCollection.loadMoreError ? (
+            <Alert variant="destructive" className="mt-4">
+              <AlertTitle>More repositories unavailable</AlertTitle>
+              <AlertDescription>
+                <p>
+                  The loaded repositories remain available. Retry this page.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void repositoryCollection.loadMore()}
+                >
+                  Retry loading repositories
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
         </section>
       ) : null}
 
