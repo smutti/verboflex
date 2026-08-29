@@ -125,7 +125,8 @@ beforeEach(() => {
 });
 
 describe("authenticated application shell", () => {
-  it("shows server identity, human role labels, and the approved role-aware workspace copy", () => {
+  it("shows server identity, human role labels, and the approved role-aware workspace copy", async () => {
+    const user = userEvent.setup();
     render(
       <AppShell
         accessToken="ordinary-server-token"
@@ -151,6 +152,7 @@ describe("authenticated application shell", () => {
     expect(
       screen.getByRole("heading", { name: "Administration summary" }),
     ).toBeVisible();
+    await user.click(screen.getByRole("link", { name: "Workspace" }));
   });
 
   it("announces a bounded loading state while generated service status is pending", () => {

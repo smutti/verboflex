@@ -15,6 +15,7 @@ import {
 } from "../../api/client";
 import { App } from "../../App";
 import { useSession } from "../auth/session";
+import { WorkspaceOverviewPage } from "./WorkspaceOverviewPage";
 
 vi.mock("../../api/client", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../api/client")>();
@@ -329,5 +330,142 @@ describe("role-aware Workspace overview", () => {
     expect(listAdminProductsMock).toHaveBeenCalledTimes(2);
     expect(listAdminUsersMock).toHaveBeenCalledTimes(2);
     expect(getAdminBitbucketStatusMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses plain links outside a router and maps incomplete summaries to bounded recovery", async () => {
+    const principal = principalFor("admin");
+    listAdminProductsMock
+      .mockResolvedValueOnce({ data: undefined, error: undefined } as never)
+      .mockResolvedValueOnce({
+        data: { items: [], next_cursor: null },
+        error: undefined,
+      });
+    listAdminUsersMock.mockResolvedValue({
+      data: { items: [], next_cursor: null },
+      error: undefined,
+    });
+    getAdminBitbucketStatusMock.mockResolvedValue({
+      data: {
+        connected_at: null,
+        expires_at: null,
+        revoked_at: null,
+        status: "Disconnected",
+      },
+      error: undefined,
+    });
+    const user = userEvent.setup();
+
+    render(
+      <WorkspaceOverviewPage
+        accessToken="direct-admin-token"
+        principal={principal}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Administrator summaries unavailable"),
+    ).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "Retry administrator summaries" }),
+    );
+
+    expect(await screen.findByText("0 loaded products")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open Products" })).toHaveAttribute(
+      "href",
+      "/admin/products",
+    );
+  });
+
+  it("ignores successful summaries superseded by new administrator authority", async () => {
+    let resolveOld!: (value: {
+      data: { items: never[]; next_cursor: null };
+      error: undefined;
+    }) => void;
+    const oldProducts = new Promise<{
+      data: { items: never[]; next_cursor: null };
+      error: undefined;
+    }>((resolve) => {
+      resolveOld = resolve;
+    });
+    listAdminProductsMock
+      .mockReturnValueOnce(oldProducts)
+      .mockResolvedValueOnce({
+        data: { items: [], next_cursor: null },
+        error: undefined,
+      });
+    listAdminUsersMock.mockResolvedValue({
+      data: { items: [], next_cursor: null },
+      error: undefined,
+    });
+    getAdminBitbucketStatusMock.mockResolvedValue({
+      data: {
+        connected_at: null,
+        expires_at: null,
+        revoked_at: null,
+        status: "Disconnected",
+      },
+      error: undefined,
+    });
+    const first = principalFor("admin");
+    const { rerender } = render(
+      <WorkspaceOverviewPage accessToken="old-token" principal={first} />,
+    );
+    await screen.findByText("Loading administrator summaries");
+
+    const successor = { ...first, id: "successor-admin" };
+    rerender(
+      <WorkspaceOverviewPage
+        accessToken="successor-token"
+        principal={successor}
+      />,
+    );
+    expect(await screen.findByText("0 loaded products")).toBeVisible();
+    resolveOld({ data: { items: [], next_cursor: null }, error: undefined });
+    await Promise.resolve();
+
+    expect(
+      screen.queryByText("Administrator summaries unavailable"),
+    ).toBeNull();
+  });
+
+  it("ignores rejected summaries superseded by new administrator authority", async () => {
+    let rejectOld!: (reason: Error) => void;
+    listAdminProductsMock
+      .mockReturnValueOnce(
+        new Promise((_resolve, reject) => {
+          rejectOld = reject;
+        }) as never,
+      )
+      .mockResolvedValueOnce({
+        data: { items: [], next_cursor: null },
+        error: undefined,
+      });
+    listAdminUsersMock.mockResolvedValue({
+      data: { items: [], next_cursor: null },
+      error: undefined,
+    });
+    getAdminBitbucketStatusMock.mockResolvedValue({
+      data: {
+        connected_at: null,
+        expires_at: null,
+        revoked_at: null,
+        status: "Disconnected",
+      },
+      error: undefined,
+    });
+    const principal = principalFor("admin");
+    const view = render(
+      <WorkspaceOverviewPage accessToken="obsolete" principal={principal} />,
+    );
+    await screen.findByText("Loading administrator summaries");
+    view.rerender(
+      <WorkspaceOverviewPage accessToken="successor" principal={principal} />,
+    );
+    expect(await screen.findByText("0 loaded products")).toBeVisible();
+    rejectOld(new Error("stale summary failure"));
+    await Promise.resolve();
+    expect(
+      screen.queryByText("Administrator summaries unavailable"),
+    ).toBeNull();
   });
 });

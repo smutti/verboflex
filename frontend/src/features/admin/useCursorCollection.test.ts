@@ -13,6 +13,53 @@ function item(index: number): Item {
 }
 
 describe("useCursorCollection", () => {
+  it("lets an explicit reload supersede the queued initial request", async () => {
+    const loadPage = vi.fn().mockResolvedValue({
+      items: [item(1)],
+      next_cursor: null,
+    });
+    const { result } = renderHook(() =>
+      useCursorCollection({
+        getItemId: (entry: Item) => entry.id,
+        loadPage,
+        queryKey: "reload-before-microtask",
+      }),
+    );
+
+    await act(async () => result.current.reload());
+    await waitFor(() => expect(result.current.items).toEqual([item(1)]));
+    expect(loadPage).toHaveBeenCalledOnce();
+  });
+
+  it("drops an initial microtask whose generation was synchronously replaced", async () => {
+    const queued: VoidFunction[] = [];
+    const queue = vi
+      .spyOn(globalThis, "queueMicrotask")
+      .mockImplementation((callback) => queued.push(callback));
+    const loadPage = vi
+      .fn()
+      .mockResolvedValue({ items: [item(1)], next_cursor: null });
+    const { result, rerender } = renderHook(
+      ({ queryKey }) =>
+        useCursorCollection({
+          getItemId: (entry: Item) => entry.id,
+          loadPage,
+          queryKey,
+        }),
+      { initialProps: { queryKey: "first-generation" } },
+    );
+    rerender({ queryKey: "second-generation" });
+    await act(async () => {
+      const callbacks = queued.splice(0);
+      callbacks.forEach((callback) => callback());
+      callbacks.at(-1)?.();
+      await Promise.resolve();
+    });
+    expect(loadPage).toHaveBeenCalledOnce();
+    expect(result.current.items).toEqual([item(1)]);
+    queue.mockRestore();
+  });
+
   it("appends opaque cursor pages in response order and deduplicates stable identities", async () => {
     const firstPage = Array.from({ length: 50 }, (_, index) => item(index + 1));
     const loadPage = vi
@@ -90,5 +137,98 @@ describe("useCursorCollection", () => {
     expect(result.current.items).toEqual([item(200)]);
     expect(result.current.nextCursor).toBeNull();
     expect(loadPage).toHaveBeenCalledTimes(2);
+  });
+
+  it("recovers initial and appended failures, replaces identities, and bounds duplicate actions", async () => {
+    const loadPage = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("initial diagnostics"))
+      .mockResolvedValueOnce({ items: [item(1)], next_cursor: "page-2" })
+      .mockRejectedValueOnce(new Error("page diagnostics"))
+      .mockResolvedValueOnce({
+        items: [{ id: "item-1", label: "Updated item 1" }, item(2)],
+        next_cursor: null,
+      });
+    const { result } = renderHook(() =>
+      useCursorCollection({
+        getItemId: (entry: Item) => entry.id,
+        loadPage,
+        queryKey: "recoverable",
+      }),
+    );
+
+    await waitFor(() => expect(result.current.status).toBe("error"));
+    await act(async () => {
+      await result.current.loadMore();
+    });
+    expect(loadPage).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await result.current.reload();
+    });
+    expect(result.current.items).toEqual([item(1)]);
+
+    await act(async () => {
+      await Promise.all([result.current.loadMore(), result.current.loadMore()]);
+    });
+    expect(loadPage).toHaveBeenCalledTimes(3);
+    expect(result.current.loadMoreError).toBe(true);
+
+    await act(async () => {
+      await result.current.loadMore();
+    });
+    expect(result.current.items).toEqual([item(1), item(2)]);
+    expect(result.current.isEnd).toBe(true);
+
+    act(() => {
+      result.current.appendItems([
+        { id: "item-1", label: "Appended item 1" },
+        item(3),
+        { id: "item-3", label: "Duplicate item 3" },
+      ]);
+    });
+    expect(result.current.items).toEqual([item(1), item(2), item(3)]);
+
+    act(() => {
+      result.current.upsertItems([
+        { id: "item-1", label: "Upserted item 1" },
+        item(4),
+        { id: "item-4", label: "Latest item 4" },
+      ]);
+    });
+    expect(result.current.items).toEqual([
+      { id: "item-1", label: "Upserted item 1" },
+      item(2),
+      item(3),
+      item(4),
+    ]);
+  });
+
+  it("ignores a rejected request after its query authority is aborted", async () => {
+    let rejectObsolete!: (reason: Error) => void;
+    const obsolete = new Promise<{ items: Item[]; next_cursor: null }>(
+      (_resolve, reject) => {
+        rejectObsolete = reject;
+      },
+    );
+    const loadPage = vi
+      .fn()
+      .mockReturnValueOnce(obsolete)
+      .mockResolvedValueOnce({ items: [item(2)], next_cursor: null });
+    const { result, rerender } = renderHook(
+      ({ queryKey }) =>
+        useCursorCollection({
+          getItemId: (entry: Item) => entry.id,
+          loadPage,
+          queryKey,
+        }),
+      { initialProps: { queryKey: "obsolete" } },
+    );
+    await waitFor(() => expect(loadPage).toHaveBeenCalledOnce());
+
+    rerender({ queryKey: "successor" });
+    rejectObsolete(new Error("stale failure"));
+    await waitFor(() => expect(result.current.items).toEqual([item(2)]));
+    expect(result.current.status).toBe("ready");
   });
 });

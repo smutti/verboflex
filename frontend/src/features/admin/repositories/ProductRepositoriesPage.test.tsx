@@ -112,4 +112,37 @@ describe("ProductRepositoriesPage cursor boundaries", () => {
       screen.getAllByRole("button", { name: /Use Repository 50/ }),
     ).toHaveLength(2);
   });
+
+  it("retries rejected initial and continuation pages without losing loaded repositories", async () => {
+    listRepositoriesMock
+      .mockResolvedValueOnce(ok(undefined as never))
+      .mockResolvedValueOnce(
+        ok({ items: [repository(1)], next_cursor: "opaque-page-2" }),
+      )
+      .mockResolvedValueOnce(ok(undefined as never))
+      .mockResolvedValueOnce(ok({ items: [repository(2)], next_cursor: null }));
+    const user = userEvent.setup();
+
+    render(<ProductRepositoriesPage accessToken="recovery-admin-bearer" />);
+
+    expect(await screen.findByText("Repositories unavailable")).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "Retry loading page" }),
+    );
+    expect((await screen.findAllByText("Repository 1"))[0]).toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", { name: "Load more repositories" }),
+    );
+    expect(
+      await screen.findByText("More repositories unavailable"),
+    ).toBeVisible();
+    expect(screen.getAllByText("Repository 1")[0]).toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", { name: "Retry loading repositories" }),
+    );
+    expect((await screen.findAllByText("Repository 2"))[0]).toBeVisible();
+    expect(listRepositoriesMock).toHaveBeenCalledTimes(4);
+  });
 });
