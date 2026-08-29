@@ -9,11 +9,13 @@ from enum import StrEnum
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import ProductRepositoryMapping
 from verboflex.services.preview_jobs import is_current_preview_confirmation
+from verboflex.services.products import normalize_product_name
 
 
 class PublicationBlocker(StrEnum):
@@ -165,6 +167,31 @@ def _result(product: Product, *, changed: bool) -> PublicationResult:
     )
 
 
+def _promote_candidate_identity(
+    session: Session,
+    *,
+    product: Product,
+    candidate: ProductRevision,
+) -> None:
+    """Validate and copy one canonical candidate identity to its Product."""
+    try:
+        canonical_identity = normalize_product_name(candidate.display_name)
+    except ValueError as error:
+        raise PublicationConflict("identity conflict") from error
+    if canonical_identity != (candidate.display_name, candidate.name_key):
+        raise PublicationConflict("identity conflict")
+    conflicting_product_id = session.scalar(
+        select(Product.id).where(
+            Product.name_key == candidate.name_key,
+            Product.id != product.id,
+        )
+    )
+    if conflicting_product_id is not None:
+        raise PublicationConflict("identity conflict")
+    product.display_name = candidate.display_name
+    product.name_key = candidate.name_key
+
+
 def publish_product_candidate(
     session: Session,
     *,
@@ -174,31 +201,47 @@ def publish_product_candidate(
     confirmation_predicate: ConfirmationPredicate = is_current_preview_confirmation,
 ) -> PublicationResult:
     """Atomically validate and publish one exact candidate revision."""
-    with session.begin():
-        product = _locked_product(session, product_id)
-        if product.active_revision_id == candidate_revision_id:
-            active = _locked_revision(session, candidate_revision_id)
-            if not active.is_published or active.version != expected_candidate_version:
+    try:
+        with session.begin():
+            product = _locked_product(session, product_id)
+            if product.active_revision_id == candidate_revision_id:
+                active = _locked_revision(session, candidate_revision_id)
+                if not active.is_published or active.version != expected_candidate_version:
+                    raise PublicationConflict("revision conflict")
+                return _result(product, changed=False)
+            if product.candidate_revision_id != candidate_revision_id:
                 raise PublicationConflict("revision conflict")
-            return _result(product, changed=False)
-        if product.candidate_revision_id != candidate_revision_id:
-            raise PublicationConflict("revision conflict")
-        candidate = _locked_revision(session, candidate_revision_id)
-        if candidate.is_published or candidate.version != expected_candidate_version:
-            raise PublicationConflict("revision conflict")
-        _require_eligible(
-            session,
-            revision=candidate,
-            confirmation_predicate=confirmation_predicate,
-        )
-        candidate.is_published = True
-        candidate.published_at = datetime.now(UTC)
-        session.flush()
-        product.active_revision_id = candidate.id
-        product.candidate_revision_id = None
-        product.is_active = True
-        session.flush()
-        return _result(product, changed=True)
+            candidate = _locked_revision(session, candidate_revision_id)
+            if (
+                candidate.product_id != product.id
+                or candidate.is_published
+                or candidate.version != expected_candidate_version
+            ):
+                raise PublicationConflict("revision conflict")
+            _require_eligible(
+                session,
+                revision=candidate,
+                confirmation_predicate=confirmation_predicate,
+            )
+
+            candidate.is_published = True
+            candidate.published_at = datetime.now(UTC)
+            session.flush()
+
+            _promote_candidate_identity(
+                session,
+                product=product,
+                candidate=candidate,
+            )
+            session.flush()
+
+            product.active_revision_id = candidate.id
+            product.candidate_revision_id = None
+            product.is_active = True
+            session.flush()
+            return _result(product, changed=True)
+    except IntegrityError as error:
+        raise PublicationConflict("identity conflict") from error
 
 
 def deactivate_product(
