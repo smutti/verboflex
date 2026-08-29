@@ -271,6 +271,7 @@ preflight() {
 }
 
 prepare_stack() {
+  local compose_start_log rc
   compose build backend worker frontend
   compose up -d mock-bitbucket postgres redis
   wait_for_postgres
@@ -282,7 +283,19 @@ prepare_stack() {
     >"$SMOKE_RUNTIME_DIR/bootstrap.out"
   grep -Fxq 'First administrator created.' "$SMOKE_RUNTIME_DIR/bootstrap.out" \
     || die "admin bootstrap did not reach its non-secret success checkpoint"
-  compose up -d backend worker frontend
+  compose_start_log="$SMOKE_RUNTIME_DIR/compose-start.log"
+  : >"$compose_start_log"
+  chmod 600 "$compose_start_log"
+  set +e
+  compose up -d backend worker frontend 2>&1 | tee "$compose_start_log"
+  rc=${PIPESTATUS[0]}
+  set -e
+  if [ "$rc" -ne 0 ]; then
+    if grep -Fq "address already in use" "$compose_start_log"; then
+      return 75
+    fi
+    return "$rc"
+  fi
   wait_for_url "$SMOKE_BACKEND_URL/api/v1/health" 200 backend
   wait_for_url "$SMOKE_FRONTEND_URL/login" 200 frontend
   compose exec -T backend python -c \
@@ -352,6 +365,27 @@ run_mock_provider() {
   printf 'phase2 mocked deployment smoke: PASS\n'
 }
 
+run_mock_provider_with_port_retry() {
+  local attempt rc
+  for attempt in 1 2 3; do
+    set +e
+    "$SCRIPT_DIR/phase2_smoke.sh" --mock-provider-once
+    rc=$?
+    set -e
+    if [ "$rc" -eq 0 ]; then
+      return 0
+    fi
+    if [ "$rc" -ne 75 ]; then
+      return "$rc"
+    fi
+    if [ "$attempt" -lt 3 ]; then
+      printf 'phase2 smoke: transient host-port race, retrying isolated attempt %s/3\n' \
+        "$((attempt + 1))" >&2
+    fi
+  done
+  die "host-port binding remained unavailable after three isolated attempts"
+}
+
 live_provider_gate() {
   local live_env_file="${VERBOFLEX_PHASE2_LIVE_ENV_FILE:-$REPO_ROOT/.env.phase2-live}"
   [ -x "$BACKEND_ROOT/.venv/bin/python" ] || die "backend Python environment is unavailable"
@@ -360,7 +394,8 @@ live_provider_gate() {
 }
 
 case "${1:-}" in
-  --mock-provider) run_mock_provider ;;
+  --mock-provider) run_mock_provider_with_port_retry ;;
+  --mock-provider-once) run_mock_provider ;;
   --live-provider-read-only) live_provider_gate ;;
   *) die "usage: tools/phase2_smoke.sh --mock-provider|--live-provider-read-only" ;;
 esac
