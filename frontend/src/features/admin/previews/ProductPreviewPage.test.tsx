@@ -18,9 +18,11 @@ import {
   getAdminPreviewJob,
   getAdminProduct,
   listAdminCandidateMappings,
+  listAdminRevisionMappings,
   listAdminRepositoryBranches,
   publishAdminProductCandidate,
   reactivateAdminProduct,
+  updateAdminProductCandidate,
   type AdminMappingResponse,
   type AdminPreviewJobResponse,
   type AdminPreviewLayoutCandidateResponse,
@@ -40,9 +42,11 @@ vi.mock("../../../api/client", async (importOriginal) => {
     getAdminPreviewJob: vi.fn(),
     getAdminProduct: vi.fn(),
     listAdminCandidateMappings: vi.fn(),
+    listAdminRevisionMappings: vi.fn(),
     listAdminRepositoryBranches: vi.fn(),
     publishAdminProductCandidate: vi.fn(),
     reactivateAdminProduct: vi.fn(),
+    updateAdminProductCandidate: vi.fn(),
   };
 });
 
@@ -50,10 +54,12 @@ const confirmMock = vi.mocked(confirmAdminPreviewJob);
 const createJobMock = vi.mocked(createAdminPreviewJob);
 const getJobMock = vi.mocked(getAdminPreviewJob);
 const getProductMock = vi.mocked(getAdminProduct);
-const listMappingsMock = vi.mocked(listAdminCandidateMappings);
+const listCandidateMappingsMock = vi.mocked(listAdminCandidateMappings);
+const listRevisionMappingsMock = vi.mocked(listAdminRevisionMappings);
 const listBranchesMock = vi.mocked(listAdminRepositoryBranches);
 const publishMock = vi.mocked(publishAdminProductCandidate);
 const reactivateMock = vi.mocked(reactivateAdminProduct);
+const updateProductMock = vi.mocked(updateAdminProductCandidate);
 const toastSuccessMock = vi.mocked(toast.success);
 
 const product: AdminProductResponse = {
@@ -82,6 +88,27 @@ const mapping: AdminMappingResponse = {
   topology: "direct",
   translations_repository_id: null,
   translations_source_branch: null,
+};
+
+const inactiveActiveOnlyProduct: AdminProductResponse = {
+  ...product,
+  active_revision: {
+    description: "Published localization configuration",
+    id: "00000000-0000-4000-8000-000000000202",
+    is_published: true,
+    name: product.name,
+    version: 7,
+  },
+  candidate_revision: null,
+  is_active: false,
+};
+
+const confirmedActiveMapping: AdminMappingResponse = {
+  ...mapping,
+  candidate_version: inactiveActiveOnlyProduct.active_revision!.version,
+  selected_layout_candidate_id:
+    "00000000-0000-4000-8000-000000000501",
+  selected_layout_version: 1,
 };
 
 const formats = [
@@ -198,8 +225,9 @@ describe("administrator product preview and publication page", () => {
     getJobMock.mockReset();
     getProductMock.mockReset();
     getProductMock.mockResolvedValue(ok(product));
-    listMappingsMock.mockReset();
-    listMappingsMock.mockResolvedValue(
+    listCandidateMappingsMock.mockReset();
+    listRevisionMappingsMock.mockReset();
+    listRevisionMappingsMock.mockResolvedValue(
       ok({ items: [mapping], next_cursor: null }),
     );
     listBranchesMock.mockReset();
@@ -214,6 +242,7 @@ describe("administrator product preview and publication page", () => {
     );
     publishMock.mockReset();
     reactivateMock.mockReset();
+    updateProductMock.mockReset();
     toastSuccessMock.mockReset();
   });
 
@@ -457,5 +486,176 @@ describe("administrator product preview and publication page", () => {
     ).toHaveAttribute("href", `#preview-${mapping.id}`);
     expect(screen.getByText("Confirmed")).toBeVisible();
     expect(toastSuccessMock).not.toHaveBeenCalled();
+  });
+
+  it("loads Product before the exact active revision and never creates candidate state", async () => {
+    let resolveProduct!: (value: ReturnType<typeof ok<AdminProductResponse>>) => void;
+    getProductMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveProduct = resolve;
+      }),
+    );
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+
+    renderPage();
+    await waitFor(() => expect(getProductMock).toHaveBeenCalledTimes(1));
+    expect(listRevisionMappingsMock).not.toHaveBeenCalled();
+
+    resolveProduct(ok(inactiveActiveOnlyProduct));
+
+    expect(
+      await screen.findByRole("button", { name: "Reactivate product" }),
+    ).toBeEnabled();
+    expect(listRevisionMappingsMock).toHaveBeenCalledTimes(1);
+    expect(listRevisionMappingsMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: {
+        product_id: inactiveActiveOnlyProduct.id,
+        revision_id: inactiveActiveOnlyProduct.active_revision!.id,
+      },
+      query: { cursor: null, limit: 50 },
+    });
+    expect(listCandidateMappingsMock).not.toHaveBeenCalled();
+    expect(updateProductMock).not.toHaveBeenCalled();
+    expect(createJobMock).not.toHaveBeenCalled();
+    expect(publishMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing", { ...confirmedActiveMapping, selected_layout_candidate_id: null }],
+    ["stale", { ...confirmedActiveMapping, selected_layout_version: null }],
+    [
+      "failed",
+      {
+        ...confirmedActiveMapping,
+        selected_layout_candidate_id: null,
+        selected_layout_version: null,
+      },
+    ],
+  ])(
+    "keeps reactivation disabled for a %s active confirmation without sending a lifecycle request",
+    async (_state, blockedMapping) => {
+      getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+      listRevisionMappingsMock.mockResolvedValueOnce(
+        ok({ items: [blockedMapping], next_cursor: null }),
+      );
+
+      renderPage();
+
+      expect(
+        await screen.findByText(
+          "Mapping 1: Preview confirmation required",
+        ),
+      ).toBeVisible();
+      expect(
+        screen.getByRole("button", { name: "Reactivate product" }),
+      ).toBeDisabled();
+      expect(reactivateMock).not.toHaveBeenCalled();
+      expect(updateProductMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("sends only the exact active revision authority and renders the returned terminal state", async () => {
+    const reactivatedProduct: AdminProductResponse = {
+      ...inactiveActiveOnlyProduct,
+      is_active: true,
+    };
+    getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+    reactivateMock.mockResolvedValueOnce(ok(reactivatedProduct));
+
+    renderPage();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Reactivate product" }),
+    );
+    const dialog = screen.getByRole("alertdialog", {
+      name: "Reactivate Mobile Product?",
+    });
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Reactivate product" }),
+    );
+
+    expect(reactivateMock).toHaveBeenCalledTimes(1);
+    expect(reactivateMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      body: {
+        active_revision_id: inactiveActiveOnlyProduct.active_revision!.id,
+        expected_active_version:
+          inactiveActiveOnlyProduct.active_revision!.version,
+      },
+      path: { product_id: inactiveActiveOnlyProduct.id },
+    });
+    expect(await screen.findByText("Active")).toBeVisible();
+    expect(toastSuccessMock).toHaveBeenCalledWith("Product reactivated");
+    expect(listCandidateMappingsMock).not.toHaveBeenCalled();
+    expect(updateProductMock).not.toHaveBeenCalled();
+    expect(publishMock).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates pending reactivation and retries a 409 against the unchanged active revision", async () => {
+    let resolveConflict!: (
+      value: ReturnType<
+        typeof failure<AdminProductLifecycleConflictResponse>
+      >,
+    ) => void;
+    getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+    reactivateMock
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveConflict = resolve;
+        }),
+      )
+      .mockResolvedValueOnce(
+        ok({ ...inactiveActiveOnlyProduct, is_active: true }),
+      );
+
+    renderPage();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Reactivate product" }),
+    );
+    const confirm = within(screen.getByRole("alertdialog")).getByRole(
+      "button",
+      { name: "Reactivate product" },
+    );
+    await userEvent.click(confirm);
+    await userEvent.click(confirm);
+    expect(reactivateMock).toHaveBeenCalledTimes(1);
+
+    resolveConflict(
+      failure(
+        {
+          blockers: ["preview_confirmation_required"],
+          detail: "Product publication blocked",
+        },
+        409,
+      ),
+    );
+    expect(
+      await screen.findByRole("alert", { name: "Publication blocked" }),
+    ).toHaveTextContent("Preview confirmation required");
+    expect(screen.getByText("Inactive")).toBeVisible();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Reactivate product" }),
+    );
+    await userEvent.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", {
+        name: "Reactivate product",
+      }),
+    );
+
+    expect(reactivateMock).toHaveBeenCalledTimes(2);
+    expect(reactivateMock.mock.calls[0]).toEqual(reactivateMock.mock.calls[1]);
+    expect(await screen.findByText("Active")).toBeVisible();
+    expect(listCandidateMappingsMock).not.toHaveBeenCalled();
+    expect(updateProductMock).not.toHaveBeenCalled();
   });
 });
