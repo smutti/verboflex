@@ -252,6 +252,10 @@ def _mapping_path(product_id: UUID, mapping_id: UUID | None = None) -> str:
     return collection if mapping_id is None else f"{collection}/{mapping_id}"
 
 
+def _revision_mapping_path(product_id: UUID, revision_id: UUID) -> str:
+    return f"/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings"
+
+
 async def _request(
     method: str,
     *,
@@ -359,6 +363,349 @@ def _persist_mapping(
                 for target in targets
             ],
         )
+    )
+
+
+def _seed_revision_read_graph(
+    factory: sessionmaker[Session],
+    *,
+    include_candidate: bool,
+) -> tuple[UUID, UUID, UUID | None, UUID, tuple[UUID, ...]]:
+    """Persist active/candidate/stale mappings before publication guards engage."""
+    product_id = uuid4()
+    active_id = uuid4()
+    candidate_id = uuid4() if include_candidate else None
+    stale_id = uuid4()
+    repository_ids = tuple(uuid4() for _ in range(4))
+    mapping_ids = tuple(uuid4() for _ in range(3 if include_candidate else 1))
+    now = datetime.now(UTC)
+    with factory.begin() as session:
+        product = Product(
+            id=product_id,
+            display_name=f"Revision read {product_id}",
+            name_key=f"revision read {product_id}",
+            is_active=False,
+        )
+        session.add(product)
+        session.flush()
+        active = ProductRevision(
+            id=active_id,
+            product_id=product_id,
+            description="active revision",
+            version=7,
+            is_published=False,
+        )
+        stale = ProductRevision(
+            id=stale_id,
+            product_id=product_id,
+            description="historical revision",
+            version=3,
+            is_published=False,
+        )
+        revisions = [active, stale]
+        if candidate_id is not None:
+            revisions.append(
+                ProductRevision(
+                    id=candidate_id,
+                    product_id=product_id,
+                    description="candidate revision",
+                    version=11,
+                    is_published=False,
+                )
+            )
+        session.add_all(revisions)
+        session.add_all(
+            Repository(
+                id=repository_id,
+                workspace="revision-read-team",
+                repository_slug=f"repo-{repository_id.hex}",
+            )
+            for repository_id in repository_ids
+        )
+        session.flush()
+        _persist_mapping(
+            session,
+            mapping_id=mapping_ids[0],
+            revision_id=active_id,
+            topology="direct",
+            primary_repository_id=repository_ids[0],
+            primary_branch="active/main",
+            targets=("active/release",),
+            default_target="active/release",
+        )
+        if candidate_id is not None:
+            _persist_mapping(
+                session,
+                mapping_id=mapping_ids[1],
+                revision_id=candidate_id,
+                topology="direct",
+                primary_repository_id=repository_ids[1],
+                primary_branch="candidate/a",
+                targets=("candidate/release",),
+                default_target="candidate/release",
+            )
+            _persist_mapping(
+                session,
+                mapping_id=mapping_ids[2],
+                revision_id=candidate_id,
+                topology="separate",
+                primary_repository_id=repository_ids[2],
+                primary_branch="candidate/keys",
+                translations_repository_id=repository_ids[3],
+                translations_branch="candidate/translations",
+                targets=("candidate/release",),
+                default_target="candidate/release",
+            )
+        session.flush()
+        active.is_published = True
+        active.published_at = now
+        stale.is_published = True
+        stale.published_at = now
+        session.flush()
+        product.active_revision_id = active_id
+        product.candidate_revision_id = candidate_id
+    return product_id, active_id, candidate_id, stale_id, mapping_ids
+
+
+def _revision_graph_snapshot(
+    factory: sessionmaker[Session],
+    *,
+    product_ids: Sequence[UUID],
+) -> tuple[Any, ...]:
+    """Capture every persisted pointer and revision-owned row touched by the read."""
+    ordered_product_ids = tuple(sorted(product_ids))
+    with factory() as session:
+        revision_ids = tuple(
+            session.scalars(
+                select(ProductRevision.id)
+                .where(ProductRevision.product_id.in_(ordered_product_ids))
+                .order_by(ProductRevision.id)
+            )
+        )
+        mapping_ids = tuple(
+            session.scalars(
+                select(ProductRepositoryMapping.id)
+                .where(ProductRepositoryMapping.revision_id.in_(revision_ids))
+                .order_by(ProductRepositoryMapping.id)
+            )
+        )
+        return (
+            tuple(
+                session.execute(
+                    select(
+                        Product.id,
+                        Product.active_revision_id,
+                        Product.candidate_revision_id,
+                        Product.is_active,
+                        Product.updated_at,
+                    )
+                    .where(Product.id.in_(ordered_product_ids))
+                    .order_by(Product.id)
+                ).all()
+            ),
+            tuple(
+                session.execute(
+                    select(
+                        ProductRevision.id,
+                        ProductRevision.product_id,
+                        ProductRevision.version,
+                        ProductRevision.is_published,
+                        ProductRevision.published_at,
+                        ProductRevision.updated_at,
+                    )
+                    .where(ProductRevision.id.in_(revision_ids))
+                    .order_by(ProductRevision.id)
+                ).all()
+            ),
+            tuple(
+                session.execute(
+                    select(
+                        ProductRepositoryMapping.id,
+                        ProductRepositoryMapping.revision_id,
+                        ProductRepositoryMapping.topology,
+                        ProductRepositoryMapping.identity_key,
+                        ProductRepositoryMapping.selected_layout_candidate_id,
+                        ProductRepositoryMapping.selected_layout_version,
+                        ProductRepositoryMapping.confirmed_preview_job_id,
+                        ProductRepositoryMapping.confirmed_preview_digest,
+                        ProductRepositoryMapping.preview_confirmed_by,
+                        ProductRepositoryMapping.preview_confirmed_at,
+                        ProductRepositoryMapping.created_at,
+                        ProductRepositoryMapping.updated_at,
+                    )
+                    .where(ProductRepositoryMapping.id.in_(mapping_ids))
+                    .order_by(ProductRepositoryMapping.id)
+                ).all()
+            ),
+            tuple(
+                session.execute(
+                    select(
+                        ProductMappingRepositorySide.mapping_id,
+                        ProductMappingRepositorySide.role,
+                        ProductMappingRepositorySide.repository_id,
+                        ProductMappingRepositorySide.source_branch,
+                    )
+                    .where(ProductMappingRepositorySide.mapping_id.in_(mapping_ids))
+                    .order_by(
+                        ProductMappingRepositorySide.mapping_id,
+                        ProductMappingRepositorySide.role,
+                    )
+                ).all()
+            ),
+            tuple(
+                session.execute(
+                    select(
+                        ProductMappingAllowedTarget.mapping_id,
+                        ProductMappingAllowedTarget.branch,
+                        ProductMappingAllowedTarget.is_default,
+                    )
+                    .where(ProductMappingAllowedTarget.mapping_id.in_(mapping_ids))
+                    .order_by(
+                        ProductMappingAllowedTarget.mapping_id,
+                        ProductMappingAllowedTarget.branch,
+                    )
+                ).all()
+            ),
+        )
+
+
+def test_revision_mapping_read_is_owned_cursor_faithful_and_mutation_free(
+    mapping_session_factory: sessionmaker[Session],
+) -> None:
+    """Active/candidate reads preserve graph state and reject every other revision."""
+    active_only = _seed_revision_read_graph(
+        mapping_session_factory,
+        include_candidate=False,
+    )
+    candidate_graph = _seed_revision_read_graph(
+        mapping_session_factory,
+        include_candidate=True,
+    )
+    active_product_id, active_id, _no_candidate, stale_id, active_mapping_ids = active_only
+    product_id, candidate_active_id, candidate_id, _candidate_stale, mapping_ids = candidate_graph
+    assert candidate_id is not None
+    adapter = BranchAdapter(())
+    _configure_dependencies(mapping_session_factory, adapter)
+    admin_token = _create_authority(
+        mapping_session_factory,
+        email="revision-reader@example.com",
+        roles=("admin",),
+    )
+    ordinary_token = _create_authority(
+        mapping_session_factory,
+        email="revision-reader-denied@example.com",
+        roles=("viewer",),
+    )
+    before = _revision_graph_snapshot(
+        mapping_session_factory,
+        product_ids=(active_product_id, product_id),
+    )
+
+    assert (
+        asyncio.run(
+            _request(
+                "GET",
+                path=_revision_mapping_path(active_product_id, active_id),
+                access_token=None,
+            )
+        ).status_code
+        == 401
+    )
+    assert (
+        asyncio.run(
+            _request(
+                "GET",
+                path=_revision_mapping_path(active_product_id, active_id),
+                access_token=ordinary_token,
+            )
+        ).status_code
+        == 403
+    )
+
+    active_response = asyncio.run(
+        _request(
+            "GET",
+            path=_revision_mapping_path(active_product_id, active_id),
+            access_token=admin_token,
+        )
+    )
+    assert active_response.status_code == 200
+    assert active_response.json() == {
+        "items": [
+            {
+                "id": str(active_mapping_ids[0]),
+                "topology": "direct",
+                "primary_repository_id": active_response.json()["items"][0][
+                    "primary_repository_id"
+                ],
+                "primary_source_branch": "active/main",
+                "translations_repository_id": None,
+                "translations_source_branch": None,
+                "allowed_target_branches": ["active/release"],
+                "default_target_branch": "active/release",
+                "selected_layout_candidate_id": None,
+                "selected_layout_version": None,
+                "candidate_version": 7,
+            }
+        ],
+        "next_cursor": None,
+    }
+
+    first_page = asyncio.run(
+        _request(
+            "GET",
+            path=_revision_mapping_path(product_id, candidate_id) + "?limit=1",
+            access_token=admin_token,
+        )
+    )
+    assert first_page.status_code == 200
+    assert [item["id"] for item in first_page.json()["items"]] == [str(mapping_ids[1])]
+    cursor = first_page.json()["next_cursor"]
+    assert isinstance(cursor, str) and cursor
+    second_page = asyncio.run(
+        _request(
+            "GET",
+            path=_revision_mapping_path(product_id, candidate_id)
+            + f"?limit=1&cursor={cursor}",
+            access_token=admin_token,
+        )
+    )
+    assert second_page.status_code == 200
+    assert [item["id"] for item in second_page.json()["items"]] == [str(mapping_ids[2])]
+    assert second_page.json()["next_cursor"] is None
+
+    candidate_active = asyncio.run(
+        _request(
+            "GET",
+            path=_revision_mapping_path(product_id, candidate_active_id),
+            access_token=admin_token,
+        )
+    )
+    assert candidate_active.status_code == 200
+    assert [item["id"] for item in candidate_active.json()["items"]] == [str(mapping_ids[0])]
+
+    for requested_product_id, requested_revision_id in (
+        (product_id, active_id),
+        (active_product_id, stale_id),
+        (product_id, uuid4()),
+    ):
+        rejected = asyncio.run(
+            _request(
+                "GET",
+                path=_revision_mapping_path(requested_product_id, requested_revision_id),
+                access_token=admin_token,
+            )
+        )
+        assert rejected.status_code == 404
+        assert rejected.json() == {"detail": "Mapping revision unavailable"}
+
+    assert adapter.calls == []
+    assert (
+        _revision_graph_snapshot(
+            mapping_session_factory,
+            product_ids=(active_product_id, product_id),
+        )
+        == before
     )
 
 
