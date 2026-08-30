@@ -86,7 +86,7 @@ Plans:
   7. Guided shadcn admin screens provide actionable user, repository, mapping, OAuth, validation, and background-job states.
   8. Phase quality gate passes with RED→GREEN TDD evidence, code review, and backend/frontend/worker/deploy smoke verification.
 
-**Plans**: 37/38 plans executed (20 original plans, 17/18 gap-closure plans executed)
+**Plans**: 37/43 plans executed (20 original plans, 17/23 gap-closure plans executed)
 
 Plans:
 **Wave 1**
@@ -216,7 +216,27 @@ Plans:
 
 - [x] 02-37-PLAN.md — Full architecture, E2E, Compose, worker-loss, security, and unchanged-source gauntlet expansion
 
-**Wave 31** *(gap closure final authority; blocked on every Plan 02-21 through 02-37)*
+**Wave 31** *(gap closure scheduler deployment; blocked on Wave 30 completion)*
+
+- [ ] 02-39-PLAN.md — Staging/production scheduler authority and dual-overlay worker-loss recovery
+
+**Wave 32** *(gap closure active-revision revalidation core; blocked on Wave 31 completion)*
+
+- [ ] 02-40-PLAN.md — Immutable active-revision revalidation and reconfirmation authority
+
+**Wave 33** *(gap closure revalidation API/client; blocked on Wave 32 completion)*
+
+- [ ] 02-41-PLAN.md — Exact active-revision recovery API and generated TypeScript client
+
+**Wave 34** *(gap closure revalidation UI/E2E; blocked on Wave 33 completion)*
+
+- [ ] 02-42-PLAN.md — Inactive-product revalidation UI and real reconnect-to-reactivate E2E recovery
+
+**Wave 35** *(gap closure browser anti-framing; blocked on Wave 34 completion)*
+
+- [ ] 02-43-PLAN.md — Runtime Nginx CSP and frame-embedding denial
+
+**Wave 36** *(gap closure final authority; blocked on every Plan 02-21 through 02-43)*
 
 - [ ] 02-38-PLAN.md — Fresh critical-zero ASVS L1 review and independent `status: passed` verifier closeout
 
@@ -407,7 +427,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Platform Foundation | 15/15 | Complete    | 2026-08-26 |
-| 2. Admin Configuration | 37/38 | In Progress|  |
+| 2. Admin Configuration | 37/43 | In Progress|  |
 | 3. Bitbucket Import Integration | 0/4 | Not started | - |
 | 4. Localization Parser Foundation | 0/7 | Not started | - |
 | 5. Import, Search, and Constraints | 0/6 | Not started | - |
