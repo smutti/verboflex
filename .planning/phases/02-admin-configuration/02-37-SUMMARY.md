@@ -17,9 +17,9 @@ provides:
 affects: [02-38, phase-02-verification, phase-02-gauntlet, deployment-smoke]
 
 actuals:
-  tokens: 41549
+  tokens: 41805
   tasks: 2
-  commits: 15
+  commits: 16
 
 tech-stack:
   added: []
@@ -81,7 +81,7 @@ coverage:
         status: pass
     human_judgment: false
 
-duration: 1h49min
+duration: 2h03min
 completed: 2026-08-30
 status: complete
 ---
@@ -92,18 +92,18 @@ status: complete
 
 ## Performance
 
-- **Duration:** 1h 49 min
+- **Duration:** 2h 03 min
 - **Started:** 2026-08-29T22:04:04Z
-- **Completed:** 2026-08-29T23:53:00Z
+- **Completed:** 2026-08-30T00:07:09Z
 - **Tasks:** 2
 - **Files modified:** 26 implementation/test/harness files plus this summary
-- **Actual estimate scale:** 41,549 tokens (166,196 realized diff characters / 4)
+- **Actual estimate scale:** 41,805 tokens (167,220 realized diff characters / 4)
 
 ## Accomplishments
 
 - Bound CR-01..CR-10, WR-01..WR-02, and G1..G5 to imported Python authorities, FastAPI routes/OpenAPI, generated-client operations, frontend usage, Celery scheduling, Compose environments, and executable architecture/E2E/smoke nodes while preserving Plan 02-30's literal inventories.
 - Proved `AdminBitbucketStatusResponse.status` reaches OpenAPI, generated TypeScript, and `BitbucketConnectionPage` unchanged, and structurally rejected deferred callback/auth-code/refresh, provider-write, canonical-translation persistence, and non-admin administrator-request surfaces.
-- Passed all 18 fail-closed layers on source digest `dbbb5ec2de3ba4759db6a54d5ec945a3e7bce551fce7b16cfe947287381b97f9`, including 785 backend tests, 260 frontend tests, exact 354/354 backend and 477/477 frontend diff coverage, and 159/159 killed mutants.
+- Passed all 18 fail-closed layers on source digest `9d706927ce28271b9dfbff7d0695b9a4268cc4b4a9e75c068e6465f6774650f7`, including 785 backend tests, 260 frontend tests, exact 354/354 backend and 477/477 frontend diff coverage, and 159/159 killed mutants.
 - Passed base Compose, exact `repository` scope with five provider GETs and zero writes, eight real-backend desktop/mobile Playwright cases, and killed-running-worker watchdog terminalization followed by an isolated successful retry.
 
 ## Task Commits
@@ -125,6 +125,7 @@ The plan-level RED/GREEN gates and validation-debt repairs were committed atomic
 13. **Exact frontend Cobertura-root normalization** — `a539e38` (fix)
 14. **Current OAuth authority mutation verifier** — `925510e` (test)
 15. **Exact reviewed secret-fixture policy and negative control** — `43f3b4e` (fix)
+16. **Trap-owned temporary secret-scan cleanup and assertion** — `453286d` (fix)
 
 Plan metadata is committed separately with this summary and synchronized planning state.
 
@@ -234,14 +235,23 @@ Plan metadata is committed separately with this summary and synchronized plannin
 - **Verification:** Policy replay, checker self-tests, the security layer, runtime seeded-secret scans, and the full gauntlet passed.
 - **Committed in:** `43f3b4e`
 
+**9. [Rule 1 - Bug] Made the cleanup claim remove and verify its secret-scan artifact**
+- **Found during:** Independent post-gauntlet cleanup audit.
+- **Issue:** The cleanup layer reported zero secret files while `/tmp/verboflex-phase02-secrets.json` still retained detector metadata and hashes.
+- **Fix:** Removed the exact artifact after successful scanning and through the shared teardown trap, asserted its absence in the resource-cleanup layer, and added a sentinel cleanup self-test.
+- **Files modified:** `tools/phase2_gauntlet.sh`
+- **Verification:** Checker replay, focused architecture, the full 18-layer gauntlet, and an independent filesystem audit all passed with the artifact absent.
+- **Committed in:** `453286d`
+
 ---
 
-**Total deviations:** 8 auto-fixed (3 Rule 1 bugs, 4 Rule 3 blockers, 1 Rule 2 security gate).
+**Total deviations:** 9 auto-fixed (4 Rule 1 bugs, 4 Rule 3 blockers, 1 Rule 2 security gate).
 **Impact on plan:** All repairs were necessary to keep the phase-wide gate authoritative; no dependency, provider write, coverage weakening, skip, or unrelated production feature was introduced.
 
 ## Issues Encountered
 
 - The first full gauntlet exposed stale test expectations, formatting drift, phase-wide backend/frontend diff-coverage debt, mutation-verifier drift, and the reviewed secret-inventory drift. Each failed closed, was repaired atomically within explicitly extended ownership, and the full command was restarted from layer one.
+- The first green cleanup message overstated teardown because the detect-secrets JSON remained in `/tmp`; the independent audit caught it, the trap/assertion were repaired, and all 18 layers were rerun on a fresh unchanged digest.
 - The all-dependency audit reports a moderate advisory in the development-only Stryker `typed-rest-client` chain. The configured all-package high-severity gate and production-only moderate gate both passed; no runtime dependency or package lock was changed.
 
 ## Authentication Gates
@@ -258,14 +268,14 @@ None - deterministic base, mock-provider/browser, and worker-loss validation req
 
 ## Next Phase Readiness
 
-- Plan 02-38 can perform its fresh critical-zero ASVS review and independent verifier closeout against digest `dbbb5ec2de3ba4759db6a54d5ec945a3e7bce551fce7b16cfe947287381b97f9`.
+- Plan 02-38 can perform its fresh critical-zero ASVS review and independent verifier closeout against digest `9d706927ce28271b9dfbff7d0695b9a4268cc4b4a9e75c068e6465f6774650f7`.
 - All mandatory Phase 02-37 architecture, test, coverage, mutation, security, E2E, deployment, recovery, and cleanup gates are green.
 - No blocker remains.
 
 ## Self-Check: PASSED
 
 - All 26 changed implementation/test/harness files and this summary exist.
-- Commits `410f5f5`, `e13a77d`, `4389062`, `e3e2695`, `631db5d`, `cc99653`, `e21e98d`, `cc1f78f`, `0ef6652`, `f99e6c9`, `ee4c6f6`, `a91d69a`, `a539e38`, `925510e`, and `43f3b4e` are reachable in order from the current branch.
+- Commits `410f5f5`, `e13a77d`, `4389062`, `e3e2695`, `631db5d`, `cc99653`, `e21e98d`, `cc1f78f`, `0ef6652`, `f99e6c9`, `ee4c6f6`, `a91d69a`, `a539e38`, `925510e`, `43f3b4e`, and `453286d` are reachable in order from the current branch.
 - The focused architecture command passed 26/26; `bash tools/phase2_gauntlet.sh --gap-closure` passed 18/18 on one unchanged digest.
 - Independent post-run inspection found zero Phase 02-37 containers, networks, volumes, images, or temporary secret files.
 - No tracked deletion, dependency change, skipped mandatory layer, ignored mutant, coverage exclusion, provider write, generated-client drift, unmodeled production threat surface, or blocking stub remains.
