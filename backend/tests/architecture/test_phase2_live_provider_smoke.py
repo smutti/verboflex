@@ -100,6 +100,20 @@ DECLARED_CREDENTIAL_REWRITE = {
 IDENTITY_REWRITE = {
     key: key for key in PRE_REWRITE_DECISIONS if key not in DECLARED_CREDENTIAL_REWRITE
 }
+FRONTEND_CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; base-uri 'none'; object-src 'none'; "
+    "frame-ancestors 'none'; form-action 'self'; script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+    "font-src 'self' data:; connect-src 'self' https: "
+    "http://localhost:*; frame-src 'none'"
+)
+FRONTEND_SECURITY_HEADERS = (
+    ("Content-Security-Policy", "$expected_csp"),
+    ("X-Frame-Options", "DENY"),
+    ("X-Content-Type-Options", "nosniff"),
+    ("Referrer-Policy", "strict-origin-when-cross-origin"),
+    ("Permissions-Policy", "camera=(), microphone=(), geolocation=()"),
+)
 
 
 def _load_live_smoke() -> ModuleType:
@@ -359,48 +373,99 @@ def test_base_client_credentials_smoke_uses_only_base_compose_and_owner_env() ->
 def test_frontend_built_image_smoke_enforces_anti_framing_headers() -> None:
     """The common smoke probes exact defensive headers on root and SPA fallback."""
     source = SMOKE_HARNESS.read_text(encoding="utf-8")
-    function = source.split("verify_frontend_security_headers()", 1)[1].split(
-        "\nwait_for_worker()", 1
-    )[0]
-    prepare = source.split("prepare_base_stack()", 1)[1].split("\nverify_provider_ready()", 1)[0]
-    expected_csp = (
-        "default-src 'self'; base-uri 'none'; object-src 'none'; "
-        "frame-ancestors 'none'; form-action 'self'; script-src 'self'; "
-        "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
-        "font-src 'self' data:; connect-src 'self' https: "
-        "http://localhost:*; frame-src 'none'"
-    )
-    expected_headers = {
-        "Content-Security-Policy": expected_csp,
-        "X-Frame-Options": "DENY",
-        "X-Content-Type-Options": "nosniff",
-        "Referrer-Policy": "strict-origin-when-cross-origin",
-        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-    }
-
-    assert "assert_single_frontend_header()" in source
-    assert "verify_frontend_security_headers()" in source
-    assert "root|/" in function
-    assert "deep-spa-fallback|/admin/products/security-header-probe" in function
-    assert "--dump-header" in function
-    assert "--output /dev/null" in function
-    assert "expected=200" in function
-    assert 'sub(/\\r$/, "", line)' in source
-    assert "tolower(" in source
-    assert 'header_count" != "1"' in source
-    assert 'actual_value" != "$expected_value"' in source
-    for header_name, expected_value in expected_headers.items():
-        assert header_name in function
-        assert expected_value in function
-    assert prepare.count("verify_frontend_security_headers") == 1
-    assert prepare.index('wait_for_url "$SMOKE_FRONTEND_URL" 200 frontend') < prepare.index(
-        "verify_frontend_security_headers"
-    )
+    assert not _frontend_security_smoke_contract_problems(source)
 
 
 def _frontend_security_smoke_contract_problems(source: str) -> list[str]:
-    del source
-    return []
+    problems: list[str] = []
+    gauntlet = GAUNTLET_HARNESS.read_text(encoding="utf-8")
+
+    if source.count("assert_single_frontend_header()") != 1:
+        problems.append("single-header assertion definition")
+    if source.count("verify_frontend_security_headers()") != 1:
+        problems.append("security-header verification definition")
+    try:
+        assertion = source.split("assert_single_frontend_header()", 1)[1].split(
+            "\nverify_frontend_security_headers()", 1
+        )[0]
+        verification = source.split("verify_frontend_security_headers()", 1)[1].split(
+            "\nwait_for_worker()", 1
+        )[0]
+        prepare = source.split("prepare_base_stack()", 1)[1].split("\nverify_provider_ready()", 1)[
+            0
+        ]
+    except IndexError, ValueError:
+        return [*problems, "bounded function sections"]
+
+    if assertion.count('sub(/\\r$/, "", line)') != 2:
+        problems.append("CRLF normalization")
+    if assertion.count("tolower(substr(") != 2 or assertion.count('tolower(name ":")') != 2:
+        problems.append("case-insensitive header matching")
+    if assertion.count('[ "$header_count" != "1" ]') != 1:
+        problems.append("unique header cardinality")
+    if assertion.count('[ "$actual_value" != "$expected_value" ]') != 1:
+        problems.append("exact header value")
+    expected_diagnostic = (
+        'die "frontend security header mismatch: target=$target '
+        'header=$header_name expected=$expected_value"'
+    )
+    if assertion.count(expected_diagnostic) != 1:
+        problems.append("bounded mismatch diagnostic")
+    diagnostic_lines = [line for line in assertion.splitlines() if 'die "' in line]
+    if any(
+        forbidden in line
+        for line in diagnostic_lines
+        for forbidden in ("$actual_value", "$headers", "body", "Authorization", "secret")
+    ):
+        problems.append("diagnostic disclosure")
+
+    expected_csp_assignment = f'local expected_csp="{FRONTEND_CONTENT_SECURITY_POLICY}"'
+    if verification.count(expected_csp_assignment) != 1:
+        problems.append("canonical content security policy")
+    for header_name, expected_value in FRONTEND_SECURITY_HEADERS:
+        if verification.count(f"{header_name}|{expected_value}\n") != 1:
+            problems.append(f"canonical {header_name}")
+    for target in (
+        "root|/\n",
+        "deep-spa-fallback|/admin/products/security-header-probe\n",
+    ):
+        if verification.count(target) != 1:
+            problems.append(f"target {target.rstrip()}")
+    required_runtime_fragments = (
+        "--dump-header",
+        "--output /dev/null",
+        "--write-out '%{http_code}'",
+        '[ "$status" = "200" ]',
+        'assert_single_frontend_header "$target" "$headers" "$header_name" "$expected_value"',
+    )
+    for fragment in required_runtime_fragments:
+        if verification.count(fragment) != 1:
+            problems.append(f"runtime fragment {fragment}")
+    if "--location" in verification or " --output -" in verification:
+        problems.append("redirect or response-body exposure")
+
+    common_call = "  verify_frontend_security_headers\n"
+    frontend_ready = 'wait_for_url "$SMOKE_FRONTEND_URL" 200 frontend'
+    if prepare.count(common_call) != 1:
+        problems.append("common invocation")
+    elif frontend_ready not in prepare or prepare.index(frontend_ready) > prepare.index(
+        common_call
+    ):
+        problems.append("post-readiness invocation")
+
+    expected_base_layer = (
+        'run_layer base-compose-smoke "$GAUNTLET_DIR/phase2_smoke.sh" --base-client-credentials'
+    )
+    expected_browser_layer = (
+        'run_layer mock-provider-browser-smoke "$GAUNTLET_DIR/phase2_smoke.sh" --mock-live-provider'
+    )
+    if gauntlet.count(expected_base_layer) != 1:
+        problems.append("single base smoke gauntlet layer")
+    if gauntlet.count(expected_browser_layer) != 1:
+        problems.append("single browser smoke gauntlet layer")
+    if gauntlet.count("run_layer worker-loss-smoke") != 1:
+        problems.append("single worker-loss smoke gauntlet layer")
+    return problems
 
 
 def test_frontend_security_smoke_contract_rejects_in_memory_bypasses() -> None:
