@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, type Options as Options2, type RequestResult, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ConfirmAdminPreviewJobData, ConfirmAdminPreviewJobErrors, ConfirmAdminPreviewJobResponses, ConnectAdminBitbucketOauthData, ConnectAdminBitbucketOauthErrors, ConnectAdminBitbucketOauthResponses, CreateAdminCandidateMappingData, CreateAdminCandidateMappingErrors, CreateAdminCandidateMappingResponses, CreateAdminPreviewJobData, CreateAdminPreviewJobErrors, CreateAdminPreviewJobResponses, CreateAdminProductData, CreateAdminProductErrors, CreateAdminProductResponses, CreateAdminRepositoryData, CreateAdminRepositoryErrors, CreateAdminRepositoryResponses, CreateAdminUserData, CreateAdminUserErrors, CreateAdminUserResponses, DeactivateAdminProductData, DeactivateAdminProductErrors, DeactivateAdminProductResponses, DeactivateAdminUserData, DeactivateAdminUserErrors, DeactivateAdminUserResponses, DiscoverAdminRepositorySourcesData, DiscoverAdminRepositorySourcesErrors, DiscoverAdminRepositorySourcesResponses, GetAdminBitbucketStatusData, GetAdminBitbucketStatusErrors, GetAdminBitbucketStatusResponses, GetAdminPreviewJobData, GetAdminPreviewJobErrors, GetAdminPreviewJobResponses, GetAdminProductData, GetAdminProductErrors, GetAdminProductResponses, GetAdminRepositoryBranchData, GetAdminRepositoryBranchErrors, GetAdminRepositoryBranchResponses, GetAdminRepositoryData, GetAdminRepositoryErrors, GetAdminRepositoryResponses, IssueTokenData, IssueTokenErrors, IssueTokenResponses, ListAdminCandidateMappingsData, ListAdminCandidateMappingsErrors, ListAdminCandidateMappingsResponses, ListAdminProductsData, ListAdminProductsErrors, ListAdminProductsResponses, ListAdminRepositoriesData, ListAdminRepositoriesErrors, ListAdminRepositoriesResponses, ListAdminRepositoryBranchesData, ListAdminRepositoryBranchesErrors, ListAdminRepositoryBranchesResponses, ListAdminRevisionMappingsData, ListAdminRevisionMappingsErrors, ListAdminRevisionMappingsResponses, ListAdminUsersData, ListAdminUsersErrors, ListAdminUsersResponses, LogoutData, LogoutErrors, LogoutResponses, PublishAdminProductCandidateData, PublishAdminProductCandidateErrors, PublishAdminProductCandidateResponses, ReactivateAdminProductData, ReactivateAdminProductErrors, ReactivateAdminProductResponses, ReactivateAdminUserData, ReactivateAdminUserErrors, ReactivateAdminUserResponses, ReadCurrentUserData, ReadCurrentUserErrors, ReadCurrentUserResponses, ReadHealthData, ReadHealthErrors, ReadHealthResponses, ReadSystemStatusData, ReadSystemStatusErrors, ReadSystemStatusResponses, ReconnectAdminBitbucketOauthData, ReconnectAdminBitbucketOauthErrors, ReconnectAdminBitbucketOauthResponses, RefreshAccessTokenData, RefreshAccessTokenErrors, RefreshAccessTokenResponses, ResetAdminUserPasswordData, ResetAdminUserPasswordErrors, ResetAdminUserPasswordResponses, RevokeAdminBitbucketConnectionLocallyData, RevokeAdminBitbucketConnectionLocallyErrors, RevokeAdminBitbucketConnectionLocallyResponses, UpdateAdminCandidateMappingData, UpdateAdminCandidateMappingErrors, UpdateAdminCandidateMappingResponses, UpdateAdminProductCandidateData, UpdateAdminProductCandidateErrors, UpdateAdminProductCandidateResponses, UpdateAdminUserData, UpdateAdminUserErrors, UpdateAdminUserResponses } from './types.gen';
+import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ConfirmAdminActiveRevisionRevalidationData, ConfirmAdminActiveRevisionRevalidationErrors, ConfirmAdminActiveRevisionRevalidationResponses, ConfirmAdminPreviewJobData, ConfirmAdminPreviewJobErrors, ConfirmAdminPreviewJobResponses, ConnectAdminBitbucketOauthData, ConnectAdminBitbucketOauthErrors, ConnectAdminBitbucketOauthResponses, CreateAdminActiveRevisionRevalidationJobData, CreateAdminActiveRevisionRevalidationJobErrors, CreateAdminActiveRevisionRevalidationJobResponses, CreateAdminCandidateMappingData, CreateAdminCandidateMappingErrors, CreateAdminCandidateMappingResponses, CreateAdminPreviewJobData, CreateAdminPreviewJobErrors, CreateAdminPreviewJobResponses, CreateAdminProductData, CreateAdminProductErrors, CreateAdminProductResponses, CreateAdminRepositoryData, CreateAdminRepositoryErrors, CreateAdminRepositoryResponses, CreateAdminUserData, CreateAdminUserErrors, CreateAdminUserResponses, DeactivateAdminProductData, DeactivateAdminProductErrors, DeactivateAdminProductResponses, DeactivateAdminUserData, DeactivateAdminUserErrors, DeactivateAdminUserResponses, DiscoverAdminRepositorySourcesData, DiscoverAdminRepositorySourcesErrors, DiscoverAdminRepositorySourcesResponses, GetAdminActiveRevisionRevalidationJobData, GetAdminActiveRevisionRevalidationJobErrors, GetAdminActiveRevisionRevalidationJobResponses, GetAdminBitbucketStatusData, GetAdminBitbucketStatusErrors, GetAdminBitbucketStatusResponses, GetAdminPreviewJobData, GetAdminPreviewJobErrors, GetAdminPreviewJobResponses, GetAdminProductData, GetAdminProductErrors, GetAdminProductReactivationEligibilityData, GetAdminProductReactivationEligibilityErrors, GetAdminProductReactivationEligibilityResponses, GetAdminProductResponses, GetAdminRepositoryBranchData, GetAdminRepositoryBranchErrors, GetAdminRepositoryBranchResponses, GetAdminRepositoryData, GetAdminRepositoryErrors, GetAdminRepositoryResponses, IssueTokenData, IssueTokenErrors, IssueTokenResponses, ListAdminCandidateMappingsData, ListAdminCandidateMappingsErrors, ListAdminCandidateMappingsResponses, ListAdminProductsData, ListAdminProductsErrors, ListAdminProductsResponses, ListAdminRepositoriesData, ListAdminRepositoriesErrors, ListAdminRepositoriesResponses, ListAdminRepositoryBranchesData, ListAdminRepositoryBranchesErrors, ListAdminRepositoryBranchesResponses, ListAdminRevisionMappingsData, ListAdminRevisionMappingsErrors, ListAdminRevisionMappingsResponses, ListAdminUsersData, ListAdminUsersErrors, ListAdminUsersResponses, LogoutData, LogoutErrors, LogoutResponses, PublishAdminProductCandidateData, PublishAdminProductCandidateErrors, PublishAdminProductCandidateResponses, ReactivateAdminProductData, ReactivateAdminProductErrors, ReactivateAdminProductResponses, ReactivateAdminUserData, ReactivateAdminUserErrors, ReactivateAdminUserResponses, ReadCurrentUserData, ReadCurrentUserErrors, ReadCurrentUserResponses, ReadHealthData, ReadHealthErrors, ReadHealthResponses, ReadSystemStatusData, ReadSystemStatusErrors, ReadSystemStatusResponses, ReconnectAdminBitbucketOauthData, ReconnectAdminBitbucketOauthErrors, ReconnectAdminBitbucketOauthResponses, RefreshAccessTokenData, RefreshAccessTokenErrors, RefreshAccessTokenResponses, ResetAdminUserPasswordData, ResetAdminUserPasswordErrors, ResetAdminUserPasswordResponses, RevokeAdminBitbucketConnectionLocallyData, RevokeAdminBitbucketConnectionLocallyErrors, RevokeAdminBitbucketConnectionLocallyResponses, UpdateAdminCandidateMappingData, UpdateAdminCandidateMappingErrors, UpdateAdminCandidateMappingResponses, UpdateAdminProductCandidateData, UpdateAdminProductCandidateErrors, UpdateAdminProductCandidateResponses, UpdateAdminUserData, UpdateAdminUserErrors, UpdateAdminUserResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -17,6 +17,32 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
      */
     meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
 };
+
+/**
+ * Get Admin Active Revision Revalidation Job
+ *
+ * Inspect bounded active-revision work without consulting provider state.
+ */
+export const getAdminActiveRevisionRevalidationJob = <ThrowOnError extends boolean = false>(options: Options<GetAdminActiveRevisionRevalidationJobData, ThrowOnError>): RequestResult<GetAdminActiveRevisionRevalidationJobResponses, GetAdminActiveRevisionRevalidationJobErrors, ThrowOnError> => (options.client ?? client).get<GetAdminActiveRevisionRevalidationJobResponses, GetAdminActiveRevisionRevalidationJobErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/active-revision-revalidation-jobs/{job_id}',
+    ...options
+});
+
+/**
+ * Confirm Admin Active Revision Revalidation
+ *
+ * Confirm only when caller and live authority share one complete identity.
+ */
+export const confirmAdminActiveRevisionRevalidation = <ThrowOnError extends boolean = false>(options: Options<ConfirmAdminActiveRevisionRevalidationData, ThrowOnError>): RequestResult<ConfirmAdminActiveRevisionRevalidationResponses, ConfirmAdminActiveRevisionRevalidationErrors, ThrowOnError> => (options.client ?? client).post<ConfirmAdminActiveRevisionRevalidationResponses, ConfirmAdminActiveRevisionRevalidationErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/active-revision-revalidation-jobs/{job_id}/confirmation',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get Admin Bitbucket Status
@@ -245,6 +271,32 @@ export const reactivateAdminProduct = <ThrowOnError extends boolean = false>(opt
 export const listAdminRevisionMappings = <ThrowOnError extends boolean = false>(options: Options<ListAdminRevisionMappingsData, ThrowOnError>): RequestResult<ListAdminRevisionMappingsResponses, ListAdminRevisionMappingsErrors, ThrowOnError> => (options.client ?? client).get<ListAdminRevisionMappingsResponses, ListAdminRevisionMappingsErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings',
+    ...options
+});
+
+/**
+ * Create Admin Active Revision Revalidation Job
+ *
+ * Create or reuse read-only work for one exact inactive published mapping.
+ */
+export const createAdminActiveRevisionRevalidationJob = <ThrowOnError extends boolean = false>(options: Options<CreateAdminActiveRevisionRevalidationJobData, ThrowOnError>): RequestResult<CreateAdminActiveRevisionRevalidationJobResponses, CreateAdminActiveRevisionRevalidationJobErrors, ThrowOnError> => (options.client ?? client).post<CreateAdminActiveRevisionRevalidationJobResponses, CreateAdminActiveRevisionRevalidationJobErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings/{mapping_id}/revalidation-preview-jobs',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Admin Product Reactivation Eligibility
+ *
+ * Project exact published-revision currentness without mutating lifecycle state.
+ */
+export const getAdminProductReactivationEligibility = <ThrowOnError extends boolean = false>(options: Options<GetAdminProductReactivationEligibilityData, ThrowOnError>): RequestResult<GetAdminProductReactivationEligibilityResponses, GetAdminProductReactivationEligibilityErrors, ThrowOnError> => (options.client ?? client).get<GetAdminProductReactivationEligibilityResponses, GetAdminProductReactivationEligibilityErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/products/{product_id}/revisions/{revision_id}/reactivation-eligibility',
     ...options
 });
 

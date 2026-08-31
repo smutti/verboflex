@@ -29,6 +29,191 @@ export type AccessTokenResponse = {
 };
 
 /**
+ * AdminActiveRevisionRevalidationConfirmationRequest
+ *
+ * Complete caller compare identity for one active-revision confirmation.
+ */
+export type AdminActiveRevisionRevalidationConfirmationRequest = {
+    /**
+     * Active Revision Id
+     */
+    active_revision_id: string;
+    /**
+     * Active Revision Version
+     */
+    active_revision_version: number;
+    /**
+     * Commits
+     */
+    commits: Array<AdminPreviewCommitRequest>;
+    /**
+     * Connection Generation
+     */
+    connection_generation: number;
+    /**
+     * Layout Candidate Id
+     */
+    layout_candidate_id: string;
+    /**
+     * Layout Candidate Version
+     */
+    layout_candidate_version: 1;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Preview Digest
+     */
+    preview_digest: string;
+};
+
+/**
+ * AdminActiveRevisionRevalidationConfirmationResponse
+ *
+ * Immutable bounded evidence for one exact published-revision job.
+ */
+export type AdminActiveRevisionRevalidationConfirmationResponse = {
+    /**
+     * Active Revision Id
+     */
+    active_revision_id: string;
+    /**
+     * Active Revision Version
+     */
+    active_revision_version: number;
+    /**
+     * Commits
+     */
+    commits: Array<AdminPreviewRepositorySideResponse>;
+    /**
+     * Confirmed At
+     */
+    confirmed_at: string;
+    /**
+     * Confirmed By
+     */
+    confirmed_by: string;
+    /**
+     * Connection Generation
+     */
+    connection_generation: number;
+    /**
+     * Job Id
+     */
+    job_id: string;
+    /**
+     * Layout Candidate Id
+     */
+    layout_candidate_id: string;
+    /**
+     * Layout Candidate Version
+     */
+    layout_candidate_version: 1;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Preview Digest
+     */
+    preview_digest: string;
+    /**
+     * Product Id
+     */
+    product_id: string;
+};
+
+/**
+ * AdminActiveRevisionRevalidationJobCreateRequest
+ *
+ * Exact published-revision compare values with commit-only provider identity.
+ */
+export type AdminActiveRevisionRevalidationJobCreateRequest = {
+    /**
+     * Commits
+     */
+    commits: Array<AdminPreviewCommitRequest>;
+    /**
+     * Expected Active Revision Version
+     */
+    expected_active_revision_version: number;
+};
+
+/**
+ * AdminActiveRevisionRevalidationJobResponse
+ *
+ * Bounded active-revision job projection with no candidate terminology.
+ */
+export type AdminActiveRevisionRevalidationJobResponse = {
+    /**
+     * Active Revision Id
+     */
+    active_revision_id: string;
+    /**
+     * Active Revision Version
+     */
+    active_revision_version: number;
+    /**
+     * Attempt
+     */
+    attempt: number;
+    /**
+     * Connection Generation
+     */
+    connection_generation: number;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Detector Version
+     */
+    detector_version: string;
+    /**
+     * Error Code
+     */
+    error_code: 'enqueue_failed' | 'processing_failed' | 'stale_attempt' | 'stale_active_revision' | 'stale_connection' | 'stale_identity' | 'time_limit_exceeded' | null;
+    /**
+     * Finished At
+     */
+    finished_at: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Input Digest
+     */
+    input_digest: string;
+    /**
+     * Is Current
+     */
+    is_current: boolean;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Repository Sides
+     */
+    repository_sides: Array<AdminPreviewRepositorySideResponse>;
+    result: AdminPreviewJobResultResponse | null;
+    /**
+     * Started At
+     */
+    started_at: string | null;
+    /**
+     * State
+     */
+    state: 'queued' | 'running' | 'succeeded' | 'failed' | 'timed_out';
+};
+
+/**
  * AdminBitbucketErrorResponse
  *
  * Stable integration failures without provider diagnostic material.
@@ -604,6 +789,58 @@ export type AdminProductReactivateRequest = {
 };
 
 /**
+ * AdminProductReactivationEligibilityResponse
+ *
+ * Exact active-revision recovery state without configuration contents.
+ */
+export type AdminProductReactivationEligibilityResponse = {
+    /**
+     * Active Revision Id
+     */
+    active_revision_id: string;
+    /**
+     * Active Revision Version
+     */
+    active_revision_version: number;
+    /**
+     * Blocker Codes
+     */
+    blocker_codes: Array<'product_active' | 'candidate_revision_present' | 'mappings_required' | 'mapping_configuration_invalid' | 'layout_required' | 'revalidation_confirmation_required'>;
+    /**
+     * Eligible
+     */
+    eligible: boolean;
+    /**
+     * Mappings
+     */
+    mappings: Array<AdminProductReactivationMappingResponse>;
+    /**
+     * Product Id
+     */
+    product_id: string;
+};
+
+/**
+ * AdminProductReactivationMappingResponse
+ *
+ * Bounded currentness projection for one published mapping.
+ */
+export type AdminProductReactivationMappingResponse = {
+    /**
+     * Blocker Codes
+     */
+    blocker_codes: Array<'product_active' | 'candidate_revision_present' | 'mappings_required' | 'mapping_configuration_invalid' | 'layout_required' | 'revalidation_confirmation_required'>;
+    /**
+     * Is Current
+     */
+    is_current: boolean;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+};
+
+/**
  * AdminProductResponse
  *
  * Stable product identity with explicitly separate revision states.
@@ -1106,6 +1343,106 @@ export type ValidationError = {
      */
     type: string;
 };
+
+export type GetAdminActiveRevisionRevalidationJobData = {
+    body?: never;
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/active-revision-revalidation-jobs/{job_id}';
+};
+
+export type GetAdminActiveRevisionRevalidationJobErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetAdminActiveRevisionRevalidationJobError = GetAdminActiveRevisionRevalidationJobErrors[keyof GetAdminActiveRevisionRevalidationJobErrors];
+
+export type GetAdminActiveRevisionRevalidationJobResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminActiveRevisionRevalidationJobResponse;
+};
+
+export type GetAdminActiveRevisionRevalidationJobResponse = GetAdminActiveRevisionRevalidationJobResponses[keyof GetAdminActiveRevisionRevalidationJobResponses];
+
+export type ConfirmAdminActiveRevisionRevalidationData = {
+    body: AdminActiveRevisionRevalidationConfirmationRequest;
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/active-revision-revalidation-jobs/{job_id}/confirmation';
+};
+
+export type ConfirmAdminActiveRevisionRevalidationErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type ConfirmAdminActiveRevisionRevalidationError = ConfirmAdminActiveRevisionRevalidationErrors[keyof ConfirmAdminActiveRevisionRevalidationErrors];
+
+export type ConfirmAdminActiveRevisionRevalidationResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminActiveRevisionRevalidationConfirmationResponse;
+};
+
+export type ConfirmAdminActiveRevisionRevalidationResponse = ConfirmAdminActiveRevisionRevalidationResponses[keyof ConfirmAdminActiveRevisionRevalidationResponses];
 
 export type GetAdminBitbucketStatusData = {
     body?: never;
@@ -1921,6 +2258,123 @@ export type ListAdminRevisionMappingsResponses = {
 };
 
 export type ListAdminRevisionMappingsResponse = ListAdminRevisionMappingsResponses[keyof ListAdminRevisionMappingsResponses];
+
+export type CreateAdminActiveRevisionRevalidationJobData = {
+    body: AdminActiveRevisionRevalidationJobCreateRequest;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Revision Id
+         */
+        revision_id: string;
+        /**
+         * Mapping Id
+         */
+        mapping_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings/{mapping_id}/revalidation-preview-jobs';
+};
+
+export type CreateAdminActiveRevisionRevalidationJobErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type CreateAdminActiveRevisionRevalidationJobError = CreateAdminActiveRevisionRevalidationJobErrors[keyof CreateAdminActiveRevisionRevalidationJobErrors];
+
+export type CreateAdminActiveRevisionRevalidationJobResponses = {
+    /**
+     * Successful Response
+     */
+    202: AdminActiveRevisionRevalidationJobResponse;
+};
+
+export type CreateAdminActiveRevisionRevalidationJobResponse = CreateAdminActiveRevisionRevalidationJobResponses[keyof CreateAdminActiveRevisionRevalidationJobResponses];
+
+export type GetAdminProductReactivationEligibilityData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Revision Id
+         */
+        revision_id: string;
+    };
+    query: {
+        /**
+         * Expected Active Revision Version
+         */
+        expected_active_revision_version: number;
+    };
+    url: '/api/v1/admin/products/{product_id}/revisions/{revision_id}/reactivation-eligibility';
+};
+
+export type GetAdminProductReactivationEligibilityErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetAdminProductReactivationEligibilityError = GetAdminProductReactivationEligibilityErrors[keyof GetAdminProductReactivationEligibilityErrors];
+
+export type GetAdminProductReactivationEligibilityResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminProductReactivationEligibilityResponse;
+};
+
+export type GetAdminProductReactivationEligibilityResponse = GetAdminProductReactivationEligibilityResponses[keyof GetAdminProductReactivationEligibilityResponses];
 
 export type ListAdminRepositoriesData = {
     body?: never;

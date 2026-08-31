@@ -6,6 +6,19 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+AdminActiveRevisionRevalidationErrorCode = (
+    Literal[
+        "enqueue_failed",
+        "processing_failed",
+        "stale_attempt",
+        "stale_active_revision",
+        "stale_connection",
+        "stale_identity",
+        "time_limit_exceeded",
+    ]
+    | None
+)
+
 
 class AdminPreviewCommitRequest(BaseModel):
     """One resolved commit associated with a server-owned mapping role."""
@@ -180,18 +193,7 @@ class AdminActiveRevisionRevalidationJobResponse(BaseModel):
         Field(min_length=1, max_length=2),
     ]
     result: AdminPreviewJobResultResponse | None
-    error_code: (
-        Literal[
-            "enqueue_failed",
-            "processing_failed",
-            "stale_attempt",
-            "stale_candidate",
-            "stale_connection",
-            "stale_identity",
-            "time_limit_exceeded",
-        ]
-        | None
-    )
+    error_code: AdminActiveRevisionRevalidationErrorCode
     is_current: bool
     created_at: datetime
     started_at: datetime | None

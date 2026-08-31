@@ -130,7 +130,9 @@ def _active_response(
             if record.result is not None
             else None
         ),
-        error_code=record.error_code,
+        error_code=(
+            "stale_active_revision" if record.error_code == "stale_candidate" else record.error_code
+        ),
         is_current=record.is_current,
         created_at=record.created_at,
         started_at=record.started_at,
