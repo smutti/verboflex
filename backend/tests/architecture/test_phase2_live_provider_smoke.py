@@ -100,20 +100,6 @@ DECLARED_CREDENTIAL_REWRITE = {
 IDENTITY_REWRITE = {
     key: key for key in PRE_REWRITE_DECISIONS if key not in DECLARED_CREDENTIAL_REWRITE
 }
-FRONTEND_CONTENT_SECURITY_POLICY = (
-    "default-src 'self'; base-uri 'none'; object-src 'none'; "
-    "frame-ancestors 'none'; form-action 'self'; script-src 'self'; "
-    "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
-    "font-src 'self' data:; connect-src 'self' https: "
-    "http://localhost:*; frame-src 'none'"
-)
-FRONTEND_SECURITY_HEADERS = (
-    ("Content-Security-Policy", "$expected_csp"),
-    ("X-Frame-Options", "DENY"),
-    ("X-Content-Type-Options", "nosniff"),
-    ("Referrer-Policy", "strict-origin-when-cross-origin"),
-    ("Permissions-Policy", "camera=(), microphone=(), geolocation=()"),
-)
 
 
 def _load_live_smoke() -> ModuleType:
@@ -239,6 +225,22 @@ def test_base_compose_inherits_exact_provider_settings_without_secret_output(
     )
     assert all(value not in diagnostic_surfaces for value in sentinels.values())
     assert not problems, "; ".join(problems)
+
+
+FRONTEND_CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; base-uri 'none'; object-src 'none'; "
+    "frame-ancestors 'none'; form-action 'self'; script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+    "font-src 'self' data:; connect-src 'self' https: "
+    "http://localhost:*; frame-src 'none'"
+)
+FRONTEND_SECURITY_HEADERS = (
+    ("Content-Security-Policy", "$expected_csp"),
+    ("X-Frame-Options", "DENY"),
+    ("X-Content-Type-Options", "nosniff"),
+    ("Referrer-Policy", "strict-origin-when-cross-origin"),
+    ("Permissions-Policy", "camera=(), microphone=(), geolocation=()"),
+)
 
 
 def test_deployment_overlays_give_scheduler_exact_worker_authority(
