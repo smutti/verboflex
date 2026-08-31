@@ -188,7 +188,9 @@ def _raise_preview_error(error: Exception) -> NoReturn:
     raise error
 
 
-def _raise_active_revalidation_error(error: Exception) -> NoReturn:
+def _raise_active_revalidation_error(
+    error: PreviewJobNotFound | PreviewJobConflict | PreviewConnectionUnavailable,
+) -> NoReturn:
     if isinstance(error, PreviewJobNotFound):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -199,12 +201,10 @@ def _raise_active_revalidation_error(error: Exception) -> NoReturn:
             status_code=status.HTTP_409_CONFLICT,
             detail="Active revision revalidation conflict",
         ) from error
-    if isinstance(error, PreviewConnectionUnavailable):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Active revision revalidation unavailable",
-        ) from error
-    raise error
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Active revision revalidation unavailable",
+    ) from error
 
 
 def _active_confirmation_identity_matches(
