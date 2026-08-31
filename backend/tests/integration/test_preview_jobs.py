@@ -40,7 +40,10 @@ from verboflex.localization.preview.core import build_layout_candidate
 from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.bitbucket_connection import BitbucketConnection
-from verboflex.models.preview_job import PreviewJob
+from verboflex.models.preview_job import (
+    ActiveRevisionRevalidationConfirmation,
+    PreviewJob,
+)
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
     ProductMappingAllowedTarget,
@@ -2207,6 +2210,75 @@ def _published_configuration_snapshot(
     return (tuple(product), revisions, mappings, sides, targets)
 
 
+def _seed_active_revalidation_authority(
+    factory: sessionmaker[Session],
+    *,
+    invalid_mapping: bool = False,
+) -> tuple[UUID, UUID, UUID, UUID, UUID]:
+    """Project the standard preview fixture into one inactive published revision."""
+    product_id, _old_active_id, revision_id, mapping_id = _seed_preview_graph(factory)
+    actor_id = uuid4()
+    selected_layout_id = UUID(str(_candidate()["id"]))
+    with factory.begin() as session:
+        mapping = session.get_one(ProductRepositoryMapping, mapping_id)
+        if invalid_mapping:
+            mapping.topology = "separate"
+            mapping.selected_layout_candidate_id = None
+            mapping.selected_layout_version = None
+        else:
+            mapping.selected_layout_candidate_id = selected_layout_id
+            mapping.selected_layout_version = 1
+        session.flush()
+        revision = session.get_one(ProductRevision, revision_id)
+        revision.is_published = True
+        revision.published_at = datetime.now(UTC)
+        session.flush()
+        product = session.get_one(Product, product_id)
+        product.is_active = False
+        product.active_revision_id = revision_id
+        product.candidate_revision_id = None
+        session.add(
+            User(
+                id=actor_id,
+                email=f"revalidation-coverage-{actor_id}@example.com",
+                display_name="Revalidation Coverage Admin",
+                hashed_password=hash_password("revalidation coverage administrator phrase!"),
+                is_active=True,
+                must_change_password=False,
+            )
+        )
+    return product_id, revision_id, mapping_id, actor_id, selected_layout_id
+
+
+def _complete_active_revalidation(
+    factory: sessionmaker[Session],
+    *,
+    product_id: UUID,
+    revision_id: UUID,
+    mapping_id: UUID,
+    commit_hash: str = COMMIT_HASH,
+) -> tuple[PreviewJobRecord, dict[str, object]]:
+    preview_jobs = importlib.import_module("verboflex.services.preview_jobs")
+    with factory() as session:
+        job = preview_jobs.create_or_reuse_active_revision_revalidation_job(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            mapping_id=mapping_id,
+            expected_active_revision_version=4,
+            commits={"direct": commit_hash},
+            enqueuer=lambda _job_id: None,
+        )
+    execute_preview_job(factory, job_id=job.id, processor=_confirmable_processor)
+    with factory() as session:
+        completed = preview_jobs.get_active_revision_revalidation_job(
+            session,
+            job_id=job.id,
+        )
+    assert completed.result is not None
+    return completed, completed.result
+
+
 def test_inactive_active_revision_can_revalidate_confirm_and_reactivate_without_graph_mutation(
     preview_session_factory: sessionmaker[Session],
 ) -> None:
@@ -2243,9 +2315,7 @@ def test_inactive_active_revision_can_revalidate_confirm_and_reactivate_without_
     with preview_session_factory() as session:
         completed_candidate = get_preview_job(session, job_id=candidate_job.id)
         assert completed_candidate.result is not None
-        selected = cast(
-            list[dict[str, object]], completed_candidate.result["layout_candidates"]
-        )[0]
+        selected = cast(list[dict[str, object]], completed_candidate.result["layout_candidates"])[0]
         confirm_preview_job(
             session,
             job_id=candidate_job.id,
@@ -2302,10 +2372,13 @@ def test_inactive_active_revision_can_revalidate_confirm_and_reactivate_without_
         job_id=active_job.id,
         processor=_confirmable_processor,
     )
-    assert _published_configuration_snapshot(
-        preview_session_factory,
-        product_id=product_id,
-    ) == before_revalidation
+    assert (
+        _published_configuration_snapshot(
+            preview_session_factory,
+            product_id=product_id,
+        )
+        == before_revalidation
+    )
 
     with preview_session_factory() as session:
         succeeded = preview_jobs.get_active_revision_revalidation_job(
@@ -2313,15 +2386,16 @@ def test_inactive_active_revision_can_revalidate_confirm_and_reactivate_without_
             job_id=active_job.id,
         )
         assert succeeded.result is not None
-        current_layout = cast(
-            list[dict[str, object]], succeeded.result["layout_candidates"]
-        )[0]
-        assert preview_jobs.get_active_revision_revalidation_eligibility(
-            session,
-            product_id=product_id,
-            active_revision_id=candidate_id,
-            expected_active_revision_version=4,
-        ).eligible is False
+        current_layout = cast(list[dict[str, object]], succeeded.result["layout_candidates"])[0]
+        assert (
+            preview_jobs.get_active_revision_revalidation_eligibility(
+                session,
+                product_id=product_id,
+                active_revision_id=candidate_id,
+                expected_active_revision_version=4,
+            ).eligible
+            is False
+        )
     with preview_session_factory() as session:
         confirmation = preview_jobs.confirm_active_revision_revalidation(
             session,
@@ -2338,10 +2412,13 @@ def test_inactive_active_revision_can_revalidate_confirm_and_reactivate_without_
     assert confirmation.preview_digest == succeeded.result["digest"]
     assert confirmation.layout_candidate_id == UUID(str(current_layout["id"]))
     assert confirmation.confirmed_by == actor_id
-    assert _published_configuration_snapshot(
-        preview_session_factory,
-        product_id=product_id,
-    ) == before_revalidation
+    assert (
+        _published_configuration_snapshot(
+            preview_session_factory,
+            product_id=product_id,
+        )
+        == before_revalidation
+    )
 
     with preview_session_factory() as session:
         eligibility = preview_jobs.get_active_revision_revalidation_eligibility(
@@ -2363,7 +2440,628 @@ def test_inactive_active_revision_can_revalidate_confirm_and_reactivate_without_
     assert reactivated.changed is True
     assert reactivated.is_active is True
     assert reactivated.candidate_revision_id is None
-    assert _published_configuration_snapshot(
+    assert (
+        _published_configuration_snapshot(
+            preview_session_factory,
+            product_id=product_id,
+        )
+        == before_revalidation
+    )
+
+
+def test_active_revalidation_namespace_and_creation_guards_fail_closed(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Reject wrong lifecycle ownership while preserving disjoint job namespaces."""
+    preview_jobs = importlib.import_module("verboflex.services.preview_jobs")
+    product_id, revision_id, mapping_id, actor_id, selected_layout_id = (
+        _seed_active_revalidation_authority(preview_session_factory)
+    )
+    with preview_session_factory() as session:
+        created = preview_jobs.create_or_reuse_active_revision_revalidation_job(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            mapping_id=mapping_id,
+            expected_active_revision_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    with preview_session_factory() as session:
+        reused = preview_jobs.create_or_reuse_active_revision_revalidation_job(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            mapping_id=mapping_id,
+            expected_active_revision_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    assert reused.id == created.id
+
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="preview identity conflict"),
+    ):
+        get_preview_job(session, job_id=created.id)
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="preview identity conflict"),
+    ):
+        confirm_preview_job(
+            session,
+            job_id=created.id,
+            preview_digest="f" * 64,
+            layout_candidate_id=selected_layout_id,
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobNotFound, match="active revalidation job unavailable"),
+    ):
+        preview_jobs.get_active_revision_revalidation_job(session, job_id=uuid4())
+
+    with preview_session_factory() as session:
+        row = session.get_one(PreviewJob, created.id)
+        revision = session.get_one(ProductRevision, revision_id)
+        mapping = session.get_one(ProductRepositoryMapping, mapping_id)
+        connection = session.get_one(BitbucketConnection, 1)
+        row.revision_scope = cast(Any, "invalid")
+        with pytest.raises(PreviewJobConflict, match="persisted preview scope rejected"):
+            _identity(row)
+        with session.no_autoflush:
+            assert (
+                preview_jobs._current_identity_matches(
+                    row,
+                    revision,
+                    mapping,
+                    connection,
+                )
+                is False
+            )
+        session.rollback()
+
+    with preview_session_factory.begin() as session:
+        session.get_one(Product, product_id).is_active = True
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobNotFound, match="active revision revalidation unavailable"),
+    ):
+        preview_jobs.create_or_reuse_active_revision_revalidation_job(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            mapping_id=mapping_id,
+            expected_active_revision_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    with preview_session_factory.begin() as session:
+        session.get_one(Product, product_id).is_active = False
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="active revision revalidation conflict"),
+    ):
+        preview_jobs.create_or_reuse_active_revision_revalidation_job(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            mapping_id=mapping_id,
+            expected_active_revision_version=5,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobNotFound, match="active revision mapping unavailable"),
+    ):
+        preview_jobs.create_or_reuse_active_revision_revalidation_job(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            mapping_id=uuid4(),
+            expected_active_revision_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+
+
+def test_active_revalidation_enqueue_failures_are_bounded_and_retryable(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Bound broker failures and preserve a racing durable state without overwrite."""
+    preview_jobs = importlib.import_module("verboflex.services.preview_jobs")
+    product_id, revision_id, mapping_id, _actor_id, _selected_layout_id = (
+        _seed_active_revalidation_authority(preview_session_factory)
+    )
+
+    def unavailable_enqueuer(_job_id: UUID) -> None:
+        raise RuntimeError("broker diagnostics must not escape")
+
+    with preview_session_factory() as session:
+        failed = preview_jobs.create_or_reuse_active_revision_revalidation_job(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            mapping_id=mapping_id,
+            expected_active_revision_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=unavailable_enqueuer,
+        )
+    assert failed.state == "failed"
+    assert failed.error_code == "enqueue_failed"
+    with preview_session_factory() as session:
+        retried = preview_jobs.create_or_reuse_active_revision_revalidation_job(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            mapping_id=mapping_id,
+            expected_active_revision_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    assert retried.attempt == 2
+
+    product_id, _active_id, _candidate_id, candidate_mapping_id = _seed_preview_graph(
+        preview_session_factory
+    )
+
+    with preview_session_factory() as session:
+
+        def racing_enqueuer(job_id: UUID) -> None:
+            with preview_session_factory.begin() as racing_session:
+                row = racing_session.get_one(PreviewJob, job_id)
+                row.state = "running"
+                row.started_at = datetime.now(UTC)
+            session.expire_all()
+            raise RuntimeError("late broker acknowledgement")
+
+        racing = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=candidate_mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=racing_enqueuer,
+        )
+    assert racing.state == "running"
+    assert racing.error_code is None
+
+
+def test_active_revalidation_confirmation_and_currentness_reject_every_mismatch(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Exercise exact confirmation identity, idempotency, and corrupted evidence denial."""
+    preview_jobs = importlib.import_module("verboflex.services.preview_jobs")
+    product_id, revision_id, mapping_id, actor_id, selected_layout_id = (
+        _seed_active_revalidation_authority(preview_session_factory)
+    )
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobNotFound, match="active revalidation job unavailable"),
+    ):
+        preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=uuid4(),
+            preview_digest="f" * 64,
+            layout_candidate_id=selected_layout_id,
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
+
+    with preview_session_factory() as session:
+        candidate_job = PreviewJob(
+            id=uuid4(),
+            input_digest="1" * 64,
+            attempt=1,
+            state="queued",
+            revision_scope="candidate",
+            product_id=product_id,
+            candidate_revision_id=revision_id,
+            candidate_revision_version=4,
+            mapping_id=mapping_id,
+            topology="direct",
+            connection_generation=7,
+            detector_version="preview-v1",
+            layout_identity="automatic",
+            repository_sides=[
+                {
+                    "role": "direct",
+                    "repository_id": str(
+                        session.get_one(ProductRepositoryMapping, mapping_id).sides[0].repository_id
+                    ),
+                    "source_branch": "main",
+                    "commit_hash": COMMIT_HASH,
+                }
+            ],
+        )
+        session.add(candidate_job)
+        session.commit()
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="active revalidation identity conflict"),
+    ):
+        preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=candidate_job.id,
+            preview_digest="1" * 64,
+            layout_candidate_id=selected_layout_id,
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobNotFound, match="active revalidation job unavailable"),
+    ):
+        preview_jobs.get_active_revision_revalidation_job(session, job_id=candidate_job.id)
+    with preview_session_factory() as session:
+        row = session.get_one(PreviewJob, candidate_job.id)
+        revision = session.get_one(ProductRevision, revision_id)
+        mapping = session.get_one(ProductRepositoryMapping, mapping_id)
+        mapping.confirmed_preview_job_id = row.id
+        mapping.confirmed_preview_digest = "1" * 64
+        mapping.preview_confirmed_by = actor_id
+        mapping.preview_confirmed_at = datetime.now(UTC)
+        with session.no_autoflush:
+            mapping.confirmed_preview_digest = None
+            assert (
+                preview_jobs.is_current_preview_confirmation(
+                    session,
+                    revision,
+                    mapping,
+                )
+                is False
+            )
+            mapping.confirmed_preview_digest = "1" * 64
+            mapping.confirmed_preview_job_id = uuid4()
+            assert (
+                preview_jobs.is_current_preview_confirmation(
+                    session,
+                    revision,
+                    mapping,
+                )
+                is False
+            )
+            mapping.confirmed_preview_job_id = row.id
+            assert (
+                preview_jobs.is_current_preview_confirmation(
+                    session,
+                    revision,
+                    mapping,
+                )
+                is False
+            )
+            row.state = "succeeded"
+            row.result = {"closed": "candidate fallback branch"}
+            assert preview_jobs._mapping_has_complete_confirmation(mapping) is True
+            assert preview_jobs._confirmation_job_matches(row, revision, mapping) is True
+            assert (
+                preview_jobs.is_current_preview_confirmation(
+                    session,
+                    revision,
+                    mapping,
+                )
+                is False
+            )
+        session.rollback()
+
+    with preview_session_factory() as session:
+        queued = preview_jobs.create_or_reuse_active_revision_revalidation_job(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            mapping_id=mapping_id,
+            expected_active_revision_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="confirmation unavailable"),
+    ):
+        preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=queued.id,
+            preview_digest=queued.input_digest,
+            layout_candidate_id=selected_layout_id,
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
+    execute_preview_job(
+        preview_session_factory,
+        job_id=queued.id,
+        processor=_confirmable_processor,
+    )
+    with preview_session_factory() as session:
+        completed = preview_jobs.get_active_revision_revalidation_job(
+            session,
+            job_id=queued.id,
+        )
+    assert completed.result is not None
+    result = completed.result
+    candidates = cast(list[dict[str, object]], result["layout_candidates"])
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="identity conflict"),
+    ):
+        preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=queued.id,
+            preview_digest="f" * 64,
+            layout_candidate_id=selected_layout_id,
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="confirmation unavailable"),
+    ):
+        preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=queued.id,
+            preview_digest=str(result["digest"]),
+            layout_candidate_id=uuid4(),
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="confirmation unavailable"),
+    ):
+        preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=queued.id,
+            preview_digest=str(result["digest"]),
+            layout_candidate_id=UUID(str(candidates[1]["id"])),
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
+    with preview_session_factory() as session:
+        confirmed = preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=queued.id,
+            preview_digest=str(result["digest"]),
+            layout_candidate_id=selected_layout_id,
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
+    with preview_session_factory() as session:
+        idempotent = preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=queued.id,
+            preview_digest=str(result["digest"]),
+            layout_candidate_id=selected_layout_id,
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
+    assert idempotent == confirmed
+
+    second, second_result = _complete_active_revalidation(
         preview_session_factory,
         product_id=product_id,
-    ) == before_revalidation
+        revision_id=revision_id,
+        mapping_id=mapping_id,
+        commit_hash="b" * 40,
+    )
+    with preview_session_factory.begin() as session:
+        session.add(
+            ActiveRevisionRevalidationConfirmation(
+                job_id=second.id,
+                revision_scope="active_revalidation",
+                product_id=product_id,
+                revision_id=revision_id,
+                revision_version=4,
+                mapping_id=mapping_id,
+                connection_generation=second.connection_generation,
+                preview_digest="e" * 64,
+                layout_candidate_id=selected_layout_id,
+                layout_candidate_version=1,
+                confirmed_by=actor_id,
+                confirmed_at=datetime.now(UTC),
+            )
+        )
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="confirmation conflict"),
+    ):
+        preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=second.id,
+            preview_digest=str(second_result["digest"]),
+            layout_candidate_id=selected_layout_id,
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
+    with preview_session_factory() as session:
+        revision = session.get_one(ProductRevision, revision_id)
+        mapping = session.get_one(ProductRepositoryMapping, mapping_id)
+        assert (
+            preview_jobs.active_revision_revalidation_is_current(
+                session,
+                revision,
+                mapping,
+            )
+            is False
+        )
+    with preview_session_factory() as session:
+        row = session.get_one(PreviewJob, second.id)
+        revision = session.get_one(ProductRevision, revision_id)
+        mapping = session.get_one(ProductRepositoryMapping, mapping_id)
+        row.state = "failed"
+        with session.no_autoflush:
+            assert (
+                preview_jobs.active_revision_revalidation_is_current(
+                    session,
+                    revision,
+                    mapping,
+                )
+                is False
+            )
+        session.rollback()
+    with preview_session_factory.begin() as session:
+        session.get_one(PreviewJob, second.id).result = {"invalid": "closed result"}
+    with preview_session_factory() as session:
+        revision = session.get_one(ProductRevision, revision_id)
+        mapping = session.get_one(ProductRepositoryMapping, mapping_id)
+        assert (
+            preview_jobs.active_revision_revalidation_is_current(
+                session,
+                revision,
+                mapping,
+            )
+            is False
+        )
+    with preview_session_factory.begin() as session:
+        session.get_one(BitbucketConnection, 1).generation += 1
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="identity conflict"),
+    ):
+        preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=second.id,
+            preview_digest=str(second_result["digest"]),
+            layout_candidate_id=selected_layout_id,
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
+
+
+def test_active_revalidation_eligibility_and_revision_scope_guards_are_bounded(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Project deterministic blockers and reject impossible revision-scope states."""
+    preview_jobs = importlib.import_module("verboflex.services.preview_jobs")
+    product_id, revision_id, mapping_id, _actor_id, _selected_layout_id = (
+        _seed_active_revalidation_authority(preview_session_factory)
+    )
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobNotFound, match="active revision revalidation unavailable"),
+    ):
+        preview_jobs.get_active_revision_revalidation_eligibility(
+            session,
+            product_id=uuid4(),
+            active_revision_id=revision_id,
+            expected_active_revision_version=4,
+        )
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="active revision revalidation conflict"),
+    ):
+        preview_jobs.get_active_revision_revalidation_eligibility(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            expected_active_revision_version=5,
+        )
+    empty_product_id = uuid4()
+    empty_active_revision_id = uuid4()
+    empty_candidate_revision_id = uuid4()
+    with preview_session_factory.begin() as session:
+        empty_product = Product(
+            id=empty_product_id,
+            display_name=f"Empty authority {empty_product_id}",
+            name_key=f"empty authority {empty_product_id}",
+            is_active=True,
+        )
+        session.add(empty_product)
+        session.flush()
+        session.add_all(
+            [
+                ProductRevision(
+                    id=empty_active_revision_id,
+                    product_id=empty_product_id,
+                    version=1,
+                    is_published=True,
+                    published_at=datetime.now(UTC),
+                ),
+                ProductRevision(
+                    id=empty_candidate_revision_id,
+                    product_id=empty_product_id,
+                    version=1,
+                    is_published=False,
+                ),
+            ]
+        )
+        session.flush()
+        empty_product.active_revision_id = empty_active_revision_id
+        empty_product.candidate_revision_id = empty_candidate_revision_id
+    with preview_session_factory() as session:
+        blocked = preview_jobs.get_active_revision_revalidation_eligibility(
+            session,
+            product_id=empty_product_id,
+            active_revision_id=empty_active_revision_id,
+            expected_active_revision_version=1,
+        )
+    assert blocked.blocker_codes == (
+        "product_active",
+        "candidate_revision_present",
+        "mappings_required",
+    )
+
+    product_id, revision_id, mapping_id, _actor_id, _selected_layout_id = (
+        _seed_active_revalidation_authority(
+            preview_session_factory,
+            invalid_mapping=True,
+        )
+    )
+    with preview_session_factory() as session:
+        blocked = preview_jobs.get_active_revision_revalidation_eligibility(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            expected_active_revision_version=4,
+        )
+    assert blocked.mappings[0].blocker_codes == (
+        "mapping_configuration_invalid",
+        "layout_required",
+    )
+
+    with preview_session_factory() as session:
+        row = PreviewJob(
+            id=uuid4(),
+            input_digest="2" * 64,
+            attempt=1,
+            state="queued",
+            revision_scope="active_revalidation",
+            product_id=product_id,
+            candidate_revision_id=revision_id,
+            candidate_revision_version=4,
+            mapping_id=mapping_id,
+            topology="separate",
+            connection_generation=7,
+            detector_version="preview-v1",
+            layout_identity="automatic",
+            repository_sides=[],
+        )
+        assert preview_jobs._current_revision(session, row, for_update=False) is not None
+        row.revision_scope = cast(Any, "invalid")
+        assert preview_jobs._current_revision(session, row, for_update=False) is None
+        assert (
+            preview_jobs._current_identity_matches(
+                row,
+                session.get_one(ProductRevision, revision_id),
+                session.get_one(ProductRepositoryMapping, mapping_id),
+                session.get_one(BitbucketConnection, 1),
+            )
+            is False
+        )
+        product = session.get_one(Product, product_id)
+        revision = session.get_one(ProductRevision, revision_id)
+        with session.no_autoflush:
+            product.is_active = True
+            assert preview_jobs._current_revision(session, row, for_update=False) is None
+            product.is_active = False
+            row.revision_scope = "candidate"
+            product.candidate_revision_id = uuid4()
+            assert preview_jobs._current_revision(session, row, for_update=False) is None
+            product.candidate_revision_id = revision_id
+            assert preview_jobs._current_revision(session, row, for_update=False) is None
+            row.revision_scope = "active_revalidation"
+            product.candidate_revision_id = None
+            revision.is_published = False
+            assert preview_jobs._current_revision(session, row, for_update=False) is None
+        session.rollback()
+    assert _start_preview_job(preview_session_factory, job_id=uuid4()) is None
