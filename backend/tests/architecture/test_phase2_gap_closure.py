@@ -107,18 +107,18 @@ UI_FINGERPRINTS = {
     "long-text": "08549ee968721bd5ed52",
 }
 REVIEW_FINGERPRINTS = {
-    "CR-01": "76bf59c04b20990f7493",
-    "CR-02": "b7a74b76b17053d90580",
-    "CR-03": "7a69ae3a74e24a168a88",
-    "CR-04": "dbb0ee06729e1762a38d",
-    "CR-05": "4cdaf12bd17a8050c35c",
-    "CR-06": "71fbeecc01b77b8287ae",
-    "CR-07": "56ee67ab0369b8e1c0f0",
-    "CR-08": "25ad14a5778e022ee23b",
-    "CR-09": "4a8bc6f607f609db5466",
-    "CR-10": "04143b19d9c4fefb2b24",
-    "WR-01": "9e3cdfde91a38f904f7a",
-    "WR-02": "b19bdbb44331ed4020f4",
+    "CR-01": "22f869561ee7ed6f2e0c",
+    "CR-02": "1227743d8ecfaabf3a14",
+    "CR-03": "fd2c0dc1b93f157b0435",
+    "CR-04": "65384d38a1e11cf97cf5",
+    "CR-05": "ccff4ac06c9b6b548a21",
+    "CR-06": "c0953c91859e3e15f7cf",
+    "CR-07": "d56cea49a5b5046fb449",
+    "CR-08": "47507f0ba2c953a052ee",
+    "CR-09": "1e39dfc96e5aabc4d809",
+    "CR-10": "7a2baeb79e8858af3305",
+    "WR-01": "b4c65a16705b9f8df2be",
+    "WR-02": "86f390b8b9aa3d7b95bb",
 }
 VERIFIER_SEMANTICS = {
     "G1": "cross-entry-point admin safety",
@@ -481,11 +481,17 @@ def _capabilities() -> dict[str, dict[str, str]]:
 
 def _review_findings() -> dict[str, str]:
     text = REVIEW_PATH.read_text(encoding="utf-8")
+    rows = [
+        row
+        for row in _table_rows(
+            text,
+            start="### Original CR/WR Inventory Re-audit",
+            end="### ASVS 5.0 Level 1 Coverage",
+        )
+        if row and re.fullmatch(r"(?:CR|WR)-\d{2}", row[0])
+    ]
     return _unique(
-        [
-            (match.group("key"), _fingerprint(match.group("meaning")))
-            for match in re.finditer(r"^### (?P<key>(?:CR|WR)-\d{2}): (?P<meaning>.*)$", text, re.M)
-        ],
+        [(row[0], _fingerprint(" | ".join(row))) for row in rows],
         source="review findings",
     )
 
