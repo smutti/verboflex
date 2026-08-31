@@ -203,7 +203,7 @@ status: complete
 - Mutation: all backend verifier inventories killed, publication **25/25**, preview jobs **16/16**, Android **10/10**, iOS **11/11**; Stryker polling mutation gate passed.
 - Real runtime harness: `bash tools/phase2_smoke.sh --mock-live-provider` passed **8/8** with provider audit `client_credentials`, exact `repository` scope, five GETs, and zero writes.
 - Gap closure: `bash tools/phase2_gauntlet.sh --gap-closure` passed **18/18 layers** from zero; source digest remained `21d7cab7a0a20ee285727edc88553cbabf70b488d85672c2a7164590990733c4`.
-- Runtime cleanup: zero Phase 2 containers, networks, volumes, images, and secret files remained.
+- Runtime cleanup: zero Phase 2 containers, networks, volumes, or secret files remained, and zero images created by Plan 02-42 remained. The two pre-existing `verboflex-frontend:phase02-27-e2e` and `verboflex-backend:phase02-27-e2e` cache images were intentionally preserved.
 - Dependency integrity: `frontend/package.json` and `frontend/package-lock.json` remained byte-for-byte unchanged.
 
 ## TDD Gate Compliance
