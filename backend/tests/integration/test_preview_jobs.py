@@ -3065,3 +3065,294 @@ def test_active_revalidation_eligibility_and_revision_scope_guards_are_bounded(
             assert preview_jobs._current_revision(session, row, for_update=False) is None
         session.rollback()
     assert _start_preview_job(preview_session_factory, job_id=uuid4()) is None
+
+
+def test_active_revision_revalidation_api_is_admin_only_exact_and_read_only(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Expose exact active-revision recovery without provider or graph writes."""
+    _configure_dependencies(preview_session_factory)
+    admin_token = _create_authority(preview_session_factory, role_name="admin")
+    viewer_token = _create_authority(preview_session_factory, role_name="viewer")
+    product_id, revision_id, mapping_id, _actor_id, selected_layout_id = (
+        _seed_active_revalidation_authority(preview_session_factory)
+    )
+    before_revalidation = _published_configuration_snapshot(
+        preview_session_factory,
+        product_id=product_id,
+    )
+    enqueuer = PersistedUuidEnqueuer(preview_session_factory)
+    app.state.preview_job_enqueuer = enqueuer
+    eligibility_path = (
+        f"/api/v1/admin/products/{product_id}/revisions/{revision_id}"
+        "/reactivation-eligibility?expected_active_revision_version=4"
+    )
+    create_path = (
+        f"/api/v1/admin/products/{product_id}/revisions/{revision_id}"
+        f"/mappings/{mapping_id}/revalidation-preview-jobs"
+    )
+    create_payload = {
+        "expected_active_revision_version": 4,
+        "commits": [{"role": "direct", "commit_hash": COMMIT_HASH}],
+    }
+
+    protected_requests = (
+        ("GET", eligibility_path, None),
+        ("POST", create_path, create_payload),
+        ("GET", f"/api/v1/admin/active-revision-revalidation-jobs/{uuid4()}", None),
+        (
+            "POST",
+            f"/api/v1/admin/active-revision-revalidation-jobs/{uuid4()}/confirmation",
+            {
+                "active_revision_id": str(revision_id),
+                "active_revision_version": 4,
+                "mapping_id": str(mapping_id),
+                "connection_generation": 7,
+                "commits": [{"role": "direct", "commit_hash": COMMIT_HASH}],
+                "preview_digest": "f" * 64,
+                "layout_candidate_id": str(selected_layout_id),
+                "layout_candidate_version": 1,
+            },
+        ),
+    )
+    for method, path, payload in protected_requests:
+        assert (
+            asyncio.run(_request(method, path, access_token=None, json=payload)).status_code
+            == 401
+        )
+        assert (
+            asyncio.run(
+                _request(method, path, access_token=viewer_token, json=payload)
+            ).status_code
+            == 403
+        )
+
+    missing_requests = (
+        (
+            "GET",
+            (
+                f"/api/v1/admin/products/{uuid4()}/revisions/{revision_id}"
+                "/reactivation-eligibility?expected_active_revision_version=4"
+            ),
+            None,
+        ),
+        (
+            "POST",
+            (
+                f"/api/v1/admin/products/{product_id}/revisions/{revision_id}"
+                f"/mappings/{uuid4()}/revalidation-preview-jobs"
+            ),
+            create_payload,
+        ),
+        (
+            "GET",
+            f"/api/v1/admin/active-revision-revalidation-jobs/{uuid4()}",
+            None,
+        ),
+        (
+            "POST",
+            f"/api/v1/admin/active-revision-revalidation-jobs/{uuid4()}/confirmation",
+            protected_requests[-1][2],
+        ),
+    )
+    for method, path, payload in missing_requests:
+        response = asyncio.run(
+            _request(method, path, access_token=admin_token, json=payload)
+        )
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Active revision revalidation unavailable"}
+
+    eligibility = asyncio.run(
+        _request("GET", eligibility_path, access_token=admin_token)
+    )
+    assert eligibility.status_code == 200
+    assert eligibility.json() == {
+        "product_id": str(product_id),
+        "active_revision_id": str(revision_id),
+        "active_revision_version": 4,
+        "eligible": False,
+        "blocker_codes": ["revalidation_confirmation_required"],
+        "mappings": [
+            {
+                "mapping_id": str(mapping_id),
+                "is_current": False,
+                "blocker_codes": ["revalidation_confirmation_required"],
+            }
+        ],
+    }
+
+    stale_version = asyncio.run(
+        _request(
+            "POST",
+            create_path,
+            access_token=admin_token,
+            json={**create_payload, "expected_active_revision_version": 5},
+        )
+    )
+    stale_commit = asyncio.run(
+        _request(
+            "POST",
+            create_path,
+            access_token=admin_token,
+            json={
+                **create_payload,
+                "commits": [{"role": "keys", "commit_hash": COMMIT_HASH}],
+            },
+        )
+    )
+    assert stale_version.status_code == 409
+    assert stale_commit.status_code == 409
+
+    created = asyncio.run(
+        _request(
+            "POST",
+            create_path,
+            access_token=admin_token,
+            json=create_payload,
+        )
+    )
+    assert created.status_code == 202
+    created_body = created.json()
+    assert created_body["product_id"] == str(product_id)
+    assert created_body["active_revision_id"] == str(revision_id)
+    assert created_body["active_revision_version"] == 4
+    assert created_body["mapping_id"] == str(mapping_id)
+    assert created_body["connection_generation"] == 7
+    assert created_body["repository_sides"] == [
+        {
+            "role": "direct",
+            "repository_id": created_body["repository_sides"][0]["repository_id"],
+            "source_branch": "main",
+            "commit_hash": COMMIT_HASH,
+        }
+    ]
+    assert "candidate_revision_id" not in created_body
+    assert "candidate_revision_version" not in created_body
+    assert enqueuer.payloads == [(created_body["id"],)]
+
+    job_path = f"/api/v1/admin/active-revision-revalidation-jobs/{created_body['id']}"
+    queued = asyncio.run(_request("GET", job_path, access_token=admin_token))
+    assert queued.status_code == 200
+    assert queued.json() == created_body
+
+    execute_preview_job(
+        preview_session_factory,
+        job_id=UUID(created_body["id"]),
+        processor=_confirmable_processor,
+    )
+    succeeded = asyncio.run(_request("GET", job_path, access_token=admin_token))
+    assert succeeded.status_code == 200
+    succeeded_body = succeeded.json()
+    assert succeeded_body["state"] == "succeeded"
+    assert succeeded_body["is_current"] is True
+    assert succeeded_body["result"] is not None
+    selected = next(
+        candidate
+        for candidate in succeeded_body["result"]["layout_candidates"]
+        if candidate["id"] == str(selected_layout_id)
+    )
+    confirmation_path = f"{job_path}/confirmation"
+    confirmation_payload = {
+        "active_revision_id": str(revision_id),
+        "active_revision_version": 4,
+        "mapping_id": str(mapping_id),
+        "connection_generation": 7,
+        "commits": [{"role": "direct", "commit_hash": COMMIT_HASH}],
+        "preview_digest": succeeded_body["result"]["digest"],
+        "layout_candidate_id": selected["id"],
+        "layout_candidate_version": selected["version"],
+    }
+    stale_confirmation_values = (
+        {"active_revision_id": str(uuid4())},
+        {"active_revision_version": 5},
+        {"mapping_id": str(uuid4())},
+        {"connection_generation": 8},
+        {"commits": [{"role": "direct", "commit_hash": "b" * 40}]},
+    )
+    for replacement in stale_confirmation_values:
+        response = asyncio.run(
+            _request(
+                "POST",
+                confirmation_path,
+                access_token=admin_token,
+                json={**confirmation_payload, **replacement},
+            )
+        )
+        assert response.status_code == 409
+        assert response.json() == {"detail": "Active revision revalidation conflict"}
+
+    confirmed = asyncio.run(
+        _request(
+            "POST",
+            confirmation_path,
+            access_token=admin_token,
+            json=confirmation_payload,
+        )
+    )
+    assert confirmed.status_code == 200
+    confirmed_body = confirmed.json()
+    assert confirmed_body == {
+        "job_id": created_body["id"],
+        "product_id": str(product_id),
+        "active_revision_id": str(revision_id),
+        "active_revision_version": 4,
+        "mapping_id": str(mapping_id),
+        "connection_generation": 7,
+        "commits": created_body["repository_sides"],
+        "preview_digest": succeeded_body["result"]["digest"],
+        "layout_candidate_id": selected["id"],
+        "layout_candidate_version": 1,
+        "confirmed_by": confirmed_body["confirmed_by"],
+        "confirmed_at": confirmed_body["confirmed_at"],
+    }
+    assert (
+        asyncio.run(
+            _request("GET", eligibility_path, access_token=admin_token)
+        ).json()["eligible"]
+        is True
+    )
+
+    sensitive_fields = {
+        "access_token",
+        "access_token_ciphertext",
+        "client_secret",
+        "credentials",
+        "provider_body",
+        "raw_body",
+        "refresh_token",
+        "source_bytes",
+        "source_file_content",
+    }
+
+    def all_keys(value: object) -> set[str]:
+        if isinstance(value, dict):
+            return set(value).union(*(all_keys(item) for item in value.values()))
+        if isinstance(value, list):
+            return set().union(*(all_keys(item) for item in value))
+        return set()
+
+    for public_body in (
+        eligibility.json(),
+        created_body,
+        succeeded_body,
+        confirmed_body,
+    ):
+        assert all_keys(public_body).isdisjoint(sensitive_fields)
+    assert (
+        _published_configuration_snapshot(
+            preview_session_factory,
+            product_id=product_id,
+        )
+        == before_revalidation
+    )
+    with preview_session_factory() as session:
+        assert session.scalar(text("SELECT to_regclass('public.translations')")) is None
+
+    with preview_session_factory.begin() as session:
+        connection = session.get_one(BitbucketConnection, 1)
+        connection.access_token_ciphertext = None
+    unavailable = asyncio.run(
+        _request("POST", create_path, access_token=admin_token, json=create_payload)
+    )
+    assert unavailable.status_code == 503
+    assert unavailable.json() == {"detail": "Active revision revalidation unavailable"}
