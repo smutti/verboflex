@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: ready_to_execute
-stopped_at: Completed 02-40-PLAN.md
-last_updated: "2026-08-31T13:39:13.805Z"
+stopped_at: Completed 02-41-PLAN.md
+last_updated: "2026-08-31T17:47:49.466Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 02 critical gap planning complete — 43 plans total
-state_head: 1c6b50fda71298539dba62e46fb9564e2e220d59
+state_head: 8862930180033162e047a10d31d48486bad82044
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 58
-  completed_plans: 54
+  completed_plans: 55
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — READY TO EXECUTE
-Plan: 39 of 43
+Plan: 40 of 43
 Status: Ready to execute
 Last activity: 2026-08-30 — Phase 02 critical gap planning complete
 
@@ -112,6 +112,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P37 | 2h03min | 2 tasks | 26 files |
 | Phase 02 P39 | 35min | 2 tasks | 5 files |
 | Phase 02 P40 | 2h 18m | 2 tasks | 10 files |
+| Phase 02 P41 | 3h 54m | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -292,6 +293,8 @@ Recent decisions affecting current work:
 - [Phase 02]: Candidate canonical preview identity remains byte-for-byte unchanged; active revalidation uses a domain-separated revision scope.
 - [Phase 02]: Active revalidation authority is an immutable sidecar outside the published graph and must match the latest exact live tuple.
 - [Phase 02]: Reactivation preserves original current candidate confirmation authority before falling back to exact active-revalidation evidence.
+- [Phase 02]: Active-revision recovery uses dedicated public vocabulary while compatibility storage fields remain internal.
+- [Phase 02]: Canonical backend OpenAPI and the pinned generator exclusively own all TypeScript recovery exports.
 
 ### Pending Todos
 
@@ -330,6 +333,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-31T13:39:13.741Z
-Stopped at: Completed 02-40-PLAN.md
+Last session: 2026-08-31T17:47:49.408Z
+Stopped at: Completed 02-41-PLAN.md
 Resume file: None
