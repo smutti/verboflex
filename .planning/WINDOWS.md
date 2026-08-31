@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 0
 waived_count: 0
-fixed_count: 35
-total_count: 35
-last_updated: 2026-08-29T20:13:36.042Z
+fixed_count: 37
+total_count: 37
+last_updated: 2026-08-31T11:12:09.549Z
 ---
 
 # Broken Windows Ledger
@@ -50,6 +50,8 @@ last_updated: 2026-08-29T20:13:36.042Z
 | 33 | 02 | deviation | frontend/src/features/admin/mappings/ProductMappingsPage.tsx |  | Prevented a successful mapping save from invalidating its own current-candidate collection | fixed |  | 2026-08-29T20:13:15.806Z | 2026-08-29T20:13:35.915Z |
 | 34 | 02 | deviation | frontend/src/features/admin/useCursorCollection.ts |  | Preserved generated wire-shape authority for the generic cursor slice | fixed |  | 2026-08-29T20:13:15.871Z | 2026-08-29T20:13:35.980Z |
 | 35 | 02 | deviation | frontend/e2e/admin-configuration.spec.ts |  | Verified current-source browser journeys after detecting a stale default nginx asset | fixed |  | 2026-08-29T20:13:15.939Z | 2026-08-29T20:13:36.042Z |
+| 36 | 02 | deviation | tools/phase2_smoke.sh |  | Generated owner-only deployment secrets were required for real staging/production smoke and are fully scanned and cleaned | fixed |  | 2026-08-31T11:11:45.316Z | 2026-08-31T11:12:09.484Z |
+| 37 | 02 | deviation | tools/phase2_gauntlet.sh |  | Mechanical Ruff formatting shifted three exact reviewed secret-fixture line numbers; policy entries were realigned | fixed |  | 2026-08-31T11:11:45.381Z | 2026-08-31T11:12:09.549Z |
 
 ````json
 [
@@ -472,6 +474,30 @@ last_updated: 2026-08-29T20:13:36.042Z
     "reason": "",
     "recorded_at": "2026-08-29T20:13:15.939Z",
     "resolved_at": "2026-08-29T20:13:36.042Z"
+  },
+  {
+    "id": 36,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "tools/phase2_smoke.sh",
+    "line": null,
+    "description": "Generated owner-only deployment secrets were required for real staging/production smoke and are fully scanned and cleaned",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-31T11:11:45.316Z",
+    "resolved_at": "2026-08-31T11:12:09.484Z"
+  },
+  {
+    "id": 37,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "tools/phase2_gauntlet.sh",
+    "line": null,
+    "description": "Mechanical Ruff formatting shifted three exact reviewed secret-fixture line numbers; policy entries were realigned",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-31T11:11:45.381Z",
+    "resolved_at": "2026-08-31T11:12:09.549Z"
   }
 ]
 ````
