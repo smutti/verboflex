@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: ready_to_execute
-stopped_at: Completed 02-41-PLAN.md
-last_updated: "2026-08-31T17:47:49.466Z"
+stopped_at: Completed 02-42-PLAN.md
+last_updated: "2026-08-31T20:36:55.523Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 02 critical gap planning complete — 43 plans total
-state_head: 8862930180033162e047a10d31d48486bad82044
+state_head: 3e9739feb9a263ace6fc9f26518ee05455fc2d06
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 58
-  completed_plans: 55
+  completed_plans: 56
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — READY TO EXECUTE
-Plan: 40 of 43
+Plan: 41 of 43
 Status: Ready to execute
 Last activity: 2026-08-30 — Phase 02 critical gap planning complete
 
@@ -113,6 +113,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P39 | 35min | 2 tasks | 5 files |
 | Phase 02 P40 | 2h 18m | 2 tasks | 10 files |
 | Phase 02 P41 | 3h 54m | 2 tasks | 11 files |
+| Phase 02-admin-configuration P42 | 2h 37m | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -295,6 +296,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Reactivation preserves original current candidate confirmation authority before falling back to exact active-revalidation evidence.
 - [Phase 02]: Active-revision recovery uses dedicated public vocabulary while compatibility storage fields remain internal.
 - [Phase 02]: Canonical backend OpenAPI and the pinned generator exclusively own all TypeScript recovery exports.
+- [Phase 02]: Published recovery badges and Reactivate gating derive only from exact server eligibility.
+- [Phase 02]: Active-revision recovery uses only generated eligibility, create, get, and confirm operations; candidate and provider-write shortcuts remain forbidden.
+- [Phase 02]: Recovery E2E authority requires an immutable graph snapshot plus ordered application and provider route audits.
 
 ### Pending Todos
 
@@ -333,6 +337,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-31T17:47:49.408Z
-Stopped at: Completed 02-41-PLAN.md
+Last session: 2026-08-31T20:36:55.469Z
+Stopped at: Completed 02-42-PLAN.md
 Resume file: None
