@@ -835,8 +835,7 @@ def test_active_revision_revalidation_sidecar_migrates_reversibly(
         )
         connection.execute(
             text(
-                "UPDATE preview_jobs SET revision_scope = 'active_revalidation' "
-                "WHERE id = :job_id"
+                "UPDATE preview_jobs SET revision_scope = 'active_revalidation' WHERE id = :job_id"
             ),
             {"job_id": job_id},
         )

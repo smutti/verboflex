@@ -525,10 +525,8 @@ def test_active_revision_revalidation_never_mutates_published_graph(
                 "digest": "d" * 64,
                 "sides": (
                     '[{"role":"direct","repository_id":"'
-                    f'{ids["repository"]}'
-                    '","source_branch":"main","commit_hash":"'
-                    + "a" * 40
-                    + '"}]'
+                    f"{ids['repository']}"
+                    '","source_branch":"main","commit_hash":"' + "a" * 40 + '"}]'
                 ),
             },
         )
@@ -562,10 +560,7 @@ def test_active_revision_revalidation_never_mutates_published_graph(
         graph_engine.begin() as connection,
     ):
         connection.execute(
-            text(
-                "DELETE FROM active_revision_revalidation_confirmations "
-                "WHERE job_id = :job_id"
-            ),
+            text("DELETE FROM active_revision_revalidation_confirmations WHERE job_id = :job_id"),
             {"job_id": job_id},
         )
     assert _published_graph_rows(graph_engine, ids) == before

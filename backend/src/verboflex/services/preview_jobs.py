@@ -1103,7 +1103,7 @@ def _active_confirmed_layout_matches(
     assert row.result is not None
     try:
         result = _closed_result(_identity(row), row.result)
-    except (PreviewJobConflict, ValueError):
+    except PreviewJobConflict, ValueError:
         return False
     if result["digest"] != sidecar.preview_digest:
         return False
@@ -1172,10 +1172,7 @@ def get_active_revision_revalidation_eligibility(
             or mapping.topology not in {"direct", "separate"}
         ):
             blockers.append("mapping_configuration_invalid")
-        if (
-            mapping.selected_layout_candidate_id is None
-            or mapping.selected_layout_version is None
-        ):
+        if mapping.selected_layout_candidate_id is None or mapping.selected_layout_version is None:
             blockers.append("layout_required")
         if not blockers and not is_current_preview_confirmation(session, revision, mapping):
             blockers.append("revalidation_confirmation_required")

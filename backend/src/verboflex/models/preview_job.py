@@ -167,8 +167,7 @@ class ActiveRevisionRevalidationConfirmation(Base):
             name="connection_generation_non_negative",
         ),
         CheckConstraint(
-            "char_length(preview_digest) = 64 "
-            "AND preview_digest ~ '^[0-9a-f]{64}$'",
+            "char_length(preview_digest) = 64 AND preview_digest ~ '^[0-9a-f]{64}$'",
             name="preview_digest_sha256",
         ),
         CheckConstraint(
