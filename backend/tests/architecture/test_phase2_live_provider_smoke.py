@@ -398,6 +398,52 @@ def test_frontend_built_image_smoke_enforces_anti_framing_headers() -> None:
     )
 
 
+def _frontend_security_smoke_contract_problems(source: str) -> list[str]:
+    del source
+    return []
+
+
+def test_frontend_security_smoke_contract_rejects_in_memory_bypasses() -> None:
+    """Removing any common-path, fallback, uniqueness, or value guard is rejected."""
+    source = SMOKE_HARNESS.read_text(encoding="utf-8")
+    mutations = {
+        "common invocation removed": source.replace(
+            "  verify_frontend_security_headers\n",
+            "",
+            1,
+        ),
+        "deep fallback removed": source.replace(
+            "deep-spa-fallback|/admin/products/security-header-probe\n",
+            "",
+            1,
+        ),
+        "uniqueness guard removed": source.replace(
+            '[ "$header_count" != "1" ] || ',
+            "",
+            1,
+        ),
+        "header duplicated": source.replace(
+            "X-Frame-Options|DENY\n",
+            "X-Frame-Options|DENY\nX-Frame-Options|DENY\n",
+            1,
+        ),
+        "CSP framing weakened": source.replace(
+            "frame-ancestors 'none'",
+            "frame-ancestors https:",
+            1,
+        ),
+        "legacy framing weakened": source.replace(
+            "X-Frame-Options|DENY",
+            "X-Frame-Options|SAMEORIGIN",
+            1,
+        ),
+    }
+
+    assert not _frontend_security_smoke_contract_problems(source)
+    for mutation_name, mutated_source in mutations.items():
+        assert _frontend_security_smoke_contract_problems(mutated_source), mutation_name
+
+
 def test_probe_is_an_authenticated_local_api_driver_without_provider_authority() -> None:
     """Only production code may contact the provider token endpoint or hold its bearer."""
     source = LIVE_SMOKE_HELPER.read_text(encoding="utf-8")
