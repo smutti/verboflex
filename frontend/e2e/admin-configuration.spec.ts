@@ -1333,6 +1333,58 @@ interface RealReactivationFixtures {
   userId: string;
 }
 
+interface RealReactivationEvidence {
+  graph: {
+    active_revision_id: string;
+    active_revision_version: number;
+    candidate_revision_id: null;
+    mappings: Array<{
+      confirmed_preview: {
+        connection_generation: number;
+        job_id: string;
+        repository_sides: Array<{
+          commit_hash: string;
+          repository_id: string;
+          role: string;
+          source_branch: string;
+        }>;
+        result_digest: string;
+      };
+      id: string;
+      identity_key: string;
+      revision_id: string;
+      selected_layout_candidate_id: string;
+      selected_layout_version: number;
+      sides: Array<{
+        repository_id: string;
+        role: string;
+        source_branch: string;
+      }>;
+      targets: Array<{ branch: string; is_default: boolean }>;
+      topology: string;
+    }>;
+  };
+  is_active: boolean;
+  sidecars: Array<{
+    connection_generation: number;
+    job_id: string;
+    layout_candidate_id: string;
+    layout_candidate_version: number;
+    mapping_id: string;
+    preview_digest: string;
+    product_id: string;
+    revision_id: string;
+    revision_version: number;
+  }>;
+}
+
+interface MockProviderAuditRow {
+  category: string;
+  effective_scope: string;
+  grant_type: string;
+  method: string;
+}
+
 interface RealMapping51Fixtures {
   blockedActiveProductId: string;
   candidateBoundaryMappingId: string;
@@ -1471,6 +1523,7 @@ with SessionFactory.begin() as session:
         )
         job = PreviewJob(
             id=uuid4(),
+            revision_scope="candidate",
             input_digest=input_digest,
             attempt=1,
             state="succeeded",
@@ -1554,6 +1607,111 @@ with SessionFactory.begin() as session:
     connection.revoked_at = None
 `;
 
+const realReactivationExpireConnection = String.raw`
+import json
+import sys
+from datetime import UTC, datetime, timedelta
+
+from verboflex.db.session import SessionFactory
+from verboflex.models.bitbucket_connection import BitbucketConnection
+
+json.load(sys.stdin)
+with SessionFactory.begin() as session:
+    connection = session.get_one(BitbucketConnection, 1)
+    connection.provider_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+`;
+
+const realReactivationEvidence = String.raw`
+import json
+import sys
+from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+from verboflex.db.session import SessionFactory
+from verboflex.models.preview_job import (
+    ActiveRevisionRevalidationConfirmation,
+    PreviewJob,
+)
+from verboflex.models.product import Product, ProductRevision
+from verboflex.models.product_mapping import ProductRepositoryMapping
+
+payload = json.load(sys.stdin)
+product_id = UUID(payload["productId"])
+
+with SessionFactory() as session:
+    product = session.get_one(Product, product_id)
+    revision = session.get_one(ProductRevision, product.active_revision_id)
+    mappings = session.execute(
+        select(ProductRepositoryMapping)
+        .options(
+            selectinload(ProductRepositoryMapping.sides),
+            selectinload(ProductRepositoryMapping.allowed_targets),
+        )
+        .where(ProductRepositoryMapping.revision_id == revision.id)
+        .order_by(ProductRepositoryMapping.id)
+    ).scalars().all()
+    graph_mappings = []
+    for mapping in mappings:
+        confirmed_job = session.get_one(PreviewJob, mapping.confirmed_preview_job_id)
+        graph_mappings.append({
+            "confirmed_preview": {
+                "connection_generation": confirmed_job.connection_generation,
+                "job_id": str(confirmed_job.id),
+                "repository_sides": confirmed_job.repository_sides,
+                "result_digest": confirmed_job.result["digest"],
+            },
+            "id": str(mapping.id),
+            "identity_key": mapping.identity_key,
+            "revision_id": str(mapping.revision_id),
+            "selected_layout_candidate_id": str(mapping.selected_layout_candidate_id),
+            "selected_layout_version": mapping.selected_layout_version,
+            "sides": [
+                {
+                    "repository_id": str(side.repository_id),
+                    "role": side.role,
+                    "source_branch": side.source_branch,
+                }
+                for side in mapping.sides
+            ],
+            "targets": [
+                {"branch": target.branch, "is_default": target.is_default}
+                for target in mapping.allowed_targets
+            ],
+            "topology": mapping.topology,
+        })
+    sidecars = session.execute(
+        select(ActiveRevisionRevalidationConfirmation)
+        .where(ActiveRevisionRevalidationConfirmation.product_id == product_id)
+        .order_by(ActiveRevisionRevalidationConfirmation.job_id)
+    ).scalars().all()
+
+print(json.dumps({
+    "graph": {
+        "active_revision_id": str(revision.id),
+        "active_revision_version": revision.version,
+        "candidate_revision_id": None,
+        "mappings": graph_mappings,
+    },
+    "is_active": product.is_active,
+    "sidecars": [
+        {
+            "connection_generation": row.connection_generation,
+            "job_id": str(row.job_id),
+            "layout_candidate_id": str(row.layout_candidate_id),
+            "layout_candidate_version": row.layout_candidate_version,
+            "mapping_id": str(row.mapping_id),
+            "preview_digest": row.preview_digest,
+            "product_id": str(row.product_id),
+            "revision_id": str(row.revision_id),
+            "revision_version": row.revision_version,
+        }
+        for row in sidecars
+    ],
+}, separators=(",", ":"), sort_keys=True))
+`;
+
 const realMapping51Seed = String.raw`
 import json
 from datetime import UTC, datetime, timedelta
@@ -1634,6 +1792,7 @@ with SessionFactory.begin() as session:
         )
         job = PreviewJob(
             id=uuid4(),
+            revision_scope="candidate",
             input_digest=input_digest,
             attempt=1,
             state="succeeded",
@@ -1884,6 +2043,68 @@ function seedRealReactivationFixtures(): RealReactivationFixtures {
 
 function cleanupRealReactivationFixtures(fixture: RealReactivationFixtures) {
   runRealBackendPython(realReactivationCleanup, JSON.stringify(fixture));
+}
+
+function expireRealReactivationConnection(fixture: RealReactivationFixtures) {
+  runRealBackendPython(
+    realReactivationExpireConnection,
+    JSON.stringify(fixture),
+  );
+}
+
+function readRealReactivationEvidence(
+  productId: string,
+): RealReactivationEvidence {
+  const output = runRealBackendPython(
+    realReactivationEvidence,
+    JSON.stringify({ productId }),
+  );
+  return JSON.parse(output.trim()) as RealReactivationEvidence;
+}
+
+function mockProviderContainer() {
+  const composeProject = execFileSync(
+    "docker",
+    [
+      "inspect",
+      "--format",
+      '{{ index .Config.Labels "com.docker.compose.project" }}',
+      realBackendContainer(),
+    ],
+    { encoding: "utf8" },
+  ).trim();
+  const matches = execFileSync(
+    "docker",
+    [
+      "ps",
+      "--filter",
+      `label=com.docker.compose.project=${composeProject}`,
+      "--filter",
+      "label=com.docker.compose.service=mock-bitbucket",
+      "--format",
+      "{{.Names}}",
+    ],
+    { encoding: "utf8" },
+  )
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  if (matches.length !== 1) {
+    throw new Error("real-backend E2E requires one scoped mock provider");
+  }
+  return matches[0];
+}
+
+function readMockProviderAudit(): MockProviderAuditRow[] {
+  const output = execFileSync(
+    "docker",
+    ["exec", mockProviderContainer(), "cat", "/run/phase2/provider-audit.jsonl"],
+    { encoding: "utf8" },
+  );
+  return output
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as MockProviderAuditRow);
 }
 
 function seedRealMapping51Fixtures(): RealMapping51Fixtures {
@@ -2193,19 +2414,23 @@ test("unchanged active revision reactivation uses real backend state and blocks 
 }) => {
   const fixture = seedRealReactivationFixtures();
   const productId = fixture.currentProductId;
-  const staleProductId = fixture.staleProductId;
   try {
     const { password } = await signInWithRealBackendCredentials(
       page,
       fixture.email,
       fixture.password,
     );
+    const routes: Array<{ method: string; pathname: string }> = [];
     const writes: Array<{ body: unknown; method: string; pathname: string }> =
       [];
     page.on("request", (request) => {
       const method = request.method();
       const pathname = new URL(request.url()).pathname;
-      if (pathname.startsWith("/api/v1/admin/") && method !== "GET") {
+      if (!pathname.startsWith("/api/v1/admin/")) {
+        return;
+      }
+      routes.push({ method, pathname });
+      if (method !== "GET") {
         writes.push({
           body: request.postDataJSON(),
           method,
@@ -2231,11 +2456,59 @@ test("unchanged active revision reactivation uses real backend state and blocks 
     await expect(
       page.getByRole("button", { name: "Reactivate product" }),
     ).toBeEnabled();
-    expect(
-      writes.filter(({ pathname }) =>
-        pathname.includes(`/admin/products/${productId}/candidate`),
-      ),
-    ).toEqual([]);
+    const before = readRealReactivationEvidence(productId);
+    expect(before.is_active).toBe(false);
+    expect(before.sidecars).toEqual([]);
+    const providerAuditBaseline = readMockProviderAudit().length;
+
+    expireRealReactivationConnection(fixture);
+    await page.goto("/admin/bitbucket");
+    await expect(page.getByLabel("Bitbucket connection status")).toContainText(
+      "Reauthorization required",
+    );
+    const reconnectResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname ===
+          "/api/v1/admin/bitbucket/reconnect",
+    );
+    await page.getByRole("button", { name: "Reconnect Bitbucket" }).click();
+    expect((await reconnectResponse).status()).toBe(200);
+    await expect(
+      page.getByRole("status", { name: "Bitbucket connection mutation" }),
+    ).toContainText("Bitbucket reconnected");
+
+    const staleProductLoaded = page.waitForResponse(productResponse(productId));
+    const staleMappingsLoaded = page.waitForResponse(
+      revisionMappingsResponse(productId),
+    );
+    await page.goto(`/admin/products/${productId}/preview`);
+    const staleProduct = (await (
+      await staleProductLoaded
+    ).json()) as RealProduct;
+    const staleMappingResponse = await staleMappingsLoaded;
+    expect(staleProduct.is_active).toBe(false);
+    expect(staleProduct.candidate_revision).toBeNull();
+    expect(staleProduct.active_revision).toEqual(initial.active_revision);
+    expect(new URL(staleMappingResponse.url()).pathname).toBe(
+      `/api/v1/admin/products/${productId}/revisions/${initial.active_revision!.id}/mappings`,
+    );
+    await expect(page.getByText("Preview out of date")).toBeVisible();
+    const reactivate = page.getByRole("button", {
+      name: "Reactivate product",
+    });
+    await expect(reactivate).toBeDisabled();
+
+    await page.getByRole("button", { name: "Run validation again" }).click();
+    await expect(
+      page.locator('[data-slot="badge"]').filter({ hasText: /^Succeeded$/ }),
+    ).toBeVisible();
+    await page
+      .getByRole("radio", { name: "Android XML — res" })
+      .click();
+    await page.getByRole("button", { name: "Confirm preview" }).click();
+    await expect(page.getByText("Confirmed", { exact: true })).toBeVisible();
+    await expect(reactivate).toBeEnabled();
 
     const reactivateResponse = page.waitForResponse((response) => {
       const request = response.request();
@@ -2245,7 +2518,7 @@ test("unchanged active revision reactivation uses real backend state and blocks 
           `/api/v1/admin/products/${productId}/reactivate`
       );
     });
-    await page.getByRole("button", { name: "Reactivate product" }).click();
+    await reactivate.click();
     await page
       .getByRole("alertdialog", {
         name: `Reactivate ${initial.name}?`,
@@ -2259,50 +2532,102 @@ test("unchanged active revision reactivation uses real backend state and blocks 
       id: productId,
       is_active: true,
     });
-    expect(writes).toEqual([
-      {
-        body: {
-          active_revision_id: initial.active_revision!.id,
-          expected_active_version: initial.active_revision!.version,
-        },
-        method: "POST",
-        pathname: `/api/v1/admin/products/${productId}/reactivate`,
-      },
-    ]);
     await expect(page.getByText("Active", { exact: true })).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Reactivate product" }),
     ).toHaveCount(0);
 
-    const staleProductLoaded = page.waitForResponse(
-      productResponse(staleProductId),
-    );
-    const staleMappingsLoaded = page.waitForResponse(
-      revisionMappingsResponse(staleProductId),
-    );
-    await page.goto(`/admin/products/${staleProductId}/preview`);
-    const staleProduct = (await (
-      await staleProductLoaded
-    ).json()) as RealProduct;
-    const staleMappingResponse = await staleMappingsLoaded;
-    expect(staleProduct.is_active).toBe(false);
-    expect(staleProduct.candidate_revision).toBeNull();
-    expect(staleProduct.active_revision).not.toBeNull();
-    expect(new URL(staleMappingResponse.url()).pathname).toBe(
-      `/api/v1/admin/products/${staleProductId}/revisions/${staleProduct.active_revision!.id}/mappings`,
-    );
-    await expect(
-      page.getByText("Preview confirmation required", { exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Reactivate product" }),
-    ).toBeDisabled();
+    const after = readRealReactivationEvidence(productId);
+    expect(after.graph).toEqual(before.graph);
+    expect(after.is_active).toBe(true);
+    expect(after.sidecars).toHaveLength(1);
+    expect(after.sidecars[0]).toMatchObject({
+      connection_generation:
+        before.graph.mappings[0].confirmed_preview.connection_generation + 1,
+      layout_candidate_id:
+        before.graph.mappings[0].selected_layout_candidate_id,
+      layout_candidate_version:
+        before.graph.mappings[0].selected_layout_version,
+      mapping_id: before.graph.mappings[0].id,
+      product_id: productId,
+      revision_id: before.graph.active_revision_id,
+      revision_version: before.graph.active_revision_version,
+    });
+
+    const expectedRouteSequence: Array<
+      (route: { method: string; pathname: string }) => boolean
+    > = [
+      (route) =>
+        route.method === "POST" &&
+        route.pathname === "/api/v1/admin/bitbucket/reconnect",
+      (route) =>
+        route.method === "GET" &&
+        route.pathname ===
+          `/api/v1/admin/products/${productId}/revisions/${initial.active_revision!.id}/reactivation-eligibility`,
+      (route) =>
+        route.method === "GET" &&
+        route.pathname ===
+          `/api/v1/admin/repositories/${fixture.repositoryIds[0]}/branches`,
+      (route) =>
+        route.method === "POST" &&
+        route.pathname.endsWith("/revalidation-preview-jobs"),
+      (route) =>
+        route.method === "GET" &&
+        route.pathname.includes("/active-revision-revalidation-jobs/"),
+      (route) =>
+        route.method === "POST" &&
+        route.pathname.endsWith("/confirmation") &&
+        route.pathname.includes("/active-revision-revalidation-jobs/"),
+      (route) =>
+        route.method === "POST" &&
+        route.pathname === `/api/v1/admin/products/${productId}/reactivate`,
+    ];
+    let routeCursor = -1;
+    for (const matches of expectedRouteSequence) {
+      const next = routes.findIndex(
+        (route, index) => index > routeCursor && matches(route),
+      );
+      expect(next).toBeGreaterThan(routeCursor);
+      routeCursor = next;
+    }
     expect(
       writes.filter(
         ({ pathname }) =>
-          pathname === `/api/v1/admin/products/${staleProductId}/reactivate`,
+          pathname.includes("/candidate") ||
+          pathname.endsWith("/publish") ||
+          (pathname.endsWith("/preview-jobs") &&
+            !pathname.endsWith("/revalidation-preview-jobs")),
       ),
     ).toEqual([]);
+    expect(writes.at(-1)).toEqual({
+      body: {
+        active_revision_id: initial.active_revision!.id,
+        expected_active_version: initial.active_revision!.version,
+      },
+      method: "POST",
+      pathname: `/api/v1/admin/products/${productId}/reactivate`,
+    });
+
+    const providerAudit = readMockProviderAudit().slice(providerAuditBaseline);
+    expect(
+      providerAudit.filter(({ category }) => category === "oauth-token-exchange"),
+    ).toHaveLength(1);
+    expect(
+      providerAudit.filter(({ category }) => category === "repository-read"),
+    ).not.toHaveLength(0);
+    expect(
+      providerAudit.filter(({ category }) => category === "forbidden-mutation"),
+    ).toEqual([]);
+    expect(
+      providerAudit.filter(({ category }) => category === "repository-read"),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          effective_scope: "repository",
+          method: "GET",
+        }),
+      ]),
+    );
     await expectNoSeededSecret(page, password);
   } finally {
     cleanupRealReactivationFixtures(fixture);
