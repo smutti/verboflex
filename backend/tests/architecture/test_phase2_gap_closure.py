@@ -1041,7 +1041,7 @@ def test_phase2_forbidden_bypasses_are_absent() -> None:
     )
 
     admin_routes = _admin_route_functions()
-    assert len(admin_routes) == 30
+    assert len(admin_routes) == 34
     for path, function in admin_routes:
         annotations = {
             ast.unparse(argument.annotation)
