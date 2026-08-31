@@ -4,16 +4,33 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import openApiDocument from "../../openapi.json";
 import { createClient } from "./client/client";
 import {
+  confirmAdminActiveRevisionRevalidation,
+  createAdminActiveRevisionRevalidationJob,
+  getAdminActiveRevisionRevalidationJob,
+  getAdminProductReactivationEligibility,
   getAdminRepositoryBranch,
   listAdminRevisionMappings,
   listAdminUsers,
 } from "./client/sdk.gen";
 import type {
+  AdminActiveRevisionRevalidationConfirmationRequest,
+  AdminActiveRevisionRevalidationConfirmationResponse,
+  AdminActiveRevisionRevalidationJobCreateRequest,
+  AdminActiveRevisionRevalidationJobResponse,
   AdminBranchListResponse,
   AdminBranchResponse,
   AdminMappingListResponse,
   AdminRepositoryListResponse,
+  AdminProductReactivationEligibilityResponse,
   AdminUserListResponse,
+  ConfirmAdminActiveRevisionRevalidationData,
+  ConfirmAdminActiveRevisionRevalidationResponse,
+  CreateAdminActiveRevisionRevalidationJobData,
+  CreateAdminActiveRevisionRevalidationJobResponse,
+  GetAdminActiveRevisionRevalidationJobData,
+  GetAdminActiveRevisionRevalidationJobResponse,
+  GetAdminProductReactivationEligibilityData,
+  GetAdminProductReactivationEligibilityResponse,
   GetAdminRepositoryBranchData,
   GetAdminRepositoryBranchResponse,
   ListAdminRevisionMappingsData,
@@ -192,6 +209,14 @@ const phaseTwoAdminOperationIds = new Map([
     "POST /api/v1/admin/preview-jobs/{job_id}/confirmation",
     "confirm_admin_preview_job",
   ],
+  [
+    "GET /api/v1/admin/active-revision-revalidation-jobs/{job_id}",
+    "get_admin_active_revision_revalidation_job",
+  ],
+  [
+    "POST /api/v1/admin/active-revision-revalidation-jobs/{job_id}/confirmation",
+    "confirm_admin_active_revision_revalidation",
+  ],
   ["GET /api/v1/admin/products", "list_admin_products"],
   ["POST /api/v1/admin/products", "create_admin_product"],
   ["GET /api/v1/admin/products/{product_id}", "get_admin_product"],
@@ -218,6 +243,14 @@ const phaseTwoAdminOperationIds = new Map([
   [
     "GET /api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings",
     "list_admin_revision_mappings",
+  ],
+  [
+    "GET /api/v1/admin/products/{product_id}/revisions/{revision_id}/reactivation-eligibility",
+    "get_admin_product_reactivation_eligibility",
+  ],
+  [
+    "POST /api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings/{mapping_id}/revalidation-preview-jobs",
+    "create_admin_active_revision_revalidation_job",
   ],
   [
     "POST /api/v1/admin/products/{product_id}/deactivate",
@@ -301,6 +334,113 @@ function findHandwrittenAdminUserWireTypes(
 }
 
 describe("canonical generated Phase 2 admin client", () => {
+  it("exposes exact active-revision recovery operations and closed generated shapes", async () => {
+    const productId = "10000000-0000-4000-8000-000000000001";
+    const revisionId = "20000000-0000-4000-8000-000000000002";
+    const mappingId = "30000000-0000-4000-8000-000000000003";
+    const jobId = "40000000-0000-4000-8000-000000000004";
+    const commitHash = "a".repeat(40);
+    const eligibilityBody = {
+      product_id: productId,
+      active_revision_id: revisionId,
+      active_revision_version: 4,
+      eligible: false,
+      blocker_codes: ["revalidation_confirmation_required"],
+      mappings: [
+        {
+          mapping_id: mappingId,
+          is_current: false,
+          blocker_codes: ["revalidation_confirmation_required"],
+        },
+      ],
+    } satisfies AdminProductReactivationEligibilityResponse;
+    const createBody = {
+      expected_active_revision_version: 4,
+      commits: [{ role: "direct", commit_hash: commitHash }],
+    } satisfies AdminActiveRevisionRevalidationJobCreateRequest;
+    const confirmationBody = {
+      active_revision_id: revisionId,
+      active_revision_version: 4,
+      mapping_id: mappingId,
+      connection_generation: 7,
+      commits: [{ role: "direct", commit_hash: commitHash }],
+      preview_digest: "f".repeat(64),
+      layout_candidate_id: "50000000-0000-4000-8000-000000000005",
+      layout_candidate_version: 1,
+    } satisfies AdminActiveRevisionRevalidationConfirmationRequest;
+    const { apiClient, requests } = createRecordingApiClient(eligibilityBody);
+
+    const eligibility = await getAdminProductReactivationEligibility({
+      auth: "phase-two-memory-bearer",
+      client: apiClient,
+      path: { product_id: productId, revision_id: revisionId },
+      query: { expected_active_revision_version: 4 },
+    });
+    await createAdminActiveRevisionRevalidationJob({
+      auth: "phase-two-memory-bearer",
+      body: createBody,
+      client: apiClient,
+      path: {
+        product_id: productId,
+        revision_id: revisionId,
+        mapping_id: mappingId,
+      },
+    });
+    await getAdminActiveRevisionRevalidationJob({
+      auth: "phase-two-memory-bearer",
+      client: apiClient,
+      path: { job_id: jobId },
+    });
+    await confirmAdminActiveRevisionRevalidation({
+      auth: "phase-two-memory-bearer",
+      body: confirmationBody,
+      client: apiClient,
+      path: { job_id: jobId },
+    });
+
+    expectTypeOf(eligibility.data).toEqualTypeOf<
+      GetAdminProductReactivationEligibilityResponse | undefined
+    >();
+    expectTypeOf<
+      CreateAdminActiveRevisionRevalidationJobData["body"]
+    >().toEqualTypeOf<AdminActiveRevisionRevalidationJobCreateRequest>();
+    expectTypeOf<
+      ConfirmAdminActiveRevisionRevalidationData["body"]
+    >().toEqualTypeOf<AdminActiveRevisionRevalidationConfirmationRequest>();
+    expectTypeOf<
+      GetAdminProductReactivationEligibilityData["path"]
+    >().toEqualTypeOf<{ product_id: string; revision_id: string }>();
+    expectTypeOf<
+      GetAdminProductReactivationEligibilityData["query"]
+    >().toEqualTypeOf<{ expected_active_revision_version: number }>();
+    expectTypeOf<CreateAdminActiveRevisionRevalidationJobResponse>().toEqualTypeOf<AdminActiveRevisionRevalidationJobResponse>();
+    expectTypeOf<GetAdminActiveRevisionRevalidationJobResponse>().toEqualTypeOf<AdminActiveRevisionRevalidationJobResponse>();
+    expectTypeOf<ConfirmAdminActiveRevisionRevalidationResponse>().toEqualTypeOf<AdminActiveRevisionRevalidationConfirmationResponse>();
+    expectTypeOf<
+      GetAdminActiveRevisionRevalidationJobData["path"]
+    >().toEqualTypeOf<{
+      job_id: string;
+    }>();
+
+    expect(requests.map((request) => request.method)).toEqual([
+      "GET",
+      "POST",
+      "GET",
+      "POST",
+    ]);
+    expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+      `/api/v1/admin/products/${productId}/revisions/${revisionId}/reactivation-eligibility`,
+      `/api/v1/admin/products/${productId}/revisions/${revisionId}/mappings/${mappingId}/revalidation-preview-jobs`,
+      `/api/v1/admin/active-revision-revalidation-jobs/${jobId}`,
+      `/api/v1/admin/active-revision-revalidation-jobs/${jobId}/confirmation`,
+    ]);
+    expect(
+      new URL(requests[0]!.url).searchParams.get(
+        "expected_active_revision_version",
+      ),
+    ).toBe("4");
+  });
+
   it("calls the generated user list with its exact response type and an in-memory bearer", async () => {
     const responseBody = {
       items: [

@@ -123,6 +123,19 @@ EXPECTED_OPERATIONS = {
         {"200", "401", "403", "404", "409", "422", "503"},
         True,
     ),
+    ("/api/v1/admin/active-revision-revalidation-jobs/{job_id}", "get"): (
+        "get_admin_active_revision_revalidation_job",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    (
+        "/api/v1/admin/active-revision-revalidation-jobs/{job_id}/confirmation",
+        "post",
+    ): (
+        "confirm_admin_active_revision_revalidation",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
     ("/api/v1/admin/products/{product_id}", "get"): (
         "get_admin_product",
         {"200", "401", "403", "404", "422"},
@@ -146,6 +159,23 @@ EXPECTED_OPERATIONS = {
     ("/api/v1/admin/products/{product_id}/reactivate", "post"): (
         "reactivate_admin_product",
         {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/revisions/{revision_id}/reactivation-eligibility",
+        "get",
+    ): (
+        "get_admin_product_reactivation_eligibility",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/revisions/{revision_id}"
+        "/mappings/{mapping_id}/revalidation-preview-jobs",
+        "post",
+    ): (
+        "create_admin_active_revision_revalidation_job",
+        {"202", "401", "403", "404", "409", "422", "503"},
         True,
     ),
     ("/api/v1/admin/users", "get"): (
@@ -317,6 +347,27 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
             "422",
             "503",
         },
+        ("/api/v1/admin/active-revision-revalidation-jobs/{job_id}", "get"): {
+            "401",
+            "403",
+            "404",
+            "409",
+            "422",
+            "503",
+        },
+        (
+            "/api/v1/admin/active-revision-revalidation-jobs/{job_id}/confirmation",
+            "post",
+        ): {"401", "403", "404", "409", "422", "503"},
+        (
+            "/api/v1/admin/products/{product_id}/revisions/{revision_id}/reactivation-eligibility",
+            "get",
+        ): {"401", "403", "404", "409", "422", "503"},
+        (
+            "/api/v1/admin/products/{product_id}/revisions/{revision_id}"
+            "/mappings/{mapping_id}/revalidation-preview-jobs",
+            "post",
+        ): {"401", "403", "404", "409", "422", "503"},
         ("/api/v1/admin/products/{product_id}", "get"): {"401", "403", "404", "422"},
         ("/api/v1/admin/products/{product_id}", "patch"): {
             "401",
@@ -749,6 +800,160 @@ def test_admin_preview_openapi_is_closed_current_and_source_free() -> None:
         assert forbidden not in preview_contract
 
 
+def test_active_revision_revalidation_openapi_is_exact_bounded_and_source_free() -> None:
+    """Freeze the four recovery operations and their active-revision vocabulary."""
+    schema = app.openapi()
+    schemas = schema["components"]["schemas"]
+    eligibility_path = (
+        "/api/v1/admin/products/{product_id}/revisions/{revision_id}/reactivation-eligibility"
+    )
+    create_path = (
+        "/api/v1/admin/products/{product_id}/revisions/{revision_id}"
+        "/mappings/{mapping_id}/revalidation-preview-jobs"
+    )
+    job_path = "/api/v1/admin/active-revision-revalidation-jobs/{job_id}"
+    confirmation_path = f"{job_path}/confirmation"
+    operation_ids = {
+        schema["paths"][eligibility_path]["get"]["operationId"],
+        schema["paths"][create_path]["post"]["operationId"],
+        schema["paths"][job_path]["get"]["operationId"],
+        schema["paths"][confirmation_path]["post"]["operationId"],
+    }
+    assert operation_ids == {
+        "get_admin_product_reactivation_eligibility",
+        "create_admin_active_revision_revalidation_job",
+        "get_admin_active_revision_revalidation_job",
+        "confirm_admin_active_revision_revalidation",
+    }
+
+    eligibility_parameters = _parameters_by_name(schema["paths"][eligibility_path]["get"])
+    assert set(eligibility_parameters) == {
+        "product_id",
+        "revision_id",
+        "expected_active_revision_version",
+    }
+    assert eligibility_parameters["expected_active_revision_version"]["required"] is True
+    assert eligibility_parameters["expected_active_revision_version"]["schema"]["minimum"] == 1
+
+    create_request = schemas["AdminActiveRevisionRevalidationJobCreateRequest"]
+    confirmation_request = schemas["AdminActiveRevisionRevalidationConfirmationRequest"]
+    job_response = schemas["AdminActiveRevisionRevalidationJobResponse"]
+    confirmation_response = schemas["AdminActiveRevisionRevalidationConfirmationResponse"]
+    eligibility_response = schemas["AdminProductReactivationEligibilityResponse"]
+    mapping_response = schemas["AdminProductReactivationMappingResponse"]
+    expected_properties = {
+        "AdminActiveRevisionRevalidationJobCreateRequest": {
+            "expected_active_revision_version",
+            "commits",
+        },
+        "AdminActiveRevisionRevalidationConfirmationRequest": {
+            "active_revision_id",
+            "active_revision_version",
+            "mapping_id",
+            "connection_generation",
+            "commits",
+            "preview_digest",
+            "layout_candidate_id",
+            "layout_candidate_version",
+        },
+        "AdminActiveRevisionRevalidationJobResponse": {
+            "id",
+            "input_digest",
+            "attempt",
+            "state",
+            "product_id",
+            "active_revision_id",
+            "active_revision_version",
+            "mapping_id",
+            "connection_generation",
+            "detector_version",
+            "repository_sides",
+            "result",
+            "error_code",
+            "is_current",
+            "created_at",
+            "started_at",
+            "finished_at",
+        },
+        "AdminActiveRevisionRevalidationConfirmationResponse": {
+            "job_id",
+            "product_id",
+            "active_revision_id",
+            "active_revision_version",
+            "mapping_id",
+            "connection_generation",
+            "commits",
+            "preview_digest",
+            "layout_candidate_id",
+            "layout_candidate_version",
+            "confirmed_by",
+            "confirmed_at",
+        },
+        "AdminProductReactivationEligibilityResponse": {
+            "product_id",
+            "active_revision_id",
+            "active_revision_version",
+            "eligible",
+            "blocker_codes",
+            "mappings",
+        },
+        "AdminProductReactivationMappingResponse": {
+            "mapping_id",
+            "is_current",
+            "blocker_codes",
+        },
+    }
+    for schema_name, properties in expected_properties.items():
+        contract = schemas[schema_name]
+        assert contract["additionalProperties"] is False
+        assert set(contract["properties"]) == properties
+        assert set(contract["required"]) == properties
+
+    assert create_request["properties"]["commits"]["minItems"] == 1
+    assert create_request["properties"]["commits"]["maxItems"] == 2
+    assert confirmation_request["properties"]["commits"]["maxItems"] == 2
+    assert confirmation_request["properties"]["preview_digest"]["pattern"] == ("^[0-9a-f]{64}$")
+    assert confirmation_request["properties"]["layout_candidate_version"]["const"] == 1
+    assert job_response["properties"]["repository_sides"]["maxItems"] == 2
+    assert confirmation_response["properties"]["commits"]["maxItems"] == 2
+    assert eligibility_response["properties"]["mappings"]["maxItems"] == 500
+    assert mapping_response["properties"]["blocker_codes"]["maxItems"] == 6
+
+    error_code = job_response["properties"]["error_code"]["anyOf"][0]
+    assert "stale_active_revision" in error_code["enum"]
+    assert "stale_candidate" not in error_code["enum"]
+    active_contract = json.dumps(
+        {
+            "paths": {
+                path: schema["paths"][path]
+                for path in (
+                    eligibility_path,
+                    create_path,
+                    job_path,
+                    confirmation_path,
+                )
+            },
+            "schemas": {name: schemas[name] for name in expected_properties},
+        },
+        sort_keys=True,
+    ).casefold()
+    for forbidden in (
+        "access_token",
+        "candidate_revision_id",
+        "candidate_revision_version",
+        "client_secret",
+        "credentials",
+        "provider_body",
+        "provider_write",
+        "raw_body",
+        "refresh_token",
+        "repository:write",
+        "source_bytes",
+        "source_file_content",
+    ):
+        assert forbidden not in active_contract
+
+
 def test_admin_product_openapi_is_closed_to_exact_lifecycle_operations() -> None:
     """Expose only typed product lifecycle actions over publication authority."""
     schema = app.openapi()
@@ -809,9 +1014,27 @@ def test_admin_product_openapi_is_closed_to_exact_lifecycle_operations() -> None
     }
     revision_paths = {path for path in schema["paths"] if "/revisions/" in path}
     assert revision_paths == {
-        "/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings"
+        "/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings",
+        ("/api/v1/admin/products/{product_id}/revisions/{revision_id}/reactivation-eligibility"),
+        (
+            "/api/v1/admin/products/{product_id}/revisions/{revision_id}"
+            "/mappings/{mapping_id}/revalidation-preview-jobs"
+        ),
     }
-    assert set(schema["paths"][revision_paths.pop()]) == {"get"}
+    assert set(
+        schema["paths"]["/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings"]
+    ) == {"get"}
+    assert set(
+        schema["paths"][
+            "/api/v1/admin/products/{product_id}/revisions/{revision_id}/reactivation-eligibility"
+        ]
+    ) == {"get"}
+    assert set(
+        schema["paths"][
+            "/api/v1/admin/products/{product_id}/revisions/{revision_id}"
+            "/mappings/{mapping_id}/revalidation-preview-jobs"
+        ]
+    ) == {"post"}
     lifecycle_contract = json.dumps(
         {path: schema["paths"][path] for path in sorted(lifecycle_paths)},
         sort_keys=True,
