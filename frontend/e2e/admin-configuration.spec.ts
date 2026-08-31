@@ -1431,6 +1431,7 @@ user_id = uuid4()
 password = f"VF e2e reactivation {uuid4().hex}!"
 email = f"reactivation-{user_id.hex}@example.com"
 repository_ids = []
+mock_commit_hash = "0123456789abcdef0123456789abcdef01234567"
 
 with SessionFactory.begin() as session:
     connection = session.get_one(BitbucketConnection, 1)
@@ -1513,7 +1514,7 @@ with SessionFactory.begin() as session:
         session.add_all([revision, repository, mapping])
         session.flush()
 
-        repository_sides = _complete_sides(mapping, {"direct": "a" * 40})
+        repository_sides = _complete_sides(mapping, {"direct": mock_commit_hash})
         _encoded, input_digest = _canonical_identity(
             product_id=product_id,
             revision=revision,
@@ -1543,8 +1544,8 @@ with SessionFactory.begin() as session:
         candidate = build_layout_candidate(
             repository_side="direct",
             format="android_xml",
-            layout_identity=f"mobile/{mapping_id}/src/main/res",
-            files=(f"mobile/{mapping_id}/src/main/res/values/strings.xml",),
+            layout_identity="res",
+            files=("res/values/strings.xml",),
             values={"default": {"hello": "Hello"}},
         ).to_mapping()
         job.result = _closed_result(
@@ -2507,7 +2508,9 @@ test("unchanged active revision reactivation uses real backend state and blocks 
       .getByRole("radio", { name: "Android XML — res" })
       .click();
     await page.getByRole("button", { name: "Confirm preview" }).click();
-    await expect(page.getByText("Confirmed", { exact: true })).toBeVisible();
+    await expect(
+      page.locator('[data-slot="badge"]').filter({ hasText: /^Confirmed$/ }),
+    ).toBeVisible();
     await expect(reactivate).toBeEnabled();
 
     const reactivateResponse = page.waitForResponse((response) => {
