@@ -1115,6 +1115,466 @@ describe("administrator product preview and publication page", () => {
     );
   });
 
+  it("bounds unavailable and failed active-revision polling and restores recovery focus", async () => {
+    getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+    getReactivationEligibilityMock.mockResolvedValueOnce(
+      ok(reactivationEligibility(false)),
+    );
+    createActiveRevalidationMock.mockImplementation(async () =>
+      ok(
+        activeRevalidationJob({
+          created_at: new Date(Date.now() - 89_900).toISOString(),
+          finished_at: null,
+          is_current: false,
+          result: null,
+          started_at: null,
+          state: "queued",
+        }),
+        202,
+      ),
+    );
+    getActiveRevalidationMock
+      .mockResolvedValueOnce(
+        failure({ detail: "provider_token=must-not-render" }),
+      )
+      .mockRejectedValueOnce(new Error("bounded polling failure"))
+      .mockResolvedValueOnce(
+        ok(
+          activeRevalidationJob({
+            error_code: "processing_failed",
+            is_current: false,
+            result: null,
+            state: "failed",
+          }),
+        ),
+      );
+
+    renderPage(inactiveActiveOnlyProduct.id);
+    const runAgain = await screen.findByRole("button", {
+      name: "Run validation again",
+    });
+
+    await userEvent.click(runAgain);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("status", {
+          name: "Active revision recovery status",
+        }),
+      ).toHaveTextContent("Validation status is unavailable. Try again."),
+    );
+    expect(runAgain).toHaveFocus();
+    expect(
+      screen.getByText("Status unavailable").closest("[role='alert']"),
+    ).not.toHaveTextContent("provider_token");
+
+    await userEvent.click(runAgain);
+    await waitFor(() =>
+      expect(getActiveRevalidationMock).toHaveBeenCalledTimes(2),
+    );
+    await waitFor(() => expect(runAgain).toHaveFocus());
+
+    await userEvent.click(runAgain);
+    expect(
+      await screen.findByText("Failed", { selector: "span" }),
+    ).toBeVisible();
+    await waitFor(() => expect(runAgain).toHaveFocus());
+    expect(getActiveRevalidationMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("pauses an expired active-revision job without issuing another provider read", async () => {
+    getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+    getReactivationEligibilityMock.mockResolvedValueOnce(
+      ok(reactivationEligibility(false)),
+    );
+    createActiveRevalidationMock
+      .mockResolvedValueOnce(
+        ok(
+          activeRevalidationJob({
+            created_at: "2000-01-01T00:00:00Z",
+            finished_at: null,
+            is_current: false,
+            result: null,
+            started_at: null,
+            state: "running",
+          }),
+          202,
+        ),
+      )
+      .mockRejectedValueOnce(new Error("bounded create failure"))
+      .mockResolvedValueOnce(
+        ok(
+          activeRevalidationJob({
+            created_at: "not-a-timestamp",
+            finished_at: null,
+            is_current: false,
+            result: null,
+            started_at: null,
+            state: "queued",
+          }),
+          202,
+        ),
+      );
+
+    renderPage(inactiveActiveOnlyProduct.id);
+    const runAgain = await screen.findByRole("button", {
+      name: "Run validation again",
+    });
+    await userEvent.click(runAgain);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("status", {
+          name: "Active revision recovery status",
+        }),
+      ).toHaveTextContent("Automatic updates paused. Try again."),
+    );
+    expect(runAgain).toHaveFocus();
+    expect(getActiveRevalidationMock).not.toHaveBeenCalled();
+
+    await userEvent.click(runAgain);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("status", {
+          name: "Active revision recovery status",
+        }),
+      ).toHaveTextContent("Validation did not complete. Try again."),
+    );
+    expect(runAgain).toHaveFocus();
+
+    await userEvent.click(runAgain);
+    expect(
+      (await screen.findAllByText("Queued", { exact: true }))[0],
+    ).toBeVisible();
+    expect(getActiveRevalidationMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores a superseded poll and bounds the current poll transport failure", async () => {
+    let resolveObsoletePoll!: (
+      value: ReturnType<typeof ok<AdminActiveRevisionRevalidationJobResponse>>,
+    ) => void;
+    let rejectObsoletePoll!: (reason: Error) => void;
+    getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+    getReactivationEligibilityMock.mockResolvedValueOnce(
+      ok(reactivationEligibility(false)),
+    );
+    createActiveRevalidationMock.mockImplementation(async () =>
+      ok(
+        activeRevalidationJob({
+          created_at: new Date(Date.now() - 89_900).toISOString(),
+          finished_at: null,
+          is_current: false,
+          result: null,
+          started_at: null,
+          state: "queued",
+        }),
+        202,
+      ),
+    );
+    getActiveRevalidationMock
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveObsoletePoll = resolve;
+        }) as never,
+      )
+      .mockReturnValueOnce(
+        new Promise((_resolve, reject) => {
+          rejectObsoletePoll = reject;
+        }) as never,
+      )
+      .mockRejectedValueOnce(new Error("bounded current poll failure"));
+
+    renderPage(inactiveActiveOnlyProduct.id);
+    const runAgain = await screen.findByRole("button", {
+      name: "Run validation again",
+    });
+    await userEvent.click(runAgain);
+    await waitFor(() =>
+      expect(getActiveRevalidationMock).toHaveBeenCalledOnce(),
+    );
+
+    await userEvent.click(runAgain);
+    await waitFor(() =>
+      expect(getActiveRevalidationMock).toHaveBeenCalledTimes(2),
+    );
+    await act(async () => {
+      resolveObsoletePoll(ok(activeRevalidationJob()));
+    });
+
+    await userEvent.click(runAgain);
+    await waitFor(() =>
+      expect(getActiveRevalidationMock).toHaveBeenCalledTimes(3),
+    );
+    expect(await screen.findByText("Status unavailable")).toBeVisible();
+    await act(async () => {
+      rejectObsoletePoll(new Error("superseded polling failure"));
+    });
+
+    expect(
+      screen.getByRole("status", {
+        name: "Active revision recovery status",
+      }),
+    ).toHaveTextContent("Validation status is unavailable. Try again.");
+    expect(
+      screen.queryByText("Succeeded", { selector: "span" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("deduplicates active-revision validation and ignores its superseded result", async () => {
+    let resolveValidation!: (
+      value: ReturnType<typeof ok<AdminActiveRevisionRevalidationJobResponse>>,
+    ) => void;
+    getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+    getReactivationEligibilityMock.mockResolvedValueOnce(
+      ok(reactivationEligibility(false)),
+    );
+    createActiveRevalidationMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveValidation = resolve;
+      }) as never,
+    );
+
+    const view = renderPage(inactiveActiveOnlyProduct.id);
+    const runAgain = await screen.findByRole("button", {
+      name: "Run validation again",
+    });
+    act(() => {
+      runAgain.click();
+      runAgain.click();
+    });
+    await waitFor(() =>
+      expect(createActiveRevalidationMock).toHaveBeenCalledOnce(),
+    );
+
+    view.unmount();
+    await act(async () => {
+      resolveValidation(ok(activeRevalidationJob(), 202));
+    });
+    expect(createActiveRevalidationMock).toHaveBeenCalledOnce();
+    expect(getActiveRevalidationMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores a rejected active validation after recovery authority unmounts", async () => {
+    let rejectValidation!: (reason: Error) => void;
+    getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+    getReactivationEligibilityMock.mockResolvedValueOnce(
+      ok(reactivationEligibility(false)),
+    );
+    createActiveRevalidationMock.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectValidation = reject;
+      }) as never,
+    );
+
+    const view = renderPage(inactiveActiveOnlyProduct.id);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Run validation again" }),
+    );
+    await waitFor(() =>
+      expect(createActiveRevalidationMock).toHaveBeenCalledOnce(),
+    );
+    view.unmount();
+    await act(async () => {
+      rejectValidation(new Error("superseded create failure"));
+    });
+
+    expect(getActiveRevalidationMock).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates confirmation and bounds empty and rejected responses", async () => {
+    let resolveConfirmation!: (
+      value: ReturnType<typeof failure<{ detail: string }>>,
+    ) => void;
+    getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+    getReactivationEligibilityMock.mockResolvedValueOnce(
+      ok(reactivationEligibility(false)),
+    );
+    createActiveRevalidationMock.mockResolvedValue(
+      ok(activeRevalidationJob(), 202),
+    );
+    confirmActiveRevalidationMock
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveConfirmation = resolve;
+        }) as never,
+      )
+      .mockRejectedValueOnce(new Error("bounded confirmation failure"));
+
+    renderPage(inactiveActiveOnlyProduct.id);
+    const runAgain = await screen.findByRole("button", {
+      name: "Run validation again",
+    });
+    await userEvent.click(runAgain);
+    await userEvent.click(
+      await screen.findByRole("radio", {
+        name: "Android XML — app/src/main/res",
+      }),
+    );
+    const confirm = screen.getByRole("button", { name: "Confirm preview" });
+    act(() => {
+      confirm.click();
+      confirm.click();
+    });
+    await waitFor(() =>
+      expect(confirmActiveRevalidationMock).toHaveBeenCalledOnce(),
+    );
+    resolveConfirmation(failure({ detail: "provider_token=must-not-render" }));
+    expect(
+      (await screen.findByText("Preview not confirmed")).closest(
+        "[role='alert']",
+      ),
+    ).not.toHaveTextContent("provider_token");
+    expect(runAgain).toHaveFocus();
+
+    await userEvent.click(runAgain);
+    await userEvent.click(
+      await screen.findByRole("radio", {
+        name: "Android XML — app/src/main/res",
+      }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Confirm preview" }),
+    );
+    expect(await screen.findByText("Preview not confirmed")).toBeVisible();
+    expect(runAgain).toHaveFocus();
+    expect(confirmActiveRevalidationMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails closed on invalid eligibility, retries transport errors, and accepts only exact authority", async () => {
+    const invalidEligibility = {
+      ...reactivationEligibility(true),
+      product_id: "00000000-0000-4000-8000-000000000999",
+    };
+    getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+    getReactivationEligibilityMock
+      .mockRejectedValueOnce(new Error("bounded eligibility failure"))
+      .mockResolvedValueOnce(ok(invalidEligibility))
+      .mockResolvedValueOnce(ok(reactivationEligibility(true)));
+
+    renderPage(inactiveActiveOnlyProduct.id);
+    expect(
+      await screen.findByText("Reactivation status unavailable"),
+    ).toBeVisible();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry confirmation check" }),
+    );
+    await waitFor(() =>
+      expect(getReactivationEligibilityMock).toHaveBeenCalledTimes(2),
+    );
+    expect(
+      await screen.findByText("Reactivation status unavailable"),
+    ).toBeVisible();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry confirmation check" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Reactivate product" }),
+      ).toBeEnabled(),
+    );
+    expect(getReactivationEligibilityMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("cancels queued eligibility loading when the page unmounts", async () => {
+    const view = renderPage();
+    view.unmount();
+
+    await act(async () => Promise.resolve());
+    expect(getReactivationEligibilityMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores superseded eligibility and omits already-current mappings from blockers", async () => {
+    let resolveEligibility!: (
+      value: ReturnType<typeof ok<AdminProductReactivationEligibilityResponse>>,
+    ) => void;
+    let rejectEligibility!: (reason: Error) => void;
+    const secondMapping = {
+      ...confirmedActiveMapping,
+      id: "00000000-0000-4000-8000-000000000302",
+    };
+    const mixedEligibility: AdminProductReactivationEligibilityResponse = {
+      ...reactivationEligibility(false),
+      mappings: [
+        {
+          blocker_codes: [],
+          is_current: true,
+          mapping_id: confirmedActiveMapping.id,
+        },
+        {
+          blocker_codes: ["revalidation_confirmation_required"],
+          is_current: false,
+          mapping_id: secondMapping.id,
+        },
+      ],
+    };
+    getProductMock.mockResolvedValue(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValue(
+      ok({ items: [confirmedActiveMapping, secondMapping], next_cursor: null }),
+    );
+    getReactivationEligibilityMock
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveEligibility = resolve;
+        }) as never,
+      )
+      .mockReturnValueOnce(
+        new Promise((_resolve, reject) => {
+          rejectEligibility = reject;
+        }) as never,
+      )
+      .mockResolvedValueOnce(ok(mixedEligibility));
+
+    const view = renderPage(inactiveActiveOnlyProduct.id);
+    await waitFor(() =>
+      expect(getReactivationEligibilityMock).toHaveBeenCalledOnce(),
+    );
+    view.rerender(
+      <MemoryRouter>
+        <ProductPreviewPage
+          accessToken="successor-admin-bearer"
+          productId={inactiveActiveOnlyProduct.id}
+        />
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(getReactivationEligibilityMock).toHaveBeenCalledTimes(3),
+    );
+    resolveEligibility(ok(reactivationEligibility(true)));
+    rejectEligibility(new Error("superseded eligibility failure"));
+
+    expect(
+      await screen.findByText("Mapping 2: Preview confirmation required"),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Mapping 1: Preview confirmation required"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Reactivate product" }),
+    ).toBeDisabled();
+  });
+
   it.each([
     [
       "missing",
