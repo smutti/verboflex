@@ -36,13 +36,15 @@ MUTATIONS = (
     Mutation(
         "confirmation-completeness-bypassed",
         "src/verboflex/services/preview_jobs.py",
-        "    if not _mapping_has_complete_confirmation(mapping):\n        return False",
-        "    if False and not _mapping_has_complete_confirmation(mapping):\n        return False",
+        "    if _mapping_has_complete_confirmation(mapping):",
+        "    if True:",
     ),
     Mutation(
         "confirmation-job-state-inverted",
         "src/verboflex/services/preview_jobs.py",
+        '        and row.revision_scope == "candidate"\n'
         '        and row.state == "succeeded"',
+        '        and row.revision_scope == "candidate"\n'
         '        and row.state != "succeeded"',
     ),
     Mutation(
@@ -54,8 +56,9 @@ MUTATIONS = (
     Mutation(
         "complete-confirmation-identity-bypassed",
         "src/verboflex/services/preview_jobs.py",
-        "        and _current_identity_matches(row, revision, mapping, connection)",
-        "        and True",
+        "        and _current_identity_matches(row, revision, mapping, connection)\n"
+        "                and _confirmed_layout_matches(row, mapping)",
+        "        and True\n                and _confirmed_layout_matches(row, mapping)",
     ),
     Mutation(
         "confirmed-digest-bypassed",
