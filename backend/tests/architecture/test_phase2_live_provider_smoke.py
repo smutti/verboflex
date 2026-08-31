@@ -24,6 +24,7 @@ BASE_COMPOSE = REPOSITORY_ROOT / "docker-compose.yml"
 STAGING_COMPOSE = REPOSITORY_ROOT / "docker-compose.staging.yml"
 PRODUCTION_COMPOSE = REPOSITORY_ROOT / "docker-compose.prod.yml"
 SMOKE_HARNESS = REPOSITORY_ROOT / "tools" / "phase2_smoke.sh"
+GAUNTLET_HARNESS = REPOSITORY_ROOT / "tools" / "phase2_gauntlet.sh"
 MOCK_PROVIDER = REPOSITORY_ROOT / "tools" / "phase2_mock_provider.py"
 COVERAGE_PATH = REPOSITORY_ROOT / ".planning" / "phases" / "02-admin-configuration" / "COVERAGE.md"
 EXACT_PROVIDER_SETTINGS = {
@@ -587,3 +588,53 @@ def test_worker_loss_smoke_proves_bounded_terminalization_and_retry() -> None:
     assert all(fragment in worker_loss for fragment in required)
     assert "deadline=" in worker_loss
     assert "sleep 10" not in worker_loss
+
+
+def test_worker_loss_smoke_exercises_staging_and_production_overlays() -> None:
+    """The authoritative process-loss gate runs each shipped deployment in isolation."""
+    source = SMOKE_HARNESS.read_text(encoding="utf-8")
+    gauntlet = GAUNTLET_HARNESS.read_text(encoding="utf-8")
+
+    assert 'SMOKE_DEPLOYMENT_OVERLAY=""' in source
+    assert "compose_deployment_overlay()" in source
+    assert "run_worker_loss_for_overlay_with_port_retry()" in source
+    assert "run_worker_loss_dual_overlay()" in source
+
+    compose_mock = source.split("compose_mock()", 1)[1].split("\n}", 1)[0]
+    assert 'if [ -n "$SMOKE_DEPLOYMENT_OVERLAY" ]' in compose_mock
+    base_position = compose_mock.index('"$REPO_ROOT/docker-compose.yml"')
+    deployment_position = compose_mock.index('"$deployment_overlay"')
+    mock_position = compose_mock.index('"$SMOKE_OVERRIDE_FILE"')
+    assert base_position < deployment_position < mock_position
+
+    worker_loss = source.split("run_worker_loss()", 1)[1].split(
+        "\nrun_worker_loss_for_overlay_with_port_retry()", 1
+    )[0]
+    assert 'SMOKE_DEPLOYMENT_OVERLAY=$1' in worker_loss
+    assert "prepare_base_stack" in worker_loss
+    assert "wait_for_scheduler" in source.split("prepare_base_stack()", 1)[1].split(
+        "\n}", 1
+    )[0]
+    assert "compose_base" not in worker_loss
+
+    retry = source.split("run_worker_loss_for_overlay_with_port_retry()", 1)[1].split(
+        "\n}", 1
+    )[0]
+    assert "for attempt in 1 2 3" in retry
+    assert 'if [ "$rc" -ne 75 ]' in retry
+    assert '"$SCRIPT_DIR/phase2_smoke.sh" --worker-loss-once "$deployment_overlay"' in (
+        retry
+    )
+
+    dual_overlay = source.split("run_worker_loss_dual_overlay()", 1)[1].split(
+        "\n}", 1
+    )[0]
+    assert dual_overlay.count("run_worker_loss_for_overlay_with_port_retry staging") == 1
+    assert dual_overlay.count("run_worker_loss_for_overlay_with_port_retry production") == 1
+    assert "compose_base" not in dual_overlay
+
+    assert gauntlet.count("run_layer worker-loss-smoke") == 1
+    assert (
+        'run_layer worker-loss-smoke "$GAUNTLET_DIR/phase2_smoke.sh" '
+        "--mock-provider --worker-loss"
+    ) in gauntlet
