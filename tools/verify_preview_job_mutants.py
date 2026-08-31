@@ -71,8 +71,12 @@ MUTATIONS = (
     Mutation(
         "retry-reuses-terminal-attempt-number",
         "src/verboflex/services/preview_jobs.py",
-        "                attempt=1 if latest is None else latest.attempt + 1,\n",
-        "                attempt=1 if latest is None else latest.attempt,\n",
+        "                attempt=1 if latest is None else latest.attempt + 1,\n"
+        '                state="queued",\n'
+        '                revision_scope="candidate",\n',
+        "                attempt=1 if latest is None else latest.attempt,\n"
+        '                state="queued",\n'
+        '                revision_scope="candidate",\n',
     ),
     Mutation(
         "result-envelope-allows-extra-fields",
@@ -105,7 +109,15 @@ MUTATIONS = (
     Mutation(
         "status-currentness-inverted",
         "src/verboflex/services/preview_jobs.py",
+        '        if row.revision_scope != "candidate":\n'
+        '            raise PreviewJobConflict("preview identity conflict")\n'
+        "        return _record(\n"
+        "            row,\n"
         "            is_current=_current_failure_code(session, row, for_update=False) is None,\n",
+        '        if row.revision_scope != "candidate":\n'
+        '            raise PreviewJobConflict("preview identity conflict")\n'
+        "        return _record(\n"
+        "            row,\n"
         "            is_current=_current_failure_code(\n"
         "                session, row, for_update=False\n"
         "            )\n"
@@ -143,8 +155,9 @@ MUTATIONS = (
     Mutation(
         "preview-model-not-explicitly-exported",
         "src/verboflex/models/__init__.py",
-        "from verboflex.models.preview_job import PreviewJob\n",
-        "",
+        "from verboflex.models.preview_job import "
+        "ActiveRevisionRevalidationConfirmation, PreviewJob\n",
+        "from verboflex.models.preview_job import ActiveRevisionRevalidationConfirmation\n",
     ),
 )
 
