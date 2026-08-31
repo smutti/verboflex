@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import secrets
 import subprocess
 import sys
 from pathlib import Path
@@ -20,6 +21,8 @@ from verboflex.services.bitbucket_oauth import BitbucketOAuthService
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 LIVE_SMOKE_HELPER = REPOSITORY_ROOT / "tools" / "phase2_live_provider.py"
 BASE_COMPOSE = REPOSITORY_ROOT / "docker-compose.yml"
+STAGING_COMPOSE = REPOSITORY_ROOT / "docker-compose.staging.yml"
+PRODUCTION_COMPOSE = REPOSITORY_ROOT / "docker-compose.prod.yml"
 SMOKE_HARNESS = REPOSITORY_ROOT / "tools" / "phase2_smoke.sh"
 MOCK_PROVIDER = REPOSITORY_ROOT / "tools" / "phase2_mock_provider.py"
 COVERAGE_PATH = REPOSITORY_ROOT / ".planning" / "phases" / "02-admin-configuration" / "COVERAGE.md"
@@ -27,6 +30,18 @@ EXACT_PROVIDER_SETTINGS = {
     "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID",
     "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET",
     "VERBOFLEX_BITBUCKET_TOKEN_ENCRYPTION_KEYRING",
+}
+EXACT_DEPLOYMENT_SETTINGS = {
+    "VERBOFLEX_APP_ENV",
+    "VERBOFLEX_DATABASE_URL",
+    "VERBOFLEX_REDIS_URL",
+    "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID",
+    "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET",
+    "VERBOFLEX_BITBUCKET_TOKEN_ENCRYPTION_KEYRING",
+    "VERBOFLEX_PREVIEW_SOFT_TIME_LIMIT_SECONDS",
+    "VERBOFLEX_PREVIEW_HARD_TIME_LIMIT_SECONDS",
+    "VERBOFLEX_PREVIEW_WATCHDOG_GRACE_SECONDS",
+    "VERBOFLEX_PREVIEW_WATCHDOG_INTERVAL_SECONDS",
 }
 PRE_REWRITE_DECISIONS = {
     "oauth-authorization-code-start": "INTEGRATE",
@@ -208,6 +223,122 @@ def test_base_compose_inherits_exact_provider_settings_without_secret_output(
         (captured.out, captured.err, rendered.stderr, quiet.stdout, quiet.stderr)
     )
     assert all(value not in diagnostic_surfaces for value in sentinels.values())
+    assert not problems, "; ".join(problems)
+
+
+def test_deployment_overlays_give_scheduler_exact_worker_authority(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Every deployed backend process receives one exact scheduler-safe authority."""
+    sentinels = {
+        "VERBOFLEX_POSTGRES_PASSWORD": secrets.token_urlsafe(24),
+        "VERBOFLEX_JWT_SECRET_KEY": secrets.token_urlsafe(32),
+        "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID": secrets.token_urlsafe(18),
+        "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET": secrets.token_urlsafe(32),
+        "VERBOFLEX_BITBUCKET_TOKEN_ENCRYPTION_KEYRING": Fernet.generate_key().decode(),
+        "VERBOFLEX_PREVIEW_SOFT_TIME_LIMIT_SECONDS": "41",
+        "VERBOFLEX_PREVIEW_HARD_TIME_LIMIT_SECONDS": "53",
+        "VERBOFLEX_PREVIEW_WATCHDOG_GRACE_SECONDS": "7",
+        "VERBOFLEX_PREVIEW_WATCHDOG_INTERVAL_SECONDS": "3",
+    }
+    environment_file = tmp_path / "owner-only-deployment.env"
+    environment_file.write_text(
+        "".join(f"{key}={value}\n" for key, value in sentinels.items()),
+        encoding="utf-8",
+    )
+    environment_file.chmod(0o600)
+
+    problems: list[str] = []
+    diagnostic_surfaces: list[str] = []
+    if environment_file.stat().st_mode & 0o777 != 0o600:
+        problems.append("deployment env permissions were not owner-only")
+
+    for deployment, overlay, expected_environment, expected_image in (
+        ("staging", STAGING_COMPOSE, "staging", "verboflex-backend:staging"),
+        (
+            "production",
+            PRODUCTION_COMPOSE,
+            "production",
+            "verboflex-backend:production",
+        ),
+    ):
+        command = [
+            "docker",
+            "compose",
+            "--env-file",
+            os.fspath(environment_file),
+            "-f",
+            os.fspath(BASE_COMPOSE),
+            "-f",
+            os.fspath(overlay),
+        ]
+        rendered = subprocess.run(
+            [*command, "config", "--format", "json"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        quiet = subprocess.run(
+            [*command, "config", "--quiet"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        diagnostic_surfaces.extend((rendered.stderr, quiet.stdout, quiet.stderr))
+        if rendered.returncode != 0:
+            problems.append(f"{deployment} rendered config was invalid")
+            continue
+        if quiet.returncode != 0:
+            problems.append(f"{deployment} quiet validation failed")
+
+        config = json.loads(rendered.stdout)
+        services = config.get("services")
+        if not isinstance(services, dict):
+            problems.append(f"{deployment} services were absent")
+            continue
+        authorities: dict[str, dict[str, object]] = {}
+        for service_name in ("backend", "worker", "scheduler"):
+            service = services.get(service_name)
+            if not isinstance(service, dict):
+                problems.append(f"{deployment} {service_name} service was absent")
+                continue
+            environment = service.get("environment")
+            if not isinstance(environment, dict):
+                problems.append(f"{deployment} {service_name} environment was absent")
+                continue
+            missing = EXACT_DEPLOYMENT_SETTINGS.difference(environment)
+            for key in sorted(missing):
+                problems.append(f"{deployment} {service_name} missing {key}")
+            authorities[service_name] = {
+                "environment": {
+                    key: environment.get(key) for key in EXACT_DEPLOYMENT_SETTINGS
+                },
+                "image": service.get("image"),
+                "restart": service.get("restart"),
+            }
+            if environment.get("VERBOFLEX_APP_ENV") != expected_environment:
+                problems.append(f"{deployment} {service_name} app environment mismatched")
+            if service.get("image") != expected_image:
+                problems.append(f"{deployment} {service_name} image mismatched")
+            if service.get("restart") != "unless-stopped":
+                problems.append(f"{deployment} {service_name} restart policy mismatched")
+
+        if len(authorities) == 3 and len(set(map(repr, authorities.values()))) != 1:
+            problems.append(f"{deployment} backend process authority mismatched")
+        scheduler = services.get("scheduler")
+        worker = services.get("worker")
+        if isinstance(scheduler, dict) and "beat" not in scheduler.get("command", []):
+            problems.append(f"{deployment} scheduler command was not Celery Beat")
+        if isinstance(worker, dict) and "beat" in worker.get("command", []):
+            problems.append(f"{deployment} worker command included Celery Beat")
+
+    captured = capsys.readouterr()
+    diagnostic_surfaces.extend((captured.out, captured.err))
+    combined_diagnostics = "\n".join(diagnostic_surfaces)
+    for key, value in sentinels.items():
+        if value in combined_diagnostics:
+            problems.append(f"diagnostics leaked {key}")
     assert not problems, "; ".join(problems)
 
 
