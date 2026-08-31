@@ -127,6 +127,63 @@ wait_for_url() {
   die "$label readiness timed out"
 }
 
+assert_single_frontend_header() {
+  local target=$1 headers=$2 header_name=$3 expected_value=$4
+  local header_count actual_value
+  header_count=$(
+    awk -v name="$header_name" '
+      {
+        line = $0
+        sub(/\r$/, "", line)
+        if (tolower(substr(line, 1, length(name) + 1)) == tolower(name ":")) {
+          count += 1
+        }
+      }
+      END { print count + 0 }
+    ' "$headers"
+  )
+  actual_value=$(
+    awk -v name="$header_name" '
+      {
+        line = $0
+        sub(/\r$/, "", line)
+        if (tolower(substr(line, 1, length(name) + 1)) == tolower(name ":")) {
+          sub(/^[^:]*:[[:space:]]*/, "", line)
+          print line
+        }
+      }
+    ' "$headers"
+  )
+  if [ "$header_count" != "1" ] || [ "$actual_value" != "$expected_value" ]; then
+    die "frontend security header mismatch: target=$target header=$header_name expected=$expected_value"
+  fi
+}
+
+verify_frontend_security_headers() {
+  local target path headers status header_name expected_value
+  local expected_csp="default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https: http://localhost:*; frame-src 'none'"
+  while IFS='|' read -r target path; do
+    headers="$SMOKE_RUNTIME_DIR/frontend-security-$target.headers"
+    status=$(curl --silent --show-error --max-time 5 --dump-header "$headers" \
+      --output /dev/null --write-out '%{http_code}' "$SMOKE_FRONTEND_URL$path") \
+      || die "frontend security probe failed: target=$target"
+    [ "$status" = "200" ] \
+      || die "frontend security response failed: target=$target expected=200"
+    while IFS='|' read -r header_name expected_value; do
+      assert_single_frontend_header "$target" "$headers" "$header_name" "$expected_value"
+    done <<EOF
+Content-Security-Policy|$expected_csp
+X-Frame-Options|DENY
+X-Content-Type-Options|nosniff
+Referrer-Policy|strict-origin-when-cross-origin
+Permissions-Policy|camera=(), microphone=(), geolocation=()
+EOF
+  done <<'EOF'
+root|/
+deep-spa-fallback|/admin/products/security-header-probe
+EOF
+}
+
 wait_for_worker() {
   local deadline
   deadline=$((SECONDS + 180))
@@ -377,6 +434,7 @@ prepare_base_stack() {
   fi
   wait_for_url "$SMOKE_BACKEND_URL/api/v1/health" 200 backend
   wait_for_url "$SMOKE_FRONTEND_URL" 200 frontend
+  verify_frontend_security_headers
   wait_for_worker
   wait_for_scheduler
   for service in postgres redis backend worker scheduler frontend; do

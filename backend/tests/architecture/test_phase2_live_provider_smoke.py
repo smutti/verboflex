@@ -356,6 +356,48 @@ def test_base_client_credentials_smoke_uses_only_base_compose_and_owner_env() ->
     assert "SMOKE_OVERRIDE_FILE" not in base_function
 
 
+def test_frontend_built_image_smoke_enforces_anti_framing_headers() -> None:
+    """The common smoke probes exact defensive headers on root and SPA fallback."""
+    source = SMOKE_HARNESS.read_text(encoding="utf-8")
+    function = source.split("verify_frontend_security_headers()", 1)[1].split(
+        "\nwait_for_worker()", 1
+    )[0]
+    prepare = source.split("prepare_base_stack()", 1)[1].split("\nverify_provider_ready()", 1)[0]
+    expected_csp = (
+        "default-src 'self'; base-uri 'none'; object-src 'none'; "
+        "frame-ancestors 'none'; form-action 'self'; script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+        "font-src 'self' data:; connect-src 'self' https: "
+        "http://localhost:*; frame-src 'none'"
+    )
+    expected_headers = {
+        "Content-Security-Policy": expected_csp,
+        "X-Frame-Options": "DENY",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    }
+
+    assert "assert_single_frontend_header()" in source
+    assert "verify_frontend_security_headers()" in source
+    assert "root|/" in function
+    assert "deep-spa-fallback|/admin/products/security-header-probe" in function
+    assert "--dump-header" in function
+    assert "--output /dev/null" in function
+    assert "expected=200" in function
+    assert 'sub(/\\r$/, "", line)' in source
+    assert "tolower(" in source
+    assert 'header_count" != "1"' in source
+    assert 'actual_value" != "$expected_value"' in source
+    for header_name, expected_value in expected_headers.items():
+        assert header_name in function
+        assert expected_value in function
+    assert prepare.count("verify_frontend_security_headers") == 1
+    assert prepare.index('wait_for_url "$SMOKE_FRONTEND_URL" 200 frontend') < prepare.index(
+        "verify_frontend_security_headers"
+    )
+
+
 def test_probe_is_an_authenticated_local_api_driver_without_provider_authority() -> None:
     """Only production code may contact the provider token endpoint or hold its bearer."""
     source = LIVE_SMOKE_HELPER.read_text(encoding="utf-8")
