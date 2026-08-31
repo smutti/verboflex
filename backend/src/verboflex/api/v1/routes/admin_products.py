@@ -1,6 +1,6 @@
 """Administrator-only product identity and candidate revision routes."""
 
-from typing import Annotated, Any, NoReturn
+from typing import Annotated, Any, NoReturn, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -16,6 +16,9 @@ from verboflex.schemas.admin_products import (
     AdminProductListResponse,
     AdminProductPublishRequest,
     AdminProductReactivateRequest,
+    AdminProductReactivationBlocker,
+    AdminProductReactivationEligibilityResponse,
+    AdminProductReactivationMappingResponse,
     AdminProductResponse,
     AdminProductRevisionSummary,
     AdminProductStatus,
@@ -23,6 +26,11 @@ from verboflex.schemas.admin_products import (
 )
 from verboflex.schemas.system import ErrorResponse
 from verboflex.schemas.users import RoleName
+from verboflex.services.preview_jobs import (
+    PreviewJobConflict,
+    PreviewJobNotFound,
+    get_active_revision_revalidation_eligibility,
+)
 from verboflex.services.products import (
     InvalidProductCursor,
     ProductNameConflict,
@@ -122,6 +130,13 @@ LIFECYCLE_RESPONSES: dict[int | str, dict[str, Any]] = {
     status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
     status.HTTP_409_CONFLICT: {"model": AdminProductLifecycleConflictResponse},
     status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
+}
+REACTIVATION_ELIGIBILITY_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **AUTH_RESPONSES,
+    status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    status.HTTP_409_CONFLICT: {"model": ErrorResponse},
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
+    status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
 }
 
 
@@ -328,3 +343,57 @@ async def reactivate_admin_product_route(
         return _response(get_product(session, product_id=product_id))
     except (PublicationBlocked, PublicationConflict, PublicationNotFound) as error:
         return _lifecycle_conflict_response(error)
+
+
+@router.get(
+    "/{product_id}/revisions/{revision_id}/reactivation-eligibility",
+    operation_id="get_admin_product_reactivation_eligibility",
+    response_model=AdminProductReactivationEligibilityResponse,
+    responses=REACTIVATION_ELIGIBILITY_RESPONSES,
+)
+async def get_admin_product_reactivation_eligibility(
+    product_id: UUID,
+    revision_id: UUID,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+    expected_active_revision_version: Annotated[int, Query(ge=1)],
+) -> AdminProductReactivationEligibilityResponse:
+    """Project exact published-revision currentness without mutating lifecycle state."""
+    try:
+        eligibility = get_active_revision_revalidation_eligibility(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            expected_active_revision_version=expected_active_revision_version,
+        )
+    except PreviewJobNotFound as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Active revision revalidation unavailable",
+        ) from error
+    except PreviewJobConflict as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Active revision revalidation conflict",
+        ) from error
+    return AdminProductReactivationEligibilityResponse(
+        product_id=eligibility.product_id,
+        active_revision_id=eligibility.active_revision_id,
+        active_revision_version=eligibility.active_revision_version,
+        eligible=eligibility.eligible,
+        blocker_codes=cast(
+            list[AdminProductReactivationBlocker],
+            list(eligibility.blocker_codes),
+        ),
+        mappings=[
+            AdminProductReactivationMappingResponse(
+                mapping_id=mapping.mapping_id,
+                is_current=mapping.is_current,
+                blocker_codes=cast(
+                    list[AdminProductReactivationBlocker],
+                    list(mapping.blocker_codes),
+                ),
+            )
+            for mapping in eligibility.mappings
+        ],
+    )

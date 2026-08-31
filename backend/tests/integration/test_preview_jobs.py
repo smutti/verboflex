@@ -3117,13 +3117,10 @@ def test_active_revision_revalidation_api_is_admin_only_exact_and_read_only(
     )
     for method, path, payload in protected_requests:
         assert (
-            asyncio.run(_request(method, path, access_token=None, json=payload)).status_code
-            == 401
+            asyncio.run(_request(method, path, access_token=None, json=payload)).status_code == 401
         )
         assert (
-            asyncio.run(
-                _request(method, path, access_token=viewer_token, json=payload)
-            ).status_code
+            asyncio.run(_request(method, path, access_token=viewer_token, json=payload)).status_code
             == 403
         )
 
@@ -3156,15 +3153,11 @@ def test_active_revision_revalidation_api_is_admin_only_exact_and_read_only(
         ),
     )
     for method, path, payload in missing_requests:
-        response = asyncio.run(
-            _request(method, path, access_token=admin_token, json=payload)
-        )
+        response = asyncio.run(_request(method, path, access_token=admin_token, json=payload))
         assert response.status_code == 404
         assert response.json() == {"detail": "Active revision revalidation unavailable"}
 
-    eligibility = asyncio.run(
-        _request("GET", eligibility_path, access_token=admin_token)
-    )
+    eligibility = asyncio.run(_request("GET", eligibility_path, access_token=admin_token))
     assert eligibility.status_code == 200
     assert eligibility.json() == {
         "product_id": str(product_id),
@@ -3306,9 +3299,7 @@ def test_active_revision_revalidation_api_is_admin_only_exact_and_read_only(
         "confirmed_at": confirmed_body["confirmed_at"],
     }
     assert (
-        asyncio.run(
-            _request("GET", eligibility_path, access_token=admin_token)
-        ).json()["eligible"]
+        asyncio.run(_request("GET", eligibility_path, access_token=admin_token)).json()["eligible"]
         is True
     )
 

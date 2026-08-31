@@ -134,3 +134,87 @@ class AdminPreviewJobResponse(BaseModel):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+
+
+class AdminActiveRevisionRevalidationJobCreateRequest(BaseModel):
+    """Exact published-revision compare values with commit-only provider identity."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_active_revision_version: Annotated[int, Field(ge=1)]
+    commits: Annotated[list[AdminPreviewCommitRequest], Field(min_length=1, max_length=2)]
+
+
+class AdminActiveRevisionRevalidationConfirmationRequest(BaseModel):
+    """Complete caller compare identity for one active-revision confirmation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    active_revision_id: UUID
+    active_revision_version: Annotated[int, Field(ge=1)]
+    mapping_id: UUID
+    connection_generation: Annotated[int, Field(ge=0)]
+    commits: Annotated[list[AdminPreviewCommitRequest], Field(min_length=1, max_length=2)]
+    preview_digest: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    layout_candidate_id: UUID
+    layout_candidate_version: Literal[1]
+
+
+class AdminActiveRevisionRevalidationJobResponse(BaseModel):
+    """Bounded active-revision job projection with no candidate terminology."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    input_digest: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    attempt: Annotated[int, Field(ge=1)]
+    state: Literal["queued", "running", "succeeded", "failed", "timed_out"]
+    product_id: UUID
+    active_revision_id: UUID
+    active_revision_version: Annotated[int, Field(ge=1)]
+    mapping_id: UUID
+    connection_generation: Annotated[int, Field(ge=0)]
+    detector_version: Annotated[str, Field(min_length=1, max_length=64)]
+    repository_sides: Annotated[
+        list[AdminPreviewRepositorySideResponse],
+        Field(min_length=1, max_length=2),
+    ]
+    result: AdminPreviewJobResultResponse | None
+    error_code: (
+        Literal[
+            "enqueue_failed",
+            "processing_failed",
+            "stale_attempt",
+            "stale_candidate",
+            "stale_connection",
+            "stale_identity",
+            "time_limit_exceeded",
+        ]
+        | None
+    )
+    is_current: bool
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+class AdminActiveRevisionRevalidationConfirmationResponse(BaseModel):
+    """Immutable bounded evidence for one exact published-revision job."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: UUID
+    product_id: UUID
+    active_revision_id: UUID
+    active_revision_version: Annotated[int, Field(ge=1)]
+    mapping_id: UUID
+    connection_generation: Annotated[int, Field(ge=0)]
+    commits: Annotated[
+        list[AdminPreviewRepositorySideResponse],
+        Field(min_length=1, max_length=2),
+    ]
+    preview_digest: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    layout_candidate_id: UUID
+    layout_candidate_version: Literal[1]
+    confirmed_by: UUID
+    confirmed_at: datetime

@@ -107,3 +107,45 @@ class AdminProductLifecycleConflictResponse(BaseModel):
 
 
 AdminProductStatus = Literal["active", "inactive"]
+
+
+AdminProductReactivationBlocker = Literal[
+    "product_active",
+    "candidate_revision_present",
+    "mappings_required",
+    "mapping_configuration_invalid",
+    "layout_required",
+    "revalidation_confirmation_required",
+]
+
+
+class AdminProductReactivationMappingResponse(BaseModel):
+    """Bounded currentness projection for one published mapping."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mapping_id: UUID
+    is_current: bool
+    blocker_codes: Annotated[
+        list[AdminProductReactivationBlocker],
+        Field(max_length=6),
+    ]
+
+
+class AdminProductReactivationEligibilityResponse(BaseModel):
+    """Exact active-revision recovery state without configuration contents."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    active_revision_id: UUID
+    active_revision_version: Annotated[int, Field(ge=1)]
+    eligible: bool
+    blocker_codes: Annotated[
+        list[AdminProductReactivationBlocker],
+        Field(max_length=6),
+    ]
+    mappings: Annotated[
+        list[AdminProductReactivationMappingResponse],
+        Field(max_length=500),
+    ]
