@@ -16,7 +16,10 @@ from sqlalchemy.orm import Session, selectinload, sessionmaker
 from verboflex.core.config import get_settings
 from verboflex.localization.preview.core import validate_layout_candidate_mappings
 from verboflex.models.bitbucket_connection import BitbucketConnection
-from verboflex.models.preview_job import PreviewJob
+from verboflex.models.preview_job import (
+    ActiveRevisionRevalidationConfirmation,
+    PreviewJob,
+)
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import ProductRepositoryMapping
 
@@ -27,6 +30,7 @@ PREVIEW_WATCHDOG_BATCH_SIZE = 100
 MAX_RESULT_BYTES = 1_048_576
 
 PreviewJobState = Literal["queued", "running", "succeeded", "failed", "timed_out"]
+PreviewRevisionScope = Literal["candidate", "active_revalidation"]
 PreviewJobErrorCode = Literal[
     "enqueue_failed",
     "processing_failed",
@@ -80,6 +84,44 @@ class PreviewConfirmationRecord:
     confirmed_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class ActiveRevisionRevalidationConfirmationRecord:
+    """One immutable explicit confirmation of an exact published revision job."""
+
+    job_id: UUID
+    product_id: UUID
+    revision_id: UUID
+    revision_version: int
+    mapping_id: UUID
+    connection_generation: int
+    preview_digest: str
+    layout_candidate_id: UUID
+    layout_candidate_version: Literal[1]
+    confirmed_by: UUID
+    confirmed_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveRevisionMappingEligibility:
+    """Bounded currentness result for one published mapping."""
+
+    mapping_id: UUID
+    is_current: bool
+    blocker_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveRevisionRevalidationEligibility:
+    """Read-only all-mapping reactivation eligibility projection."""
+
+    product_id: UUID
+    active_revision_id: UUID
+    active_revision_version: int
+    eligible: bool
+    blocker_codes: tuple[str, ...]
+    mappings: tuple[ActiveRevisionMappingEligibility, ...]
+
+
 class PreviewEnqueuer(Protocol):
     """Persisted-job transport seam whose only input is the durable UUID."""
 
@@ -103,6 +145,7 @@ class PreviewJobIdentity:
     job_id: UUID
     input_digest: str
     attempt: int
+    revision_scope: PreviewRevisionScope
     product_id: UUID
     candidate_revision_id: UUID
     candidate_revision_version: int
@@ -122,6 +165,7 @@ class PreviewJobRecord:
     input_digest: str
     attempt: int
     state: PreviewJobState
+    revision_scope: PreviewRevisionScope
     product_id: UUID
     candidate_revision_id: UUID
     candidate_revision_version: int
@@ -181,6 +225,7 @@ def _record(row: PreviewJob, *, is_current: bool) -> PreviewJobRecord:
         input_digest=row.input_digest,
         attempt=row.attempt,
         state=cast(PreviewJobState, row.state),
+        revision_scope=cast(PreviewRevisionScope, row.revision_scope),
         product_id=row.product_id,
         candidate_revision_id=row.candidate_revision_id,
         candidate_revision_version=row.candidate_revision_version,
@@ -200,10 +245,13 @@ def _record(row: PreviewJob, *, is_current: bool) -> PreviewJobRecord:
 def _identity(row: PreviewJob) -> PreviewJobIdentity:
     if row.topology not in {"direct", "separate"}:
         raise PreviewJobConflict("persisted preview topology rejected")
+    if row.revision_scope not in {"candidate", "active_revalidation"}:
+        raise PreviewJobConflict("persisted preview scope rejected")
     return PreviewJobIdentity(
         job_id=row.id,
         input_digest=row.input_digest,
         attempt=row.attempt,
+        revision_scope=cast(PreviewRevisionScope, row.revision_scope),
         product_id=row.product_id,
         candidate_revision_id=row.candidate_revision_id,
         candidate_revision_version=row.candidate_revision_version,
@@ -275,6 +323,8 @@ def _complete_preview_digest(
         ],
         "topology": identity.topology,
     }
+    if identity.revision_scope == "active_revalidation":
+        payload["revision_scope"] = identity.revision_scope
     encoded = json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(encoded.encode("ascii")).hexdigest()
 
@@ -388,6 +438,36 @@ def _canonical_identity(
     return encoded, hashlib.sha256(encoded.encode("ascii")).hexdigest()
 
 
+def _active_revalidation_identity(
+    *,
+    product_id: UUID,
+    revision: ProductRevision,
+    mapping: ProductRepositoryMapping,
+    connection_generation: int,
+    repository_sides: list[dict[str, str]],
+) -> tuple[str, str]:
+    """Domain-separate published-revision work without changing candidate bytes."""
+    payload = {
+        "active_revision_id": str(revision.id),
+        "active_revision_version": revision.version,
+        "connection_generation": connection_generation,
+        "detector_version": PREVIEW_DETECTOR_VERSION,
+        "layout_identity": PREVIEW_LAYOUT_IDENTITY,
+        "mapping_id": str(mapping.id),
+        "product_id": str(product_id),
+        "repository_sides": repository_sides,
+        "revision_scope": "active_revalidation",
+        "topology": mapping.topology,
+    }
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return encoded, hashlib.sha256(encoded.encode("ascii")).hexdigest()
+
+
 def _locked_mapping(
     session: Session,
     *,
@@ -418,6 +498,52 @@ def _locked_mapping(
     ).scalar_one_or_none()
     if mapping is None or mapping.topology not in {"direct", "separate"}:
         raise PreviewJobNotFound("preview mapping unavailable")
+    return revision, mapping
+
+
+def _locked_active_revision_mapping(
+    session: Session,
+    *,
+    product_id: UUID,
+    active_revision_id: UUID,
+    mapping_id: UUID,
+    expected_active_revision_version: int,
+) -> tuple[ProductRevision, ProductRepositoryMapping]:
+    product = session.execute(
+        select(Product).where(Product.id == product_id).with_for_update()
+    ).scalar_one_or_none()
+    if (
+        product is None
+        or product.is_active
+        or product.active_revision_id != active_revision_id
+        or product.candidate_revision_id is not None
+    ):
+        raise PreviewJobNotFound("active revision revalidation unavailable")
+    revision = session.execute(
+        select(ProductRevision)
+        .where(
+            ProductRevision.id == active_revision_id,
+            ProductRevision.product_id == product_id,
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
+    if (
+        revision is None
+        or not revision.is_published
+        or revision.version != expected_active_revision_version
+    ):
+        raise PreviewJobConflict("active revision revalidation conflict")
+    mapping = session.execute(
+        select(ProductRepositoryMapping)
+        .options(selectinload(ProductRepositoryMapping.sides))
+        .where(
+            ProductRepositoryMapping.id == mapping_id,
+            ProductRepositoryMapping.revision_id == revision.id,
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
+    if mapping is None or mapping.topology not in {"direct", "separate"}:
+        raise PreviewJobNotFound("active revision mapping unavailable")
     return revision, mapping
 
 
@@ -539,6 +665,94 @@ def create_or_reuse_preview_job(
                 input_digest=input_digest,
                 attempt=1 if latest is None else latest.attempt + 1,
                 state="queued",
+                revision_scope="candidate",
+                product_id=product_id,
+                candidate_revision_id=revision.id,
+                candidate_revision_version=revision.version,
+                mapping_id=mapping.id,
+                topology=mapping.topology,
+                connection_generation=connection_generation,
+                detector_version=PREVIEW_DETECTOR_VERSION,
+                layout_identity=PREVIEW_LAYOUT_IDENTITY,
+                repository_sides=repository_sides,
+            )
+            session.add(row)
+            session.flush()
+            created = True
+        record = _record(
+            row,
+            is_current=_current_failure_code(session, row, for_update=True) is None,
+        )
+
+    if not created:
+        return record
+    try:
+        enqueuer(record.id)
+    except Exception:
+        with session.begin():
+            row = session.execute(
+                select(PreviewJob).where(PreviewJob.id == record.id).with_for_update()
+            ).scalar_one()
+            if row.state == "queued":
+                row.state = "failed"
+                row.error_code = "enqueue_failed"
+                row.finished_at = datetime.now(UTC)
+                row.updated_at = row.finished_at
+            record = _record(
+                row,
+                is_current=_current_failure_code(session, row, for_update=True) is None,
+            )
+    return record
+
+
+def create_or_reuse_active_revision_revalidation_job(
+    session: Session,
+    *,
+    product_id: UUID,
+    active_revision_id: UUID,
+    mapping_id: UUID,
+    expected_active_revision_version: int,
+    commits: object,
+    enqueuer: PreviewEnqueuer = enqueue_preview_job,
+) -> PreviewJobRecord:
+    """Persist or reuse read-only work for one exact inactive published mapping."""
+    created = False
+    with session.begin():
+        revision, mapping = _locked_active_revision_mapping(
+            session,
+            product_id=product_id,
+            active_revision_id=active_revision_id,
+            mapping_id=mapping_id,
+            expected_active_revision_version=expected_active_revision_version,
+        )
+        connection_generation = _connected_generation(session)
+        repository_sides = _complete_sides(mapping, commits)
+        _encoded_identity, input_digest = _active_revalidation_identity(
+            product_id=product_id,
+            revision=revision,
+            mapping=mapping,
+            connection_generation=connection_generation,
+            repository_sides=repository_sides,
+        )
+        latest = session.execute(
+            select(PreviewJob)
+            .where(
+                PreviewJob.input_digest == input_digest,
+                PreviewJob.revision_scope == "active_revalidation",
+            )
+            .order_by(PreviewJob.attempt.desc())
+            .limit(1)
+            .with_for_update()
+        ).scalar_one_or_none()
+        if latest is not None and latest.state not in {"failed", "timed_out"}:
+            row = latest
+        else:
+            row = PreviewJob(
+                id=uuid4(),
+                input_digest=input_digest,
+                attempt=1 if latest is None else latest.attempt + 1,
+                state="queued",
+                revision_scope="active_revalidation",
                 product_id=product_id,
                 candidate_revision_id=revision.id,
                 candidate_revision_version=revision.version,
@@ -584,6 +798,24 @@ def get_preview_job(session: Session, *, job_id: UUID) -> PreviewJobRecord:
         row = session.get(PreviewJob, job_id)
         if row is None:
             raise PreviewJobNotFound("preview job unavailable")
+        if row.revision_scope != "candidate":
+            raise PreviewJobConflict("preview identity conflict")
+        return _record(
+            row,
+            is_current=_current_failure_code(session, row, for_update=False) is None,
+        )
+
+
+def get_active_revision_revalidation_job(
+    session: Session,
+    *,
+    job_id: UUID,
+) -> PreviewJobRecord:
+    """Read one bounded active-revalidation job from PostgreSQL."""
+    with session.begin():
+        row = session.get(PreviewJob, job_id)
+        if row is None or row.revision_scope != "active_revalidation":
+            raise PreviewJobNotFound("active revalidation job unavailable")
         return _record(
             row,
             is_current=_current_failure_code(session, row, for_update=False) is None,
@@ -606,6 +838,8 @@ def confirm_preview_job(
         ).scalar_one_or_none()
         if row is None:
             raise PreviewJobNotFound("preview job unavailable")
+        if row.revision_scope != "candidate":
+            raise PreviewJobConflict("preview identity conflict")
         if _current_failure_code(session, row, for_update=True) is not None:
             raise PreviewJobConflict("preview identity conflict")
         if row.state != "succeeded" or row.result is None:
@@ -664,24 +898,313 @@ def confirm_preview_job(
         )
 
 
+def confirm_active_revision_revalidation(
+    session: Session,
+    *,
+    job_id: UUID,
+    preview_digest: str,
+    layout_candidate_id: UUID,
+    layout_candidate_version: Literal[1],
+    actor_id: UUID,
+) -> ActiveRevisionRevalidationConfirmationRecord:
+    """Persist immutable explicit evidence without mutating the published graph."""
+    with session.begin():
+        row = session.execute(
+            select(PreviewJob).where(PreviewJob.id == job_id).with_for_update()
+        ).scalar_one_or_none()
+        if row is None:
+            raise PreviewJobNotFound("active revalidation job unavailable")
+        if row.revision_scope != "active_revalidation":
+            raise PreviewJobConflict("active revalidation identity conflict")
+        if _current_failure_code(session, row, for_update=True) is not None:
+            raise PreviewJobConflict("active revalidation identity conflict")
+        if row.state != "succeeded" or row.result is None:
+            raise PreviewJobConflict("active revalidation confirmation unavailable")
+        result = _closed_result(_identity(row), row.result)
+        if result["digest"] != preview_digest:
+            raise PreviewJobConflict("active revalidation identity conflict")
+        candidates = cast(list[dict[str, object]], result["layout_candidates"])
+        matches = [
+            candidate
+            for candidate in candidates
+            if candidate["id"] == str(layout_candidate_id)
+            and candidate["version"] == layout_candidate_version
+        ]
+        if len(matches) != 1:
+            raise PreviewJobConflict("active revalidation confirmation unavailable")
+        revision = _current_revision(session, row, for_update=True)
+        mapping = _current_mapping(session, row, for_update=True)
+        assert revision is not None
+        assert mapping is not None
+        expected_side = "direct" if mapping.topology == "direct" else "translations"
+        if (
+            matches[0]["repository_side"] != expected_side
+            or mapping.selected_layout_candidate_id != layout_candidate_id
+            or mapping.selected_layout_version != layout_candidate_version
+        ):
+            raise PreviewJobConflict("active revalidation confirmation unavailable")
+        existing = session.get(ActiveRevisionRevalidationConfirmation, row.id)
+        if existing is not None:
+            if not _sidecar_matches_confirmation_request(
+                existing,
+                row=row,
+                preview_digest=preview_digest,
+                layout_candidate_id=layout_candidate_id,
+                layout_candidate_version=layout_candidate_version,
+            ):
+                raise PreviewJobConflict("active revalidation confirmation conflict")
+            return _active_confirmation_record(existing)
+        confirmed_at = datetime.now(UTC)
+        sidecar = ActiveRevisionRevalidationConfirmation(
+            job_id=row.id,
+            revision_scope="active_revalidation",
+            product_id=row.product_id,
+            revision_id=row.candidate_revision_id,
+            revision_version=row.candidate_revision_version,
+            mapping_id=row.mapping_id,
+            connection_generation=row.connection_generation,
+            preview_digest=preview_digest,
+            layout_candidate_id=layout_candidate_id,
+            layout_candidate_version=layout_candidate_version,
+            confirmed_by=actor_id,
+            confirmed_at=confirmed_at,
+        )
+        session.add(sidecar)
+        session.flush()
+        return _active_confirmation_record(sidecar)
+
+
+def _active_confirmation_record(
+    row: ActiveRevisionRevalidationConfirmation,
+) -> ActiveRevisionRevalidationConfirmationRecord:
+    return ActiveRevisionRevalidationConfirmationRecord(
+        job_id=row.job_id,
+        product_id=row.product_id,
+        revision_id=row.revision_id,
+        revision_version=row.revision_version,
+        mapping_id=row.mapping_id,
+        connection_generation=row.connection_generation,
+        preview_digest=row.preview_digest,
+        layout_candidate_id=row.layout_candidate_id,
+        layout_candidate_version=cast(Literal[1], row.layout_candidate_version),
+        confirmed_by=row.confirmed_by,
+        confirmed_at=row.confirmed_at,
+    )
+
+
+def _sidecar_matches_confirmation_request(
+    sidecar: ActiveRevisionRevalidationConfirmation,
+    *,
+    row: PreviewJob,
+    preview_digest: str,
+    layout_candidate_id: UUID,
+    layout_candidate_version: Literal[1],
+) -> bool:
+    return (
+        sidecar.revision_scope == "active_revalidation"
+        and sidecar.product_id == row.product_id
+        and sidecar.revision_id == row.candidate_revision_id
+        and sidecar.revision_version == row.candidate_revision_version
+        and sidecar.mapping_id == row.mapping_id
+        and sidecar.connection_generation == row.connection_generation
+        and sidecar.preview_digest == preview_digest
+        and sidecar.layout_candidate_id == layout_candidate_id
+        and sidecar.layout_candidate_version == layout_candidate_version
+    )
+
+
 def is_current_preview_confirmation(
     session: Session,
     revision: ProductRevision,
     mapping: ProductRepositoryMapping,
 ) -> bool:
     """Recompute one exact confirmation against current durable authority."""
-    if not _mapping_has_complete_confirmation(mapping):
-        return False
-    assert mapping.confirmed_preview_job_id is not None
-    row = session.get(PreviewJob, mapping.confirmed_preview_job_id)
-    if row is None or not _confirmation_job_matches(row, revision, mapping):
-        return False
-    connection = _current_connection(session, row, for_update=True)
+    if _mapping_has_complete_confirmation(mapping):
+        assert mapping.confirmed_preview_job_id is not None
+        row = session.get(PreviewJob, mapping.confirmed_preview_job_id)
+        if row is not None and _confirmation_job_matches(row, revision, mapping):
+            connection = _current_connection(session, row, for_update=True)
+            if (
+                connection is not None
+                and _confirmation_job_is_latest(session, row)
+                and _current_identity_matches(row, revision, mapping, connection)
+                and _confirmed_layout_matches(row, mapping)
+            ):
+                return True
+    return active_revision_revalidation_is_current(session, revision, mapping)
+
+
+def active_revision_revalidation_is_current(
+    session: Session,
+    revision: ProductRevision,
+    mapping: ProductRepositoryMapping,
+) -> bool:
+    """Accept only explicit sidecar evidence for the exact latest active job."""
+    sidecars = session.execute(
+        select(ActiveRevisionRevalidationConfirmation)
+        .where(
+            ActiveRevisionRevalidationConfirmation.product_id == revision.product_id,
+            ActiveRevisionRevalidationConfirmation.revision_id == revision.id,
+            ActiveRevisionRevalidationConfirmation.mapping_id == mapping.id,
+        )
+        .order_by(
+            ActiveRevisionRevalidationConfirmation.confirmed_at.desc(),
+            ActiveRevisionRevalidationConfirmation.job_id.desc(),
+        )
+    ).scalars()
+    for sidecar in sidecars:
+        row = session.get(PreviewJob, sidecar.job_id)
+        if row is None or not _active_confirmation_job_matches(
+            sidecar,
+            row=row,
+            revision=revision,
+            mapping=mapping,
+        ):
+            continue
+        connection = _current_connection(session, row, for_update=True)
+        if (
+            connection is not None
+            and _current_failure_code(session, row, for_update=True) is None
+            and _confirmation_job_is_latest(session, row)
+            and _current_identity_matches(row, revision, mapping, connection)
+            and _active_confirmed_layout_matches(sidecar, row=row, mapping=mapping)
+        ):
+            return True
+    return False
+
+
+def _active_confirmation_job_matches(
+    sidecar: ActiveRevisionRevalidationConfirmation,
+    *,
+    row: PreviewJob,
+    revision: ProductRevision,
+    mapping: ProductRepositoryMapping,
+) -> bool:
     return (
-        connection is not None
-        and _confirmation_job_is_latest(session, row)
-        and _current_identity_matches(row, revision, mapping, connection)
-        and _confirmed_layout_matches(row, mapping)
+        row.revision_scope == "active_revalidation"
+        and sidecar.revision_scope == "active_revalidation"
+        and row.state == "succeeded"
+        and row.result is not None
+        and sidecar.product_id == revision.product_id == row.product_id
+        and sidecar.revision_id == revision.id == row.candidate_revision_id
+        and sidecar.revision_version == revision.version == row.candidate_revision_version
+        and sidecar.mapping_id == mapping.id == row.mapping_id
+        and sidecar.connection_generation == row.connection_generation
+        and mapping.revision_id == revision.id
+    )
+
+
+def _active_confirmed_layout_matches(
+    sidecar: ActiveRevisionRevalidationConfirmation,
+    *,
+    row: PreviewJob,
+    mapping: ProductRepositoryMapping,
+) -> bool:
+    assert row.result is not None
+    try:
+        result = _closed_result(_identity(row), row.result)
+    except (PreviewJobConflict, ValueError):
+        return False
+    if result["digest"] != sidecar.preview_digest:
+        return False
+    candidates = cast(list[dict[str, object]], result["layout_candidates"])
+    return (
+        mapping.selected_layout_candidate_id == sidecar.layout_candidate_id
+        and mapping.selected_layout_version == sidecar.layout_candidate_version
+        and _selected_layout_matches(candidates, mapping)
+    )
+
+
+def get_active_revision_revalidation_eligibility(
+    session: Session,
+    *,
+    product_id: UUID,
+    active_revision_id: UUID,
+    expected_active_revision_version: int,
+) -> ActiveRevisionRevalidationEligibility:
+    """Project exact all-mapping recovery authority without changing durable state."""
+    product = session.get(Product, product_id)
+    if product is None or product.active_revision_id != active_revision_id:
+        raise PreviewJobNotFound("active revision revalidation unavailable")
+    revision = session.execute(
+        select(ProductRevision).where(
+            ProductRevision.id == active_revision_id,
+            ProductRevision.product_id == product_id,
+        )
+    ).scalar_one_or_none()
+    if (
+        revision is None
+        or not revision.is_published
+        or revision.version != expected_active_revision_version
+    ):
+        raise PreviewJobConflict("active revision revalidation conflict")
+    mappings = tuple(
+        session.execute(
+            select(ProductRepositoryMapping)
+            .options(
+                selectinload(ProductRepositoryMapping.sides),
+                selectinload(ProductRepositoryMapping.allowed_targets),
+            )
+            .where(ProductRepositoryMapping.revision_id == revision.id)
+            .order_by(ProductRepositoryMapping.id)
+        ).scalars()
+    )
+    global_blockers: list[str] = []
+    if product.is_active:
+        global_blockers.append("product_active")
+    if product.candidate_revision_id is not None:
+        global_blockers.append("candidate_revision_present")
+    if not mappings:
+        global_blockers.append("mappings_required")
+    mapping_results: list[ActiveRevisionMappingEligibility] = []
+    for mapping in mappings:
+        blockers: list[str] = []
+        roles = tuple(side.role for side in mapping.sides)
+        if (
+            (mapping.topology == "direct" and roles != ("direct",))
+            or (
+                mapping.topology == "separate"
+                and (
+                    roles != ("keys", "translations")
+                    or mapping.sides[0].repository_id == mapping.sides[1].repository_id
+                )
+            )
+            or mapping.topology not in {"direct", "separate"}
+        ):
+            blockers.append("mapping_configuration_invalid")
+        if (
+            mapping.selected_layout_candidate_id is None
+            or mapping.selected_layout_version is None
+        ):
+            blockers.append("layout_required")
+        if not blockers and not is_current_preview_confirmation(session, revision, mapping):
+            blockers.append("revalidation_confirmation_required")
+        mapping_results.append(
+            ActiveRevisionMappingEligibility(
+                mapping_id=mapping.id,
+                is_current=not blockers,
+                blocker_codes=tuple(blockers),
+            )
+        )
+    combined_blockers = tuple(
+        dict.fromkeys(
+            [
+                *global_blockers,
+                *(
+                    blocker
+                    for mapping_result in mapping_results
+                    for blocker in mapping_result.blocker_codes
+                ),
+            ]
+        )
+    )
+    return ActiveRevisionRevalidationEligibility(
+        product_id=product_id,
+        active_revision_id=revision.id,
+        active_revision_version=revision.version,
+        eligible=not combined_blockers,
+        blocker_codes=combined_blockers,
+        mappings=tuple(mapping_results),
     )
 
 
@@ -703,6 +1226,7 @@ def _confirmation_job_matches(
 ) -> bool:
     return (
         mapping.revision_id == revision.id
+        and row.revision_scope == "candidate"
         and row.state == "succeeded"
         and row.result is not None
         and row.product_id == revision.product_id
@@ -714,13 +1238,17 @@ def _confirmation_job_matches(
 
 def _confirmation_job_is_latest(session: Session, row: PreviewJob) -> bool:
     latest_attempt = session.scalar(
-        select(func.max(PreviewJob.attempt)).where(PreviewJob.input_digest == row.input_digest)
+        select(func.max(PreviewJob.attempt)).where(
+            PreviewJob.input_digest == row.input_digest,
+            PreviewJob.revision_scope == row.revision_scope,
+        )
     )
     latest_mapping_job_id = session.scalar(
         select(PreviewJob.id)
         .where(
             PreviewJob.mapping_id == row.mapping_id,
             PreviewJob.candidate_revision_id == row.candidate_revision_id,
+            PreviewJob.revision_scope == row.revision_scope,
         )
         .order_by(PreviewJob.created_at.desc(), PreviewJob.id.desc())
         .limit(1)
@@ -775,7 +1303,10 @@ def _current_failure_code(
     if connection is None:
         return "stale_connection"
     latest_attempt = session.scalar(
-        select(func.max(PreviewJob.attempt)).where(PreviewJob.input_digest == row.input_digest)
+        select(func.max(PreviewJob.attempt)).where(
+            PreviewJob.input_digest == row.input_digest,
+            PreviewJob.revision_scope == row.revision_scope,
+        )
     )
     if latest_attempt != row.attempt:
         return "stale_attempt"
@@ -784,6 +1315,7 @@ def _current_failure_code(
         .where(
             PreviewJob.mapping_id == row.mapping_id,
             PreviewJob.candidate_revision_id == row.candidate_revision_id,
+            PreviewJob.revision_scope == row.revision_scope,
         )
         .order_by(PreviewJob.created_at.desc(), PreviewJob.id.desc())
         .limit(1)
@@ -806,7 +1338,19 @@ def _current_revision(
     if for_update:
         product_statement = product_statement.with_for_update()
     product = session.execute(product_statement).scalar_one_or_none()
-    if product is None or product.candidate_revision_id != row.candidate_revision_id:
+    if product is None:
+        return None
+    if row.revision_scope == "candidate":
+        pointer_is_current = product.candidate_revision_id == row.candidate_revision_id
+    elif row.revision_scope == "active_revalidation":
+        pointer_is_current = (
+            not product.is_active
+            and product.candidate_revision_id is None
+            and product.active_revision_id == row.candidate_revision_id
+        )
+    else:
+        return None
+    if not pointer_is_current:
         return None
     revision_statement = select(ProductRevision).where(
         ProductRevision.id == row.candidate_revision_id
@@ -814,11 +1358,11 @@ def _current_revision(
     if for_update:
         revision_statement = revision_statement.with_for_update()
     revision = session.execute(revision_statement).scalar_one_or_none()
-    if (
-        revision is None
-        or revision.is_published
-        or revision.version != row.candidate_revision_version
-    ):
+    if revision is None or revision.version != row.candidate_revision_version:
+        return None
+    if row.revision_scope == "candidate" and revision.is_published:
+        return None
+    if row.revision_scope == "active_revalidation" and not revision.is_published:
         return None
     return revision
 
@@ -876,13 +1420,24 @@ def _current_identity_matches(
         persisted_sides = _repository_sides(row)
         commits = {side.role: side.commit_hash for side in persisted_sides}
         current_sides = _complete_sides(mapping, commits)
-        _encoded, current_digest = _canonical_identity(
-            product_id=row.product_id,
-            revision=revision,
-            mapping=mapping,
-            connection_generation=connection.generation,
-            repository_sides=current_sides,
-        )
+        if row.revision_scope == "candidate":
+            _encoded, current_digest = _canonical_identity(
+                product_id=row.product_id,
+                revision=revision,
+                mapping=mapping,
+                connection_generation=connection.generation,
+                repository_sides=current_sides,
+            )
+        elif row.revision_scope == "active_revalidation":
+            _encoded, current_digest = _active_revalidation_identity(
+                product_id=row.product_id,
+                revision=revision,
+                mapping=mapping,
+                connection_generation=connection.generation,
+                repository_sides=current_sides,
+            )
+        else:
+            return False
     except PreviewJobConflict:
         return False
     return (

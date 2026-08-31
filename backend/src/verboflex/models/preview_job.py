@@ -32,6 +32,10 @@ class PreviewJob(Base):
             "state IN ('queued', 'running', 'succeeded', 'failed', 'timed_out')",
             name="state_value",
         ),
+        CheckConstraint(
+            "revision_scope IN ('candidate', 'active_revalidation')",
+            name="revision_scope_value",
+        ),
         CheckConstraint("attempt > 0", name="positive_attempt"),
         CheckConstraint(
             "candidate_revision_version > 0",
@@ -65,6 +69,11 @@ class PreviewJob(Base):
             "input_digest",
             "attempt",
             name="uq_preview_jobs_digest_attempt",
+        ),
+        UniqueConstraint(
+            "id",
+            "revision_scope",
+            name="uq_preview_jobs_id_revision_scope",
         ),
         ForeignKeyConstraint(
             ["product_id", "candidate_revision_id"],
@@ -100,6 +109,12 @@ class PreviewJob(Base):
     input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     attempt: Mapped[int] = mapped_column(Integer, nullable=False)
     state: Mapped[str] = mapped_column(String(16), nullable=False)
+    revision_scope: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default="candidate",
+        server_default="candidate",
+    )
     product_id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True),
         nullable=False,
@@ -134,4 +149,101 @@ class PreviewJob(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+
+class ActiveRevisionRevalidationConfirmation(Base):
+    """Immutable explicit authority for one exact published-revision preview."""
+
+    __tablename__ = "active_revision_revalidation_confirmations"
+    __table_args__ = (
+        CheckConstraint(
+            "revision_scope = 'active_revalidation'",
+            name="revision_scope_value",
+        ),
+        CheckConstraint("revision_version > 0", name="positive_revision_version"),
+        CheckConstraint(
+            "connection_generation >= 0",
+            name="connection_generation_non_negative",
+        ),
+        CheckConstraint(
+            "char_length(preview_digest) = 64 "
+            "AND preview_digest ~ '^[0-9a-f]{64}$'",
+            name="preview_digest_sha256",
+        ),
+        CheckConstraint(
+            "layout_candidate_version > 0",
+            name="positive_layout_candidate_version",
+        ),
+        ForeignKeyConstraint(
+            ["job_id", "revision_scope"],
+            ["preview_jobs.id", "preview_jobs.revision_scope"],
+            name="fk_active_revalidation_confirmation_job_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["product_id", "revision_id"],
+            ["product_revisions.product_id", "product_revisions.id"],
+            name="fk_active_revalidation_confirmation_owned_revision",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["revision_id", "mapping_id"],
+            ["product_repository_mappings.revision_id", "product_repository_mappings.id"],
+            name="fk_active_revalidation_confirmation_owned_mapping",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["confirmed_by"],
+            ["users.id"],
+            name="fk_active_revalidation_confirmation_actor",
+            ondelete="RESTRICT",
+        ),
+    )
+
+    job_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        primary_key=True,
+    )
+    revision_scope: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default="active_revalidation",
+        server_default="active_revalidation",
+    )
+    product_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    revision_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    revision_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    mapping_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    connection_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    preview_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    layout_candidate_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        nullable=False,
+    )
+    layout_candidate_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    confirmed_by: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        nullable=False,
+    )
+    confirmed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
     )

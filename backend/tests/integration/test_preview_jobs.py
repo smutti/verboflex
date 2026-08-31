@@ -2308,7 +2308,10 @@ def test_inactive_active_revision_can_revalidate_confirm_and_reactivate_without_
     ) == before_revalidation
 
     with preview_session_factory() as session:
-        succeeded = get_preview_job(session, job_id=active_job.id)
+        succeeded = preview_jobs.get_active_revision_revalidation_job(
+            session,
+            job_id=active_job.id,
+        )
         assert succeeded.result is not None
         current_layout = cast(
             list[dict[str, object]], succeeded.result["layout_candidates"]
@@ -2319,6 +2322,7 @@ def test_inactive_active_revision_can_revalidate_confirm_and_reactivate_without_
             active_revision_id=candidate_id,
             expected_active_revision_version=4,
         ).eligible is False
+    with preview_session_factory() as session:
         confirmation = preview_jobs.confirm_active_revision_revalidation(
             session,
             job_id=active_job.id,
@@ -2349,6 +2353,7 @@ def test_inactive_active_revision_can_revalidate_confirm_and_reactivate_without_
         assert eligibility.eligible is True
         assert len(eligibility.mappings) == 1
         assert eligibility.mappings[0].is_current is True
+    with preview_session_factory() as session:
         reactivated = reactivate_product(
             session,
             product_id=product_id,
