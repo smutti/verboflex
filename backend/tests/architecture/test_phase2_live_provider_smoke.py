@@ -312,9 +312,7 @@ def test_deployment_overlays_give_scheduler_exact_worker_authority(
             for key in sorted(missing):
                 problems.append(f"{deployment} {service_name} missing {key}")
             authorities[service_name] = {
-                "environment": {
-                    key: environment.get(key) for key in EXACT_DEPLOYMENT_SETTINGS
-                },
+                "environment": {key: environment.get(key) for key in EXACT_DEPLOYMENT_SETTINGS},
                 "image": service.get("image"),
                 "restart": service.get("restart"),
             }
@@ -610,31 +608,22 @@ def test_worker_loss_smoke_exercises_staging_and_production_overlays() -> None:
     worker_loss = source.split("run_worker_loss()", 1)[1].split(
         "\nrun_worker_loss_for_overlay_with_port_retry()", 1
     )[0]
-    assert 'SMOKE_DEPLOYMENT_OVERLAY=$1' in worker_loss
+    assert "SMOKE_DEPLOYMENT_OVERLAY=$1" in worker_loss
     assert "prepare_base_stack" in worker_loss
-    assert "wait_for_scheduler" in source.split("prepare_base_stack()", 1)[1].split(
-        "\n}", 1
-    )[0]
+    assert "wait_for_scheduler" in source.split("prepare_base_stack()", 1)[1].split("\n}", 1)[0]
     assert "compose_base" not in worker_loss
 
-    retry = source.split("run_worker_loss_for_overlay_with_port_retry()", 1)[1].split(
-        "\n}", 1
-    )[0]
+    retry = source.split("run_worker_loss_for_overlay_with_port_retry()", 1)[1].split("\n}", 1)[0]
     assert "for attempt in 1 2 3" in retry
     assert 'if [ "$rc" -ne 75 ]' in retry
-    assert '"$SCRIPT_DIR/phase2_smoke.sh" --worker-loss-once "$deployment_overlay"' in (
-        retry
-    )
+    assert '"$SCRIPT_DIR/phase2_smoke.sh" --worker-loss-once "$deployment_overlay"' in (retry)
 
-    dual_overlay = source.split("run_worker_loss_dual_overlay()", 1)[1].split(
-        "\n}", 1
-    )[0]
+    dual_overlay = source.split("run_worker_loss_dual_overlay()", 1)[1].split("\n}", 1)[0]
     assert dual_overlay.count("run_worker_loss_for_overlay_with_port_retry staging") == 1
     assert dual_overlay.count("run_worker_loss_for_overlay_with_port_retry production") == 1
     assert "compose_base" not in dual_overlay
 
     assert gauntlet.count("run_layer worker-loss-smoke") == 1
     assert (
-        'run_layer worker-loss-smoke "$GAUNTLET_DIR/phase2_smoke.sh" '
-        "--mock-provider --worker-loss"
+        'run_layer worker-loss-smoke "$GAUNTLET_DIR/phase2_smoke.sh" --mock-provider --worker-loss'
     ) in gauntlet

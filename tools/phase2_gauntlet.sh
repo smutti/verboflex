@@ -558,9 +558,9 @@ write_phase_secret_policy() {
       'src/verboflex/auth/principal.py|28|Secret Keyword' \
       'src/verboflex/auth/principal.py|29|Secret Keyword' \
       'tests/api/test_admin_users.py|192|Secret Keyword' \
-      'tests/architecture/test_phase2_live_provider_smoke.py|107|Secret Keyword' \
-      'tests/architecture/test_phase2_live_provider_smoke.py|108|Secret Keyword' \
-      'tests/architecture/test_phase2_live_provider_smoke.py|146|Secret Keyword' \
+      'tests/architecture/test_phase2_live_provider_smoke.py|123|Secret Keyword' \
+      'tests/architecture/test_phase2_live_provider_smoke.py|124|Secret Keyword' \
+      'tests/architecture/test_phase2_live_provider_smoke.py|162|Secret Keyword' \
       'tests/auth/test_bootstrap_admin.py|137|Secret Keyword' \
       'tests/auth/test_bootstrap_admin.py|148|Secret Keyword' \
       'tests/auth/test_bootstrap_admin.py|236|Secret Keyword' \
