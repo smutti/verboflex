@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: ready_to_execute
-stopped_at: Completed 02-39-PLAN.md
-last_updated: "2026-08-31T11:13:07.797Z"
+stopped_at: Completed 02-40-PLAN.md
+last_updated: "2026-08-31T13:39:13.805Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 02 critical gap planning complete — 43 plans total
-state_head: 625e26ea7342c3787730171327518d3206bc6e1e
+state_head: 1c6b50fda71298539dba62e46fb9564e2e220d59
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 58
-  completed_plans: 53
+  completed_plans: 54
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — READY TO EXECUTE
-Plan: 38 of 43
+Plan: 39 of 43
 Status: Ready to execute
 Last activity: 2026-08-30 — Phase 02 critical gap planning complete
 
@@ -111,6 +111,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P30 | 18 min | 2 tasks | 4 files |
 | Phase 02 P37 | 2h03min | 2 tasks | 26 files |
 | Phase 02 P39 | 35min | 2 tasks | 5 files |
+| Phase 02 P40 | 2h 18m | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -288,6 +289,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Bind Phase 2 source-secret false positives to exact reviewed path, line, and detector type with an unreviewed-finding negative control.
 - [Phase 02]: Both deployment schedulers explicitly inherit the overlay environment, deployed backend image, and unless-stopped restart authority while retaining the base Celery Beat command.
 - [Phase 02]: The authoritative worker-loss gate always runs staging and production in separate projects and retries only the exact address-bind race, at most three times per overlay.
+- [Phase 02]: Candidate canonical preview identity remains byte-for-byte unchanged; active revalidation uses a domain-separated revision scope.
+- [Phase 02]: Active revalidation authority is an immutable sidecar outside the published graph and must match the latest exact live tuple.
+- [Phase 02]: Reactivation preserves original current candidate confirmation authority before falling back to exact active-revalidation evidence.
 
 ### Pending Todos
 
@@ -326,6 +330,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-31T11:13:07.734Z
-Stopped at: Completed 02-39-PLAN.md
+Last session: 2026-08-31T13:39:13.741Z
+Stopped at: Completed 02-40-PLAN.md
 Resume file: None
