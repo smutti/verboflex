@@ -40,7 +40,11 @@ from verboflex.services.preview_jobs import (
     _closed_result,
     _complete_sides,
     _identity,
+    confirm_active_revision_revalidation,
+    create_or_reuse_active_revision_revalidation_job,
     create_or_reuse_preview_job,
+    execute_preview_job,
+    get_active_revision_revalidation_job,
 )
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -1118,3 +1122,197 @@ def test_stale_confirmation_identity_preserves_the_prior_active_graph(
     after = _graph_snapshot(publication_session_factory, product_id=product_id)
     assert after == before
     assert after[0][2] == old_active_id
+
+
+def _active_revalidation_processor(mapping_id: UUID) -> Any:
+    candidate = _preview_candidate(mapping_id)
+
+    def processor(identity: Any) -> dict[str, object]:
+        return {
+            "detector_version": identity.detector_version,
+            "digest": identity.input_digest,
+            "layout_candidates": [candidate],
+        }
+
+    return processor
+
+
+@pytest.mark.parametrize("authority_drift", ("generation", "commit", "version", "mapping"))
+def test_generation_commit_version_and_mapping_drift_block_reactivation_until_reconfirmed(
+    publication_session_factory: sessionmaker[Session],
+    authority_drift: str,
+) -> None:
+    """Every stale sidecar tuple fails closed until a new exact job is confirmed."""
+    publication = _publication_module()
+    product_id, _old_active_id, candidate_id, _repository_id = _seed_product_graph(
+        publication_session_factory,
+        candidate_mapping_count=2,
+    )
+    assert candidate_id is not None
+    _confirm_revision_mappings(
+        publication_session_factory,
+        product_id=product_id,
+        revision_id=candidate_id,
+    )
+    with publication_session_factory() as session:
+        publication.publish_product_candidate(
+            session,
+            product_id=product_id,
+            candidate_revision_id=candidate_id,
+            expected_candidate_version=7,
+        )
+    with publication_session_factory() as session:
+        publication.deactivate_product(session, product_id=product_id)
+    actor_id = uuid4()
+    with publication_session_factory.begin() as session:
+        session.add(
+            User(
+                id=actor_id,
+                email=f"active-revalidation-{actor_id}@example.com",
+                display_name="Active Revalidation Admin",
+                hashed_password=hash_password("active revalidation administrator phrase!"),
+                is_active=True,
+                must_change_password=False,
+            )
+        )
+        session.get_one(BitbucketConnection, 1).generation += 1
+    with publication_session_factory() as session:
+        mapping_ids = tuple(
+            session.scalars(
+                select(ProductRepositoryMapping.id)
+                .where(ProductRepositoryMapping.revision_id == candidate_id)
+                .order_by(ProductRepositoryMapping.id)
+            )
+        )
+    assert len(mapping_ids) == 2
+    mapping_id = mapping_ids[0]
+    with publication_session_factory() as session:
+        original = create_or_reuse_active_revision_revalidation_job(
+            session,
+            product_id=product_id,
+            active_revision_id=candidate_id,
+            mapping_id=mapping_id,
+            expected_active_revision_version=7,
+            commits={"direct": "a" * 40},
+            enqueuer=lambda _job_id: None,
+        )
+    execute_preview_job(
+        publication_session_factory,
+        job_id=original.id,
+        processor=_active_revalidation_processor(mapping_id),
+    )
+    with publication_session_factory() as session:
+        completed = get_active_revision_revalidation_job(session, job_id=original.id)
+        assert completed.result is not None
+        selected = completed.result["layout_candidates"][0]
+    assert isinstance(selected, dict)
+    with publication_session_factory() as session:
+        confirm_active_revision_revalidation(
+            session,
+            job_id=original.id,
+            preview_digest=str(completed.result["digest"]),
+            layout_candidate_id=UUID(str(selected["id"])),
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
+
+    replacement = None
+    if authority_drift == "generation":
+        with publication_session_factory.begin() as session:
+            session.get_one(BitbucketConnection, 1).generation += 1
+    elif authority_drift == "commit":
+        with publication_session_factory() as session:
+            replacement = create_or_reuse_active_revision_revalidation_job(
+                session,
+                product_id=product_id,
+                active_revision_id=candidate_id,
+                mapping_id=mapping_id,
+                expected_active_revision_version=7,
+                commits={"direct": "b" * 40},
+                enqueuer=lambda _job_id: None,
+            )
+    else:
+        with publication_session_factory.begin() as session:
+            row = session.get_one(PreviewJob, original.id)
+            row.state = "failed"
+            row.result = None
+            row.error_code = "processing_failed"
+            if authority_drift == "version":
+                row.candidate_revision_version += 1
+            else:
+                row.mapping_id = mapping_ids[1]
+
+    blocked_snapshot = _graph_snapshot(publication_session_factory, product_id=product_id)
+    with (
+        publication_session_factory() as session,
+        pytest.raises(publication.PublicationBlocked) as blocked,
+    ):
+        publication.reactivate_product(
+            session,
+            product_id=product_id,
+            active_revision_id=candidate_id,
+            expected_active_version=7,
+        )
+    assert tuple(blocker.value for blocker in blocked.value.blockers) == (
+        "preview_confirmation_required",
+    )
+    assert _graph_snapshot(publication_session_factory, product_id=product_id) == blocked_snapshot
+
+    if replacement is None:
+        with publication_session_factory() as session:
+            replacement = create_or_reuse_active_revision_revalidation_job(
+                session,
+                product_id=product_id,
+                active_revision_id=candidate_id,
+                mapping_id=mapping_id,
+                expected_active_revision_version=7,
+                commits={"direct": "a" * 40},
+                enqueuer=lambda _job_id: None,
+            )
+    execute_preview_job(
+        publication_session_factory,
+        job_id=replacement.id,
+        processor=_active_revalidation_processor(mapping_id),
+    )
+    with publication_session_factory() as session:
+        current = get_active_revision_revalidation_job(session, job_id=replacement.id)
+        assert current.result is not None
+        current_selected = current.result["layout_candidates"][0]
+    assert isinstance(current_selected, dict)
+    confirmation_barrier = Barrier(2)
+
+    def confirm_once(_index: int) -> UUID:
+        with publication_session_factory() as session:
+            confirmation_barrier.wait()
+            return confirm_active_revision_revalidation(
+                session,
+                job_id=replacement.id,
+                preview_digest=str(current.result["digest"]),
+                layout_candidate_id=UUID(str(current_selected["id"])),
+                layout_candidate_version=1,
+                actor_id=actor_id,
+            ).job_id
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        confirmation_jobs = tuple(executor.map(confirm_once, range(2)))
+    assert confirmation_jobs == (replacement.id, replacement.id)
+
+    reactivation_barrier = Barrier(2)
+
+    def reactivate_once(_index: int) -> bool:
+        with publication_session_factory() as session:
+            reactivation_barrier.wait()
+            return publication.reactivate_product(
+                session,
+                product_id=product_id,
+                active_revision_id=candidate_id,
+                expected_active_version=7,
+            ).changed
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        reactivation_results = tuple(executor.map(reactivate_once, range(2)))
+    assert sorted(reactivation_results) == [False, True]
+    after = _graph_snapshot(publication_session_factory, product_id=product_id)
+    assert after[0][1] is True
+    assert after[0][2:] == blocked_snapshot[0][2:]
+    assert after[1:] == blocked_snapshot[1:]

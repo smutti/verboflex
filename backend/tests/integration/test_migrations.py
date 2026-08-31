@@ -25,6 +25,7 @@ ADMIN_DATABASE_URL = os.environ.get(
     "postgresql://postgres@127.0.0.1:55432/postgres",
 )
 EXPECTED_TABLES = {
+    "active_revision_revalidation_confirmations",
     "auth_sessions",
     "bitbucket_connections",
     "preview_jobs",
@@ -790,3 +791,107 @@ def test_preview_watchdog_explain_reaches_partial_index_and_bounded_selector(
         "failed",
         "timed_out",
     }
+
+
+def test_active_revision_revalidation_sidecar_migrates_reversibly(
+    migrated_database: tuple[Config, Engine],
+) -> None:
+    """Backfill candidate scope and remove/recreate only 0011-owned authority."""
+    from verboflex import models
+
+    config, engine = migrated_database
+    command.upgrade(config, "0009_product_graph_integrity")
+    _cutoff, expected_ids, _stale_running = _seed_preview_watchdog_rows(engine)
+    command.upgrade(config, "0010_preview_watchdog_index")
+    command.upgrade(config, "head")
+
+    assert hasattr(models, "ActiveRevisionRevalidationConfirmation")
+    inspector = inspect(engine)
+    preview_columns = {column["name"]: column for column in inspector.get_columns("preview_jobs")}
+    assert preview_columns["revision_scope"]["nullable"] is False
+    assert {
+        constraint["name"] for constraint in inspector.get_check_constraints("preview_jobs")
+    } >= {"ck_preview_jobs_revision_scope_value"}
+    assert {
+        constraint["name"] for constraint in inspector.get_unique_constraints("preview_jobs")
+    } >= {"uq_preview_jobs_id_revision_scope"}
+    with engine.connect() as connection:
+        scoped = connection.execute(
+            text("SELECT id, revision_scope FROM preview_jobs ORDER BY id")
+        ).all()
+    assert {row.id for row in scoped} == set(expected_ids)
+    assert {row.revision_scope for row in scoped} == {"candidate"}
+
+    job_id = scoped[0].id
+    actor_id = uuid4()
+    layout_id = uuid4()
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, email, display_name, hashed_password) "
+                "VALUES (:id, :email, 'Migration Revalidation Admin', 'not-a-secret')"
+            ),
+            {"id": actor_id, "email": f"migration-revalidation-{actor_id}@example.com"},
+        )
+        connection.execute(
+            text(
+                "UPDATE preview_jobs SET revision_scope = 'active_revalidation' "
+                "WHERE id = :job_id"
+            ),
+            {"job_id": job_id},
+        )
+        authority = connection.execute(
+            text(
+                "SELECT product_id, candidate_revision_id, candidate_revision_version, "
+                "mapping_id, connection_generation FROM preview_jobs WHERE id = :job_id"
+            ),
+            {"job_id": job_id},
+        ).one()
+        connection.execute(
+            text(
+                "INSERT INTO active_revision_revalidation_confirmations "
+                "(job_id, revision_scope, product_id, revision_id, revision_version, "
+                "mapping_id, connection_generation, preview_digest, layout_candidate_id, "
+                "layout_candidate_version, confirmed_by, confirmed_at) VALUES "
+                "(:job_id, 'active_revalidation', :product_id, :revision_id, "
+                ":revision_version, :mapping_id, :generation, :digest, :layout_id, 1, "
+                ":actor_id, CURRENT_TIMESTAMP)"
+            ),
+            {
+                "job_id": job_id,
+                "product_id": authority.product_id,
+                "revision_id": authority.candidate_revision_id,
+                "revision_version": authority.candidate_revision_version,
+                "mapping_id": authority.mapping_id,
+                "generation": authority.connection_generation,
+                "digest": "d" * 64,
+                "layout_id": layout_id,
+                "actor_id": actor_id,
+            },
+        )
+
+    with pytest.raises(DBAPIError, match="revalidation confirmation is immutable"):
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE active_revision_revalidation_confirmations "
+                    "SET preview_digest = :digest WHERE job_id = :job_id"
+                ),
+                {"digest": "e" * 64, "job_id": job_id},
+            )
+
+    command.downgrade(config, "0010_preview_watchdog_index")
+    downgraded = inspect(engine)
+    assert "active_revision_revalidation_confirmations" not in downgraded.get_table_names()
+    assert "revision_scope" not in {
+        column["name"] for column in downgraded.get_columns("preview_jobs")
+    }
+    assert _preview_job_ids(engine) == set(expected_ids)
+
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        reupgraded = connection.execute(
+            text("SELECT id, revision_scope FROM preview_jobs ORDER BY id")
+        ).all()
+    assert {row.id for row in reupgraded} == set(expected_ids)
+    assert {row.revision_scope for row in reupgraded} == {"candidate"}

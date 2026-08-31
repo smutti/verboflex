@@ -76,6 +76,9 @@ def _seed_graph(engine: Engine) -> dict[str, Any]:
             "foreign_display_name": f"Foreign {identities['foreign_product']}",
             "foreign_name_key": f"foreign {identities['foreign_product']}",
             "candidate_digest": identities["candidate_job"].hex * 2,
+            "active_layout": uuid4(),
+            "candidate_layout": uuid4(),
+            "foreign_layout": uuid4(),
         }
     )
     now = datetime.now(UTC)
@@ -160,9 +163,6 @@ def _seed_graph(engine: Engine) -> dict[str, Any]:
             ),
             {
                 **identities,
-                "active_layout": uuid4(),
-                "candidate_layout": uuid4(),
-                "foreign_layout": uuid4(),
             },
         )
         for prefix in ("active", "candidate", "foreign"):
@@ -467,3 +467,105 @@ def test_publication_order_needs_no_bypass_and_both_published_graphs_stay_immuta
         "WHERE mapping_id = :active_mapping AND role = 'direct'",
         ids,
     )
+
+
+def _published_graph_rows(engine: Engine, ids: dict[str, Any]) -> tuple[object, ...]:
+    """Capture every row in the published graph, excluding preview sidecars."""
+    with engine.connect() as connection:
+        revision = connection.execute(
+            text("SELECT * FROM product_revisions WHERE id = :active_revision"),
+            ids,
+        ).one()
+        mapping = connection.execute(
+            text("SELECT * FROM product_repository_mappings WHERE id = :active_mapping"),
+            ids,
+        ).one()
+        sides = tuple(
+            connection.execute(
+                text(
+                    "SELECT * FROM product_mapping_repository_sides "
+                    "WHERE mapping_id = :active_mapping ORDER BY role"
+                ),
+                ids,
+            ).all()
+        )
+        targets = tuple(
+            connection.execute(
+                text(
+                    "SELECT * FROM product_mapping_allowed_targets "
+                    "WHERE mapping_id = :active_mapping ORDER BY branch"
+                ),
+                ids,
+            ).all()
+        )
+    return (tuple(revision), tuple(mapping), sides, targets)
+
+
+def test_active_revision_revalidation_never_mutates_published_graph(
+    graph_engine: Engine,
+) -> None:
+    """Sidecar inserts remain outside the guarded published configuration graph."""
+    ids = _seed_graph(graph_engine)
+    job_id = uuid4()
+    before = _published_graph_rows(graph_engine, ids)
+    with graph_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO preview_jobs "
+                "(id, input_digest, attempt, state, revision_scope, product_id, "
+                "candidate_revision_id, candidate_revision_version, mapping_id, topology, "
+                "connection_generation, detector_version, layout_identity, repository_sides) "
+                "VALUES (:job_id, :digest, 1, 'queued', 'active_revalidation', :product, "
+                ":active_revision, 4, :active_mapping, 'direct', 1, 'preview-v1', "
+                "'automatic', CAST(:sides AS jsonb))"
+            ),
+            {
+                **ids,
+                "job_id": job_id,
+                "digest": "d" * 64,
+                "sides": (
+                    '[{"role":"direct","repository_id":"'
+                    f'{ids["repository"]}'
+                    '","source_branch":"main","commit_hash":"'
+                    + "a" * 40
+                    + '"}]'
+                ),
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO active_revision_revalidation_confirmations "
+                "(job_id, revision_scope, product_id, revision_id, revision_version, "
+                "mapping_id, connection_generation, preview_digest, layout_candidate_id, "
+                "layout_candidate_version, confirmed_by, confirmed_at) VALUES "
+                "(:job_id, 'active_revalidation', :product, :active_revision, 4, "
+                ":active_mapping, 1, :preview_digest, :active_layout, 1, :actor, "
+                "CURRENT_TIMESTAMP)"
+            ),
+            {**ids, "job_id": job_id, "preview_digest": "e" * 64},
+        )
+    assert _published_graph_rows(graph_engine, ids) == before
+
+    with (
+        pytest.raises(DBAPIError, match="revalidation confirmation is immutable"),
+        graph_engine.begin() as connection,
+    ):
+        connection.execute(
+            text(
+                "UPDATE active_revision_revalidation_confirmations "
+                "SET preview_digest = :digest WHERE job_id = :job_id"
+            ),
+            {"job_id": job_id, "digest": "f" * 64},
+        )
+    with (
+        pytest.raises(DBAPIError, match="revalidation confirmation is immutable"),
+        graph_engine.begin() as connection,
+    ):
+        connection.execute(
+            text(
+                "DELETE FROM active_revision_revalidation_confirmations "
+                "WHERE job_id = :job_id"
+            ),
+            {"job_id": job_id},
+        )
+    assert _published_graph_rows(graph_engine, ids) == before
