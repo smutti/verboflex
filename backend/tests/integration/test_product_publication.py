@@ -403,6 +403,7 @@ def _confirm_revision_mappings(
                 input_digest=input_digest,
                 attempt=1,
                 state="succeeded",
+                revision_scope="candidate",
                 product_id=product_id,
                 candidate_revision_id=revision_id,
                 candidate_revision_version=revision.version,
@@ -1186,35 +1187,42 @@ def test_generation_commit_version_and_mapping_drift_block_reactivation_until_re
         )
     assert len(mapping_ids) == 2
     mapping_id = mapping_ids[0]
-    with publication_session_factory() as session:
-        original = create_or_reuse_active_revision_revalidation_job(
-            session,
-            product_id=product_id,
-            active_revision_id=candidate_id,
-            mapping_id=mapping_id,
-            expected_active_revision_version=7,
-            commits={"direct": "a" * 40},
-            enqueuer=lambda _job_id: None,
+    original_jobs = []
+    for initial_mapping_id in mapping_ids:
+        with publication_session_factory() as session:
+            initial = create_or_reuse_active_revision_revalidation_job(
+                session,
+                product_id=product_id,
+                active_revision_id=candidate_id,
+                mapping_id=initial_mapping_id,
+                expected_active_revision_version=7,
+                commits={"direct": "a" * 40},
+                enqueuer=lambda _job_id: None,
+            )
+        execute_preview_job(
+            publication_session_factory,
+            job_id=initial.id,
+            processor=_active_revalidation_processor(initial_mapping_id),
         )
-    execute_preview_job(
-        publication_session_factory,
-        job_id=original.id,
-        processor=_active_revalidation_processor(mapping_id),
-    )
-    with publication_session_factory() as session:
-        completed = get_active_revision_revalidation_job(session, job_id=original.id)
-        assert completed.result is not None
-        selected = completed.result["layout_candidates"][0]
-    assert isinstance(selected, dict)
-    with publication_session_factory() as session:
-        confirm_active_revision_revalidation(
-            session,
-            job_id=original.id,
-            preview_digest=str(completed.result["digest"]),
-            layout_candidate_id=UUID(str(selected["id"])),
-            layout_candidate_version=1,
-            actor_id=actor_id,
-        )
+        with publication_session_factory() as session:
+            initial_result = get_active_revision_revalidation_job(
+                session,
+                job_id=initial.id,
+            )
+            assert initial_result.result is not None
+            initial_selected = initial_result.result["layout_candidates"][0]
+        assert isinstance(initial_selected, dict)
+        with publication_session_factory() as session:
+            confirm_active_revision_revalidation(
+                session,
+                job_id=initial.id,
+                preview_digest=str(initial_result.result["digest"]),
+                layout_candidate_id=UUID(str(initial_selected["id"])),
+                layout_candidate_version=1,
+                actor_id=actor_id,
+            )
+        original_jobs.append(initial)
+    original = original_jobs[0]
 
     replacement = None
     if authority_drift == "generation":
@@ -1233,14 +1241,25 @@ def test_generation_commit_version_and_mapping_drift_block_reactivation_until_re
             )
     else:
         with publication_session_factory.begin() as session:
-            row = session.get_one(PreviewJob, original.id)
-            row.state = "failed"
-            row.result = None
-            row.error_code = "processing_failed"
             if authority_drift == "version":
-                row.candidate_revision_version += 1
+                session.execute(
+                    text(
+                        "UPDATE preview_jobs SET state = 'failed', result = NULL, "
+                        "error_code = 'processing_failed', "
+                        "candidate_revision_version = candidate_revision_version + 1 "
+                        "WHERE id = :job_id"
+                    ),
+                    {"job_id": original.id},
+                )
             else:
-                row.mapping_id = mapping_ids[1]
+                session.execute(
+                    text(
+                        "UPDATE preview_jobs SET state = 'failed', result = NULL, "
+                        "error_code = 'processing_failed', mapping_id = :mapping_id "
+                        "WHERE id = :job_id"
+                    ),
+                    {"job_id": original.id, "mapping_id": mapping_ids[1]},
+                )
 
     blocked_snapshot = _graph_snapshot(publication_session_factory, product_id=product_id)
     with (
@@ -1296,6 +1315,41 @@ def test_generation_commit_version_and_mapping_drift_block_reactivation_until_re
     with ThreadPoolExecutor(max_workers=2) as executor:
         confirmation_jobs = tuple(executor.map(confirm_once, range(2)))
     assert confirmation_jobs == (replacement.id, replacement.id)
+
+    if authority_drift == "generation":
+        secondary_mapping_id = mapping_ids[1]
+        with publication_session_factory() as session:
+            secondary = create_or_reuse_active_revision_revalidation_job(
+                session,
+                product_id=product_id,
+                active_revision_id=candidate_id,
+                mapping_id=secondary_mapping_id,
+                expected_active_revision_version=7,
+                commits={"direct": "a" * 40},
+                enqueuer=lambda _job_id: None,
+            )
+        execute_preview_job(
+            publication_session_factory,
+            job_id=secondary.id,
+            processor=_active_revalidation_processor(secondary_mapping_id),
+        )
+        with publication_session_factory() as session:
+            secondary_result = get_active_revision_revalidation_job(
+                session,
+                job_id=secondary.id,
+            )
+            assert secondary_result.result is not None
+            secondary_selected = secondary_result.result["layout_candidates"][0]
+        assert isinstance(secondary_selected, dict)
+        with publication_session_factory() as session:
+            confirm_active_revision_revalidation(
+                session,
+                job_id=secondary.id,
+                preview_digest=str(secondary_result.result["digest"]),
+                layout_candidate_id=UUID(str(secondary_selected["id"])),
+                layout_candidate_version=1,
+                actor_id=actor_id,
+            )
 
     reactivation_barrier = Barrier(2)
 

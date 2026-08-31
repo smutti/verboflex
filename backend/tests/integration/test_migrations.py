@@ -870,15 +870,17 @@ def test_active_revision_revalidation_sidecar_migrates_reversibly(
             },
         )
 
-    with pytest.raises(DBAPIError, match="revalidation confirmation is immutable"):
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "UPDATE active_revision_revalidation_confirmations "
-                    "SET preview_digest = :digest WHERE job_id = :job_id"
-                ),
-                {"digest": "e" * 64, "job_id": job_id},
-            )
+    with (
+        pytest.raises(DBAPIError, match="revalidation confirmation is immutable"),
+        engine.begin() as connection,
+    ):
+        connection.execute(
+            text(
+                "UPDATE active_revision_revalidation_confirmations "
+                "SET preview_digest = :digest WHERE job_id = :job_id"
+            ),
+            {"digest": "e" * 64, "job_id": job_id},
+        )
 
     command.downgrade(config, "0010_preview_watchdog_index")
     downgraded = inspect(engine)

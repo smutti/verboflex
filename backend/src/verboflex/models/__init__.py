@@ -2,7 +2,7 @@
 
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.bitbucket_connection import BitbucketConnection
-from verboflex.models.preview_job import PreviewJob
+from verboflex.models.preview_job import ActiveRevisionRevalidationConfirmation, PreviewJob
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
     ProductMappingAllowedTarget,
@@ -15,6 +15,7 @@ from verboflex.models.user import User
 
 __all__ = [
     "AuthSession",
+    "ActiveRevisionRevalidationConfirmation",
     "BitbucketConnection",
     "PreviewJob",
     "Product",
