@@ -69,6 +69,12 @@ from verboflex.services.preview_jobs import (
     get_preview_job,
     skeleton_preview_processor,
 )
+from verboflex.services.publication import (
+    PublicationBlocked,
+    deactivate_product,
+    publish_product_candidate,
+    reactivate_product,
+)
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 ADMIN_DATABASE_URL = os.environ.get(
@@ -2116,3 +2122,243 @@ def test_confirmation_rejects_missing_candidate_and_wrong_repository_side(
             layout_candidate_version=1,
             actor_id=actor_id,
         )
+
+
+def _published_configuration_snapshot(
+    factory: sessionmaker[Session],
+    *,
+    product_id: UUID,
+) -> tuple[object, ...]:
+    """Capture the complete published graph while excluding operational activation."""
+    with factory() as session:
+        product = session.execute(
+            select(
+                Product.id,
+                Product.active_revision_id,
+                Product.candidate_revision_id,
+                Product.display_name,
+                Product.name_key,
+            ).where(Product.id == product_id)
+        ).one()
+        revisions = tuple(
+            session.execute(
+                select(
+                    ProductRevision.id,
+                    ProductRevision.version,
+                    ProductRevision.display_name,
+                    ProductRevision.name_key,
+                    ProductRevision.description,
+                    ProductRevision.is_published,
+                    ProductRevision.published_at,
+                )
+                .where(ProductRevision.product_id == product_id)
+                .order_by(ProductRevision.id)
+            ).all()
+        )
+        revision_ids = tuple(revision.id for revision in revisions)
+        mappings = tuple(
+            session.execute(
+                select(
+                    ProductRepositoryMapping.id,
+                    ProductRepositoryMapping.revision_id,
+                    ProductRepositoryMapping.topology,
+                    ProductRepositoryMapping.identity_key,
+                    ProductRepositoryMapping.selected_layout_candidate_id,
+                    ProductRepositoryMapping.selected_layout_version,
+                    ProductRepositoryMapping.confirmed_preview_job_id,
+                    ProductRepositoryMapping.confirmed_preview_digest,
+                    ProductRepositoryMapping.preview_confirmed_by,
+                    ProductRepositoryMapping.preview_confirmed_at,
+                )
+                .where(ProductRepositoryMapping.revision_id.in_(revision_ids))
+                .order_by(ProductRepositoryMapping.id)
+            ).all()
+        )
+        mapping_ids = tuple(mapping.id for mapping in mappings)
+        sides = tuple(
+            session.execute(
+                select(
+                    ProductMappingRepositorySide.mapping_id,
+                    ProductMappingRepositorySide.role,
+                    ProductMappingRepositorySide.repository_id,
+                    ProductMappingRepositorySide.source_branch,
+                )
+                .where(ProductMappingRepositorySide.mapping_id.in_(mapping_ids))
+                .order_by(
+                    ProductMappingRepositorySide.mapping_id,
+                    ProductMappingRepositorySide.role,
+                )
+            ).all()
+        )
+        targets = tuple(
+            session.execute(
+                select(
+                    ProductMappingAllowedTarget.mapping_id,
+                    ProductMappingAllowedTarget.branch,
+                    ProductMappingAllowedTarget.is_default,
+                )
+                .where(ProductMappingAllowedTarget.mapping_id.in_(mapping_ids))
+                .order_by(
+                    ProductMappingAllowedTarget.mapping_id,
+                    ProductMappingAllowedTarget.branch,
+                )
+            ).all()
+        )
+    return (tuple(product), revisions, mappings, sides, targets)
+
+
+def test_inactive_active_revision_can_revalidate_confirm_and_reactivate_without_graph_mutation(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Recover an exact published graph through read-only work and sidecar authority."""
+    product_id, _old_active_id, candidate_id, mapping_id = _seed_preview_graph(
+        preview_session_factory
+    )
+    actor_id = uuid4()
+    with preview_session_factory.begin() as session:
+        session.add(
+            User(
+                id=actor_id,
+                email=f"revalidation-{actor_id}@example.com",
+                display_name="Revalidation Admin",
+                hashed_password=hash_password("revalidation administrator phrase!"),
+                is_active=True,
+                must_change_password=False,
+            )
+        )
+    with preview_session_factory() as session:
+        candidate_job = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    execute_preview_job(
+        preview_session_factory,
+        job_id=candidate_job.id,
+        processor=_confirmable_processor,
+    )
+    with preview_session_factory() as session:
+        completed_candidate = get_preview_job(session, job_id=candidate_job.id)
+        assert completed_candidate.result is not None
+        selected = cast(
+            list[dict[str, object]], completed_candidate.result["layout_candidates"]
+        )[0]
+        confirm_preview_job(
+            session,
+            job_id=candidate_job.id,
+            preview_digest=str(completed_candidate.result["digest"]),
+            layout_candidate_id=UUID(str(selected["id"])),
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
+    with preview_session_factory() as session:
+        published = publish_product_candidate(
+            session,
+            product_id=product_id,
+            candidate_revision_id=candidate_id,
+            expected_candidate_version=4,
+        )
+    assert published.active_revision_id == candidate_id
+    assert published.candidate_revision_id is None
+    with preview_session_factory() as session:
+        deactivate_product(session, product_id=product_id)
+    before_revalidation = _published_configuration_snapshot(
+        preview_session_factory,
+        product_id=product_id,
+    )
+
+    with preview_session_factory.begin() as session:
+        connection = session.get_one(BitbucketConnection, 1)
+        connection.generation += 1
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PublicationBlocked, match="product publication blocked"),
+    ):
+        reactivate_product(
+            session,
+            product_id=product_id,
+            active_revision_id=candidate_id,
+            expected_active_version=4,
+        )
+
+    preview_jobs = importlib.import_module("verboflex.services.preview_jobs")
+    create_active_job = preview_jobs.create_or_reuse_active_revision_revalidation_job
+    with preview_session_factory() as session:
+        active_job = create_active_job(
+            session,
+            product_id=product_id,
+            active_revision_id=candidate_id,
+            mapping_id=mapping_id,
+            expected_active_revision_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    assert active_job.revision_scope == "active_revalidation"
+    execute_preview_job(
+        preview_session_factory,
+        job_id=active_job.id,
+        processor=_confirmable_processor,
+    )
+    assert _published_configuration_snapshot(
+        preview_session_factory,
+        product_id=product_id,
+    ) == before_revalidation
+
+    with preview_session_factory() as session:
+        succeeded = get_preview_job(session, job_id=active_job.id)
+        assert succeeded.result is not None
+        current_layout = cast(
+            list[dict[str, object]], succeeded.result["layout_candidates"]
+        )[0]
+        assert preview_jobs.get_active_revision_revalidation_eligibility(
+            session,
+            product_id=product_id,
+            active_revision_id=candidate_id,
+            expected_active_revision_version=4,
+        ).eligible is False
+        confirmation = preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=active_job.id,
+            preview_digest=str(succeeded.result["digest"]),
+            layout_candidate_id=UUID(str(current_layout["id"])),
+            layout_candidate_version=1,
+            actor_id=actor_id,
+        )
+    assert confirmation.revision_id == candidate_id
+    assert confirmation.revision_version == 4
+    assert confirmation.mapping_id == mapping_id
+    assert confirmation.connection_generation == 8
+    assert confirmation.preview_digest == succeeded.result["digest"]
+    assert confirmation.layout_candidate_id == UUID(str(current_layout["id"]))
+    assert confirmation.confirmed_by == actor_id
+    assert _published_configuration_snapshot(
+        preview_session_factory,
+        product_id=product_id,
+    ) == before_revalidation
+
+    with preview_session_factory() as session:
+        eligibility = preview_jobs.get_active_revision_revalidation_eligibility(
+            session,
+            product_id=product_id,
+            active_revision_id=candidate_id,
+            expected_active_revision_version=4,
+        )
+        assert eligibility.eligible is True
+        assert len(eligibility.mappings) == 1
+        assert eligibility.mappings[0].is_current is True
+        reactivated = reactivate_product(
+            session,
+            product_id=product_id,
+            active_revision_id=candidate_id,
+            expected_active_version=4,
+        )
+    assert reactivated.changed is True
+    assert reactivated.is_active is True
+    assert reactivated.candidate_revision_id is None
+    assert _published_configuration_snapshot(
+        preview_session_factory,
+        product_id=product_id,
+    ) == before_revalidation
