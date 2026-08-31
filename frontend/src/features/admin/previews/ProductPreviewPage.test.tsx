@@ -138,15 +138,12 @@ function reactivationEligibility(
 ): AdminProductReactivationEligibilityResponse {
   return {
     active_revision_id: inactiveActiveOnlyProduct.active_revision!.id,
-    active_revision_version:
-      inactiveActiveOnlyProduct.active_revision!.version,
+    active_revision_version: inactiveActiveOnlyProduct.active_revision!.version,
     blocker_codes: isCurrent ? [] : ["revalidation_confirmation_required"],
     eligible: isCurrent,
     mappings: [
       {
-        blocker_codes: isCurrent
-          ? []
-          : ["revalidation_confirmation_required"],
+        blocker_codes: isCurrent ? [] : ["revalidation_confirmation_required"],
         is_current: isCurrent,
         mapping_id: confirmedActiveMapping.id,
       },
@@ -194,8 +191,7 @@ function activeRevalidationJob(
 ): AdminActiveRevisionRevalidationJobResponse {
   return {
     active_revision_id: inactiveActiveOnlyProduct.active_revision!.id,
-    active_revision_version:
-      inactiveActiveOnlyProduct.active_revision!.version,
+    active_revision_version: inactiveActiveOnlyProduct.active_revision!.version,
     attempt: 1,
     connection_generation: 8,
     created_at: new Date().toISOString(),
@@ -325,8 +321,7 @@ describe("administrator product preview and publication page", () => {
       ok({
         ...reactivationEligibility(true),
         active_revision_id: options.path.revision_id,
-        active_revision_version:
-          options.query.expected_active_revision_version,
+        active_revision_version: options.query.expected_active_revision_version,
         product_id: options.path.product_id,
       }),
     );
@@ -999,10 +994,7 @@ describe("administrator product preview and publication page", () => {
       .mockResolvedValueOnce(ok(currentEligibility));
     createActiveRevalidationMock
       .mockResolvedValueOnce(
-        failure(
-          { detail: "provider_token=must-not-render" },
-          503,
-        ) as never,
+        failure({ detail: "provider_token=must-not-render" }, 503) as never,
       )
       .mockResolvedValueOnce(ok(queuedJob, 202));
     getActiveRevalidationMock.mockResolvedValueOnce(ok(succeededJob));

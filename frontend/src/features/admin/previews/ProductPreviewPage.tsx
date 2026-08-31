@@ -824,8 +824,9 @@ function PublishedMappingRecovery({
             focusRecoveryControl();
             return;
           }
-          const pollingExhausted =
-            activeRevalidationPollingExhausted(response.data);
+          const pollingExhausted = activeRevalidationPollingExhausted(
+            response.data,
+          );
           setPollingError(pollingExhausted);
           setAnnouncement(
             pollingExhausted
@@ -887,8 +888,9 @@ function PublishedMappingRecovery({
         focusRecoveryControl();
         return;
       }
-      const pollingExhausted =
-        activeRevalidationPollingExhausted(response.data);
+      const pollingExhausted = activeRevalidationPollingExhausted(
+        response.data,
+      );
       setPollingError(pollingExhausted);
       setAnnouncement(
         pollingExhausted
@@ -1085,9 +1087,7 @@ function PublishedMappingRecovery({
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   type="button"
-                  disabled={
-                    selectedCandidate === undefined || confirmPending
-                  }
+                  disabled={selectedCandidate === undefined || confirmPending}
                   aria-busy={confirmPending}
                   onClick={() => void submitConfirmation()}
                 >
@@ -1419,12 +1419,9 @@ export function ProductPreviewPage({
         reactivationEligibility.eligible &&
         reactivationEligibility.mappings.length === mappings.length &&
         mappings.every(
-          (mapping) =>
-            reactivationMappingCurrentness.get(mapping.id) === true,
+          (mapping) => reactivationMappingCurrentness.get(mapping.id) === true,
         )
-      : mappings.every(
-          (mapping) => confirmationState[mapping.id] === true,
-        ));
+      : mappings.every((mapping) => confirmationState[mapping.id] === true));
   const publishLabel =
     currentProduct.active_revision === null
       ? "Publish product"
@@ -1540,9 +1537,7 @@ export function ProductPreviewPage({
 
       {isReactivation && reactivationEligibilityState.status === "error" ? (
         <PreviewAlert title="Reactivation status unavailable">
-          <p>
-            The current confirmation state could not be checked. Try again.
-          </p>
+          <p>The current confirmation state could not be checked. Try again.</p>
           <Button
             type="button"
             variant="outline"

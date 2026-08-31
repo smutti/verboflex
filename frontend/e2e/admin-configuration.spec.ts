@@ -2099,7 +2099,12 @@ function mockProviderContainer() {
 function readMockProviderAudit(): MockProviderAuditRow[] {
   const output = execFileSync(
     "docker",
-    ["exec", mockProviderContainer(), "cat", "/run/phase2/provider-audit.jsonl"],
+    [
+      "exec",
+      mockProviderContainer(),
+      "cat",
+      "/run/phase2/provider-audit.jsonl",
+    ],
     { encoding: "utf8" },
   );
   return output
@@ -2504,9 +2509,7 @@ test("unchanged active revision reactivation uses real backend state and blocks 
     await expect(
       page.locator('[data-slot="badge"]').filter({ hasText: /^Succeeded$/ }),
     ).toBeVisible();
-    await page
-      .getByRole("radio", { name: "Android XML — res" })
-      .click();
+    await page.getByRole("radio", { name: "Android XML — res" }).click();
     await page.getByRole("button", { name: "Confirm preview" }).click();
     await expect(
       page.locator('[data-slot="badge"]').filter({ hasText: /^Confirmed$/ }),
@@ -2613,7 +2616,9 @@ test("unchanged active revision reactivation uses real backend state and blocks 
 
     const providerAudit = readMockProviderAudit().slice(providerAuditBaseline);
     expect(
-      providerAudit.filter(({ category }) => category === "oauth-token-exchange"),
+      providerAudit.filter(
+        ({ category }) => category === "oauth-token-exchange",
+      ),
     ).toHaveLength(1);
     expect(
       providerAudit.filter(({ category }) => category === "repository-read"),
