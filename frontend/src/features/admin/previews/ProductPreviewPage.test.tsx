@@ -14,20 +14,26 @@ import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  confirmAdminActiveRevisionRevalidation,
   confirmAdminPreviewJob,
+  createAdminActiveRevisionRevalidationJob,
   createAdminPreviewJob,
+  getAdminActiveRevisionRevalidationJob,
   getAdminPreviewJob,
   getAdminProduct,
+  getAdminProductReactivationEligibility,
   listAdminCandidateMappings,
   listAdminRevisionMappings,
   listAdminRepositoryBranches,
   publishAdminProductCandidate,
   reactivateAdminProduct,
   updateAdminProductCandidate,
+  type AdminActiveRevisionRevalidationJobResponse,
   type AdminMappingResponse,
   type AdminPreviewJobResponse,
   type AdminPreviewLayoutCandidateResponse,
   type AdminProductLifecycleConflictResponse,
+  type AdminProductReactivationEligibilityResponse,
   type AdminProductResponse,
 } from "../../../api/client";
 import { ProductPreviewPage } from "./ProductPreviewPage";
@@ -38,10 +44,14 @@ vi.mock("../../../api/client", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../../api/client")>();
   return {
     ...original,
+    confirmAdminActiveRevisionRevalidation: vi.fn(),
     confirmAdminPreviewJob: vi.fn(),
+    createAdminActiveRevisionRevalidationJob: vi.fn(),
     createAdminPreviewJob: vi.fn(),
+    getAdminActiveRevisionRevalidationJob: vi.fn(),
     getAdminPreviewJob: vi.fn(),
     getAdminProduct: vi.fn(),
+    getAdminProductReactivationEligibility: vi.fn(),
     listAdminCandidateMappings: vi.fn(),
     listAdminRevisionMappings: vi.fn(),
     listAdminRepositoryBranches: vi.fn(),
@@ -51,10 +61,22 @@ vi.mock("../../../api/client", async (importOriginal) => {
   };
 });
 
+const confirmActiveRevalidationMock = vi.mocked(
+  confirmAdminActiveRevisionRevalidation,
+);
 const confirmMock = vi.mocked(confirmAdminPreviewJob);
+const createActiveRevalidationMock = vi.mocked(
+  createAdminActiveRevisionRevalidationJob,
+);
 const createJobMock = vi.mocked(createAdminPreviewJob);
+const getActiveRevalidationMock = vi.mocked(
+  getAdminActiveRevisionRevalidationJob,
+);
 const getJobMock = vi.mocked(getAdminPreviewJob);
 const getProductMock = vi.mocked(getAdminProduct);
+const getReactivationEligibilityMock = vi.mocked(
+  getAdminProductReactivationEligibility,
+);
 const listCandidateMappingsMock = vi.mocked(listAdminCandidateMappings);
 const listRevisionMappingsMock = vi.mocked(listAdminRevisionMappings);
 const listBranchesMock = vi.mocked(listAdminRepositoryBranches);
@@ -111,6 +133,28 @@ const confirmedActiveMapping: AdminMappingResponse = {
   selected_layout_version: 1,
 };
 
+function reactivationEligibility(
+  isCurrent: boolean,
+): AdminProductReactivationEligibilityResponse {
+  return {
+    active_revision_id: inactiveActiveOnlyProduct.active_revision!.id,
+    active_revision_version:
+      inactiveActiveOnlyProduct.active_revision!.version,
+    blocker_codes: isCurrent ? [] : ["revalidation_confirmation_required"],
+    eligible: isCurrent,
+    mappings: [
+      {
+        blocker_codes: isCurrent
+          ? []
+          : ["revalidation_confirmation_required"],
+        is_current: isCurrent,
+        mapping_id: confirmedActiveMapping.id,
+      },
+    ],
+    product_id: inactiveActiveOnlyProduct.id,
+  };
+}
+
 const formats = [
   ["android_xml", "Android XML", "app/src/main/res"],
   ["qt_ts", "Qt TS", "translations/{locale}.ts"],
@@ -144,6 +188,43 @@ function candidate(
 const candidates = formats.map(([format, , identity], index) =>
   candidate(format, identity, index + 1),
 );
+
+function activeRevalidationJob(
+  overrides: Partial<AdminActiveRevisionRevalidationJobResponse> = {},
+): AdminActiveRevisionRevalidationJobResponse {
+  return {
+    active_revision_id: inactiveActiveOnlyProduct.active_revision!.id,
+    active_revision_version:
+      inactiveActiveOnlyProduct.active_revision!.version,
+    attempt: 1,
+    connection_generation: 8,
+    created_at: new Date().toISOString(),
+    detector_version: "detector-v1",
+    error_code: null,
+    finished_at: "2026-08-31T17:00:05Z",
+    id: "00000000-0000-4000-8000-000000000701",
+    input_digest: "e".repeat(64),
+    is_current: true,
+    mapping_id: confirmedActiveMapping.id,
+    product_id: inactiveActiveOnlyProduct.id,
+    repository_sides: [
+      {
+        commit_hash: "b".repeat(40),
+        repository_id: confirmedActiveMapping.primary_repository_id,
+        role: "direct",
+        source_branch: confirmedActiveMapping.primary_source_branch,
+      },
+    ],
+    result: {
+      detector_version: "detector-v1",
+      digest: "f".repeat(64),
+      layout_candidates: [candidates[0]],
+    },
+    started_at: "2026-08-31T17:00:01Z",
+    state: "succeeded",
+    ...overrides,
+  };
+}
 
 function previewJob(
   overrides: Partial<AdminPreviewJobResponse> = {},
@@ -230,9 +311,12 @@ async function runValidation() {
 
 describe("administrator product preview and publication page", () => {
   beforeEach(() => {
+    confirmActiveRevalidationMock.mockReset();
     confirmMock.mockReset();
+    createActiveRevalidationMock.mockReset();
     createJobMock.mockReset();
     createJobMock.mockResolvedValue(ok(previewJob(), 202));
+    getActiveRevalidationMock.mockReset();
     getJobMock.mockReset();
     getProductMock.mockReset();
     getProductMock.mockResolvedValue(ok(product));
@@ -878,6 +962,150 @@ describe("administrator product preview and publication page", () => {
     expect(publishMock).not.toHaveBeenCalled();
   });
 
+  it("recovers generation-stale active mappings without candidate mutation", async () => {
+    const staleEligibility = reactivationEligibility(false);
+    const currentEligibility = reactivationEligibility(true);
+    const queuedJob = activeRevalidationJob({
+      finished_at: null,
+      is_current: false,
+      result: null,
+      started_at: null,
+      state: "queued",
+    });
+    const succeededJob = activeRevalidationJob();
+    const reactivatedProduct: AdminProductResponse = {
+      ...inactiveActiveOnlyProduct,
+      is_active: true,
+    };
+    getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+    getReactivationEligibilityMock
+      .mockResolvedValueOnce(ok(staleEligibility))
+      .mockResolvedValueOnce(ok(currentEligibility));
+    createActiveRevalidationMock
+      .mockResolvedValueOnce(
+        failure(
+          { detail: "provider_token=must-not-render" },
+          503,
+        ) as never,
+      )
+      .mockResolvedValueOnce(ok(queuedJob, 202));
+    getActiveRevalidationMock.mockResolvedValueOnce(ok(succeededJob));
+    confirmActiveRevalidationMock.mockResolvedValueOnce(
+      ok({
+        active_revision_id: succeededJob.active_revision_id,
+        active_revision_version: succeededJob.active_revision_version,
+        commits: succeededJob.repository_sides,
+        confirmed_at: "2026-08-31T17:00:06Z",
+        confirmed_by: "00000000-0000-4000-8000-000000000001",
+        connection_generation: succeededJob.connection_generation,
+        job_id: succeededJob.id,
+        layout_candidate_id: candidates[0].id,
+        layout_candidate_version: candidates[0].version,
+        mapping_id: succeededJob.mapping_id,
+        preview_digest: succeededJob.result!.digest,
+        product_id: succeededJob.product_id,
+      }),
+    );
+    reactivateMock.mockResolvedValueOnce(ok(reactivatedProduct));
+
+    const view = renderPage(inactiveActiveOnlyProduct.id);
+
+    expect(await screen.findByText("Preview out of date")).toBeVisible();
+    expect(
+      screen.getByText(
+        "This preview no longer matches the current draft. Run validation again.",
+      ),
+    ).toBeVisible();
+    const runAgain = screen.getByRole("button", {
+      name: "Run validation again",
+    });
+    const reactivate = screen.getByRole("button", {
+      name: "Reactivate product",
+    });
+    expect(reactivate).toBeDisabled();
+
+    await userEvent.click(runAgain);
+    const recoveryStatus = await screen.findByRole("status", {
+      name: "Active revision recovery status",
+    });
+    expect(recoveryStatus).toHaveTextContent(
+      "Validation did not complete. Try again.",
+    );
+    expect(recoveryStatus).not.toHaveTextContent("must-not-render");
+    expect(runAgain).toHaveFocus();
+
+    await userEvent.click(runAgain);
+    expect(await screen.findByText("Queued", { exact: true })).toBeVisible();
+    expect(createActiveRevalidationMock).toHaveBeenLastCalledWith({
+      auth: "memory-only-admin-bearer",
+      body: {
+        commits: [{ commit_hash: "b".repeat(40), role: "direct" }],
+        expected_active_revision_version:
+          inactiveActiveOnlyProduct.active_revision!.version,
+      },
+      path: {
+        mapping_id: confirmedActiveMapping.id,
+        product_id: inactiveActiveOnlyProduct.id,
+        revision_id: inactiveActiveOnlyProduct.active_revision!.id,
+      },
+    });
+    await waitFor(
+      () => expect(getActiveRevalidationMock).toHaveBeenCalledOnce(),
+      { timeout: 3_000 },
+    );
+    expect(await screen.findByText("Succeeded", { exact: true })).toBeVisible();
+
+    await userEvent.click(
+      screen.getByRole("radio", {
+        name: "Android XML — app/src/main/res",
+      }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Confirm preview" }),
+    );
+    expect(confirmActiveRevalidationMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      body: {
+        active_revision_id: succeededJob.active_revision_id,
+        active_revision_version: succeededJob.active_revision_version,
+        commits: [{ commit_hash: "b".repeat(40), role: "direct" }],
+        connection_generation: succeededJob.connection_generation,
+        layout_candidate_id: candidates[0].id,
+        layout_candidate_version: candidates[0].version,
+        mapping_id: succeededJob.mapping_id,
+        preview_digest: succeededJob.result!.digest,
+      },
+      path: { job_id: succeededJob.id },
+    });
+    expect(await screen.findByText("Confirmed")).toBeVisible();
+    await waitFor(() => expect(reactivate).toBeEnabled());
+    expect(getReactivationEligibilityMock).toHaveBeenCalledTimes(2);
+
+    await userEvent.click(reactivate);
+    await userEvent.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", {
+        name: "Reactivate product",
+      }),
+    );
+    expect(await screen.findByText("Active")).toBeVisible();
+
+    expect(confirmMock).not.toHaveBeenCalled();
+    expect(createJobMock).not.toHaveBeenCalled();
+    expect(listCandidateMappingsMock).not.toHaveBeenCalled();
+    expect(updateProductMock).not.toHaveBeenCalled();
+    expect(publishMock).not.toHaveBeenCalled();
+
+    view.unmount();
+    const pollCountAfterUnmount = getActiveRevalidationMock.mock.calls.length;
+    await new Promise((resolve) => window.setTimeout(resolve, 25));
+    expect(getActiveRevalidationMock).toHaveBeenCalledTimes(
+      pollCountAfterUnmount,
+    );
+  });
+
   it.each([
     [
       "missing",
@@ -1117,3 +1345,4 @@ describe("administrator product preview and publication page", () => {
     ).not.toBeInTheDocument();
   });
 });
+    getReactivationEligibilityMock.mockReset();
