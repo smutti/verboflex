@@ -3174,6 +3174,16 @@ def test_active_revision_revalidation_api_is_admin_only_exact_and_read_only(
         ],
     }
 
+    stale_eligibility = asyncio.run(
+        _request(
+            "GET",
+            eligibility_path.replace(
+                "expected_active_revision_version=4",
+                "expected_active_revision_version=5",
+            ),
+            access_token=admin_token,
+        )
+    )
     stale_version = asyncio.run(
         _request(
             "POST",
@@ -3193,8 +3203,24 @@ def test_active_revision_revalidation_api_is_admin_only_exact_and_read_only(
             },
         )
     )
+    duplicate_commit_roles = asyncio.run(
+        _request(
+            "POST",
+            create_path,
+            access_token=admin_token,
+            json={
+                **create_payload,
+                "commits": [
+                    {"role": "direct", "commit_hash": COMMIT_HASH},
+                    {"role": "direct", "commit_hash": "b" * 40},
+                ],
+            },
+        )
+    )
+    assert stale_eligibility.status_code == 409
     assert stale_version.status_code == 409
     assert stale_commit.status_code == 409
+    assert duplicate_commit_roles.status_code == 409
 
     created = asyncio.run(
         _request(
@@ -3261,6 +3287,12 @@ def test_active_revision_revalidation_api_is_admin_only_exact_and_read_only(
         {"mapping_id": str(uuid4())},
         {"connection_generation": 8},
         {"commits": [{"role": "direct", "commit_hash": "b" * 40}]},
+        {
+            "commits": [
+                {"role": "direct", "commit_hash": COMMIT_HASH},
+                {"role": "direct", "commit_hash": "b" * 40},
+            ]
+        },
     )
     for replacement in stale_confirmation_values:
         response = asyncio.run(
