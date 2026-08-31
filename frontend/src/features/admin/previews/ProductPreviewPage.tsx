@@ -9,17 +9,23 @@ import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import {
+  confirmAdminActiveRevisionRevalidation,
   confirmAdminPreviewJob,
+  createAdminActiveRevisionRevalidationJob,
   createAdminPreviewJob,
+  getAdminActiveRevisionRevalidationJob,
   getAdminProduct,
+  getAdminProductReactivationEligibility,
   listAdminRevisionMappings,
   listAdminRepositoryBranches,
   publishAdminProductCandidate,
   reactivateAdminProduct,
+  type AdminActiveRevisionRevalidationJobResponse,
   type AdminMappingResponse,
   type AdminPreviewCommitRequest,
   type AdminPreviewJobResponse,
   type AdminPreviewLayoutCandidateResponse,
+  type AdminProductReactivationEligibilityResponse,
   type AdminProductResponse,
 } from "../../../api/client";
 import {
@@ -49,7 +55,11 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { useCursorCollection } from "../useCursorCollection";
-import { previewJobIdentity, usePreviewPolling } from "./usePreviewPolling";
+import {
+  nextPreviewPollDelay,
+  previewJobIdentity,
+  usePreviewPolling,
+} from "./usePreviewPolling";
 
 export interface ProductPreviewPageProps {
   accessToken: string;
@@ -65,6 +75,13 @@ type PageState =
       productId: string;
       revisionId: string;
       revisionVersion: number;
+    };
+
+type ReactivationEligibilityState =
+  | { status: "idle" | "loading" | "error" }
+  | {
+      data: AdminProductReactivationEligibilityResponse;
+      status: "ready";
     };
 
 type PublicationBlocker =
@@ -136,11 +153,41 @@ function publicationBlockers(error: unknown): PublicationBlocker[] {
   );
 }
 
-function hasPublishedPreviewConfirmation(mapping: AdminMappingResponse) {
-  return (
-    mapping.selected_layout_candidate_id !== null &&
-    mapping.selected_layout_version !== null
-  );
+function activeRevalidationJobIdentity(
+  job: AdminActiveRevisionRevalidationJobResponse,
+) {
+  return JSON.stringify({
+    activeRevisionId: job.active_revision_id,
+    activeRevisionVersion: job.active_revision_version,
+    attempt: job.attempt,
+    connectionGeneration: job.connection_generation,
+    detectorVersion: job.detector_version,
+    id: job.id,
+    inputDigest: job.input_digest,
+    mappingId: job.mapping_id,
+    productId: job.product_id,
+    repositorySides: job.repository_sides.map((side) => ({
+      commitHash: side.commit_hash,
+      repositoryId: side.repository_id,
+      role: side.role,
+      sourceBranch: side.source_branch,
+    })),
+  });
+}
+
+function activeRevalidationPollingExhausted(
+  job: AdminActiveRevisionRevalidationJobResponse,
+) {
+  if (
+    job.state === "failed" ||
+    job.state === "succeeded" ||
+    job.state === "timed_out"
+  ) {
+    return false;
+  }
+  const createdAt = Date.parse(job.created_at);
+  const elapsed = Number.isFinite(createdAt) ? Date.now() - createdAt : 0;
+  return nextPreviewPollDelay(elapsed) === null;
 }
 
 async function resolveCommits(
@@ -214,7 +261,9 @@ function CandidateDetails({
   job,
 }: {
   candidate: AdminPreviewLayoutCandidateResponse;
-  job: AdminPreviewJobResponse;
+  job: {
+    repository_sides: AdminPreviewJobResponse["repository_sides"];
+  };
 }) {
   const side = job.repository_sides.find(
     (repositorySide) => repositorySide.role === candidate.repository_side,
@@ -670,20 +719,267 @@ function MappingPreview({
   );
 }
 
-function PublishedMappingConfirmation({
+function PublishedMappingRecovery({
+  accessToken,
+  eligibilityReady,
   index,
+  isCurrent,
   mapping,
+  onConfirmed,
+  productId,
+  revisionId,
+  revisionVersion,
 }: {
+  accessToken: string;
+  eligibilityReady: boolean;
   index: number;
+  isCurrent: boolean;
   mapping: AdminMappingResponse;
+  onConfirmed: () => Promise<void>;
+  productId: string;
+  revisionId: string;
+  revisionVersion: number;
 }) {
+  const runButtonRef = useRef<HTMLButtonElement>(null);
+  const runGenerationRef = useRef(0);
+  const runPendingRef = useRef(false);
+  const [announcement, setAnnouncement] = useState("");
+  const [confirmError, setConfirmError] = useState(false);
+  const [confirmPending, setConfirmPending] = useState(false);
+  const confirmPendingRef = useRef(false);
+  const [confirmedIdentity, setConfirmedIdentity] = useState<string | null>(
+    null,
+  );
+  const [job, setJob] =
+    useState<AdminActiveRevisionRevalidationJobResponse | null>(null);
+  const [pollingError, setPollingError] = useState(false);
+  const [runError, setRunError] = useState(false);
+  const [runPending, setRunPending] = useState(false);
+  const [selectedCandidateId, setSelectedCandidateId] = useState("");
+
+  useEffect(
+    () => () => {
+      runGenerationRef.current += 1;
+    },
+    [],
+  );
+
+  const result = job?.result ?? null;
+  const candidates = result?.layout_candidates ?? [];
+  const candidatesAreExact =
+    candidates.length > 0 && candidates.every(isExactCandidate);
+  const confirmable =
+    job?.state === "succeeded" &&
+    job.is_current &&
+    result !== null &&
+    candidatesAreExact;
+  const selectedCandidate = candidates.find(
+    (candidate) => candidate.id === selectedCandidateId,
+  );
+  const currentConfirmationIdentity =
+    job === null || result === null || selectedCandidate === undefined
+      ? null
+      : `${activeRevalidationJobIdentity(job)}:${result.digest}:${selectedCandidate.id}`;
+  const confirmed =
+    currentConfirmationIdentity !== null &&
+    confirmedIdentity === currentConfirmationIdentity;
+
+  const focusRecoveryControl = useCallback(() => {
+    queueMicrotask(() => runButtonRef.current?.focus());
+  }, []);
+
+  useEffect(() => {
+    if (
+      job === null ||
+      job.state === "failed" ||
+      job.state === "succeeded" ||
+      job.state === "timed_out"
+    ) {
+      return;
+    }
+    const generation = runGenerationRef.current;
+    const identity = activeRevalidationJobIdentity(job);
+    const createdAt = Date.parse(job.created_at);
+    const elapsed = Number.isFinite(createdAt) ? Date.now() - createdAt : 0;
+    const delay = nextPreviewPollDelay(elapsed);
+    if (delay === null) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const response = await getAdminActiveRevisionRevalidationJob({
+            auth: accessToken,
+            path: { job_id: job.id },
+          });
+          if (generation !== runGenerationRef.current) {
+            return;
+          }
+          if (
+            response.data === undefined ||
+            activeRevalidationJobIdentity(response.data) !== identity
+          ) {
+            setAnnouncement("Validation status is unavailable. Try again.");
+            setPollingError(true);
+            focusRecoveryControl();
+            return;
+          }
+          const pollingExhausted =
+            activeRevalidationPollingExhausted(response.data);
+          setPollingError(pollingExhausted);
+          setAnnouncement(
+            pollingExhausted
+              ? "Automatic updates paused. Try again."
+              : JOB_LABELS[response.data.state],
+          );
+          setJob(response.data);
+          if (
+            pollingExhausted ||
+            response.data.state === "failed" ||
+            response.data.state === "timed_out"
+          ) {
+            focusRecoveryControl();
+          }
+        } catch {
+          if (generation === runGenerationRef.current) {
+            setAnnouncement("Validation status is unavailable. Try again.");
+            setPollingError(true);
+            focusRecoveryControl();
+          }
+        }
+      })();
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [accessToken, focusRecoveryControl, job]);
+
+  async function runValidationAgain() {
+    if (runPendingRef.current) {
+      return;
+    }
+    const generation = ++runGenerationRef.current;
+    runPendingRef.current = true;
+    setRunPending(true);
+    setRunError(false);
+    setPollingError(false);
+    setConfirmError(false);
+    setConfirmedIdentity(null);
+    setSelectedCandidateId("");
+    try {
+      const commits = await resolveCommits(accessToken, mapping);
+      const response = await createAdminActiveRevisionRevalidationJob({
+        auth: accessToken,
+        body: {
+          commits,
+          expected_active_revision_version: revisionVersion,
+        },
+        path: {
+          mapping_id: mapping.id,
+          product_id: productId,
+          revision_id: revisionId,
+        },
+      });
+      if (generation !== runGenerationRef.current) {
+        return;
+      }
+      if (response.data === undefined) {
+        setAnnouncement("Validation did not complete. Try again.");
+        setRunError(true);
+        focusRecoveryControl();
+        return;
+      }
+      const pollingExhausted =
+        activeRevalidationPollingExhausted(response.data);
+      setPollingError(pollingExhausted);
+      setAnnouncement(
+        pollingExhausted
+          ? "Automatic updates paused. Try again."
+          : JOB_LABELS[response.data.state],
+      );
+      setJob(response.data);
+      if (pollingExhausted) {
+        focusRecoveryControl();
+      }
+    } catch {
+      if (generation === runGenerationRef.current) {
+        setAnnouncement("Validation did not complete. Try again.");
+        setRunError(true);
+        focusRecoveryControl();
+      }
+    } finally {
+      if (generation === runGenerationRef.current) {
+        runPendingRef.current = false;
+        setRunPending(false);
+      }
+    }
+  }
+
+  async function submitConfirmation() {
+    if (
+      confirmPendingRef.current ||
+      !confirmable ||
+      job === null ||
+      result === null ||
+      selectedCandidate === undefined ||
+      currentConfirmationIdentity === null
+    ) {
+      return;
+    }
+    confirmPendingRef.current = true;
+    setConfirmPending(true);
+    setConfirmError(false);
+    try {
+      const response = await confirmAdminActiveRevisionRevalidation({
+        auth: accessToken,
+        body: {
+          active_revision_id: job.active_revision_id,
+          active_revision_version: job.active_revision_version,
+          commits: job.repository_sides.map((side) => ({
+            commit_hash: side.commit_hash,
+            role: side.role,
+          })),
+          connection_generation: job.connection_generation,
+          layout_candidate_id: selectedCandidate.id,
+          layout_candidate_version: selectedCandidate.version,
+          mapping_id: job.mapping_id,
+          preview_digest: result.digest,
+        },
+        path: { job_id: job.id },
+      });
+      if (response.data === undefined) {
+        setAnnouncement("Preview was not confirmed. Run validation again.");
+        setConfirmError(true);
+        focusRecoveryControl();
+        return;
+      }
+      setConfirmedIdentity(currentConfirmationIdentity);
+      setAnnouncement("Confirmed");
+      await onConfirmed();
+    } catch {
+      setAnnouncement("Preview was not confirmed. Run validation again.");
+      setConfirmError(true);
+      focusRecoveryControl();
+    } finally {
+      confirmPendingRef.current = false;
+      setConfirmPending(false);
+    }
+  }
+
   return (
     <section
       id={`preview-${mapping.id}`}
-      className="grid gap-3 rounded-lg border bg-secondary p-6"
+      className="grid gap-6 rounded-lg border bg-secondary p-6"
       aria-labelledby={`preview-title-${mapping.id}`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div
+        role="status"
+        aria-label="Active revision recovery status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {announcement}
+      </div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid gap-1">
           <h2
             id={`preview-title-${mapping.id}`}
@@ -696,12 +992,123 @@ function PublishedMappingConfirmation({
             mapping
           </p>
         </div>
-        <Badge variant="outline" className="w-fit rounded-md">
-          {hasPublishedPreviewConfirmation(mapping)
-            ? "Confirmed"
-            : "Preview confirmation required"}
-        </Badge>
+        {eligibilityReady && isCurrent ? (
+          <Badge variant="outline" className="w-fit rounded-md">
+            Confirmed
+          </Badge>
+        ) : !eligibilityReady ? (
+          <Badge variant="outline" className="w-fit rounded-md">
+            Checking confirmation
+          </Badge>
+        ) : (
+          <Button
+            ref={runButtonRef}
+            type="button"
+            disabled={runPending}
+            aria-busy={runPending}
+            onClick={() => void runValidationAgain()}
+          >
+            Run validation again
+          </Button>
+        )}
       </div>
+
+      {eligibilityReady && !isCurrent ? (
+        <PreviewAlert title="Preview out of date">
+          This preview no longer matches the current draft. Run validation
+          again.
+        </PreviewAlert>
+      ) : null}
+
+      {runError ? (
+        <PreviewAlert title="Validation did not complete">
+          Validation did not complete. Try again.
+        </PreviewAlert>
+      ) : null}
+
+      {pollingError ? (
+        <PreviewAlert title="Status unavailable">
+          Validation status is unavailable. Try again.
+        </PreviewAlert>
+      ) : null}
+
+      {job === null || isCurrent ? null : (
+        <div className="grid gap-6">
+          <Badge variant="outline" className="w-fit rounded-md">
+            {JOB_LABELS[job.state]}
+          </Badge>
+
+          {job.state === "failed" || job.state === "timed_out" ? (
+            <PreviewAlert title="Validation did not complete">
+              Validation did not complete. Run validation again.
+            </PreviewAlert>
+          ) : null}
+
+          {confirmable ? (
+            <>
+              <fieldset className="grid gap-3">
+                <legend className="text-heading font-semibold">
+                  Detected layout candidates
+                </legend>
+                <RadioGroup
+                  value={selectedCandidateId}
+                  onValueChange={(value) => {
+                    setSelectedCandidateId(value);
+                    setConfirmedIdentity(null);
+                  }}
+                  className="grid gap-3"
+                >
+                  {candidates.map((candidate) => {
+                    const label = candidateLabel(candidate);
+                    return (
+                      <label
+                        key={candidate.id}
+                        className="flex min-w-0 items-start gap-3 rounded-lg border p-4"
+                      >
+                        <RadioGroupItem
+                          value={candidate.id}
+                          aria-label={label}
+                        />
+                        <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+                          {label}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </RadioGroup>
+              </fieldset>
+
+              {selectedCandidate === undefined ? null : (
+                <CandidateDetails candidate={selectedCandidate} job={job} />
+              )}
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  disabled={
+                    selectedCandidate === undefined || confirmPending
+                  }
+                  aria-busy={confirmPending}
+                  onClick={() => void submitConfirmation()}
+                >
+                  Confirm preview
+                </Button>
+                {confirmed ? (
+                  <Badge variant="outline" className="w-fit rounded-md">
+                    Confirmed
+                  </Badge>
+                ) : null}
+              </div>
+            </>
+          ) : null}
+
+          {confirmError ? (
+            <PreviewAlert title="Preview not confirmed">
+              Preview was not confirmed. Run validation again.
+            </PreviewAlert>
+          ) : null}
+        </div>
+      )}
     </section>
   );
 }
@@ -712,9 +1119,12 @@ export function ProductPreviewPage({
 }: ProductPreviewPageProps) {
   const routeProductId = useParams<"productId">().productId;
   const resolvedProductId = productId ?? routeProductId;
+  const eligibilityGenerationRef = useRef(0);
   const loadGenerationRef = useRef(0);
   const publicationPendingRef = useRef(false);
   const [pageState, setPageState] = useState<PageState>({ status: "loading" });
+  const [reactivationEligibilityState, setReactivationEligibilityState] =
+    useState<ReactivationEligibilityState>({ status: "idle" });
   const [confirmationState, setConfirmationState] = useState<
     Record<string, boolean>
   >({});
@@ -725,6 +1135,8 @@ export function ProductPreviewPage({
 
   const loadPage = useCallback(async () => {
     const generation = ++loadGenerationRef.current;
+    eligibilityGenerationRef.current += 1;
+    setReactivationEligibilityState({ status: "idle" });
     setPageState({ status: "loading" });
     if (resolvedProductId === undefined) {
       setPageState({ status: "error" });
@@ -837,9 +1249,70 @@ export function ProductPreviewPage({
     });
     return () => {
       active = false;
+      eligibilityGenerationRef.current += 1;
       loadGenerationRef.current += 1;
     };
   }, [loadPage]);
+
+  const loadReactivationEligibility = useCallback(async () => {
+    if (
+      pageState.status !== "ready" ||
+      pageState.product.is_active ||
+      pageState.product.active_revision === null ||
+      pageState.product.candidate_revision !== null ||
+      !mappingCollectionComplete
+    ) {
+      setReactivationEligibilityState({ status: "idle" });
+      return;
+    }
+    const generation = ++eligibilityGenerationRef.current;
+    const activeRevision = pageState.product.active_revision;
+    setReactivationEligibilityState({ status: "loading" });
+    try {
+      const response = await getAdminProductReactivationEligibility({
+        auth: accessToken,
+        path: {
+          product_id: pageState.productId,
+          revision_id: activeRevision.id,
+        },
+        query: {
+          expected_active_revision_version: activeRevision.version,
+        },
+      });
+      if (generation !== eligibilityGenerationRef.current) {
+        return;
+      }
+      if (
+        response.data === undefined ||
+        response.data.product_id !== pageState.productId ||
+        response.data.active_revision_id !== activeRevision.id ||
+        response.data.active_revision_version !== activeRevision.version
+      ) {
+        setReactivationEligibilityState({ status: "error" });
+        return;
+      }
+      setReactivationEligibilityState({
+        data: response.data,
+        status: "ready",
+      });
+    } catch {
+      if (generation === eligibilityGenerationRef.current) {
+        setReactivationEligibilityState({ status: "error" });
+      }
+    }
+  }, [accessToken, mappingCollectionComplete, pageState]);
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (active) {
+        void loadReactivationEligibility();
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [loadReactivationEligibility]);
 
   const updateConfirmation = useCallback(
     (mappingId: string, confirmed: boolean) => {
@@ -928,14 +1401,30 @@ export function ProductPreviewPage({
     !currentProduct.is_active &&
     currentProduct.active_revision !== null &&
     currentProduct.candidate_revision === null;
+  const reactivationEligibility =
+    reactivationEligibilityState.status === "ready"
+      ? reactivationEligibilityState.data
+      : null;
+  const reactivationMappingCurrentness = new Map(
+    reactivationEligibility?.mappings.map((mapping) => [
+      mapping.mapping_id,
+      mapping.is_current,
+    ]) ?? [],
+  );
   const allConfirmed =
     collectionReady &&
     mappings.length > 0 &&
-    mappings.every((mapping) =>
-      isReactivation
-        ? hasPublishedPreviewConfirmation(mapping)
-        : confirmationState[mapping.id] === true,
-    );
+    (isReactivation
+      ? reactivationEligibility !== null &&
+        reactivationEligibility.eligible &&
+        reactivationEligibility.mappings.length === mappings.length &&
+        mappings.every(
+          (mapping) =>
+            reactivationMappingCurrentness.get(mapping.id) === true,
+        )
+      : mappings.every(
+          (mapping) => confirmationState[mapping.id] === true,
+        ));
   const publishLabel =
     currentProduct.active_revision === null
       ? "Publish product"
@@ -1049,6 +1538,21 @@ export function ProductPreviewPage({
         </Alert>
       ) : null}
 
+      {isReactivation && reactivationEligibilityState.status === "error" ? (
+        <PreviewAlert title="Reactivation status unavailable">
+          <p>
+            The current confirmation state could not be checked. Try again.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void loadReactivationEligibility()}
+          >
+            Retry confirmation check
+          </Button>
+        </PreviewAlert>
+      ) : null}
+
       {collectionReady && mappings.length === 0 ? (
         <Alert>
           <AlertTitle>No mappings configured</AlertTitle>
@@ -1059,10 +1563,19 @@ export function ProductPreviewPage({
       ) : (
         mappings.map((mapping, index) =>
           isReactivation ? (
-            <PublishedMappingConfirmation
+            <PublishedMappingRecovery
               key={mapping.id}
+              accessToken={accessToken}
+              eligibilityReady={reactivationEligibility !== null}
               index={index}
+              isCurrent={
+                reactivationMappingCurrentness.get(mapping.id) === true
+              }
               mapping={mapping}
+              onConfirmed={loadReactivationEligibility}
+              productId={readyState.productId}
+              revisionId={readyState.revisionId}
+              revisionVersion={readyState.revisionVersion}
             />
           ) : (
             <MappingPreview
@@ -1115,7 +1628,8 @@ export function ProductPreviewPage({
           {!allConfirmed ? (
             <ul className="grid gap-2">
               {mappings.map((mapping, index) =>
-                (isReactivation && hasPublishedPreviewConfirmation(mapping)) ||
+                (isReactivation &&
+                  reactivationMappingCurrentness.get(mapping.id) === true) ||
                 (!isReactivation &&
                   confirmationState[mapping.id] === true) ? null : (
                   <li key={mapping.id}>

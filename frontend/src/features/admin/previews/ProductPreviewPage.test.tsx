@@ -320,6 +320,16 @@ describe("administrator product preview and publication page", () => {
     getJobMock.mockReset();
     getProductMock.mockReset();
     getProductMock.mockResolvedValue(ok(product));
+    getReactivationEligibilityMock.mockReset();
+    getReactivationEligibilityMock.mockImplementation(async (options) =>
+      ok({
+        ...reactivationEligibility(true),
+        active_revision_id: options.path.revision_id,
+        active_revision_version:
+          options.query.expected_active_revision_version,
+        product_id: options.path.product_id,
+      }),
+    );
     listCandidateMappingsMock.mockReset();
     listRevisionMappingsMock.mockReset();
     listRevisionMappingsMock.mockResolvedValue(
@@ -565,6 +575,9 @@ describe("administrator product preview and publication page", () => {
       selected_layout_version: null,
     });
     getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+    getReactivationEligibilityMock.mockResolvedValueOnce(
+      ok(reactivationEligibility(false)),
+    );
     listRevisionMappingsMock
       .mockResolvedValueOnce(ok({ items: firstPage, next_cursor: "page-2" }))
       .mockImplementationOnce(async () => {
@@ -1038,7 +1051,9 @@ describe("administrator product preview and publication page", () => {
     expect(runAgain).toHaveFocus();
 
     await userEvent.click(runAgain);
-    expect(await screen.findByText("Queued", { exact: true })).toBeVisible();
+    expect(
+      (await screen.findAllByText("Queued", { exact: true }))[0],
+    ).toBeVisible();
     expect(createActiveRevalidationMock).toHaveBeenLastCalledWith({
       auth: "memory-only-admin-bearer",
       body: {
@@ -1056,7 +1071,9 @@ describe("administrator product preview and publication page", () => {
       () => expect(getActiveRevalidationMock).toHaveBeenCalledOnce(),
       { timeout: 3_000 },
     );
-    expect(await screen.findByText("Succeeded", { exact: true })).toBeVisible();
+    expect(
+      (await screen.findAllByText("Succeeded", { exact: true }))[0],
+    ).toBeVisible();
 
     await userEvent.click(
       screen.getByRole("radio", {
@@ -1080,7 +1097,7 @@ describe("administrator product preview and publication page", () => {
       },
       path: { job_id: succeededJob.id },
     });
-    expect(await screen.findByText("Confirmed")).toBeVisible();
+    expect((await screen.findAllByText("Confirmed"))[0]).toBeVisible();
     await waitFor(() => expect(reactivate).toBeEnabled());
     expect(getReactivationEligibilityMock).toHaveBeenCalledTimes(2);
 
@@ -1124,6 +1141,9 @@ describe("administrator product preview and publication page", () => {
     "keeps reactivation disabled for a %s active confirmation without sending a lifecycle request",
     async (_state, blockedMapping) => {
       getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+      getReactivationEligibilityMock.mockResolvedValueOnce(
+        ok(reactivationEligibility(false)),
+      );
       listRevisionMappingsMock.mockResolvedValueOnce(
         ok({ items: [blockedMapping], next_cursor: null }),
       );
@@ -1345,4 +1365,3 @@ describe("administrator product preview and publication page", () => {
     ).not.toBeInTheDocument();
   });
 });
-    getReactivationEligibilityMock.mockReset();
