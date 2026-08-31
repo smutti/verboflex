@@ -6,6 +6,7 @@ readonly REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 readonly BACKEND_ROOT="$REPO_ROOT/backend"
 
 SMOKE_MODE=""
+SMOKE_DEPLOYMENT_OVERLAY=""
 SMOKE_PROJECT=""
 SMOKE_RUNTIME_DIR=""
 SMOKE_ENV_FILE=""
@@ -18,6 +19,8 @@ SMOKE_EMAIL="phase02-smoke@example.com"
 SMOKE_TEMP_PASSWORD=""
 SMOKE_NEW_PASSWORD=""
 SMOKE_CLIENT_SECRET=""
+SMOKE_POSTGRES_PASSWORD=""
+SMOKE_JWT_SECRET_KEY=""
 SMOKE_ACCESS_TOKEN=""
 SMOKE_KEYRING=""
 SMOKE_WORKER_LOSS_STATE=""
@@ -41,9 +44,25 @@ compose_base() {
     -f "$REPO_ROOT/docker-compose.yml" "$@"
 }
 
+compose_deployment_overlay() {
+  case "${1:-}" in
+    staging) printf '%s\n' "$REPO_ROOT/docker-compose.staging.yml" ;;
+    production) printf '%s\n' "$REPO_ROOT/docker-compose.prod.yml" ;;
+    *) die "unsupported deployment overlay" ;;
+  esac
+}
+
 compose_mock() {
-  docker compose --project-name "$SMOKE_PROJECT" --env-file "$SMOKE_ENV_FILE" \
-    -f "$REPO_ROOT/docker-compose.yml" -f "$SMOKE_OVERRIDE_FILE" "$@"
+  local deployment_overlay
+  if [ -n "$SMOKE_DEPLOYMENT_OVERLAY" ]; then
+    deployment_overlay=$(compose_deployment_overlay "$SMOKE_DEPLOYMENT_OVERLAY")
+    docker compose --project-name "$SMOKE_PROJECT" --env-file "$SMOKE_ENV_FILE" \
+      -f "$REPO_ROOT/docker-compose.yml" -f "$deployment_overlay" \
+      -f "$SMOKE_OVERRIDE_FILE" "$@"
+  else
+    docker compose --project-name "$SMOKE_PROJECT" --env-file "$SMOKE_ENV_FILE" \
+      -f "$REPO_ROOT/docker-compose.yml" -f "$SMOKE_OVERRIDE_FILE" "$@"
+  fi
 }
 
 compose_active() {
@@ -209,14 +228,15 @@ make_tls_material() {
 }
 
 initialize_runtime() {
-  local backend_port frontend_port suffix
+  local backend_port frontend_port suffix deployment_name
   suffix="$$-$(date +%s)"
-  SMOKE_PROJECT="verboflex_phase02_37_${suffix//-/_}"
-  SMOKE_RUNTIME_DIR=$(mktemp -d /tmp/verboflex-phase02-37.XXXXXX)
+  deployment_name=${SMOKE_DEPLOYMENT_OVERLAY:-base}
+  SMOKE_PROJECT="verboflex_phase02_37_${deployment_name}_${suffix//-/_}"
+  SMOKE_RUNTIME_DIR=$(mktemp -d "/tmp/verboflex-phase02-37.${deployment_name}.XXXXXX")
   SMOKE_ENV_FILE="$SMOKE_RUNTIME_DIR/owner-only.env"
   SMOKE_OVERRIDE_FILE="$SMOKE_RUNTIME_DIR/mock-provider.yml"
   SMOKE_PROBE_ENV_FILE="$SMOKE_RUNTIME_DIR/local-api-probe.env"
-  SMOKE_IMAGE_TAG="phase02-37-$suffix"
+  SMOKE_IMAGE_TAG="phase02-37-$deployment_name-$suffix"
   chmod 700 "$SMOKE_RUNTIME_DIR"
   backend_port=$(random_port)
   frontend_port=$(random_port)
@@ -225,6 +245,8 @@ initialize_runtime() {
   SMOKE_TEMP_PASSWORD="PhaseTwoTemporary-$(openssl rand -hex 10)!"
   SMOKE_NEW_PASSWORD="PhaseTwoOrdinary-$(openssl rand -hex 10)!"
   SMOKE_CLIENT_SECRET="mock-client-secret-$(openssl rand -hex 24)"
+  SMOKE_POSTGRES_PASSWORD="mock-postgres-password-$(openssl rand -hex 24)"
+  SMOKE_JWT_SECRET_KEY="mock-jwt-secret-$(openssl rand -hex 32)"
   SMOKE_ACCESS_TOKEN="mock-provider-bearer-$(openssl rand -hex 24)"
   SMOKE_WORKER_LOSS_STATE="$SMOKE_RUNTIME_DIR/worker-loss-state.json"
   SMOKE_BLOCK_FILE="$SMOKE_RUNTIME_DIR/preview-worker-block"
@@ -241,6 +263,8 @@ initialize_runtime() {
     'VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID=phase2-mock-consumer' \
     "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET=$SMOKE_CLIENT_SECRET" \
     "VERBOFLEX_BITBUCKET_TOKEN_ENCRYPTION_KEYRING=$SMOKE_KEYRING" \
+    "VERBOFLEX_POSTGRES_PASSWORD=$SMOKE_POSTGRES_PASSWORD" \
+    "VERBOFLEX_JWT_SECRET_KEY=$SMOKE_JWT_SECRET_KEY" \
     "PHASE2_RUNTIME_DIR=$SMOKE_RUNTIME_DIR" \
     "PHASE2_REPO_ROOT=$REPO_ROOT" \
     "PHASE2_FRONTEND_ORIGIN=$SMOKE_FRONTEND_URL" \
@@ -420,7 +444,8 @@ verify_no_secret_surfaces() {
     "$SMOKE_RUNTIME_DIR/provider-audit.jsonl"
   )
   for secret in "$SMOKE_TEMP_PASSWORD" "$SMOKE_NEW_PASSWORD" "$SMOKE_CLIENT_SECRET" \
-    "$SMOKE_ACCESS_TOKEN" "$SMOKE_KEYRING"; do
+    "$SMOKE_POSTGRES_PASSWORD" "$SMOKE_JWT_SECRET_KEY" "$SMOKE_ACCESS_TOKEN" \
+    "$SMOKE_KEYRING"; do
     for surface in "${traceback_surfaces[@]}"; do
       if [ -f "$surface" ] && grep -Fq -- "$secret" "$surface"; then
         die "captured evidence exposed seeded secret material"
@@ -561,6 +586,8 @@ assert_original_preview_unchanged() {
 
 run_worker_loss() {
   local worker_container max_bound deadline remaining terminal_error="time_limit_exceeded"
+  SMOKE_DEPLOYMENT_OVERLAY=$1
+  compose_deployment_overlay "$SMOKE_DEPLOYMENT_OVERLAY" >/dev/null
   SMOKE_MODE="mock-live-provider"
   trap cleanup EXIT INT TERM
   initialize_runtime
@@ -597,7 +624,8 @@ run_worker_loss() {
   wait_for_preview_state "succeeded" 60
   assert_original_preview_unchanged
   verify_no_secret_surfaces
-  printf 'phase2 worker-loss smoke: PASS (timed_out/time_limit_exceeded, replacement retry succeeded)\n'
+  printf 'phase2 worker-loss %s overlay: PASS (timed_out/time_limit_exceeded, replacement retry succeeded)\n' \
+    "$SMOKE_DEPLOYMENT_OVERLAY"
 }
 
 run_mock_provider_with_port_retry() {
@@ -617,17 +645,28 @@ run_mock_provider_with_port_retry() {
   die "host-port binding remained unavailable after three isolated attempts"
 }
 
-run_worker_loss_with_port_retry() {
-  local attempt rc
+run_worker_loss_for_overlay_with_port_retry() {
+  local deployment_overlay=$1 attempt rc
+  compose_deployment_overlay "$deployment_overlay" >/dev/null
   for attempt in 1 2 3; do
     set +e
-    "$SCRIPT_DIR/phase2_smoke.sh" --worker-loss-once
+    "$SCRIPT_DIR/phase2_smoke.sh" --worker-loss-once "$deployment_overlay"
     rc=$?
     set -e
     if [ "$rc" -eq 0 ]; then return 0; fi
     if [ "$rc" -ne 75 ]; then return "$rc"; fi
+    if [ "$attempt" -lt 3 ]; then
+      printf 'phase2 %s worker-loss: address already in use, retrying isolated attempt %s/3\n' \
+        "$deployment_overlay" "$((attempt + 1))" >&2
+    fi
   done
-  die "worker-loss host-port binding remained unavailable after three isolated attempts"
+  die "$deployment_overlay worker-loss host-port binding remained unavailable after three isolated attempts"
+}
+
+run_worker_loss_dual_overlay() {
+  run_worker_loss_for_overlay_with_port_retry staging
+  run_worker_loss_for_overlay_with_port_retry production
+  printf 'phase2 dual-overlay worker-loss smoke: PASS (staging and production)\n'
 }
 
 live_provider_gate() {
@@ -649,8 +688,8 @@ run_gap_closure() {
 }
 
 case "${1:-}:${2:-}" in
-  --mock-provider:--worker-loss) run_worker_loss_with_port_retry ;;
-  --worker-loss-once:) run_worker_loss ;;
+  --mock-provider:--worker-loss) run_worker_loss_dual_overlay ;;
+  --worker-loss-once:staging|--worker-loss-once:production) run_worker_loss "$2" ;;
   --base-client-credentials:) run_base_client_credentials ;;
   --mock-live-provider:) run_mock_provider_with_port_retry ;;
   --mock-live-provider-once:) run_mock_live_provider ;;
