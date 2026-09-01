@@ -1,6 +1,6 @@
 ---
 phase: 02-admin-configuration
-reviewed: 2026-09-01T07:49:24Z
+reviewed: 2026-09-01T09:26:59Z
 review_date: 2026-09-01
 depth: deep
 asvs_level: OWASP ASVS 5.0 Level 1
@@ -299,19 +299,19 @@ files_reviewed_list:
   - tools/verify_rate_limit_boundary_mutant.py
   - tools/verify_repository_api_mutants.py
 findings:
-  critical: 0
-  warning: 5
+  critical: 2
+  warning: 6
   info: 0
-  total: 5
-status: pass_with_warnings
+  total: 8
+status: issues_found
 ---
 
 # Phase 2: Code and Security Review
 
-**Reviewed:** 2026-09-01T07:49:24Z
+**Reviewed:** 2026-09-01T09:26:59Z
 **Depth:** deep
 **ASVS target:** OWASP ASVS 5.0 Level 1
-**Status:** PASS WITH WARNINGS — zero unresolved Critical findings; WR-03..WR-07 remain open
+**Status:** ISSUES FOUND — CR-14, CR-15, and WR-03..WR-08 remain open
 
 ## Narrative Findings (AI reviewer)
 
@@ -321,11 +321,33 @@ The complete implementation range `ce9fbeef86b00f594d1d06e15d3083d623c54095..99d
 
 The current review-mode digest is `ede23c16f49301366ec9e30edc885e52c726b5d57a7bc3a796be6e9f30979d90`; the final manifest digest is `3d07af5efc811a412f85419dd6db10cf6c5804101ff545ae60669795dd020c30`. The executor's unchanged-source `bash tools/phase2_gauntlet.sh --gap-closure` result is PASS 18/18. Independent focused execution added 20 backend node passes, 101 frontend test passes, static/type gates, dependency audits, manifest comparison, and the malformed-expiry reproduction.
 
-No Critical finding remains. CR-11, CR-12, and CR-13 are closed by deployed scheduler parity plus dual-overlay worker-loss recovery, immutable active-revision revalidation with UI recovery, and runtime CSP/X-Frame-Options respectively. Five non-blocking warnings remain explicitly open; none is represented as fixed.
+The execute:post review then read all 171 unique paths in `/tmp/verboflex_phase2_review_files.txt` at standard depth, without accepting the prior PASS as evidence. It confirmed the five existing open warnings and found two new Critical correctness/data-loss defects plus one new Warning in an executable smoke path. CR-11, CR-12, and CR-13 remain closed by their existing evidence; CR-14, CR-15, and WR-08 are additive findings and do not rewrite any earlier row or the frozen legacy inventory.
 
 ### Critical Issues
 
-No unresolved Critical issues were found in the reviewed source.
+#### CR-14: Preview commit resolution truncates valid configured branches after the first 100
+
+**Classification:** BLOCKER
+**Files:** `frontend/src/features/admin/previews/ProductPreviewPage.tsx:193-241`, `frontend/src/features/admin/mappings/ProductMappingsPage.tsx:218-270`, `frontend/src/api/client/sdk.gen.ts:345-362`
+**Symbol:** `resolveCommits`
+
+**Issue:** Preview creation resolves each configured source branch by requesting only the first branch page with `cursor: null, limit: 100`, then searching that page locally. Branch names are opaque and the mapping workflow deliberately supports a configured branch beyond the first 100 by calling the exact `getAdminRepositoryBranch` endpoint. A valid saved mapping whose source branch is on page 101 or later therefore always throws before candidate validation or active-revision revalidation can start. This blocks preview confirmation, publication, and reactivation for a configuration the same UI and API accept.
+
+**Executable evidence:** The existing 100/101 Playwright boundary proves the mapping workflow restores the 101st configured branch through the exact detail endpoint, while `ProductPreviewPage.test.tsx:723-739` asserts only the truncated first-page request. The generated client exposes `getAdminRepositoryBranch`, but `resolveCommits` does not use it. **Current result: OPEN — BLOCKER.**
+
+**Fix:** Resolve every configured source branch through `getAdminRepositoryBranch` (and require the returned exact name), for direct, separate, and active-revalidation flows. Add a preview regression where the configured branch is absent from page one but the exact detail read returns branch 101 and its commit.
+
+#### CR-15: Dirty forms lose data on ordinary SPA navigation
+
+**Classification:** BLOCKER
+**Files:** `frontend/src/features/admin/products/ProductWizardPage.tsx:347-370`, `frontend/src/components/layout/AppShell.tsx:88-102`, `frontend/src/features/admin/mappings/ProductMappingsPage.tsx:305-332`, `frontend/src/features/admin/mappings/ProductMappingsPage.tsx:849-909`
+**Symbols:** `ProductWizardPage`, `RoutedDestination`, `ProductMappingsPage`
+
+**Issue:** The product wizard guards only `beforeunload` and `popstate`. React Router `<Link>` navigation uses same-document history navigation and does not fire either event before unmounting the route, so clicking Workspace, Products, Users, or Bitbucket silently discards dirty product details. The mapping form maintains unsaved repository/branch/target state but installs no route or unload guard at all. The current `popstate` handler also runs after the history position has changed and attempts recovery with `history.forward()`, rather than blocking the transition before data is lost.
+
+**Executable evidence:** The current browser E2E covers page reload only (`beforeunload`), and the unit test manually dispatches `popstate`; neither clicks a real routed shell link. Source tracing from `RoutedDestination` to `ProductWizardPage` shows no React Router blocker between the `<Link>` and route unmount. **Current result: OPEN — BLOCKER.**
+
+**Fix:** Derive dirty state for both product and mapping forms and register a React Router navigation blocker that opens the existing named Alert Dialog before any SPA transition, retaining values and focus on `Keep editing` and proceeding only on `Discard changes`. Keep `beforeunload` for document exits. Add real-router tests that click shell/product links from each dirty form and exercise both choices.
 
 ### Warnings
 
@@ -383,6 +405,18 @@ No unresolved Critical issues were found in the reviewed source.
 
 **Fix:** Include the exact JSON contract (or all deliberate backend test data) in the manifest, add a self-test that compares changed executable test inputs with resolved manifest membership, then rerun review and the official gauntlet on the new digest.
 
+#### WR-08: The advertised default Compose flow calls removed OAuth endpoints
+
+**Classification:** WARNING
+**File:** `tools/phase2_compose_flow.py:478-482`, `tools/phase2_compose_flow.py:530-546`
+**Symbol:** `main`
+
+**Issue:** The no-flag mode still advertises `phase2_compose_flow.py BACKEND_URL EMAIL TEMP_PASSWORD`, then calls `/api/v1/admin/bitbucket/oauth/start` and `/api/v1/admin/bitbucket/oauth/callback`. Those authorization-code endpoints were removed when Phase 2 adopted client credentials; the current OpenAPI exposes only connect, reconnect, status, and revoke. The documented default verifier therefore deterministically receives 404 before reaching repository, mapping, preview, or publication assertions.
+
+**Executable evidence:** Comparing the two literal paths with `frontend/openapi.json` found neither route. The maintained worker-loss and gap-boundary modes already use `POST /api/v1/admin/bitbucket/connect`, but the default path is not invoked by the current gauntlet, so its breakage is masked. **Current result: OPEN — WARNING.**
+
+**Fix:** Replace the authorization-code sequence with the current client-credentials connect contract and update its assertions, or remove the dead default mode and usage text. Add the retained mode as an explicit gauntlet node so API drift fails the executable evidence layer.
+
 ### Current CR/WR Inventory Re-audit
 
 Every historical row was resolved against current production symbols and executable current tests. “PASS” below records tests actually run in this review unless explicitly identified as part of the upstream official 18/18 result.
@@ -409,6 +443,9 @@ Every historical row was resolved against current production symbols and executa
 | WR-05 | **OPEN — WARNING** | Dockerfile `FROM` and Compose `image` selectors | immutable-image inventory command | Python/uv/Node/Nginx/PostgreSQL/Redis selectors still lack `@sha256:` pins; current severity Warning |
 | WR-06 | **OPEN — WARNING** | `.env.example`; `docker-compose.yml` required OAuth/keyring and preview settings | environment-key comparison probe | Example still has 0/7 Phase 2 provider/watchdog keys; current severity Warning |
 | WR-07 | **OPEN — WARNING** | `tools/phase2_source_manifest.txt`; executable `phase2_spec_edge_matrix.json` loaded by `test_phase2_spec_edge_traceability.py` | resolved-manifest membership comparison | JSON contract remains outside both review and final digest inputs; current severity Warning |
+| CR-14 | **OPEN — BLOCKER** | `ProductPreviewPage.resolveCommits`; exact repository-branch generated client | 100/101 mapping E2E plus preview first-page request trace | Valid configured branches beyond the first 100 cannot start candidate or active-revision preview validation |
+| CR-15 | **OPEN — BLOCKER** | `ProductWizardPage` dirty listeners; `AppShell.RoutedDestination`; `ProductMappingsPage` form state | real-router call-chain trace plus existing reload-only/manual-event tests | Router Link navigation can unmount dirty forms without the required discard confirmation |
+| WR-08 | **OPEN — WARNING** | `phase2_compose_flow.main` default no-flag mode | literal route comparison against current OpenAPI | Advertised default smoke calls removed OAuth start/callback routes and deterministically stops at 404 |
 
 ### Original CR/WR Inventory Re-audit
 
@@ -444,7 +481,7 @@ The primary review authority is OWASP ASVS 5.0.0 Level 1. The Phase 2 research's
 | V11 Cryptography | Pydantic `SecretStr`, MultiFernet authenticated encryption/key rotation, encrypted provider token at rest, no custom cipher, redacted repr and no-store public projections | PASS |
 | V16 Logging and Error Handling | Bounded public error enums/messages, provider body/token exclusion, secret-free diagnostics/audit probes, no callback/query credentials, captured-log negative tests | PASS |
 | Cross-domain product graph authority | Composite ownership FKs, published and active-child triggers, deep candidate clone, immutable sidecar recovery, atomic publication/reactivation | PASS |
-| Cross-domain pagination completeness | Opaque server cursors, all-page collection before lifecycle decisions, partial/error states disable authority; 51st-row tests execute | PASS |
+| Cross-domain pagination completeness | Mapping/list collection is complete, but preview commit resolution truncates provider branches to the first 100 | FAIL — CR-14 |
 | Cross-domain worker-loss recovery | Durable CAS terminalization, separate Beat scheduler with deployment parity, dual-overlay real process-kill/retry isolation | PASS |
 | Cross-domain browser response hardening | Runtime complete CSP, `frame-ancestors 'none'`, XFO DENY, nosniff, referrer and permissions headers on root/fallback | PASS |
 | Provider-write and canonical-write exclusion | Provider adapter publicly exposes only bounded GET operations; URL allowlist excludes write endpoints; OpenAPI and mock/live audit expose zero provider/canonical write authority | PASS |
@@ -462,13 +499,15 @@ The primary review authority is OWASP ASVS 5.0.0 Level 1. The Phase 2 research's
 - Runtime header evidence: focused architecture contract passed; the official built-Nginx probe confirmed the exact CSP and defensive headers on both `/` and SPA fallback responses.
 - Focused malformed-expiry probe: current validator accepted an unbounded positive `expires_in`, and datetime persistence overflowed; this is the WR-03 reproduction.
 - Manifest comparison: the current resolved manifest contains 287 unique paths but excludes the executable `phase2_spec_edge_matrix.json` input; this is WR-07.
+- Execute:post standard review: all 171 manifest paths were read and checked; focused Vitest execution passed 3 files / 84 tests, TypeScript typecheck and ESLint passed, backend Ruff passed, and mypy passed across 81 source files. The passing suites do not cover the CR-14 branch-101 preview path or the CR-15 real Router Link transition.
+- API drift probe: the default `phase2_compose_flow.py` OAuth start/callback literals are absent from the current OpenAPI; this is WR-08.
 
 ### Closure Decision
 
-**Critical gate: PASS.** CR-01..CR-13 are closed on current production symbols and executable evidence; `findings.critical: 0`. WR-03..WR-07 remain explicitly **OPEN — WARNING** and should be scheduled for remediation, but they are not Critical/High-equivalent blockers under this ASVS Level 1 review. The canonical review/evidence/verifier updates remain outside this reviewer's ownership.
+**Critical gate: FAIL.** CR-01..CR-13 retain their prior closed dispositions, but CR-14 and CR-15 are open on current production symbols; `findings.critical: 2`. WR-03..WR-08 remain explicitly **OPEN — WARNING**. No source, canonical review/evidence, or verifier artifact was changed by this review.
 
 ---
 
-_Reviewed: 2026-09-01T07:49:24Z_
+_Reviewed: 2026-09-01T09:26:59Z_
 _Reviewer: the agent (gsd-code-reviewer)_  
 _Depth: deep_
