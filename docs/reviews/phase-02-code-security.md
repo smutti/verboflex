@@ -3,9 +3,9 @@
 - Review-status: CLOSED
 - Open-critical-high: 0
 - Full-gauntlet-status: PASS
-- Reviewed-source-digest: `2e93097910a805663c7ccad721f4f629b478bdd01efca95541c8509c5f0354a9`
+- Reviewed-source-digest: `b0f7e5f09c804d81ad86ccc0a68032b3a4a031f4c7a69d3dbeca65ab5be587f6`
 - Review-standard: OWASP ASVS 5.0 Level 1
-- Review-scope: Complete Phase 2 diff `ce9fbeef86b00f594d1d06e15d3083d623c54095..7af1d1063ab6a795a42f0e26175fc2196ba6eda5`, all 290 full-review paths, and the test-only semantic-transition delta through `542903d39b11617c1985574eb4a5f7d32f9038cf`
+- Review-scope: Complete Phase 2 diff `ce9fbeef86b00f594d1d06e15d3083d623c54095..7af1d1063ab6a795a42f0e26175fc2196ba6eda5`, all 290 full-review paths, the semantic-transition delta through `542903d39b11617c1985574eb4a5f7d32f9038cf`, and the regression-harness RED/GREEN delta through `2faff96e8c35b9964f7c458095fe9f1039a42e16`
 - Review-date: 2026-09-01
 - Structured-review: `.planning/phases/02-admin-configuration/02-REVIEW.md`
 
@@ -16,6 +16,8 @@ The fresh independent deep review reports zero unresolved Critical or project Hi
 The typed reviewer therefore truthfully reports `status: issues_found` with `critical: 0`, `warning: 6`, `info: 0`, and `total: 6`. That warning-bearing typed status is separate from this canonical Critical/High closeout authority: `Review-status: CLOSED` and `Open-critical-high: 0`.
 
 The post-transition official gauntlet passed all 18 layers on the unchanged application source before this canonical artifact was updated. A later test-only semantic-transition delta changed no production, runtime, schema, API, generated, dependency, configuration, or manifest behavior; a fresh typed delta review found no new Critical/High-equivalent issue and the focused semantic audit passed 8/8. Historical review, verifier, plan, or PASS prose is not closure authority.
+
+The post-close regression delta repaired only executable verification harnesses: it removed a SIGPIPE-prone OpenAPI assertion, supplied generated provider configuration to the isolated Phase 1 smoke, and refreshed the fingerprint-exact secret false-positive inventory without narrowing scan scope. All four Phase 1 regression harnesses pass, and a fresh deep typed delta review found no new Critical/High-equivalent issue.
 
 ## Current Finding Inventory
 
@@ -68,12 +70,13 @@ The post-transition official gauntlet passed all 18 layers on the unchanged appl
 - Exact semantic audit after both supported live transitions (Critical-to-warning review and `gaps_found`-to-`passed` verifier): 8/8 passed.
 - Official post-transition application command before the test-only delta: `bash tools/phase2_gauntlet.sh --gap-closure` — PASS, 18/18 layers.
 - Fresh typed digest-delta review: commit `542903d` changed only the live verifier-state assertion; the fail-closed parser and all inventory/status mutants remain enforced, with zero new Critical/High-equivalent findings.
+- Fresh regression-harness delta review: commits `a9c1e2f` and `2faff96` preserve RED/GREEN order, exact OpenAPI drift semantics, owner-only generated provider configuration, bounded cleanup, and path/line/type/fingerprint secret policy matching; no new finding was introduced.
 - Fresh reviewer scope: 290 unique current review paths plus the complete Phase 2 implementation diff.
 - Full suites: backend 807/807, frontend 304/304, backend properties 200/200, frontend properties 3/3.
 - Changed-source coverage: backend 641/641 and frontend 746/746 lines, both 100%.
 - Mutation, migration, OpenAPI/client drift, static, secret, supply-chain, and architecture/provider gates passed under their declared thresholds.
 - Mock provider production browser smoke: 8/8 with five audited GETs and zero writes; both deployment-overlay worker-loss paths passed.
-- Fresh review digest after the test-only delta: `2e93097910a805663c7ccad721f4f629b478bdd01efca95541c8509c5f0354a9`.
+- Fresh review digest after the regression-harness delta: `b0f7e5f09c804d81ad86ccc0a68032b3a4a031f4c7a69d3dbeca65ab5be587f6`.
 
 ## Review Limits
 
