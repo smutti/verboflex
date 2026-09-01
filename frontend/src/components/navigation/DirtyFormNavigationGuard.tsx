@@ -197,11 +197,7 @@ export function DirtyFormNavigationProvider({
       {children}
       <AlertDialog
         open={openTransactionToken !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            keepEditing();
-          }
-        }}
+        onOpenChange={keepEditing}
       >
         <AlertDialogContent onCloseAutoFocus={restoreFocus}>
           <AlertDialogHeader>
