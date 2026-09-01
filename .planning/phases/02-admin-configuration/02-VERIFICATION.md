@@ -1,14 +1,15 @@
 ---
 phase: 02-admin-configuration
-verified: 2026-09-01T18:09:09Z
+verified: 2026-09-01T19:47:24Z
 verification_date: 2026-09-01
 status: passed
 score: "8/8 roadmap success criteria verified"
 behavior_unverified: 0
 overrides_applied: 0
-head: 5b1d425352003d0543ecab634ad14a104a46206d
-review_source_digest: 2e93097910a805663c7ccad721f4f629b478bdd01efca95541c8509c5f0354a9
-final_source_digest: e7f71e46fdaf7aea75230852d4232fb6b8e9fcfb43bd6f14f7440a89743a88e7
+head: 1d031a7efde376a13f41c6276562b2dc05f231fd
+verified_head: 1d031a7efde376a13f41c6276562b2dc05f231fd
+review_source_digest: bf9597261aee80e83d7ced33ec2a88162b7e47072507d174d30f97100214bf29
+final_source_digest: 3ec8ee9ea7020531e0da3d799ce8ecce27fbdd455ecf9500ac637892504471a6
 inventories:
   phase_goal: {count: 1, total: 1}
   roadmap_success_criteria: {count: 8, total: 8}
@@ -41,13 +42,13 @@ gaps: []
 # Phase 2: Admin Configuration Verification Report
 
 **Phase Goal:** Deliver an administrator-only control plane for internal users, versioned products, reusable repositories, one-format mappings, a single organizational Bitbucket OAuth connection, and live read-only validation previews.
-**Verified:** 2026-09-01T18:09:09Z
+**Verified:** 2026-09-01T19:47:24Z
 **Status:** `passed`
-**Re-verification:** Yes — fresh independent goal-backward verification after CR-14 and CR-15 gap closure. This verifier inspected current source and executable evidence; SUMMARY claims were not accepted as proof.
+**Re-verification:** Yes — compact independent revalidation after CR-14/CR-15 closure and the Phase 1 regression-harness repair delta. Current source and executable evidence were used; SUMMARY claims were not accepted as proof.
 
 ## Verdict
 
-Phase 2 achieves its goal at committed HEAD `5b1d425352003d0543ecab634ad14a104a46206d`. All eight ROADMAP success criteria and all 15 Phase 2 requirements are verified. The result is bound to review-source digest `2e93097910a805663c7ccad721f4f629b478bdd01efca95541c8509c5f0354a9` and final-source digest `e7f71e46fdaf7aea75230852d4232fb6b8e9fcfb43bd6f14f7440a89743a88e7`.
+Phase 2 achieves its goal at committed HEAD `1d031a7efde376a13f41c6276562b2dc05f231fd`. All eight ROADMAP success criteria and all 15 Phase 2 requirements are verified. The result is bound to review-source digest `bf9597261aee80e83d7ced33ec2a88162b7e47072507d174d30f97100214bf29` and final-source digest `3ec8ee9ea7020531e0da3d799ce8ecce27fbdd455ecf9500ac637892504471a6`.
 
 The canonical security review is `CLOSED` with `Open-critical-high: 0`. The structured reviewer truthfully remains `issues_found` because WR-03 through WR-08 remain six OPEN Warnings. Those warnings are nonblocking under the project's High threshold; WR-08 remains deferred and is not represented as fixed.
 
@@ -55,13 +56,17 @@ The canonical security review is `CLOSED` with `Open-critical-high: 0`. The stru
 
 | Authority | Current evidence | Verdict |
 |---|---|---|
-| Review source | `2e93097910a805663c7ccad721f4f629b478bdd01efca95541c8509c5f0354a9` | ✓ Exact review-mode digest |
-| Final canonical source | `e7f71e46fdaf7aea75230852d4232fb6b8e9fcfb43bd6f14f7440a89743a88e7` | ✓ Exact final-mode digest |
+| Review source | `bf9597261aee80e83d7ced33ec2a88162b7e47072507d174d30f97100214bf29` | ✓ Exact review-mode digest |
+| Final canonical source | `3ec8ee9ea7020531e0da3d799ce8ecce27fbdd455ecf9500ac637892504471a6` | ✓ Exact final-mode digest |
 | Canonical review | `Review-status: CLOSED`; `Open-critical-high: 0` | ✓ Critical/High gate closed |
 | Structured review | `issues_found`; Critical 0, Warning 6, Info 0 | ✓ Reconciled with all 23 current CR/WR rows |
-| Official post-canonical gauntlet | 18/18 ordered layers; final digest unchanged | ✓ PASS |
+| Official closeout gauntlet | Accepted 18/18 closure baseline; final digest rebound after the isolated regression-harness delta | ✓ PASS |
 | Provider boundary | Five audited GET requests, zero provider writes, no residual owned resources | ✓ Read-only contract preserved |
-| Fresh independent corroboration | CR-14 exact-detail trace, CR-15 router/focus/mobile trace, focused executable tests, semantic closeout audit | ✓ Current behavior independently checked |
+| Fresh independent corroboration | Semantic closeout audit, both source-state checks, all four Phase 1 harnesses, and deep typed delta review | ✓ Current source independently checked |
+
+## Regression Delta Verification
+
+The fresh delta is bounded to the Phase 1 regression harnesses: RED commit `a9c1e2f` captured the failures and GREEN commit `2faff96` repaired them. All four harnesses pass on current source. The OpenAPI gate retains an exact semantic comparison without a SIGPIPE-prone pipeline; generated Bitbucket credentials and keyring material are owner-only and cleaned up within bounded traps; detect-secrets preserves exact path, line, type, and fingerprint evidence and rejects an unreviewed fingerprint. No application source, API/schema, or dependency behavior changed. Deep typed review of the delta found no additional issue.
 
 ## Goal Achievement
 
@@ -76,7 +81,7 @@ The canonical security review is `CLOSED` with `Open-critical-high: 0`. The stru
 | SC-05 | Every direct/separate mapping has one exact layout, source branch, targets/default, and repository+target grouping. | ✓ VERIFIED | Closed schemas and mapping services enforce direct/separate sides, exact opaque branches, contained defaults, one layout identity, and exact grouping properties. |
 | SC-06 | Bounded Android XML, Qt `.ts`, JSON, and iOS `.strings` preview fails closed for invalid, ambiguous, stale, disconnected, or bounded terminal states. | ✓ VERIFIED | Four strict detectors feed durable revision/commit-bound jobs; exact-detail branch resolution now covers branch 101+ for candidate and active-revision validation, and confirmation/currentness gates are tested. |
 | SC-07 | Guided shadcn admin screens expose actionable and data-safe lifecycle, OAuth, mapping, preview, and job states. | ✓ VERIFIED | User/product/repository/mapping/preview screens are generated-client backed; shared router blocking protects dirty product and mapping forms, including Link, Back, reload, 320px Sheet, focus, and value preservation. |
-| SC-08 | RED→GREEN TDD, code review, backend/frontend/worker, and deploy smoke gates pass. | ✓ VERIFIED | Post-canonical gauntlet passed 18/18: semantic 34/34, backend 807/807, frontend 304/304, property and mutation gates, provider/browser 57/57 and 8/8, both deployment overlays, cleanup, and unchanged digest. |
+| SC-08 | RED→GREEN TDD, code review, backend/frontend/worker, and deploy smoke gates pass. | ✓ VERIFIED | The accepted 18/18 closeout gauntlet remains the baseline. Regression commits `a9c1e2f` (RED) and `2faff96` (GREEN) restore all four Phase 1 harnesses without changing application source, API/schema, or dependency behavior. |
 
 **Score:** 8/8 roadmap success criteria verified; 0 present-but-behavior-unverified.
 
@@ -367,7 +372,7 @@ The table below is authoritative for this verifier. It preserves the structured 
 | Structured closure contract | `cd backend && uv run pytest -q tests/architecture/test_phase2_gap_closure.py -x` | 8/8 passed | ✓ PASS |
 | CR-14 exact-detail branch authority | Focused preview tests plus direct source trace through generated detail and worker recheck | Candidate/active direct/separate branch 101+ succeeds; mismatch fails closed | ✓ PASS |
 | CR-15 router transaction authority | Focused unit/real-router/browser paths | Link, Back, reload, values, focus, one destination, and 320px Sheet covered | ✓ PASS |
-| Official post-canonical quality gate | `bash tools/phase2_gauntlet.sh --gap-closure` recorded against final digest | 18/18; digest unchanged; zero residual owned resources | ✓ PASS |
+| Official closeout quality gate | Accepted `bash tools/phase2_gauntlet.sh --gap-closure` baseline plus isolated regression-harness reseal | 18/18 baseline retained; all four Phase 1 harnesses now pass | ✓ PASS |
 | Review-source binding | `tools/source_state.sh --verify-review-source` | Exact review digest accepted | ✓ PASS |
 | Final report-source binding | `tools/source_state.sh --verify-report-digest` | Exact final digest accepted | ✓ PASS |
 
@@ -410,6 +415,6 @@ No blocking gaps remain. CR-14 and CR-15 are closed by reachable current product
 
 ---
 
-_Verified: 2026-09-01T18:09:09Z_
+_Verified: 2026-09-01T19:47:24Z_
 
-_Verifier: the agent (fresh independent gsd-verifier, compact continuation)_
+_Verifier: the agent (independent gsd-verifier, compact regression-delta recovery)_

@@ -8,7 +8,7 @@
 - Initial-gauntlet-status: PASS — 18/18 layers
 - Canonical-gauntlet-status: PASS — 18/18 layers; critical-zero and review-source checks exited 0
 - Structured-review-status: `issues_found` — 0 Critical, 6 Warning, 0 Info
-- Verifier-status: PENDING RESEAL — the prior independent 8/8 PASS remains historical evidence; a fresh verifier will bind the regression-harness delta to the current digest pair
+- Verifier-status: PASS — fresh independent exact `status: passed`, score 8/8, complete inventories, zero gaps, rebound after the regression-harness delta
 
 ## Source Identity
 
@@ -201,6 +201,7 @@ The execute-phase regression gate reran the Phase 1 shell harnesses after the Ph
 - Fresh deep typed delta review: Critical 0, Warning 6, Info 0; no new finding; CR-01..CR-15 and WR-01..WR-02 CLOSED; WR-03..WR-08 OPEN WARNING.
 - Current review digest: `bf9597261aee80e83d7ced33ec2a88162b7e47072507d174d30f97100214bf29`; canonical review-source verification PASS.
 - Current final digest: `3ec8ee9ea7020531e0da3d799ce8ecce27fbdd455ecf9500ac637892504471a6`.
+- Fresh compact verifier: exact `status: passed`, score 8/8, complete inventories, `gaps: []`, `behavior_unverified: 0`; semantic 8/8, both source-state checks, and diff-check PASS.
 
 ## Secret and Write Exclusions
 
