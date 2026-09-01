@@ -798,7 +798,9 @@ describe("administrator product preview and publication page", () => {
         next_cursor: "page-2",
       }),
     );
-    getBranchMock.mockResolvedValueOnce(ok({ commit_hash: commit, name: branch }));
+    getBranchMock.mockResolvedValueOnce(
+      ok({ commit_hash: commit, name: branch }),
+    );
 
     renderPage();
     await userEvent.click(
@@ -832,8 +834,7 @@ describe("administrator product preview and publication page", () => {
       ...mapping,
       primary_source_branch: keysBranch,
       topology: "separate" as const,
-      translations_repository_id:
-        "00000000-0000-4000-8000-000000000402",
+      translations_repository_id: "00000000-0000-4000-8000-000000000402",
       translations_source_branch: translationsBranch,
     };
     listRevisionMappingsMock.mockResolvedValueOnce(
@@ -902,8 +903,7 @@ describe("administrator product preview and publication page", () => {
         ...confirmedActiveMapping,
         primary_source_branch: "keys/101%2F?# Ω",
         topology: "separate" as const,
-        translations_repository_id:
-          "00000000-0000-4000-8000-000000000402",
+        translations_repository_id: "00000000-0000-4000-8000-000000000402",
         translations_source_branch: "translations/102%2F?# Ω",
       },
     ],
@@ -1063,7 +1063,9 @@ describe("administrator product preview and publication page", () => {
         }),
       );
       if (failureMode === "rejected") {
-        getBranchMock.mockRejectedValueOnce(new Error("bounded lookup failure"));
+        getBranchMock.mockRejectedValueOnce(
+          new Error("bounded lookup failure"),
+        );
       } else {
         getBranchMock.mockResolvedValueOnce(ok(undefined as never));
       }
@@ -1091,8 +1093,7 @@ describe("administrator product preview and publication page", () => {
       ...mapping,
       primary_source_branch: "keys/101",
       topology: "separate" as const,
-      translations_repository_id:
-        "00000000-0000-4000-8000-000000000402",
+      translations_repository_id: "00000000-0000-4000-8000-000000000402",
       translations_source_branch: "translations/102",
     };
     listRevisionMappingsMock.mockResolvedValueOnce(
