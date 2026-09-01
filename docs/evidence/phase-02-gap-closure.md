@@ -1,24 +1,24 @@
 # Phase 2 Gap-Closure Evidence
 
 - Evidence-date: 2026-09-01
-- Source-digest: `e7f71e46fdaf7aea75230852d4232fb6b8e9fcfb43bd6f14f7440a89743a88e7`
-- Review-source-digest: `2e93097910a805663c7ccad721f4f629b478bdd01efca95541c8509c5f0354a9`
-- Reviewed-head: `542903d39b11617c1985574eb4a5f7d32f9038cf`
-- Canonical-review-commit: `0902fdd`
+- Source-digest: `3ec8ee9ea7020531e0da3d799ce8ecce27fbdd455ecf9500ac637892504471a6`
+- Review-source-digest: `bf9597261aee80e83d7ced33ec2a88162b7e47072507d174d30f97100214bf29`
+- Reviewed-head: `2faff96e8c35b9964f7c458095fe9f1039a42e16`
+- Canonical-review-commit: `9f19b61`
 - Initial-gauntlet-status: PASS — 18/18 layers
 - Canonical-gauntlet-status: PASS — 18/18 layers; critical-zero and review-source checks exited 0
 - Structured-review-status: `issues_found` — 0 Critical, 6 Warning, 0 Info
-- Verifier-status: PASS — fresh independent exact `status: passed`, score 8/8, complete inventories, zero gaps
+- Verifier-status: PENDING RESEAL — the prior independent 8/8 PASS remains historical evidence; a fresh verifier will bind the regression-harness delta to the current digest pair
 
 ## Source Identity
 
-`tools/phase2_source_manifest.txt` is the source-set contract. Review mode deliberately excludes `docs/reviews/phase-02-code-security.md`; final mode includes it and deliberately excludes generated evidence. The fresh structured report and canonical review therefore bind to the review digest without self-reference, while this evidence binds to the final digest after canonical commit `0902fdd`.
+`tools/phase2_source_manifest.txt` is the source-set contract. Review mode deliberately excludes `docs/reviews/phase-02-code-security.md`; final mode includes it and deliberately excludes generated evidence. The fresh structured report and canonical review therefore bind to the review digest without self-reference, while this evidence binds to the final digest after canonical commit `9f19b61`.
 
 | Identity | Exact value | Verification |
 | --- | --- | --- |
-| Complete Phase 2 implementation plus semantic-audit delta | `ce9fbeef86b00f594d1d06e15d3083d623c54095..542903d39b11617c1985574eb4a5f7d32f9038cf` | Full typed review plus fresh typed review of the only later test-only delta |
-| Review source | `2e93097910a805663c7ccad721f4f629b478bdd01efca95541c8509c5f0354a9` | `tools/source_state.sh --review-digest`; canonical `--verify-review-source` exits 0 |
-| Final canonical source | `e7f71e46fdaf7aea75230852d4232fb6b8e9fcfb43bd6f14f7440a89743a88e7` | `tools/source_state.sh --digest` after commit `0902fdd` |
+| Complete Phase 2 implementation plus reviewed regression delta | `ce9fbeef86b00f594d1d06e15d3083d623c54095..2faff96e8c35b9964f7c458095fe9f1039a42e16` | Full typed review plus fresh typed delta reviews for semantic and regression-harness changes |
+| Review source | `bf9597261aee80e83d7ced33ec2a88162b7e47072507d174d30f97100214bf29` | Phase-2-path-explicit `tools/source_state.sh --review-digest`; canonical `--verify-review-source` exits 0 |
+| Final canonical source | `3ec8ee9ea7020531e0da3d799ce8ecce27fbdd455ecf9500ac637892504471a6` | `tools/source_state.sh --digest` after commit `9f19b61` |
 
 ## Fresh Official Gauntlet Before Review
 
@@ -189,6 +189,18 @@ The fresh compact typed `gsd-verifier` independently retained the completed goal
 - Accepted review digest: `2e93097910a805663c7ccad721f4f629b478bdd01efca95541c8509c5f0354a9`.
 - Accepted final digest: `e7f71e46fdaf7aea75230852d4232fb6b8e9fcfb43bd6f14f7440a89743a88e7`.
 - Final checks: focused semantic audit 8/8 PASS; `--verify-review-source` PASS; `--verify-report-digest` PASS; verifier report diff-check PASS.
+
+### Regression-gate repair and current review seal
+
+The execute-phase regression gate reran the Phase 1 shell harnesses after the Phase 2 closeout. It exposed two harness-only incompatibilities: the OpenAPI negative control used an early-closing `printf | grep -Fq` pipeline under `pipefail`, and the isolated Phase 1 smoke did not supply the provider variables now required by base Compose. The RED commit `a9c1e2f` captured both failures; GREEN commit `2faff96` repaired them without changing application runtime behavior.
+
+- Phase 1 regression harnesses: `test_source_state.sh`, `test_gauntlet.sh`, `test_real_smoke.sh`, and `test_adversarial_auth.sh` all PASS.
+- OpenAPI control: the same exact `diff --git` condition is enforced without SIGPIPE ambiguity.
+- Smoke credentials: client secret and Fernet key are generated per run, stored only in the owner-only temporary environment, and removed by bounded cleanup.
+- Secret audit: repository scan scope remains unchanged and findings remain exact path/line/type/fingerprint matches; an unreviewed fingerprint is still rejected.
+- Fresh deep typed delta review: Critical 0, Warning 6, Info 0; no new finding; CR-01..CR-15 and WR-01..WR-02 CLOSED; WR-03..WR-08 OPEN WARNING.
+- Current review digest: `bf9597261aee80e83d7ced33ec2a88162b7e47072507d174d30f97100214bf29`; canonical review-source verification PASS.
+- Current final digest: `3ec8ee9ea7020531e0da3d799ce8ecce27fbdd455ecf9500ac637892504471a6`.
 
 ## Secret and Write Exclusions
 
