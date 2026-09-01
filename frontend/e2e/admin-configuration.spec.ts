@@ -1133,7 +1133,7 @@ test("dirty product and mapping routes require discard before navigation", async
   const name = page.getByLabel("Name", { exact: true });
   await expect(name).toHaveValue("Zulu Mobile");
   await name.fill("Zulu Mobile unsaved");
-  const usersLink = page.locator("aside").getByRole("link", { name: "Users" });
+  const usersLink = page.locator('aside a[href="/admin/users"]');
   await usersLink.focus();
   await usersLink.click();
   const productDialog = page.getByRole("alertdialog", {
