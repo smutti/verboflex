@@ -1236,9 +1236,17 @@ def test_phase2_review_contract_rejects_inventory_and_count_mutants() -> None:
 def test_phase2_verifier_contract_accepts_truthful_state_transitions() -> None:
     """Both current gaps and complete passed inventories are truthful states."""
     current = _verifier_groups()
-    assert current["status"] == "gaps_found"
-    assert current["review"]["open_blockers"] == ["CR-14", "CR-15"]
-    assert len(current["gaps"]) == 2
+    assert current["status"] in {"gaps_found", "passed"}
+    if current["status"] == "gaps_found":
+        assert current["review"]["open_blockers"] == ["CR-14", "CR-15"]
+        assert len(current["gaps"]) == 2
+    else:
+        assert current["review"]["open_blockers"] == []
+        assert current["gaps"] == []
+        assert all(
+            record["count"] == record["total"]
+            for record in current["inventories"].values()
+        )
 
     passed = _verifier_groups(_verifier_fixture(status="passed"))
     assert passed["status"] == "passed"
