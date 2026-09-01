@@ -18,6 +18,7 @@ import {
   confirmAdminPreviewJob,
   createAdminActiveRevisionRevalidationJob,
   createAdminPreviewJob,
+  getAdminRepositoryBranch,
   getAdminActiveRevisionRevalidationJob,
   getAdminPreviewJob,
   getAdminProduct,
@@ -48,6 +49,7 @@ vi.mock("../../../api/client", async (importOriginal) => {
     confirmAdminPreviewJob: vi.fn(),
     createAdminActiveRevisionRevalidationJob: vi.fn(),
     createAdminPreviewJob: vi.fn(),
+    getAdminRepositoryBranch: vi.fn(),
     getAdminActiveRevisionRevalidationJob: vi.fn(),
     getAdminPreviewJob: vi.fn(),
     getAdminProduct: vi.fn(),
@@ -69,6 +71,7 @@ const createActiveRevalidationMock = vi.mocked(
   createAdminActiveRevisionRevalidationJob,
 );
 const createJobMock = vi.mocked(createAdminPreviewJob);
+const getBranchMock = vi.mocked(getAdminRepositoryBranch);
 const getActiveRevalidationMock = vi.mocked(
   getAdminActiveRevisionRevalidationJob,
 );
@@ -312,6 +315,10 @@ describe("administrator product preview and publication page", () => {
     createActiveRevalidationMock.mockReset();
     createJobMock.mockReset();
     createJobMock.mockResolvedValue(ok(previewJob(), 202));
+    getBranchMock.mockReset();
+    getBranchMock.mockResolvedValue(
+      ok({ commit_hash: "b".repeat(40), name: "main" }),
+    );
     getActiveRevalidationMock.mockReset();
     getJobMock.mockReset();
     getProductMock.mockReset();
@@ -724,11 +731,12 @@ describe("administrator product preview and publication page", () => {
     renderPage();
     await runValidation();
 
-    expect(listBranchesMock).toHaveBeenCalledWith({
+    expect(getBranchMock).toHaveBeenCalledWith({
       auth: "memory-only-admin-bearer",
       path: { repository_id: mapping.primary_repository_id },
-      query: { cursor: null, limit: 100 },
+      query: { branch_name: mapping.primary_source_branch },
     });
+    expect(listBranchesMock).not.toHaveBeenCalled();
     expect(createJobMock).toHaveBeenCalledWith({
       auth: "memory-only-admin-bearer",
       body: {
@@ -769,6 +777,390 @@ describe("administrator product preview and publication page", () => {
     expect(within(sampleTable).getAllByRole("row")[2]).toHaveTextContent(
       "itwelcome.titleBenvenuto",
     );
+  });
+
+  it("resolves branch 101 through exact detail for a candidate direct source", async () => {
+    const branch = "Release/101%2F?query#fragment Ω ";
+    const commit = "1".repeat(40);
+    const branch101Mapping = {
+      ...mapping,
+      primary_source_branch: branch,
+    };
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [branch101Mapping], next_cursor: null }),
+    );
+    listBranchesMock.mockResolvedValueOnce(
+      ok({
+        items: Array.from({ length: 100 }, (_, index) => ({
+          commit_hash: String(index + 1).padStart(40, "0"),
+          name: `unrelated-${index + 1}`,
+        })),
+        next_cursor: "page-2",
+      }),
+    );
+    getBranchMock.mockResolvedValueOnce(ok({ commit_hash: commit, name: branch }));
+
+    renderPage();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Run validation" }),
+    );
+
+    await waitFor(() =>
+      expect(getBranchMock).toHaveBeenCalledWith({
+        auth: "memory-only-admin-bearer",
+        path: { repository_id: branch101Mapping.primary_repository_id },
+        query: { branch_name: branch },
+      }),
+    );
+    expect(listBranchesMock).not.toHaveBeenCalled();
+    expect(createJobMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      body: {
+        commits: [{ commit_hash: commit, role: "direct" }],
+        expected_candidate_version: branch101Mapping.candidate_version,
+      },
+      path: { mapping_id: branch101Mapping.id, product_id: product.id },
+    });
+  });
+
+  it("resolves branch 101 through exact detail for candidate keys and translations sources", async () => {
+    const keysBranch = "keys/101%2F?# Ω";
+    const translationsBranch = "translations/102%2F?# Ω";
+    const keysCommit = "2".repeat(40);
+    const translationsCommit = "3".repeat(40);
+    const separate = {
+      ...mapping,
+      primary_source_branch: keysBranch,
+      topology: "separate" as const,
+      translations_repository_id:
+        "00000000-0000-4000-8000-000000000402",
+      translations_source_branch: translationsBranch,
+    };
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [separate], next_cursor: null }),
+    );
+    listBranchesMock.mockResolvedValue(
+      ok({
+        items: Array.from({ length: 100 }, (_, index) => ({
+          commit_hash: String(index + 1).padStart(40, "0"),
+          name: `unrelated-${index + 1}`,
+        })),
+        next_cursor: "page-2",
+      }),
+    );
+    getBranchMock.mockImplementation(async (options) =>
+      ok(
+        options.path.repository_id === separate.primary_repository_id
+          ? { commit_hash: keysCommit, name: keysBranch }
+          : { commit_hash: translationsCommit, name: translationsBranch },
+      ),
+    );
+
+    renderPage();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Run validation" }),
+    );
+
+    await waitFor(() => expect(getBranchMock).toHaveBeenCalledTimes(2));
+    expect(getBranchMock.mock.calls.map(([options]) => options)).toEqual([
+      {
+        auth: "memory-only-admin-bearer",
+        path: { repository_id: separate.primary_repository_id },
+        query: { branch_name: keysBranch },
+      },
+      {
+        auth: "memory-only-admin-bearer",
+        path: { repository_id: separate.translations_repository_id },
+        query: { branch_name: translationsBranch },
+      },
+    ]);
+    expect(listBranchesMock).not.toHaveBeenCalled();
+    expect(createJobMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      body: {
+        commits: [
+          { commit_hash: keysCommit, role: "keys" },
+          { commit_hash: translationsCommit, role: "translations" },
+        ],
+        expected_candidate_version: separate.candidate_version,
+      },
+      path: { mapping_id: separate.id, product_id: product.id },
+    });
+  });
+
+  it.each([
+    [
+      "direct",
+      {
+        ...confirmedActiveMapping,
+        primary_source_branch: "active/101%2F?# Ω",
+      },
+    ],
+    [
+      "separate",
+      {
+        ...confirmedActiveMapping,
+        primary_source_branch: "keys/101%2F?# Ω",
+        topology: "separate" as const,
+        translations_repository_id:
+          "00000000-0000-4000-8000-000000000402",
+        translations_source_branch: "translations/102%2F?# Ω",
+      },
+    ],
+  ])(
+    "resolves branch 101 through exact detail for active %s sources",
+    async (_topology, activeMapping) => {
+      const expectedSides =
+        activeMapping.topology === "direct"
+          ? [
+              {
+                branch: activeMapping.primary_source_branch,
+                commit: "4".repeat(40),
+                repositoryId: activeMapping.primary_repository_id,
+                role: "direct" as const,
+              },
+            ]
+          : [
+              {
+                branch: activeMapping.primary_source_branch,
+                commit: "4".repeat(40),
+                repositoryId: activeMapping.primary_repository_id,
+                role: "keys" as const,
+              },
+              {
+                branch: activeMapping.translations_source_branch!,
+                commit: "5".repeat(40),
+                repositoryId: activeMapping.translations_repository_id!,
+                role: "translations" as const,
+              },
+            ];
+      getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+      listRevisionMappingsMock.mockResolvedValueOnce(
+        ok({ items: [activeMapping], next_cursor: null }),
+      );
+      getReactivationEligibilityMock.mockResolvedValueOnce(
+        ok(reactivationEligibility(false)),
+      );
+      listBranchesMock.mockResolvedValue(
+        ok({
+          items: Array.from({ length: 100 }, (_, index) => ({
+            commit_hash: String(index + 1).padStart(40, "0"),
+            name: `unrelated-${index + 1}`,
+          })),
+          next_cursor: "page-2",
+        }),
+      );
+      getBranchMock.mockImplementation(async (options) => {
+        const side = expectedSides.find(
+          (candidateSide) =>
+            candidateSide.repositoryId === options.path.repository_id,
+        )!;
+        return ok({ commit_hash: side.commit, name: side.branch });
+      });
+      createActiveRevalidationMock.mockResolvedValueOnce(
+        ok(activeRevalidationJob(), 202),
+      );
+
+      renderPage(inactiveActiveOnlyProduct.id);
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Run validation again" }),
+      );
+
+      await waitFor(() =>
+        expect(getBranchMock).toHaveBeenCalledTimes(expectedSides.length),
+      );
+      expect(getBranchMock.mock.calls.map(([options]) => options)).toEqual(
+        expectedSides.map((side) => ({
+          auth: "memory-only-admin-bearer",
+          path: { repository_id: side.repositoryId },
+          query: { branch_name: side.branch },
+        })),
+      );
+      expect(listBranchesMock).not.toHaveBeenCalled();
+      expect(createActiveRevalidationMock).toHaveBeenCalledWith({
+        auth: "memory-only-admin-bearer",
+        body: {
+          commits: expectedSides.map((side) => ({
+            commit_hash: side.commit,
+            role: side.role,
+          })),
+          expected_active_revision_version:
+            inactiveActiveOnlyProduct.active_revision!.version,
+        },
+        path: {
+          mapping_id: activeMapping.id,
+          product_id: inactiveActiveOnlyProduct.id,
+          revision_id: inactiveActiveOnlyProduct.active_revision!.id,
+        },
+      });
+      expect(createJobMock).not.toHaveBeenCalled();
+      expect(publishMock).not.toHaveBeenCalled();
+      expect(reactivateMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["case", "release/opaque"],
+    ["surrounding character", "xRelease/Opaque"],
+    ["Unicode", "Release/Opaque Ω"],
+    ["percent", "Release/Opaque%2F"],
+    ["slash", "Release/Opaque/"],
+    ["question mark", "Release/Opaque?"],
+    ["hash", "Release/Opaque#"],
+  ])(
+    "resolves branch 101 through exact detail and rejects a %s mismatch",
+    async (_difference, returnedName) => {
+      const requestedName = "Release/Opaque";
+      const mismatchedMapping = {
+        ...mapping,
+        primary_source_branch: requestedName,
+      };
+      listRevisionMappingsMock.mockResolvedValueOnce(
+        ok({ items: [mismatchedMapping], next_cursor: null }),
+      );
+      listBranchesMock.mockResolvedValueOnce(
+        ok({
+          items: [{ commit_hash: "6".repeat(40), name: requestedName }],
+          next_cursor: null,
+        }),
+      );
+      getBranchMock.mockResolvedValueOnce(
+        ok({ commit_hash: "7".repeat(40), name: returnedName }),
+      );
+
+      renderPage();
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Run validation" }),
+      );
+
+      await waitFor(() => expect(getBranchMock).toHaveBeenCalledOnce());
+      await waitFor(() =>
+        expect(
+          screen.getByText(
+            "Validation did not complete. Review the reason, then retry.",
+          ),
+        ).toBeVisible(),
+      );
+      expect(createJobMock).not.toHaveBeenCalled();
+      expect(createActiveRevalidationMock).not.toHaveBeenCalled();
+      expect(publishMock).not.toHaveBeenCalled();
+      expect(reactivateMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["rejected", "empty"])(
+    "resolves branch 101 through exact detail and fails closed for a %s response",
+    async (failureMode) => {
+      const requestedName = "Release/opaque%2F?# Ω";
+      const exactMapping = { ...mapping, primary_source_branch: requestedName };
+      listRevisionMappingsMock.mockResolvedValueOnce(
+        ok({ items: [exactMapping], next_cursor: null }),
+      );
+      listBranchesMock.mockResolvedValueOnce(
+        ok({
+          items: [{ commit_hash: "8".repeat(40), name: requestedName }],
+          next_cursor: null,
+        }),
+      );
+      if (failureMode === "rejected") {
+        getBranchMock.mockRejectedValueOnce(new Error("bounded lookup failure"));
+      } else {
+        getBranchMock.mockResolvedValueOnce(ok(undefined as never));
+      }
+
+      renderPage();
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Run validation" }),
+      );
+
+      await waitFor(() => expect(getBranchMock).toHaveBeenCalledOnce());
+      expect(
+        await screen.findByText(
+          "Validation did not complete. Review the reason, then retry.",
+        ),
+      ).toBeVisible();
+      expect(createJobMock).not.toHaveBeenCalled();
+      expect(createActiveRevalidationMock).not.toHaveBeenCalled();
+      expect(publishMock).not.toHaveBeenCalled();
+      expect(reactivateMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("resolves branch 101 through exact detail and fails closed when one separate side fails", async () => {
+    const separate = {
+      ...mapping,
+      primary_source_branch: "keys/101",
+      topology: "separate" as const,
+      translations_repository_id:
+        "00000000-0000-4000-8000-000000000402",
+      translations_source_branch: "translations/102",
+    };
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [separate], next_cursor: null }),
+    );
+    listBranchesMock.mockResolvedValue(
+      ok({
+        items: [
+          { commit_hash: "9".repeat(40), name: separate.primary_source_branch },
+          {
+            commit_hash: "a".repeat(40),
+            name: separate.translations_source_branch,
+          },
+        ],
+        next_cursor: null,
+      }),
+    );
+    getBranchMock
+      .mockResolvedValueOnce(
+        ok({
+          commit_hash: "9".repeat(40),
+          name: separate.primary_source_branch,
+        }),
+      )
+      .mockRejectedValueOnce(new Error("bounded translations lookup failure"));
+
+    renderPage();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Run validation" }),
+    );
+
+    await waitFor(() => expect(getBranchMock).toHaveBeenCalledTimes(2));
+    expect(
+      await screen.findByText(
+        "Validation did not complete. Review the reason, then retry.",
+      ),
+    ).toBeVisible();
+    expect(createJobMock).not.toHaveBeenCalled();
+    expect(createActiveRevalidationMock).not.toHaveBeenCalled();
+    expect(publishMock).not.toHaveBeenCalled();
+    expect(reactivateMock).not.toHaveBeenCalled();
+  });
+
+  it("resolves branch 101 through exact detail and rejects missing separate-side identity", async () => {
+    const incomplete = {
+      ...mapping,
+      topology: "separate" as const,
+      translations_repository_id: null,
+      translations_source_branch: null,
+    };
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [incomplete], next_cursor: null }),
+    );
+
+    renderPage();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Run validation" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Validation did not complete. Review the reason, then retry.",
+      ),
+    ).toBeVisible();
+    expect(createJobMock).not.toHaveBeenCalled();
+    expect(createActiveRevalidationMock).not.toHaveBeenCalled();
+    expect(publishMock).not.toHaveBeenCalled();
+    expect(reactivateMock).not.toHaveBeenCalled();
   });
 
   it.each([

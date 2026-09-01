@@ -993,12 +993,17 @@ test("100/101 exact branches stay fail-closed at 200 percent zoom", async ({
   const state = defaultState();
   const configuredBranch =
     "release/2026-with-a-very-long-opaque-provider-branch-name";
+  const configuredKeysBranch = "keys/101%2F?#-opaque-provider-branch";
+  const configuredTranslationsBranch =
+    "translations/102%2F?#-opaque-provider-branch";
   state.branches = [
     ...Array.from({ length: 100 }, (_, index) => ({
       commit_hash: String(index + 1).padStart(40, "0"),
       name: `provider-branch-${String(index + 1).padStart(3, "0")}`,
     })),
     { commit_hash: "f".repeat(40), name: configuredBranch },
+    { commit_hash: "e".repeat(40), name: configuredKeysBranch },
+    { commit_hash: "d".repeat(40), name: configuredTranslationsBranch },
   ];
   state.mappings = [
     {
@@ -1006,6 +1011,11 @@ test("100/101 exact branches stay fail-closed at 200 percent zoom", async ({
       allowed_target_branches: [configuredBranch],
       default_target_branch: configuredBranch,
       primary_source_branch: configuredBranch,
+    },
+    {
+      ...separateMapping,
+      primary_source_branch: configuredKeysBranch,
+      translations_source_branch: configuredTranslationsBranch,
     },
   ];
   state.paginateBranches = true;
@@ -1034,7 +1044,7 @@ test("100/101 exact branches stay fail-closed at 200 percent zoom", async ({
   await page
     .getByRole("button", { name: "Load more branches for Source branch" })
     .click();
-  await expect(page.getByText("All 101 branches loaded")).toBeVisible();
+  await expect(page.getByText("All 103 branches loaded")).toBeVisible();
   await expect(sourceBranch).toContainText(configuredBranch);
   expect(
     state.branchRequests.filter(({ branchName }) => branchName === null),
@@ -1050,6 +1060,26 @@ test("100/101 exact branches stay fail-closed at 200 percent zoom", async ({
   await page.evaluate(() => {
     document.documentElement.style.zoom = "2";
   });
+  await expectNoPageOverflow(page);
+
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = "1";
+  });
+  const previewBranchBaseline = state.branchRequests.length;
+  await page.goto("/admin/products/product-1/preview");
+  const runValidationButtons = page.getByRole("button", {
+    name: "Run validation",
+  });
+  await expect(runValidationButtons).toHaveCount(2);
+  await runValidationButtons.nth(0).click();
+  await expect(page.getByText("Succeeded", { exact: true })).toHaveCount(1);
+  await runValidationButtons.nth(1).click();
+  await expect(page.getByText("Succeeded", { exact: true })).toHaveCount(2);
+  expect(state.branchRequests.slice(previewBranchBaseline)).toEqual([
+    { branchName: configuredBranch, cursor: null, limit: null },
+    { branchName: configuredKeysBranch, cursor: null, limit: null },
+    { branchName: configuredTranslationsBranch, cursor: null, limit: null },
+  ]);
   await expectNoPageOverflow(page);
 });
 
@@ -2427,6 +2457,7 @@ test("unchanged active revision reactivation uses real backend state and blocks 
       fixture.password,
     );
     const routes: Array<{ method: string; pathname: string }> = [];
+    const branchDetailQueries: string[] = [];
     const writes: Array<{ body: unknown; method: string; pathname: string }> =
       [];
     page.on("request", (request) => {
@@ -2436,6 +2467,11 @@ test("unchanged active revision reactivation uses real backend state and blocks 
         return;
       }
       routes.push({ method, pathname });
+      if (method === "GET" && pathname.endsWith("/branch")) {
+        branchDetailQueries.push(
+          new URL(request.url()).searchParams.get("branch_name") ?? "",
+        );
+      }
       if (method !== "GET") {
         writes.push({
           body: request.postDataJSON(),
@@ -2573,7 +2609,7 @@ test("unchanged active revision reactivation uses real backend state and blocks 
       (route) =>
         route.method === "GET" &&
         route.pathname ===
-          `/api/v1/admin/repositories/${fixture.repositoryIds[0]}/branches`,
+          `/api/v1/admin/repositories/${fixture.repositoryIds[0]}/branch`,
       (route) =>
         route.method === "POST" &&
         route.pathname.endsWith("/revalidation-preview-jobs"),
@@ -2596,6 +2632,7 @@ test("unchanged active revision reactivation uses real backend state and blocks 
       expect(next).toBeGreaterThan(routeCursor);
       routeCursor = next;
     }
+    expect(branchDetailQueries).toEqual(["main"]);
     expect(
       writes.filter(
         ({ pathname }) =>
