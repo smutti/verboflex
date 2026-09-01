@@ -19,12 +19,18 @@ import {
   listAdminRevisionMappings,
   readCurrentUser,
   readSystemStatus,
+  refreshAccessToken,
   type RoleName,
 } from "./api/client";
 import { ProductDetailLayout } from "./features/admin/products/ProductDetailLayout";
 import { DirtyFormNavigationProvider } from "./components/navigation/DirtyFormNavigationGuard";
 import { SessionProvider } from "./features/auth/session";
-import { AdminApplicationRoutes, AppRouter, SessionRoutes } from "./router";
+import {
+  AdminApplicationRoutes,
+  AppRouter,
+  createVerboFlexBrowserRouter,
+  SessionRoutes,
+} from "./router";
 
 vi.mock("./api/client", () => ({
   changePassword: vi.fn(),
@@ -44,6 +50,7 @@ const getAdminProductMock = vi.mocked(getAdminProduct);
 const listAdminRevisionMappingsMock = vi.mocked(listAdminRevisionMappings);
 const readCurrentUserMock = vi.mocked(readCurrentUser);
 const readSystemStatusMock = vi.mocked(readSystemStatus);
+const refreshAccessTokenMock = vi.mocked(refreshAccessToken);
 
 const ordinaryPrincipal = {
   id: "73f123f7-ebad-4dad-8b5d-dcc3214b3b06",
@@ -69,7 +76,12 @@ beforeEach(() => {
   listAdminRevisionMappingsMock.mockReset();
   readCurrentUserMock.mockReset();
   readSystemStatusMock.mockReset();
+  refreshAccessTokenMock.mockReset();
   readSystemStatusMock.mockReturnValue(new Promise<never>(() => undefined));
+  refreshAccessTokenMock.mockResolvedValue({
+    data: undefined,
+    error: { detail: "No session" },
+  });
 });
 
 function LocationMarker() {
@@ -106,6 +118,16 @@ function renderRoutes(
 }
 
 describe("session routes", () => {
+  it("creates the production browser router with the session and dirty-form providers", async () => {
+    const router = createVerboFlexBrowserRouter();
+    render(<RouterProvider router={router} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "VerboFlex" }),
+    ).toBeVisible();
+    router.dispose();
+  });
+
   it("deep-links an existing product candidate through the explicit edit route", async () => {
     const productId = "00000000-0000-4000-8000-000000000101";
     const candidateId = "00000000-0000-4000-8000-000000000202";

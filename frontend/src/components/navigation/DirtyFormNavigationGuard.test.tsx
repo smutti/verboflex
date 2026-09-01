@@ -1,6 +1,13 @@
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import {
@@ -35,6 +42,9 @@ function FormRoute() {
       </label>
       <Link to="/destination-a">Destination A</Link>
       <Link to="/destination-b">Destination B</Link>
+      <button type="button" onClick={() => setValue("saved")}>
+        Reset draft
+      </button>
       <button type="button">Programmatic trigger</button>
     </>
   );
@@ -134,6 +144,53 @@ describe("shared dirty-form router transaction", () => {
     expect(router.state.location.pathname).not.toBe("/destination-a");
   });
 
+  it("consumes a captured discard transaction only once", async () => {
+    const router = createHarness();
+    await makeDirty();
+
+    await userEvent.click(screen.getByRole("link", { name: "Destination A" }));
+    await expectDecision();
+    const discard = screen.getByRole("button", { name: "Discard changes" });
+    act(() => {
+      discard.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      discard.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe("/destination-a"),
+    );
+  });
+
+  it("cancels the pending transaction when the registered form becomes clean", async () => {
+    const router = createHarness();
+    await makeDirty();
+
+    await userEvent.click(screen.getByRole("link", { name: "Destination A" }));
+    await expectDecision();
+    fireEvent.click(screen.getByText("Reset draft"));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+    expect(router.state.location.pathname).toBe("/form");
+  });
+
+  it("cancels a pending transition even when no connected trigger owns focus", async () => {
+    const router = createHarness();
+    const { input } = await makeDirty();
+    act(() => input.blur());
+    expect(document.activeElement).toBe(document.body);
+
+    await router.navigate("/destination-a");
+    await expectDecision();
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+    expect(router.state.location.pathname).toBe("/form");
+  });
+
   it("blocks programmatic PUSH and POP transactions before the route changes", async () => {
     const router = createHarness({
       initialEntries: ["/history-origin", "/form"],
@@ -167,5 +224,16 @@ describe("shared dirty-form router transaction", () => {
     const dirtyExit = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(dirtyExit);
     expect(dirtyExit.defaultPrevented).toBe(true);
+  });
+
+  it("fails closed when a dirty-form hook is mounted outside its provider", () => {
+    function UnwrappedDirtyForm() {
+      useDirtyFormNavigationGuard("unwrapped", true);
+      return null;
+    }
+
+    expect(() => render(<UnwrappedDirtyForm />)).toThrow(
+      "useDirtyFormNavigationGuard requires DirtyFormNavigationProvider",
+    );
   });
 });
