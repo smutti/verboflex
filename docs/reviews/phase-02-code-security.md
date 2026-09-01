@@ -3,72 +3,79 @@
 - Review-status: CLOSED
 - Open-critical-high: 0
 - Full-gauntlet-status: PASS
-- Reviewed-source-digest: `ede23c16f49301366ec9e30edc885e52c726b5d57a7bc3a796be6e9f30979d90`
+- Reviewed-source-digest: `f12c23d7aa7655027b189b7793227403575e5393e92ed08ae9009db9dda1e1ca`
 - Review-standard: OWASP ASVS 5.0 Level 1
-- Review-scope: Complete Phase 2 diff `ce9fbeef86b00f594d1d06e15d3083d623c54095..99d2d0af5dfb27cc3ef47590f480ae7a33cf4d94` through Plan 02-43
+- Review-scope: Complete Phase 2 diff `ce9fbeef86b00f594d1d06e15d3083d623c54095..7af1d1063ab6a795a42f0e26175fc2196ba6eda5` and all 290 current review paths through Plan 02-46
 - Review-date: 2026-09-01
 - Structured-review: `.planning/phases/02-admin-configuration/02-REVIEW.md`
 
 ## Verdict
 
-The fresh independent review reports zero unresolved Critical or High-equivalent findings on the current review-mode digest. CR-01 through CR-13 are CLOSED on current production symbols and executable evidence. WR-01 and WR-02 are CLOSED. WR-03 through WR-07 remain explicitly OPEN at Warning severity and are not represented as fixed.
+The fresh independent deep review reports zero unresolved Critical or project High-equivalent findings on the current review-mode digest. CR-01 through CR-15 are CLOSED on current production symbols and executable evidence. WR-01 and WR-02 are CLOSED. WR-03 through WR-08 remain explicitly OPEN at Warning severity and are not represented as fixed.
 
-The official pre-review gap-closure gauntlet passed all 18 layers on the unchanged final source. The canonical-source rerun and the independent verifier remain separately recorded in `docs/evidence/phase-02-gap-closure.md`; no historical review, verifier, plan statement, or stale digest is used as closure authority.
+The typed reviewer therefore truthfully reports `status: issues_found` with `critical: 0`, `warning: 6`, `info: 0`, and `total: 6`. That warning-bearing typed status is separate from this canonical Critical/High closeout authority: `Review-status: CLOSED` and `Open-critical-high: 0`.
+
+The post-transition official gauntlet passed all 18 layers on the unchanged reviewed source before this canonical artifact was updated. Historical review, verifier, plan, or PASS prose is not closure authority.
 
 ## Current Finding Inventory
 
 | Row | Disposition | Current production authority | Executable current evidence |
 | --- | --- | --- | --- |
-| CR-01 | CLOSED | Base Compose provider environment shared by backend, worker, and scheduler | Exact base-Compose inheritance contract passed |
-| CR-02 | CLOSED | Exact bounded Bitbucket client-credentials token exchange | Exact exchange contract passed |
-| CR-03 | CLOSED | Client-credentials-only service and connect/reconnect/status/revoke routes | No callback, authorization-code, browser-token, or refresh authority contract passed |
-| CR-04 | CLOSED; WR-03 remains | Access-only encrypted generation, exact scope/status, expiry, and serialized renewal | Persistence and concurrent-renewal contracts passed |
-| CR-05 | CLOSED | Stable Product identity, complete candidate graph clone, atomic publication promotion | Candidate isolation contract passed |
-| CR-06 | CLOSED | Exact active-revision revalidation and locked reactivation authority | Revalidate, confirm, reactivate without graph mutation passed |
-| CR-07 | CLOSED | Persistent mobile wizard navigation controls | 320px keyboard/pointer five-step contract passed |
-| CR-08 | CLOSED | Opaque cursor collection and terminal-page lifecycle gating | 51st-row completeness and supersession contracts passed |
-| CR-09 | CLOSED | Durable watchdog CAS terminalization and retry isolation | Watchdog and worker-loss recovery contracts passed |
-| CR-10 | CLOSED | Shared last-admin advisory lock and survivor predicate across HTTP and CLI | Cross-entry concurrency and sole-admin denial contracts passed |
-| CR-11 | CLOSED | Scheduler parity in base, staging, and production; separate Celery Beat; dual-overlay recovery | Scheduler contracts and staging/production KILL-to-timeout-to-retry smoke passed |
-| CR-12 | CLOSED | Immutable active-revalidation sidecar, exact eligibility, admin recovery API and UI | Graph immutability, API/service, frontend, and real-backend recovery E2E passed |
-| CR-13 | CLOSED | Runtime CSP `frame-ancestors 'none'`, X-Frame-Options DENY, and defensive headers | Built-Nginx root and SPA-fallback header smoke passed |
-| WR-01 | CLOSED | Role-projected workspace and location-authoritative shell navigation | Workspace bounded-state suite passed |
-| WR-02 | CLOSED | Composite ownership FKs, published-child triggers, and immutable revalidation sidecar | Graph-integrity and sidecar immutability contracts passed |
-| WR-03 | **OPEN — WARNING** | Provider `expires_in` has no explicit upper bound | `10**100` is accepted before persistence raises `OverflowError` |
-| WR-04 | **OPEN — WARNING** | Development-only Stryker dependency chain includes vulnerable `qs` | Full npm graph reports two moderate records; production graph reports zero |
-| WR-05 | **OPEN — WARNING** | Container image selectors use mutable tags | Dockerfile/Compose provenance inventory finds no `@sha256:` pins |
+| CR-01 | CLOSED | Base Compose provider environment shared by backend, worker, and scheduler | Semantic/runtime and architecture/provider layers passed; base Compose readiness passed |
+| CR-02 | CLOSED | `BitbucketOAuthTokenExchange.exchange_client_credentials`; exact response validation | Mutation proof and mock provider passed exact client-credentials grant and `repository` scope |
+| CR-03 | CLOSED | Client-credentials-only service and connect/reconnect/status/revoke routes | No callback, authorization-code, browser-token, or refresh authority remains in OpenAPI/runtime |
+| CR-04 | CLOSED; WR-03 remains | `acquire_repository_read_lease`, `_renew_access_token_if_needed`, `_persist_access_only`, `public_status` | Access-only encrypted generations and serialized renewal passed; malformed lifetime remains Warning-only |
+| CR-05 | CLOSED | `_clone_active_revision_graph`; `_promote_candidate_identity` | Complete candidate isolation and atomic publication mutation contracts passed |
+| CR-06 | CLOSED | `reactivate_product`; `active_revision_revalidation_is_current`; `PublishedMappingRecovery` | Real-backend reactivation passed with immutable active graph and zero provider writes |
+| CR-07 | CLOSED | Persistent mobile wizard Back/Next controls | Five-step 320px keyboard/pointer browser contract passed |
+| CR-08 | CLOSED | `useCursorCollection`; terminal-cursor preview readiness | 51st-row completeness, deduplication, supersession, and lifecycle gating passed |
+| CR-09 | CLOSED | `reconcile_stale_preview_jobs`; `preview-stale-job-watchdog` | Staging and production worker-loss recovery passed bounded timeout and replacement retry |
+| CR-10 | CLOSED | `ADMIN_AUTHORITY_LOCK_KEY`; shared admin survivor predicate | Cross-entry HTTP/CLI last-admin concurrency and mutation contracts passed |
+| CR-11 | CLOSED | Celery Beat schedule and base/staging/production scheduler services | Scheduler parity and both deployment-overlay recovery paths passed |
+| CR-12 | CLOSED | Active-revision revalidation job, confirmation, currentness, and UI recovery | Exact server eligibility, immutable sidecar, frontend, and real-backend E2E passed |
+| CR-13 | CLOSED | Runtime Nginx CSP and defensive response headers | Built root and SPA fallback passed anti-framing and complete defensive-header probes |
+| CR-14 | CLOSED | `configuredPreviewSourceSides`, `resolveConfiguredBranchCommit`, generated `getAdminRepositoryBranch` | Candidate and active direct/separate branch-101 detail paths, exact name equality, fail-closed cases, browser proof, and five-GET/zero-write audit passed |
+| CR-15 | CLOSED | `DirtyFormNavigationProvider`, `useBlocker`, `useBeforeUnload`, product/mapping registration, mobile commit observer | Real-router Link/PUSH/Back, reload separation, Keep editing/Escape/Discard once, stale-intent isolation, value/focus preservation, and 320px Sheet paths passed |
+| WR-01 | CLOSED | Role-projected workspace and location-authoritative shell navigation | Full frontend and focused router/shell suites passed |
+| WR-02 | CLOSED | Composite ownership, published-child triggers, immutable revalidation sidecar | Migrations, graph integrity, and sidecar immutability passed |
+| WR-03 | **OPEN — WARNING** | Provider `expires_in` has no explicit upper bound | `10**100` passes validation before persistence raises `OverflowError` |
+| WR-04 | **OPEN — WARNING** | Development-only Stryker chain includes vulnerable `qs` | Full npm graph reports two moderate records; production graph reports zero |
+| WR-05 | **OPEN — WARNING** | Container image selectors use mutable tags | Dockerfile/Compose inventory finds no `@sha256:` pins |
 | WR-06 | **OPEN — WARNING** | `.env.example` omits Phase 2 provider/watchdog settings | Environment-key comparison finds zero of seven settings |
-| WR-07 | **OPEN — WARNING** | Source manifest omits the executable Phase 2 edge-matrix JSON | Resolved manifest omits the JSON loaded by the traceability test |
+| WR-07 | **OPEN — WARNING** | Source manifest omits the executable Phase 2 edge-matrix JSON | The JSON is reviewed through the diff but remains outside both source digests |
+| WR-08 | **OPEN — WARNING** | `phase2_compose_flow.main` default no-flag mode calls removed OAuth endpoints | Current OpenAPI lacks those routes; supported `--gap-closure` does not invoke this deferred broken path |
 
 ## ASVS 5.0 Level 1 Disposition
 
 | Security authority | Result | Reviewed boundary |
 | --- | --- | --- |
-| Validation and business logic | PASS with WR-03 | Closed schemas, exact cursors/paths/scopes/status, transactional invariants, fail-closed revalidation |
+| Validation and business logic | PASS with WR-03 | Closed schemas, exact cursor/path/scope/status validation, transactional invariants, fail-closed revalidation |
 | File handling and provider reads | PASS | GET-only commit-bound reads, redirect/path rejection, bounded pages/files/depth/bytes, strict format parsers |
 | Authentication and sessions | PASS | Purpose-bound bearer tokens, Argon2 passwords, refresh rotation/revocation, current database authority |
-| Authorization | PASS | Server-enforced admin dependencies, cross-entry last-admin lock, admin-only recovery routes |
+| Authorization | PASS | Server-enforced admin dependencies, last-admin lock, admin-only recovery routes |
 | OAuth | PASS with WR-03 | Backend-only client credentials, exact repository scope, access-only encrypted generations, expiry/revoke/reconnect checks |
-| Cryptography and data protection | PASS | MultiFernet authenticated encryption, secret redaction, no-store public projections, memory-only frontend bearer |
-| Logging and error handling | PASS | Bounded public errors, provider body/token exclusion, secret-free diagnostics and audit output |
-| Product graph authority | PASS | Composite ownership, published graph immutability, atomic publication/reactivation, immutable recovery sidecar |
-| Pagination and asynchronous recovery | PASS | All-page collection before lifecycle actions, durable CAS terminalization, scheduler parity, dual-overlay worker-loss recovery |
-| Browser response hardening | PASS | Complete runtime CSP, anti-framing, nosniff, referrer and permissions headers |
-| Provider-write exclusion | PASS | Adapter exposes bounded GET operations only; runtime audits observe zero provider writes |
-| Dependency and evidence provenance | WARNING | WR-04 through WR-07 remain open and visible |
+| Cryptography and data protection | PASS | MultiFernet authenticated encryption, redaction, no-store projections, memory-only frontend bearer |
+| Logging and error handling | PASS | Bounded public errors, provider/token exclusion, secret-free diagnostics and evidence |
+| Product graph authority | PASS | Composite ownership, published graph immutability, atomic publication/reactivation, immutable sidecar |
+| Router data-loss protection | PASS | One router-owned transaction, exact decisions, separate document exit, stale cleanup, focus/value preservation |
+| Pagination and asynchronous recovery | PASS | All-page collection, durable CAS terminalization, scheduler parity, dual-overlay recovery |
+| Browser response hardening | PASS | Complete runtime CSP, anti-framing, nosniff, referrer, and permissions headers |
+| Provider-write exclusion | PASS | Read-only adapter and runtime audit observed five GETs and zero writes |
+| Dependency and evidence provenance | WARNING | WR-04 through WR-08 remain open and visible |
 
 ## Fresh Verification Performed
 
-- Official pre-review command: `bash tools/phase2_gauntlet.sh --gap-closure` — PASS, 18/18 layers.
-- Fresh review scope: 287 unique current review-manifest paths and the complete 279-file Phase 2 implementation diff.
-- Focused backend review: 20/20 nodes passed.
-- Focused frontend review: 5 files, 101/101 tests passed.
-- Static review gates: Ruff, mypy across 81 source files, TypeScript, and ESLint passed.
-- Dependency review: `uv lock --check` and `pip-audit` passed; production npm audit reports zero; the full development graph retains WR-04.
-- Fresh review digest after the structured report was written: `ede23c16f49301366ec9e30edc885e52c726b5d57a7bc3a796be6e9f30979d90`.
+- Exact semantic audit after the supported historical-blocker to warning-only transition: 8/8 passed.
+- Official post-transition command: `bash tools/phase2_gauntlet.sh --gap-closure` — PASS, 18/18 layers.
+- Fresh reviewer scope: 290 unique current review paths plus the complete Phase 2 implementation diff.
+- Full suites: backend 807/807, frontend 304/304, backend properties 200/200, frontend properties 3/3.
+- Changed-source coverage: backend 641/641 and frontend 746/746 lines, both 100%.
+- Mutation, migration, OpenAPI/client drift, static, secret, supply-chain, and architecture/provider gates passed under their declared thresholds.
+- Mock provider production browser smoke: 8/8 with five audited GETs and zero writes; both deployment-overlay worker-loss paths passed.
+- Fresh review digest: `f12c23d7aa7655027b189b7793227403575e5393e92ed08ae9009db9dda1e1ca`.
 
 ## Review Limits
 
-- The optional live-provider smoke remains intentionally skipped without explicit opt-in and local provider configuration. Current mock-live-provider execution performs five audited GETs and zero writes; no provider-side revocation claim is made.
-- WR-03 through WR-07 are non-blocking at their fresh assessed Warning severity, remain scheduled work, and are not hidden by the CLOSED Critical/High gate.
-- `Reviewed-source-digest` is the review-mode digest, which deliberately excludes this canonical review to avoid self-reference. The final-mode digest after this canonical artifact is committed is recorded in the gap-closure evidence.
+- The optional live-provider smoke remains intentionally skipped without explicit opt-in and local provider configuration; no live-provider claim is fabricated.
+- WR-03 through WR-08 are nonblocking at their fresh Warning severity and remain scheduled work. WR-08 is explicitly deferred, not fixed.
+- `Reviewed-source-digest` is the review-mode digest and deliberately excludes this canonical review to avoid self-reference. The final digest after this artifact is committed is recorded in the gap-closure evidence.
