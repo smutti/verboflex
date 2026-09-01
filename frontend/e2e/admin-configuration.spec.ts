@@ -1177,6 +1177,7 @@ test("dirty product and mapping routes require discard before navigation", async
   await expect(previewLink).toBeFocused();
 
   await previewLink.click();
+  await expect(mappingDialog).toBeVisible();
   await usersLink.evaluate((element) => (element as HTMLElement).click());
   await mappingDialog.getByRole("button", { name: "Discard changes" }).click();
   await expect(page).toHaveURL("/admin/products/product-1/preview");
