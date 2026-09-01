@@ -1,260 +1,425 @@
 ---
 phase: 02-admin-configuration
-verified: 2026-08-29T10:27:29Z
-status: gaps_found
-score: 53/64 must-haves verified
+verified: 2026-09-01T08:39:35Z
+verification_date: 2026-09-01
+status: passed
+score: "8/8 roadmap success criteria verified"
 behavior_unverified: 0
 overrides_applied: 0
-gaps:
-  - truth: "User lifecycle preserves the last-active-admin invariant through every privileged entry point."
-    status: failed
-    reason: "The HTTP service enforces the invariant, but the privileged deactivate-user CLI bypasses the global authority lock and survivor check."
-    artifacts:
-      - path: "backend/src/verboflex/services/admin_users.py"
-        issue: "deactivate_user_by_email() directly deactivates the row without _lock_admin_authority() or _require_admin_survivor()."
-      - path: "backend/src/verboflex/cli.py"
-        issue: "The CLI delegates directly to the unsafe service path."
-    missing:
-      - "Route CLI deactivation through the same serialized invariant used by the HTTP lifecycle service."
-      - "Add a failing-first regression for CLI deactivation of the sole active administrator, including concurrency coverage."
-  - truth: "Editing a published product creates an isolated, complete candidate graph while the active configuration remains byte-for-byte unchanged."
-    status: failed
-    reason: "There is no production edit route for an existing product; candidate creation copies only the revision description, omits mappings/sides/targets, and updates the globally shared product name before publication."
-    artifacts:
-      - path: "backend/src/verboflex/services/products.py"
-        issue: "save_product_candidate() creates a bare ProductRevision and mutates Product.display_name/name_key immediately."
-      - path: "frontend/src/router.tsx"
-        issue: "Only the /admin/products/new wizard route exists; no existing-product edit route supplies initialProduct."
-    missing:
-      - "Clone the full active revision graph into a new candidate and keep all effective active identity/configuration unchanged until publish."
-      - "Add and test a routed existing-product edit workflow."
-  - truth: "The shipped stack can establish and maintain the approved single organization-wide, repository-only Bitbucket connection."
-    status: failed
-    reason: "Base Compose supplies no OAuth settings; production supports authorization-code/refresh pairs while the approved and live-tested client uses client_credentials; callback completion redirects to the API origin; expiry does not change status or trigger a reachable refresh path."
-    artifacts:
-      - path: "docker-compose.yml"
-        issue: "No VERBOFLEX_BITBUCKET_OAUTH_* or keyring configuration is passed to backend/worker."
-      - path: "backend/src/verboflex/services/bitbucket_oauth.py"
-        issue: "No client_credentials grant; refresh token is mandatory; provider_expires_at is ignored by status/readability."
-      - path: "backend/src/verboflex/api/v1/routes/admin_bitbucket.py"
-        issue: "Relative callback redirect resolves on localhost:8000 instead of the frontend on localhost:8080."
-    missing:
-      - "Choose and implement one approved production grant end-to-end, including Compose configuration and encrypted durable authority."
-      - "Redirect callback completion to the configured frontend origin."
-      - "Handle access-token expiry with reachable refresh/reauthorization behavior and tests."
-  - truth: "Administrators can complete product setup, reactivation, repository/branch selection, and preview flows across the supported UI."
-    status: failed
-    reason: "Reactivation loads an endpoint that rejects the candidate-null state, mobile wizard navigation stops after step 2, several collection/branch consumers discard pagination, and Workspace overview is inert and permanently current."
-    artifacts:
-      - path: "frontend/src/features/admin/previews/ProductPreviewPage.tsx"
-        issue: "Always requests candidate mappings before evaluating the reactivation state."
-      - path: "frontend/src/features/admin/products/ProductWizardPage.tsx"
-        issue: "Step buttons are desktop-only and mobile progress is display-only."
-      - path: "frontend/src/features/admin/repositories/ProductRepositoriesPage.tsx"
-        issue: "Fetches only the first 50 repositories and discards next_cursor."
-      - path: "frontend/src/features/admin/mappings/ProductMappingsPage.tsx"
-        issue: "Fetches only first repository/mapping/branch pages and discards cursors."
-      - path: "frontend/src/components/layout/AppShell.tsx"
-        issue: "Workspace overview is a button with no navigation and aria-current is unconditional."
-    missing:
-      - "Use a reactivation-compatible read model or endpoint and exercise the real backend contract in E2E."
-      - "Add usable Previous/Next or selectable mobile step navigation."
-      - "Consume pagination for repositories, mappings, and branches."
-      - "Make Workspace overview navigable and derive current state from the route."
-  - truth: "Every accepted preview job reaches a durable terminal state, including hard timeout and worker loss."
-    status: failed
-    reason: "The worker commits running before work and only writes a terminal state in the surviving task process; hard kill/crash has no watchdog, redelivery, or stale-running reconciliation."
-    artifacts:
-      - path: "backend/src/verboflex/services/preview_jobs.py"
-        issue: "A running row can remain permanent when the process never reaches _finish_preview_job()."
-      - path: "backend/src/verboflex/worker/celery_app.py"
-        issue: "No late acknowledgement, reject-on-worker-lost, or reconciler is configured."
-    missing:
-      - "Implement durable worker-loss/hard-timeout recovery with attempt-safe terminalization or redelivery."
-      - "Add a regression that kills/loses a running task and proves a bounded terminal result."
-  - truth: "The final quality gate has no unresolved critical/high finding."
-    status: failed
-    reason: "The newest code review, committed after the earlier closed security review/evidence refresh, contains 10 confirmed critical findings."
-    artifacts:
-      - path: ".planning/phases/02-admin-configuration/02-REVIEW.md"
-        issue: "CR-01 through CR-10 remain valid against current code."
-    missing:
-      - "Close every confirmed critical with focused TDD, repeat the full unchanged-source gate, and obtain a fresh review."
+head: dc6a7e14a3dd1bafdcdbac61f52a96107ba2ba22
+final_source_digest: a4b16eeb2879fd64b32a8942663bd2af117d99662b206bd24711744d9d302964
+review_source_digest: ede23c16f49301366ec9e30edc885e52c726b5d57a7bc3a796be6e9f30979d90
+inventories:
+  phase_goal: "1/1 verified"
+  roadmap_success_criteria: "8/8 verified"
+  requirements: "15/15 satisfied"
+  context_decisions: "23/23 honored"
+  research_assumptions: "3/3 resolved and tested"
+  spec_edge_rows: "54/54 disposition verified (47 tested, 2 assumption-resolved and tested, 5 dismissed)"
+  prohibitions: "9/9 test-enforced"
+  ui_categories: "8/8 verified"
+  bitbucket_capabilities: "44/44 disposition verified (9 integrated, 35 opt-out)"
+  review_rows: "20/20 adjudicated (13 critical closed, 2 warnings closed, 5 warnings open)"
+  root_concerns: "6/6 closed"
+review:
+  status: pass_with_warnings
+  critical: 0
+  warning: 5
+  open_warnings: [WR-03, WR-04, WR-05, WR-06, WR-07]
+re_verification:
+  previous_status: gaps_found
+  previous_score: "53/64"
+  gaps_closed:
+    - "G1 cross-entry-point administrator safety"
+    - "G2 complete candidate isolation and editing"
+    - "G3 production OAuth composition"
+    - "G4 usable end-to-end admin UI"
+    - "G5 durable worker-loss handling"
+    - "G6 clean fresh review"
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 2: Admin Configuration Verification Report
 
-**Phase Goal:** Deliver an administrator-only control plane for internal users, versioned products, reusable repositories, one-format mappings, a single organizational Bitbucket OAuth connection, and live read-only validation previews.
-**Verified:** 2026-08-29T10:27:29Z
-**Status:** `gaps_found`
-**Re-verification:** No — initial goal-backward verification.
+**Phase Goal:** Deliver an administrator-only control plane for internal users, versioned products, reusable repositories, one-format mappings, a single organizational Bitbucket OAuth connection, and live read-only validation previews.  
+**Verified:** 2026-09-01T08:39:35Z  
+**Status:** `passed`  
+**Re-verification:** Yes — fresh goal-backward verification after gap closure. The earlier report, historical reviews, summaries, and prior PASS claims were treated as inventory only.
+
+## Verdict
+
+The Phase 2 goal is achieved at current HEAD `dc6a7e14a3dd1bafdcdbac61f52a96107ba2ba22`. All eight roadmap contracts, all 15 Phase 2 requirements, and every required inventory below are present, substantive, runtime-reachable, and covered by current executable evidence. The official unchanged-source gap-closure gauntlet passed all 18 layers and finished on the same final source digest.
+
+The current review has zero Critical findings and five explicitly open non-blocking warnings. WR-03 through WR-07 are retained as **OPEN — WARNING** below; this report does not call them fixed or omit their limitations. There are zero goal-blocking gaps, zero behavior-unverified truths, and no human-only item required for this verdict.
+
+## Source and Evidence Freshness
+
+| Authority | Fresh command or source | Result |
+|---|---|---|
+| Final source identity | `VERBOFLEX_SOURCE_MANIFEST=tools/phase2_source_manifest.txt tools/source_state.sh --digest` | `a4b16eeb2879fd64b32a8942663bd2af117d99662b206bd24711744d9d302964` |
+| Review-mode identity | `VERBOFLEX_SOURCE_MANIFEST=tools/phase2_source_manifest.txt VERBOFLEX_REVIEW_PATH=docs/reviews/phase-02-code-security.md tools/source_state.sh --review-digest` | `ede23c16f49301366ec9e30edc885e52c726b5d57a7bc3a796be6e9f30979d90` |
+| Canonical review binding | `tools/source_state.sh --verify-review-source` | exit 0 |
+| Gap evidence binding | `VERBOFLEX_EVIDENCE_PATH=docs/evidence/phase-02-gap-closure.md tools/source_state.sh --verify-report-digest` | exit 0 |
+| Official gate | `bash tools/phase2_gauntlet.sh --gap-closure` | exit 0; PASS 18/18; final digest unchanged |
+| Decision ledger | `gsd-tools query check.decision-coverage-verify ...` | 23/23 honored; no `not_honored` entries |
+| Current review inventory | authoritative section of `02-REVIEW.md` | 20 rows: CR-01..13 and WR-01..07; 13 Critical rows closed, WR-01/02 closed, WR-03..07 open |
+| Literal edge registry | `phase2_spec_edge_matrix.json` consumed by `test_phase2_spec_edge_traceability.py` | 54 rows: 47 tested, 2 resolved by A-01/A-02 and tested, 5 dismissed |
+
+WR-07 limits the digest claim: `phase2_spec_edge_matrix.json` is executable input but is not included in either source manifest digest. The matrix was therefore counted only after a fresh direct parse and fresh execution of its in-manifest architecture consumer; its omission remains an open provenance warning.
 
 ## Goal Achievement
 
 ### Roadmap Success Criteria
 
-| # | Roadmap contract | Status | Current-code evidence |
+| # | Roadmap contract | Status | Current code and behavioral evidence |
 |---|---|---|---|
-| 1 | Complete reversible internal-user lifecycle with multiple roles, one-time credentials, and last-active-admin safety | ✗ FAILED | HTTP paths are substantive, but `deactivate_user_by_email()` bypasses the survivor invariant and is exposed by the privileged CLI. |
-| 2 | Candidate product changes remain isolated until atomic publication | ✗ FAILED | Existing-product edit is unrouted; the candidate omits the active mapping graph and the product name changes before publication. |
-| 3 | Global repositories are reusable while mappings and preview state remain product/revision-specific | ✓ VERIFIED | Global repository identity is separated from revision-owned `ProductRepositoryMapping`; service and DB tests cover reuse and revision isolation. |
-| 4 | One exact-scope organizational Bitbucket connection powers live repository listing and read-only preview | ✗ FAILED | Production Compose/config/grant/callback/expiry paths do not match the approved, live-tested connection. |
-| 5 | Each mapping has one exact format/layout, source branch, allowed/default targets, and fixed repository+target PR grouping | ✓ VERIFIED | Mapping validators, layout identity/version selection, branch constraints, and deterministic `pr_grouping.py` are wired and targeted tests pass. |
-| 6 | Four-format bounded preview fails closed for invalid, ambiguous, stale, disconnected, or timed-out work | ✗ FAILED | Detector/confirmation logic is strong, but worker loss/hard timeout can leave `running` forever rather than failing closed. |
-| 7 | Guided shadcn admin screens expose actionable states on supported layouts | ✗ FAILED | Published edit/reactivation/mobile navigation/pagination and Workspace overview have observable wiring gaps. |
-| 8 | TDD, review, backend/frontend/worker, and deployment smoke gate closes cleanly | ✗ FAILED | The supplied gauntlet/test/smoke facts are valid but the newest review has 10 unresolved critical findings. |
+| SC-01 | Complete reversible internal-user lifecycle with multiple roles, one-time credentials, and last-active-admin safety | ✓ VERIFIED | `admin_users.py` shares `ADMIN_AUTHORITY_LOCK_KEY`, `_lock_admin_authority`, `_require_admin_survivor`, and the common deactivation transition across HTTP and CLI. Concurrency/reset/CLI nodes passed in the 803-test run. |
+| SC-02 | Candidate product changes remain isolated until atomic publication | ✓ VERIFIED | `save_product_candidate` and `_clone_active_revision_graph` clone all mappings/sides/targets with new IDs; `_promote_candidate_identity` and publication move identity/pointers only under the product lock. Clone/isolation/publication mutation inventories were all killed. |
+| SC-03 | Global repositories are reusable while mappings and preview state remain product/revision-specific | ✓ VERIFIED | `Repository` owns normalized global provider identity; composite ownership FKs and revision-owned mapping/preview rows isolate product graphs. Repository race/reuse and graph-integrity tests passed. |
+| SC-04 | One exact-scope organizational Bitbucket connection powers live repository listing and read-only preview | ✓ VERIFIED | Backend-only `client_credentials`, exact `repository` effective scope, encrypted access-only generations, reacquisition, local revoke, Compose parity, and GET-only provider adapter are production-wired. Mock-provider audit observed client credentials, five GETs, zero writes. |
+| SC-05 | Each mapping has one exact format/layout, source branch, allowed/default targets, and fixed repository+target PR grouping | ✓ VERIFIED | Mapping schemas/services enforce direct/separate topology, exact live branches, allowed/default membership, one confirmed layout, and deterministic repository+target grouping. Mapping/grouping mutation inventories were fully killed. |
+| SC-06 | Four-format bounded preview fails closed for invalid, ambiguous, stale, disconnected, timed-out, or worker-lost work | ✓ VERIFIED | Strict Android/Qt/JSON/iOS adapters feed a closed result envelope and durable UUID/attempt/generation CAS. Watchdog and dual-overlay worker-loss smokes produced `timed_out/time_limit_exceeded`, then an isolated successful retry. |
+| SC-07 | Guided shadcn admin screens expose actionable states on supported layouts | ✓ VERIFIED | Guarded URL-backed routes use the generated client. Component/E2E tests exercise loading/error/empty/partial/overflow, 0/1/50/51 collections, 100/101 branches, 320px five-step traversal, stale recovery, and explicit publish/reactivate actions. |
+| SC-08 | TDD, review, backend/frontend/worker, and deployment smoke gate closes cleanly | ✓ VERIFIED | Official gate passed 18/18: 803 backend, 271 frontend, static/build/OpenAPI/migration/property/mutation checks, provider/browser smoke, both deployment overlays, cleanup, and unchanged final digest. Current review is `pass_with_warnings`, `critical: 0`. |
 
-**Roadmap contract score:** 2/8 verified.
-
-### PLAN Must-Have Disposition
-
-The 64 detailed PLAN truths were read and checked against code. The merged score retains roadmap wording where a PLAN truth only restates it.
-
-| Plans | Verified / total | Failed or narrowed truth |
-|---|---:|---|
-| 02-01 | 2/3 | “any transition” preserving an active admin fails through CLI deactivation. |
-| 02-02 | 2/3 | Published-product candidate isolation is incomplete: no graph clone and effective product identity changes early. |
-| 02-03–02-04 | 5/5 | Repository identity and the core singleton/encryption/generation service are substantive. Operational production wiring is separately failed by the roadmap contract. |
-| 02-05 | 1/3 | Refresh is not reachable and expiry never yields a correct public/read state; revoke itself is verified. |
-| 02-06–02-10 | 15/15 | Bounded read adapter, discovery, mapping/topology/grouping, and normal publication service paths are substantive and tested. |
-| 02-11 | 2/3 | Attempt identity is guarded, but hard-kill/worker-loss terminalization is absent. |
-| 02-12–02-15 | 13/13 | Four detectors, registry/ambiguity, confirmation, publication predicate, and generated-client drift are substantive and wired. |
-| 02-16 | 3/4 | Shared-shell URL/current-state contract is broken by the inert, always-current Workspace overview. |
-| 02-17 | 3/3 | User-page lifecycle, one-time credential modal, and conflict handling are present for the HTTP UI path. |
-| 02-18 | 2/4 | Existing-product save/edit is unreachable and the mobile five-step wizard cannot advance beyond the embedded step. |
-| 02-19 | 2/4 | Callback does not complete on the SPA origin; real-backend reactivation and mobile E2E behavior fail. |
-| 02-20 | 3/4 | Deployment-like/mock/live evidence exists, but the mandatory fresh-review truth fails. |
-
-**Detailed PLAN score:** 53/64 truths verified; 0 present-but-behavior-unverified truths.
-
-## Required Artifacts and Wiring
-
-All 44 paths declared under PLAN `must_haves.artifacts` exist and contain substantive code. The GSD artifact helper returned zero entries because these plans use inline YAML maps, so existence/substance/wiring was checked manually. Existence does not rescue the following broken links.
-
-| Artifact group | Exists/substantive | Wiring/data status | Result |
-|---|---|---|---|
-| User admin API/service/UI | Yes | HTTP path flows API → service → PostgreSQL; CLI uses a different unsafe transition | ⚠ PARTIAL |
-| Product/revision/mapping models, migrations, services | Yes | Normal create/publish flows reach PostgreSQL; active graph → candidate clone/edit route is missing | ✗ HOLLOW FOR EDIT |
-| OAuth service/routes/UI | Yes | Core service reaches encrypted DB state and Bitbucket adapter; Compose/grant/callback/expiry authority is incomplete | ✗ PARTIAL |
-| Discovery/read adapter | Yes | Credential lease → validated `api.bitbucket.org` reads → opaque cursors | ✓ VERIFIED |
-| Preview detectors/registry/confirmation | Yes | Commit-bound bytes → exact detector → digest/confirmation → publication predicate | ✓ VERIFIED |
-| Preview worker | Yes | Queued → running → terminal on surviving process; no durable recovery after process loss | ✗ PARTIAL |
-| Generated client/admin SPA | Yes | Most API operations consume generated types; existing edit/reactivation/mobile/pagination paths are disconnected | ✗ PARTIAL |
-| Compose/smoke/gauntlet tooling | Yes | Mock flow and checks exist; base OAuth configuration and clean-review gate fail | ✗ PARTIAL |
-
-### Key Links
-
-| Link | Status | Evidence |
-|---|---|---|
-| Admin user routes → lifecycle service → DB | ✓ WIRED | Role/temporary-password/session-revocation paths use serialized service transactions. |
-| Privileged CLI → lifecycle invariant | ✗ NOT WIRED | CLI calls `deactivate_user_by_email()` without the HTTP survivor guard. |
-| Product save → complete candidate graph | ✗ NOT WIRED | Only a bare revision row is created; mappings/sides/targets are not cloned. |
-| Product list/detail → existing-product edit wizard | ✗ NOT WIRED | Router exposes `/new`, overview, repositories, mappings, and preview, but no edit route with `initialProduct`. |
-| OAuth settings → backend/worker Compose | ✗ NOT WIRED | Base environment omits required client/secret/callback/keyring values. |
-| OAuth callback → frontend page | ✗ NOT WIRED | Relative 303 Location remains on the API origin. |
-| OAuth expiry → refresh/reauthorization | ✗ NOT WIRED | `refresh()` has no route/task/caller and status/read lease ignore expiry. |
-| OAuth lease → Bitbucket read adapter | ✓ WIRED | Exact-generation credential lease is consumed by discovery/read services. |
-| Mapping API → candidate revision graph | ✓ WIRED | Optimistic version checks and revision-owned mapping mutations reach PostgreSQL. |
-| Source read → four detector registry → candidate response | ✓ WIRED | Bounded commit-resolved bytes flow through exact Android/Qt/JSON/iOS detectors. |
-| Preview confirmation → publication predicate | ✓ WIRED | Bound digest/layout/authority identity is checked before normal publication. |
-| Celery hard loss → durable terminal job | ✗ NOT WIRED | Only the running worker process can finish the row. |
-| React admin pages → generated client | ✓ WIRED | Generated OpenAPI client is used; drift check passes. |
-| Cursor-bearing APIs → repository/mapping/branch UI | ✗ PARTIAL | First page is rendered, but `next_cursor` is discarded by these consumers. |
-
-### Data-Flow Trace
-
-| Rendered/returned data | Real source | Flow | Status |
-|---|---|---|---|
-| Users/products/repositories | PostgreSQL queries | API schemas → generated client → React states | ✓ FLOWING, except edit navigation gap |
-| Branches/source files | Bitbucket Cloud | encrypted lease → HTTPS adapter → bounded service → API/UI | ✓ FLOWING for reachable first pages |
-| Preview samples/layout choices | Commit-bound provider bytes | worker → detector registry → PostgreSQL job → polling UI | ✓ FLOWING during normal worker completion |
-| Reactivation mappings | Candidate-mapping endpoint | Endpoint rejects the candidate-null state required for reactivation | ✗ DISCONNECTED |
-| OAuth connection in base Compose | Environment → service factory | Required environment values are absent, factory returns unavailable | ✗ DISCONNECTED |
+**Roadmap score:** 8/8 verified; 0 present-but-behavior-unverified.
 
 ## Requirements Coverage
 
-Every Phase 2 requirement ID is claimed by at least one plan; there are no orphaned Phase 2 requirements. `[x]` markers in `REQUIREMENTS.md` were treated as planning metadata, not evidence.
+Every Phase 2 requirement is claimed and implemented; no Phase 2 requirement is orphaned. Checkboxes in `REQUIREMENTS.md` were not used as evidence.
 
-| Requirement | Description (REQUIREMENTS.md) | Status | Evidence / blocker |
+| Requirement | Contract | Status | Current evidence |
 |---|---|---|---|
-| AUTH-02 | Create, update, reset, deactivate, and view internal users | ✗ BLOCKED | HTTP lifecycle works, but the privileged CLI can deactivate the sole active admin. |
-| AUTH-03 | Assign multiple roles to one user | ✓ SATISFIED | Durable many-role assignment is enforced in model/service/API/UI tests. |
-| PROD-01 | Create and edit product identity/description/status | ✗ BLOCKED | No routed existing-product edit; name mutates before candidate publication. |
-| PROD-02 | Configure one or more repositories per product | ✓ SATISFIED | Reusable repositories and revision-owned mapping associations are implemented. |
-| PROD-03 | Configure source branch per mapping | ✗ BLOCKED | Backend supports exact branches, but UI cannot reach branch results after the first 100. |
-| PROD-04 | Configure allowed target branches | ✗ BLOCKED | Validation exists, but pagination makes valid later branches unselectable in the control plane. |
-| PROD-05 | Configure PR grouping | ✓ SATISFIED | Fixed repository UUID + exact target branch grouping is deterministic and tests pass. |
-| PROD-06 | Configure direct vs linked-translation topology | ✓ SATISFIED | Direct/separate topology constraints and transitions are implemented. |
-| PROD-07 | Link key and translation repositories | ✓ SATISFIED | Separate Keys/Translations sides retain explicit repository/branch identity. |
-| PROD-08 | Validate mapping through live bounded preview | ✗ BLOCKED | Normal preview works, but worker loss can remain running forever and reactivation preview is unreachable. |
-| PROD-09 | Configure localization format per mapping | ✓ SATISFIED | Exactly one versioned layout candidate can be selected/confirmed. |
-| BITB-01 | Connect/reconnect/revoke/view one organizational OAuth connection | ✗ BLOCKED | Shipped configuration, approved grant, callback origin, and expiry lifecycle do not compose. |
-| BITB-03 | List configured repository branches | ✗ BLOCKED | API pagination exists; admin UI silently discards continuation pages. |
-| BITB-04 | Read localization files from configured source branch | ✗ BLOCKED | Read adapter is substantive, but the approved production credential path is not implemented. |
-| UI-03 | Clear repository/branch/mapping/credential validation feedback | ✗ BLOCKED | Critical edit/reactivation/mobile/pagination/navigation flows are not actionable. |
+| AUTH-02 | Create, update, reset, deactivate, reactivate, and view internal users | ✓ SATISFIED | Admin API/UI plus common locked service/CLI transitions; one-time secret and authority-revocation tests pass. |
+| AUTH-03 | Assign multiple fixed roles to one user | ✓ SATISFIED | Non-empty set semantics, stable ordering, self-admin protection, survivor invariant, and UI role controls are tested. |
+| PROD-01 | Create/edit product name, description, and lifecycle | ✓ SATISFIED | A-01 normalization, routed `/new` and `/:id/edit`, isolated candidate identity, publication, deactivation, and reactivation are exercised. |
+| PROD-02 | Configure one or more repositories per product | ✓ SATISFIED | Global credential-free registry plus revision-owned mapping sides; reuse and complete pagination are tested. |
+| PROD-03 | Configure the exact source branch per mapping | ✓ SATISFIED | Provider branch resolution and paged/exact configured branch controls preserve opaque names, including item 101. |
+| PROD-04 | Configure allowed/default PR target branches | ✓ SATISFIED | Non-empty normalized allowed set, exact live membership, default containment, and conflict projection are enforced. |
+| PROD-05 | Configure product-specific PR grouping | ✓ SATISFIED | `pr_grouping.py` groups only exact repository UUID + target branch and is invariant to language/file order. |
+| PROD-06 | Configure direct or linked-translation topology | ✓ SATISFIED | Closed topology schema/service/UI; topology changes require confirmation and clear irrelevant state. |
+| PROD-07 | Link key and translation repositories | ✓ SATISFIED | Separate mappings require exact `keys` and `translations` repository/branch sides throughout API, DB, UI, and preview identity. |
+| PROD-08 | Validate mapping through live bounded preview | ✓ SATISFIED | Commit-bound discovery, strict four-format detection, durable background jobs, polling, confirmation, stale checks, and recovery execute. |
+| PROD-09 | Configure one localization format/layout per mapping | ✓ SATISFIED | Separate exact candidates, confidence 1, explicit radio selection, versioned confirmation, and ambiguity rejection are tested. |
+| BITB-01 | Connect, reconnect, revoke, and inspect one organization-wide Bitbucket OAuth connection | ✓ SATISFIED | Direct admin operations, access-only encrypted generation, expiry reacquisition, bounded status, and local revoke are wired; WR-03 remains. |
+| BITB-03 | List configured repository branches | ✓ SATISFIED | Provider pagination is fully traversed; app cursors and exact-branch lookups reach 100/101 boundary behavior. |
+| BITB-04 | Read localization files from configured source branch | ✓ SATISFIED | Commit-bound GET-only source tree/raw reads enforce URL, generation, encoding, byte, depth, entry, page, and file ceilings. |
+| UI-03 | Clear validation feedback for repository, branch, mapping, and credential setup | ✓ SATISFIED | Stable bounded copy, owning-region errors, preserved inputs, focus/ARIA, retry, conflict, and lifecycle blocker tests pass. |
 
-**Coverage:** 6/15 satisfied, 9/15 blocked.
+**Requirements score:** 15/15 satisfied.
 
-## Decision and Prohibition Coverage
+## Context Decisions D-01..D-23
 
-The decision ledger query reports all 23 `02-CONTEXT.md` decisions as referenced (`23/23`, no `not_honored` entries). That traceability result is non-blocking and does not prove runtime correctness; D-09/D-16/D-21 are among the decisions whose implementation has the gaps above.
+The decision-coverage query returned 23/23 honored. Each row below also has a current runtime or test reachability anchor; the query result alone was not treated as proof.
 
-Eight of nine SPEC prohibitions have direct enforcement/tests (secret exposure, repository-state coupling, ambiguity, PR grouping, sample labeling, stale/unconfirmed publish, and provider/canonical writes). The candidate-save prohibition is violated in effective behavior because product identity changes before publish and no isolated candidate graph is constructed.
-
-## `02-REVIEW.md` Adjudication
-
-The review commit is newer than `docs/reviews/phase-02-code-security.md` and the last evidence refresh. Each finding was independently checked against current code; none is rejected.
-
-| Finding | Verdict | Code evidence | Goal impact |
+| Decision | Locked outcome | Status | Current evidence |
 |---|---|---|---|
-| CR-01 Compose cannot receive Bitbucket config | **CONFIRMED** | `docker-compose.yml:9-20` omits all OAuth/keyring settings; the service factory degrades to unavailable. | Blocks BITB-01/04 and SC4. |
-| CR-02 Approved client-credentials grant absent | **CONFIRMED** | `bitbucket_oauth.py:122-151` implements only authorization-code/refresh; `:742-759` requires a refresh token. | Live proof exercised a separate memory-only authority, not production. |
-| CR-03 Callback redirects to API origin | **CONFIRMED** | `admin_bitbucket.py:227-230` returns a relative path from port 8000 while SPA is port 8080. | Same-tab completion is broken. |
-| CR-04 Token expiry leaves false Connected state | **CONFIRMED** | `public_status()` and `_require_readable_connection()` ignore `provider_expires_at`; `refresh()` is orphaned. | Reads fail after expiry without an actionable status. |
-| CR-05 Published edit unreachable/incomplete | **CONFIRMED** | Router has no existing edit route; `products.py:209+` creates only a revision and `:159-161,189` mutates global identity. | Breaks candidate isolation and PROD-01. |
-| CR-06 Reactivation unreachable | **CONFIRMED** | Preview page requests candidate mappings at `:687-696` before detecting candidate-null reactivation at `:785-795`; backend rejects that state. | Breaks product lifecycle UI. |
-| CR-07 Mobile wizard cannot advance | **CONFIRMED** | Step buttons are `hidden ... md:block`; mobile `Step n of 5` is display-only; embedded later steps provide no step navigation. | Breaks supported mobile flow. |
-| CR-08 Pagination discarded | **CONFIRMED** | Repository/mapping/preview pages request fixed first pages and never consume their `next_cursor`; only Users/Products do. | Makes valid repositories/branches/mappings inaccessible. |
-| CR-09 Worker loss leaves permanent running | **CONFIRMED** | `preview_jobs.py:837` commits running; terminalization occurs only later in the same process; Celery config has no recovery mechanism. | Breaks durable fail-closed preview. |
-| CR-10 CLI can deactivate last admin | **CONFIRMED** | `admin_users.py:413-431` omits the authority lock/survivor check; `cli.py:99-106` calls it. | Breaks AUTH-02/SC1 safety invariant. |
-| WR-01 Workspace overview inert/current | **CONFIRMED WARNING** | `AppShell.tsx:139-159` renders a no-op button with unconditional `aria-current="page"`. | Navigation/accessibility defect; included in UI gap. |
-| WR-02 DB lacks cross-graph ownership constraints | **CONFIRMED WARNING** | Independent FKs permit cross-product revision/mapping/job IDs; published immutability trigger covers only revision rows. | Service checks reduce current exposure, but DB integrity is not fail-closed. |
+| D-01 | Backend-generated temporary password, revealed once, forced change | ✓ VERIFIED | `_generate_temporary_credential`, hash-only persistence, `TemporaryPasswordDialog`; create/reset/reactivate and erasure tests. |
+| D-02 | Corporate email immutable; replacement requires new account | ✓ VERIFIED | Update schema/service excludes email mutation; immutable-email API/UI tests. |
+| D-03 | Only display name, roles, lifecycle, dedicated reset are administratively mutable | ✓ VERIFIED | Closed Pydantic schemas and lifecycle routes; secret/list/OpenAPI negative tests. |
+| D-04 | Additive combinations of four roles; at least one retained | ✓ VERIFIED | Fixed enum/set validation plus empty/duplicate role tests. |
+| D-05 | No self-admin removal; all paths preserve an active admin | ✓ VERIFIED | Shared advisory lock/survivor predicate and cross-entry/concurrency tests. |
+| D-06 | Deactivation reversible; revoke authority; reactivation creates fresh secret | ✓ VERIFIED | Common lifecycle transaction advances token version/revokes sessions; freshness tests. |
+| D-07 | Global repository unique by normalized workspace+slug and reusable | ✓ VERIFIED | `Repository` unique constraint and registration race/reuse tests. |
+| D-08 | Product-specific configuration lives on revision mappings | ✓ VERIFIED | Revision-owned mappings/sides/targets and two-product isolation tests. |
+| D-09 | Only Product has operational active/inactive state | ✓ VERIFIED | Product lifecycle service/schema; no mapping lifecycle column or route. |
+| D-10 | Publish/reactivate requires every mapping valid; deactivation preserves graph | ✓ VERIFIED | Closed blocker matrix, full eligibility, graph-preserving lifecycle integration tests. |
+| D-11 | One source, non-empty allowed targets, contained default per mapping | ✓ VERIFIED | Mapping validators and exact provider-branch tests. |
+| D-12 | One mapping model with `direct` and `separate` topologies | ✓ VERIFIED | Closed enums/check constraints, side roles, service/UI transition tests. |
+| D-13 | Layout is automatically discovered; no admin globs/templates | ✓ VERIFIED | Detector registry derives candidates; schemas/OpenAPI/browser expose no manual layout controls. |
+| D-14 | Phase 2 preview adapters are read-only, not canonical writers | ✓ VERIFIED | Preview registry plus provider/canonical forbidden-boundary architecture tests. |
+| D-15 | Preview shows files/formats/languages/samples and needs explicit confirmation | ✓ VERIFIED | `CandidateDetails`, partial label, radio selection, exact confirmation identity tests. |
+| D-16 | Unsafe-to-bound scanning/parsing runs through background jobs | ✓ VERIFIED | HTTP persists/enqueues UUID only; Celery worker owns discovery/detection; background boundary tests. |
+| D-17 | PR grouping is fixed by repository and target branch | ✓ VERIFIED | Five grouping/property tests and 13/13 grouping mutants killed. |
+| D-18 | Alternative target must be drawn from allowed list | ✓ VERIFIED | Mapping membership validator and live checkbox/default controls. |
+| D-19 | Guided new-product wizard; focused detail sections in shared admin shell | ✓ VERIFIED | URL-backed five-step wizard and overview/repositories/mappings/preview routes; 320px E2E. |
+| D-20 | Active edits create isolated candidate; atomic publish promotes it | ✓ VERIFIED | Deep clone with fresh IDs, active immutability triggers, version conflicts, atomic pointer/identity promotion. |
+| D-21 | Provider authentication is OAuth 2.0, not access/API/app-password tokens | ✓ VERIFIED | Client-credentials-only service/routes and forbidden credential/grant surface tests. |
+| D-22 | Provider credentials backend-only, encrypted, separate from user auth | ✓ VERIFIED | `SecretStr`, MultiFernet, access-only encrypted row, redaction/OpenAPI/browser/log scans. |
+| D-23 | Exact least-privilege scope matrix; no undocumented superset | ✓ VERIFIED | Exact `repository` comparison, x-oauth-scopes validation, 44-row capability matrix, provider audit. |
 
-## Behavioral Spot-Checks
+**Decision score:** 23/23 verified.
 
-| Behavior | Command | Result | Status |
+## Research Assumptions A-01..A-03
+
+| Assumption | Resolution | Status | Executable evidence |
 |---|---|---|---|
-| Fixed repository+target grouping | `uv run pytest -q tests/unit/services/test_pr_grouping.py` | 5 passed in 0.14s | ✓ PASS |
-| Preview polling ordering/stop behavior | `npm test -- --run src/features/admin/previews/usePreviewPolling.test.ts` | 13 passed | ✓ PASS |
-| Generated OpenAPI drift | `npm run api:check` | Generation completed; committed schema/client unchanged | ✓ PASS |
-| Phase 2 scripts parse | `bash -n tools/phase2_gauntlet.sh tools/phase2_smoke.sh` | syntax ok | ✓ PASS |
+| A-01 | NFKC, Unicode whitespace collapse/trim, printable ≤120 code points, casefolded global `name_key` | ✓ RESOLVED/TESTED | `normalize_product_name`; `test_a01_normalizes_display_and_global_identity_key`; product-name property suite. |
+| A-02 | Strict per-format encoding/shape matrix; duplicate/invalid/unsupported content blocks | ✓ RESOLVED/TESTED | Android/Qt/JSON/iOS unit/property suites; detector mutation inventories including invalid UTF, duplicate identity, DTD/entity, escape, and registry mutations. |
+| A-03 | Exact pagination/file/depth/byte/language/sample/time/job/polling/list bounds | ✓ RESOLVED/TESTED | `SOURCE_DISCOVERY_BUDGET`, HTTPX timeouts, preview job limits, polling scheduler, boundary tests, watchdog/worker-loss smoke. |
 
-No conventional `scripts/**/tests/probe-*.sh` or PLAN-declared probe was found, so Probe Execution is not applicable. The orchestrator-supplied facts—14/14 final gauntlet, live 5 GET/0 writes, 14-plan/0-violation TDD checkpoint, and regression gate with temporary Redis/Celery—are recorded as valid historical evidence. They do not exercise the failed paths above.
+**Assumption score:** 3/3 resolved and tested.
 
-## Test Quality and Anti-Patterns
+## Literal SPEC Edge Rows
 
-- No `.skip`, `.only`, `pytest.mark.skip`, `xfail`, or test TODO marker was found in the scanned Phase 2 test areas.
-- The review explains three misleading proof boundaries: the product-copy test asserts only revision fields, the callback test checks a Location header without following it across origins, and the reactivation E2E mock returns candidate mappings in a backend-impossible candidate-null state.
-- The live Bitbucket probe correctly proves exact repository scope and zero writes, but it uses client credentials plus memory-only authority and therefore is not a production-path integration test.
-- One TODO exists in generated `frontend/src/api/client/client/client.gen.ts:214`; it is generator-owned cleanup text, not a Phase 2 implementation stub. No unreferenced `TBD`, `FIXME`, or source `XXX` debt marker was found.
+Fresh matrix parsing found exactly 54 rows: 47 `tested`, 1 `resolved-A-01`, 1 `resolved-A-02`, and 5 `dismissed`. `test_phase2_spec_edge_traceability.py` freshly proved a one-to-one match with the literal SPEC table and reachable collected test nodes.
+
+| Edge | Current disposition | Reachable current test node |
+|---|---|---|
+| R1-adjacency | ✓ TESTED | `test_duplicate_normalized_email_conflicts_without_enumeration_or_secret` |
+| R1-empty | ✓ TESTED | `test_concurrent_cross_deactivation_cannot_remove_the_last_active_admin` |
+| R1-ordering | ✓ TESTED | `test_user_list_has_stable_opaque_default_and_maximum_pagination` |
+| R1-idempotency | ✓ TESTED | `test_admin_updates_roles_then_resets_deactivates_and_reactivates_one_identity` |
+| R1-concurrency | ✓ TESTED | `test_concurrent_cross_role_removal_cannot_remove_the_last_active_admin` |
+| R2-adjacency | ✓ TESTED | role non-empty/fixed-vocabulary node |
+| R2-empty | ✓ TESTED | role non-empty/fixed-vocabulary node |
+| R2-encoding | ✓ TESTED | normalized email conflict node |
+| R2-ordering | ✓ TESTED | stable role update/lifecycle node |
+| R2-idempotency | ✓ TESTED | identical role/display update node |
+| R2-concurrency | ✓ TESTED | cross-role-removal concurrency node |
+| R3-idempotency | ✓ TESTED | concurrent reset/final-secret node |
+| R3-concurrency | ✓ TESTED | concurrent reset/final-secret node |
+| R4-empty | ✓ TESTED | A-01 normalization node |
+| R4-encoding | ✓ RESOLVED A-01 + TESTED | A-01 normalization node |
+| R4-idempotency | ✓ TESTED | version/conflict/identical-save node |
+| R4-concurrency | ✓ TESTED | product-lock publish/stale-writer node |
+| R5-idempotency | ✓ TESTED | credential repetition/generation node |
+| R5-concurrency | ✓ TESTED | credential rotation/revoke serialization node |
+| R6-adjacency | ✓ TESTED | repository identity normalization node |
+| R6-empty | ✓ TESTED | repository identity normalization node |
+| R6-encoding | ✓ TESTED | repository identity normalization node |
+| R6-ordering | ✓ TESTED | server-ordered repository collection node |
+| R6-idempotency | ✓ TESTED | duplicate/UUID reuse node |
+| R6-concurrency | ✓ TESTED | two-session registration race node |
+| R7-adjacency | ✓ TESTED | target-set/default-membership node |
+| R7-empty | ✓ TESTED | exact separate-side node |
+| R7-encoding | ✓ TESTED | live exact branch node |
+| R7-ordering | ✓ DISMISSED (set order has no meaning) | target-set normalization guard node |
+| R7-idempotency | ✓ TESTED | duplicate identity/true no-op node |
+| R7-concurrency | ✓ TESTED | duplicate identity/conflict node |
+| R8-adjacency | ✓ TESTED | exact repository+target identity node |
+| R8-empty | ✓ TESTED | empty/no-capability grouping node |
+| R8-ordering | ✓ DISMISSED (order cannot affect identity) | grouping permutation node |
+| R8-idempotency | ✓ TESTED | grouping permutation/invariance node |
+| R8-concurrency | ✓ DISMISSED (Phase 2 executes no PR jobs) | no-provider/persistence capability node |
+| R9-adjacency | ✓ TESTED | four separate exact format candidates node |
+| R9-empty | ✓ TESTED | empty/unrelated content node |
+| R9-encoding | ✓ RESOLVED A-02 + TESTED | unsupported-shape and invalid-encoding nodes |
+| R9-ordering | ✓ TESTED | file-order invariant node |
+| R9-idempotency | ✓ TESTED | succeeded-result currentness node |
+| R9-concurrency | ✓ TESTED | in-flight stale commit node |
+| R10-adjacency | ✓ TESTED | every-mapping confirmation node |
+| R10-empty | ✓ TESTED | closed blocker/unchanged graphs node |
+| R10-ordering | ✓ DISMISSED (validity is order-independent) | every-mapping confirmation node |
+| R10-idempotency | ✓ TESTED | product-lock linearization node |
+| R10-concurrency | ✓ TESTED | product-lock linearization node |
+| R11-adjacency | ✓ DISMISSED (routes have no merge semantics) | router local-containment node |
+| R11-empty | ✓ TESTED | loading/retry/empty collection node |
+| R11-ordering | ✓ TESTED | API-order/cursor node |
+| R11-idempotency | ✓ TESTED | duplicate-pending submission node |
+| R11-concurrency | ✓ TESTED | expected-version/preserved-edit node |
+| R12-idempotency | ✓ TESTED | no dynamic/mutating provider verb node |
+| R12-concurrency | ✓ TESTED | same read-only provider-boundary node |
+
+**Edge score:** 54/54 disposition verified.
+
+## Prohibitions
+
+All nine are `verification: test`. Each has non-empty enforcement evidence and passed; none was silently accepted on judgment.
+
+| # | Prohibition | Status | Wired enforcement evidence |
+|---|---|---|---|
+| P-01 | Never expose temporary passwords outside the one successful lifecycle response | ✓ VERIFIED | Hash-only model/service; response-only schema; list/detail/OpenAPI/log tests; UI erases acknowledgement state. |
+| P-02 | Never mutate/deactivate/replace active revision during candidate save, preview, or failure | ✓ VERIFIED | Ownership triggers, deep clone, read-only preview path, graph-byte identity and failure tests. |
+| P-03 | Never expose Bitbucket credentials/client secrets to SPA, OpenAPI, payloads, or logs | ✓ VERIFIED | SecretBox/SecretStr, closed schemas, redaction scans, storage guard, provider diagnostics tests. |
+| P-04 | Never propagate product-specific state between products sharing a repository | ✓ VERIFIED | Revision ownership constraints and two-product repository/mapping isolation tests. |
+| P-05 | Never guess ambiguity or combine formats/layouts into one mapping | ✓ VERIFIED | Strict detector registry, exact candidate separation, ambiguity/unsupported fixtures, confidence guards. |
+| P-06 | Never group across repository or target-branch boundaries | ✓ VERIFIED | Grouping property suite and killed equality/order mutants. |
+| P-07 | Never present bounded samples as exhaustive | ✓ VERIFIED | `samples_are_partial` response and visible exact partial-sample copy tested in UI/E2E. |
+| P-08 | Never publish with absent/stale/ambiguous/invalid/disconnected/unconfirmed preview | ✓ VERIFIED | Closed blockers, current identity/confirmation checks, negative publication matrix and E2E. |
+| P-09 | Never write provider source/canonical translation/commit/branch/PR state from preview | ✓ VERIFIED | GET-only adapter/allowlist, provider-spy/architecture tests, five GETs/zero writes audit. |
+
+**Prohibition score:** 9/9 test-enforced.
+
+## UI State Categories
+
+| Category | Status | Current source and executable evidence |
+|---|---|---|
+| empty | ✓ VERIFIED | Named list/preview states and component tests |
+| loading | ✓ VERIFIED | Route/list/branch/preview Skeletons, `aria-busy`, pending/dedup tests |
+| error | ✓ VERIFIED | Bounded owning-region Alerts, preserved inputs, retry, sanitization |
+| populated | ✓ VERIFIED | Deterministic API order, desktop tables/mobile stacks, routed actions |
+| partial | ✓ VERIFIED | Active/candidate distinction, blockers, terminal-cursor gating, sample copy |
+| overflow | ✓ VERIFIED | Focusable local overflow, wrapping actions, 320px/200% zoom E2E |
+| zero-one-many | ✓ VERIFIED | 0/1/50/51 rows, 100/101 branches, grammar and explicit confirmation |
+| long-text | ✓ VERIFIED | safe wraps, full-copy access, long identifier/text tests |
+
+**UI score:** 8/8 verified.
+
+## Bitbucket Capability Matrix
+
+Fresh parsing of `COVERAGE.md` found exactly 44 decisions: 9 integrated and 35 explicit opt-outs. The forbidden-boundary suite proves opt-outs are absent from provider adapter, service, OpenAPI, and generated client surfaces.
+
+| Capability | Decision | Status | Current reachability/enforcement |
+|---|---|---|---|
+| oauth-client-credentials-acquisition | INTEGRATE | ✓ VERIFIED | exact token exchange/provider audit |
+| oauth-client-credentials-reacquisition | INTEGRATE | ✓ VERIFIED | serialized renewal/reconnect tests |
+| oauth-authorization-code-callback-and-refresh-token-flows | OPT-OUT | ✓ ENFORCED | service/route/client absence test |
+| oauth-effective-scope-inspection | INTEGRATE | ✓ VERIFIED | exact token and response scope checks |
+| repository-metadata-by-workspace-and-slug | INTEGRATE | ✓ VERIFIED | metadata GET and provider audit |
+| branch-listing-with-provider-pagination | INTEGRATE | ✓ VERIFIED | provider traversal and app cursor tests |
+| branch-to-commit-resolution | INTEGRATE | ✓ VERIFIED | exact branch name/hash validation |
+| source-tree-directory-pagination | INTEGRATE | ✓ VERIFIED | commit-bound budgeted traversal |
+| raw-source-file-read-at-commit | INTEGRATE | ✓ VERIFIED | streamed bounded raw GET |
+| provider-next-url-validation | INTEGRATE | ✓ VERIFIED | host/path/resource validation mutants killed |
+| oauth-provider-side-token-revocation | OPT-OUT | ✓ ENFORCED | local generation revoke only |
+| repository-listing-and-search | OPT-OUT | ✓ ENFORCED | explicit registration only |
+| account-profile-and-email | OPT-OUT | ✓ ENFORCED | endpoint/scope absent |
+| workspace-membership-and-permissions | OPT-OUT | ✓ ENFORCED | capability absent |
+| project-listing-and-metadata | OPT-OUT | ✓ ENFORCED | endpoint family absent |
+| workspace-and-project-administration | OPT-OUT | ✓ ENFORCED | admin APIs excluded by allowlist |
+| tag-listing-and-other-ref-discovery | OPT-OUT | ✓ ENFORCED | branch-only refs |
+| commit-history-listing-and-search | OPT-OUT | ✓ ENFORCED | no commit collection/search |
+| commit-diff-diffstat-and-patch-read | OPT-OUT | ✓ ENFORCED | no diff family |
+| commit-status-read-and-write | OPT-OUT | ✓ ENFORCED | no status capability |
+| source-file-create-update-delete | OPT-OUT | ✓ ENFORCED | GET-only adapter |
+| branch-create-update-delete | OPT-OUT | ✓ ENFORCED | branch GET only |
+| tag-create-update-delete | OPT-OUT | ✓ ENFORCED | tags/writes absent |
+| commit-create | OPT-OUT | ✓ ENFORCED | source write absent |
+| pull-request-list-and-read | OPT-OUT | ✓ ENFORCED | PR family absent |
+| pull-request-create-and-update | OPT-OUT | ✓ ENFORCED | write scope/operation absent |
+| pull-request-merge-decline-and-approve | OPT-OUT | ✓ ENFORCED | workflow capability absent |
+| pull-request-comments-tasks-and-activity | OPT-OUT | ✓ ENFORCED | collaboration capability absent |
+| pull-request-diff-and-diffstat | OPT-OUT | ✓ ENFORCED | PR/diff absent |
+| repository-webhook-list-and-read | OPT-OUT | ✓ ENFORCED | webhook family absent |
+| repository-webhook-create-update-delete | OPT-OUT | ✓ ENFORCED | webhook admin absent |
+| repository-settings-and-permissions-admin | OPT-OUT | ✓ ENFORCED | exact reader scope/allowlist |
+| branch-restrictions-and-merge-checks-admin | OPT-OUT | ✓ ENFORCED | policy API absent |
+| deploy-keys-access-keys-and-ssh-keys-admin | OPT-OUT | ✓ ENFORCED | OAuth-only credential surface |
+| pipelines-list-and-read | OPT-OUT | ✓ ENFORCED | pipelines family absent |
+| pipelines-run-stop-and-manage | OPT-OUT | ✓ ENFORCED | pipeline mutation absent |
+| deployments-and-environments | OPT-OUT | ✓ ENFORCED | deployment family absent |
+| issues-list-and-read | OPT-OUT | ✓ ENFORCED | issues family absent |
+| issues-create-update-delete-and-comments | OPT-OUT | ✓ ENFORCED | issue mutation absent |
+| downloads-list-and-read | OPT-OUT | ✓ ENFORCED | source API only |
+| downloads-upload-and-delete | OPT-OUT | ✓ ENFORCED | downloads mutation absent |
+| wiki-read-and-write | OPT-OUT | ✓ ENFORCED | wiki endpoint/scope absent |
+| snippets-read-and-write | OPT-OUT | ✓ ENFORCED | snippet endpoint/scope absent |
+| code-search | OPT-OUT | ✓ ENFORCED | bounded source traversal only |
+
+**Capability score:** 44/44 disposition verified (9 integrated, 35 opt-out).
+
+## Current Fresh Review CR-01..CR-13 and WR-01..WR-07
+
+This is the authoritative 20-row inventory. The separate legacy appendix in `02-REVIEW.md` is non-authoritative and was not used for current disposition.
+
+| Row | Current status | Current production/evidence anchor | Verdict |
+|---|---|---|---|
+| CR-01 | CLOSED | shared backend/worker/scheduler provider environment | ✓ VERIFIED |
+| CR-02 | CLOSED | exact bounded client-credentials exchange | ✓ VERIFIED |
+| CR-03 | CLOSED | no callback/authorization-code/refresh authority | ✓ VERIFIED |
+| CR-04 | CLOSED for normal authority; WR-03 remains | access-only encrypted generation/renewal | ✓ VERIFIED WITH WR-03 |
+| CR-05 | CLOSED | complete isolated candidate graph | ✓ VERIFIED |
+| CR-06 | CLOSED | immutable revalidation/reactivation | ✓ VERIFIED |
+| CR-07 | CLOSED | persistent five-step mobile controls | ✓ VERIFIED |
+| CR-08 | CLOSED | complete cursor/51st mapping gating | ✓ VERIFIED |
+| CR-09 | CLOSED | watchdog CAS and worker-kill smoke | ✓ VERIFIED |
+| CR-10 | CLOSED | common HTTP/CLI admin invariant | ✓ VERIFIED |
+| CR-11 | CLOSED | scheduler parity and dual-overlay loss smoke | ✓ VERIFIED |
+| CR-12 | CLOSED | immutable revalidation sidecar/UI recovery | ✓ VERIFIED |
+| CR-13 | CLOSED | runtime CSP/anti-framing headers | ✓ VERIFIED |
+| WR-01 | CLOSED | location-authoritative Workspace shell | ✓ VERIFIED |
+| WR-02 | CLOSED | graph ownership/published immutability | ✓ VERIFIED |
+| WR-03 | **OPEN — WARNING** | unbounded positive `expires_in` can overflow | ⚠ OPEN; not fixed |
+| WR-04 | **OPEN — WARNING** | dev-only Stryker → typed-rest-client → `qs` advisory | ⚠ OPEN; not fixed |
+| WR-05 | **OPEN — WARNING** | mutable container tags | ⚠ OPEN; not fixed |
+| WR-06 | **OPEN — WARNING** | `.env.example` lacks seven Phase 2 keys | ⚠ OPEN; not fixed |
+| WR-07 | **OPEN — WARNING** | edge JSON outside digests | ⚠ OPEN; not fixed |
+
+The review gate remains `critical: 0`, `warning: 5`, `status: pass_with_warnings`. None of WR-03..07 is represented as fixed.
+
+## G1..G6 Root-Concern Closure
+
+| Root | Current closure | Status |
+|---|---|---|
+| G1 cross-entry admin safety | shared advisory lock/survivor transition covers HTTP and CLI | ✓ CLOSED |
+| G2 candidate isolation/editing | routed edit deep-clones full active graph; atomic delayed promotion | ✓ CLOSED |
+| G3 OAuth composition | client credentials, exact scope, encrypted generation, renewal, Compose, GET-only adapter | ✓ CLOSED; WR-03 retained |
+| G4 end-to-end admin UI | URL routes, mobile wizard, complete cursors, recovery, UI state matrix | ✓ CLOSED |
+| G5 worker-loss handling | Beat scheduler and attempt/generation CAS in staging+production | ✓ CLOSED |
+| G6 clean fresh review | CR-01..13 closed, critical 0, five open warnings | ✓ CLOSED WITH WARNINGS |
+
+**Root-concern score:** 6/6 closed.
+
+## Artifacts, Wiring, and Data Flow
+
+| Artifact group | Exists/substantive | Real flow | Status |
+|---|---|---|---|
+| User admin API/service/CLI/UI | yes | route/CLI → shared lock/service → PostgreSQL → generated client/UI | ✓ VERIFIED |
+| Product/revision/repository/mapping graph | yes | API → locks → owned revision graph → publication/reactivation | ✓ VERIFIED |
+| OAuth/provider adapter | yes | Compose → token endpoint → encrypted generation → lease → validated GET | ✓ VERIFIED |
+| Discovery/four-format preview | yes | branch → commit → bounded bytes → detector → durable result/confirmation | ✓ VERIFIED |
+| Worker recovery | yes | UUID → running CAS → worker/scheduler terminal CAS → retry | ✓ VERIFIED |
+| Generated client/admin SPA | yes | OpenAPI → generated calls → routed state/forms/lifecycle | ✓ VERIFIED |
+| Deployment/security | yes | three Compose layers; built Nginx root/fallback headers | ✓ VERIFIED |
+| Quality/evidence | yes | digests → 18 layers → cleanup/final identity | ✓ VERIFIED; WR-07 retained |
+
+### Critical Key Links
+
+| From | To | Via | Status |
+|---|---|---|---|
+| Admin HTTP/CLI | active-admin invariant | common lock/survivor predicate | ✓ WIRED |
+| Active product | isolated candidate | complete fresh-ID graph clone | ✓ WIRED |
+| Candidate | effective active config | locked atomic publication | ✓ WIRED |
+| OAuth settings | backend/worker/scheduler | shared Compose environment | ✓ WIRED |
+| OAuth connection | provider reads | generation checked before/after GET | ✓ WIRED |
+| Provider source | detectors | exact commit + bounded traversal | ✓ WIRED |
+| Preview | publication/reactivation | closed identity/confirmation/eligibility | ✓ WIRED |
+| Worker loss | terminal/retry | Beat watchdog + CAS | ✓ WIRED |
+| OpenAPI | admin SPA | generated client + drift/behavior tests | ✓ WIRED |
+| Partial collections | lifecycle authority | terminal cursor gating | ✓ WIRED |
+
+### Level-4 Data Flow
+
+| Value | Authoritative source and flow | Status |
+|---|---|---|
+| users/products/repositories/mappings | PostgreSQL → service/schema → generated client → React | ✓ FLOWING |
+| Bitbucket status | encrypted singleton generation → bounded response → page | ✓ FLOWING |
+| branches/source | provider HTTP → validated adapter/discovery → API | ✓ FLOWING |
+| preview details | commit bytes → worker/detector → PostgreSQL → polling UI | ✓ FLOWING |
+| lifecycle blockers | current graph/confirmations → eligibility → UI | ✓ FLOWING |
+| recovery | stale running rows → Beat lock/CAS → terminal/retry | ✓ FLOWING |
+
+No goal-path dynamic value terminates in a production placeholder, mock-only branch, or hardcoded empty prop.
+
+## Behavioral and Quality Gate
+
+| Layer | Fresh result | Status |
+|---|---|---|
+| Semantic closure | 30 passed, including edge and gap fingerprints | ✓ PASS |
+| Backend | 803 passed; 97% overall coverage | ✓ PASS |
+| Frontend | 271 passed | ✓ PASS |
+| Static/build | mypy 81 files, Ruff, typecheck/lint/format/build | ✓ PASS |
+| Properties | 200 backend + 3 frontend | ✓ PASS |
+| Changed scope | 641/641 backend + 634/634 frontend | ✓ PASS |
+| Mutations | all backend inventories killed; polling 30/30 | ✓ PASS |
+| Migrations/OpenAPI | 10 passed; generated diff clean | ✓ PASS |
+| Supply chain | policy passed; production audits clean | ✓ PASS WITH WR-04/05 |
+| Architecture/provider spy | 53 passed | ✓ PASS |
+| Base Compose | client-credentials readiness | ✓ PASS |
+| Provider/browser | provider audit; Playwright 8/8 | ✓ PASS |
+| Worker loss | staging+production recovery | ✓ PASS |
+| Live external provider | explicitly optional SKIP | informational |
+| Cleanup/final identity | zero resources; digest unchanged | ✓ PASS |
+
+No unreferenced `TBD`, `FIXME`, or `XXX` blocker exists in Phase 2 production source. Inspected empty seeds and conditional `return null` paths are state guards replaced by real generated-client data. The generator-owned client TODO is not an implementation stub.
 
 ## Human Verification Required
 
-None is required to establish this verdict: each blocking failure is observable in current wiring or invariants. After gap closure, repeat desktop/mobile UAT and a real same-tab Bitbucket connection, expiry, and reactivation flow before declaring the phase passed.
+None. State transitions, cancellation/supersession, pagination, worker loss, governed layout breakpoints, and provider HTTP behavior all have passing behavioral or deployment/browser evidence. The external-account smoke is explicitly optional, not an unverified must-have.
 
-## Gaps Summary and Closure Guidance
+## Gaps Summary
 
-The implementation contains substantial, well-tested foundations, but the Phase 2 outcome is not achieved. Six root concerns block progress: cross-entry-point admin safety, complete candidate isolation/editing, production OAuth composition, usable end-to-end admin UI, durable worker-loss handling, and a clean fresh review.
+No goal-blocking gaps remain. WR-03..WR-07 remain visible follow-up work and are not represented as fixed.
 
-Recommended closure order:
+## Frozen Legacy Compatibility Appendix — Non-Authoritative
 
-1. Run `$gsd-plan-phase 2 --gaps` and create focused TDD plans from the structured frontmatter gaps.
-2. Fix authority/data-integrity paths first: last-admin CLI, candidate graph clone/identity isolation, and preview recovery.
-3. Align the approved Bitbucket grant and shipped configuration; close callback and expiry behavior with production-path tests.
-4. Repair existing edit/reactivation/mobile/pagination/navigation flows and replace impossible mocks with contract-faithful E2E fixtures.
-5. Repeat the complete unchanged-source Phase 2 gauntlet and obtain a fresh code/security review; then rerun verification.
+The following sentence is retained only because `test_phase2_gap_closure.py` freezes it as a compatibility fingerprint. It describes the superseded 2026-08-29 failed verification, **not** current disposition.
+
+> Six root concerns block progress: cross-entry-point admin safety, complete candidate isolation/editing, production OAuth composition, usable end-to-end admin UI, durable worker-loss handling, and a clean fresh review.
 
 ---
 
-_Verified: 2026-08-29T10:27:29Z_
+_Verified: 2026-09-01T08:39:35Z_  
 _Verifier: the agent (gsd-verifier)_
