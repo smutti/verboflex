@@ -902,6 +902,237 @@ def _admin_route_functions() -> list[tuple[Path, ast.AsyncFunctionDef | ast.Func
     return functions
 
 
+def _frontmatter_document(frontmatter: dict[str, Any], body: str = "# Fixture\n") -> str:
+    return f"---\n{yaml.safe_dump(frontmatter, sort_keys=False)}---\n\n{body}"
+
+
+def _review_fixture(
+    *,
+    critical: int = 2,
+    warning: int = 6,
+    status: str = "issues_found",
+) -> str:
+    inventory = {
+        **{
+            f"CR-{number:02d}": {
+                "disposition": "open" if number in {14, 15} and critical else "closed",
+                "severity": "critical",
+            }
+            for number in range(1, 16)
+        },
+        **{
+            f"WR-{number:02d}": {
+                "disposition": "open" if number >= 3 else "closed",
+                "severity": "warning",
+            }
+            for number in range(1, 9)
+        },
+    }
+    frontmatter = {
+        "phase": "02-admin-configuration",
+        "findings": {
+            "critical": critical,
+            "warning": warning,
+            "info": 0,
+            "total": critical + warning,
+        },
+        "status": status,
+        "review_inventory": inventory,
+    }
+    table_rows = []
+    for key, record in inventory.items():
+        disposition = record["disposition"].upper()
+        severity = record["severity"].upper()
+        table_rows.append(
+            f"| {key} | **{disposition} — {severity}** | fixture authority | fixture evidence |"
+        )
+    body = "\n".join(
+        [
+            "# Review fixture",
+            "",
+            "### Current CR/WR Inventory Re-audit",
+            "",
+            "| Row | Current disposition | Authority | Evidence |",
+            "| --- | --- | --- | --- |",
+            *table_rows,
+            "",
+            "### ASVS 5.0 Level 1 Coverage",
+        ]
+    )
+    return _frontmatter_document(frontmatter, body)
+
+
+def _verifier_fixture(*, status: str = "gaps_found") -> str:
+    complete = status == "passed"
+    totals = {
+        "phase_goal": 1,
+        "roadmap_success_criteria": 8,
+        "requirements": 15,
+        "context_decisions": 23,
+        "research_assumptions": 3,
+        "spec_edge_rows": 54,
+        "prohibitions": 9,
+        "ui_considerations": 8,
+        "bitbucket_capabilities": 44,
+        "review_rows": 23,
+    }
+    inventories = {
+        key: {
+            "count": total
+            if complete or key not in {"phase_goal", "roadmap_success_criteria", "requirements"}
+            else {"phase_goal": 0, "roadmap_success_criteria": 5, "requirements": 13}[key],
+            "total": total,
+        }
+        for key, total in totals.items()
+    }
+    frontmatter = {
+        "phase": "02-admin-configuration",
+        "status": status,
+        "inventories": inventories,
+        "review": {
+            "status": "issues_found",
+            "critical": 0 if complete else 2,
+            "warning": 6,
+            "info": 0,
+            "open_blockers": [] if complete else ["CR-14", "CR-15"],
+            "open_warnings": [
+                "WR-03",
+                "WR-04",
+                "WR-05",
+                "WR-06",
+                "WR-07",
+                "WR-08",
+            ],
+        },
+        "gaps": []
+        if complete
+        else [
+            {
+                "truth": "CR-14 and CR-15 remain open",
+                "status": "failed",
+                "reason": "fixture blocker state",
+            }
+        ],
+    }
+    return _frontmatter_document(frontmatter, "# Verifier fixture\n")
+
+
+def test_phase2_review_contract_uses_current_structured_inventory() -> None:
+    """Current and critical-zero reports validate without a frozen prose appendix."""
+    current = _review_findings()
+    assert set(current) == {"findings", "inventory", "status"}, (
+        "review outcome must come from the structured current inventory"
+    )
+    assert current["findings"] == {"critical": 2, "warning": 6, "info": 0, "total": 8}
+    assert current["inventory"]["CR-14"]["disposition"] == "open"
+    assert current["inventory"]["CR-15"]["disposition"] == "open"
+    assert {
+        key
+        for key, record in current["inventory"].items()
+        if record["disposition"] == "open" and record["severity"] == "warning"
+    } == {f"WR-{number:02d}" for number in range(3, 9)}
+
+    warning_only = _review_findings(_review_fixture(critical=0))
+    assert warning_only["status"] == "issues_found"
+    assert warning_only["findings"] == {
+        "critical": 0,
+        "warning": 6,
+        "info": 0,
+        "total": 6,
+    }
+
+
+def test_phase2_review_contract_rejects_inventory_and_count_mutants() -> None:
+    """Missing, duplicate, hidden, and count-inconsistent review rows fail closed."""
+    baseline = _review_fixture()
+    frontmatter = yaml.safe_load(baseline.split("---", 2)[1])
+
+    missing = copy.deepcopy(frontmatter)
+    del missing["review_inventory"]["CR-14"]
+    with pytest.raises(AssertionError):
+        _review_findings(_frontmatter_document(missing, baseline.split("---", 2)[2]))
+
+    hidden_warning = copy.deepcopy(frontmatter)
+    hidden_warning["review_inventory"]["WR-08"]["disposition"] = "closed"
+    with pytest.raises(AssertionError):
+        _review_findings(_frontmatter_document(hidden_warning, baseline.split("---", 2)[2]))
+
+    bad_count = copy.deepcopy(frontmatter)
+    bad_count["findings"]["warning"] = 5
+    bad_count["findings"]["total"] = 7
+    with pytest.raises(AssertionError):
+        _review_findings(_frontmatter_document(bad_count, baseline.split("---", 2)[2]))
+
+    unsupported = copy.deepcopy(frontmatter)
+    unsupported["status"] = "pass_with_warnings"
+    with pytest.raises(AssertionError):
+        _review_findings(_frontmatter_document(unsupported, baseline.split("---", 2)[2]))
+
+    duplicate_yaml = baseline.replace(
+        "  CR-01:\n",
+        "  CR-01:\n    disposition: closed\n    severity: critical\n  CR-01:\n",
+        1,
+    )
+    with pytest.raises(AssertionError):
+        _review_findings(duplicate_yaml)
+
+
+def test_phase2_verifier_contract_accepts_truthful_state_transitions() -> None:
+    """Both current gaps and complete passed inventories are truthful states."""
+    current = _verifier_groups()
+    assert current["status"] == "gaps_found"
+    assert current["review"]["open_blockers"] == ["CR-14", "CR-15"]
+    assert len(current["gaps"]) == 2
+
+    passed = _verifier_groups(_verifier_fixture(status="passed"))
+    assert passed["status"] == "passed"
+    assert passed["gaps"] == []
+    assert all(
+        record["count"] == record["total"] for record in passed["inventories"].values()
+    )
+
+
+def test_phase2_verifier_contract_rejects_false_pass_and_status_mutants() -> None:
+    """A passed label cannot hide gaps, incomplete totals, blockers, or warnings."""
+    baseline = _verifier_fixture(status="passed")
+    frontmatter = yaml.safe_load(baseline.split("---", 2)[1])
+
+    incomplete = copy.deepcopy(frontmatter)
+    incomplete["inventories"]["requirements"]["count"] = 14
+    with pytest.raises(AssertionError):
+        _verifier_groups(_frontmatter_document(incomplete))
+
+    hidden_warning = copy.deepcopy(frontmatter)
+    hidden_warning["review"]["open_warnings"].remove("WR-08")
+    hidden_warning["review"]["warning"] = 5
+    with pytest.raises(AssertionError):
+        _verifier_groups(_frontmatter_document(hidden_warning))
+
+    false_gap = copy.deepcopy(frontmatter)
+    false_gap["gaps"] = [
+        {"truth": "hidden gap", "status": "failed", "reason": "fixture"}
+    ]
+    with pytest.raises(AssertionError):
+        _verifier_groups(_frontmatter_document(false_gap))
+
+    blockers = copy.deepcopy(frontmatter)
+    blockers["review"]["critical"] = 1
+    blockers["review"]["open_blockers"] = ["CR-14"]
+    with pytest.raises(AssertionError):
+        _verifier_groups(_frontmatter_document(blockers))
+
+    unsupported = copy.deepcopy(frontmatter)
+    unsupported["status"] = "complete"
+    with pytest.raises(AssertionError):
+        _verifier_groups(_frontmatter_document(unsupported))
+
+    gaps_without_details = copy.deepcopy(frontmatter)
+    gaps_without_details["status"] = "gaps_found"
+    gaps_without_details["gaps"] = []
+    with pytest.raises(AssertionError):
+        _verifier_groups(_frontmatter_document(gaps_without_details))
+
+
 def test_phase2_multi_source_coverage_contract() -> None:
     """Every canonical item retains meaning and reaches executable evidence."""
     inventory = _multi_source_inventory()
