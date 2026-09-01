@@ -1,14 +1,14 @@
 # Phase 2 Gap-Closure Evidence
 
 - Evidence-date: 2026-09-01
-- Source-digest: `95d3e797fe972d22d05f7e421eb5fbe9f48a458bf26f6468a862f7d753f2def0`
-- Review-source-digest: `ede23c16f49301366ec9e30edc885e52c726b5d57a7bc3a796be6e9f30979d90`
-- Reviewed-head: `99d2d0af5dfb27cc3ef47590f480ae7a33cf4d94`
-- Canonical-review-commit: `b935fa6`
+- Source-digest: `941de2917f2a9a9f162901449bfabbd34b866c4070bad562b332c8da31a50e6a`
+- Review-source-digest: `f12c23d7aa7655027b189b7793227403575e5393e92ed08ae9009db9dda1e1ca`
+- Reviewed-head: `7af1d1063ab6a795a42f0e26175fc2196ba6eda5`
+- Canonical-review-commit: `a139cb4`
 - Initial-gauntlet-status: PASS — 18/18 layers
 - Canonical-gauntlet-status: PASS — 18/18 layers; critical-zero and review-source checks exited 0
-- Structured-review-status: PASS WITH WARNINGS — 0 Critical, 5 Warning, 0 Info
-- Verifier-status: PASS — exact `status: passed`, 0 gaps, 0 behavior-unverified
+- Structured-review-status: `issues_found` — 0 Critical, 6 Warning, 0 Info
+- Verifier-status: PENDING — the fresh post-02-45 verifier is dispatched only after the canonical rerun
 
 ## Source Identity
 
@@ -16,9 +16,9 @@
 
 | Identity | Exact value | Verification |
 | --- | --- | --- |
-| Complete Phase 2 implementation range | `ce9fbeef86b00f594d1d06e15d3083d623c54095..99d2d0af5dfb27cc3ef47590f480ae7a33cf4d94` | `git diff --name-only` selected 279 changed files |
-| Review source | `ede23c16f49301366ec9e30edc885e52c726b5d57a7bc3a796be6e9f30979d90` | `tools/source_state.sh --review-digest`; unchanged after structured and canonical review writes |
-| Final canonical source | `a4b16eeb2879fd64b32a8942663bd2af117d99662b206bd24711744d9d302964` | `tools/source_state.sh --digest` after commit `b935fa6` |
+| Complete Phase 2 implementation range | `ce9fbeef86b00f594d1d06e15d3083d623c54095..7af1d1063ab6a795a42f0e26175fc2196ba6eda5` | Fresh reviewer inspected 290 resolved manifest-plus-diff paths |
+| Review source | `f12c23d7aa7655027b189b7793227403575e5393e92ed08ae9009db9dda1e1ca` | `tools/source_state.sh --review-digest`; unchanged after structured and canonical review writes |
+| Final canonical source | `941de2917f2a9a9f162901449bfabbd34b866c4070bad562b332c8da31a50e6a` | `tools/source_state.sh --digest` after commit `a139cb4` |
 
 ## Fresh Official Gauntlet Before Review
 
@@ -146,6 +146,23 @@ The first fresh critical-zero structured review exposed one remaining historical
 - Post-transition-named-router-browser: the three required branch-101, dirty product/mapping, and 320px focus journeys passed 3/3.
 - Post-transition-official-gauntlet: PASS — 18/18 ordered layers, including semantic runtime 34/34, backend 807/807, frontend 304/304, complete property/mutation/coverage authority, mock provider browser 8/8 with five GETs and zero writes, both deployment overlays, zero-resource cleanup, and unchanged final digest.
 - Post-transition-warning-authority: WR-03 through WR-08 remain OPEN Warnings; no repair claim was made.
+
+### Fresh structured review and canonical rerun
+
+The second fresh typed `gsd-code-reviewer` inspected the complete current manifest and Phase 2 diff on review digest `f12c23d7aa7655027b189b7793227403575e5393e92ed08ae9009db9dda1e1ca`. The structured result is exact `status: issues_found` with 0 Critical, 6 Warning, 0 Info, and 23 reconciled inventory rows: CR-01..CR-15 and WR-01..WR-02 CLOSED; WR-03..WR-08 OPEN WARNING. The post-write semantic audit passed 8/8. No Critical or project High-equivalent blocker was found.
+
+Commit `a139cb4` published the canonical `Review-status: CLOSED` and `Open-critical-high: 0` authority while keeping the six warnings visible. Because the canonical review is excluded only from review mode, the review digest remained `f12c23d7aa7655027b189b7793227403575e5393e92ed08ae9009db9dda1e1ca` and the final digest became `941de2917f2a9a9f162901449bfabbd34b866c4070bad562b332c8da31a50e6a`.
+
+- Post-canonical-official-gauntlet: PASS — 18/18 ordered layers.
+- Post-canonical-semantic-runtime: 34/34 passed.
+- Post-canonical-backend-and-frontend: 807/807 backend and 304/304 frontend passed; backend 200/200 and frontend 3/3 property cases passed.
+- Post-canonical-changed-scope-and-mutation: backend 641/641 and frontend 746/746 changed lines covered; all backend inventories and frontend 30/30 mutants were killed.
+- Post-canonical-provider-and-browser: architecture/provider 57/57 and production browser 8/8 passed with five provider GETs and zero writes.
+- Post-canonical-deployment: base readiness plus staging and production worker-loss replacement retries passed.
+- Post-canonical-live-provider: expected SKIP without explicit opt-in and local provider configuration.
+- Post-canonical-cleanup-and-digest: zero owned resources remained and final source state stayed `941de2917f2a9a9f162901449bfabbd34b866c4070bad562b332c8da31a50e6a`.
+- Post-canonical-review-source-validation: `tools/source_state.sh --verify-review-source` exited 0.
+- Post-canonical-warning-authority: WR-03 through WR-08 remain OPEN Warnings; WR-08 remains deferred and is not represented as fixed.
 
 ## Secret and Write Exclusions
 
