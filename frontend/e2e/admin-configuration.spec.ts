@@ -1122,6 +1122,134 @@ test("gap-closure mobile wizard traverses step 1 to 5 to 1 at 320 pixels", async
   await expectNoPageOverflow(page);
 });
 
+test("dirty product and mapping routes require discard before navigation", async ({
+  page,
+}) => {
+  const state = defaultState();
+  await installAdminApi(page, state);
+  await page.setViewportSize({ width: 1024, height: 900 });
+
+  await page.goto("/admin/products/product-1/edit");
+  const name = page.getByLabel("Name", { exact: true });
+  await expect(name).toHaveValue("Zulu Mobile");
+  await name.fill("Zulu Mobile unsaved");
+  const usersLink = page.locator("aside").getByRole("link", { name: "Users" });
+  await usersLink.focus();
+  await usersLink.click();
+  const productDialog = page.getByRole("alertdialog", {
+    name: "Leave without saving?",
+  });
+  await expect(productDialog).toContainText(
+    "Your unsaved entries on this page will be lost.",
+  );
+  await productDialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(name).toHaveValue("Zulu Mobile unsaved");
+  await expect(usersLink).toBeFocused();
+  await expect(page).toHaveURL("/admin/products/product-1/edit");
+
+  await usersLink.click();
+  await page
+    .getByRole("alertdialog", { name: "Leave without saving?" })
+    .getByRole("button", { name: "Discard changes" })
+    .click();
+  await expect(page).toHaveURL("/admin/users");
+
+  await page.goto("/admin/products/product-1/mappings");
+  await page.getByRole("button", { name: "Edit mapping" }).first().click();
+  await chooseSelect(
+    page,
+    "Default target",
+    "release/very-long-supported-target-name",
+  );
+  const productNavigation = page.getByRole("navigation", {
+    name: "Product configuration",
+  });
+  const previewLink = productNavigation.getByRole("link", { name: "Preview" });
+  await previewLink.focus();
+  await previewLink.click();
+  const mappingDialog = page.getByRole("alertdialog", {
+    name: "Leave without saving?",
+  });
+  await mappingDialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(page.getByLabel("Default target")).toContainText(
+    "release/very-long-supported-target-name",
+  );
+  await expect(previewLink).toBeFocused();
+
+  await previewLink.click();
+  await usersLink.evaluate((element) => (element as HTMLElement).click());
+  await mappingDialog.getByRole("button", { name: "Discard changes" }).click();
+  await expect(page).toHaveURL("/admin/products/product-1/preview");
+  await expect(mappingDialog).toHaveCount(0);
+
+  await page.goto("/admin/products/product-1/mappings");
+  await page.getByRole("button", { name: "Edit mapping" }).first().click();
+  await chooseSelect(
+    page,
+    "Default target",
+    "release/very-long-supported-target-name",
+  );
+  void page.goBack().catch(() => null);
+  const backDialog = page.getByRole("alertdialog", {
+    name: "Leave without saving?",
+  });
+  await expect(backDialog).toBeVisible();
+  await backDialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(page).toHaveURL("/admin/products/product-1/mappings");
+
+  const reloadDialogPromise = page.waitForEvent("dialog");
+  void page.reload().catch(() => null);
+  const reloadDialog = await reloadDialogPromise;
+  expect(reloadDialog.type()).toBe("beforeunload");
+  await reloadDialog.dismiss();
+  await expect(page).toHaveURL("/admin/products/product-1/mappings");
+  await expect(page.getByLabel("Default target")).toContainText(
+    "release/very-long-supported-target-name",
+  );
+});
+
+test("dirty mobile mapping navigation restores focus after cancel", async ({
+  page,
+}) => {
+  const state = defaultState();
+  await installAdminApi(page, state);
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/admin/products/product-1/mappings");
+  await page.getByRole("button", { name: "Edit mapping" }).first().click();
+  await chooseSelect(
+    page,
+    "Default target",
+    "release/very-long-supported-target-name",
+  );
+
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  const sheet = page.getByRole("dialog", { name: "Navigation" });
+  const usersLink = sheet.getByRole("link", { name: "Users" });
+  await usersLink.click();
+  const dialog = page.getByRole("alertdialog", {
+    name: "Leave without saving?",
+  });
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(sheet).toBeVisible();
+  await expect(usersLink).toBeFocused();
+  await expect(page.getByLabel("Default target")).toContainText(
+    "release/very-long-supported-target-name",
+  );
+  await expectNoPageOverflow(page);
+
+  await usersLink.click();
+  await page
+    .getByRole("alertdialog", { name: "Leave without saving?" })
+    .getByRole("button", { name: "Discard changes" })
+    .click();
+  await expect(page).toHaveURL("/admin/users");
+  await expect(sheet).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Users" })).toBeFocused();
+  await expectNoPageOverflow(page);
+});
+
 test("product lifecycle remains backend-authoritative for deactivate and reactivation blockers", async ({
   page,
 }) => {

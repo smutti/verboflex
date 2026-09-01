@@ -9,7 +9,13 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import {
+  createMemoryRouter,
+  Link,
+  RouterProvider,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -22,6 +28,7 @@ import {
   type AdminMappingResponse,
   type AdminRepositoryResponse,
 } from "../../../api/client";
+import { DirtyFormNavigationProvider } from "../../../components/navigation/DirtyFormNavigationGuard";
 import { ProductMappingsPage } from "./ProductMappingsPage";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
@@ -104,27 +111,71 @@ function ok<T>(data: T) {
   };
 }
 
-function renderMappings(productId = "product-one") {
-  return render(
-    <MemoryRouter>
+function MappingNavigationHarness({
+  accessToken,
+  candidateVersion,
+  productId,
+}: {
+  accessToken: string;
+  candidateVersion?: number;
+  productId: string;
+}) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (
+    <DirtyFormNavigationProvider>
+      <nav aria-label="Test destinations">
+        <Link to="/admin/users">Users destination</Link>
+        <button type="button" onClick={() => void navigate("/admin/bitbucket")}>
+          PUSH destination
+        </button>
+        <button type="button" onClick={() => void navigate(-1)}>
+          Back intent
+        </button>
+      </nav>
+      <output data-testid="current-location">{location.pathname}</output>
       <ProductMappingsPage
-        accessToken="memory-only-admin-bearer"
-        candidateVersion={5}
+        accessToken={accessToken}
+        candidateVersion={candidateVersion}
         productId={productId}
       />
-    </MemoryRouter>,
+    </DirtyFormNavigationProvider>
+  );
+}
+
+function mappingRouter(
+  productId = "product-one",
+  accessToken = "memory-only-admin-bearer",
+  candidateVersion?: number,
+  initialEntries = [`/admin/products/${productId}/mappings`],
+) {
+  return createMemoryRouter(
+    [
+      {
+        path: "*",
+        element: (
+          <MappingNavigationHarness
+            accessToken={accessToken}
+            candidateVersion={candidateVersion}
+            productId={productId}
+          />
+        ),
+      },
+    ],
+    { initialEntries, initialIndex: initialEntries.length - 1 },
+  );
+}
+
+function renderMappings(productId = "product-one") {
+  return render(
+    <RouterProvider
+      router={mappingRouter(productId, "memory-only-admin-bearer", 5)}
+    />,
   );
 }
 
 function renderMappingsWithServerVersion(productId = "product-one") {
-  return render(
-    <MemoryRouter>
-      <ProductMappingsPage
-        accessToken="memory-only-admin-bearer"
-        productId={productId}
-      />
-    </MemoryRouter>,
-  );
+  return render(<RouterProvider router={mappingRouter(productId)} />);
 }
 
 describe("administrator mapping cursor collections", () => {
@@ -226,13 +277,9 @@ describe("administrator mapping cursor collections", () => {
     );
     const oldSignal = listAdminCandidateMappingsMock.mock.calls[0]?.[0].signal;
     view.rerender(
-      <MemoryRouter>
-        <ProductMappingsPage
-          accessToken="replacement-authority"
-          candidateVersion={5}
-          productId="new-product"
-        />
-      </MemoryRouter>,
+      <RouterProvider
+        router={mappingRouter("new-product", "replacement-authority", 5)}
+      />,
     );
 
     expect(await screen.findByText("All 1 mapping loaded")).toBeVisible();
@@ -378,12 +425,9 @@ describe("administrator mapping cursor collections", () => {
     );
     const view = renderMappings("obsolete-product");
     view.rerender(
-      <MemoryRouter>
-        <ProductMappingsPage
-          accessToken="successor-authority"
-          productId="successor-product"
-        />
-      </MemoryRouter>,
+      <RouterProvider
+        router={mappingRouter("successor-product", "successor-authority")}
+      />,
     );
 
     expect(await screen.findByText("No mappings configured")).toBeVisible();
@@ -517,12 +561,9 @@ describe("administrator mapping cursor collections", () => {
     const view = renderMappingsWithServerVersion("obsolete-product");
     await waitFor(() => expect(getAdminProductMock).toHaveBeenCalledOnce());
     view.rerender(
-      <MemoryRouter>
-        <ProductMappingsPage
-          accessToken="successor-authority"
-          productId="successor-product"
-        />
-      </MemoryRouter>,
+      <RouterProvider
+        router={mappingRouter("successor-product", "successor-authority")}
+      />,
     );
     expect(await screen.findByText("No mappings configured")).toBeVisible();
     rejectObsolete(new Error("stale version failure"));
@@ -547,12 +588,9 @@ describe("administrator mapping cursor collections", () => {
     const view = renderMappingsWithServerVersion("obsolete-product");
     await waitFor(() => expect(getAdminProductMock).toHaveBeenCalledOnce());
     view.rerender(
-      <MemoryRouter>
-        <ProductMappingsPage
-          accessToken="successor-authority"
-          productId="successor-product"
-        />
-      </MemoryRouter>,
+      <RouterProvider
+        router={mappingRouter("successor-product", "successor-authority")}
+      />,
     );
     expect(await screen.findByText("No mappings configured")).toBeVisible();
     resolveObsolete(ok({ candidate_revision: { version: 99 } }));
@@ -570,5 +608,150 @@ describe("administrator mapping cursor collections", () => {
     );
     expect(await screen.findByText("Mapping not saved")).toBeVisible();
     expect(createAdminCandidateMappingMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks confirmed topology changes for Link, PUSH, and Back while topology cancellation stays clean", async () => {
+    listAdminCandidateMappingsMock.mockResolvedValue(
+      ok({ items: [], next_cursor: null }),
+    );
+    render(
+      <RouterProvider
+        router={mappingRouter("product-one", "memory-only-admin-bearer", 5, [
+          "/admin/users",
+          "/admin/products/product-one/mappings",
+        ])}
+      />,
+    );
+    const user = userEvent.setup();
+
+    expect(
+      await screen.findByRole("heading", { name: "Add mapping" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("radio", { name: "Separate" }));
+    const topologyDialog = screen.getByRole("alertdialog", {
+      name: "Change mapping topology?",
+    });
+    await user.click(
+      within(topologyDialog).getByRole("button", { name: "Cancel" }),
+    );
+    await user.click(screen.getByRole("link", { name: "Users destination" }));
+    expect(screen.getByTestId("current-location")).toHaveTextContent(
+      "/admin/users",
+    );
+
+    await user.click(screen.getByRole("radio", { name: "Separate" }));
+    await user.click(screen.getByRole("button", { name: "Change topology" }));
+    const push = screen.getByRole("button", { name: "PUSH destination" });
+    push.focus();
+    await user.click(push);
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Leave without saving?",
+    });
+    expect(dialog).toHaveTextContent(
+      "Your unsaved entries on this page will be lost.",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Keep editing" }),
+    );
+    expect(screen.getByRole("radio", { name: "Separate" })).toBeChecked();
+    expect(push).toHaveFocus();
+    expect(screen.getByTestId("current-location")).toHaveTextContent(
+      "/admin/users",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Back intent" }));
+    expect(
+      await screen.findByRole("alertdialog", {
+        name: "Leave without saving?",
+      }),
+    ).toBeVisible();
+  });
+
+  it("treats an unchanged edit and reordered target set as clean but exact field changes as dirty", async () => {
+    const configured = {
+      ...mapping(11),
+      allowed_target_branches: ["main", "release/2026"],
+      default_target_branch: "main",
+    };
+    listAdminCandidateMappingsMock.mockResolvedValue(
+      ok({ items: [configured], next_cursor: null }),
+    );
+    listAdminRepositoryBranchesMock.mockResolvedValue(
+      ok({
+        items: [
+          { name: "main", commit_hash: "a".repeat(40) },
+          { name: "release/2026", commit_hash: "b".repeat(40) },
+        ],
+        next_cursor: null,
+      }),
+    );
+    getAdminRepositoryBranchMock.mockImplementation(async (options) =>
+      ok({
+        name: options.query.branch_name,
+        commit_hash: "c".repeat(40),
+      }),
+    );
+    renderMappings();
+    const user = userEvent.setup();
+
+    await user.click(
+      (await screen.findAllByRole("button", { name: "Edit mapping" }))[0],
+    );
+    await user.click(screen.getByLabelText("Allow target main"));
+    await user.click(screen.getByLabelText("Allow target main"));
+    await user.click(screen.getByRole("link", { name: "Users destination" }));
+    expect(
+      screen.queryByRole("alertdialog", { name: "Leave without saving?" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("combobox", { name: "Default target" }));
+    await user.click(screen.getByRole("option", { name: "release/2026" }));
+    await user.click(screen.getByRole("link", { name: "Users destination" }));
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Leave without saving?",
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Keep editing" }),
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Default target" }),
+    ).toHaveTextContent("release/2026");
+
+    await user.click(screen.getByRole("combobox", { name: "Default target" }));
+    await user.click(screen.getByRole("option", { name: "main" }));
+    await user.click(screen.getByRole("link", { name: "Users destination" }));
+    expect(
+      screen.queryByRole("alertdialog", { name: "Leave without saving?" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps invalid mapping attempts dirty and protected with values and focus intact", async () => {
+    listAdminCandidateMappingsMock.mockResolvedValue(
+      ok({ items: [], next_cursor: null }),
+    );
+    renderMappings();
+    const user = userEvent.setup();
+
+    await user.click(
+      await screen.findByRole("combobox", { name: "Repository" }),
+    );
+    await user.click(
+      screen.getByRole("option", { name: /Application source/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save mapping" }));
+    expect(await screen.findByText("Mapping not saved")).toBeVisible();
+    const link = screen.getByRole("link", { name: "Users destination" });
+    link.focus();
+    await user.click(link);
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Leave without saving?",
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Keep editing" }),
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Repository" }),
+    ).toHaveTextContent("Application source");
+    expect(link).toHaveFocus();
   });
 });
