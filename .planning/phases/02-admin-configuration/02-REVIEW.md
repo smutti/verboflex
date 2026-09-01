@@ -1,18 +1,21 @@
 ---
 phase: 02-admin-configuration
-reviewed: 2026-09-01T18:17:51Z
+reviewed: 2026-09-01T19:27:33Z
 review_date: 2026-09-01
 depth: deep
 review_mode: digest-delta
 asvs_level: OWASP ASVS 5.0 Level 1
-scope: test-only delta 5389c15..542903d after the prior full typed review
-diff_base: 5389c15c7c1d5f4f6f63e6a2568937ab423b3857
-reviewed_head: 542903d39b11617c1985574eb4a5f7d32f9038cf
-previous_reviewed_source_digest: f12c23d7aa7655027b189b7793227403575e5393e92ed08ae9009db9dda1e1ca
-reviewed_source_digest: 2e93097910a805663c7ccad721f4f629b478bdd01efca95541c8509c5f0354a9
-files_reviewed: 1
+scope: bounded regression-fix delta dd80fbc..2faff96 after the prior typed review
+diff_base: dd80fbc41d514ea99907f9475dd08e87f79ceddf
+reviewed_head: 2faff96e8c35b9964f7c458095fe9f1039a42e16
+previous_reviewed_source_digest: 2e93097910a805663c7ccad721f4f629b478bdd01efca95541c8509c5f0354a9
+reviewed_source_digest: b0f7e5f09c804d81ad86ccc0a68032b3a4a031f4c7a69d3dbeca65ab5be587f6
+files_reviewed: 4
 files_reviewed_list:
-  - backend/tests/architecture/test_phase2_gap_closure.py
+  - tools/gauntlet.sh
+  - tools/real_smoke.sh
+  - tools/tests/test_gauntlet.sh
+  - tools/tests/test_real_smoke.sh
 findings:
   critical: 0
   warning: 6
@@ -47,38 +50,38 @@ review_inventory:
 
 # Phase 2: Code Review Report
 
-**Reviewed:** 2026-09-01T18:17:51Z
+**Reviewed:** 2026-09-01T19:27:33Z
 **Depth:** deep digest-delta
-**Files Reviewed:** 1 changed source file
+**Files Reviewed:** 4 changed source files
 **Status:** issues_found
-**Reviewed HEAD:** `542903d39b11617c1985574eb4a5f7d32f9038cf`
-**Reviewed-source digest:** `2e93097910a805663c7ccad721f4f629b478bdd01efca95541c8509c5f0354a9`
+**Reviewed HEAD:** `2faff96e8c35b9964f7c458095fe9f1039a42e16`
+**Reviewed-source digest:** `b0f7e5f09c804d81ad86ccc0a68032b3a4a031f4c7a69d3dbeca65ab5be587f6`
 
 ## Narrative Findings (AI reviewer)
 
 ### Summary
 
-This fresh typed review is bounded to the only source delta after the prior full review: commit `542903d`, which changes `backend/tests/architecture/test_phase2_gap_closure.py:1236-1254`. The exact `5389c15..542903d` diff replaces a stale live-report assertion that required `gaps_found` with explicit branches for the two valid semantic transitions already enforced by `_verifier_groups`: truthful `gaps_found` and truthful `passed`.
+This fresh typed review is bounded to the exact regression-fix delta `dd80fbc..2faff96`: two RED checker changes in `a9c1e2f` followed by the two harness fixes in `2faff96`. All four files were read in full and their call chains into Docker Compose, OpenAPI drift generation/restoration, secret scanning, and smoke cleanup were traced.
 
-No new Critical, project High-equivalent, Warning, or Info defect is introduced by the delta. The passed branch requires no open blockers, no gaps, and complete inventory counts. The existing helper still rejects duplicate YAML keys, missing or extra inventory identifiers, malformed records, count/total drift, hidden warnings, unsupported statuses, false passed reports with gaps or blockers, and `gaps_found` reports without concrete gaps. The existing mutation tests still exercise those fail-closed paths.
+No new Critical, project High-equivalent, Warning, or Info defect is introduced by this delta. The OpenAPI negative control preserves the exact `diff --git` semantic check without the early-closing pipeline that produced status 141 under `set -o pipefail`. The secret audit remains an exact, sorted four-field equality policy over path, line, detector type, and fingerprint; the new rows do not introduce a path-only, type-only, wildcard, or ignore-baseline bypass. The smoke harness uses disposable random provider values, a valid Fernet key, an owner-only runtime directory, and a mode-0600 environment file. Values are captured rather than echoed, Compose rendering is suppressed in preflight, and cleanup remains confined to the generated project, images, and runtime directory.
 
-The delta changes no production/runtime/schema/API/generated/dependency/configuration/manifest behavior. It neither closes nor hides any existing warning. The current typed outcome therefore remains exactly Critical 0, Warning 6, Info 0, total 6, with `status: issues_found`. CR-01..CR-15 and WR-01..WR-02 remain CLOSED; WR-03..WR-08 remain OPEN Warnings; WR-08 remains deferred.
+The RED/GREEN ordering is genuine. At `a9c1e2f`, the tests required the three Bitbucket inputs while the historical preflight still omitted them, and base Compose's `${VAR:?}` contract returned nonzero. The historical `printf | grep -Fq` control also reproduces status 141 with a large early match under pipefail. At `2faff96`, both packaged regression checkers pass.
 
-The canonical review and verifier were inspected only as untrusted transition context. Both remain bound to their recorded earlier HEAD/digest and are not promoted here as current-digest authority. This report alone is freshly bound to review digest `2e93097910a805663c7ccad721f4f629b478bdd01efca95541c8509c5f0354a9`.
+The delta changes no application runtime, API, schema, generated client, package, lockfile, dependency, or production authorization behavior. It neither closes nor hides any retained warning. The current typed outcome therefore remains exactly Critical 0, Warning 6, Info 0, total 6, with `status: issues_found`. CR-01..CR-15 and WR-01..WR-02 remain CLOSED; WR-03..WR-08 remain OPEN Warnings; WR-08 remains deferred.
 
 ### Delta Assessment
 
-**File:** `backend/tests/architecture/test_phase2_gap_closure.py:1236-1254`
+**Files:** `tools/gauntlet.sh:717-746`, `tools/tests/test_gauntlet.sh:26-32`
 
-**Result:** No finding. The change broadens only the live fixture assertion from one historical state to the two states accepted by the phase verifier contract. It does not weaken `_verifier_groups`, which remains the validation authority before the branch assertions run.
+**Result:** No finding. The shell `case` test recognizes the same fixed substring as the former `grep -Fq`, but does not create a producer/consumer pipeline and therefore cannot convert a successful early match into SIGPIPE status 141. The surrounding negative control still requires a real source mutation, a nonzero API drift result, exact restoration of the backend subject and generated frontend artifacts, and failure for the expected reason.
 
-**Negative controls retained:**
+**Files:** `tools/gauntlet.sh:754-909`, `tools/gauntlet.sh:1339-1351`
 
-- Duplicate frontmatter keys are rejected by `_UniqueKeySafeLoader` at lines 378-409.
-- Review inventory exact-set, table, severity, disposition, count, and typed-status reconciliation remains enforced at lines 512-605.
-- Verifier inventory exact identifiers/totals, unique blocker/warning lists, preserved `WR-03..WR-08`, and state-specific gap/completeness rules remain enforced at lines 608-685.
-- Missing/duplicate/hidden/count-inconsistent review mutants remain at lines 1201-1233.
-- Incomplete inventory, hidden warning, false-gap, blocker, unsupported-status, and gap-without-detail verifier mutants remain at lines 1257-1293.
+**Result:** No finding. Current detector output is compared byte-for-byte with the audited policy after normalization to sorted `path|line|type|hashed_secret` rows. The focused self-test passes the current exact map and proves that one appended unreviewed fingerprint is rejected. The additions are exact current false positives and do not weaken scan scope or matching precision.
+
+**Files:** `tools/real_smoke.sh:112-160`, `tools/real_smoke.sh:168-228`, `tools/tests/test_real_smoke.sh:16-33`
+
+**Result:** No finding. The client secret is generated with OpenSSL, the encryption key with `Fernet.generate_key()`, and neither is printed. Both preflight and full smoke place the values only in a generated owner-only runtime tree with a mode-0600 env file. The normal smoke installs bounded cleanup before Compose resources are created; successful preflight deletes its exact runtime directory. The regression checker supplies non-secret fixtures only to Compose's configuration rendering and separately exercises the real generated-value preflight.
 
 ## Warnings
 
@@ -86,42 +89,42 @@ The canonical review and verifier were inspected only as untrusted transition co
 
 **Classification:** WARNING
 **File:** `backend/src/verboflex/services/bitbucket_oauth.py:345-363`, `backend/src/verboflex/services/bitbucket_oauth.py:516-533`
-**Issue:** An arbitrarily large positive provider expiry passes validation and can raise `OverflowError` during persistence date arithmetic. The test-only delta does not touch this path.
+**Issue:** An arbitrarily large positive provider expiry passes validation and can raise `OverflowError` during persistence date arithmetic. The regression-harness delta does not touch this path.
 **Fix:** Enforce a documented maximum token lifetime, map arithmetic failure to `OAuthConnectionUnavailable`, and cover boundary and enormous values.
 
 ### WR-04: The locked developer dependency graph contains a known moderate advisory
 
 **Classification:** WARNING
 **File:** `frontend/package.json:35-40`, `frontend/package-lock.json:12991-13018`
-**Issue:** The development-only Stryker chain resolves affected `qs@6.15.1` through `typed-rest-client@2.3.1`. The test-only delta does not change dependencies.
+**Issue:** The development-only Stryker chain resolves affected `qs@6.15.1` through `typed-rest-client@2.3.1`. The regression-harness delta does not change dependencies.
 **Fix:** Upgrade or compatibly override the affected chain, regenerate the lockfile, and enforce a full-graph advisory threshold in CI.
 
 ### WR-05: Container provenance is mutable
 
 **Classification:** WARNING
 **File:** `docker/backend.Dockerfile:3-5`, `docker/backend.Dockerfile:22`, `docker/frontend.Dockerfile:3`, `docker/frontend.Dockerfile:17`, `docker-compose.yml:36`, `docker-compose.yml:51`
-**Issue:** Upstream and deployable images remain tag-only, so reviewed source digests do not identify later container bytes. The test-only delta does not change image selectors.
+**Issue:** Upstream and deployable images remain tag-only, so reviewed source digests do not identify later container bytes. The regression-harness delta does not change image selectors.
 **Fix:** Pin approved images with `tag@sha256:...` and update digests through a reviewed automation path.
 
 ### WR-06: The canonical environment example cannot configure Phase 2
 
 **Classification:** WARNING
 **File:** `.env.example:1-13`, `docker-compose.yml:21-27`
-**Issue:** `.env.example` still omits the three required Bitbucket inputs and four preview/watchdog controls consumed by Compose. The test-only delta does not change configuration.
+**Issue:** `.env.example` still omits the three required Bitbucket inputs and four preview/watchdog controls consumed by Compose. The regression harness now generates its own disposable values, but the canonical user-facing example remains incomplete.
 **Fix:** Add safe placeholders, formats, generation guidance, defaults, and validated ranges for all seven settings.
 
 ### WR-07: The source manifest omits executable Phase 2 test data
 
 **Classification:** WARNING
 **File:** `tools/phase2_source_manifest.txt:1-36`, `backend/tests/architecture/phase2_spec_edge_matrix.json:1`
-**Issue:** The semantic traceability test reads the JSON matrix, but the manifest still excludes it from source digests. The test-only delta does not repair manifest coverage.
+**Issue:** The semantic traceability test reads the JSON matrix, but the manifest still excludes it from source digests. The regression-harness delta does not repair manifest coverage.
 **Fix:** Include executable non-code fixtures in the manifest and add a manifest-coverage assertion, then regenerate digests.
 
 ### WR-08: The advertised default Compose flow calls removed OAuth endpoints
 
 **Classification:** WARNING
 **File:** `tools/phase2_compose_flow.py:478-482`, `tools/phase2_compose_flow.py:530-546`
-**Issue:** The positional/no-flag flow still calls removed authorization-code endpoints and fails before its remaining lifecycle checks. The supported gap-closure path does not invoke it, and the test-only delta does not repair it. **Disposition remains deferred, not fixed.**
+**Issue:** The positional/no-flag flow still calls removed authorization-code endpoints and fails before its remaining lifecycle checks. The supported gap-closure path does not invoke it, and the regression-harness delta does not repair it. **Disposition remains deferred, not fixed.**
 **Fix:** Migrate the flow to the current client-credentials contract or remove it; if retained, execute it explicitly in the gauntlet.
 
 ### Current CR/WR Inventory Re-audit
@@ -130,7 +133,7 @@ Every row below is the current typed inventory. Disposition and severity remain 
 
 | Row | Disposition | Severity | Current authority / delta result |
 |---|---|---|---|
-| CR-01 | CLOSED | CRITICAL | Base Compose provider environment remains unchanged. |
+| CR-01 | CLOSED | CRITICAL | Base Compose provider environment remains unchanged; the legacy smoke now supplies its required values. |
 | CR-02 | CLOSED | CRITICAL | Exact bounded client-credentials exchange remains unchanged. |
 | CR-03 | CLOSED | CRITICAL | Client-credentials-only lifecycle authority remains unchanged. |
 | CR-04 | CLOSED | CRITICAL | Access-only encrypted generation and renewal authority remain unchanged; WR-03 stays separate and open. |
@@ -156,11 +159,18 @@ Every row below is the current typed inventory. Disposition and severity remain 
 
 ## Verification Performed
 
-- Exact source delta inspected: `5389c15..542903d`.
-- Current semantic helpers and mutation controls inspected in context.
-- Current structured review inventory, canonical review, and verifier report inspected as untrusted context only.
-- Focused semantic test: `cd backend && uv run pytest -q tests/architecture/test_phase2_gap_closure.py -x`.
-- Artifact whitespace check: `git diff --check -- .planning/phases/02-admin-configuration/02-REVIEW.md`.
+- Exact source delta inspected: `dd80fbc..2faff96` and separate RED/GREEN commits `a9c1e2f` / `2faff96`.
+- Full contents and relevant callers read for all four scoped files.
+- Shell syntax: `bash -n tools/gauntlet.sh tools/real_smoke.sh tools/tests/test_gauntlet.sh tools/tests/test_real_smoke.sh` — PASS.
+- Packaged gauntlet checker: `bash tools/tests/test_gauntlet.sh` — PASS.
+- Packaged real-smoke checker: `bash tools/tests/test_real_smoke.sh` — PASS.
+- OpenAPI SIGPIPE reproduction of the removed pipeline: status 141 under `set -o pipefail` with an early fixed-string match.
+- Missing-provider-variable RED reproduction: base/staging Compose configuration exits 1 at the exact `${VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET:?}` contract.
+- Secret policy self-test, including appended-fingerprint negative control, passed through the packaged gauntlet checker.
+- No owned `verboflex-phase01-smoke*` temporary runtime directory remained after focused checks.
+- Artifact whitespace and worktree checks passed; only the pre-existing untracked `.gsd/`, planning runtime files, and `graphify-out/` remain outside review scope.
+- Phase 2 final-mode source digest independently reproduced as `b0f7e5f09c804d81ad86ccc0a68032b3a4a031f4c7a69d3dbeca65ab5be587f6` before this report write.
+- The full Phase 2 gauntlet was intentionally not rerun for this bounded review.
 
 ## Closure Decision
 
@@ -168,6 +178,6 @@ Every row below is the current typed inventory. Disposition and severity remain 
 
 ---
 
-_Reviewed: 2026-09-01T18:17:51Z_
+_Reviewed: 2026-09-01T19:27:33Z_
 _Reviewer: the agent (gsd-code-reviewer, digest-delta)_
 _Depth: deep_
