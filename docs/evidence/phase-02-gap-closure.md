@@ -1,10 +1,10 @@
 # Phase 2 Gap-Closure Evidence
 
 - Evidence-date: 2026-09-01
-- Source-digest: `941de2917f2a9a9f162901449bfabbd34b866c4070bad562b332c8da31a50e6a`
-- Review-source-digest: `f12c23d7aa7655027b189b7793227403575e5393e92ed08ae9009db9dda1e1ca`
-- Reviewed-head: `7af1d1063ab6a795a42f0e26175fc2196ba6eda5`
-- Canonical-review-commit: `a139cb4`
+- Source-digest: `e7f71e46fdaf7aea75230852d4232fb6b8e9fcfb43bd6f14f7440a89743a88e7`
+- Review-source-digest: `2e93097910a805663c7ccad721f4f629b478bdd01efca95541c8509c5f0354a9`
+- Reviewed-head: `542903d39b11617c1985574eb4a5f7d32f9038cf`
+- Canonical-review-commit: `0902fdd`
 - Initial-gauntlet-status: PASS — 18/18 layers
 - Canonical-gauntlet-status: PASS — 18/18 layers; critical-zero and review-source checks exited 0
 - Structured-review-status: `issues_found` — 0 Critical, 6 Warning, 0 Info
@@ -12,13 +12,13 @@
 
 ## Source Identity
 
-`tools/phase2_source_manifest.txt` is the source-set contract. Review mode deliberately excludes `docs/reviews/phase-02-code-security.md`; final mode includes it and deliberately excludes generated evidence. The fresh structured report and canonical review therefore bind to the review digest without self-reference, while this evidence binds to the final digest after canonical commit `b935fa6`.
+`tools/phase2_source_manifest.txt` is the source-set contract. Review mode deliberately excludes `docs/reviews/phase-02-code-security.md`; final mode includes it and deliberately excludes generated evidence. The fresh structured report and canonical review therefore bind to the review digest without self-reference, while this evidence binds to the final digest after canonical commit `0902fdd`.
 
 | Identity | Exact value | Verification |
 | --- | --- | --- |
-| Complete Phase 2 implementation range | `ce9fbeef86b00f594d1d06e15d3083d623c54095..7af1d1063ab6a795a42f0e26175fc2196ba6eda5` | Fresh reviewer inspected 290 resolved manifest-plus-diff paths |
-| Review source | `f12c23d7aa7655027b189b7793227403575e5393e92ed08ae9009db9dda1e1ca` | `tools/source_state.sh --review-digest`; unchanged after structured and canonical review writes |
-| Final canonical source | `941de2917f2a9a9f162901449bfabbd34b866c4070bad562b332c8da31a50e6a` | `tools/source_state.sh --digest` after commit `a139cb4` |
+| Complete Phase 2 implementation plus semantic-audit delta | `ce9fbeef86b00f594d1d06e15d3083d623c54095..542903d39b11617c1985574eb4a5f7d32f9038cf` | Full typed review plus fresh typed review of the only later test-only delta |
+| Review source | `2e93097910a805663c7ccad721f4f629b478bdd01efca95541c8509c5f0354a9` | `tools/source_state.sh --review-digest`; canonical `--verify-review-source` exits 0 |
+| Final canonical source | `e7f71e46fdaf7aea75230852d4232fb6b8e9fcfb43bd6f14f7440a89743a88e7` | `tools/source_state.sh --digest` after commit `0902fdd` |
 
 ## Fresh Official Gauntlet Before Review
 
@@ -163,6 +163,20 @@ Commit `a139cb4` published the canonical `Review-status: CLOSED` and `Open-criti
 - Post-canonical-cleanup-and-digest: zero owned resources remained and final source state stayed `941de2917f2a9a9f162901449bfabbd34b866c4070bad562b332c8da31a50e6a`.
 - Post-canonical-review-source-validation: `tools/source_state.sh --verify-review-source` exited 0.
 - Post-canonical-warning-authority: WR-03 through WR-08 remain OPEN Warnings; WR-08 remains deferred and is not represented as fixed.
+
+### Test-only verifier-transition digest delta
+
+The first fresh final verifier correctly produced exact `status: passed`, which exposed one remaining historical-state assertion in `test_phase2_verifier_contract_accepts_truthful_state_transitions`: the schema validator already enforced truthful `gaps_found` and `passed` states, but the live-file assertion still required only `gaps_found`. Commit `542903d` made that assertion transition-aware without changing the fail-closed parser or its missing, duplicate, inconsistent-count, hidden-warning, unsupported-status, false-passed, blocker, or incomplete-inventory negative controls.
+
+- Delta scope: only `backend/tests/architecture/test_phase2_gap_closure.py`; no production, runtime, schema, migration, API/OpenAPI, generated client, dependency, package/lockfile, configuration, source-manifest, or provider-authority file changed.
+- Delta semantic result: 8/8 focused structured-inventory tests passed.
+- Application evidence: the immediately preceding canonical application gauntlet remains PASS 18/18; it was not repeated for this test-only compatibility delta.
+- Fresh typed digest-delta reviewer: exact `status: issues_found`, Critical 0, Warning 6, Info 0, total 6; no Critical/High-equivalent blocker.
+- Current inventory: CR-01..CR-15 and WR-01..WR-02 CLOSED; WR-03..WR-08 OPEN WARNING; WR-08 remains deferred, not fixed.
+- Accepted review digest: `2e93097910a805663c7ccad721f4f629b478bdd01efca95541c8509c5f0354a9`.
+- Canonical review commit: `0902fdd`; `Review-status: CLOSED`, `Open-critical-high: 0`, and `tools/source_state.sh --verify-review-source` PASS.
+- Accepted final digest before verifier report publication: `e7f71e46fdaf7aea75230852d4232fb6b8e9fcfb43bd6f14f7440a89743a88e7`.
+- Fresh verifier status: PENDING until the compact verifier rebinds its passed report to the accepted digest pair and the semantic/source-state checks pass.
 
 ## Secret and Write Exclusions
 
