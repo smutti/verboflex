@@ -113,7 +113,7 @@
 
 - [x] **UI-01**: Frontend uses shadcn/ui primitives for core controls such as buttons, inputs, selects, dialogs, sheets, badges, tooltips, tabs, tables, sidebars, and toasts.
 - [ ] **UI-02**: Review workspace presents filters, results, translation detail, comments, state controls, and constraint status in a dense task-focused layout.
-- [ ] **UI-03**: Admin configuration screens provide clear validation feedback for repository, branch, mapping, and credential setup.
+- [x] **UI-03**: Admin configuration screens provide clear validation feedback for repository, branch, mapping, and credential setup.
 - [ ] **UI-04**: Frontend shows background job status for imports and PR submissions without blocking the user interface.
 
 ## v2 Requirements
@@ -248,7 +248,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PR-11 | Phase 8 | Pending |
 | UI-01 | Phase 1 | Complete |
 | UI-02 | Phase 6 | Pending |
-| UI-03 | Phase 2 | Gaps Found |
+| UI-03 | Phase 2 | Complete |
 | UI-04 | Phase 8 | Pending |
 
 **Coverage:**
