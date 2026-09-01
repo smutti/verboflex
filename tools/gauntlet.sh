@@ -739,7 +739,10 @@ openapi_negative_control() (
   git -C "$REPO_ROOT" diff --quiet -- frontend/openapi.json frontend/src/api/client \
     || die "OpenAPI drift control did not restore generated clients"
   [ "$rc" -ne 0 ] || die "OpenAPI drift negative control unexpectedly passed"
-  printf '%s' "$output" | grep -Fq 'diff --git' || die "OpenAPI drift control failed for the wrong reason"
+  case "$output" in
+    *'diff --git'*) ;;
+    *) die "OpenAPI drift control failed for the wrong reason" ;;
+  esac
   printf 'OpenAPI drift negative control: PASS\n'
 )
 
@@ -762,20 +765,121 @@ src/verboflex/auth/refresh_sessions.py|20|Base64 High Entropy String|e582429052c
 tests/api/test_admin_users.py|192|Secret Keyword|cbd35a7eedd58ee2f4ab223644a0a2b73a635bbd
 tests/api/test_rate_limits.py|189|Secret Keyword|5ac066cfb3bcf9973a0b40daeb7f5606103c1bd3
 tests/api/test_system_status.py|109|Basic Auth Credentials|e5e9fa1ba31ecd1ae84f75caaa474f3a663f05f4
+tests/architecture/test_phase2_gap_closure.py|101|Hex High Entropy String|861c51f9e1bcf75dd79a1cac09d53a876442638d
+tests/architecture/test_phase2_gap_closure.py|102|Hex High Entropy String|e3fec03c2aae0f002e0e60a8d15c8aee11bcf3e7
+tests/architecture/test_phase2_gap_closure.py|103|Hex High Entropy String|47d93d606e2b04f5f317c24a01fd44e6dc43e592
+tests/architecture/test_phase2_gap_closure.py|104|Hex High Entropy String|a155a53fbc7f26ec0526caf8be1246aea7f0fe8b
+tests/architecture/test_phase2_gap_closure.py|105|Hex High Entropy String|32f2c288943d38941b79b702cc253b1f814376be
+tests/architecture/test_phase2_gap_closure.py|106|Hex High Entropy String|5162b7f6fc82261331603793a1a5bfa1d7976275
+tests/architecture/test_phase2_gap_closure.py|107|Hex High Entropy String|06a4b4c4c936aa7862fbe37149451abcc8444ab0
+tests/architecture/test_phase2_gap_closure.py|108|Hex High Entropy String|4602cbb9ed906875802566ad74f6779f952dc6dc
+tests/architecture/test_phase2_gap_closure.py|128|Hex High Entropy String|5f7aed697833d16ba9e41cc8f000cfba6f97fe77
+tests/architecture/test_phase2_gap_closure.py|129|Hex High Entropy String|5d70bc15dfa4f1e23e34e0e5dfdd2ad6d006eabe
+tests/architecture/test_phase2_gap_closure.py|130|Hex High Entropy String|7f7be4f4e4c5e506bf045d221b44449c2d18e500
+tests/architecture/test_phase2_gap_closure.py|131|Hex High Entropy String|dddd6827f8d987ee84817dabb218c536fc3a1056
+tests/architecture/test_phase2_gap_closure.py|132|Hex High Entropy String|ec644a764ac25986979e1da959adeab9d16ee728
+tests/architecture/test_phase2_gap_closure.py|133|Hex High Entropy String|0bee47b9490683452e0f043a89f001bd59e90cb9
+tests/architecture/test_phase2_gap_closure.py|134|Hex High Entropy String|efdf916626799c4045557767bc7db60b53f34257
+tests/architecture/test_phase2_gap_closure.py|135|Hex High Entropy String|88b88c99e9961eeb48d847cb4faeb1e0d74f6cf4
+tests/architecture/test_phase2_gap_closure.py|136|Hex High Entropy String|da0661c828b3507a12e6aa79f156b5249a31db04
+tests/architecture/test_phase2_gap_closure.py|139|Hex High Entropy String|768c3725acced65278c65d81fc7d3b3877d3e452
+tests/architecture/test_phase2_gap_closure.py|140|Hex High Entropy String|b73ba3448a019c2d2af515211f3bf34e953737ce
+tests/architecture/test_phase2_gap_closure.py|141|Hex High Entropy String|e28039f8f923290107561ec763be989189a3109f
+tests/architecture/test_phase2_gap_closure.py|142|Hex High Entropy String|e44800d52286f74b9e510b8a736f92c98891eab3
+tests/architecture/test_phase2_gap_closure.py|143|Hex High Entropy String|bddc89a074e272d22c24ef8852d0592ba4ebb4c2
+tests/architecture/test_phase2_gap_closure.py|144|Hex High Entropy String|bd9ef523c312ae923aa59e0b3e6b0e456efefd2c
+tests/architecture/test_phase2_gap_closure.py|145|Hex High Entropy String|24b7ea4ba096aefdf15771974e329c2ea984f028
+tests/architecture/test_phase2_gap_closure.py|146|Hex High Entropy String|c16a1ab5924ff06b09bc82b7b35770841c58c258
+tests/architecture/test_phase2_gap_closure.py|147|Hex High Entropy String|80a3beaa47c3497520fadfa8357e43a44b22a952
+tests/architecture/test_phase2_gap_closure.py|148|Hex High Entropy String|862b107e8f28d16105624ba1ef43a1b44ee6ccc4
+tests/architecture/test_phase2_gap_closure.py|149|Hex High Entropy String|c12f10aa321327ca1b2fa23f646b144d3a5f9001
+tests/architecture/test_phase2_gap_closure.py|150|Hex High Entropy String|d8a775307a511052a80f0a68d5e4c8155f10a379
+tests/architecture/test_phase2_gap_closure.py|151|Hex High Entropy String|bec854fe0dfada0277e30c78d9db6977dadd73f9
+tests/architecture/test_phase2_gap_closure.py|152|Hex High Entropy String|b85040ed2f2d9aaedff5a3bee71445aee95bad01
+tests/architecture/test_phase2_gap_closure.py|153|Hex High Entropy String|f873e97615618a3da956a943170cb0bffc015d82
+tests/architecture/test_phase2_gap_closure.py|154|Hex High Entropy String|9fce54fa9bed3604b4ccb57c7a4e5da93e7033db
+tests/architecture/test_phase2_gap_closure.py|155|Hex High Entropy String|57094b273076e6cf20d8ed7d31d687f02fec1072
+tests/architecture/test_phase2_gap_closure.py|156|Hex High Entropy String|6bc309f0da813b64d2da34cf24988e712e7b34bd
+tests/architecture/test_phase2_gap_closure.py|157|Hex High Entropy String|bf4fd9a58861808dc5783407c24b843535ea6371
+tests/architecture/test_phase2_gap_closure.py|158|Hex High Entropy String|c9a34cdd23689844f55c6c62b9fad408e936fbc8
+tests/architecture/test_phase2_gap_closure.py|159|Hex High Entropy String|71f2d5eda8109fd7467f5937b4dabedf5985b697
+tests/architecture/test_phase2_gap_closure.py|160|Hex High Entropy String|851e31e68ef17dd86e40a36da9081aea087e425e
+tests/architecture/test_phase2_gap_closure.py|161|Hex High Entropy String|e2decc5a5e8f29c9217d9540057b52b83ba1c266
+tests/architecture/test_phase2_gap_closure.py|162|Hex High Entropy String|ad4e89d456ec9741ecdd88005e79d1befbb3fbe4
+tests/architecture/test_phase2_gap_closure.py|163|Hex High Entropy String|6b99eb1094f1e2e0d1c20f3ca5d1b7353826cd7a
+tests/architecture/test_phase2_gap_closure.py|164|Hex High Entropy String|0a59fd6c077f8b93441e172545b6479d6f554ca0
+tests/architecture/test_phase2_gap_closure.py|165|Hex High Entropy String|823fe230db0fa34b559e569b71f384e61f7936c1
+tests/architecture/test_phase2_gap_closure.py|166|Hex High Entropy String|11c5a7f9cd758ba10bfef9b63a07f1226c07ae5c
+tests/architecture/test_phase2_gap_closure.py|167|Hex High Entropy String|37c8042bce182f8d353ed58e688ba01ac4f14098
+tests/architecture/test_phase2_gap_closure.py|168|Hex High Entropy String|3df8f20294b52f0c7a84c9bf88e4d3df109743b4
+tests/architecture/test_phase2_gap_closure.py|169|Hex High Entropy String|82c01157711f96082e514e6a77bf18545ab5067b
+tests/architecture/test_phase2_gap_closure.py|170|Hex High Entropy String|55a2b7d75d5dc7eac8ffb47c4c91f5c3a4a7e9f3
+tests/architecture/test_phase2_gap_closure.py|171|Hex High Entropy String|863294e273d66a71051e7fb8face42f1a2eb0a62
+tests/architecture/test_phase2_gap_closure.py|41|Hex High Entropy String|84272060a1b4a958cd3b38f5f0f59c7494d47e5b
+tests/architecture/test_phase2_gap_closure.py|43|Hex High Entropy String|1129b095b56d1c5a58898c1ce78a8a39ef621d26
+tests/architecture/test_phase2_gap_closure.py|44|Hex High Entropy String|81ab625e90a1129d3e2f9920e7b6b7cc7397d334
+tests/architecture/test_phase2_gap_closure.py|45|Hex High Entropy String|7f5ef0452e0c7b977c763781b6f70649c2fa71a0
+tests/architecture/test_phase2_gap_closure.py|46|Hex High Entropy String|1e6a6fc292cc473f4525dbccad3e3eaf32426356
+tests/architecture/test_phase2_gap_closure.py|47|Hex High Entropy String|bf174e02ae98e85b96b464bf81a908c1b5a9fa2f
+tests/architecture/test_phase2_gap_closure.py|48|Hex High Entropy String|d6834e2141dc4b3c4b01de8a23cc1cb31f9a1cfa
+tests/architecture/test_phase2_gap_closure.py|49|Hex High Entropy String|7f9ae4ed580cc82b1b6be40a23f272140bbc7476
+tests/architecture/test_phase2_gap_closure.py|51|Hex High Entropy String|cf0cd4431b51a8b8cdd6128ef0a27394d6b2b7e1
+tests/architecture/test_phase2_gap_closure.py|52|Hex High Entropy String|4db8a39cffc2954b8e48636ee85e02859387e9a3
+tests/architecture/test_phase2_gap_closure.py|53|Hex High Entropy String|b76e43aed365048c97424e1cfcf0170e61aeb692
+tests/architecture/test_phase2_gap_closure.py|55|Hex High Entropy String|d8cd5c961305d97f853e29512bd143182626c358
+tests/architecture/test_phase2_gap_closure.py|56|Hex High Entropy String|76c82148887d6acac01f51d3fee846761f8d74f7
+tests/architecture/test_phase2_gap_closure.py|57|Hex High Entropy String|69770043673fe5e60ca9f4aae2dc470f9248fddf
+tests/architecture/test_phase2_gap_closure.py|60|Hex High Entropy String|8828eadd103b37eaa11aa741e95dc397ba7597d6
+tests/architecture/test_phase2_gap_closure.py|61|Hex High Entropy String|aea6af1fd9fb990a85304f558c6860629c2ded70
+tests/architecture/test_phase2_gap_closure.py|62|Hex High Entropy String|562bb26bf0656b9ae707a4f535b299118500639f
+tests/architecture/test_phase2_gap_closure.py|63|Hex High Entropy String|4b587c3c69dfd5ccf2823c455002130c930d490d
+tests/architecture/test_phase2_gap_closure.py|64|Hex High Entropy String|e60d885472c681c9673909d89b4dac77a0a2033e
+tests/architecture/test_phase2_gap_closure.py|65|Hex High Entropy String|2bfdb456589e0ad7a13491152d8aa1e2899f11a8
+tests/architecture/test_phase2_gap_closure.py|66|Hex High Entropy String|ad2bf777b582262c72344aa285996ab29e2c3a29
+tests/architecture/test_phase2_gap_closure.py|67|Hex High Entropy String|d922e3de97b8d42d8353fdee1bade49e96763e76
+tests/architecture/test_phase2_gap_closure.py|68|Hex High Entropy String|57de6d1704fcfc8b0486673dafd8e57563cb813d
+tests/architecture/test_phase2_gap_closure.py|69|Hex High Entropy String|d740d494b499202e127d5777a7acba1a0a459429
+tests/architecture/test_phase2_gap_closure.py|70|Hex High Entropy String|0edf0df42184e8e637e1f02de37fa1c539d045b1
+tests/architecture/test_phase2_gap_closure.py|71|Hex High Entropy String|1bd3f19008dacbfa8d08402566ec721419b21c79
+tests/architecture/test_phase2_gap_closure.py|72|Hex High Entropy String|c10917cc93021b12770e8575570b063dd12edfdb
+tests/architecture/test_phase2_gap_closure.py|73|Hex High Entropy String|16057707afdd498ae5478d5486e85173fa20e237
+tests/architecture/test_phase2_gap_closure.py|74|Hex High Entropy String|396782bd9ba8540ec6787ee9354d87d70fc5e822
+tests/architecture/test_phase2_gap_closure.py|75|Hex High Entropy String|94e0b1ddfedd502a19d22b45445a3bd9621b8b7a
+tests/architecture/test_phase2_gap_closure.py|77|Hex High Entropy String|2e1b0e04a5cb43582ddf32197e8049f567df8c5c
+tests/architecture/test_phase2_gap_closure.py|78|Hex High Entropy String|4bf9f72d2c506a1dc47dbe9bd7d4afadc06d52d3
+tests/architecture/test_phase2_gap_closure.py|79|Hex High Entropy String|687f8291590033bfe8a913110c535b8159f5d66d
+tests/architecture/test_phase2_gap_closure.py|80|Hex High Entropy String|463d7c3109f2ecfa6cb927c53ed986be6ded544e
+tests/architecture/test_phase2_gap_closure.py|81|Hex High Entropy String|07633598be1a9cc0f8ff4eea50b53019d6b5c811
+tests/architecture/test_phase2_gap_closure.py|82|Hex High Entropy String|e0267f8c6a7f93f317d4e3ee080d3b6b34c89b8c
+tests/architecture/test_phase2_gap_closure.py|85|Hex High Entropy String|c943b7c5d845dfd3f552e0c2155b3528a8ad31ef
+tests/architecture/test_phase2_gap_closure.py|86|Hex High Entropy String|9941c20e13fe5266a34240bba6a7d074cc99f08a
+tests/architecture/test_phase2_gap_closure.py|87|Hex High Entropy String|9b99026574d85e39fa678c435b217af18e026e3e
+tests/architecture/test_phase2_gap_closure.py|90|Hex High Entropy String|35870f97f8793daa8fd5f889556cf8b204f07acd
+tests/architecture/test_phase2_gap_closure.py|91|Hex High Entropy String|c56e9fc5e1743b66049cf86c1865e66559a3c065
+tests/architecture/test_phase2_gap_closure.py|92|Hex High Entropy String|db366f18fe58722e9d93ba49c9fcd6961947bf3c
+tests/architecture/test_phase2_gap_closure.py|93|Hex High Entropy String|c008ca85001a9b0db883a925b292e056b7de3ad2
+tests/architecture/test_phase2_gap_closure.py|94|Hex High Entropy String|b30221ec453984441e0fcfb20a55dfcc598bf316
+tests/architecture/test_phase2_gap_closure.py|95|Hex High Entropy String|da7942e506abd934e8e9b281ec0cfacf8d928254
+tests/architecture/test_phase2_gap_closure.py|96|Hex High Entropy String|0cc14d34ab3a94303db0387e6d7635a957c94fc8
+tests/architecture/test_phase2_gap_closure.py|97|Hex High Entropy String|960b27719c11d5aad565fd4709b3dde569769a18
+tests/architecture/test_phase2_gap_closure.py|98|Hex High Entropy String|c9a9a0ddf0c2adf994402955cc84944b7e14f351
+tests/architecture/test_phase2_live_provider_smoke.py|123|Secret Keyword|70fc6e0d262430f6631fe63e5bfeea516e31a638
+tests/architecture/test_phase2_live_provider_smoke.py|124|Secret Keyword|1de639a3d621921d3f0f3b5a1d7ebb55ae2d14bf
+tests/architecture/test_phase2_live_provider_smoke.py|162|Secret Keyword|691ad370655555d3143654d4e7ecdda5282437c5
 tests/auth/test_bootstrap_admin.py|137|Secret Keyword|985a4d67132193977275067aca18c13f8c8371c8
 tests/auth/test_bootstrap_admin.py|148|Secret Keyword|d36b093dec485bfd20ef697ca6c1ad79e1ac9210
 tests/auth/test_bootstrap_admin.py|236|Secret Keyword|3da24dfed48aa2721da14e6f79e588440b934675
 tests/auth/test_bootstrap_admin.py|296|Secret Keyword|028e59d8204d08fecd6aad12434b872fe4319f6d
 tests/auth/test_bootstrap_admin.py|411|Secret Keyword|5d9dec21ffdbb45c64f0ea2b1abf3b25c2afc728
-tests/auth/test_bootstrap_admin.py|586|Secret Keyword|1123e04e3b43d460543f1b0bf94e67a0a636b2cc
-tests/auth/test_bootstrap_admin.py|689|Secret Keyword|cdd076c21ce35f40d40b6c16d12bd40876050a6f
-tests/auth/test_bootstrap_admin.py|767|Secret Keyword|18468712bc6eede8cb7adf8932b073bf56773a11
+tests/auth/test_bootstrap_admin.py|589|Secret Keyword|1123e04e3b43d460543f1b0bf94e67a0a636b2cc
+tests/auth/test_bootstrap_admin.py|692|Secret Keyword|cdd076c21ce35f40d40b6c16d12bd40876050a6f
+tests/auth/test_bootstrap_admin.py|770|Secret Keyword|18468712bc6eede8cb7adf8932b073bf56773a11
 tests/auth/test_login.py|45|Secret Keyword|e7e0ea25217b715c566268c0607e48acef3b9ccf
 tests/auth/test_password_change.py|188|Secret Keyword|a95b347855753c3b784594a28fa00ec116430d1c
 tests/auth/test_password_change.py|36|Secret Keyword|bc27f09f74d82f81b559a27a26bd03f580960364
 tests/auth/test_password_change.py|37|Secret Keyword|ba8d4568d2e2f6531c78080cedddb3a16f08afd5
 tests/integration/test_bitbucket_discovery.py|735|Base64 High Entropy String|8eb6a2543a00fa38b9a717242e592d4afa7f80cf
-tests/unit/services/test_admin_users.py|335|Secret Keyword|374997990c71d0ff9a4f7a41bc0ceb63a2110237
+tests/unit/services/test_admin_users.py|596|Secret Keyword|374997990c71d0ff9a4f7a41bc0ceb63a2110237
 AUDITED_FALSE_POSITIVES
 }
 

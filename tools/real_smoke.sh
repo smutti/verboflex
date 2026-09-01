@@ -111,6 +111,7 @@ settings_check() {
 
 preflight() {
   local runtime env_file backend_port frontend_port secret rc
+  local bitbucket_client_secret bitbucket_keyring
   command -v docker >/dev/null 2>&1 || die "Docker is unavailable"
   docker info >/dev/null 2>&1 || die "Docker daemon is unavailable"
   runtime=$(mktemp -d /tmp/verboflex-phase01-smoke-preflight.XXXXXX)
@@ -133,6 +134,11 @@ preflight() {
   backend_port=$(random_port)
   frontend_port=$(random_port)
   while [ "$frontend_port" = "$backend_port" ]; do frontend_port=$(random_port); done
+  bitbucket_client_secret=$(openssl rand -hex 24)
+  bitbucket_keyring=$(
+    cd "$BACKEND_ROOT"
+    uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+  )
   : >"$env_file"
   chmod 600 "$env_file"
   printf '%s\n' \
@@ -142,6 +148,9 @@ preflight() {
     'VERBOFLEX_REFRESH_COOKIE_SECURE=true' \
     "VERBOFLEX_BACKEND_PORT=$backend_port" \
     "VERBOFLEX_FRONTEND_PORT=$frontend_port" \
+    'VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID=phase01-smoke-preflight' \
+    "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET=$bitbucket_client_secret" \
+    "VERBOFLEX_BITBUCKET_TOKEN_ENCRYPTION_KEYRING=$bitbucket_keyring" \
     "VITE_API_BASE_URL=http://localhost:$backend_port" \
     'VERBOFLEX_IMAGE_TAG=phase01-smoke-preflight' >"$env_file"
   docker compose --project-name "verboflex_phase01_preflight_$$" --env-file "$env_file" \
@@ -181,6 +190,7 @@ cleanup() {
 
 initialize_runtime() {
   local backend_port frontend_port secret postgres_password suffix
+  local bitbucket_client_secret bitbucket_keyring
   suffix="$$-$(date +%s)"
   SMOKE_PROJECT="verboflex_phase01_smoke_${suffix//-/_}"
   SMOKE_RUNTIME_DIR=$(mktemp -d /tmp/verboflex-phase01-smoke.XXXXXX)
@@ -194,6 +204,11 @@ initialize_runtime() {
   while [ "$frontend_port" = "$backend_port" ]; do frontend_port=$(random_port); done
   secret=$(openssl rand -hex 32)
   postgres_password=$(openssl rand -hex 24)
+  bitbucket_client_secret=$(openssl rand -hex 24)
+  bitbucket_keyring=$(
+    cd "$BACKEND_ROOT"
+    uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+  )
   SMOKE_TEMP_PASSWORD="TemporarySmoke$(openssl rand -hex 12)!"
   SMOKE_NEW_PASSWORD="OrdinarySmoke$(openssl rand -hex 12)!"
   SMOKE_BACKEND_URL="http://localhost:$backend_port"
@@ -206,6 +221,9 @@ initialize_runtime() {
     'VERBOFLEX_REFRESH_COOKIE_SECURE=true' \
     "VERBOFLEX_BACKEND_PORT=$backend_port" \
     "VERBOFLEX_FRONTEND_PORT=$frontend_port" \
+    'VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID=phase01-smoke' \
+    "VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET=$bitbucket_client_secret" \
+    "VERBOFLEX_BITBUCKET_TOKEN_ENCRYPTION_KEYRING=$bitbucket_keyring" \
     "VITE_API_BASE_URL=$SMOKE_BACKEND_URL" \
     "VERBOFLEX_IMAGE_TAG=$SMOKE_IMAGE_TAG" >"$SMOKE_ENV_FILE"
 }
