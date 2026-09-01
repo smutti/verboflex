@@ -13,11 +13,11 @@ import {
   confirmAdminPreviewJob,
   createAdminActiveRevisionRevalidationJob,
   createAdminPreviewJob,
+  getAdminRepositoryBranch,
   getAdminActiveRevisionRevalidationJob,
   getAdminProduct,
   getAdminProductReactivationEligibility,
   listAdminRevisionMappings,
-  listAdminRepositoryBranches,
   publishAdminProductCandidate,
   reactivateAdminProduct,
   type AdminActiveRevisionRevalidationJobResponse,
@@ -225,18 +225,15 @@ async function resolveCommits(
       if (side.branch === "" || side.repositoryId === "") {
         throw new Error();
       }
-      const result = await listAdminRepositoryBranches({
+      const result = await getAdminRepositoryBranch({
         auth: accessToken,
         path: { repository_id: side.repositoryId },
-        query: { cursor: null, limit: 100 },
+        query: { branch_name: side.branch },
       });
-      const branch = result.data?.items.find(
-        (item) => item.name === side.branch,
-      );
-      if (branch === undefined) {
+      if (result.data === undefined || result.data.name !== side.branch) {
         throw new Error();
       }
-      return { commit_hash: branch.commit_hash, role: side.role };
+      return { commit_hash: result.data.commit_hash, role: side.role };
     }),
   );
 }
