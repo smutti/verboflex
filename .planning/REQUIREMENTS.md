@@ -19,30 +19,30 @@
 ### Authentication and Roles
 
 - [x] **AUTH-01**: User can authenticate to the backend with an internal corporate-email/password account using OAuth2 bearer-token authentication; bootstrapped or reset credentials require a password change before normal application access.
-- [x] **AUTH-02**: Admin can create, update, administratively reset passwords for, deactivate, and view internal users.
-- [x] **AUTH-03**: Admin can assign multiple roles to the same user.
+- [ ] **AUTH-02**: Admin can create, update, administratively reset passwords for, deactivate, and view internal users.
+- [ ] **AUTH-03**: Admin can assign multiple roles to the same user.
 - [x] **AUTH-04**: System supports the roles admin, product manager/reviewer, translator, and viewer.
 - [ ] **AUTH-05**: Backend enforces role-based authorization on admin configuration, translation editing, approval, commenting, and PR submission APIs.
 - [ ] **AUTH-06**: Frontend hides or disables actions the authenticated user is not authorized to perform.
 
 ### Product and Repository Configuration
 
-- [x] **PROD-01**: Admin can create and edit a product record with name, description, and active/inactive status.
-- [x] **PROD-02**: Admin can configure one or more Bitbucket Cloud repositories for a product.
-- [x] **PROD-03**: Admin can configure the source branch the platform reads from for each repository mapping.
-- [x] **PROD-04**: Admin can configure allowed target branches for translation pull requests.
-- [x] **PROD-05**: Admin can configure product-specific pull request grouping behavior.
-- [x] **PROD-06**: Admin can configure whether translations live directly in the product repository or in a linked translation repository.
-- [x] **PROD-07**: Admin can configure links between a repository containing translation keys and a separate Bitbucket project/repository containing translated values.
-- [x] **PROD-08**: Admin can validate a repository mapping by previewing detected files, languages, sample keys, and sample translations before enabling imports.
-- [x] **PROD-09**: Admin can configure the localization file format used by each mapping.
+- [ ] **PROD-01**: Admin can create and edit a product record with name, description, and active/inactive status.
+- [ ] **PROD-02**: Admin can configure one or more Bitbucket Cloud repositories for a product.
+- [ ] **PROD-03**: Admin can configure the source branch the platform reads from for each repository mapping.
+- [ ] **PROD-04**: Admin can configure allowed target branches for translation pull requests.
+- [ ] **PROD-05**: Admin can configure product-specific pull request grouping behavior.
+- [ ] **PROD-06**: Admin can configure whether translations live directly in the product repository or in a linked translation repository.
+- [ ] **PROD-07**: Admin can configure links between a repository containing translation keys and a separate Bitbucket project/repository containing translated values.
+- [ ] **PROD-08**: Admin can validate a repository mapping by previewing detected files, languages, sample keys, and sample translations before enabling imports.
+- [ ] **PROD-09**: Admin can configure the localization file format used by each mapping.
 
 ### Bitbucket Cloud Integration
 
-- [x] **BITB-01**: Admin can connect, reconnect, revoke, and view bounded status for the single organization-wide Bitbucket Cloud OAuth 2.0 connection used for repository access.
+- [ ] **BITB-01**: Admin can connect, reconnect, revoke, and view bounded status for the single organization-wide Bitbucket Cloud OAuth 2.0 connection used for repository access.
 - [ ] **BITB-02**: System validates and reports Bitbucket Cloud capabilities required by configured read/import operations and the later write/pull-request profile without silently expanding OAuth scopes.
-- [x] **BITB-03**: System can list configured repository branches from Bitbucket Cloud.
-- [x] **BITB-04**: System can read configured localization files from the configured Bitbucket Cloud source branch.
+- [ ] **BITB-03**: System can list configured repository branches from Bitbucket Cloud.
+- [ ] **BITB-04**: System can read configured localization files from the configured Bitbucket Cloud source branch.
 - [ ] **BITB-05**: System stores the source commit hash and file reference used for each import.
 - [ ] **BITB-06**: System reports Bitbucket connection, permission, and import errors in a way admins can act on.
 
@@ -113,7 +113,7 @@
 
 - [x] **UI-01**: Frontend uses shadcn/ui primitives for core controls such as buttons, inputs, selects, dialogs, sheets, badges, tooltips, tabs, tables, sidebars, and toasts.
 - [ ] **UI-02**: Review workspace presents filters, results, translation detail, comments, state controls, and constraint status in a dense task-focused layout.
-- [x] **UI-03**: Admin configuration screens provide clear validation feedback for repository, branch, mapping, and credential setup.
+- [ ] **UI-03**: Admin configuration screens provide clear validation feedback for repository, branch, mapping, and credential setup.
 - [ ] **UI-04**: Frontend shows background job status for imports and PR submissions without blocking the user interface.
 
 ## v2 Requirements
@@ -181,24 +181,24 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PLAT-06 | Phase 1 | Complete |
 | PLAT-07 | Phase 9 | Pending |
 | AUTH-01 | Phase 1 | Complete |
-| AUTH-02 | Phase 2 | Complete |
-| AUTH-03 | Phase 2 | Complete |
+| AUTH-02 | Phase 2 | Gaps Found |
+| AUTH-03 | Phase 2 | Gaps Found |
 | AUTH-04 | Phase 1 | Complete |
 | AUTH-05 | Phase 9 | Pending |
 | AUTH-06 | Phase 9 | Pending |
-| PROD-01 | Phase 2 | Complete |
-| PROD-02 | Phase 2 | Complete |
-| PROD-03 | Phase 2 | Complete |
-| PROD-04 | Phase 2 | Complete |
-| PROD-05 | Phase 2 | Complete |
-| PROD-06 | Phase 2 | Complete |
-| PROD-07 | Phase 2 | Complete |
-| PROD-08 | Phase 2 | Complete |
-| PROD-09 | Phase 2 | Complete |
-| BITB-01 | Phase 2 | Complete |
+| PROD-01 | Phase 2 | Gaps Found |
+| PROD-02 | Phase 2 | Gaps Found |
+| PROD-03 | Phase 2 | Gaps Found |
+| PROD-04 | Phase 2 | Gaps Found |
+| PROD-05 | Phase 2 | Gaps Found |
+| PROD-06 | Phase 2 | Gaps Found |
+| PROD-07 | Phase 2 | Gaps Found |
+| PROD-08 | Phase 2 | Gaps Found |
+| PROD-09 | Phase 2 | Gaps Found |
+| BITB-01 | Phase 2 | Gaps Found |
 | BITB-02 | Phase 3 | Pending |
-| BITB-03 | Phase 2 | Complete |
-| BITB-04 | Phase 2 | Complete |
+| BITB-03 | Phase 2 | Gaps Found |
+| BITB-04 | Phase 2 | Gaps Found |
 | BITB-05 | Phase 3 | Pending |
 | BITB-06 | Phase 3 | Pending |
 | FMT-01 | Phase 4 | Pending |
@@ -248,7 +248,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PR-11 | Phase 8 | Pending |
 | UI-01 | Phase 1 | Complete |
 | UI-02 | Phase 6 | Pending |
-| UI-03 | Phase 2 | Complete |
+| UI-03 | Phase 2 | Gaps Found |
 | UI-04 | Phase 8 | Pending |
 
 **Coverage:**
