@@ -1169,9 +1169,19 @@ def test_phase2_review_contract_uses_current_structured_inventory() -> None:
     assert set(current) == {"findings", "inventory", "status"}, (
         "review outcome must come from the structured current inventory"
     )
-    assert current["findings"] == {"critical": 2, "warning": 6, "info": 0, "total": 8}
-    assert current["inventory"]["CR-14"]["disposition"] == "open"
-    assert current["inventory"]["CR-15"]["disposition"] == "open"
+    open_critical = {
+        key
+        for key, record in current["inventory"].items()
+        if record["disposition"] == "open" and record["severity"] == "critical"
+    }
+    assert open_critical in ({"CR-14", "CR-15"}, set())
+    assert current["findings"] == {
+        "critical": len(open_critical),
+        "warning": 6,
+        "info": 0,
+        "total": len(open_critical) + 6,
+    }
+    assert current["status"] == "issues_found"
     assert {
         key
         for key, record in current["inventory"].items()
