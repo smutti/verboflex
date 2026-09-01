@@ -14,13 +14,14 @@ Product teams can quickly find, review, constrain, modify, comment on, and appro
 
 ### Validated
 
-(None yet - ship to validate)
+- [x] Admin can configure products, Bitbucket Cloud repositories, source branches to read from, and target branches for changes. — Phase 2
+- [x] Admin can configure product-specific links between repositories when translation keys and translated values live in different Bitbucket projects. — Phase 2
+- [x] Admin can configure project-specific pull request behavior for translation updates. — Phase 2
+- [x] Platform supports internal corporate-email/password accounts and a role model with users able to hold multiple roles. — Phases 1–2
+- [x] Initial roles include admin, product manager/reviewer, translator, and viewer. — Phases 1–2
 
 ### Active
 
-- [ ] Admin can configure products, Bitbucket Cloud repositories, source branches to read from, and target branches for changes.
-- [ ] Admin can configure product-specific links between repositories when translation keys and translated values live in different Bitbucket projects.
-- [ ] Admin can configure project-specific pull request behavior for translation updates.
 - [ ] Platform can read and parse localized strings from Android XML string resources.
 - [ ] Platform can read and parse localized strings from Qt `.ts` translation files.
 - [ ] Platform can read and parse localized strings from JSON localization files.
@@ -33,8 +34,6 @@ Product teams can quickly find, review, constrain, modify, comment on, and appro
 - [ ] Authorized users can review a translation and mark it as draft, approved, or rejected.
 - [ ] Authorized users can modify translation text directly in the platform.
 - [ ] Authorized users can add comments to individual translations.
-- [ ] Platform supports internal corporate-email/password accounts and a role model with users able to hold multiple roles.
-- [ ] Initial roles include admin, product manager/reviewer, translator, and viewer.
 - [ ] When translation changes are submitted, the platform commits them back to the relevant Bitbucket Cloud repository.
 - [ ] When translation changes are submitted, the platform opens a pull request against the configured or user-selected target branch according to the product's PR configuration.
 
@@ -93,6 +92,11 @@ The initial review model is intentionally simple. Translations have draft, appro
 | Use PostgreSQL with SQLAlchemy and Alembic | PostgreSQL fits the relational model, while Alembic provides versioned schema migrations. | - Pending |
 | Use OAuth2 for authentication | Matches the desired auth model while keeping roles and permissions enforced by the backend. | - Pending |
 | Require per-phase quality gates | Each phase should add or update tests, complete code review, and verify build/deploy behavior before being marked complete. | - Pending |
+| Publish immutable active product revisions | Admin edits remain isolated in candidate revisions and publication swaps the active revision atomically, so readers never observe partial configuration. | Accepted 2026-09-01 |
+| Use one organizational Bitbucket client-credentials connection | VerboFlex uses encrypted, generation-bound, access-only credentials with exact repository read scope; Phase 2 performs no provider writes. | Accepted 2026-09-01 |
+| Keep repository identity global and mappings revision-specific | Repositories are reusable global identities, while branches, layouts, translation targets, and PR grouping belong to the product revision; each mapping represents exactly one layout. | Accepted 2026-09-01 |
+| Bind previews to immutable repository commits | Preview resolves a branch once, then parses bounded content from that immutable commit with fail-closed format handling. | Accepted 2026-09-01 |
+| Let the router own dirty-form navigation transactions | Product and mapping navigation cannot discard unsaved changes until the authoritative route transition commits. | Accepted 2026-09-01 |
 
 ## Evolution
 
@@ -112,4 +116,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-03 after initialization*
+*Last updated: 2026-09-01 after Phase 2*

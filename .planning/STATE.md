@@ -20,10 +20,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-24)
+See: .planning/PROJECT.md (updated 2026-09-01)
 
 **Core value:** Product teams can quickly find, review, constrain, modify, comment on, and approve translations, then send approved changes back through the standard Bitbucket Cloud pull request workflow.
-**Current focus:** Phase 02 — Admin Configuration
+**Current focus:** Phase 3 — Bitbucket Import Integration
 
 ## Current Position
 
@@ -32,7 +32,7 @@ Plan: Not started
 Status: Ready to plan
 Last activity: 2026-09-01 — Phase 02 complete, transitioned to Phase 3
 
-Progress: [█░░░░░░░░░] 11%
+Progress: [████████████████████] 61/61 plans (100%)
 
 ## Performance Metrics
 
@@ -327,6 +327,8 @@ None yet.
 ### Blockers/Concerns
 
 - Phase 2 implementation must preserve the resolved A-01 product-name contract, A-02 preview encoding/shape matrix, A-03 operational bounds, and the explicit dependency-legitimacy checkpoints.
+- Before Phase 3 execution, run `$gsd-secure-phase 2`; the Phase 2 verification passed, but its security transition artifact has not yet been produced.
+- Six non-blocking Phase 2 review warnings remain open: provider expiry upper bound, development dependency advisory, mutable container tags, missing Phase 2 `.env.example` settings, omitted executable edge-matrix data from the source manifest, and the deprecated default no-flag Compose flow.
 - Phase 3 must define import-grade capability checks and recovery behavior without silently expanding the Phase 2 read-only OAuth scope.
 - Phase 7 must define the exact Qt `.ts` and other format-preserving edit contract while extending, not duplicating, the Phase 4 golden parser corpus.
 
