@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -22,6 +23,7 @@ import {
   type AdminRepositoryResponse,
   type AdminSeparateMappingWriteRequest,
 } from "../../../api/client";
+import { useDirtyFormNavigationGuard } from "../../../components/navigation/DirtyFormNavigationGuard";
 import {
   Alert,
   AlertDescription,
@@ -70,6 +72,76 @@ type MappingConflictField =
   | "mapping_identity"
   | "source_branch"
   | "translations_source_branch";
+
+interface MappingDraftFingerprintInput {
+  allowedTargetBranches: string[];
+  defaultTargetBranch: string;
+  directRepositoryId: string;
+  directSourceBranch: string;
+  keysRepositoryId: string;
+  keysSourceBranch: string;
+  topology: Topology;
+  translationsRepositoryId: string;
+  translationsSourceBranch: string;
+}
+
+function mappingDraftFingerprint(input: MappingDraftFingerprintInput) {
+  const allowedTargetBranches = Array.from(
+    new Set(input.allowedTargetBranches),
+  ).sort();
+  return JSON.stringify(
+    input.topology === "direct"
+      ? {
+          allowedTargetBranches,
+          defaultTargetBranch: input.defaultTargetBranch,
+          primaryRepositoryId: input.directRepositoryId,
+          primarySourceBranch: input.directSourceBranch,
+          topology: input.topology,
+          translationsRepositoryId: null,
+          translationsSourceBranch: null,
+        }
+      : {
+          allowedTargetBranches,
+          defaultTargetBranch: input.defaultTargetBranch,
+          primaryRepositoryId: input.keysRepositoryId,
+          primarySourceBranch: input.keysSourceBranch,
+          topology: input.topology,
+          translationsRepositoryId: input.translationsRepositoryId,
+          translationsSourceBranch: input.translationsSourceBranch,
+        },
+  );
+}
+
+function savedMappingFingerprint(mapping: AdminMappingResponse | null) {
+  if (mapping === null) {
+    return mappingDraftFingerprint({
+      allowedTargetBranches: [],
+      defaultTargetBranch: "",
+      directRepositoryId: "",
+      directSourceBranch: "",
+      keysRepositoryId: "",
+      keysSourceBranch: "",
+      topology: "direct",
+      translationsRepositoryId: "",
+      translationsSourceBranch: "",
+    });
+  }
+  return mappingDraftFingerprint({
+    allowedTargetBranches: mapping.allowed_target_branches,
+    defaultTargetBranch: mapping.default_target_branch,
+    directRepositoryId:
+      mapping.topology === "direct" ? mapping.primary_repository_id : "",
+    directSourceBranch:
+      mapping.topology === "direct" ? mapping.primary_source_branch : "",
+    keysRepositoryId:
+      mapping.topology === "separate" ? mapping.primary_repository_id : "",
+    keysSourceBranch:
+      mapping.topology === "separate" ? mapping.primary_source_branch : "",
+    topology: mapping.topology,
+    translationsRepositoryId: mapping.translations_repository_id ?? "",
+    translationsSourceBranch: mapping.translations_source_branch ?? "",
+  });
+}
 
 export interface ProductMappingsPageProps {
   accessToken: string;
@@ -330,6 +402,39 @@ export function ProductMappingsPage({
     | { kind: "generic" | "invalid" }
     | null
   >(null);
+  const currentDraftFingerprint = useMemo(
+    () =>
+      mappingDraftFingerprint({
+        allowedTargetBranches,
+        defaultTargetBranch,
+        directRepositoryId,
+        directSourceBranch,
+        keysRepositoryId,
+        keysSourceBranch,
+        topology,
+        translationsRepositoryId,
+        translationsSourceBranch,
+      }),
+    [
+      allowedTargetBranches,
+      defaultTargetBranch,
+      directRepositoryId,
+      directSourceBranch,
+      keysRepositoryId,
+      keysSourceBranch,
+      topology,
+      translationsRepositoryId,
+      translationsSourceBranch,
+    ],
+  );
+  const baselineDraftFingerprint = useMemo(
+    () => savedMappingFingerprint(editingMapping),
+    [editingMapping],
+  );
+  useDirtyFormNavigationGuard(
+    `mapping:${productId}`,
+    currentDraftFingerprint !== baselineDraftFingerprint,
+  );
 
   const loadRepositoryPage = useCallback(
     async (cursor: string | null, signal: AbortSignal) => {

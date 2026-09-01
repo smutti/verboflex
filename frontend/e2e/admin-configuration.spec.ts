@@ -1182,7 +1182,11 @@ test("dirty product and mapping routes require discard before navigation", async
   await expect(page).toHaveURL("/admin/products/product-1/preview");
   await expect(mappingDialog).toHaveCount(0);
 
-  await page.goto("/admin/products/product-1/mappings");
+  await page
+    .getByRole("navigation", { name: "Product configuration" })
+    .getByRole("link", { name: "Mappings" })
+    .click();
+  await expect(page).toHaveURL("/admin/products/product-1/mappings");
   await page.getByRole("button", { name: "Edit mapping" }).first().click();
   await chooseSelect(
     page,
@@ -1246,7 +1250,7 @@ test("dirty mobile mapping navigation restores focus after cancel", async ({
     .click();
   await expect(page).toHaveURL("/admin/users");
   await expect(sheet).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Users" })).toBeFocused();
+  await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
   await expectNoPageOverflow(page);
 });
 

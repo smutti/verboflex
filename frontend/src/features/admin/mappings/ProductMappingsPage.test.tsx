@@ -699,6 +699,8 @@ describe("administrator mapping cursor collections", () => {
     );
     await user.click(screen.getByLabelText("Allow target main"));
     await user.click(screen.getByLabelText("Allow target main"));
+    await user.click(screen.getByRole("combobox", { name: "Default target" }));
+    await user.click(screen.getByRole("option", { name: "main" }));
     await user.click(screen.getByRole("link", { name: "Users destination" }));
     expect(
       screen.queryByRole("alertdialog", { name: "Leave without saving?" }),
