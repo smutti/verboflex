@@ -490,6 +490,12 @@ describe("administrator mapping cursor collections", () => {
       ).toHaveTextContent("translations/main");
     });
     await userEvent.click(screen.getByRole("button", { name: "Cancel edit" }));
+    await userEvent.click(
+      screen.getByRole("link", { name: "Users destination" }),
+    );
+    expect(
+      screen.queryByRole("alertdialog", { name: "Leave without saving?" }),
+    ).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("radio", { name: "Separate" }));
     await userEvent.click(
@@ -531,6 +537,12 @@ describe("administrator mapping cursor collections", () => {
     await waitFor(() =>
       expect(createAdminCandidateMappingMock).toHaveBeenCalledOnce(),
     );
+    await userEvent.click(
+      screen.getByRole("link", { name: "Users destination" }),
+    );
+    expect(
+      screen.queryByRole("alertdialog", { name: "Leave without saving?" }),
+    ).not.toBeInTheDocument();
   });
 
   it("maps rejected server-version loads to the bounded page error", async () => {
@@ -755,5 +767,100 @@ describe("administrator mapping cursor collections", () => {
       screen.getByRole("combobox", { name: "Repository" }),
     ).toHaveTextContent("Application source");
     expect(link).toHaveFocus();
+  });
+
+  it("protects every separate-side field through generic and conflict save failures", async () => {
+    const translationsRepository = {
+      ...repository,
+      id: "00000000-0000-4000-8000-000000000302",
+      descriptive_name: "Translations source",
+      repository_slug: "translations",
+    };
+    listAdminRepositoriesMock.mockResolvedValue(
+      ok({
+        items: [repository, translationsRepository],
+        next_cursor: null,
+      }),
+    );
+    listAdminCandidateMappingsMock.mockResolvedValue(
+      ok({ items: [], next_cursor: null }),
+    );
+    listAdminRepositoryBranchesMock.mockResolvedValue(
+      ok({
+        items: [
+          { name: "keys/main", commit_hash: "a".repeat(40) },
+          { name: "translations/main", commit_hash: "b".repeat(40) },
+          { name: "release/2026", commit_hash: "c".repeat(40) },
+        ],
+        next_cursor: null,
+      }),
+    );
+    createAdminCandidateMappingMock
+      .mockResolvedValueOnce({
+        data: undefined,
+        error: { detail: "bounded failure" },
+        request: new Request("http://localhost/api/v1/admin"),
+        response: new Response(null, { status: 503 }),
+      } as never)
+      .mockResolvedValueOnce({
+        data: undefined,
+        error: { detail: "Candidate revision conflict" },
+        request: new Request("http://localhost/api/v1/admin"),
+        response: new Response(null, { status: 409 }),
+      } as never);
+    renderMappings();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("radio", { name: "Separate" }));
+    await user.click(screen.getByRole("button", { name: "Change topology" }));
+    await user.click(screen.getByRole("combobox", { name: "Keys repository" }));
+    await user.click(
+      screen.getByRole("option", { name: /Application source/ }),
+    );
+    await user.click(
+      screen.getByRole("combobox", { name: "Translations repository" }),
+    );
+    await user.click(
+      screen.getByRole("option", { name: /Translations source/ }),
+    );
+    await user.click(
+      screen.getByRole("combobox", { name: "Keys source branch" }),
+    );
+    await user.click(screen.getByRole("option", { name: "keys/main" }));
+    await user.click(
+      screen.getByRole("combobox", { name: "Translations source branch" }),
+    );
+    await user.click(screen.getByRole("option", { name: "translations/main" }));
+    await user.click(screen.getByLabelText("Allow target release/2026"));
+    await user.click(screen.getByRole("combobox", { name: "Default target" }));
+    await user.click(screen.getByRole("option", { name: "release/2026" }));
+
+    await user.click(screen.getByRole("button", { name: "Save mapping" }));
+    expect(await screen.findByText("Mapping not saved")).toBeVisible();
+    const push = screen.getByRole("button", { name: "PUSH destination" });
+    await user.click(push);
+    let dialog = await screen.findByRole("alertdialog", {
+      name: "Leave without saving?",
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Keep editing" }),
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Keys source branch" }),
+    ).toHaveTextContent("keys/main");
+    expect(
+      screen.getByRole("combobox", { name: "Translations source branch" }),
+    ).toHaveTextContent("translations/main");
+    expect(screen.getByLabelText("Allow target release/2026")).toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: "Save mapping" }));
+    expect(
+      await screen.findByText(/mapping conflicts with the current draft/i),
+    ).toBeVisible();
+    await user.click(screen.getByRole("link", { name: "Users destination" }));
+    dialog = await screen.findByRole("alertdialog", {
+      name: "Leave without saving?",
+    });
+    expect(dialog).toBeVisible();
   });
 });
