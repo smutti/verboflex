@@ -86,7 +86,7 @@ Plans:
   7. Guided shadcn admin screens provide actionable user, repository, mapping, OAuth, validation, and background-job states.
   8. Phase quality gate passes with RED→GREEN TDD evidence, code review, and backend/frontend/worker/deploy smoke verification.
 
-**Plans**: 43/43 plans executed (20 original plans, 23/23 gap-closure plans executed)
+**Plans**: 43/46 plans executed (20 original plans, 23/26 gap-closure plans executed)
 
 Plans:
 **Wave 1**
@@ -239,6 +239,18 @@ Plans:
 **Wave 36** *(gap closure final authority; blocked on every Plan 02-21 through 02-43)*
 
 - [x] 02-38-PLAN.md — Fresh critical-zero ASVS L1 review and independent `status: passed` verifier closeout
+
+**Wave 37** *(post-review gap closure; blocked on Wave 36 completion)*
+
+- [ ] 02-44-PLAN.md — Exact configured-branch detail for candidate and active-revision previews
+
+**Wave 38** *(post-review gap closure; blocked on Wave 37 completion)*
+
+- [ ] 02-45-PLAN.md — Router-native dirty product and mapping navigation protection
+
+**Wave 39** *(post-review closeout; blocked on Wave 38 completion)*
+
+- [ ] 02-46-PLAN.md — Structured semantic audit, fresh review, and independent verifier closeout
 
 ### Phase 3: Bitbucket Import Integration
 
