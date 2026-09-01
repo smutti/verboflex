@@ -40,6 +40,7 @@ import { Skeleton } from "../../../components/ui/skeleton";
 import { Textarea } from "../../../components/ui/textarea";
 import { ProductMappingsPage } from "../mappings/ProductMappingsPage";
 import { ProductRepositoriesPage } from "../repositories/ProductRepositoriesPage";
+import { useDirtyFormNavigationGuard } from "../../../components/navigation/DirtyFormNavigationGuard";
 
 export interface ProductWizardPageProps {
   accessToken: string;
@@ -283,6 +284,10 @@ export function ProductWizardPage({
 
   const dirty =
     name !== savedNameValue || description !== savedDescriptionValue;
+  useDirtyFormNavigationGuard(
+    `product-details:${routeProductId ?? initialProduct?.id ?? "new"}`,
+    dirty,
+  );
 
   const loadRouteProduct = useCallback(async () => {
     if (routeProductId === undefined || initialProduct !== undefined) {
@@ -343,31 +348,6 @@ export function ProductWizardPage({
       stepErrorRef.current?.focus();
     }
   }, [stepError]);
-
-  useEffect(() => {
-    if (!dirty) {
-      return;
-    }
-    const confirmDirtyExit = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    const confirmHistoryExit = () => {
-      if (
-        !window.confirm(
-          "Leave without saving?\n\nYour unsaved entries on this page will be lost.",
-        )
-      ) {
-        window.history.forward();
-      }
-    };
-    window.addEventListener("beforeunload", confirmDirtyExit);
-    window.addEventListener("popstate", confirmHistoryExit);
-    return () => {
-      window.removeEventListener("beforeunload", confirmDirtyExit);
-      window.removeEventListener("popstate", confirmHistoryExit);
-    };
-  }, [dirty]);
 
   function requestStep(step: number, event: MouseEvent<HTMLButtonElement>) {
     if (step === currentStep) {

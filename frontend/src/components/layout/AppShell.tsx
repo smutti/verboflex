@@ -8,7 +8,13 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Link, useInRouterContext, useLocation } from "react-router-dom";
 import { Button } from "../ui/button";
 import {
@@ -56,6 +62,33 @@ const ADMINISTRATION_DESTINATIONS: NavigationDestination[] = [
   { icon: Users, label: "Users", to: "/admin/users" },
   { icon: Cloud, label: "Bitbucket", to: "/admin/bitbucket" },
 ];
+
+function destinationMatches(pathname: string, destination: string) {
+  return destination === "/"
+    ? pathname === "/"
+    : pathname === destination || pathname.startsWith(`${destination}/`);
+}
+
+function MobileNavigationCommitObserver({
+  destination,
+  onCommit,
+}: {
+  destination: string | null;
+  onCommit: () => void;
+}) {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (
+      destination !== null &&
+      destinationMatches(location.pathname, destination)
+    ) {
+      onCommit();
+    }
+  }, [destination, location.pathname, onCommit]);
+
+  return null;
+}
 
 function DestinationContent({
   icon: Icon,
@@ -176,21 +209,44 @@ export function AppShell({
   principal,
 }: AppShellProps) {
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const [pendingMobileDestination, setPendingMobileDestination] = useState<
+    string | null
+  >(null);
   const pendingWorkspaceFocus = useRef(false);
   const showAdministration = principal.roles.includes("admin");
+  const isWithinRouter = useInRouterContext();
   const handleMobileNavigate = (destination: NavigationDestination) => {
     pendingWorkspaceFocus.current = destination.to === "/";
-    setNavigationOpen(false);
+    setPendingMobileDestination(destination.to);
   };
+
+  const commitMobileNavigation = useCallback(() => {
+    setNavigationOpen(false);
+    setPendingMobileDestination(null);
+  }, []);
+
+  function updateNavigationOpen(open: boolean) {
+    setNavigationOpen(open);
+    if (!open) {
+      setPendingMobileDestination(null);
+      pendingWorkspaceFocus.current = false;
+    }
+  }
 
   return (
     <div
       data-testid="app-shell"
       className="min-h-screen min-w-0 max-w-full overflow-x-clip bg-background text-foreground"
     >
+      {isWithinRouter ? (
+        <MobileNavigationCommitObserver
+          destination={pendingMobileDestination}
+          onCommit={commitMobileNavigation}
+        />
+      ) : null}
       <header className="flex items-center justify-between gap-4 border-b bg-secondary px-6 py-4 md:px-8">
         <div className="flex min-w-0 items-center gap-2">
-          <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
+          <Sheet open={navigationOpen} onOpenChange={updateNavigationOpen}>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>

@@ -629,7 +629,9 @@ describe("authenticated application shell", () => {
     expect(
       await screen.findByRole("alertdialog", { name: "Leave without saving?" }),
     ).toBeVisible();
-    expect(screen.getByRole("dialog", { name: "Navigation" })).toBeVisible();
+    expect(
+      document.querySelector('[data-slot="sheet-content"][data-state="open"]'),
+    ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/admin/users");
     await user.click(screen.getByRole("button", { name: "Keep editing" }));
     await waitFor(() => expect(productsLink).toHaveFocus());

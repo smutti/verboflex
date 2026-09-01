@@ -293,26 +293,41 @@ function LocationMarker() {
 }
 
 function renderWizard(initialProduct?: AdminProductResponse) {
-  return render(
-    <MemoryRouter>
-      <ProductWizardPage
-        accessToken="memory-only-admin-bearer"
-        initialProduct={initialProduct}
-      />
-    </MemoryRouter>,
+  const router = createMemoryRouter([
+    {
+      path: "*",
+      element: (
+        <DirtyFormNavigationProvider>
+          <ProductWizardPage
+            accessToken="memory-only-admin-bearer"
+            initialProduct={initialProduct}
+          />
+        </DirtyFormNavigationProvider>
+      ),
+    },
+  ]);
+  return render(<RouterProvider router={router} />);
+}
+
+function createRouteWizardRouter(accessToken: string) {
+  return createMemoryRouter(
+    [
+      {
+        path: "/admin/products/:productId/edit",
+        element: (
+          <DirtyFormNavigationProvider>
+            <ProductWizardPage accessToken={accessToken} />
+          </DirtyFormNavigationProvider>
+        ),
+      },
+    ],
+    { initialEntries: [`/admin/products/${activeProduct.id}/edit`] },
   );
 }
 
 function renderRouteWizard(accessToken = "memory-only-admin-bearer") {
   return render(
-    <MemoryRouter initialEntries={[`/admin/products/${activeProduct.id}/edit`]}>
-      <Routes>
-        <Route
-          path="/admin/products/:productId/edit"
-          element={<ProductWizardPage accessToken={accessToken} />}
-        />
-      </Routes>
-    </MemoryRouter>,
+    <RouterProvider router={createRouteWizardRouter(accessToken)} />,
   );
 }
 
@@ -364,6 +379,23 @@ function renderRoutedProductDetails({
     { initialEntries, initialIndex },
   );
   return { router, view: render(<RouterProvider router={router} />) };
+}
+
+function renderApplicationRouter(initialEntry: string) {
+  const router = createMemoryRouter(
+    [
+      {
+        path: "*",
+        element: (
+          <DirtyFormNavigationProvider>
+            <AppRouter />
+          </DirtyFormNavigationProvider>
+        ),
+      },
+    ],
+    { initialEntries: [initialEntry] },
+  );
+  return render(<RouterProvider router={router} />);
 }
 
 function renderOverview() {
@@ -1101,16 +1133,9 @@ describe("administrator product configuration tracer", () => {
     const view = renderRouteWizard("obsolete-authority");
     await waitFor(() => expect(getAdminProductMock).toHaveBeenCalledTimes(3));
     view.rerender(
-      <MemoryRouter
-        initialEntries={[`/admin/products/${activeProduct.id}/edit`]}
-      >
-        <Routes>
-          <Route
-            path="/admin/products/:productId/edit"
-            element={<ProductWizardPage accessToken="successor-authority" />}
-          />
-        </Routes>
-      </MemoryRouter>,
+      <RouterProvider
+        router={createRouteWizardRouter("successor-authority")}
+      />,
     );
     expect(await screen.findByRole("textbox", { name: "Name" })).toHaveValue(
       candidateOnlyProduct.name,
@@ -1210,16 +1235,9 @@ describe("administrator product configuration tracer", () => {
     const view = renderRouteWizard("obsolete-authority");
     await waitFor(() => expect(getAdminProductMock).toHaveBeenCalledOnce());
     view.rerender(
-      <MemoryRouter
-        initialEntries={[`/admin/products/${activeProduct.id}/edit`]}
-      >
-        <Routes>
-          <Route
-            path="/admin/products/:productId/edit"
-            element={<ProductWizardPage accessToken="successor-authority" />}
-          />
-        </Routes>
-      </MemoryRouter>,
+      <RouterProvider
+        router={createRouteWizardRouter("successor-authority")}
+      />,
     );
     expect(await screen.findByRole("textbox", { name: "Name" })).toHaveValue(
       candidateOnlyProduct.name,
@@ -2219,11 +2237,7 @@ describe("administrator product configuration tracer", () => {
     listAdminRevisionMappingsMock.mockResolvedValue(
       ok({ items: [], next_cursor: null }),
     );
-    const collectionView = render(
-      <MemoryRouter initialEntries={["/admin/products"]}>
-        <AppRouter />
-      </MemoryRouter>,
-    );
+    const collectionView = renderApplicationRouter("/admin/products");
 
     expect(
       await screen.findByRole("heading", { name: "Products" }),
@@ -2237,13 +2251,7 @@ describe("administrator product configuration tracer", () => {
     ).toBeVisible();
 
     collectionView.unmount();
-    render(
-      <MemoryRouter
-        initialEntries={[`/admin/products/${activeProduct.id}/overview`]}
-      >
-        <AppRouter />
-      </MemoryRouter>,
-    );
+    renderApplicationRouter(`/admin/products/${activeProduct.id}/overview`);
 
     expect(
       await screen.findByRole("heading", { name: activeProduct.name }),

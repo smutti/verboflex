@@ -2,7 +2,14 @@ import "@testing-library/jest-dom/vitest";
 
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  Route,
+  RouterProvider,
+  Routes,
+  useLocation,
+} from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -15,6 +22,7 @@ import {
   type RoleName,
 } from "./api/client";
 import { ProductDetailLayout } from "./features/admin/products/ProductDetailLayout";
+import { DirtyFormNavigationProvider } from "./components/navigation/DirtyFormNavigationGuard";
 import { SessionProvider } from "./features/auth/session";
 import { AdminApplicationRoutes, AppRouter, SessionRoutes } from "./router";
 
@@ -128,15 +136,24 @@ describe("session routes", () => {
       error: undefined,
     });
 
-    render(
-      <MemoryRouter initialEntries={[`/products/${productId}/edit`]}>
-        <AdminApplicationRoutes
-          accessToken="memory-only-admin-bearer"
-          currentUserId={adminPrincipal.id}
-        />
-        <LocationMarker />
-      </MemoryRouter>,
+    const router = createMemoryRouter(
+      [
+        {
+          path: "*",
+          element: (
+            <DirtyFormNavigationProvider>
+              <AdminApplicationRoutes
+                accessToken="memory-only-admin-bearer"
+                currentUserId={adminPrincipal.id}
+              />
+              <LocationMarker />
+            </DirtyFormNavigationProvider>
+          ),
+        },
+      ],
+      { initialEntries: [`/products/${productId}/edit`] },
     );
+    render(<RouterProvider router={router} />);
 
     expect(
       await screen.findByRole("heading", { name: "Published product name" }),
