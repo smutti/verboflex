@@ -16,6 +16,9 @@ grep -Fq 'real smoke preflight: PASS' "$output_file"
 for overlay in docker-compose.staging.yml docker-compose.prod.yml; do
   VERBOFLEX_POSTGRES_PASSWORD=fixture \
   VERBOFLEX_JWT_SECRET_KEY=fixture \
+  VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID=fixture-client-id \
+  VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET=fixture-client-secret \
+  VERBOFLEX_BITBUCKET_TOKEN_ENCRYPTION_KEYRING=fixture-keyring \
   VITE_API_BASE_URL=https://api.example.invalid \
     docker compose -f "$repo_root/docker-compose.yml" -f "$repo_root/$overlay" \
       config --format json >"$output_file"
@@ -25,6 +28,9 @@ for overlay in docker-compose.staging.yml docker-compose.prod.yml; do
 done
 
 grep -Fq 'TLS termination boundary' "$repo_root/docs/phase-01-smoke.md"
+grep -Fq 'VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID' "$repo_root/tools/real_smoke.sh"
+grep -Fq 'VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET' "$repo_root/tools/real_smoke.sh"
+grep -Fq 'VERBOFLEX_BITBUCKET_TOKEN_ENCRYPTION_KEYRING' "$repo_root/tools/real_smoke.sh"
 grep -Fq '__Host-verboflex_refresh' "$repo_root/tools/real_smoke.sh"
 grep -Fq 'pre-rotation-revoked-access' "$repo_root/tools/real_smoke.sh"
 grep -Fq 'successor-revoked-access' "$repo_root/tools/real_smoke.sh"
