@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Admin Configuration
 status: ready_to_execute
-stopped_at: Completed 02-42-PLAN.md
-last_updated: "2026-08-31T20:36:55.523Z"
+stopped_at: Completed 02-43-PLAN.md
+last_updated: "2026-09-01T07:14:34.788Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 02 critical gap planning complete — 43 plans total
-state_head: 3e9739feb9a263ace6fc9f26518ee05455fc2d06
+state_head: c0675af3cf946da1e5116f6aaeecba8d9011599c
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 58
-  completed_plans: 56
+  completed_plans: 57
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-24)
 ## Current Position
 
 Phase: 02 (Admin Configuration) — READY TO EXECUTE
-Plan: 41 of 43
+Plan: 42 of 43
 Status: Ready to execute
 Last activity: 2026-08-30 — Phase 02 critical gap planning complete
 
@@ -114,6 +114,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 02 P40 | 2h 18m | 2 tasks | 10 files |
 | Phase 02 P41 | 3h 54m | 2 tasks | 11 files |
 | Phase 02-admin-configuration P42 | 2h 37m | 2 tasks | 6 files |
+| Phase 02-admin-configuration P43 | 10h 28m | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -299,6 +300,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Published recovery badges and Reactivate gating derive only from exact server eligibility.
 - [Phase 02]: Active-revision recovery uses only generated eligibility, create, get, and confirm operations; candidate and provider-write shortcuts remain forbidden.
 - [Phase 02]: Recovery E2E authority requires an immutable graph snapshot plus ordered application and provider route audits.
+- [Phase 02]: The frontend image serves one canonical CSP plus XFO, nosniff, referrer, and permissions headers with Nginx always semantics.
+- [Phase 02]: The common smoke path verifies exact singleton headers on both root and deep SPA fallback after frontend readiness.
+- [Phase 02]: The supported gap-closure mode remains the phase-wide review authority; unsupported literal flags did not justify changing the CLI.
 
 ### Pending Todos
 
@@ -337,6 +341,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-31T20:36:55.469Z
-Stopped at: Completed 02-42-PLAN.md
+Last session: 2026-09-01T07:14:34.726Z
+Stopped at: Completed 02-43-PLAN.md
 Resume file: None

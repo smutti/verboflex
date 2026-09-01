@@ -86,7 +86,7 @@ Plans:
   7. Guided shadcn admin screens provide actionable user, repository, mapping, OAuth, validation, and background-job states.
   8. Phase quality gate passes with RED→GREEN TDD evidence, code review, and backend/frontend/worker/deploy smoke verification.
 
-**Plans**: 41/43 plans executed (20 original plans, 17/23 gap-closure plans executed)
+**Plans**: 42/43 plans executed (20 original plans, 17/23 gap-closure plans executed)
 
 Plans:
 **Wave 1**
@@ -234,7 +234,7 @@ Plans:
 
 **Wave 35** *(gap closure browser anti-framing; blocked on Wave 34 completion)*
 
-- [ ] 02-43-PLAN.md — Runtime Nginx CSP and frame-embedding denial
+- [x] 02-43-PLAN.md — Runtime Nginx CSP and frame-embedding denial
 
 **Wave 36** *(gap closure final authority; blocked on every Plan 02-21 through 02-43)*
 
@@ -427,7 +427,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Platform Foundation | 15/15 | Complete    | 2026-08-26 |
-| 2. Admin Configuration | 41/43 | In Progress|  |
+| 2. Admin Configuration | 42/43 | In Progress|  |
 | 3. Bitbucket Import Integration | 0/4 | Not started | - |
 | 4. Localization Parser Foundation | 0/7 | Not started | - |
 | 5. Import, Search, and Constraints | 0/6 | Not started | - |
