@@ -9,7 +9,7 @@ scope: bounded regression-fix delta dd80fbc..2faff96 after the prior typed revie
 diff_base: dd80fbc41d514ea99907f9475dd08e87f79ceddf
 reviewed_head: 2faff96e8c35b9964f7c458095fe9f1039a42e16
 previous_reviewed_source_digest: 2e93097910a805663c7ccad721f4f629b478bdd01efca95541c8509c5f0354a9
-reviewed_source_digest: b0f7e5f09c804d81ad86ccc0a68032b3a4a031f4c7a69d3dbeca65ab5be587f6
+reviewed_source_digest: bf9597261aee80e83d7ced33ec2a88162b7e47072507d174d30f97100214bf29
 files_reviewed: 4
 files_reviewed_list:
   - tools/gauntlet.sh
@@ -55,7 +55,7 @@ review_inventory:
 **Files Reviewed:** 4 changed source files
 **Status:** issues_found
 **Reviewed HEAD:** `2faff96e8c35b9964f7c458095fe9f1039a42e16`
-**Reviewed-source digest:** `b0f7e5f09c804d81ad86ccc0a68032b3a4a031f4c7a69d3dbeca65ab5be587f6`
+**Reviewed-source digest:** `bf9597261aee80e83d7ced33ec2a88162b7e47072507d174d30f97100214bf29`
 
 ## Narrative Findings (AI reviewer)
 

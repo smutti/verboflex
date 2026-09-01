@@ -3,7 +3,7 @@
 - Review-status: CLOSED
 - Open-critical-high: 0
 - Full-gauntlet-status: PASS
-- Reviewed-source-digest: `b0f7e5f09c804d81ad86ccc0a68032b3a4a031f4c7a69d3dbeca65ab5be587f6`
+- Reviewed-source-digest: `bf9597261aee80e83d7ced33ec2a88162b7e47072507d174d30f97100214bf29`
 - Review-standard: OWASP ASVS 5.0 Level 1
 - Review-scope: Complete Phase 2 diff `ce9fbeef86b00f594d1d06e15d3083d623c54095..7af1d1063ab6a795a42f0e26175fc2196ba6eda5`, all 290 full-review paths, the semantic-transition delta through `542903d39b11617c1985574eb4a5f7d32f9038cf`, and the regression-harness RED/GREEN delta through `2faff96e8c35b9964f7c458095fe9f1039a42e16`
 - Review-date: 2026-09-01
@@ -76,7 +76,7 @@ The post-close regression delta repaired only executable verification harnesses:
 - Changed-source coverage: backend 641/641 and frontend 746/746 lines, both 100%.
 - Mutation, migration, OpenAPI/client drift, static, secret, supply-chain, and architecture/provider gates passed under their declared thresholds.
 - Mock provider production browser smoke: 8/8 with five audited GETs and zero writes; both deployment-overlay worker-loss paths passed.
-- Fresh review digest after the regression-harness delta: `b0f7e5f09c804d81ad86ccc0a68032b3a4a031f4c7a69d3dbeca65ab5be587f6`.
+- Fresh review digest after the regression-harness delta: `bf9597261aee80e83d7ced33ec2a88162b7e47072507d174d30f97100214bf29`.
 
 ## Review Limits
 
