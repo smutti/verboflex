@@ -9,7 +9,14 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  Route,
+  RouterProvider,
+  Routes,
+  useLocation,
+} from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -22,6 +29,10 @@ import {
 import { App } from "../../App";
 import { useSession } from "../../features/auth/session";
 import { AppShell } from "./AppShell";
+import {
+  DirtyFormNavigationProvider,
+  useDirtyFormNavigationGuard,
+} from "../navigation/DirtyFormNavigationGuard";
 
 vi.mock("../../api/client", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../api/client")>();
@@ -103,6 +114,19 @@ const ordinaryPrincipal: CurrentUserResponse = {
 function LocationMarker() {
   const location = useLocation();
   return <div data-testid="shell-current-route">{location.pathname}</div>;
+}
+
+function DirtyMobileShell() {
+  useDirtyFormNavigationGuard("mobile-shell-probe", true);
+  return (
+    <AppShell
+      accessToken="admin-server-token"
+      onLogout={vi.fn()}
+      principal={principal}
+    >
+      <LocationMarker />
+    </AppShell>
+  );
 }
 
 afterEach(() => {
@@ -578,6 +602,44 @@ describe("authenticated application shell", () => {
     );
     expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
     expect(trigger).toHaveFocus();
+  });
+
+  it("keeps a blocked mobile destination mounted for cancel focus and closes after discard", async () => {
+    setViewportWidth(320);
+    const router = createMemoryRouter(
+      [
+        {
+          path: "*",
+          element: (
+            <DirtyFormNavigationProvider>
+              <DirtyMobileShell />
+            </DirtyFormNavigationProvider>
+          ),
+        },
+      ],
+      { initialEntries: ["/admin/users"] },
+    );
+    render(<RouterProvider router={router} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Open navigation" }));
+    const sheet = await screen.findByRole("dialog", { name: "Navigation" });
+    const productsLink = within(sheet).getByRole("link", { name: "Products" });
+    await user.click(productsLink);
+
+    expect(
+      await screen.findByRole("alertdialog", { name: "Leave without saving?" }),
+    ).toBeVisible();
+    expect(screen.getByRole("dialog", { name: "Navigation" })).toBeVisible();
+    expect(router.state.location.pathname).toBe("/admin/users");
+    await user.click(screen.getByRole("button", { name: "Keep editing" }));
+    await waitFor(() => expect(productsLink).toHaveFocus());
+
+    await user.click(productsLink);
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe("/admin/products"),
+    );
+    expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
   });
 
   it.each([

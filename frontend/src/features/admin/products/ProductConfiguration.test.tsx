@@ -10,7 +10,14 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  Route,
+  RouterProvider,
+  Routes,
+  useLocation,
+} from "react-router-dom";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -39,6 +46,8 @@ import { ProductWizardPage } from "./ProductWizardPage";
 import { loadEditableProduct } from "./ProductWizardPage";
 import { ProductDetailLayout } from "./ProductDetailLayout";
 import { AppRouter } from "../../../router";
+import { AppShell } from "../../../components/layout/AppShell";
+import { DirtyFormNavigationProvider } from "../../../components/navigation/DirtyFormNavigationGuard";
 
 class TestResizeObserver implements ResizeObserver {
   disconnect() {}
@@ -305,6 +314,56 @@ function renderRouteWizard(accessToken = "memory-only-admin-bearer") {
       </Routes>
     </MemoryRouter>,
   );
+}
+
+function renderRoutedProductDetails({
+  initialEntries = [`/admin/products/${activeProduct.id}/edit`],
+  initialIndex,
+}: {
+  initialEntries?: string[];
+  initialIndex?: number;
+} = {}) {
+  const router = createMemoryRouter(
+    [
+      {
+        path: "*",
+        element: (
+          <DirtyFormNavigationProvider>
+            <AppShell
+              accessToken="memory-only-admin-bearer"
+              onLogout={vi.fn()}
+              principal={{
+                id: "00000000-0000-4000-8000-000000000001",
+                email: "admin@example.com",
+                display_name: "Admin",
+                must_change_password: false,
+                roles: ["admin"],
+              }}
+            >
+              <Routes>
+                <Route
+                  path={`/admin/products/${activeProduct.id}/edit`}
+                  element={
+                    <ProductWizardPage
+                      accessToken="memory-only-admin-bearer"
+                      initialProduct={activeProduct}
+                    />
+                  }
+                />
+                <Route
+                  path="/admin/users"
+                  element={<h1>Users destination</h1>}
+                />
+              </Routes>
+              <LocationMarker />
+            </AppShell>
+          </DirtyFormNavigationProvider>
+        ),
+      },
+    ],
+    { initialEntries, initialIndex },
+  );
+  return { router, view: render(<RouterProvider router={router} />) };
 }
 
 function renderOverview() {
@@ -1066,28 +1125,69 @@ describe("administrator product configuration tracer", () => {
     });
   });
 
-  it("guards browser exits while details are dirty", async () => {
-    renderWizard(activeProduct);
-    const description = screen.getByRole("textbox", { name: "Description" });
-    await userEvent.type(description, " changed");
-    const beforeUnload = new Event("beforeunload", { cancelable: true });
-    window.dispatchEvent(beforeUnload);
-    expect(beforeUnload.defaultPrevented).toBe(true);
+  it.each(["Name", "Description"])(
+    "blocks routed shell navigation for a dirty %s and preserves its values on cancel",
+    async (fieldName) => {
+      const { router } = renderRoutedProductDetails();
+      const user = userEvent.setup();
+      const name = screen.getByRole("textbox", { name: "Name" });
+      const description = screen.getByRole("textbox", { name: "Description" });
+      const field = screen.getByRole("textbox", { name: fieldName });
+      await user.type(field, " unsaved");
+      const usersLink = screen.getAllByRole("link", { name: "Users" })[0];
+      await user.click(usersLink);
 
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-    const forward = vi
-      .spyOn(window.history, "forward")
-      .mockImplementation(() => undefined);
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    expect(confirm).toHaveBeenCalledWith(
-      "Leave without saving?\n\nYour unsaved entries on this page will be lost.",
+      const dialog = await screen.findByRole("alertdialog", {
+        name: "Leave without saving?",
+      });
+      expect(dialog).toHaveTextContent(
+        "Your unsaved entries on this page will be lost.",
+      );
+      expect(router.state.location.pathname).toBe(
+        `/admin/products/${activeProduct.id}/edit`,
+      );
+      await user.click(
+        within(dialog).getByRole("button", { name: "Keep editing" }),
+      );
+      await waitFor(() => expect(usersLink).toHaveFocus());
+      expect(name).toHaveValue(
+        fieldName === "Name"
+          ? `${activeProduct.name} unsaved`
+          : activeProduct.name,
+      );
+      expect(description).toHaveValue(
+        fieldName === "Description"
+          ? `${activeProduct.candidate_revision?.description} unsaved`
+          : activeProduct.candidate_revision?.description,
+      );
+
+      const beforeUnload = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(beforeUnload);
+      expect(beforeUnload.defaultPrevented).toBe(true);
+    },
+  );
+
+  it("blocks browser Back before unmount and discards exactly the stored product route", async () => {
+    const editPath = `/admin/products/${activeProduct.id}/edit`;
+    const { router } = renderRoutedProductDetails({
+      initialEntries: ["/admin/users", editPath],
+      initialIndex: 1,
+    });
+    const user = userEvent.setup();
+    await user.type(screen.getByRole("textbox", { name: "Name" }), " dirty");
+
+    await router.navigate(-1);
+    expect(
+      await screen.findByRole("alertdialog", { name: "Leave without saving?" }),
+    ).toBeVisible();
+    expect(router.state.location.pathname).toBe(editPath);
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe("/admin/users"),
     );
-    expect(forward).toHaveBeenCalledOnce();
-    confirm.mockReturnValue(true);
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    expect(forward).toHaveBeenCalledOnce();
-    confirm.mockRestore();
-    forward.mockRestore();
+    expect(
+      screen.getByRole("heading", { name: "Users destination" }),
+    ).toBeVisible();
   });
 
   it("cancels a queued route load before it reaches the generated client", async () => {
