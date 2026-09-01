@@ -19,6 +19,7 @@ from test_phase2_spec_edge_traceability import (
     _load_matrix,
     _normalize,
 )
+from yaml.resolver import BaseResolver
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PHASE_DIR = REPOSITORY_ROOT / ".planning" / "phases" / "02-admin-configuration"
@@ -106,27 +107,22 @@ UI_FINGERPRINTS = {
     "zero-one-many": "9f46932e0eba703925c2",
     "long-text": "08549ee968721bd5ed52",
 }
-REVIEW_FINGERPRINTS = {
-    "CR-01": "22f869561ee7ed6f2e0c",
-    "CR-02": "1227743d8ecfaabf3a14",
-    "CR-03": "fd2c0dc1b93f157b0435",
-    "CR-04": "65384d38a1e11cf97cf5",
-    "CR-05": "ccff4ac06c9b6b548a21",
-    "CR-06": "c0953c91859e3e15f7cf",
-    "CR-07": "d56cea49a5b5046fb449",
-    "CR-08": "47507f0ba2c953a052ee",
-    "CR-09": "1e39dfc96e5aabc4d809",
-    "CR-10": "7a2baeb79e8858af3305",
-    "WR-01": "b4c65a16705b9f8df2be",
-    "WR-02": "86f390b8b9aa3d7b95bb",
+REVIEW_INVENTORY_KEYS = {
+    *(f"CR-{number:02d}" for number in range(1, 16)),
+    *(f"WR-{number:02d}" for number in range(1, 9)),
 }
-VERIFIER_SEMANTICS = {
-    "G1": "cross-entry-point admin safety",
-    "G2": "complete candidate isolation/editing",
-    "G3": "production OAuth composition",
-    "G4": "usable end-to-end admin UI",
-    "G5": "durable worker-loss handling",
-    "G6": "a clean fresh review",
+OPEN_WARNING_KEYS = {f"WR-{number:02d}" for number in range(3, 9)}
+VERIFIER_INVENTORY_TOTALS = {
+    "phase_goal": 1,
+    "roadmap_success_criteria": 8,
+    "requirements": 15,
+    "context_decisions": 23,
+    "research_assumptions": 3,
+    "spec_edge_rows": 54,
+    "prohibitions": 9,
+    "ui_considerations": 8,
+    "bitbucket_capabilities": 44,
+    "review_rows": 23,
 }
 CAPABILITY_FINGERPRINTS = {
     "oauth-client-credentials-acquisition": "ed66d7cd97cac016e9d7",
@@ -379,6 +375,40 @@ def _unique(rows: list[tuple[str, Any]], *, source: str) -> dict[str, Any]:
     return dict(rows)
 
 
+class _UniqueKeySafeLoader(yaml.SafeLoader):
+    """Safe YAML loader that rejects duplicate mapping keys."""
+
+
+def _construct_unique_mapping(
+    loader: _UniqueKeySafeLoader,
+    node: yaml.MappingNode,
+    deep: bool = False,
+) -> dict[Any, Any]:
+    loader.flatten_mapping(node)
+    mapping: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        assert key not in mapping, f"frontmatter contains duplicate key: {key}"
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_UniqueKeySafeLoader.add_constructor(
+    BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_unique_mapping,
+)
+
+
+def _load_bounded_frontmatter(text: str, *, source: str) -> dict[str, Any]:
+    match = re.match(r"\A---\r?\n(?P<yaml>.*?)\r?\n---(?:\r?\n|\Z)", text, re.S)
+    assert match, f"{source} has no canonical YAML frontmatter"
+    payload = match.group("yaml")
+    assert len(payload.encode("utf-8")) <= 256 * 1024, f"{source} frontmatter is unbounded"
+    loaded = yaml.load(payload, Loader=_UniqueKeySafeLoader)
+    assert isinstance(loaded, dict), f"{source} frontmatter is not a mapping"
+    return loaded
+
+
 def _goal() -> dict[str, str]:
     roadmap = ROADMAP_PATH.read_text(encoding="utf-8")
     match = re.search(r"### Phase 2:.*?\n\n\*\*Goal\*\*: (.*?)\n", roadmap, re.S)
@@ -479,32 +509,180 @@ def _capabilities() -> dict[str, dict[str, str]]:
     return _unique(rows, source="capabilities")
 
 
-def _review_findings() -> dict[str, str]:
-    text = REVIEW_PATH.read_text(encoding="utf-8")
+def _current_review_table(text: str) -> dict[str, dict[str, str]]:
+    marker = "### Current CR/WR Inventory Re-audit"
+    assert marker in text, "current review inventory table is absent"
+    section = text.split(marker, 1)[1]
+    next_heading = re.search(r"^### ", section, re.M)
+    if next_heading:
+        section = section[: next_heading.start()]
     rows = [
         row
-        for row in _table_rows(
-            text,
-            start="### Original CR/WR Inventory Re-audit",
-            end="### ASVS 5.0 Level 1 Coverage",
-        )
+        for line in section.splitlines()
+        if line.startswith("|")
+        for row in [[_normalize(cell).strip("`") for cell in line.strip("|").split("|")]]
         if row and re.fullmatch(r"(?:CR|WR)-\d{2}", row[0])
     ]
     return _unique(
-        [(row[0], _fingerprint(" | ".join(row))) for row in rows],
-        source="review findings",
+        [
+            (
+                row[0],
+                {
+                    "disposition": (
+                        "open" if re.match(r"^\*\*OPEN\b|^OPEN\b", row[1], re.I) else "closed"
+                    ),
+                    "severity": "critical" if row[0].startswith("CR-") else "warning",
+                },
+            )
+            for row in rows
+        ],
+        source="current review table",
     )
 
 
-def _verifier_groups() -> dict[str, str]:
-    text = _normalize(VERIFICATION_PATH.read_text(encoding="utf-8"))
-    exact_sentence = (
-        "Six root concerns block progress: cross-entry-point admin safety, complete "
-        "candidate isolation/editing, production OAuth composition, usable end-to-end "
-        "admin UI, durable worker-loss handling, and a clean fresh review."
+def _review_findings(text: str | None = None) -> dict[str, Any]:
+    document = REVIEW_PATH.read_text(encoding="utf-8") if text is None else text
+    frontmatter = _load_bounded_frontmatter(document, source="review")
+    status = frontmatter.get("status")
+    assert status in {"clean", "issues_found"}, "unsupported reviewer status"
+
+    findings = frontmatter.get("findings")
+    assert isinstance(findings, dict), "review findings are absent"
+    assert set(findings) == {"critical", "warning", "info", "total"}, (
+        "review finding-count keys drifted"
     )
-    assert exact_sentence in text, "verifier root-concern semantics drifted"
-    return {key: _fingerprint(meaning) for key, meaning in VERIFIER_SEMANTICS.items()}
+    assert all(type(findings[key]) is int and findings[key] >= 0 for key in findings), (
+        "review finding counts must be non-negative integers"
+    )
+    assert findings["total"] == findings["critical"] + findings["warning"] + findings["info"]
+
+    inventory = frontmatter.get("review_inventory")
+    assert isinstance(inventory, dict), "structured review inventory is absent"
+    assert set(inventory) == REVIEW_INVENTORY_KEYS, "structured review inventory key drift"
+    normalized_inventory: dict[str, dict[str, str]] = {}
+    for key, raw_record in inventory.items():
+        assert isinstance(key, str) and isinstance(raw_record, dict), (
+            "review inventory record is malformed"
+        )
+        assert set(raw_record) == {"disposition", "severity"}, (
+            f"review inventory record shape drifted: {key}"
+        )
+        disposition = raw_record["disposition"]
+        severity = raw_record["severity"]
+        assert disposition in {"closed", "open"}, f"unsupported review disposition: {key}"
+        expected_severity = "critical" if key.startswith("CR-") else "warning"
+        assert severity == expected_severity, f"review severity drifted: {key}"
+        normalized_inventory[key] = {
+            "disposition": disposition,
+            "severity": severity,
+        }
+
+    table_inventory = _current_review_table(document)
+    assert table_inventory == normalized_inventory, (
+        "structured review inventory disagrees with the authoritative current table"
+    )
+    open_critical = {
+        key
+        for key, record in normalized_inventory.items()
+        if record == {"disposition": "open", "severity": "critical"}
+    }
+    open_warning = {
+        key
+        for key, record in normalized_inventory.items()
+        if record == {"disposition": "open", "severity": "warning"}
+    }
+    assert open_critical in ({"CR-14", "CR-15"}, set()), "review blocker transition is unsupported"
+    assert open_warning == OPEN_WARNING_KEYS, "retained review warnings drifted"
+    assert findings["critical"] == len(open_critical)
+    assert findings["warning"] == len(open_warning)
+    assert findings["info"] == 0
+    expected_status = "clean" if findings["total"] == 0 else "issues_found"
+    assert status == expected_status, "review status disagrees with finding counts"
+    return {
+        "findings": dict(findings),
+        "inventory": normalized_inventory,
+        "status": status,
+    }
+
+
+def _verifier_groups(text: str | None = None) -> dict[str, Any]:
+    document = VERIFICATION_PATH.read_text(encoding="utf-8") if text is None else text
+    frontmatter = _load_bounded_frontmatter(document, source="verifier")
+    status = frontmatter.get("status")
+    assert status in {"passed", "gaps_found", "human_needed"}, "unsupported verifier status"
+
+    inventories = frontmatter.get("inventories")
+    assert isinstance(inventories, dict), "verifier inventories are absent"
+    assert set(inventories) == set(VERIFIER_INVENTORY_TOTALS), (
+        "verifier inventory identifiers drifted"
+    )
+    normalized_inventories: dict[str, dict[str, int]] = {}
+    for key, total in VERIFIER_INVENTORY_TOTALS.items():
+        raw_record = inventories[key]
+        assert isinstance(raw_record, dict) and set(raw_record) == {"count", "total"}, (
+            f"verifier inventory record shape drifted: {key}"
+        )
+        count = raw_record["count"]
+        declared_total = raw_record["total"]
+        assert type(count) is int and type(declared_total) is int
+        assert declared_total == total and 0 <= count <= declared_total, (
+            f"verifier inventory count drifted: {key}"
+        )
+        normalized_inventories[key] = {"count": count, "total": declared_total}
+
+    review = frontmatter.get("review")
+    assert isinstance(review, dict), "verifier review summary is absent"
+    assert set(review) == {
+        "status",
+        "critical",
+        "warning",
+        "info",
+        "open_blockers",
+        "open_warnings",
+    }, "verifier review summary shape drifted"
+    assert review["status"] in {"clean", "issues_found"}
+    assert all(
+        type(review[key]) is int and review[key] >= 0 for key in ("critical", "warning", "info")
+    )
+    assert isinstance(review["open_blockers"], list)
+    assert isinstance(review["open_warnings"], list)
+    assert len(review["open_blockers"]) == len(set(review["open_blockers"]))
+    assert len(review["open_warnings"]) == len(set(review["open_warnings"]))
+    assert set(review["open_blockers"]) in ({"CR-14", "CR-15"}, set())
+    assert set(review["open_warnings"]) == OPEN_WARNING_KEYS
+    assert review["critical"] == len(review["open_blockers"])
+    assert review["warning"] == len(review["open_warnings"])
+    assert review["info"] == 0
+    assert review["status"] == (
+        "clean" if review["critical"] + review["warning"] + review["info"] == 0 else "issues_found"
+    )
+
+    gaps = frontmatter.get("gaps")
+    assert isinstance(gaps, list), "verifier gaps must be a collection"
+    for gap in gaps:
+        assert isinstance(gap, dict), "verifier gap record is malformed"
+        assert {"truth", "status", "reason"}.issubset(gap), "verifier gap record is incomplete"
+        assert isinstance(gap["truth"], str) and gap["truth"].strip()
+        assert gap["status"] in {"failed", "partial"}
+        assert isinstance(gap["reason"], str) and gap["reason"].strip()
+
+    if status == "passed":
+        assert not gaps, "passed verifier retains gaps"
+        assert all(
+            record["count"] == record["total"] for record in normalized_inventories.values()
+        ), "passed verifier has incomplete inventories"
+        assert review["critical"] == 0 and not review["open_blockers"], (
+            "passed verifier retains blockers"
+        )
+    elif status == "gaps_found":
+        assert gaps, "gaps_found verifier has no concrete gaps"
+
+    return {
+        "gaps": gaps,
+        "inventories": normalized_inventories,
+        "review": dict(review),
+        "status": status,
+    }
 
 
 def _closing(plan: str, task: int, node: str) -> dict[str, object]:
@@ -588,32 +766,6 @@ def _closure(source: str, key: str, value: object) -> dict[str, object]:
         return _closing("02-27", 1, NODE_UI)
     if source == "capabilities":
         return _closing("02-35", 2, NODE_CAPABILITY)
-    if source == "review":
-        routing = {
-            "CR-01": ("02-35", 1, NODE_CAPABILITY),
-            "CR-02": ("02-21", 1, NODE_OAUTH),
-            "CR-03": ("02-22", 1, NODE_OAUTH),
-            "CR-04": ("02-22", 2, NODE_OAUTH),
-            "CR-05": ("02-24", 2, NODE_PRODUCT),
-            "CR-06": ("02-32", 2, NODE_PREVIEW),
-            "CR-07": ("02-27", 1, NODE_UI),
-            "CR-08": ("02-28", 2, NODE_PAGING),
-            "CR-09": ("02-36", 2, NODE_WORKER),
-            "CR-10": ("02-23", 2, NODE_USER),
-            "WR-01": ("02-33", 2, NODE_WORKSPACE),
-            "WR-02": ("02-24", 1, NODE_PRODUCT),
-        }
-        return _closing(*routing[key])
-    if source == "verifier":
-        routing = {
-            "G1": ("02-23", 2, NODE_USER),
-            "G2": ("02-24", 2, NODE_PRODUCT),
-            "G3": ("02-35", 2, NODE_CAPABILITY),
-            "G4": ("02-34", 2, NODE_WORKSPACE),
-            "G5": ("02-36", 2, NODE_WORKER),
-            "G6": ("02-37", 2, NODE_GAUNTLET),
-        }
-        return _closing(*routing[key])
     raise AssertionError(f"unsupported coverage source: {source}")
 
 
@@ -672,8 +824,6 @@ EXPECTED_KEYS = {
         "long-text",
     },
     "capabilities": set(CAPABILITY_FINGERPRINTS),
-    "review": {*(f"CR-{number:02d}" for number in range(1, 11)), "WR-01", "WR-02"},
-    "verifier": {f"G{number}" for number in range(1, 7)},
 }
 
 
@@ -688,8 +838,6 @@ def _multi_source_inventory() -> dict[str, dict[str, object]]:
         "prohibitions": _prohibitions(),
         "ui": _ui_considerations(),
         "capabilities": _capabilities(),
-        "review": _review_findings(),
-        "verifier": _verifier_groups(),
     }
     return {
         source: {key: _entry(source, key, semantic) for key, semantic in source_inventory.items()}
@@ -711,8 +859,6 @@ def _assert_semantics(inventory: dict[str, dict[str, object]]) -> None:
         "assumptions": ASSUMPTION_FINGERPRINTS,
         "prohibitions": PROHIBITION_FINGERPRINTS,
         "ui": UI_FINGERPRINTS,
-        "review": REVIEW_FINGERPRINTS,
-        "verifier": {key: _fingerprint(meaning) for key, meaning in VERIFIER_SEMANTICS.items()},
     }
     for source, expected in expected_fingerprints.items():
         actual = {key: entry["semantic"] for key, entry in inventory[source].items()}
@@ -1087,9 +1233,7 @@ def test_phase2_verifier_contract_accepts_truthful_state_transitions() -> None:
     passed = _verifier_groups(_verifier_fixture(status="passed"))
     assert passed["status"] == "passed"
     assert passed["gaps"] == []
-    assert all(
-        record["count"] == record["total"] for record in passed["inventories"].values()
-    )
+    assert all(record["count"] == record["total"] for record in passed["inventories"].values())
 
 
 def test_phase2_verifier_contract_rejects_false_pass_and_status_mutants() -> None:
@@ -1109,9 +1253,7 @@ def test_phase2_verifier_contract_rejects_false_pass_and_status_mutants() -> Non
         _verifier_groups(_frontmatter_document(hidden_warning))
 
     false_gap = copy.deepcopy(frontmatter)
-    false_gap["gaps"] = [
-        {"truth": "hidden gap", "status": "failed", "reason": "fixture"}
-    ]
+    false_gap["gaps"] = [{"truth": "hidden gap", "status": "failed", "reason": "fixture"}]
     with pytest.raises(AssertionError):
         _verifier_groups(_frontmatter_document(false_gap))
 
@@ -1141,6 +1283,8 @@ def test_phase2_multi_source_coverage_contract() -> None:
     _assert_capability_rewrite(inventory)
     _assert_reachability(inventory)
     _assert_deferred_scope_rejected(inventory)
+    _review_findings()
+    _verifier_groups()
 
 
 def test_phase2_audit_rejects_semantic_path_and_scope_mutations() -> None:
@@ -1153,7 +1297,7 @@ def test_phase2_audit_rejects_semantic_path_and_scope_mutations() -> None:
         _assert_semantics(semantic_mutant)
 
     path_mutant = copy.deepcopy(inventory)
-    path_mutant["review"]["CR-01"]["closure"]["node"] = (
+    path_mutant["requirements"]["PROD-01"]["closure"]["node"] = (
         "backend/tests/architecture/not_a_test.py::test_missing"
     )
     with pytest.raises(AssertionError):

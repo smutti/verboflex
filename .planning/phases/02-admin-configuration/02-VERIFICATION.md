@@ -8,12 +8,16 @@ behavior_unverified: 0
 overrides_applied: 0
 head: a1fd9afdd2896e74e5f2e6cb327670833d234924
 inventories:
-  phase_goal: "0/1 achieved"
-  roadmap_success_criteria: "5/8 verified"
-  requirements: "13/15 satisfied"
-  context_decisions: "23/23 honored (non-blocking decision gate)"
-  prohibitions: "9/9 remain test-enforced"
-  review_rows: "23/23 adjudicated (15 closed, 2 blockers open, 6 warnings open)"
+  phase_goal: {count: 0, total: 1}
+  roadmap_success_criteria: {count: 5, total: 8}
+  requirements: {count: 13, total: 15}
+  context_decisions: {count: 23, total: 23}
+  research_assumptions: {count: 3, total: 3}
+  spec_edge_rows: {count: 54, total: 54}
+  prohibitions: {count: 9, total: 9}
+  ui_considerations: {count: 8, total: 8}
+  bitbucket_capabilities: {count: 44, total: 44}
+  review_rows: {count: 23, total: 23}
 review:
   status: issues_found
   critical: 2

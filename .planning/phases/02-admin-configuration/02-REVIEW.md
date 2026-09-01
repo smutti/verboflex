@@ -304,6 +304,30 @@ findings:
   info: 0
   total: 8
 status: issues_found
+review_inventory:
+  CR-01: {disposition: closed, severity: critical}
+  CR-02: {disposition: closed, severity: critical}
+  CR-03: {disposition: closed, severity: critical}
+  CR-04: {disposition: closed, severity: critical}
+  CR-05: {disposition: closed, severity: critical}
+  CR-06: {disposition: closed, severity: critical}
+  CR-07: {disposition: closed, severity: critical}
+  CR-08: {disposition: closed, severity: critical}
+  CR-09: {disposition: closed, severity: critical}
+  CR-10: {disposition: closed, severity: critical}
+  CR-11: {disposition: closed, severity: critical}
+  CR-12: {disposition: closed, severity: critical}
+  CR-13: {disposition: closed, severity: critical}
+  CR-14: {disposition: open, severity: critical}
+  CR-15: {disposition: open, severity: critical}
+  WR-01: {disposition: closed, severity: warning}
+  WR-02: {disposition: closed, severity: warning}
+  WR-03: {disposition: open, severity: warning}
+  WR-04: {disposition: open, severity: warning}
+  WR-05: {disposition: open, severity: warning}
+  WR-06: {disposition: open, severity: warning}
+  WR-07: {disposition: open, severity: warning}
+  WR-08: {disposition: open, severity: warning}
 ---
 
 # Phase 2: Code and Security Review
