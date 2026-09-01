@@ -1,8 +1,15 @@
 import type { ReactNode } from "react";
-import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import {
+  createBrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useParams,
+} from "react-router-dom";
 
 import { App } from "./App";
 import { AppShell } from "./components/layout/AppShell";
+import { DirtyFormNavigationProvider } from "./components/navigation/DirtyFormNavigationGuard";
 import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import { Button } from "./components/ui/button";
 import { Skeleton } from "./components/ui/skeleton";
@@ -18,7 +25,11 @@ import { ProductRepositoriesPage } from "./features/admin/repositories/ProductRe
 import { UsersPage } from "./features/admin/users/UsersPage";
 import { ChangePasswordPage } from "./features/auth/ChangePasswordPage";
 import { LoginPage } from "./features/auth/LoginPage";
-import { useSession, type SessionState } from "./features/auth/session";
+import {
+  SessionProvider,
+  useSession,
+  type SessionState,
+} from "./features/auth/session";
 
 export type AdminRouteState =
   | { status: "ready" }
@@ -247,4 +258,24 @@ export function AppRouter() {
       }
     />
   );
+}
+
+function VerboFlexBrowserApplication() {
+  return (
+    <DirtyFormNavigationProvider>
+      <SessionProvider>
+        <AppRouter />
+      </SessionProvider>
+    </DirtyFormNavigationProvider>
+  );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function createVerboFlexBrowserRouter() {
+  return createBrowserRouter([
+    {
+      path: "*",
+      element: <VerboFlexBrowserApplication />,
+    },
+  ]);
 }
