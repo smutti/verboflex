@@ -1,7 +1,7 @@
 # Phase 2 Gap-Closure Evidence
 
 - Evidence-date: 2026-09-01
-- Source-digest: `a4b16eeb2879fd64b32a8942663bd2af117d99662b206bd24711744d9d302964`
+- Source-digest: `95d3e797fe972d22d05f7e421eb5fbe9f48a458bf26f6468a862f7d753f2def0`
 - Review-source-digest: `ede23c16f49301366ec9e30edc885e52c726b5d57a7bc3a796be6e9f30979d90`
 - Reviewed-head: `99d2d0af5dfb27cc3ef47590f480ae7a33cf4d94`
 - Canonical-review-commit: `b935fa6`
@@ -94,6 +94,45 @@ After Task 1 passed, a fresh typed `gsd-verifier` inspected actual current code 
 Fresh verifier execution repeated `bash tools/phase2_gauntlet.sh --gap-closure` from final digest `a4b16eeb2879fd64b32a8942663bd2af117d99662b206bd24711744d9d302964` and received PASS 18/18 with the same 803 backend tests, 271 frontend tests, 100% changed-scope coverage, all mutation inventories killed, 8/8 browser E2E, five provider GETs and zero writes, dual-overlay worker-loss recovery, expected optional live-provider SKIP, zero-resource cleanup, and unchanged final source-state.
 
 Result: **PASS** — exact frontmatter `status: passed`, score 8/8 roadmap success criteria, zero gaps, zero behavior-unverified, exact final/review digest fields, YAML parse PASS, inventory validators PASS, and post-write semantic regression 1/1 PASS.
+
+## Post-02-45 Closeout — 2026-09-01
+
+This section supersedes earlier counts and outcomes for the post-02-45 source. Historical sections above remain an audit trail only and do not authorize the current closeout.
+
+### Structured semantic audit and focused gates
+
+- Post-02-45 semantic RED: the former prose-coupled audit failed against the truthful current `gaps_found` verifier before implementation.
+- Post-02-45 semantic GREEN: 8/8 focused structured-inventory tests passed, including missing, duplicate, inconsistent-count, hidden-warning, unsupported-status, false-passed, and incomplete-inventory negative controls.
+- Post-02-45 focused frontend: 161/161 tests passed across preview resolution, dirty navigation, product configuration, mappings, AppShell, and router ownership.
+- Post-02-45 full frontend: 304/304 tests passed; TypeScript, ESLint with zero warnings, Prettier, and the Vite production build passed.
+- Post-02-45 named router browser proof: `100/101 exact branches stay fail-closed at 200 percent zoom`, `dirty product and mapping routes require discard before navigation`, and `dirty mobile mapping navigation restores focus after cancel` passed 3/3.
+
+### First official post-fix gauntlet
+
+Commands:
+
+```text
+VERBOFLEX_SOURCE_MANIFEST=tools/phase2_source_manifest.txt VERBOFLEX_REVIEW_PATH=docs/reviews/phase-02-code-security.md tools/source_state.sh --review-digest
+VERBOFLEX_SOURCE_MANIFEST=tools/phase2_source_manifest.txt VERBOFLEX_REVIEW_PATH=docs/reviews/phase-02-code-security.md tools/source_state.sh --digest
+bash tools/phase2_gauntlet.sh --gap-closure
+```
+
+- Post-02-45-review-digest-before-review: `b0cebeca874b8d6a7e23e825e08de23eb377eaa82e4097c4d9f552d32683a5a0`.
+- Post-02-45-final-digest-before-review: `95d3e797fe972d22d05f7e421eb5fbe9f48a458bf26f6468a862f7d753f2def0`.
+- Post-02-45-gauntlet-before-review: PASS — 18/18 ordered layers with unchanged final source-state.
+- Post-02-45-semantic-runtime: 34/34 passed.
+- Post-02-45-backend: 807/807 passed; aggregate coverage 97%.
+- Post-02-45-frontend: 304/304 passed.
+- Post-02-45-properties: backend 200/200 and frontend 3/3 passed.
+- Post-02-45-changed-scope: backend 641/641 and frontend 746/746 changed lines covered, both 100%.
+- Post-02-45-mutations: all ten backend inventories were killed (13/13, 6/6, 11/11, 10/10, 14/14, 13/13, 25/25, 16/16, 10/10, 11/11); frontend polling was 30/30 killed.
+- Post-02-45-contract-and-supply-chain: migrations 10/10, generated OpenAPI/client drift, secret-policy negative control, reviewed false-positive authority, license inventories, and supported audit thresholds passed. The known development-only moderate records remain warning evidence and no dependency was changed.
+- Post-02-45-provider-and-browser: architecture/provider-spy 57/57 and mock live-provider browser 8/8 passed; exact client-credentials repository authority issued five GET requests and zero writes.
+- Post-02-45-real-active-revalidation: `unchanged active revision reactivation uses real backend state and blocks stale confirmation` passed through the supported disposable smoke harness with immutable active authority and zero provider writes.
+- Post-02-45-worker-loss: staging and production both reached the bounded terminal loss state and completed replacement retries.
+- Post-02-45-live-provider: expected SKIP because explicit opt-in and local provider configuration were absent; no live provider call was fabricated.
+- Post-02-45-cleanup: PASS — zero owned containers, networks, volumes, images, secret files, or runtime residue.
+- Post-02-45-warning-authority: WR-03 through WR-08 remain OPEN Warnings; WR-08 remains deferred and is not represented as fixed.
 
 ## Secret and Write Exclusions
 
