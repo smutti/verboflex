@@ -34,7 +34,7 @@
 - [ ] **PROD-05**: Admin can configure product-specific pull request grouping behavior.
 - [ ] **PROD-06**: Admin can configure whether translations live directly in the product repository or in a linked translation repository.
 - [ ] **PROD-07**: Admin can configure links between a repository containing translation keys and a separate Bitbucket project/repository containing translated values.
-- [ ] **PROD-08**: Admin can validate a repository mapping by previewing detected files, languages, sample keys, and sample translations before enabling imports.
+- [x] **PROD-08**: Admin can validate a repository mapping by previewing detected files, languages, sample keys, and sample translations before enabling imports.
 - [ ] **PROD-09**: Admin can configure the localization file format used by each mapping.
 
 ### Bitbucket Cloud Integration
@@ -193,7 +193,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROD-05 | Phase 2 | Gaps Found |
 | PROD-06 | Phase 2 | Gaps Found |
 | PROD-07 | Phase 2 | Gaps Found |
-| PROD-08 | Phase 2 | Gaps Found |
+| PROD-08 | Phase 2 | Complete |
 | PROD-09 | Phase 2 | Gaps Found |
 | BITB-01 | Phase 2 | Gaps Found |
 | BITB-02 | Phase 3 | Pending |
