@@ -134,6 +134,19 @@ bash tools/phase2_gauntlet.sh --gap-closure
 - Post-02-45-cleanup: PASS — zero owned containers, networks, volumes, images, secret files, or runtime residue.
 - Post-02-45-warning-authority: WR-03 through WR-08 remain OPEN Warnings; WR-08 remains deferred and is not represented as fixed.
 
+### Semantic transition compatibility correction and replay
+
+The first fresh critical-zero structured review exposed one remaining historical-state assertion in the semantic test body: the parser already accepted both supported blocker and warning-only states, but `test_phase2_review_contract_uses_current_structured_inventory` still required the current on-disk report to contain two Critical findings. The post-write semantic command therefore failed 5/8 before any canonical review update. Commit `06fe382` replaced that frozen current-file expectation with count reconciliation against the permitted open-Critical set while preserving the exact warning inventory and `issues_found` status. No production, API, schema, dependency, lockfile, manifest, configuration, or runtime file changed.
+
+- Post-transition-review-digest-before-review: `f12c23d7aa7655027b189b7793227403575e5393e92ed08ae9009db9dda1e1ca`.
+- Post-transition-final-digest-before-review: `522197df9eebf96ae0cff46df9bc357f74a60152efe00cac2892aec22ef47241`.
+- Post-transition-semantic-focused: 8/8 passed; Ruff and format checks passed.
+- Post-transition-focused-frontend: 161/161 passed.
+- Post-transition-full-frontend: 304/304 passed; TypeScript, ESLint, Prettier, and Vite production build passed.
+- Post-transition-named-router-browser: the three required branch-101, dirty product/mapping, and 320px focus journeys passed 3/3.
+- Post-transition-official-gauntlet: PASS — 18/18 ordered layers, including semantic runtime 34/34, backend 807/807, frontend 304/304, complete property/mutation/coverage authority, mock provider browser 8/8 with five GETs and zero writes, both deployment overlays, zero-resource cleanup, and unchanged final digest.
+- Post-transition-warning-authority: WR-03 through WR-08 remain OPEN Warnings; no repair claim was made.
+
 ## Secret and Write Exclusions
 
 This ledger contains commands, counts, statuses, public symbol names, and digests only. It contains no credential value, access token, provider body, repository path, localization content, generated password, or raw secret-scan output. No Phase 2 provider-write surface was invoked or authorized.
