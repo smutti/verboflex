@@ -190,51 +190,63 @@ function activeRevalidationPollingExhausted(
   return nextPreviewPollDelay(elapsed) === null;
 }
 
+type ConfiguredPreviewSourceSide = {
+  branch: string;
+  repositoryId: string;
+  role: AdminPreviewCommitRequest["role"];
+};
+
+function configuredPreviewSourceSides(
+  mapping: AdminMappingResponse,
+): ConfiguredPreviewSourceSide[] {
+  return mapping.topology === "direct"
+    ? [
+        {
+          branch: mapping.primary_source_branch,
+          repositoryId: mapping.primary_repository_id,
+          role: "direct",
+        },
+      ]
+    : [
+        {
+          branch: mapping.primary_source_branch,
+          repositoryId: mapping.primary_repository_id,
+          role: "keys",
+        },
+        {
+          branch: mapping.translations_source_branch ?? "",
+          repositoryId: mapping.translations_repository_id ?? "",
+          role: "translations",
+        },
+      ];
+}
+
+async function resolveConfiguredBranchCommit(
+  accessToken: string,
+  side: ConfiguredPreviewSourceSide,
+): Promise<AdminPreviewCommitRequest> {
+  if (side.branch === "" || side.repositoryId === "") {
+    throw new Error();
+  }
+  const result = await getAdminRepositoryBranch({
+    auth: accessToken,
+    path: { repository_id: side.repositoryId },
+    query: { branch_name: side.branch },
+  });
+  if (result.data === undefined || result.data.name !== side.branch) {
+    throw new Error();
+  }
+  return { commit_hash: result.data.commit_hash, role: side.role };
+}
+
 async function resolveCommits(
   accessToken: string,
   mapping: AdminMappingResponse,
 ) {
-  const sides: Array<{
-    branch: string;
-    repositoryId: string;
-    role: AdminPreviewCommitRequest["role"];
-  }> =
-    mapping.topology === "direct"
-      ? [
-          {
-            branch: mapping.primary_source_branch,
-            repositoryId: mapping.primary_repository_id,
-            role: "direct",
-          },
-        ]
-      : [
-          {
-            branch: mapping.primary_source_branch,
-            repositoryId: mapping.primary_repository_id,
-            role: "keys",
-          },
-          {
-            branch: mapping.translations_source_branch ?? "",
-            repositoryId: mapping.translations_repository_id ?? "",
-            role: "translations",
-          },
-        ];
-
   return Promise.all(
-    sides.map(async (side): Promise<AdminPreviewCommitRequest> => {
-      if (side.branch === "" || side.repositoryId === "") {
-        throw new Error();
-      }
-      const result = await getAdminRepositoryBranch({
-        auth: accessToken,
-        path: { repository_id: side.repositoryId },
-        query: { branch_name: side.branch },
-      });
-      if (result.data === undefined || result.data.name !== side.branch) {
-        throw new Error();
-      }
-      return { commit_hash: result.data.commit_hash, role: side.role };
-    }),
+    configuredPreviewSourceSides(mapping).map((side) =>
+      resolveConfiguredBranchCommit(accessToken, side),
+    ),
   );
 }
 
