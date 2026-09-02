@@ -392,6 +392,59 @@ def test_source_service_rejects_provider_inconsistency_after_each_boundary(
     asyncio.run(exercise())
 
 
+@pytest.mark.parametrize("failed_step", ["resolve", "tree", "file"])
+def test_source_discovery_failure_does_not_retry_provider_step(failed_step: str) -> None:
+    """A failed branch, tree, or raw-file read is attempted exactly once."""
+    from verboflex.services.repository_discovery import discover_repository_sources_for_record
+
+    commit_hash = "c" * 40
+
+    @dataclass
+    class OneAttemptAdapter:
+        resolve_calls: int = 0
+        tree_calls: int = 0
+        file_calls: int = 0
+
+        async def resolve_repository_branch(self, *_args: Any, **_kwargs: Any) -> BitbucketBranch:
+            self.resolve_calls += 1
+            if failed_step == "resolve":
+                raise BitbucketProviderReadError(kind="unavailable")
+            return BitbucketBranch(name="main", commit_hash=commit_hash)
+
+        async def list_repository_source_page(
+            self, *_args: Any, **_kwargs: Any
+        ) -> BitbucketSourcePage:
+            self.tree_calls += 1
+            if failed_step == "tree":
+                raise BitbucketProviderReadError(kind="rate_limited")
+            return BitbucketSourcePage(
+                entries=(
+                    BitbucketSourceEntry(path="locale.json", kind="file", size=2),
+                ),
+                next_url=None,
+            )
+
+        async def read_repository_source_file(self, *_args: Any, **_kwargs: Any) -> bytes:
+            self.file_calls += 1
+            raise BitbucketProviderReadError(kind="timeout")
+
+    async def exercise() -> OneAttemptAdapter:
+        adapter = OneAttemptAdapter()
+        with pytest.raises(BitbucketProviderReadError):
+            await discover_repository_sources_for_record(
+                object(),
+                repository=_repository(),
+                branch="main",
+                adapter=adapter,
+            )
+        return adapter
+
+    adapter = asyncio.run(exercise())
+    assert adapter.resolve_calls == 1
+    assert adapter.tree_calls == (0 if failed_step == "resolve" else 1)
+    assert adapter.file_calls == (1 if failed_step == "file" else 0)
+
+
 def test_resolves_commit_then_streams_exact_bounded_source_candidates() -> None:
     """Branch resolution precedes tree/raw reads and successful output contains no provider URL."""
     try:

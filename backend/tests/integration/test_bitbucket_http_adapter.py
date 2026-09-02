@@ -40,7 +40,105 @@ class FakeCredentialLeaseAuthority:
         """Reject a lease after a local reconnect or revoke generation change."""
         self.validated.append(lease.generation)
         if lease.generation != self.generation:
-            raise PermissionError("stale provider generation")
+            from verboflex.services.bitbucket_oauth import OAuthGenerationRejected
+
+            raise OAuthGenerationRejected("stale provider generation")
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected_kind"),
+    [
+        (401, "reauthorization_required"),
+        (403, "permission_denied"),
+        (404, "not_found"),
+        (408, "timeout"),
+        (429, "rate_limited"),
+        (503, "unavailable"),
+        (504, "timeout"),
+    ],
+)
+def test_provider_status_failures_are_closed_and_one_attempt(
+    status_code: int,
+    expected_kind: str,
+) -> None:
+    """Each provider status has one closed result and cannot trigger a retry."""
+    from verboflex.integrations.bitbucket.client import (
+        BitbucketHttpAdapter,
+        BitbucketProviderReadError,
+    )
+
+    requests: list[httpx.Request] = []
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(status_code, text=PROVIDER_BODY, request=request)
+
+    adapter = BitbucketHttpAdapter(
+        settings=Settings(),
+        credential_leases=FakeCredentialLeaseAuthority(),
+        transport=httpx.MockTransport(provider),
+    )
+
+    async def exercise() -> None:
+        with pytest.raises(BitbucketProviderReadError) as captured:
+            await adapter.read_repository_metadata(
+                object(),
+                workspace="acme",
+                repository_slug="mobile",
+            )
+        error = captured.value
+        assert error.kind == expected_kind
+        assert error.provider_status == status_code
+        assert str(error) == "Bitbucket provider read failed"
+        assert set(vars(error)) == {"kind", "provider_status"}
+        assert error.__cause__ is None
+        assert error.__context__ is None
+        assert PROVIDER_BODY not in f"{error!r} {error} {vars(error)!r}"
+        assert len(requests) == 1
+        await adapter.aclose()
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("failure", ["connect", "timeout"])
+def test_transport_failures_are_sanitized_after_one_attempt(failure: str) -> None:
+    """Transport details and request coordinates are discarded without retry."""
+    from verboflex.integrations.bitbucket.client import (
+        BitbucketHttpAdapter,
+        BitbucketProviderReadError,
+    )
+
+    requests: list[httpx.Request] = []
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if failure == "timeout":
+            raise httpx.ReadTimeout(PROVIDER_BODY, request=request)
+        raise httpx.ConnectError(PROVIDER_BODY, request=request)
+
+    adapter = BitbucketHttpAdapter(
+        settings=Settings(),
+        credential_leases=FakeCredentialLeaseAuthority(),
+        transport=httpx.MockTransport(provider),
+    )
+
+    async def exercise() -> None:
+        with pytest.raises(BitbucketProviderReadError) as captured:
+            await adapter.read_repository_metadata(
+                object(),
+                workspace="acme",
+                repository_slug="mobile",
+            )
+        error = captured.value
+        assert error.kind == ("timeout" if failure == "timeout" else "unavailable")
+        assert error.provider_status is None
+        assert error.__cause__ is None
+        assert error.__context__ is None
+        assert PROVIDER_BODY not in f"{error!r} {error} {vars(error)!r}"
+        assert len(requests) == 1
+        await adapter.aclose()
+
+    asyncio.run(exercise())
 
 
 def test_disconnected_lease_fails_as_bounded_provider_state_before_http() -> None:
@@ -265,7 +363,11 @@ def test_reconnect_or_revoke_discards_stale_provider_results(invalidate_at: str)
                 repository_slug="mobile",
             )
         assert str(captured.value) == "Bitbucket provider read failed"
+        assert captured.value.kind == "reauthorization_required"
+        assert captured.value.provider_status is None
         assert "stale" not in f"{captured.value!r} {captured.value}".lower()
+        assert captured.value.__cause__ is None
+        assert captured.value.__context__ is None
         assert len(requests) == (0 if invalidate_at == "before_request" else 1)
         await adapter.aclose()
 
