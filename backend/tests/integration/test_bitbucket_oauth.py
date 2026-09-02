@@ -574,6 +574,7 @@ def test_client_credentials_malformed_durable_states_and_clock_fail_closed(
 
     def connection(**overrides: object) -> object:
         return SimpleNamespace(
+            generation=overrides.get("generation", 7),
             access_token_ciphertext=overrides.get("access_token_ciphertext"),
             refresh_token_ciphertext=overrides.get("refresh_token_ciphertext"),
             scope_profile=overrides.get("scope_profile", "pullrequest:write"),

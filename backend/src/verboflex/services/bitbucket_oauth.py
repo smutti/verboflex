@@ -31,7 +31,16 @@ from verboflex.security.secret_box import (
     SecretBoxDecryptionError,
 )
 
-REPOSITORY_SCOPE = "repository"
+PULLREQUEST_WRITE_SCOPE = "pullrequest:write"
+LEGACY_REPOSITORY_SCOPE = "repository"
+PULLREQUEST_WRITE_IMPLICATION_CLOSURE = frozenset(
+    {
+        PULLREQUEST_WRITE_SCOPE,
+        "pullrequest",
+        "repository:write",
+        LEGACY_REPOSITORY_SCOPE,
+    }
+)
 SETTINGS_REQUIRED_MESSAGE = "Bitbucket OAuth settings are required"
 INVALID_KEYRING_MESSAGE = "Bitbucket token encryption keyring is invalid"
 GENERATION_REJECTED_MESSAGE = "Bitbucket connection generation rejected"
@@ -93,7 +102,12 @@ class BitbucketOAuthTokenExchange:
         credentials = b64encode(f"{client_id}:{client_secret}".encode()).decode("ascii")
         request = Request(
             BITBUCKET_TOKEN_URL,
-            data=urlencode({"grant_type": "client_credentials"}).encode("ascii"),
+            data=urlencode(
+                {
+                    "grant_type": "client_credentials",
+                    "scope": PULLREQUEST_WRITE_SCOPE,
+                }
+            ).encode("ascii"),
             headers={
                 "Accept": "application/json",
                 "Authorization": f"Basic {credentials}",
@@ -126,7 +140,26 @@ class BitbucketConnectionStatus:
 
     state: str
     generation: int
-    scope_profile: str
+
+
+CapabilityReadiness = Literal[
+    "disconnected",
+    "ready",
+    "ready_for_later_phase",
+    "reauthorization_required",
+    "unavailable",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class BitbucketCapabilityProfile:
+    """Closed descriptive readiness bound to one evaluated generation."""
+
+    source_read: CapabilityReadiness
+    source_write: CapabilityReadiness
+    pull_request: CapabilityReadiness
+    evaluated_at: datetime
+    source_generation: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +175,7 @@ class BitbucketConnectionPublicStatus:
     connected_at: datetime | None
     expires_at: datetime | None
     revoked_at: datetime | None
+    capability_profile: BitbucketCapabilityProfile
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,7 +223,6 @@ def revoke_local_bitbucket_connection(
             status = BitbucketConnectionStatus(
                 state="revoked",
                 generation=connection.generation,
-                scope_profile=connection.scope_profile or REPOSITORY_SCOPE,
             )
         else:
             if expected_generation is not None and connection.generation != expected_generation:
@@ -204,13 +237,17 @@ def revoke_local_bitbucket_connection(
             status = BitbucketConnectionStatus(
                 state="revoked",
                 generation=connection.generation,
-                scope_profile=connection.scope_profile or REPOSITORY_SCOPE,
             )
         public_status = BitbucketConnectionPublicStatus(
             state="disconnected",
             connected_at=connection.connected_at,
             expires_at=None,
             revoked_at=connection.revoked_at,
+            capability_profile=_capability_profile(
+                "disconnected",
+                evaluated_at=revoked_at,
+                source_generation=connection.generation,
+            ),
         )
     if changed:
         audit_emitter(
@@ -266,10 +303,11 @@ class BitbucketOAuthService:
 
     def public_status(self, session: Session) -> BitbucketConnectionPublicStatus:
         """Read one bounded status with provider expiry as authoritative."""
+        evaluated_at = self._now()
         with session.begin():
             connection = session.get(BitbucketConnection, 1)
             if connection is None:
-                return self._status("unavailable", None)
+                return self._status("unavailable", None, evaluated_at=evaluated_at)
             has_access = connection.access_token_ciphertext is not None
             has_refresh = connection.refresh_token_ciphertext is not None
             if has_refresh and not has_access:
@@ -281,13 +319,15 @@ class BitbucketOAuthService:
                 ] = "unavailable"
             elif connection.revoked_at is not None:
                 state = "disconnected"
-            elif has_refresh:
+            elif has_refresh or (
+                has_access and connection.scope_profile == LEGACY_REPOSITORY_SCOPE
+            ):
                 state = "reauthorization_required"
-            elif has_access and connection.scope_profile != REPOSITORY_SCOPE:
+            elif has_access and connection.scope_profile != PULLREQUEST_WRITE_SCOPE:
                 state = "unavailable"
             elif has_access and (
                 connection.provider_expires_at is None
-                or connection.provider_expires_at <= self._now()
+                or connection.provider_expires_at <= evaluated_at
             ):
                 state = "reauthorization_required"
             elif has_access:
@@ -296,7 +336,7 @@ class BitbucketOAuthService:
                 state = "reauthorization_required"
             else:
                 state = "disconnected"
-            return self._status(state, connection)
+            return self._status(state, connection, evaluated_at=evaluated_at)
 
     @staticmethod
     def _status(
@@ -307,12 +347,19 @@ class BitbucketOAuthService:
             "unavailable",
         ],
         connection: BitbucketConnection | None,
+        *,
+        evaluated_at: datetime,
     ) -> BitbucketConnectionPublicStatus:
         return BitbucketConnectionPublicStatus(
             state=state,
             connected_at=None if connection is None else connection.connected_at,
             expires_at=None if connection is None else connection.provider_expires_at,
             revoked_at=None if connection is None else connection.revoked_at,
+            capability_profile=_capability_profile(
+                state,
+                evaluated_at=evaluated_at,
+                source_generation=None if connection is None else connection.generation,
+            ),
         )
 
     def acquire_client_credentials(
@@ -428,7 +475,7 @@ class BitbucketOAuthService:
         connection.generation += 1
         connection.access_token_ciphertext = self._secret_box.encrypt(access_token)
         connection.refresh_token_ciphertext = None
-        connection.scope_profile = REPOSITORY_SCOPE
+        connection.scope_profile = PULLREQUEST_WRITE_SCOPE
         connection.provider_expires_at = acquired_at + timedelta(seconds=expires_in)
         if replace_connected_at or connection.connected_at is None:
             connection.connected_at = acquired_at
@@ -437,7 +484,6 @@ class BitbucketOAuthService:
         return BitbucketConnectionStatus(
             state="connected",
             generation=connection.generation,
-            scope_profile=REPOSITORY_SCOPE,
         )
 
     @staticmethod
@@ -492,7 +538,7 @@ class BitbucketOAuthService:
     def _require_client_credentials_state(self, connection: BitbucketConnection) -> None:
         if (
             connection.revoked_at is not None
-            or connection.scope_profile != REPOSITORY_SCOPE
+            or connection.scope_profile != PULLREQUEST_WRITE_SCOPE
             or connection.access_token_ciphertext is None
             or connection.refresh_token_ciphertext is not None
             or connection.provider_expires_at is None
@@ -556,17 +602,51 @@ class BitbucketOAuthService:
     ) -> tuple[str, int]:
         access_token = token_response.get("access_token")
         token_type = token_response.get("token_type")
-        scope = token_response.get("scope")
+        raw_scope = token_response.get("scope")
         expires_in = token_response.get("expires_in")
+        scopes = raw_scope.split() if isinstance(raw_scope, str) else []
+        scope_set = frozenset(scopes)
         if (
             not isinstance(access_token, str)
             or not access_token
             or not isinstance(token_type, str)
             or token_type.casefold() != "bearer"
-            or scope != REPOSITORY_SCOPE
+            or not isinstance(raw_scope, str)
+            or PULLREQUEST_WRITE_SCOPE not in scope_set
+            or not scope_set.issubset(PULLREQUEST_WRITE_IMPLICATION_CLOSURE)
+            or len(scope_set) != len(scopes)
             or not isinstance(expires_in, int)
             or isinstance(expires_in, bool)
             or expires_in < 1
         ):
             raise OAuthConnectionUnavailable(CONNECTION_UNAVAILABLE_MESSAGE)
         return access_token, expires_in
+
+
+def _capability_profile(
+    state: Literal[
+        "disconnected",
+        "connected",
+        "reauthorization_required",
+        "unavailable",
+    ],
+    *,
+    evaluated_at: datetime,
+    source_generation: int | None,
+) -> BitbucketCapabilityProfile:
+    if state == "connected":
+        return BitbucketCapabilityProfile(
+            source_read="ready",
+            source_write="ready_for_later_phase",
+            pull_request="ready_for_later_phase",
+            evaluated_at=evaluated_at,
+            source_generation=source_generation,
+        )
+    readiness: CapabilityReadiness = state
+    return BitbucketCapabilityProfile(
+        source_read=readiness,
+        source_write=readiness,
+        pull_request=readiness,
+        evaluated_at=evaluated_at,
+        source_generation=source_generation,
+    )
