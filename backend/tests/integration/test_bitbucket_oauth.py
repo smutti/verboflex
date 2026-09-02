@@ -56,7 +56,7 @@ class FakeTokenExchange:
     client_credentials_calls: list[dict[str, str]] = field(default_factory=list)
     access_token: object = ACCESS_TOKEN
     token_type: object = "bearer"
-    scope: object = "repository"
+    scope: object = "pullrequest:write"
     expires_in: object = 3600
     error: Exception | None = None
     started: Event | None = None
@@ -145,6 +145,129 @@ def _connection_snapshot(factory: sessionmaker[Session]) -> tuple[Any, ...]:
         )
 
 
+def test_exact_scope_accepts_only_pullrequest_write_implication_closure(
+    oauth_session_factory: sessionmaker[Session],
+) -> None:
+    """Require the selected scope while accepting only its documented implications."""
+    from verboflex.services.bitbucket_oauth import (
+        PULLREQUEST_WRITE_SCOPE,
+        BitbucketOAuthService,
+        OAuthConnectionUnavailable,
+    )
+
+    assert PULLREQUEST_WRITE_SCOPE == "pullrequest:write"
+    exchange = FakeTokenExchange()
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        token_exchange=exchange,
+        clock=lambda: CLIENT_CREDENTIALS_NOW,
+    )
+
+    accepted_authority = (
+        "pullrequest:write",
+        "repository pullrequest:write repository:write pullrequest",
+    )
+    for expected_generation, authority in enumerate(accepted_authority, start=1):
+        exchange.scope = authority
+        with oauth_session_factory() as session:
+            status = service.acquire_client_credentials(session, actor_id=ADMIN_ID)
+        assert status.generation == expected_generation
+
+    rejected_authority = (
+        "repository repository:write pullrequest",
+        "pullrequest:write repository:admin",
+        "pullrequest:write pullrequest:write",
+        "PULLREQUEST:WRITE",
+    )
+    for authority in rejected_authority:
+        exchange.scope = authority
+        with (
+            oauth_session_factory() as session,
+            pytest.raises(OAuthConnectionUnavailable, match="connection unavailable"),
+        ):
+            service.acquire_client_credentials(session, actor_id=ADMIN_ID)
+        assert _connection_snapshot(oauth_session_factory)[0] == 2
+
+
+def test_capability_profile_is_closed_timestamped_and_generation_bound(
+    oauth_session_factory: sessionmaker[Session],
+) -> None:
+    """Project readiness without returning provider authority text."""
+    from verboflex.services.bitbucket_oauth import BitbucketOAuthService
+
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        token_exchange=FakeTokenExchange(
+            scope="pullrequest:write repository repository:write pullrequest"
+        ),
+        clock=lambda: CLIENT_CREDENTIALS_NOW,
+    )
+    with oauth_session_factory() as session:
+        service.acquire_client_credentials(session, actor_id=ADMIN_ID)
+    with oauth_session_factory() as session:
+        snapshot = service.public_status(session)
+
+    profile = snapshot.capability_profile
+    assert set(profile.__dataclass_fields__) == {
+        "source_read",
+        "source_write",
+        "pull_request",
+        "evaluated_at",
+        "source_generation",
+    }
+    assert profile.source_read == "ready"
+    assert profile.source_write == "ready_for_later_phase"
+    assert profile.pull_request == "ready_for_later_phase"
+    assert profile.evaluated_at == CLIENT_CREDENTIALS_NOW
+    assert profile.source_generation == 1
+    projection = repr(snapshot)
+    for forbidden in (
+        "pullrequest:write",
+        "repository:write",
+        ACCESS_TOKEN,
+        PROVIDER_ERROR_BODY,
+    ):
+        assert forbidden not in projection
+
+
+def test_reauthorization_required_repository_generation_denies_import_lease(
+    oauth_session_factory: sessionmaker[Session],
+) -> None:
+    """A legacy read-only generation remains revocable but cannot authorize imports."""
+    from verboflex.models.bitbucket_connection import BitbucketConnection
+    from verboflex.services.bitbucket_oauth import (
+        BitbucketOAuthService,
+        OAuthConnectionUnavailable,
+    )
+
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        token_exchange=FakeTokenExchange(),
+        clock=lambda: CLIENT_CREDENTIALS_NOW,
+    )
+    with oauth_session_factory() as session:
+        service.acquire_client_credentials(session, actor_id=ADMIN_ID)
+    with oauth_session_factory.begin() as session:
+        connection = session.get_one(BitbucketConnection, 1)
+        connection.scope_profile = "repository"
+
+    with oauth_session_factory() as session:
+        snapshot = service.public_status(session)
+    assert snapshot.state == "reauthorization_required"
+    assert snapshot.capability_profile.source_read == "reauthorization_required"
+    assert snapshot.capability_profile.source_write == "reauthorization_required"
+    assert snapshot.capability_profile.pull_request == "reauthorization_required"
+    with (
+        oauth_session_factory() as session,
+        pytest.raises(OAuthConnectionUnavailable, match="connection unavailable"),
+    ):
+        service.acquire_repository_read_lease(session)
+
+    with oauth_session_factory() as session:
+        revoked = service.revoke_current(session, actor_id=ADMIN_ID)
+    assert revoked.state == "revoked"
+
+
 def test_client_credentials_persists_access_only_encrypted_generation(
     oauth_session_factory: sessionmaker[Session],
     caplog: pytest.LogCaptureFixture,
@@ -181,7 +304,7 @@ def test_client_credentials_persists_access_only_encrypted_generation(
         assert connection.refresh_token_ciphertext is None
         assert connection.provider_expires_at == CLIENT_CREDENTIALS_NOW.replace(hour=13)
         assert connection.connected_at == CLIENT_CREDENTIALS_NOW
-        assert connection.scope_profile == "repository"
+        assert connection.scope_profile == "pullrequest:write"
         assert secret_box.decrypt(connection.access_token_ciphertext) == ACCESS_TOKEN
         ciphertext = connection.access_token_ciphertext
 
@@ -362,11 +485,11 @@ def test_client_credentials_renewal_failure_invalidates_expired_generation(
     assert snapshot[1:3] == (None, None)
 
     exchange.error = None
-    exchange.scope = "repository"
+    exchange.scope = "pullrequest:write"
     with oauth_session_factory() as session:
         service.acquire_client_credentials(session, actor_id=ADMIN_ID)
     clock.current += timedelta(hours=1)
-    exchange.scope = "repository:write"
+    exchange.scope = "pullrequest:write repository:admin"
     with oauth_session_factory() as session, pytest.raises(OAuthConnectionUnavailable):
         service.acquire_repository_read_lease(session)
     with oauth_session_factory() as session:
@@ -449,7 +572,7 @@ def test_client_credentials_malformed_durable_states_and_clock_fail_closed(
         return SimpleNamespace(
             access_token_ciphertext=overrides.get("access_token_ciphertext"),
             refresh_token_ciphertext=overrides.get("refresh_token_ciphertext"),
-            scope_profile=overrides.get("scope_profile", "repository"),
+            scope_profile=overrides.get("scope_profile", "pullrequest:write"),
             provider_expires_at=overrides.get("provider_expires_at"),
             connected_at=overrides.get("connected_at"),
             revoked_at=overrides.get("revoked_at"),
@@ -533,7 +656,7 @@ def test_client_credentials_provider_exchange_is_exact_and_bounded() -> None:
 
     class Opener:
         payload = (
-            b'{"access_token":"token","token_type":"bearer","scope":"repository","expires_in":3600}'
+            b'{"access_token":"token","token_type":"bearer","scope":"pullrequest:write","expires_in":3600}'
         )
         request: Any = None
         timeout: int | None = None
@@ -552,9 +675,11 @@ def test_client_credentials_provider_exchange_is_exact_and_bounded() -> None:
         client_id="client-id",
         client_secret="client-secret",  # pragma: allowlist secret
     )
-    assert response["scope"] == "repository"
+    assert response["scope"] == "pullrequest:write"
     assert opener.request.full_url == "https://bitbucket.org/site/oauth2/access_token"
-    assert opener.request.data == b"grant_type=client_credentials"
+    assert opener.request.data == (
+        b"grant_type=client_credentials&scope=pullrequest%3Awrite"
+    )
     expected = base64.b64encode(b"client-id:client-secret").decode()
     assert opener.request.headers["Authorization"] == f"Basic {expected}"
     assert opener.timeout == 10
