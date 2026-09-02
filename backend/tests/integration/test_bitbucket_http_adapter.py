@@ -469,7 +469,7 @@ def test_oauth_credential_lease_authority_fails_closed_for_unreadable_rows() -> 
     connection = SimpleNamespace(
         generation=7,
         revoked_at=None,
-        scope_profile="repository",
+        scope_profile="pullrequest:write",
         access_token_ciphertext="encrypted-access-token",
         refresh_token_ciphertext=None,
         provider_expires_at=now + timedelta(hours=1),
@@ -487,6 +487,7 @@ def test_oauth_credential_lease_authority_fails_closed_for_unreadable_rows() -> 
     unreadable_connections = (
         None,
         SimpleNamespace(**{**vars(connection), "revoked_at": object()}),
+        SimpleNamespace(**{**vars(connection), "scope_profile": "repository"}),
         SimpleNamespace(**{**vars(connection), "scope_profile": "repository:write"}),
         SimpleNamespace(**{**vars(connection), "access_token_ciphertext": None}),
         SimpleNamespace(**{**vars(connection), "refresh_token_ciphertext": "legacy-refresh-token"}),

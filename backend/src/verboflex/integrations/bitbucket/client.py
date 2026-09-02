@@ -35,11 +35,26 @@ ProviderFailureKind = Literal[
     "reauthorization_required",
     "permission_denied",
     "not_found",
+    "rate_limited",
     "unavailable",
     "timeout",
     "invalid_source",
     "limit_exceeded",
 ]
+
+_PROVIDER_FAILURE_KINDS = frozenset(
+    {
+        "disconnected",
+        "reauthorization_required",
+        "permission_denied",
+        "not_found",
+        "rate_limited",
+        "unavailable",
+        "timeout",
+        "invalid_source",
+        "limit_exceeded",
+    }
+)
 
 _MAX_JSON_RESPONSE_BYTES = 1_048_576
 
@@ -47,9 +62,21 @@ _MAX_JSON_RESPONSE_BYTES = 1_048_576
 class BitbucketProviderReadError(RuntimeError):
     """Bound every provider, credential, and response failure to one safe message."""
 
-    def __init__(self, *, kind: ProviderFailureKind = "unavailable") -> None:
+    def __init__(
+        self,
+        *,
+        kind: ProviderFailureKind = "unavailable",
+        provider_status: int | None = None,
+    ) -> None:
         super().__init__(PROVIDER_READ_FAILED_MESSAGE)
-        self.kind = kind
+        self.kind: ProviderFailureKind = kind if kind in _PROVIDER_FAILURE_KINDS else "unavailable"
+        self.provider_status = (
+            provider_status
+            if isinstance(provider_status, int)
+            and not isinstance(provider_status, bool)
+            and 100 <= provider_status <= 599
+            else None
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -316,7 +343,7 @@ class BitbucketHttpAdapter:
         try:
             decoded = json.loads(payload)
         except json.JSONDecodeError, UnicodeDecodeError:
-            raise BitbucketProviderReadError(kind="invalid_source") from None
+            decoded = None
         if not isinstance(decoded, dict):
             raise BitbucketProviderReadError(kind="invalid_source")
         return cast(dict[str, object], decoded)
@@ -330,6 +357,7 @@ class BitbucketHttpAdapter:
         expect_json: bool,
     ) -> bytes:
         validated_url = validate_bitbucket_api_url(url)
+        failure_kind: ProviderFailureKind | None = None
         try:
             lease = self._credential_leases.acquire_repository_read_lease(session)
             self._credential_leases.require_current_repository_read_lease(session, lease)
@@ -339,10 +367,10 @@ class BitbucketHttpAdapter:
                 headers={"Authorization": f"Bearer {lease.access_token}"},
             ) as response:
                 if response.is_redirect:
-                    location = response.headers.get("location")
-                    if location is not None:
-                        validate_bitbucket_api_url(location)
-                    raise BitbucketProviderReadError(kind="invalid_source")
+                    raise BitbucketProviderReadError(
+                        kind="invalid_source",
+                        provider_status=response.status_code,
+                    )
                 if not 200 <= response.status_code < 300:
                     kind: ProviderFailureKind
                     if response.status_code == 401:
@@ -351,30 +379,47 @@ class BitbucketHttpAdapter:
                         kind = "permission_denied"
                     elif response.status_code == 404:
                         kind = "not_found"
+                    elif response.status_code == 429:
+                        kind = "rate_limited"
                     elif response.status_code in {408, 504}:
                         kind = "timeout"
                     else:
                         kind = "unavailable"
-                    raise BitbucketProviderReadError(kind=kind)
+                    raise BitbucketProviderReadError(
+                        kind=kind,
+                        provider_status=response.status_code,
+                    )
                 if response.headers.get("x-oauth-scopes") != LEGACY_REPOSITORY_SCOPE:
-                    raise BitbucketProviderReadError(kind="permission_denied")
+                    raise BitbucketProviderReadError(
+                        kind="permission_denied",
+                        provider_status=response.status_code,
+                    )
                 content_encoding = response.headers.get("content-encoding")
                 if content_encoding not in {None, "identity"}:
-                    raise BitbucketProviderReadError(kind="invalid_source")
+                    raise BitbucketProviderReadError(
+                        kind="invalid_source",
+                        provider_status=response.status_code,
+                    )
                 if expect_json:
                     media_type = response.headers.get("content-type", "").split(";", 1)[0]
                     if media_type != "application/json":
-                        raise BitbucketProviderReadError(kind="invalid_source")
+                        raise BitbucketProviderReadError(
+                            kind="invalid_source",
+                            provider_status=response.status_code,
+                        )
                 content_length = response.headers.get("content-length")
                 if content_length is not None:
-                    try:
-                        declared_length = int(content_length)
-                    except ValueError:
-                        raise BitbucketProviderReadError(kind="invalid_source") from None
-                    if declared_length < 0:
-                        raise BitbucketProviderReadError(kind="invalid_source")
+                    if not content_length.isascii() or not content_length.isdecimal():
+                        raise BitbucketProviderReadError(
+                            kind="invalid_source",
+                            provider_status=response.status_code,
+                        )
+                    declared_length = int(content_length)
                     if declared_length > max_bytes:
-                        raise BitbucketProviderReadError(kind="limit_exceeded")
+                        raise BitbucketProviderReadError(
+                            kind="limit_exceeded",
+                            provider_status=response.status_code,
+                        )
                 chunks: list[bytes] = []
                 byte_count = 0
                 if response.is_stream_consumed:
@@ -383,6 +428,7 @@ class BitbucketHttpAdapter:
                         byte_count=byte_count,
                         chunk=response.content,
                         max_bytes=max_bytes,
+                        provider_status=response.status_code,
                     )
                 else:
                     async for chunk in response.aiter_raw():
@@ -391,21 +437,23 @@ class BitbucketHttpAdapter:
                             byte_count=byte_count,
                             chunk=chunk,
                             max_bytes=max_bytes,
+                            provider_status=response.status_code,
                         )
             self._credential_leases.require_current_repository_read_lease(session, lease)
             return b"".join(chunks)
         except BitbucketProviderReadError:
             raise
         except OAuthConnectionUnavailable:
-            raise BitbucketProviderReadError(kind="disconnected") from None
+            failure_kind = "disconnected"
         except OAuthGenerationRejected:
-            raise BitbucketProviderReadError(kind="reauthorization_required") from None
+            failure_kind = "reauthorization_required"
         except httpx.DecodingError:
-            raise BitbucketProviderReadError(kind="invalid_source") from None
+            failure_kind = "invalid_source"
         except httpx.TimeoutException:
-            raise BitbucketProviderReadError(kind="timeout") from None
+            failure_kind = "timeout"
         except Exception:
-            raise BitbucketProviderReadError() from None
+            failure_kind = "unavailable"
+        raise BitbucketProviderReadError(kind=failure_kind or "unavailable")
 
     @staticmethod
     def _append_bounded_chunk(
@@ -414,11 +462,15 @@ class BitbucketHttpAdapter:
         byte_count: int,
         chunk: bytes,
         max_bytes: int,
+        provider_status: int | None = None,
     ) -> int:
         """Count each transport byte exactly once before retaining it in memory."""
         next_count = byte_count + len(chunk)
         if next_count > max_bytes:
-            raise BitbucketProviderReadError(kind="limit_exceeded")
+            raise BitbucketProviderReadError(
+                kind="limit_exceeded",
+                provider_status=provider_status,
+            )
         chunks.append(chunk)
         return next_count
 

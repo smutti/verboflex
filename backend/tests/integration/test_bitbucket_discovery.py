@@ -418,9 +418,7 @@ def test_source_discovery_failure_does_not_retry_provider_step(failed_step: str)
             if failed_step == "tree":
                 raise BitbucketProviderReadError(kind="rate_limited")
             return BitbucketSourcePage(
-                entries=(
-                    BitbucketSourceEntry(path="locale.json", kind="file", size=2),
-                ),
+                entries=(BitbucketSourceEntry(path="locale.json", kind="file", size=2),),
                 next_url=None,
             )
 
