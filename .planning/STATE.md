@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 03
 current_phase_name: Bitbucket Import Integration
 status: executing
-stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-09-02T21:45:01.725Z"
+stopped_at: Completed 03-06-PLAN.md
+last_updated: "2026-09-02T22:07:01.625Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 03 execution started
-state_head: 0b58efe331c60dc1707cbee026bdf93a536f30c2
+state_head: 107160c945ea42c266ff164beac1b27a74b3431e
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 77
-  completed_plans: 66
+  completed_plans: 67
   percent: 22
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 03 (Bitbucket Import Integration) — EXECUTING
-Plan: 6 of 16
+Plan: 7 of 16
 Status: Ready to execute
 Last activity: 2026-09-02 — Phase 03 execution started
 
@@ -125,6 +125,7 @@ Progress: [████████████████████] 61/61 p
 | Phase 03 P03 | 22min | 2 tasks | 7 files |
 | Phase 03 P04 | 13min | 2 tasks | 8 files |
 | Phase 03 P05 | 13min | 2 tasks | 5 files |
+| Phase 03 P06 | 15min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -339,6 +340,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Use one ten-value application vocabulary: seven Phase 3 read operations and exactly three non-executable Phase 8 write declarations.
 - [Phase 03]: Reject non-read operations and operation/URL mismatches before credential acquisition while retaining a GET-only Phase 3 adapter.
 - [Phase 03]: Pin branch-list continuations to the originating repository and accept only pullrequest:write implication-closure scope evidence.
+- [Phase 03]: Emit Bitbucket provider-failure diagnostics only after the exact current import execution durably transitions to failed.
+- [Phase 03]: Carry only closed operation, closed category, and safe nullable provider status on internal provider errors while public imports retain one fixed bounded failure projection.
+- [Phase 03]: Treat operational logging as subordinate to import state so logger failure cannot change terminalization.
 
 ### Pending Todos
 
@@ -378,6 +382,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-02T21:45:01.600Z
-Stopped at: Completed 03-05-PLAN.md
+Last session: 2026-09-02T22:07:01.495Z
+Stopped at: Completed 03-06-PLAN.md
 Resume file: None
