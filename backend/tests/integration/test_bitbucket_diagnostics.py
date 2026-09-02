@@ -14,9 +14,7 @@ IMPORT_ID = UUID("1e4decb8-fb89-4e92-a27c-1b42b9a30ef2")
 
 def _diagnostic_record(caplog: pytest.LogCaptureFixture) -> logging.LogRecord:
     records = [
-        record
-        for record in caplog.records
-        if record.name == "verboflex.bitbucket.operations"
+        record for record in caplog.records if record.name == "verboflex.bitbucket.operations"
     ]
     assert len(records) == 1
     return records[0]

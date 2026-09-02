@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -14,6 +15,12 @@ from sqlalchemy.orm import Session, selectinload, sessionmaker
 from sqlalchemy.sql import Select
 
 from verboflex.core.config import get_settings
+from verboflex.integrations.bitbucket.client import BitbucketProviderReadError
+from verboflex.integrations.bitbucket.diagnostics import (
+    BitbucketDiagnosticContext,
+    log_bitbucket_operation_failure,
+)
+from verboflex.integrations.bitbucket.urls import BitbucketOperation
 from verboflex.models.bitbucket_connection import BitbucketConnection
 from verboflex.models.import_job import (
     ImportExecution,
@@ -641,7 +648,7 @@ def _finish_import_job(
     *,
     identity: ImportExecutionIdentity,
     references: tuple[ImportSourceReferenceRecord, ...] | None,
-) -> None:
+) -> bool:
     with factory.begin() as session:
         job = session.execute(
             select(ImportJob).where(ImportJob.id == identity.import_id).with_for_update()
@@ -663,7 +670,7 @@ def _finish_import_job(
             or job.state != "running"
             or execution.state != "running"
         ):
-            return
+            return False
         now = datetime.now(UTC)
         if references is None:
             execution.state = "failed"
@@ -696,6 +703,7 @@ def _finish_import_job(
             job.error_message = None
         execution.finished_at = now
         job.updated_at = now
+    return True
 
 
 def execute_import_job(
@@ -708,8 +716,22 @@ def execute_import_job(
     identity = _start_import_job(factory, import_id=import_id)
     if identity is None:
         return
+    started_at = time.monotonic()
     try:
         references = _validated_references(identity, processor(identity))
+    except BitbucketProviderReadError as error:
+        terminalized = _finish_import_job(factory, identity=identity, references=None)
+        if terminalized:
+            log_bitbucket_operation_failure(
+                context=BitbucketDiagnosticContext(
+                    import_id=identity.import_id,
+                    execution_number=identity.sequence,
+                ),
+                operation=error.operation or BitbucketOperation.SOURCE_TREE,
+                error_category=error.kind,
+                provider_status=error.provider_status,
+                elapsed_ms=(time.monotonic() - started_at) * 1000,
+            )
     except Exception:
         _finish_import_job(factory, identity=identity, references=None)
     else:

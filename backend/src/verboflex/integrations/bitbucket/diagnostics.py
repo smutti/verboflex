@@ -116,6 +116,10 @@ def log_bitbucket_operation_failure(
     }
 
     try:
+        # Alembic's process-local logging configuration can disable loggers that
+        # were imported before a migration run. This event remains explicitly
+        # enabled at its own bounded boundary.
+        _LOGGER.disabled = False
         _LOGGER.info(BITBUCKET_OPERATION_FAILURE_EVENT, extra=fields)
     except Exception:
         # Operational logging is deliberately subordinate to durable import state.

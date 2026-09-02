@@ -71,6 +71,7 @@ class BitbucketProviderReadError(RuntimeError):
         *,
         kind: ProviderFailureKind = "unavailable",
         provider_status: int | None = None,
+        operation: BitbucketOperation | None = None,
     ) -> None:
         super().__init__(PROVIDER_READ_FAILED_MESSAGE)
         self.kind: ProviderFailureKind = kind if kind in _PROVIDER_FAILURE_KINDS else "unavailable"
@@ -81,6 +82,12 @@ class BitbucketProviderReadError(RuntimeError):
             and 100 <= provider_status <= 599
             else None
         )
+        if operation is not None and (
+            not isinstance(operation, BitbucketOperation)
+            or operation not in PHASE_3_READ_OPERATIONS
+        ):
+            raise ValueError("Bitbucket provider operation rejected")
+        self.operation = operation
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,7 +198,7 @@ class BitbucketHttpAdapter:
         visited: set[str] = set()
         while next_url is not None:
             if next_url in visited or len(visited) >= 50:
-                raise BitbucketProviderReadError()
+                raise BitbucketProviderReadError(operation=BitbucketOperation.BRANCH_LIST)
             visited.add(next_url)
             page = await self._read_json(
                 session,
@@ -200,7 +207,10 @@ class BitbucketHttpAdapter:
             )
             page_branches, next_url = self._parse_branch_page(page)
             if next_url is not None and urlsplit(next_url).path != expected_path:
-                raise BitbucketProviderReadError(kind="invalid_source")
+                raise BitbucketProviderReadError(
+                    kind="invalid_source",
+                    operation=BitbucketOperation.BRANCH_LIST,
+                )
             branches.extend(page_branches)
         return tuple(branches)
 
@@ -223,10 +233,14 @@ class BitbucketHttpAdapter:
                 session,
                 operation=BitbucketOperation.BRANCH_RESOLVE,
                 url=url,
-            )
+            ),
+            operation=BitbucketOperation.BRANCH_RESOLVE,
         )
         if resolved.name != branch:
-            raise BitbucketProviderReadError(kind="invalid_source")
+            raise BitbucketProviderReadError(
+                kind="invalid_source",
+                operation=BitbucketOperation.BRANCH_RESOLVE,
+            )
         return resolved
 
     async def list_repository_source_page(
@@ -249,12 +263,13 @@ class BitbucketHttpAdapter:
         )
         url = next_url or source_url
         if (
-            urlsplit(
-                validate_bitbucket_api_url(url, operation=BitbucketOperation.SOURCE_TREE)
-            ).path
+            urlsplit(validate_bitbucket_api_url(url, operation=BitbucketOperation.SOURCE_TREE)).path
             != urlsplit(source_url).path
         ):
-            raise BitbucketProviderReadError(kind="invalid_source")
+            raise BitbucketProviderReadError(
+                kind="invalid_source",
+                operation=BitbucketOperation.SOURCE_TREE,
+            )
         return self._parse_source_page(
             await self._read_json(
                 session,
@@ -275,7 +290,10 @@ class BitbucketHttpAdapter:
     ) -> bytes:
         """Stream one raw commit-bound file and fail before its byte ceiling is crossed."""
         if max_bytes < 0:
-            raise BitbucketProviderReadError(kind="limit_exceeded")
+            raise BitbucketProviderReadError(
+                kind="limit_exceeded",
+                operation=BitbucketOperation.SOURCE_FILE,
+            )
         url = repository_source_url(
             workspace=workspace,
             repository_slug=repository_slug,
@@ -297,25 +315,32 @@ class BitbucketHttpAdapter:
     ) -> tuple[tuple[BitbucketBranch, ...], str | None]:
         values = page.get("values")
         if not isinstance(values, list):
-            raise BitbucketProviderReadError()
-        branches = tuple(cls._parse_branch(raw_branch) for raw_branch in values)
+            raise BitbucketProviderReadError(operation=BitbucketOperation.BRANCH_LIST)
+        branches = tuple(
+            cls._parse_branch(raw_branch, operation=BitbucketOperation.BRANCH_LIST)
+            for raw_branch in values
+        )
         raw_next = page.get("next")
         if raw_next is None:
             return branches, None
         if not isinstance(raw_next, str):
-            raise BitbucketProviderReadError()
+            raise BitbucketProviderReadError(operation=BitbucketOperation.BRANCH_LIST)
         try:
             return branches, validate_bitbucket_api_url(
                 raw_next,
                 operation=BitbucketOperation.BRANCH_LIST,
             )
         except ValueError:
-            raise BitbucketProviderReadError() from None
+            raise BitbucketProviderReadError(operation=BitbucketOperation.BRANCH_LIST) from None
 
     @staticmethod
-    def _parse_branch(raw_branch: object) -> BitbucketBranch:
+    def _parse_branch(
+        raw_branch: object,
+        *,
+        operation: BitbucketOperation | None = None,
+    ) -> BitbucketBranch:
         if not isinstance(raw_branch, dict):
-            raise BitbucketProviderReadError()
+            raise BitbucketProviderReadError(operation=operation)
         name = raw_branch.get("name")
         target = raw_branch.get("target")
         commit_hash = target.get("hash") if isinstance(target, dict) else None
@@ -327,37 +352,58 @@ class BitbucketHttpAdapter:
             or len(commit_hash) != 40
             or any(character not in "0123456789abcdefABCDEF" for character in commit_hash)
         ):
-            raise BitbucketProviderReadError()
+            raise BitbucketProviderReadError(operation=operation)
         return BitbucketBranch(name=name, commit_hash=commit_hash)
 
     @staticmethod
     def _parse_source_page(page: Mapping[str, object]) -> BitbucketSourcePage:
         values = page.get("values")
         if not isinstance(values, list):
-            raise BitbucketProviderReadError(kind="invalid_source")
+            raise BitbucketProviderReadError(
+                kind="invalid_source",
+                operation=BitbucketOperation.SOURCE_TREE,
+            )
         entries: list[BitbucketSourceEntry] = []
         for raw_entry in values:
             if not isinstance(raw_entry, dict):
-                raise BitbucketProviderReadError(kind="invalid_source")
+                raise BitbucketProviderReadError(
+                    kind="invalid_source",
+                    operation=BitbucketOperation.SOURCE_TREE,
+                )
             raw_path = raw_entry.get("path")
             raw_type = raw_entry.get("type")
             raw_size = raw_entry.get("size")
             if not isinstance(raw_path, str):
-                raise BitbucketProviderReadError(kind="invalid_source")
+                raise BitbucketProviderReadError(
+                    kind="invalid_source",
+                    operation=BitbucketOperation.SOURCE_TREE,
+                )
             try:
                 path = validate_repository_relative_path(raw_path)
             except ValueError:
-                raise BitbucketProviderReadError(kind="invalid_source") from None
+                raise BitbucketProviderReadError(
+                    kind="invalid_source",
+                    operation=BitbucketOperation.SOURCE_TREE,
+                ) from None
             if raw_type == "commit_directory":
                 if raw_size is not None:
-                    raise BitbucketProviderReadError(kind="invalid_source")
+                    raise BitbucketProviderReadError(
+                        kind="invalid_source",
+                        operation=BitbucketOperation.SOURCE_TREE,
+                    )
                 entries.append(BitbucketSourceEntry(path=path, kind="directory", size=None))
             elif raw_type == "commit_file":
                 if not isinstance(raw_size, int) or isinstance(raw_size, bool) or raw_size < 0:
-                    raise BitbucketProviderReadError(kind="invalid_source")
+                    raise BitbucketProviderReadError(
+                        kind="invalid_source",
+                        operation=BitbucketOperation.SOURCE_TREE,
+                    )
                 entries.append(BitbucketSourceEntry(path=path, kind="file", size=raw_size))
             else:
-                raise BitbucketProviderReadError(kind="invalid_source")
+                raise BitbucketProviderReadError(
+                    kind="invalid_source",
+                    operation=BitbucketOperation.SOURCE_TREE,
+                )
         raw_next = page.get("next")
         if raw_next is None:
             next_url = None
@@ -368,9 +414,15 @@ class BitbucketHttpAdapter:
                     operation=BitbucketOperation.SOURCE_TREE,
                 )
             except ValueError:
-                raise BitbucketProviderReadError(kind="invalid_source") from None
+                raise BitbucketProviderReadError(
+                    kind="invalid_source",
+                    operation=BitbucketOperation.SOURCE_TREE,
+                ) from None
         else:
-            raise BitbucketProviderReadError(kind="invalid_source")
+            raise BitbucketProviderReadError(
+                kind="invalid_source",
+                operation=BitbucketOperation.SOURCE_TREE,
+            )
         return BitbucketSourcePage(entries=tuple(entries), next_url=next_url)
 
     async def _read_json(
@@ -392,7 +444,10 @@ class BitbucketHttpAdapter:
         except json.JSONDecodeError, UnicodeDecodeError:
             decoded = None
         if not isinstance(decoded, dict):
-            raise BitbucketProviderReadError(kind="invalid_source")
+            raise BitbucketProviderReadError(
+                kind="invalid_source",
+                operation=operation,
+            )
         return cast(dict[str, object], decoded)
 
     async def _read_bounded_bytes(
@@ -496,7 +551,9 @@ class BitbucketHttpAdapter:
                         )
             self._credential_leases.require_current_repository_read_lease(session, lease)
             return b"".join(chunks)
-        except BitbucketProviderReadError:
+        except BitbucketProviderReadError as error:
+            if error.operation is None:
+                error.operation = operation
             raise
         except OAuthConnectionUnavailable:
             failure_kind = "disconnected"
@@ -508,7 +565,10 @@ class BitbucketHttpAdapter:
             failure_kind = "timeout"
         except Exception:
             failure_kind = "unavailable"
-        raise BitbucketProviderReadError(kind=failure_kind or "unavailable")
+        raise BitbucketProviderReadError(
+            kind=failure_kind or "unavailable",
+            operation=operation,
+        )
 
     @staticmethod
     def _append_bounded_chunk(

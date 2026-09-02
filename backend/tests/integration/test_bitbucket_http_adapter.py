@@ -66,6 +66,7 @@ def test_provider_status_failures_are_closed_and_one_attempt(
         BitbucketHttpAdapter,
         BitbucketProviderReadError,
     )
+    from verboflex.integrations.bitbucket.urls import BitbucketOperation
 
     requests: list[httpx.Request] = []
 
@@ -89,8 +90,9 @@ def test_provider_status_failures_are_closed_and_one_attempt(
         error = captured.value
         assert error.kind == expected_kind
         assert error.provider_status == status_code
+        assert error.operation is BitbucketOperation.REPOSITORY_METADATA
         assert str(error) == "Bitbucket provider read failed"
-        assert set(vars(error)) == {"kind", "provider_status"}
+        assert set(vars(error)) == {"kind", "operation", "provider_status"}
         assert error.__cause__ is None
         assert error.__context__ is None
         assert PROVIDER_BODY not in f"{error!r} {error} {vars(error)!r}"
