@@ -74,7 +74,7 @@ class FakeTokenExchange:
         return {
             "access_token": "api-access-secret",  # pragma: allowlist secret
             "token_type": "bearer",
-            "scope": "repository",
+            "scope": "pullrequest:write repository repository:write pullrequest",
             "expires_in": 3600,
             "provider_body": "must-not-escape",
         }
@@ -235,16 +235,52 @@ def assert_bounded_status(response: httpx.Response, expected: str) -> dict[str, 
         "status",
         "scope_profile",
         "scope_label",
+        "capability_profile",
         "connected_at",
         "expires_at",
         "revoked_at",
     }
     assert body["status"] == expected
-    assert body["scope_profile"] == "repository"
-    assert body["scope_label"] == "Read-only repository access"
-    for forbidden in ("workspace", "generation", "access_token", "refresh_token"):
-        assert forbidden not in body
+    assert body["scope_profile"] == "repository_and_pull_request"
+    assert body["scope_label"] == "Repository and pull-request access"
+    profile = body["capability_profile"]
+    assert set(profile) == {
+        "source_read",
+        "source_write",
+        "pull_request",
+        "evaluated_at",
+    }
+    expected_readiness = {
+        "Connected": ("ready", "ready_for_later_phase", "ready_for_later_phase"),
+        "Disconnected": ("disconnected", "disconnected", "disconnected"),
+        "Reauthorization required": (
+            "reauthorization_required",
+            "reauthorization_required",
+            "reauthorization_required",
+        ),
+        "Unavailable": ("unavailable", "unavailable", "unavailable"),
+    }[expected]
+    assert (
+        profile["source_read"],
+        profile["source_write"],
+        profile["pull_request"],
+    ) == expected_readiness
+    if profile["evaluated_at"] is not None:
+        evaluated_at = datetime.fromisoformat(profile["evaluated_at"].replace("Z", "+00:00"))
+        assert evaluated_at.tzinfo is not None
     return body
+
+
+def collect_mapping_keys(value: object) -> set[str]:
+    """Collect nested response keys for recursive secret-surface assertions."""
+    if isinstance(value, dict):
+        return {
+            *(str(key).casefold() for key in value),
+            *(key for child in value.values() for key in collect_mapping_keys(child)),
+        }
+    if isinstance(value, list):
+        return {key for child in value for key in collect_mapping_keys(child)}
+    return set()
 
 
 def test_admin_client_credentials_connect_reconnect_status_and_revoke(
@@ -283,7 +319,7 @@ def test_admin_client_credentials_connect_reconnect_status_and_revoke(
     assert first_snapshot[0] == 1
     assert first_snapshot[1] not in (None, "api-access-secret")
     assert first_snapshot[2] is None
-    assert first_snapshot[3] == "repository"
+    assert first_snapshot[3] == "pullrequest:write"
 
     reconnected = asyncio.run(
         bitbucket_request("POST", path=f"{BITBUCKET_PATH}/reconnect", access_token=admin_token)
@@ -301,7 +337,7 @@ def test_admin_client_credentials_connect_reconnect_status_and_revoke(
         3,
         None,
         None,
-        "repository",
+        "pullrequest:write",
     )
     assert admin_id
 
@@ -330,6 +366,70 @@ def test_client_credentials_status_uses_exact_expiry_boundary(
     clock.current += timedelta(seconds=1)
     expired = asyncio.run(bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token))
     assert_bounded_status(expired, "Reauthorization required")
+
+
+def test_legacy_authority_projects_reauthorization_required_capability(
+    bitbucket_api_session_factory: sessionmaker[Session],
+) -> None:
+    """Expose only closed recovery readiness for a superseded read-only grant."""
+    _admin_id, admin_token = create_authority(
+        bitbucket_api_session_factory,
+        email="legacy-capability-admin@example.com",
+        roles=("admin",),
+    )
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        token_exchange=FakeTokenExchange(),
+        clock=lambda: FIXED_NOW,
+    )
+    configure_dependencies(bitbucket_api_session_factory, service)
+    connected = asyncio.run(
+        bitbucket_request("POST", path=f"{BITBUCKET_PATH}/connect", access_token=admin_token)
+    )
+    assert_bounded_status(connected, "Connected")
+    with bitbucket_api_session_factory.begin() as session:
+        connection = session.get_one(BitbucketConnection, 1)
+        connection.scope_profile = "repository"
+
+    legacy = asyncio.run(
+        bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token)
+    )
+    assert_bounded_status(legacy, "Reauthorization required")
+
+
+def test_capability_projection_is_recursive_forbidden_field_free(
+    bitbucket_api_session_factory: sessionmaker[Session],
+) -> None:
+    """Keep provider authority, credentials, identity, and mutations out of status."""
+    _admin_id, admin_token = create_authority(
+        bitbucket_api_session_factory,
+        email="closed-capability-admin@example.com",
+        roles=("admin",),
+    )
+    configure_dependencies(bitbucket_api_session_factory, None)
+
+    unavailable = asyncio.run(
+        bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token)
+    )
+    body = assert_bounded_status(unavailable, "Unavailable")
+    forbidden = {
+        "access_token",
+        "authorization",
+        "branch",
+        "ciphertext",
+        "client_id",
+        "client_secret",
+        "commit",
+        "effective_scope",
+        "generation",
+        "provider_body",
+        "raw_scope",
+        "refresh_token",
+        "scope",
+        "source_generation",
+        "workspace",
+    }
+    assert collect_mapping_keys(body).isdisjoint(forbidden)
 
 
 def test_connect_reconnect_status_require_current_admin_without_mutation(
