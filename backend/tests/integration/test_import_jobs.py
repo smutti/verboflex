@@ -317,6 +317,8 @@ class PersistedImportEnqueuer:
 class ProviderResourceSpy:
     files: dict[str, bytes]
     requests: list[tuple[str, str]] = field(default_factory=list)
+    commit_hashes: list[str] = field(default_factory=lambda: [COMMIT_HASH])
+    branch_resolution_count: int = 0
 
     async def resolve_repository_branch(
         self,
@@ -333,7 +335,11 @@ class ProviderResourceSpy:
                 f"{workspace}/{repository_slug}/refs/branches/{quote(branch, safe='')}",
             )
         )
-        return BitbucketBranch(name=branch, commit_hash=COMMIT_HASH)
+        commit_hash = self.commit_hashes[
+            min(self.branch_resolution_count, len(self.commit_hashes) - 1)
+        ]
+        self.branch_resolution_count += 1
+        return BitbucketBranch(name=branch, commit_hash=commit_hash)
 
     async def list_repository_source_page(
         self,
@@ -760,6 +766,20 @@ def test_transition_current_refresh_increments_execution_without_retry(
     assert refreshed.json()["state"] == "queued"
     assert refreshed.json()["retry_count"] == 0
     assert enqueuer.payloads == [(str(import_id),), (str(import_id),)]
+
+    duplicate_queued = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert duplicate_queued.status_code == 202
+    assert duplicate_queued.json()["state"] == "queued"
+    assert enqueuer.payloads == [(str(import_id),), (str(import_id),)]
+    running_identity = import_job_service.start_import_execution(
+        import_session_factory,
+        import_id=import_id,
+    )
+    assert running_identity is not None
+    duplicate_running = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert duplicate_running.status_code == 202
+    assert duplicate_running.json()["state"] == "running"
+    assert enqueuer.payloads == [(str(import_id),), (str(import_id),)]
     with import_session_factory() as session:
         job = session.get(ImportJob, import_id)
         assert job is not None
@@ -773,6 +793,63 @@ def test_transition_current_refresh_increments_execution_without_retry(
         assert [execution.sequence for execution in executions] == [1, 2]
         assert job.current_execution_id == executions[1].id
         assert job.active_baseline_execution_id == executions[0].id
+
+
+def test_current_capability_and_branch_resolution_are_fresh_for_every_execution(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    product_id, _revision_id, _repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
+    start_path = f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
+    first_commit = "b" * 40
+    second_commit = "c" * 40
+    spy = ProviderResourceSpy(
+        files={"mobile/src/main/res/values/strings.xml": b"<resources />"},
+        commit_hashes=[first_commit, second_commit],
+    )
+
+    initial = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert initial.status_code == 202
+    import_id = UUID(initial.json()["id"])
+    execute_import_job(
+        import_session_factory,
+        import_id=import_id,
+        processor=lambda identity: import_job_service.process_import(
+            identity,
+            factory=import_session_factory,
+            adapter=spy,
+        ),
+    )
+    refreshed = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert refreshed.status_code == 202
+    execute_import_job(
+        import_session_factory,
+        import_id=import_id,
+        processor=lambda identity: import_job_service.process_import(
+            identity,
+            factory=import_session_factory,
+            adapter=spy,
+        ),
+    )
+
+    assert spy.branch_resolution_count == 2
+    status = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/imports/{import_id}",
+            access_token=admin_token,
+        )
+    )
+    assert status.status_code == 200
+    assert status.json()["retry_count"] == 0
+    assert {
+        reference["commit_hash"]
+        for reference in status.json()["active_baseline"]["source_references"]
+    } == {second_commit}
 
 
 def test_same_commit_refresh_retains_the_active_baseline_pointer(
@@ -1069,7 +1146,7 @@ def test_import_enqueue_failure_is_terminal_bounded_and_baseline_preserving(
     body = failed.json()
     assert body["state"] == "import_failed"
     assert body["active_baseline"] == before
-    assert body["retry_count"] == 1
+    assert body["retry_count"] == 0
     assert body["error_category"] == "provider_unavailable"
     assert "secret" not in str(body).casefold()
     assert "unsafe" not in str(body).casefold()

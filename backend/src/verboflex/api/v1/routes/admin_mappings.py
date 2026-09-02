@@ -33,10 +33,10 @@ from verboflex.services.import_jobs import (
     ImportEnqueuer,
     ImportJobRecord,
     ImportNotFound,
-    create_or_start_import,
     enqueue_import_job,
     get_import_job,
     list_published_mapping_imports,
+    start_or_refresh_import,
 )
 from verboflex.services.mappings import (
     InvalidMappingCursor,
@@ -218,7 +218,7 @@ async def start_admin_published_mapping_import(
 ) -> AdminPublishedMappingImportResponse:
     """Persist one queued logical import before dispatching its UUID."""
     try:
-        record = create_or_start_import(
+        record = start_or_refresh_import(
             session,
             product_id=product_id,
             mapping_id=mapping_id,

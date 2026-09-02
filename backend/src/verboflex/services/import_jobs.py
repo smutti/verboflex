@@ -30,6 +30,7 @@ from verboflex.models.import_job import (
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import ProductRepositoryMapping
 from verboflex.models.repository import Repository
+from verboflex.services.bitbucket_oauth import PULLREQUEST_WRITE_SCOPE
 from verboflex.services.repositories import RepositoryRecord
 from verboflex.services.repository_discovery import (
     SourceDiscoveryAdapter,
@@ -150,7 +151,7 @@ def _connected_generation(session: Session) -> int:
         connection is None
         or connection.access_token_ciphertext is None
         or connection.refresh_token_ciphertext is not None
-        or connection.scope_profile != "repository"
+        or connection.scope_profile != PULLREQUEST_WRITE_SCOPE
         or connection.provider_expires_at is None
         or connection.provider_expires_at <= datetime.now(UTC)
         or connection.revoked_at is not None
@@ -362,7 +363,7 @@ def enqueue_import_job(import_id: UUID) -> None:
     )
 
 
-def create_or_start_import(
+def start_or_refresh_import(
     session: Session,
     *,
     product_id: UUID,
@@ -412,25 +413,41 @@ def create_or_start_import(
             session.add(execution)
             session.flush()
             should_enqueue = True
-        elif job.state not in {"queued", "running"}:
+        elif job.state in {"current", "import_failed"}:
             now = datetime.now(UTC)
+            current_execution = session.execute(
+                select(ImportExecution)
+                .where(
+                    ImportExecution.id == job.current_execution_id,
+                    ImportExecution.import_job_id == job.id,
+                )
+                .with_for_update()
+            ).scalar_one_or_none()
+            if current_execution is None:
+                raise ImportConflict("persisted import execution rejected")
+            expected_terminal_state = "succeeded" if job.state == "current" else "failed"
+            if current_execution.state != expected_terminal_state:
+                raise ImportConflict("persisted import execution rejected")
             execution = ImportExecution(
                 id=uuid4(),
                 import_job_id=job.id,
-                sequence=job.retry_count + 2,
+                sequence=current_execution.sequence + 1,
                 state="queued",
                 connection_generation=connection_generation,
             )
             session.add(execution)
             job.current_execution_id = execution.id
             job.state = "queued"
-            job.retry_count += 1
+            if current_execution.state == "failed":
+                job.retry_count += 1
             job.error_category = None
             job.error_message = None
             job.latest_execution_at = now
             job.updated_at = now
             session.flush()
             should_enqueue = True
+        elif job.state not in {"queued", "running"}:
+            raise ImportConflict("persisted import state rejected")
         record = _record(session, mapping=mapping, job=job)
 
     if not should_enqueue:
@@ -473,6 +490,11 @@ def create_or_start_import(
     return record
 
 
+# Compatibility name retained for existing callers while the route adopts the
+# stable Phase 3 state-machine vocabulary.
+create_or_start_import = start_or_refresh_import
+
+
 def get_import_job(
     session: Session,
     *,
@@ -503,94 +525,98 @@ def get_import_job(
         return _record(session, mapping=mapping, job=job)
 
 
-def _current_execution_identity(
-    session: Session,
-    *,
-    job: ImportJob,
-) -> ImportExecutionIdentity | None:
-    product = session.execute(
-        select(Product).where(Product.id == job.product_id).with_for_update()
-    ).scalar_one_or_none()
-    if product is None or not product.is_active or product.active_revision_id != job.revision_id:
-        return None
-    revision = session.execute(
-        select(ProductRevision)
-        .where(
-            ProductRevision.id == job.revision_id,
-            ProductRevision.product_id == job.product_id,
-            ProductRevision.is_published.is_(True),
-        )
-        .with_for_update()
-    ).scalar_one_or_none()
-    mapping = session.execute(
-        select(ProductRepositoryMapping)
-        .options(selectinload(ProductRepositoryMapping.sides))
-        .where(
-            ProductRepositoryMapping.id == job.mapping_id,
-            ProductRepositoryMapping.revision_id == job.revision_id,
-        )
-        .with_for_update()
-    ).scalar_one_or_none()
-    if revision is None or mapping is None:
-        return None
-    sides = _mapping_sides(mapping)
-    execution = session.execute(
-        select(ImportExecution)
-        .where(
-            ImportExecution.id == job.current_execution_id,
-            ImportExecution.import_job_id == job.id,
-        )
-        .with_for_update()
-    ).scalar_one_or_none()
-    if execution is None or execution.state != "queued":
-        return None
-    connection_generation = _connected_generation(session)
-    if connection_generation != execution.connection_generation:
-        return None
-    execution_sides: list[ImportExecutionSide] = []
-    for side in sides:
-        repository = session.get(Repository, side.repository_id)
-        if repository is None:
-            return None
-        execution_sides.append(
-            ImportExecutionSide(
-                role=side.role,
-                repository_id=side.repository_id,
-                workspace=repository.workspace,
-                repository_slug=repository.repository_slug,
-                source_branch=side.source_branch,
-            )
-        )
-    return ImportExecutionIdentity(
-        import_id=job.id,
-        execution_id=execution.id,
-        sequence=execution.sequence,
-        product_id=job.product_id,
-        revision_id=job.revision_id,
-        mapping_id=job.mapping_id,
-        connection_generation=execution.connection_generation,
-        repository_sides=tuple(execution_sides),
-    )
-
-
-def _start_import_job(
+def start_import_execution(
     factory: sessionmaker[Session],
     *,
     import_id: UUID,
 ) -> ImportExecutionIdentity | None:
+    """Claim one queued execution under the canonical authority lock order."""
     with factory.begin() as session:
+        snapshot = session.get(ImportJob, import_id)
+        if snapshot is None:
+            return None
+        product_id = snapshot.product_id
+        revision_id = snapshot.revision_id
+        mapping_id = snapshot.mapping_id
+        current_execution_id = snapshot.current_execution_id
+
+        product = session.execute(
+            select(Product).where(Product.id == product_id).with_for_update()
+        ).scalar_one_or_none()
+        revision = session.execute(
+            select(ProductRevision)
+            .where(
+                ProductRevision.id == revision_id,
+                ProductRevision.product_id == product_id,
+            )
+            .with_for_update()
+        ).scalar_one_or_none()
+        mapping = session.execute(
+            select(ProductRepositoryMapping)
+            .options(selectinload(ProductRepositoryMapping.sides))
+            .where(
+                ProductRepositoryMapping.id == mapping_id,
+                ProductRepositoryMapping.revision_id == revision_id,
+            )
+            .with_for_update()
+        ).scalar_one_or_none()
+        try:
+            connection_generation = _connected_generation(session)
+        except ImportConnectionUnavailable:
+            connection_generation = None
         job = session.execute(
             select(ImportJob).where(ImportJob.id == import_id).with_for_update()
         ).scalar_one_or_none()
         if job is None or job.state != "queued":
             return None
-        try:
-            identity = _current_execution_identity(session, job=job)
-        except ImportConnectionUnavailable:
-            identity = None
+        execution = session.execute(
+            select(ImportExecution)
+            .where(
+                ImportExecution.id == current_execution_id,
+                ImportExecution.import_job_id == import_id,
+            )
+            .with_for_update()
+        ).scalar_one_or_none()
+        authority_is_current = (
+            product is not None
+            and product.is_active
+            and product.active_revision_id == revision_id
+            and revision is not None
+            and revision.is_published
+            and mapping is not None
+            and job.product_id == product_id
+            and job.revision_id == revision_id
+            and job.mapping_id == mapping_id
+            and job.topology == mapping.topology
+            and job.current_execution_id == current_execution_id
+            and execution is not None
+            and execution.state == "queued"
+            and connection_generation == execution.connection_generation
+        )
+        execution_sides: list[ImportExecutionSide] = []
+        if authority_is_current:
+            assert mapping is not None
+            try:
+                sides = _mapping_sides(mapping)
+            except ImportConflict:
+                authority_is_current = False
+            else:
+                for side in sides:
+                    repository = session.get(Repository, side.repository_id)
+                    if repository is None:
+                        authority_is_current = False
+                        break
+                    execution_sides.append(
+                        ImportExecutionSide(
+                            role=side.role,
+                            repository_id=side.repository_id,
+                            workspace=repository.workspace,
+                            repository_slug=repository.repository_slug,
+                            source_branch=side.source_branch,
+                        )
+                    )
         now = datetime.now(UTC)
-        if identity is None:
-            execution = session.get(ImportExecution, job.current_execution_id)
+        if not authority_is_current:
             if execution is not None and execution.state == "queued":
                 execution.state = "failed"
                 execution.started_at = now
@@ -604,13 +630,21 @@ def _start_import_job(
             )
             job.updated_at = now
             return None
-        execution = session.get(ImportExecution, identity.execution_id)
         assert execution is not None
         execution.state = "running"
         execution.started_at = now
         job.state = "running"
         job.updated_at = now
-        return identity
+        return ImportExecutionIdentity(
+            import_id=job.id,
+            execution_id=execution.id,
+            sequence=execution.sequence,
+            product_id=job.product_id,
+            revision_id=job.revision_id,
+            mapping_id=job.mapping_id,
+            connection_generation=execution.connection_generation,
+            repository_sides=tuple(execution_sides),
+        )
 
 
 def _validated_references(
@@ -643,13 +677,38 @@ def _validated_references(
     return references
 
 
-def _finish_import_job(
+def finish_import_execution(
     factory: sessionmaker[Session],
     *,
     identity: ImportExecutionIdentity,
     references: tuple[ImportSourceReferenceRecord, ...] | None,
 ) -> bool:
+    """Conditionally terminalize only the exact current execution and authority."""
     with factory.begin() as session:
+        product = session.execute(
+            select(Product).where(Product.id == identity.product_id).with_for_update()
+        ).scalar_one_or_none()
+        revision = session.execute(
+            select(ProductRevision)
+            .where(
+                ProductRevision.id == identity.revision_id,
+                ProductRevision.product_id == identity.product_id,
+            )
+            .with_for_update()
+        ).scalar_one_or_none()
+        mapping = session.execute(
+            select(ProductRepositoryMapping)
+            .options(selectinload(ProductRepositoryMapping.sides))
+            .where(
+                ProductRepositoryMapping.id == identity.mapping_id,
+                ProductRepositoryMapping.revision_id == identity.revision_id,
+            )
+            .with_for_update()
+        ).scalar_one_or_none()
+        try:
+            connection_generation = _connected_generation(session)
+        except ImportConnectionUnavailable:
+            connection_generation = None
         job = session.execute(
             select(ImportJob).where(ImportJob.id == identity.import_id).with_for_update()
         ).scalar_one_or_none()
@@ -672,7 +731,32 @@ def _finish_import_job(
         ):
             return False
         now = datetime.now(UTC)
-        if references is None:
+        current_sides: tuple[ImportRepositorySideRecord, ...] | None = None
+        if mapping is not None:
+            try:
+                current_sides = _mapping_sides(mapping)
+            except ImportConflict:
+                current_sides = None
+        authority_is_current = (
+            product is not None
+            and product.is_active
+            and product.active_revision_id == identity.revision_id
+            and revision is not None
+            and revision.is_published
+            and mapping is not None
+            and job.product_id == identity.product_id
+            and job.revision_id == identity.revision_id
+            and job.mapping_id == identity.mapping_id
+            and job.topology == mapping.topology
+            and connection_generation == identity.connection_generation
+            and current_sides is not None
+            and tuple((side.role, side.repository_id, side.source_branch) for side in current_sides)
+            == tuple(
+                (side.role, side.repository_id, side.source_branch)
+                for side in identity.repository_sides
+            )
+        )
+        if references is None or not authority_is_current:
             execution.state = "failed"
             job.state = "import_failed"
             job.error_category = IMPORT_FAILURE_CATEGORY
@@ -682,7 +766,16 @@ def _finish_import_job(
                 else IMPORT_FAILURE_WITHOUT_BASELINE
             )
         else:
-            for reference in _validated_references(identity, references):
+            validated_references = _validated_references(identity, references)
+            baseline_matches = (
+                job.active_baseline_execution_id is not None
+                and _source_references(
+                    session,
+                    execution_id=job.active_baseline_execution_id,
+                )
+                == validated_references
+            )
+            for reference in validated_references:
                 session.add(
                     ImportSourceReference(
                         execution_id=identity.execution_id,
@@ -698,7 +791,8 @@ def _finish_import_job(
                 )
             execution.state = "succeeded"
             job.state = "current"
-            job.active_baseline_execution_id = execution.id
+            if not baseline_matches:
+                job.active_baseline_execution_id = execution.id
             job.error_category = None
             job.error_message = None
         execution.finished_at = now
@@ -713,14 +807,14 @@ def execute_import_job(
     processor: ImportProcessor,
 ) -> None:
     """Run one current execution and conditionally terminalize the same record."""
-    identity = _start_import_job(factory, import_id=import_id)
+    identity = start_import_execution(factory, import_id=import_id)
     if identity is None:
         return
     started_at = time.monotonic()
     try:
         references = _validated_references(identity, processor(identity))
     except BitbucketProviderReadError as error:
-        terminalized = _finish_import_job(factory, identity=identity, references=None)
+        terminalized = finish_import_execution(factory, identity=identity, references=None)
         if terminalized:
             log_bitbucket_operation_failure(
                 context=BitbucketDiagnosticContext(
@@ -733,9 +827,9 @@ def execute_import_job(
                 elapsed_ms=(time.monotonic() - started_at) * 1000,
             )
     except Exception:
-        _finish_import_job(factory, identity=identity, references=None)
+        finish_import_execution(factory, identity=identity, references=None)
     else:
-        _finish_import_job(factory, identity=identity, references=references)
+        finish_import_execution(factory, identity=identity, references=references)
 
 
 async def _process_import(
