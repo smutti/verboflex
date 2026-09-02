@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 03
 current_phase_name: Bitbucket Import Integration
 status: executing
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-09-02T21:07:53.646Z"
+stopped_at: Completed 03-04-PLAN.md
+last_updated: "2026-09-02T21:27:04.164Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 03 execution started
-state_head: 10ea0cf42e40beeaeb76e3273fc7b5e0a23564c3
+state_head: 7bb98fc6e76436d5e09e111878c805c8e1b2a2d0
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 77
-  completed_plans: 64
+  completed_plans: 65
   percent: 22
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 03 (Bitbucket Import Integration) — EXECUTING
-Plan: 4 of 16
+Plan: 5 of 16
 Status: Ready to execute
 Last activity: 2026-09-02 — Phase 03 execution started
 
@@ -123,6 +123,7 @@ Progress: [████████████████████] 61/61 p
 | Phase 03 P01 | 1h 58m | 1 tasks | 17 files |
 | Phase 03 P02 | 12min | 2 tasks | 7 files |
 | Phase 03 P03 | 22min | 2 tasks | 7 files |
+| Phase 03 P04 | 13min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -331,6 +332,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Request exactly pullrequest:write and accept only its documented implication closure; reject missing, duplicate, case-altered, or unexpected authority.
 - [Phase 03]: Treat repository-only generations as locally revocable legacy credentials that require reauthorization and cannot issue an import lease.
 - [Phase 03]: Expose exactly three closed capability readiness dimensions plus evaluation time while keeping generation and provider authority private.
+- [Phase 03]: Render readiness through an exhaustive closed-literal label map; never derive capability from OAuth scopes, timestamps, or prior success.
+- [Phase 03]: Show Repository and pull-request access only when both generated profile fields exactly identify the expanded server contract.
+- [Phase 03]: Keep future source-write and pull-request readiness descriptive only, with no provider-write control in the browser.
 
 ### Pending Todos
 
@@ -370,6 +374,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-02T21:07:53.502Z
-Stopped at: Completed 03-03-PLAN.md
+Last session: 2026-09-02T21:27:04.028Z
+Stopped at: Completed 03-04-PLAN.md
 Resume file: None
