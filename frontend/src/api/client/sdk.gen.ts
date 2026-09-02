@@ -58,7 +58,7 @@ export const getAdminBitbucketStatus = <ThrowOnError extends boolean = false>(op
 /**
  * Connect Admin Bitbucket Oauth
  *
- * Acquire one backend-only, read-only client-credentials generation.
+ * Acquire one backend-only expanded client-credentials generation.
  */
 export const connectAdminBitbucketOauth = <ThrowOnError extends boolean = false>(options?: Options<ConnectAdminBitbucketOauthData, ThrowOnError>): RequestResult<ConnectAdminBitbucketOauthResponses, ConnectAdminBitbucketOauthErrors, ThrowOnError> => (options?.client ?? client).post<ConnectAdminBitbucketOauthResponses, ConnectAdminBitbucketOauthErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],

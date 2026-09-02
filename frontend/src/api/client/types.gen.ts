@@ -214,6 +214,30 @@ export type AdminActiveRevisionRevalidationJobResponse = {
 };
 
 /**
+ * AdminBitbucketCapabilityProfile
+ *
+ * Closed readiness evidence without provider authority or generation detail.
+ */
+export type AdminBitbucketCapabilityProfile = {
+    /**
+     * Evaluated At
+     */
+    evaluated_at: string | null;
+    /**
+     * Pull Request
+     */
+    pull_request: 'disconnected' | 'ready' | 'ready_for_later_phase' | 'reauthorization_required' | 'unavailable';
+    /**
+     * Source Read
+     */
+    source_read: 'disconnected' | 'ready' | 'ready_for_later_phase' | 'reauthorization_required' | 'unavailable';
+    /**
+     * Source Write
+     */
+    source_write: 'disconnected' | 'ready' | 'ready_for_later_phase' | 'reauthorization_required' | 'unavailable';
+};
+
+/**
  * AdminBitbucketErrorResponse
  *
  * Stable integration failures without provider diagnostic material.
@@ -231,6 +255,7 @@ export type AdminBitbucketErrorResponse = {
  * Bounded connection state safe for browser projection.
  */
 export type AdminBitbucketStatusResponse = {
+    capability_profile: AdminBitbucketCapabilityProfile;
     /**
      * Connected At
      */
@@ -246,11 +271,11 @@ export type AdminBitbucketStatusResponse = {
     /**
      * Scope Label
      */
-    scope_label?: 'Read-only repository access';
+    scope_label?: 'Repository and pull-request access';
     /**
      * Scope Profile
      */
-    scope_profile?: 'repository';
+    scope_profile?: 'repository_and_pull_request';
     /**
      * Status
      */
