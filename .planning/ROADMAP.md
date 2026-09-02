@@ -266,17 +266,26 @@ Plans:
   4. Admin receives actionable, sanitized connection, permission, rate-limit, missing-source, and import errors with safe retry guidance.
   5. Phase quality gate passes with integration tests, code review, and backend/worker/deploy smoke verification.
 
-**Plans**: 7 plans
+**Plans**: 16 plans
 
 Plans:
 
-- [ ] 03-01-PLAN.md — Direct published-mapping import tracer through browser, API, PostgreSQL, Celery, and commit-bound provider reads
-- [ ] 03-02-PLAN.md — Expanded OAuth capability profile, provider allowlist, and one-attempt resilient reads
-- [ ] 03-03-PLAN.md — Stable logical import state machine, manual retry, atomic separate baselines, and worker-loss recovery
-- [ ] 03-04-PLAN.md — Fast-forward classification and complete rewritten-history reconciliation
-- [ ] 03-05-PLAN.md — Server-owned import/product projections and canonical generated client
-- [ ] 03-06-PLAN.md — Accessible responsive import, recovery, reconciliation, and freshness UI
-- [ ] 03-07-PLAN.md — Integration, mutation, security review, API coverage, and deployment smoke quality gate
+- [ ] 03-01-PLAN.md — Production direct-import tracer through browser, API, PostgreSQL, Celery, and commit-bound reads
+- [ ] 03-02-PLAN.md — Reversible import schema, immutable provenance, and negative contract hardening
+- [ ] 03-03-PLAN.md — Exact expanded OAuth capability acquisition and closed backend projection
+- [ ] 03-04-PLAN.md — Generated capability client and approved administrator readiness UI
+- [ ] 03-05-PLAN.md — One-attempt provider resilience and application-owned GET operation boundary
+- [ ] 03-06-PLAN.md — Useful sanitized structured provider diagnostics and leakage proof
+- [ ] 03-07-PLAN.md — Stable logical import state machine, atomic separate baselines, retry, and watchdog
+- [ ] 03-08-PLAN.md — Exact ancestry, fast-forward classification, and complete bounded rewrite delta
+- [ ] 03-09-PLAN.md — Durable rewrite proposals and atomic current-baseline confirmation
+- [ ] 03-10-PLAN.md — Five-operation import API and product-local affected-mapping aggregation
+- [ ] 03-11-PLAN.md — Canonical OpenAPI and complete generated TypeScript client
+- [ ] 03-12-PLAN.md — Cursor-complete import collection, bounded polling, and responsive mapping UI
+- [ ] 03-13-PLAN.md — Rewrite dialog, product freshness, browser journeys, and 26 UI consideration identities
+- [ ] 03-14-PLAN.md — Deployment mock smoke and pre-digest supplemental live-read implementation
+- [ ] 03-15-PLAN.md — Exact source/UI/API scope audit, mutation proof, manifest, and final gauntlet
+- [ ] 03-16-PLAN.md — Digest-bound ASVS L1 review and independent exact-passed verifier closeout
 
 ### Phase 4: Localization Parser Foundation
 
@@ -443,7 +452,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 |-------|----------------|--------|-----------|
 | 1. Platform Foundation | 15/15 | Complete    | 2026-08-26 |
 | 2. Admin Configuration | 46/46 | Complete    | 2026-09-01 |
-| 3. Bitbucket Import Integration | 0/4 | Not started | - |
+| 3. Bitbucket Import Integration | 0/16 | Not started | - |
 | 4. Localization Parser Foundation | 0/7 | Not started | - |
 | 5. Import, Search, and Constraints | 0/6 | Not started | - |
 | 6. Review Workspace and Comments | 0/6 | Not started | - |
