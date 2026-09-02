@@ -28,6 +28,9 @@ EXPECTED_TABLES = {
     "active_revision_revalidation_confirmations",
     "auth_sessions",
     "bitbucket_connections",
+    "import_executions",
+    "import_jobs",
+    "import_source_references",
     "preview_jobs",
     "product_mapping_allowed_targets",
     "product_mapping_repository_sides",
@@ -217,6 +220,392 @@ def test_declarative_metadata_contains_every_auth_model() -> None:
     from verboflex.db.base import Base
 
     assert set(Base.metadata.tables) >= EXPECTED_TABLES
+
+
+def _seed_import_schema_graph(engine: Engine) -> dict[str, UUID]:
+    """Create two independent published mapping owners for forged-identity checks."""
+    identities = {
+        "product": uuid4(),
+        "revision": uuid4(),
+        "mapping": uuid4(),
+        "repository": uuid4(),
+        "foreign_product": uuid4(),
+        "foreign_revision": uuid4(),
+        "foreign_mapping": uuid4(),
+        "foreign_repository": uuid4(),
+    }
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO products (id, display_name, name_key, is_active) VALUES "
+                "(:product, 'Import owner', :product_key, true), "
+                "(:foreign_product, 'Foreign owner', :foreign_product_key, true)"
+            ),
+            {
+                **identities,
+                "product_key": f"import-owner-{identities['product']}",
+                "foreign_product_key": f"foreign-owner-{identities['foreign_product']}",
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO product_revisions "
+                "(id, product_id, display_name, name_key, description, version, "
+                "is_published, published_at) VALUES "
+                "(:revision, :product, 'Import owner', :product_key, 'published', 1, "
+                "false, NULL), "
+                "(:foreign_revision, :foreign_product, 'Foreign owner', "
+                ":foreign_product_key, 'published', 1, false, NULL)"
+            ),
+            {
+                **identities,
+                "product_key": f"import-owner-{identities['product']}",
+                "foreign_product_key": f"foreign-owner-{identities['foreign_product']}",
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO repositories "
+                "(id, workspace, repository_slug, descriptive_name, descriptive_name_key) "
+                "VALUES (:repository, 'import-workspace', :repository_slug, "
+                "'Import repository', 'import repository'), "
+                "(:foreign_repository, 'foreign-workspace', :foreign_repository_slug, "
+                "'Foreign repository', 'foreign repository')"
+            ),
+            {
+                **identities,
+                "repository_slug": f"import-{identities['repository'].hex[:12]}",
+                "foreign_repository_slug": (
+                    f"foreign-{identities['foreign_repository'].hex[:12]}"
+                ),
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO product_repository_mappings "
+                "(id, revision_id, topology, identity_key) VALUES "
+                "(:mapping, :revision, 'direct', :mapping_key), "
+                "(:foreign_mapping, :foreign_revision, 'direct', :foreign_mapping_key)"
+            ),
+            {
+                **identities,
+                "mapping_key": f"import-{identities['mapping']}",
+                "foreign_mapping_key": f"foreign-{identities['foreign_mapping']}",
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO product_mapping_repository_sides "
+                "(mapping_id, role, repository_id, source_branch) VALUES "
+                "(:mapping, 'direct', :repository, 'main'), "
+                "(:foreign_mapping, 'direct', :foreign_repository, 'foreign-main')"
+            ),
+            identities,
+        )
+        connection.execute(
+            text(
+                "UPDATE product_revisions SET is_published = true, "
+                "published_at = CURRENT_TIMESTAMP WHERE id IN (:revision, :foreign_revision)"
+            ),
+            identities,
+        )
+        connection.execute(
+            text(
+                "UPDATE products SET active_revision_id = CASE "
+                "WHEN id = :product THEN :revision ELSE :foreign_revision END "
+                "WHERE id IN (:product, :foreign_product)"
+            ),
+            identities,
+        )
+    return identities
+
+
+def _insert_import_execution(
+    engine: Engine,
+    identities: dict[str, UUID],
+    *,
+    state: str = "running",
+) -> tuple[UUID, UUID]:
+    import_id = uuid4()
+    execution_id = uuid4()
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO import_jobs "
+                "(id, product_id, revision_id, mapping_id, topology, state, "
+                "current_execution_id, retry_count, latest_execution_at) VALUES "
+                "(:import_id, :product, :revision, :mapping, 'direct', 'running', "
+                ":execution_id, 0, CURRENT_TIMESTAMP)"
+            ),
+            {**identities, "import_id": import_id, "execution_id": execution_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO import_executions "
+                "(id, import_job_id, sequence, state, connection_generation, started_at, "
+                "finished_at) VALUES (:execution_id, :import_id, 1, :state, 1, "
+                "CURRENT_TIMESTAMP, CASE WHEN CAST(:state AS varchar) "
+                "IN ('succeeded', 'failed') "
+                "THEN CURRENT_TIMESTAMP ELSE NULL END)"
+            ),
+            {
+                "execution_id": execution_id,
+                "import_id": import_id,
+                "state": state,
+            },
+        )
+    return import_id, execution_id
+
+
+def test_import_schema_is_reversible_and_database_authoritative(
+    migrated_database: tuple[Config, Engine],
+) -> None:
+    """Phase 3 objects enforce named state, ownership, identity, and index rules."""
+    config, engine = migrated_database
+    command.upgrade(config, "0011_active_revision_revalidations")
+    assert {
+        "import_jobs",
+        "import_executions",
+        "import_source_references",
+    }.isdisjoint(inspect(engine).get_table_names())
+
+    command.upgrade(config, "0012_import_jobs")
+    inspector = inspect(engine)
+    assert {
+        "pk_import_jobs",
+        "uq_import_jobs_mapping",
+        "fk_import_jobs_owned_revision",
+        "fk_import_jobs_owned_mapping",
+        "fk_import_jobs_current_execution",
+        "fk_import_jobs_active_baseline",
+        "ck_import_jobs_state_error_payload",
+    } <= _constraint_names(engine, "import_jobs")
+    assert {
+        "pk_import_executions",
+        "uq_import_executions_id_job",
+        "uq_import_executions_job_sequence",
+        "ck_import_executions_positive_sequence",
+        "ck_import_executions_state_timestamps",
+    } <= _constraint_names(engine, "import_executions")
+    assert {
+        "pk_import_source_references",
+        "uq_import_source_references_side_path",
+        "ck_import_source_references_commit_hash_sha1",
+        "ck_import_source_references_position_non_negative",
+    } <= _constraint_names(engine, "import_source_references")
+    assert {
+        "ix_import_jobs_revision_mapping",
+        "ix_import_executions_job_sequence",
+        "ix_import_source_references_execution_side_position",
+    } <= {
+        index["name"]
+        for table_name in (
+            "import_jobs",
+            "import_executions",
+            "import_source_references",
+        )
+        for index in inspector.get_indexes(table_name)
+    }
+
+    identities = _seed_import_schema_graph(engine)
+    import_id, execution_id = _insert_import_execution(engine, identities)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO import_source_references "
+                "(execution_id, position, repository_side, repository_id, source_branch, "
+                "commit_hash, path, size_bytes, sha256) VALUES "
+                "(:execution_id, 0, 'direct', :repository, 'main', :commit_hash, "
+                "'values/strings.xml', 10, :sha256)"
+            ),
+            {
+                **identities,
+                "execution_id": execution_id,
+                "commit_hash": "a" * 40,
+                "sha256": "b" * 64,
+            },
+        )
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO import_jobs "
+                "(id, product_id, revision_id, mapping_id, topology, state, "
+                "current_execution_id, latest_execution_at) VALUES "
+                "(:id, :foreign_product, :revision, :mapping, 'direct', 'queued', "
+                ":execution_id, CURRENT_TIMESTAMP)"
+            ),
+            {**identities, "id": uuid4(), "execution_id": uuid4()},
+        )
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO import_jobs "
+                "(id, product_id, revision_id, mapping_id, topology, state, "
+                "current_execution_id, latest_execution_at) VALUES "
+                "(:id, :product, :revision, :mapping, 'direct', 'queued', "
+                ":execution_id, CURRENT_TIMESTAMP)"
+            ),
+            {**identities, "id": uuid4(), "execution_id": uuid4()},
+        )
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE import_jobs SET state = 'current', "
+                "active_baseline_execution_id = NULL WHERE id = :id"
+            ),
+            {"id": import_id},
+        )
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO import_executions "
+                "(id, import_job_id, sequence, state, connection_generation) VALUES "
+                "(:id, :import_id, 0, 'queued', 1)"
+            ),
+            {"id": uuid4(), "import_id": import_id},
+        )
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO import_source_references "
+                "(execution_id, position, repository_side, repository_id, source_branch, "
+                "commit_hash, path, size_bytes, sha256) VALUES "
+                "(:execution_id, 1, 'direct', :repository, 'main', 'not-a-commit', "
+                "'values/other.xml', 1, :sha256)"
+            ),
+            {**identities, "execution_id": execution_id, "sha256": "c" * 64},
+        )
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO import_source_references "
+                "(execution_id, position, repository_side, repository_id, source_branch, "
+                "commit_hash, path, size_bytes, sha256) VALUES "
+                "(:execution_id, -1, 'direct', :repository, 'main', :commit_hash, "
+                "'values/negative.xml', 1, :sha256)"
+            ),
+            {
+                **identities,
+                "execution_id": execution_id,
+                "commit_hash": "c" * 40,
+                "sha256": "d" * 64,
+            },
+        )
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO import_source_references "
+                "(execution_id, position, repository_side, repository_id, source_branch, "
+                "commit_hash, path, size_bytes, sha256) VALUES "
+                "(:execution_id, 1, 'direct', :repository, 'main', :commit_hash, "
+                "'values/strings.xml', 10, :sha256)"
+            ),
+            {
+                **identities,
+                "execution_id": execution_id,
+                "commit_hash": "a" * 40,
+                "sha256": "b" * 64,
+            },
+        )
+    with (
+        pytest.raises(DBAPIError, match="source reference ownership"),
+        engine.begin() as connection,
+    ):
+        connection.execute(
+            text(
+                "INSERT INTO import_source_references "
+                "(execution_id, position, repository_side, repository_id, source_branch, "
+                "commit_hash, path, size_bytes, sha256) VALUES "
+                "(:execution_id, 1, 'direct', :foreign_repository, 'foreign-main', "
+                ":commit_hash, 'values/foreign.xml', 1, :sha256)"
+            ),
+            {
+                **identities,
+                "execution_id": execution_id,
+                "commit_hash": "d" * 40,
+                "sha256": "e" * 64,
+            },
+        )
+
+    command.downgrade(config, "0011_active_revision_revalidations")
+    assert {
+        "import_jobs",
+        "import_executions",
+        "import_source_references",
+    }.isdisjoint(inspect(engine).get_table_names())
+    command.upgrade(config, "head")
+    assert {
+        "import_jobs",
+        "import_executions",
+        "import_source_references",
+    } <= set(inspect(engine).get_table_names())
+
+
+def test_immutable_source_reference_and_terminal_execution_provenance(
+    migrated_database: tuple[Config, Engine],
+) -> None:
+    """Terminal executions and their exact file references reject ORM-equivalent writes."""
+    config, engine = migrated_database
+    command.upgrade(config, "head")
+    identities = _seed_import_schema_graph(engine)
+    _import_id, execution_id = _insert_import_execution(
+        engine,
+        identities,
+        state="succeeded",
+    )
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO import_source_references "
+                "(execution_id, position, repository_side, repository_id, source_branch, "
+                "commit_hash, path, size_bytes, sha256) VALUES "
+                "(:execution_id, 0, 'direct', :repository, 'main', :commit_hash, "
+                "'values/strings.xml', 10, :sha256)"
+            ),
+            {
+                **identities,
+                "execution_id": execution_id,
+                "commit_hash": "a" * 40,
+                "sha256": "b" * 64,
+            },
+        )
+
+    with (
+        pytest.raises(DBAPIError, match="terminal import execution is immutable"),
+        engine.begin() as connection,
+    ):
+        connection.execute(
+            text(
+                "UPDATE import_executions SET connection_generation = 2 WHERE id = :id"
+            ),
+            {"id": execution_id},
+        )
+    with (
+        pytest.raises(
+            DBAPIError,
+            match="terminal import source reference is immutable",
+        ),
+        engine.begin() as connection,
+    ):
+        connection.execute(
+            text(
+                "UPDATE import_source_references SET commit_hash = :commit_hash "
+                "WHERE execution_id = :id"
+            ),
+            {"id": execution_id, "commit_hash": "f" * 40},
+        )
+    with (
+        pytest.raises(
+            DBAPIError,
+            match="terminal import source reference is immutable",
+        ),
+        engine.begin() as connection,
+    ):
+        connection.execute(
+            text("DELETE FROM import_source_references WHERE execution_id = :id"),
+            {"id": execution_id},
+        )
 
 
 def test_client_credentials_credential_state_upgrade_downgrade_and_reupgrade(
