@@ -473,7 +473,7 @@ def test_connect_reconnect_status_require_current_admin_without_mutation(
     )
 
 
-def test_client_credentials_status_contract_has_no_callback_workspace_or_secrets() -> None:
+def test_client_credentials_capability_contract_has_no_forbidden_provider_fields() -> None:
     """OpenAPI exposes the four bounded administrator operations only."""
     schema = app.openapi()
     provider_paths = {path for path in schema["paths"] if path.startswith(BITBUCKET_PATH)}
@@ -496,9 +496,18 @@ def test_client_credentials_status_contract_has_no_callback_workspace_or_secrets
         "status",
         "scope_profile",
         "scope_label",
+        "capability_profile",
         "connected_at",
         "expires_at",
         "revoked_at",
+    }
+    capability_schema = schema["components"]["schemas"]["AdminBitbucketCapabilityProfile"]
+    assert capability_schema["additionalProperties"] is False
+    assert set(capability_schema["properties"]) == {
+        "source_read",
+        "source_write",
+        "pull_request",
+        "evaluated_at",
     }
     provider_contract = {
         "paths": {path: schema["paths"][path] for path in provider_paths},
@@ -513,6 +522,10 @@ def test_client_credentials_status_contract_has_no_callback_workspace_or_secrets
         "access_token",
         "refresh_token",
         "client_secret",
+        "source_generation",
+        "raw_scope",
+        "effective_scope",
+        "provider_body",
     ):
         assert forbidden not in serialized
 

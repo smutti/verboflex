@@ -9,6 +9,7 @@ from verboflex.auth.principal import Principal, require_roles
 from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
 from verboflex.schemas.admin_bitbucket import (
+    AdminBitbucketCapabilityProfile,
     AdminBitbucketErrorResponse,
     AdminBitbucketStatusResponse,
 )
@@ -88,8 +89,15 @@ def _unavailable() -> HTTPException:
 
 
 def _status_response(snapshot: BitbucketConnectionPublicStatus) -> AdminBitbucketStatusResponse:
+    capability = snapshot.capability_profile
     return AdminBitbucketStatusResponse(
         status=STATUS_LABELS[snapshot.state],
+        capability_profile=AdminBitbucketCapabilityProfile(
+            source_read=capability.source_read,
+            source_write=capability.source_write,
+            pull_request=capability.pull_request,
+            evaluated_at=capability.evaluated_at,
+        ),
         connected_at=snapshot.connected_at,
         expires_at=snapshot.expires_at,
         revoked_at=snapshot.revoked_at,
@@ -130,6 +138,12 @@ async def get_admin_bitbucket_status(
     if service is None:
         return AdminBitbucketStatusResponse(
             status="Unavailable",
+            capability_profile=AdminBitbucketCapabilityProfile(
+                source_read="unavailable",
+                source_write="unavailable",
+                pull_request="unavailable",
+                evaluated_at=None,
+            ),
             connected_at=None,
             expires_at=None,
             revoked_at=None,
@@ -149,7 +163,7 @@ async def connect_admin_bitbucket_oauth(
     session: AdminSession,
     service: ConfiguredOAuthService,
 ) -> AdminBitbucketStatusResponse:
-    """Acquire one backend-only, read-only client-credentials generation."""
+    """Acquire one backend-only expanded client-credentials generation."""
     return _connect(
         response=response,
         principal=principal,
