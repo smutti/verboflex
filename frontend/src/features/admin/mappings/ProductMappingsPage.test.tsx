@@ -33,6 +33,14 @@ import { ProductMappingsPage } from "./ProductMappingsPage";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
 
+const {
+  listAdminPublishedMappingImportsMock,
+  startAdminPublishedMappingImportMock,
+} = vi.hoisted(() => ({
+  listAdminPublishedMappingImportsMock: vi.fn(),
+  startAdminPublishedMappingImportMock: vi.fn(),
+}));
+
 vi.mock("../../../api/client", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../../api/client")>();
   return {
@@ -41,8 +49,10 @@ vi.mock("../../../api/client", async (importOriginal) => {
     getAdminProduct: vi.fn(),
     getAdminRepositoryBranch: vi.fn(),
     listAdminCandidateMappings: vi.fn(),
+    listAdminPublishedMappingImports: listAdminPublishedMappingImportsMock,
     listAdminRepositories: vi.fn(),
     listAdminRepositoryBranches: vi.fn(),
+    startAdminPublishedMappingImport: startAdminPublishedMappingImportMock,
   };
 });
 
@@ -85,6 +95,26 @@ const repository: AdminRepositoryResponse = {
   workspace: "product-team",
   repository_slug: "mobile-app",
 };
+
+const publishedImport = {
+  id: null,
+  mapping_id: "00000000-0000-4000-8000-000000000099",
+  active_revision_id: "00000000-0000-4000-8000-000000000098",
+  topology: "direct",
+  repository_sides: [
+    {
+      role: "direct",
+      repository_id: repository.id,
+      source_branch: "main",
+    },
+  ],
+  state: "not_imported",
+  active_baseline: null,
+  latest_execution_at: null,
+  retry_count: 0,
+  error_category: null,
+  error_message: null,
+} as const;
 
 function mapping(index: number, sourceBranch = "main"): AdminMappingResponse {
   return {
@@ -184,14 +214,82 @@ describe("administrator mapping cursor collections", () => {
     getAdminProductMock.mockReset();
     getAdminRepositoryBranchMock.mockReset();
     listAdminCandidateMappingsMock.mockReset();
+    listAdminPublishedMappingImportsMock.mockReset();
+    listAdminPublishedMappingImportsMock.mockResolvedValue(
+      ok({ items: [], next_cursor: null }),
+    );
     listAdminRepositoriesMock.mockReset();
     listAdminRepositoriesMock.mockResolvedValue(
       ok({ items: [repository], next_cursor: null }),
     );
     listAdminRepositoryBranchesMock.mockReset();
+    startAdminPublishedMappingImportMock.mockReset();
   });
 
   afterEach(() => cleanup());
+
+  it("runs one published direct import and waits for a server-confirmed state", async () => {
+    let resolveRefetch!: (value: ReturnType<typeof ok<unknown>>) => void;
+    listAdminPublishedMappingImportsMock
+      .mockResolvedValueOnce(
+        ok({ items: [publishedImport], next_cursor: null }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRefetch = resolve;
+        }),
+      );
+    startAdminPublishedMappingImportMock.mockResolvedValueOnce(
+      ok({
+        ...publishedImport,
+        id: "00000000-0000-4000-8000-000000000097",
+        state: "queued",
+      }),
+    );
+    listAdminCandidateMappingsMock.mockResolvedValueOnce(
+      ok({ items: [], next_cursor: null }),
+    );
+    renderMappings();
+
+    expect(
+      await screen.findByRole("heading", { name: "Published mapping imports" }),
+    ).toBeVisible();
+    expect(screen.getByText("Not imported")).toBeVisible();
+    const runImport = screen.getByRole("button", { name: "Run import" });
+    act(() => {
+      runImport.click();
+      runImport.click();
+    });
+
+    await waitFor(() =>
+      expect(startAdminPublishedMappingImportMock).toHaveBeenCalledOnce(),
+    );
+    expect(startAdminPublishedMappingImportMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: {
+        product_id: "product-one",
+        mapping_id: publishedImport.mapping_id,
+      },
+    });
+    expect(screen.getByText("Not imported")).toBeVisible();
+
+    await act(async () => {
+      resolveRefetch(
+        ok({
+          items: [
+            {
+              ...publishedImport,
+              id: "00000000-0000-4000-8000-000000000097",
+              state: "queued",
+            },
+          ],
+          next_cursor: null,
+        }),
+      );
+    });
+    expect(await screen.findByText("Queued")).toBeVisible();
+    expect(listAdminPublishedMappingImportsMock).toHaveBeenCalledTimes(2);
+  });
 
   it("appends mapping 51 in API order with one request and no repeated identity", async () => {
     const firstPage = Array.from({ length: 50 }, (_, index) =>
