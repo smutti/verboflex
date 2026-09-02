@@ -105,6 +105,24 @@ EXPECTED_OPERATIONS = {
         {"200", "401", "403", "404", "409", "422", "503"},
         True,
     ),
+    ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get"): (
+        "list_admin_published_mapping_imports",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+        "post",
+    ): (
+        "start_admin_published_mapping_import",
+        {"202", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    ("/api/v1/admin/products/{product_id}/imports/{import_id}", "get"): (
+        "get_admin_import",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
     (
         "/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs",
         "post",
@@ -339,6 +357,26 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
             "/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs",
             "post",
         ): {"401", "403", "404", "409", "422", "503"},
+        ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get"): {
+            "401",
+            "403",
+            "404",
+            "409",
+            "422",
+            "503",
+        },
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+            "post",
+        ): {"401", "403", "404", "409", "422", "503"},
+        ("/api/v1/admin/products/{product_id}/imports/{import_id}", "get"): {
+            "401",
+            "403",
+            "404",
+            "409",
+            "422",
+            "503",
+        },
         ("/api/v1/admin/preview-jobs/{job_id}", "get"): {
             "401",
             "403",
@@ -446,6 +484,67 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
     assert _response_schema(operations[(mapping_detail, "patch")], "409") == (
         "#/components/schemas/AdminMappingConflictResponse"
     )
+
+
+def test_import_public_contract_is_closed_and_provider_source_history_free() -> None:
+    schema = app.openapi()
+    operations = _operation_entries(schema)
+    paths = {
+        ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get"),
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+            "post",
+        ),
+        ("/api/v1/admin/products/{product_id}/imports/{import_id}", "get"),
+    }
+    roots = set().union(*(_schema_references(operations[path]) for path in paths))
+    components = schema["components"]["schemas"]
+    pending = list(roots)
+    import_schema_names: set[str] = set()
+    while pending:
+        name = pending.pop()
+        if name in import_schema_names or name not in components:
+            continue
+        import_schema_names.add(name)
+        pending.extend(_schema_references(components[name]) - import_schema_names)
+
+    import_schemas = {
+        name: components[name]
+        for name in import_schema_names
+        if name.startswith("AdminImport") or name.startswith("AdminPublishedMappingImport")
+    }
+    assert set(import_schemas) == {
+        "AdminImportBaselineResponse",
+        "AdminImportRepositorySideResponse",
+        "AdminImportSourceReferenceResponse",
+        "AdminPublishedMappingImportListResponse",
+        "AdminPublishedMappingImportResponse",
+    }
+    forbidden = {
+        "access_token",
+        "attempt",
+        "attempt_history",
+        "attempts",
+        "authorization",
+        "ciphertext",
+        "client_secret",
+        "credential",
+        "credentials",
+        "execution_history",
+        "provider_body",
+        "provider_response",
+        "provider_url",
+        "raw_authority",
+        "raw_source",
+        "refresh_token",
+        "source_bytes",
+        "stack",
+        "stack_trace",
+        "task_id",
+        "url",
+    }
+    assert forbidden.isdisjoint(_schema_property_names(import_schemas))
+    assert "workspace" in _schema_property_names(components["AdminRepositoryResponse"])
 
 
 def test_admin_bitbucket_openapi_is_closed_bounded_and_secret_free() -> None:

@@ -38,6 +38,7 @@ from verboflex.integrations.bitbucket.client import (
 from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.models.import_job import ImportExecution, ImportJob
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
     ProductMappingAllowedTarget,
@@ -47,6 +48,10 @@ from verboflex.models.product_mapping import (
 from verboflex.models.repository import Repository
 from verboflex.models.role import Role
 from verboflex.models.user import User
+from verboflex.services.import_jobs import (
+    ImportSourceReferenceRecord,
+    execute_import_job,
+)
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 ADMIN_DATABASE_URL = os.environ.get(
@@ -123,17 +128,17 @@ def _configure_dependencies(factory: sessionmaker[Session]) -> None:
     app.dependency_overrides[get_settings] = _settings
 
 
-def _create_admin(factory: sessionmaker[Session]) -> str:
+def _create_principal(factory: sessionmaker[Session], *, role_name: str) -> str:
     user_id = uuid4()
     auth_session_id = uuid4()
     now = datetime.now(UTC)
     with factory.begin() as session:
-        role = session.execute(select(Role).where(Role.name == "admin")).scalar_one()
+        role = session.execute(select(Role).where(Role.name == role_name)).scalar_one()
         session.add(
             User(
                 id=user_id,
-                email=f"admin-{user_id}@example.com",
-                display_name="Admin",
+                email=f"{role_name}-{user_id}@example.com",
+                display_name=role_name,
                 hashed_password=hash_password("principal password phrase!"),
                 is_active=True,
                 must_change_password=False,
@@ -157,6 +162,10 @@ def _create_admin(factory: sessionmaker[Session]) -> str:
         settings=_settings(),
         now=now,
     )
+
+
+def _create_admin(factory: sessionmaker[Session]) -> str:
+    return _create_principal(factory, role_name="admin")
 
 
 def _seed_published_direct_mapping(
@@ -228,6 +237,57 @@ def _seed_published_direct_mapping(
         connection.connected_at = now
         connection.revoked_at = None
     return product_id, revision_id, repository_id, mapping_id
+
+
+def _seed_candidate_mapping(
+    factory: sessionmaker[Session],
+    *,
+    product_id: UUID,
+) -> UUID:
+    revision_id = uuid4()
+    repository_id = uuid4()
+    mapping_id = uuid4()
+    with factory.begin() as session:
+        product = session.get(Product, product_id)
+        assert product is not None
+        session.add_all(
+            [
+                ProductRevision(
+                    id=revision_id,
+                    product_id=product_id,
+                    description="candidate",
+                    version=8,
+                    is_published=False,
+                ),
+                Repository(
+                    id=repository_id,
+                    workspace="import-team",
+                    repository_slug=f"candidate-{repository_id.hex[:12]}",
+                    descriptive_name="Candidate source",
+                    descriptive_name_key="candidate source",
+                ),
+            ]
+        )
+        session.flush()
+        session.add(
+            ProductRepositoryMapping(
+                id=mapping_id,
+                revision_id=revision_id,
+                topology="direct",
+                identity_key=f'["direct","{repository_id}","candidate"]',
+                sides=[
+                    ProductMappingRepositorySide(
+                        role="direct",
+                        repository_id=repository_id,
+                        source_branch="candidate",
+                    )
+                ],
+                allowed_targets=[ProductMappingAllowedTarget(branch="candidate", is_default=True)],
+            )
+        )
+        session.flush()
+        product.candidate_revision_id = revision_id
+    return mapping_id
 
 
 @dataclass
@@ -336,14 +396,26 @@ async def _request(
 def _assert_secret_free(value: object) -> None:
     forbidden = {
         "access_token",
+        "attempt",
+        "attempt_history",
+        "attempts",
         "authorization",
         "celery",
         "ciphertext",
+        "client_secret",
+        "credential",
+        "credentials",
+        "execution_history",
         "oauth",
         "provider_body",
+        "provider_response",
+        "provider_url",
+        "raw_authority",
         "raw_source",
         "refresh_token",
+        "source_bytes",
         "stack",
+        "stack_trace",
         "task_id",
         "url",
     }
@@ -485,3 +557,260 @@ def test_concurrent_start_serializes_to_one_logical_import_and_execution(
     with import_session_factory() as session:
         assert session.scalar(text("SELECT count(*) FROM import_jobs")) == 1
         assert session.scalar(text("SELECT count(*) FROM import_executions")) == 1
+
+
+@pytest.mark.parametrize(
+    ("role_name", "expected_status"),
+    [
+        (None, 401),
+        ("product_manager_reviewer", 403),
+        ("translator", 403),
+        ("viewer", 403),
+    ],
+)
+def test_import_authorization_fails_before_mapping_or_dispatch_work(
+    import_session_factory: sessionmaker[Session],
+    role_name: str | None,
+    expected_status: int,
+) -> None:
+    _configure_dependencies(import_session_factory)
+    product_id, _revision_id, _repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    token = (
+        _create_principal(import_session_factory, role_name=role_name)
+        if role_name is not None
+        else None
+    )
+    enqueuer = PersistedImportEnqueuer(import_session_factory)
+    app.state.import_job_enqueuer = enqueuer
+    unknown_import_id = uuid4()
+
+    responses = [
+        asyncio.run(
+            _request(
+                "GET",
+                f"/api/v1/admin/products/{product_id}/published/mapping-imports",
+                access_token=token,
+            )
+        ),
+        asyncio.run(
+            _request(
+                "POST",
+                f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+                access_token=token,
+            )
+        ),
+        asyncio.run(
+            _request(
+                "GET",
+                f"/api/v1/admin/products/{product_id}/imports/{unknown_import_id}",
+                access_token=token,
+            )
+        ),
+    ]
+
+    assert [response.status_code for response in responses] == [expected_status] * 3
+    assert enqueuer.payloads == []
+    with import_session_factory() as session:
+        assert session.scalar(text("SELECT count(*) FROM import_jobs")) == 0
+        assert session.scalar(text("SELECT count(*) FROM import_executions")) == 0
+
+
+def test_import_ownership_rejects_candidate_inactive_wrong_and_forged_identities(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    product_id, _revision_id, _repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    candidate_mapping_id = _seed_candidate_mapping(
+        import_session_factory,
+        product_id=product_id,
+    )
+    other_product_id, _other_revision, _other_repository, other_mapping_id = (
+        _seed_published_direct_mapping(import_session_factory)
+    )
+    enqueuer = PersistedImportEnqueuer(import_session_factory)
+    app.state.import_job_enqueuer = enqueuer
+
+    rejected_paths = [
+        f"/api/v1/admin/products/{product_id}/published/mappings/{candidate_mapping_id}/imports",
+        f"/api/v1/admin/products/{product_id}/published/mappings/{other_mapping_id}/imports",
+        f"/api/v1/admin/products/{product_id}/published/mappings/{uuid4()}/imports",
+    ]
+    rejected = [
+        asyncio.run(_request("POST", path, access_token=admin_token)) for path in rejected_paths
+    ]
+    assert [response.status_code for response in rejected] == [404, 404, 404]
+    assert enqueuer.payloads == []
+
+    created = asyncio.run(
+        _request(
+            "POST",
+            f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+            access_token=admin_token,
+        )
+    )
+    assert created.status_code == 202
+    import_id = created.json()["id"]
+    wrong_product = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{other_product_id}/imports/{import_id}",
+            access_token=admin_token,
+        )
+    )
+    assert wrong_product.status_code == 404
+
+    with import_session_factory.begin() as session:
+        product = session.get(Product, product_id)
+        assert product is not None
+        product.is_active = False
+
+    inactive_list = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/published/mapping-imports",
+            access_token=admin_token,
+        )
+    )
+    inactive_start = asyncio.run(
+        _request(
+            "POST",
+            f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+            access_token=admin_token,
+        )
+    )
+    inactive_status = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/imports/{import_id}",
+            access_token=admin_token,
+        )
+    )
+    assert [
+        inactive_list.status_code,
+        inactive_start.status_code,
+        inactive_status.status_code,
+    ] == [404, 404, 404]
+    assert enqueuer.payloads == [(import_id,)]
+
+
+def _successful_reference(repository_id: UUID) -> ImportSourceReferenceRecord:
+    return ImportSourceReferenceRecord(
+        position=0,
+        repository_side="direct",
+        repository_id=repository_id,
+        source_branch="main",
+        commit_hash=COMMIT_HASH,
+        path="mobile/src/main/res/values/strings.xml",
+        size_bytes=13,
+        sha256="a" * 64,
+    )
+
+
+def test_import_empty_source_terminalizes_and_preserves_the_last_baseline(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    product_id, _revision_id, repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    enqueuer = PersistedImportEnqueuer(import_session_factory)
+    app.state.import_job_enqueuer = enqueuer
+    start_path = f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
+
+    initial = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert initial.status_code == 202
+    import_id = UUID(initial.json()["id"])
+    execute_import_job(
+        import_session_factory,
+        import_id=import_id,
+        processor=lambda _identity: (_successful_reference(repository_id),),
+    )
+    baseline = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/imports/{import_id}",
+            access_token=admin_token,
+        )
+    ).json()["active_baseline"]
+    assert baseline is not None
+
+    retry = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert retry.status_code == 202
+    assert retry.json()["state"] == "queued"
+    execute_import_job(
+        import_session_factory,
+        import_id=import_id,
+        processor=lambda _identity: (),
+    )
+    failed = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/imports/{import_id}",
+            access_token=admin_token,
+        )
+    )
+    assert failed.status_code == 200
+    body = failed.json()
+    assert body["state"] == "import_failed"
+    assert body["active_baseline"] == baseline
+    assert body["error_category"] == "provider_unavailable"
+    _assert_secret_free(body)
+
+
+def test_import_enqueue_failure_is_terminal_bounded_and_baseline_preserving(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    product_id, _revision_id, repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    enqueuer = PersistedImportEnqueuer(import_session_factory)
+    app.state.import_job_enqueuer = enqueuer
+    start_path = f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
+
+    initial = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    import_id = UUID(initial.json()["id"])
+    execute_import_job(
+        import_session_factory,
+        import_id=import_id,
+        processor=lambda _identity: (_successful_reference(repository_id),),
+    )
+    before = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/imports/{import_id}",
+            access_token=admin_token,
+        )
+    ).json()["active_baseline"]
+
+    def fail_dispatch(_import_id: UUID) -> None:
+        raise RuntimeError(
+            "provider body with access_token=secret, task_id=unsafe, url=https://unsafe.invalid"
+        )
+
+    app.state.import_job_enqueuer = fail_dispatch
+    failed = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert failed.status_code == 202
+    body = failed.json()
+    assert body["state"] == "import_failed"
+    assert body["active_baseline"] == before
+    assert body["retry_count"] == 1
+    assert body["error_category"] == "provider_unavailable"
+    assert "secret" not in str(body).casefold()
+    assert "unsafe" not in str(body).casefold()
+    _assert_secret_free(body)
+    with import_session_factory() as session:
+        job = session.get(ImportJob, import_id)
+        assert job is not None
+        execution = session.get(ImportExecution, job.current_execution_id)
+        assert execution is not None
+        assert execution.state == "failed"
+        assert execution.started_at is not None
+        assert execution.finished_at is not None
