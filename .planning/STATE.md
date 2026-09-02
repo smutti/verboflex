@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 03
 current_phase_name: Bitbucket Import Integration
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-09-02T20:37:26.742Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-09-02T21:07:53.646Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 03 execution started
-state_head: 9bffeb53448c25fd100052ae1baf8dcdb544ec47
+state_head: 10ea0cf42e40beeaeb76e3273fc7b5e0a23564c3
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 77
-  completed_plans: 63
+  completed_plans: 64
   percent: 22
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 03 (Bitbucket Import Integration) — EXECUTING
-Plan: 3 of 16
+Plan: 4 of 16
 Status: Ready to execute
 Last activity: 2026-09-02 — Phase 03 execution started
 
@@ -122,6 +122,7 @@ Progress: [████████████████████] 61/61 p
 | Phase 02 P46 | 2h53min | 3 tasks | 11 files |
 | Phase 03 P01 | 1h 58m | 1 tasks | 17 files |
 | Phase 03 P02 | 12min | 2 tasks | 7 files |
+| Phase 03 P03 | 22min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -327,6 +328,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Active Product state is required at every import list, start, status, and worker-currentness boundary.
 - [Phase 03]: Zero selected source files terminally fail the current execution without replacing the last successful baseline.
 - [Phase 03]: Public import contracts expose repository selectors and commit-bound metadata only; provider, credential, source-byte, queue, and attempt internals remain private.
+- [Phase 03]: Request exactly pullrequest:write and accept only its documented implication closure; reject missing, duplicate, case-altered, or unexpected authority.
+- [Phase 03]: Treat repository-only generations as locally revocable legacy credentials that require reauthorization and cannot issue an import lease.
+- [Phase 03]: Expose exactly three closed capability readiness dimensions plus evaluation time while keeping generation and provider authority private.
 
 ### Pending Todos
 
@@ -366,6 +370,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-02T20:37:26.613Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-09-02T21:07:53.502Z
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None
