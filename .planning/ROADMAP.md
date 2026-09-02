@@ -266,14 +266,17 @@ Plans:
   4. Admin receives actionable, sanitized connection, permission, rate-limit, missing-source, and import errors with safe retry guidance.
   5. Phase quality gate passes with integration tests, code review, and backend/worker/deploy smoke verification.
 
-**Plans**: 4 plans
+**Plans**: 7 plans
 
 Plans:
 
-- [ ] 03-01: Import-grade capability validation and resilient Bitbucket client
-- [ ] 03-02: Durable source commit/file references and import baselines
-- [ ] 03-03: Actionable admin errors, recovery, and retry behavior
-- [ ] 03-04: Phase quality gate - integration tests, code review, and deploy/build verification
+- [ ] 03-01-PLAN.md — Direct published-mapping import tracer through browser, API, PostgreSQL, Celery, and commit-bound provider reads
+- [ ] 03-02-PLAN.md — Expanded OAuth capability profile, provider allowlist, and one-attempt resilient reads
+- [ ] 03-03-PLAN.md — Stable logical import state machine, manual retry, atomic separate baselines, and worker-loss recovery
+- [ ] 03-04-PLAN.md — Fast-forward classification and complete rewritten-history reconciliation
+- [ ] 03-05-PLAN.md — Server-owned import/product projections and canonical generated client
+- [ ] 03-06-PLAN.md — Accessible responsive import, recovery, reconciliation, and freshness UI
+- [ ] 03-07-PLAN.md — Integration, mutation, security review, API coverage, and deployment smoke quality gate
 
 ### Phase 4: Localization Parser Foundation
 
