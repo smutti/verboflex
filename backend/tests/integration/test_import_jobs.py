@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import logging
 import os
 import time
 from collections.abc import Generator, Iterator
@@ -32,9 +33,11 @@ from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
 from verboflex.integrations.bitbucket.client import (
     BitbucketBranch,
+    BitbucketProviderReadError,
     BitbucketSourceEntry,
     BitbucketSourcePage,
 )
+from verboflex.integrations.bitbucket.urls import BitbucketOperation
 from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.bitbucket_connection import BitbucketConnection
@@ -814,3 +817,145 @@ def test_import_enqueue_failure_is_terminal_bounded_and_baseline_preserving(
         assert execution.state == "failed"
         assert execution.started_at is not None
         assert execution.finished_at is not None
+
+
+@pytest.mark.parametrize(
+    ("failure_kind", "provider_status", "operation"),
+    [
+        ("reauthorization_required", 401, BitbucketOperation.BRANCH_RESOLVE),
+        ("permission_denied", 403, BitbucketOperation.SOURCE_TREE),
+        ("rate_limited", 429, BitbucketOperation.SOURCE_FILE),
+        ("not_found", 404, BitbucketOperation.BRANCH_RESOLVE),
+        ("timeout", 504, BitbucketOperation.SOURCE_TREE),
+        ("unavailable", 503, BitbucketOperation.SOURCE_FILE),
+        ("invalid_source", 200, BitbucketOperation.SOURCE_TREE),
+        ("limit_exceeded", 200, BitbucketOperation.SOURCE_FILE),
+    ],
+)
+def test_terminal_provider_failure_emits_one_sanitized_diagnostic_and_public_error(
+    import_session_factory: sessionmaker[Session],
+    caplog: pytest.LogCaptureFixture,
+    failure_kind: str,
+    provider_status: int,
+    operation: BitbucketOperation,
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    product_id, _revision_id, _repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
+    start_path = f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
+    created = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert created.status_code == 202
+    import_id = UUID(created.json()["id"])
+    attempts = 0
+
+    def fail_provider(_identity: object) -> tuple[ImportSourceReferenceRecord, ...]:
+        nonlocal attempts
+        attempts += 1
+        raise BitbucketProviderReadError(
+            kind=failure_kind,  # type: ignore[arg-type]
+            provider_status=provider_status,
+            operation=operation,
+        )
+
+    caplog.set_level(logging.INFO, logger="verboflex.bitbucket.operations")
+    execute_import_job(
+        import_session_factory,
+        import_id=import_id,
+        processor=fail_provider,
+    )
+
+    diagnostic_records = [
+        record
+        for record in caplog.records
+        if record.name == "verboflex.bitbucket.operations"
+        and getattr(record, "event_name", None) == "bitbucket.provider_operation_failed"
+    ]
+    assert attempts == 1
+    assert len(diagnostic_records) == 1
+    diagnostic = diagnostic_records[0]
+    assert {
+        "operation": diagnostic.operation,
+        "error_category": diagnostic.error_category,
+        "provider_status": diagnostic.provider_status,
+        "correlation_id": diagnostic.correlation_id,
+        "import_id": diagnostic.import_id,
+        "execution_number": diagnostic.execution_number,
+    } == {
+        "operation": operation.value,
+        "error_category": failure_kind,
+        "provider_status": provider_status,
+        "correlation_id": str(import_id),
+        "import_id": str(import_id),
+        "execution_number": 1,
+    }
+    assert isinstance(diagnostic.elapsed_ms, int)
+    assert 0 <= diagnostic.elapsed_ms <= 2_147_483_647
+
+    response = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/imports/{import_id}",
+            access_token=admin_token,
+        )
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "import_failed"
+    assert body["error_category"] == "provider_unavailable"
+    assert body["error_message"] == (
+        "This import did not complete. Review the reason, then retry from the mapping. "
+        "No import baseline was created."
+    )
+    _assert_secret_free(body)
+
+
+def test_diagnostic_handler_failure_cannot_change_import_terminalization(
+    import_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from verboflex.integrations.bitbucket import diagnostics
+
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    product_id, _revision_id, _repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
+    start_path = f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
+    created = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert created.status_code == 202
+    import_id = UUID(created.json()["id"])
+
+    class FailingLogger:
+        def info(self, *_args: object, **_kwargs: object) -> None:
+            raise RuntimeError("provider-body-logging-handler-canary")
+
+    monkeypatch.setattr(diagnostics, "_LOGGER", FailingLogger())
+
+    def fail_provider(_identity: object) -> tuple[ImportSourceReferenceRecord, ...]:
+        raise BitbucketProviderReadError(
+            kind="unavailable",
+            provider_status=503,
+            operation=BitbucketOperation.SOURCE_FILE,
+        )
+
+    execute_import_job(
+        import_session_factory,
+        import_id=import_id,
+        processor=fail_provider,
+    )
+
+    response = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/imports/{import_id}",
+            access_token=admin_token,
+        )
+    )
+    assert response.status_code == 200
+    assert response.json()["state"] == "import_failed"
+    assert response.json()["error_category"] == "provider_unavailable"
+    assert "canary" not in str(response.json()).casefold()
