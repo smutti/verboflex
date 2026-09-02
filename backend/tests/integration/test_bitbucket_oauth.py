@@ -476,7 +476,11 @@ def test_client_credentials_renewal_failure_invalidates_expired_generation(
             "connected_at",
             "expires_at",
             "revoked_at",
+            "capability_profile",
         }
+        assert failed_status.capability_profile.source_read == "reauthorization_required"
+        assert failed_status.capability_profile.source_write == "reauthorization_required"
+        assert failed_status.capability_profile.pull_request == "reauthorization_required"
         with pytest.raises(OAuthConnectionUnavailable):
             service.require_current_repository_read_lease(session, stale_lease)
 
