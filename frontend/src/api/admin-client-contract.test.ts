@@ -4,13 +4,16 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import openApiDocument from "../../openapi.json";
 import { createClient } from "./client/client";
 import {
+  connectAdminBitbucketOauth,
   confirmAdminActiveRevisionRevalidation,
   createAdminActiveRevisionRevalidationJob,
+  getAdminBitbucketStatus,
   getAdminActiveRevisionRevalidationJob,
   getAdminProductReactivationEligibility,
   getAdminRepositoryBranch,
   listAdminRevisionMappings,
   listAdminUsers,
+  reconnectAdminBitbucketOauth,
 } from "./client/sdk.gen";
 import type {
   AdminActiveRevisionRevalidationConfirmationRequest,
@@ -39,6 +42,10 @@ import type {
 } from "./client/types.gen";
 
 type OpenApiSchema = {
+  additionalProperties?: boolean;
+  const?: unknown;
+  enum?: unknown[];
+  required?: string[];
   properties?: Record<string, unknown>;
   items?: OpenApiSchema;
   anyOf?: OpenApiSchema[];
@@ -73,13 +80,19 @@ const sensitiveAdminProperties = new Set([
   "provider_next",
   "provider_next_url",
   "provider_url",
+  "raw_authority",
   "raw_body",
   "refresh_token",
   "refresh_token_ciphertext",
   "source_bytes",
   "state_expires_in",
   "temporary_password",
+  "token",
   "token_ciphertext",
+  "token_type",
+  "effective_authority",
+  "generation",
+  "scope",
 ]);
 
 const handwrittenSources = import.meta.glob("/src/**/*.{ts,tsx}", {
@@ -221,6 +234,14 @@ const phaseTwoAdminOperationIds = new Map([
   ["POST /api/v1/admin/products", "create_admin_product"],
   ["GET /api/v1/admin/products/{product_id}", "get_admin_product"],
   [
+    "GET /api/v1/admin/products/{product_id}/imports/{import_id}",
+    "get_admin_import",
+  ],
+  [
+    "GET /api/v1/admin/products/{product_id}/published/mapping-imports",
+    "list_admin_published_mapping_imports",
+  ],
+  [
     "PATCH /api/v1/admin/products/{product_id}",
     "update_admin_product_candidate",
   ],
@@ -259,6 +280,10 @@ const phaseTwoAdminOperationIds = new Map([
   [
     "POST /api/v1/admin/products/{product_id}/publish",
     "publish_admin_product_candidate",
+  ],
+  [
+    "POST /api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+    "start_admin_published_mapping_import",
   ],
   [
     "POST /api/v1/admin/products/{product_id}/reactivate",
@@ -599,6 +624,7 @@ describe("canonical generated Phase 2 admin client", () => {
       openApi.components.schemas.AdminBitbucketStatusResponse;
     expect(bitbucketStatus).toBeDefined();
     expect(Object.keys(bitbucketStatus?.properties ?? {}).sort()).toEqual([
+      "capability_profile",
       "connected_at",
       "expires_at",
       "revoked_at",
@@ -607,6 +633,101 @@ describe("canonical generated Phase 2 admin client", () => {
       "status",
     ]);
     expect(bitbucketStatus?.properties).not.toHaveProperty("workspace");
+  });
+
+  it("exposes the closed Phase 3 Bitbucket capability profile without provider authority", () => {
+    const statusSchema =
+      openApi.components.schemas.AdminBitbucketStatusResponse;
+    const capabilitySchema =
+      openApi.components.schemas.AdminBitbucketCapabilityProfile;
+
+    expect(statusSchema?.additionalProperties).toBe(false);
+    expect(statusSchema?.properties?.scope_profile).toMatchObject({
+      const: "repository_and_pull_request",
+    });
+    expect(statusSchema?.properties?.scope_label).toMatchObject({
+      const: "Repository and pull-request access",
+    });
+    expect(statusSchema?.properties?.capability_profile).toEqual({
+      $ref: "#/components/schemas/AdminBitbucketCapabilityProfile",
+    });
+
+    expect(capabilitySchema?.additionalProperties).toBe(false);
+    expect(Object.keys(capabilitySchema?.properties ?? {}).sort()).toEqual([
+      "evaluated_at",
+      "pull_request",
+      "source_read",
+      "source_write",
+    ]);
+    expect(capabilitySchema?.required?.sort()).toEqual([
+      "evaluated_at",
+      "pull_request",
+      "source_read",
+      "source_write",
+    ]);
+
+    const readiness = [
+      "disconnected",
+      "ready",
+      "ready_for_later_phase",
+      "reauthorization_required",
+      "unavailable",
+    ];
+    for (const field of ["source_read", "source_write", "pull_request"]) {
+      expect(
+        (capabilitySchema?.properties?.[field] as OpenApiSchema | undefined)
+          ?.enum,
+      ).toEqual(readiness);
+    }
+
+    const generatedCapabilityTypes = generatedTypeAliasesWithPrefix(
+      generatedTypesSource,
+      "AdminBitbucket",
+    );
+    expect(generatedCapabilityTypes).toContain(
+      "export type AdminBitbucketCapabilityProfile",
+    );
+    expect(generatedCapabilityTypes).toContain(
+      "source_read: 'disconnected' | 'ready' | 'ready_for_later_phase' | 'reauthorization_required' | 'unavailable'",
+    );
+    expect(generatedCapabilityTypes).not.toMatch(
+      /(?:raw_authority|effective_authority|generation|token|provider_body|workspace|scope:)/u,
+    );
+  });
+
+  it("calls only the generated VerboFlex capability endpoints with bearer authority", async () => {
+    const responseBody = {
+      status: "Connected",
+      scope_profile: "repository_and_pull_request",
+      scope_label: "Repository and pull-request access",
+      capability_profile: {
+        source_read: "ready",
+        source_write: "ready_for_later_phase",
+        pull_request: "ready_for_later_phase",
+        evaluated_at: "2026-09-02T21:00:00Z",
+      },
+      connected_at: "2026-09-02T21:00:00Z",
+      expires_at: "2026-09-02T22:00:00Z",
+      revoked_at: null,
+    };
+    const { apiClient, requests } = createRecordingApiClient(responseBody);
+    const authority = "phase-three-memory-bearer";
+
+    await getAdminBitbucketStatus({ client: apiClient, auth: authority });
+    await connectAdminBitbucketOauth({ client: apiClient, auth: authority });
+    await reconnectAdminBitbucketOauth({ client: apiClient, auth: authority });
+
+    expect(
+      requests.map((request) => [
+        request.method,
+        new URL(request.url).pathname,
+        request.headers.get("Authorization"),
+      ]),
+    ).toEqual([
+      ["GET", "/api/v1/admin/bitbucket", `Bearer ${authority}`],
+      ["POST", "/api/v1/admin/bitbucket/connect", `Bearer ${authority}`],
+      ["POST", "/api/v1/admin/bitbucket/reconnect", `Bearer ${authority}`],
+    ]);
   });
 
   it("exposes direct connection controls but no callback or provider write surface", () => {
