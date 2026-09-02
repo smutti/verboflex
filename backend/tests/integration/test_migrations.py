@@ -275,9 +275,7 @@ def _seed_import_schema_graph(engine: Engine) -> dict[str, UUID]:
             {
                 **identities,
                 "repository_slug": f"import-{identities['repository'].hex[:12]}",
-                "foreign_repository_slug": (
-                    f"foreign-{identities['foreign_repository'].hex[:12]}"
-                ),
+                "foreign_repository_slug": (f"foreign-{identities['foreign_repository'].hex[:12]}"),
             },
         )
         connection.execute(
@@ -576,9 +574,7 @@ def test_immutable_source_reference_and_terminal_execution_provenance(
         engine.begin() as connection,
     ):
         connection.execute(
-            text(
-                "UPDATE import_executions SET connection_generation = 2 WHERE id = :id"
-            ),
+            text("UPDATE import_executions SET connection_generation = 2 WHERE id = :id"),
             {"id": execution_id},
         )
     with (
