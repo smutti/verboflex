@@ -221,7 +221,7 @@ def test_reads_metadata_only_through_validated_current_generation() -> None:
             return httpx.Response(
                 200,
                 json=[{"uuid": "{repository-uuid}"}],
-                headers={"x-oauth-scopes": "repository"},
+                headers={"x-oauth-scopes": "pullrequest:write"},
                 request=request,
             )
         return httpx.Response(
@@ -231,7 +231,7 @@ def test_reads_metadata_only_through_validated_current_generation() -> None:
                 "workspace": {"slug": "acme"},
                 "slug": slug,
             },
-            headers={"x-oauth-scopes": "repository"},
+            headers={"x-oauth-scopes": "pullrequest:write"},
             request=request,
         )
 
@@ -345,7 +345,7 @@ def test_reconnect_or_revoke_discards_stale_provider_results(invalidate_at: str)
         return httpx.Response(
             200,
             json={"uuid": "{stale-repository-uuid}"},
-            headers={"x-oauth-scopes": "repository"},
+            headers={"x-oauth-scopes": "pullrequest:write"},
             request=request,
         )
 

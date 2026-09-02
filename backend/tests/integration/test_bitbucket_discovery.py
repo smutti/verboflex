@@ -17,6 +17,7 @@ from verboflex.core.config import Settings
 from verboflex.integrations.bitbucket.client import (
     BitbucketBranch,
     BitbucketHttpAdapter,
+    BitbucketOperation,
     BitbucketProviderReadError,
     BitbucketSourceEntry,
     BitbucketSourcePage,
@@ -80,7 +81,7 @@ def test_lists_exact_branches_with_validated_opaque_pagination() -> None:
         return httpx.Response(
             200,
             json=payload,
-            headers={"x-oauth-scopes": "repository"},
+            headers={"x-oauth-scopes": "pullrequest:write"},
             request=request,
         )
 
@@ -119,7 +120,7 @@ def test_lists_exact_branches_with_validated_opaque_pagination() -> None:
                     "values": [{"name": "main", "target": {"hash": "d" * 40}}],
                     "next": "https://attacker.example/steal-provider-token",
                 },
-                headers={"x-oauth-scopes": "repository"},
+                headers={"x-oauth-scopes": "pullrequest:write"},
                 request=request,
             )
 
@@ -138,6 +139,38 @@ def test_lists_exact_branches_with_validated_opaque_pagination() -> None:
         assert "attacker" not in repr(captured.value).lower()
         assert len(requests) == requests_before_rejection + 1
         await hostile.aclose()
+
+        cross_repository_requests: list[httpx.Request] = []
+
+        def cross_repository_provider(request: httpx.Request) -> httpx.Response:
+            cross_repository_requests.append(request)
+            return httpx.Response(
+                200,
+                json={
+                    "values": [{"name": "main", "target": {"hash": "e" * 40}}],
+                    "next": (
+                        "https://api.bitbucket.org/2.0/repositories/acme/other/"
+                        "refs/branches?pagelen=100&page=2"
+                    ),
+                },
+                headers={"x-oauth-scopes": "pullrequest:write"},
+                request=request,
+            )
+
+        cross_repository = BitbucketHttpAdapter(
+            settings=Settings(),
+            credential_leases=authority,
+            transport=httpx.MockTransport(cross_repository_provider),
+        )
+        with pytest.raises(BitbucketProviderReadError) as cross_repository_error:
+            await cross_repository.list_repository_branches(
+                object(),
+                workspace="acme",
+                repository_slug="mobile",
+            )
+        assert cross_repository_error.value.kind == "invalid_source"
+        assert len(cross_repository_requests) == 1
+        await cross_repository.aclose()
         await adapter.aclose()
 
     asyncio.run(exercise())
@@ -184,7 +217,7 @@ def test_source_url_and_adapter_guards_reject_ambiguous_provider_coordinates() -
         return httpx.Response(
             200,
             json={"name": "other", "target": {"hash": commit_hash}},
-            headers={"x-oauth-scopes": "repository"},
+            headers={"x-oauth-scopes": "pullrequest:write"},
             request=request,
         )
 
@@ -276,7 +309,7 @@ def test_source_transport_rejects_unsafe_encoding_media_and_lengths(
         return httpx.Response(
             200,
             stream=ChunkStream(body),
-            headers={"x-oauth-scopes": "repository", **headers},
+            headers={"x-oauth-scopes": "pullrequest:write", **headers},
             request=request,
         )
 
@@ -290,6 +323,7 @@ def test_source_transport_rejects_unsafe_encoding_media_and_lengths(
         with pytest.raises(BitbucketProviderReadError) as captured:
             await adapter._read_bounded_bytes(
                 object(),
+                operation=BitbucketOperation.REPOSITORY_METADATA,
                 url="https://api.bitbucket.org/2.0/repositories/acme/mobile",
                 max_bytes=32,
                 expect_json=True,
@@ -306,7 +340,7 @@ def test_source_json_and_raw_stream_accounting_are_closed_and_exact() -> None:
 
     def provider(request: httpx.Request) -> httpx.Response:
         body = next(responses)
-        headers = {"x-oauth-scopes": "repository"}
+        headers = {"x-oauth-scopes": "pullrequest:write"}
         if body in {b"{", b"[]"}:
             headers["content-type"] = "application/json"
         return httpx.Response(
@@ -326,15 +360,27 @@ def test_source_json_and_raw_stream_accounting_are_closed_and_exact() -> None:
         metadata_url = "https://api.bitbucket.org/2.0/repositories/acme/mobile"
         for _ in range(2):
             with pytest.raises(BitbucketProviderReadError) as captured:
-                await adapter._read_json(object(), url=metadata_url)
+                await adapter._read_json(
+                    object(),
+                    operation=BitbucketOperation.REPOSITORY_METADATA,
+                    url=metadata_url,
+                )
             assert captured.value.kind == "invalid_source"
         first = await adapter._read_bounded_bytes(
-            object(), url=metadata_url, max_bytes=2, expect_json=False
+            object(),
+            operation=BitbucketOperation.REPOSITORY_METADATA,
+            url=metadata_url,
+            max_bytes=2,
+            expect_json=False,
         )
         assert first == b"ab"
         with pytest.raises(BitbucketProviderReadError) as oversized:
             await adapter._read_bounded_bytes(
-                object(), url=metadata_url, max_bytes=1, expect_json=False
+                object(),
+                operation=BitbucketOperation.REPOSITORY_METADATA,
+                url=metadata_url,
+                max_bytes=1,
+                expect_json=False,
             )
         assert oversized.value.kind == "limit_exceeded"
         await adapter.aclose()
@@ -472,7 +518,7 @@ def test_resolves_commit_then_streams_exact_bounded_source_candidates() -> None:
             return httpx.Response(
                 200,
                 json=payload,
-                headers={"x-oauth-scopes": "repository"},
+                headers={"x-oauth-scopes": "pullrequest:write"},
                 request=request,
             )
         if path.endswith(f"/src/{commit_hash}/") and request.url.params.get("after") is None:
@@ -486,7 +532,7 @@ def test_resolves_commit_then_streams_exact_bounded_source_candidates() -> None:
             return httpx.Response(
                 200,
                 json=payload,
-                headers={"x-oauth-scopes": "repository"},
+                headers={"x-oauth-scopes": "pullrequest:write"},
                 request=request,
             )
         if request.url.params.get("after") is not None:
@@ -498,7 +544,7 @@ def test_resolves_commit_then_streams_exact_bounded_source_candidates() -> None:
             return httpx.Response(
                 200,
                 json=payload,
-                headers={"x-oauth-scopes": "repository"},
+                headers={"x-oauth-scopes": "pullrequest:write"},
                 request=request,
             )
         if path.endswith(f"/src/{commit_hash}/locales") and request.url.params:
@@ -510,7 +556,7 @@ def test_resolves_commit_then_streams_exact_bounded_source_candidates() -> None:
             return httpx.Response(
                 200,
                 json=payload,
-                headers={"x-oauth-scopes": "repository"},
+                headers={"x-oauth-scopes": "pullrequest:write"},
                 request=request,
             )
         relative_path = path.split(f"/src/{commit_hash}/", 1)[1]
@@ -519,7 +565,7 @@ def test_resolves_commit_then_streams_exact_bounded_source_candidates() -> None:
             content=raw_bodies[relative_path],
             headers={
                 "content-encoding": "identity",
-                "x-oauth-scopes": "repository",
+                "x-oauth-scopes": "pullrequest:write",
             },
             request=request,
         )
@@ -610,7 +656,7 @@ def test_hostile_source_reads_fail_closed_without_returning_provider_bytes(
             return httpx.Response(
                 200,
                 json={"name": "main", "target": {"hash": commit_hash}},
-                headers={"x-oauth-scopes": "repository"},
+                headers={"x-oauth-scopes": "pullrequest:write"},
                 request=request,
             )
         if request.url.params.get("pagelen") == "100":
@@ -623,7 +669,7 @@ def test_hostile_source_reads_fail_closed_without_returning_provider_bytes(
             return httpx.Response(
                 200,
                 json=payload,
-                headers={"x-oauth-scopes": "repository"},
+                headers={"x-oauth-scopes": "pullrequest:write"},
                 request=request,
             )
         if mode == "revoked":
@@ -634,7 +680,7 @@ def test_hostile_source_reads_fail_closed_without_returning_provider_bytes(
                 headers={"location": "https://api.bitbucket.org/2.0/repositories/acme/mobile"},
                 request=request,
             )
-        headers = {"x-oauth-scopes": "repository"}
+        headers = {"x-oauth-scopes": "pullrequest:write"}
         if mode == "compressed":
             headers["content-encoding"] = "gzip"
         content = b"x" * (1_048_576 + 1) if mode == "oversized" else marker

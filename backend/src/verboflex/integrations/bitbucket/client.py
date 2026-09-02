@@ -13,6 +13,9 @@ from sqlalchemy.orm import Session
 
 from verboflex.core.config import Settings
 from verboflex.integrations.bitbucket.urls import (
+    PHASE_3_READ_OPERATIONS,
+    PHASE_8_WRITE_OPERATIONS,
+    BitbucketOperation,
     repository_branch_url,
     repository_branches_url,
     repository_metadata_url,
@@ -21,7 +24,8 @@ from verboflex.integrations.bitbucket.urls import (
     validate_repository_relative_path,
 )
 from verboflex.services.bitbucket_oauth import (
-    LEGACY_REPOSITORY_SCOPE,
+    PULLREQUEST_WRITE_IMPLICATION_CLOSURE,
+    PULLREQUEST_WRITE_SCOPE,
     BitbucketCredentialLease,
     OAuthConnectionUnavailable,
     OAuthGenerationRejected,
@@ -163,7 +167,11 @@ class BitbucketHttpAdapter:
             workspace=workspace,
             repository_slug=repository_slug,
         )
-        return await self._read_json(session, url=url)
+        return await self._read_json(
+            session,
+            operation=BitbucketOperation.REPOSITORY_METADATA,
+            url=url,
+        )
 
     async def list_repository_branches(
         self,
@@ -173,18 +181,26 @@ class BitbucketHttpAdapter:
         repository_slug: str,
     ) -> tuple[BitbucketBranch, ...]:
         """Traverse opaque provider pages in order and preserve exact branch names."""
-        next_url: str | None = repository_branches_url(
+        first_url = repository_branches_url(
             workspace=workspace,
             repository_slug=repository_slug,
         )
+        expected_path = urlsplit(first_url).path
+        next_url: str | None = first_url
         branches: list[BitbucketBranch] = []
         visited: set[str] = set()
         while next_url is not None:
             if next_url in visited or len(visited) >= 50:
                 raise BitbucketProviderReadError()
             visited.add(next_url)
-            page = await self._read_json(session, url=next_url)
+            page = await self._read_json(
+                session,
+                operation=BitbucketOperation.BRANCH_LIST,
+                url=next_url,
+            )
             page_branches, next_url = self._parse_branch_page(page)
+            if next_url is not None and urlsplit(next_url).path != expected_path:
+                raise BitbucketProviderReadError(kind="invalid_source")
             branches.extend(page_branches)
         return tuple(branches)
 
@@ -202,7 +218,13 @@ class BitbucketHttpAdapter:
             repository_slug=repository_slug,
             branch=branch,
         )
-        resolved = self._parse_branch(await self._read_json(session, url=url))
+        resolved = self._parse_branch(
+            await self._read_json(
+                session,
+                operation=BitbucketOperation.BRANCH_RESOLVE,
+                url=url,
+            )
+        )
         if resolved.name != branch:
             raise BitbucketProviderReadError(kind="invalid_source")
         return resolved
@@ -226,9 +248,20 @@ class BitbucketHttpAdapter:
             paginated=True,
         )
         url = next_url or source_url
-        if urlsplit(validate_bitbucket_api_url(url)).path != urlsplit(source_url).path:
+        if (
+            urlsplit(
+                validate_bitbucket_api_url(url, operation=BitbucketOperation.SOURCE_TREE)
+            ).path
+            != urlsplit(source_url).path
+        ):
             raise BitbucketProviderReadError(kind="invalid_source")
-        return self._parse_source_page(await self._read_json(session, url=url))
+        return self._parse_source_page(
+            await self._read_json(
+                session,
+                operation=BitbucketOperation.SOURCE_TREE,
+                url=url,
+            )
+        )
 
     async def read_repository_source_file(
         self,
@@ -251,6 +284,7 @@ class BitbucketHttpAdapter:
         )
         return await self._read_bounded_bytes(
             session,
+            operation=BitbucketOperation.SOURCE_FILE,
             url=url,
             max_bytes=max_bytes,
             expect_json=False,
@@ -271,7 +305,10 @@ class BitbucketHttpAdapter:
         if not isinstance(raw_next, str):
             raise BitbucketProviderReadError()
         try:
-            return branches, validate_bitbucket_api_url(raw_next)
+            return branches, validate_bitbucket_api_url(
+                raw_next,
+                operation=BitbucketOperation.BRANCH_LIST,
+            )
         except ValueError:
             raise BitbucketProviderReadError() from None
 
@@ -326,16 +363,26 @@ class BitbucketHttpAdapter:
             next_url = None
         elif isinstance(raw_next, str):
             try:
-                next_url = validate_bitbucket_api_url(raw_next)
+                next_url = validate_bitbucket_api_url(
+                    raw_next,
+                    operation=BitbucketOperation.SOURCE_TREE,
+                )
             except ValueError:
                 raise BitbucketProviderReadError(kind="invalid_source") from None
         else:
             raise BitbucketProviderReadError(kind="invalid_source")
         return BitbucketSourcePage(entries=tuple(entries), next_url=next_url)
 
-    async def _read_json(self, session: Session, *, url: str) -> Mapping[str, object]:
+    async def _read_json(
+        self,
+        session: Session,
+        *,
+        operation: BitbucketOperation,
+        url: str,
+    ) -> Mapping[str, object]:
         payload = await self._read_bounded_bytes(
             session,
+            operation=operation,
             url=url,
             max_bytes=_MAX_JSON_RESPONSE_BYTES,
             expect_json=True,
@@ -352,11 +399,12 @@ class BitbucketHttpAdapter:
         self,
         session: Session,
         *,
+        operation: BitbucketOperation,
         url: str,
         max_bytes: int,
         expect_json: bool,
     ) -> bytes:
-        validated_url = validate_bitbucket_api_url(url)
+        validated_url = validate_bitbucket_api_url(url, operation=operation)
         failure_kind: ProviderFailureKind | None = None
         try:
             lease = self._credential_leases.acquire_repository_read_lease(session)
@@ -389,7 +437,14 @@ class BitbucketHttpAdapter:
                         kind=kind,
                         provider_status=response.status_code,
                     )
-                if response.headers.get("x-oauth-scopes") != LEGACY_REPOSITORY_SCOPE:
+                raw_scopes = response.headers.get("x-oauth-scopes")
+                scopes = raw_scopes.split() if isinstance(raw_scopes, str) else []
+                scope_set = frozenset(scopes)
+                if (
+                    PULLREQUEST_WRITE_SCOPE not in scope_set
+                    or not scope_set.issubset(PULLREQUEST_WRITE_IMPLICATION_CLOSURE)
+                    or len(scope_set) != len(scopes)
+                ):
                     raise BitbucketProviderReadError(
                         kind="permission_denied",
                         provider_status=response.status_code,
@@ -480,9 +535,12 @@ class BitbucketHttpAdapter:
 
 
 __all__ = [
+    "PHASE_3_READ_OPERATIONS",
+    "PHASE_8_WRITE_OPERATIONS",
     "BitbucketCredentialLease",
     "BitbucketBranch",
     "BitbucketHttpAdapter",
+    "BitbucketOperation",
     "BitbucketProviderReadError",
     "BitbucketSourceEntry",
     "BitbucketSourcePage",
