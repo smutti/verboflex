@@ -269,22 +269,62 @@ Plans:
 **Plans**: 16 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 03-01-PLAN.md — Production direct-import tracer through browser, API, PostgreSQL, Celery, and commit-bound reads
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 03-02-PLAN.md — Reversible import schema, immutable provenance, and negative contract hardening
 - [ ] 03-03-PLAN.md — Exact expanded OAuth capability acquisition and closed backend projection
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 03-04-PLAN.md — Generated capability client and approved administrator readiness UI
 - [ ] 03-05-PLAN.md — One-attempt provider resilience and application-owned GET operation boundary
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 03-06-PLAN.md — Useful sanitized structured provider diagnostics and leakage proof
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 03-07-PLAN.md — Stable logical import state machine, atomic separate baselines, retry, and watchdog
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 03-08-PLAN.md — Exact ancestry, fast-forward classification, and complete bounded rewrite delta
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
 - [ ] 03-09-PLAN.md — Durable rewrite proposals and atomic current-baseline confirmation
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
 - [ ] 03-10-PLAN.md — Five-operation import API and product-local affected-mapping aggregation
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
 - [ ] 03-11-PLAN.md — Canonical OpenAPI and complete generated TypeScript client
+
+**Wave 10** *(blocked on Wave 9 completion)*
+
 - [ ] 03-12-PLAN.md — Cursor-complete import collection, bounded polling, and responsive mapping UI
+
+**Wave 11** *(blocked on Wave 10 completion)*
+
 - [ ] 03-13-PLAN.md — Rewrite dialog, product freshness, browser journeys, and 26 UI consideration identities
+
+**Wave 12** *(blocked on Wave 11 completion)*
+
 - [ ] 03-14-PLAN.md — Deployment mock smoke and pre-digest supplemental live-read implementation
+
+**Wave 13** *(blocked on Wave 12 completion)*
+
 - [ ] 03-15-PLAN.md — Exact source/UI/API scope audit, mutation proof, manifest, and final gauntlet
+
+**Wave 14** *(blocked on Wave 13 completion)*
+
 - [ ] 03-16-PLAN.md — Digest-bound ASVS L1 review and independent exact-passed verifier closeout
 
 ### Phase 4: Localization Parser Foundation
