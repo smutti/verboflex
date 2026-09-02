@@ -51,6 +51,8 @@ from verboflex.models.product_mapping import (
 from verboflex.models.repository import Repository
 from verboflex.models.role import Role
 from verboflex.models.user import User
+from verboflex.services import import_jobs as import_job_service
+from verboflex.services.bitbucket_oauth import PULLREQUEST_WRITE_SCOPE
 from verboflex.services.import_jobs import (
     ImportSourceReferenceRecord,
     execute_import_job,
@@ -235,7 +237,7 @@ def _seed_published_direct_mapping(
         connection.generation = 9
         connection.access_token_ciphertext = "encrypted-access"
         connection.refresh_token_ciphertext = None
-        connection.scope_profile = "repository"
+        connection.scope_profile = PULLREQUEST_WRITE_SCOPE
         connection.provider_expires_at = now + timedelta(hours=1)
         connection.connected_at = now
         connection.revoked_at = None
@@ -712,6 +714,269 @@ def _successful_reference(repository_id: UUID) -> ImportSourceReferenceRecord:
         size_bytes=13,
         sha256="a" * 64,
     )
+
+
+def _successful_reference_at(
+    repository_id: UUID,
+    *,
+    commit_hash: str,
+) -> ImportSourceReferenceRecord:
+    return ImportSourceReferenceRecord(
+        position=0,
+        repository_side="direct",
+        repository_id=repository_id,
+        source_branch="main",
+        commit_hash=commit_hash,
+        path="mobile/src/main/res/values/strings.xml",
+        size_bytes=13,
+        sha256="a" * 64,
+    )
+
+
+def test_transition_current_refresh_increments_execution_without_retry(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    product_id, _revision_id, repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    enqueuer = PersistedImportEnqueuer(import_session_factory)
+    app.state.import_job_enqueuer = enqueuer
+    start_path = f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
+
+    initial = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert initial.status_code == 202
+    import_id = UUID(initial.json()["id"])
+    execute_import_job(
+        import_session_factory,
+        import_id=import_id,
+        processor=lambda _identity: (_successful_reference(repository_id),),
+    )
+
+    refreshed = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert refreshed.status_code == 202
+    assert refreshed.json()["id"] == str(import_id)
+    assert refreshed.json()["state"] == "queued"
+    assert refreshed.json()["retry_count"] == 0
+    assert enqueuer.payloads == [(str(import_id),), (str(import_id),)]
+    with import_session_factory() as session:
+        job = session.get(ImportJob, import_id)
+        assert job is not None
+        executions = tuple(
+            session.execute(
+                select(ImportExecution)
+                .where(ImportExecution.import_job_id == import_id)
+                .order_by(ImportExecution.sequence)
+            ).scalars()
+        )
+        assert [execution.sequence for execution in executions] == [1, 2]
+        assert job.current_execution_id == executions[1].id
+        assert job.active_baseline_execution_id == executions[0].id
+
+
+def test_same_commit_refresh_retains_the_active_baseline_pointer(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    product_id, _revision_id, repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
+    start_path = f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
+
+    initial = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    import_id = UUID(initial.json()["id"])
+    reference = _successful_reference(repository_id)
+    execute_import_job(
+        import_session_factory,
+        import_id=import_id,
+        processor=lambda _identity: (reference,),
+    )
+    with import_session_factory() as session:
+        before = session.get(ImportJob, import_id)
+        assert before is not None
+        original_baseline_id = before.active_baseline_execution_id
+        assert original_baseline_id is not None
+
+    refreshed = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert refreshed.status_code == 202
+    execute_import_job(
+        import_session_factory,
+        import_id=import_id,
+        processor=lambda _identity: (reference,),
+    )
+
+    with import_session_factory() as session:
+        after = session.get(ImportJob, import_id)
+        assert after is not None
+        assert after.state == "current"
+        assert after.retry_count == 0
+        assert after.active_baseline_execution_id == original_baseline_id
+        assert after.current_execution_id != original_baseline_id
+
+
+def test_retry_replaces_current_projection_and_retains_the_previous_baseline(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    product_id, _revision_id, repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
+    start_path = f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
+    status_path: str
+
+    initial = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    import_id = UUID(initial.json()["id"])
+    status_path = f"/api/v1/admin/products/{product_id}/imports/{import_id}"
+    execute_import_job(
+        import_session_factory,
+        import_id=import_id,
+        processor=lambda _identity: (_successful_reference(repository_id),),
+    )
+    original = asyncio.run(_request("GET", status_path, access_token=admin_token)).json()
+
+    refresh = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert refresh.status_code == 202
+    execute_import_job(
+        import_session_factory,
+        import_id=import_id,
+        processor=lambda _identity: (),
+    )
+    failed = asyncio.run(_request("GET", status_path, access_token=admin_token)).json()
+    assert failed["state"] == "import_failed"
+    assert failed["retry_count"] == 0
+    assert failed["active_baseline"] == original["active_baseline"]
+
+    retried = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    retried_body = retried.json()
+    assert retried.status_code == 202
+    assert retried_body["id"] == str(import_id)
+    assert retried_body["state"] == "queued"
+    assert retried_body["retry_count"] == 1
+    assert retried_body["error_category"] is None
+    assert retried_body["error_message"] is None
+
+    next_commit = "c" * 40
+    execute_import_job(
+        import_session_factory,
+        import_id=import_id,
+        processor=lambda _identity: (
+            _successful_reference_at(repository_id, commit_hash=next_commit),
+        ),
+    )
+    current = asyncio.run(_request("GET", status_path, access_token=admin_token)).json()
+    assert current["state"] == "current"
+    assert current["retry_count"] == 1
+    assert current["active_baseline"]["source_references"][0]["commit_hash"] == next_commit
+    _assert_secret_free(current)
+    assert {
+        "current_execution_id",
+        "connection_generation",
+        "execution_history",
+        "attempt_history",
+    }.isdisjoint(current)
+    with import_session_factory() as session:
+        executions = tuple(
+            session.execute(
+                select(ImportExecution)
+                .where(ImportExecution.import_job_id == import_id)
+                .order_by(ImportExecution.sequence)
+            ).scalars()
+        )
+        assert [execution.sequence for execution in executions] == [1, 2, 3]
+
+
+def test_current_capability_generation_is_revalidated_before_completion(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    product_id, _revision_id, repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
+    start_path = f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
+
+    created = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert created.status_code == 202
+    import_id = UUID(created.json()["id"])
+    identity = import_job_service.start_import_execution(
+        import_session_factory,
+        import_id=import_id,
+    )
+    assert identity is not None
+
+    with import_session_factory.begin() as session:
+        connection = session.get(BitbucketConnection, 1)
+        assert connection is not None
+        connection.generation += 1
+
+    terminalized = import_job_service.finish_import_execution(
+        import_session_factory,
+        identity=identity,
+        references=(_successful_reference(repository_id),),
+    )
+    assert terminalized is True
+    response = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/imports/{import_id}",
+            access_token=admin_token,
+        )
+    )
+    assert response.status_code == 200
+    assert response.json()["state"] == "import_failed"
+    assert response.json()["active_baseline"] is None
+
+
+def test_late_worker_completion_cannot_overwrite_a_newer_retry(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    product_id, _revision_id, repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
+    start_path = f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
+
+    created = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    import_id = UUID(created.json()["id"])
+    first_identity = import_job_service.start_import_execution(
+        import_session_factory,
+        import_id=import_id,
+    )
+    assert first_identity is not None
+    assert import_job_service.finish_import_execution(
+        import_session_factory,
+        identity=first_identity,
+        references=None,
+    )
+
+    retried = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert retried.status_code == 202
+    assert retried.json()["retry_count"] == 1
+    assert (
+        import_job_service.finish_import_execution(
+            import_session_factory,
+            identity=first_identity,
+            references=(_successful_reference(repository_id),),
+        )
+        is False
+    )
+    with import_session_factory() as session:
+        job = session.get(ImportJob, import_id)
+        assert job is not None
+        current_execution = session.get(ImportExecution, job.current_execution_id)
+        assert current_execution is not None
+        assert job.state == "queued"
+        assert job.active_baseline_execution_id is None
+        assert current_execution.sequence == 2
+        assert current_execution.state == "queued"
 
 
 def test_import_empty_source_terminalizes_and_preserves_the_last_baseline(
