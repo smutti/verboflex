@@ -546,7 +546,7 @@ def test_import_public_contract_is_closed_and_provider_source_history_free() -> 
 
 
 def test_admin_bitbucket_openapi_is_closed_bounded_and_secret_free() -> None:
-    """Expose only approved lifecycle state and exact repository read scope."""
+    """Expose only approved lifecycle state and closed capability readiness."""
     schema = app.openapi()
     schemas = schema["components"]["schemas"]
     connection_status = schemas["AdminBitbucketStatusResponse"]
@@ -558,6 +558,7 @@ def test_admin_bitbucket_openapi_is_closed_bounded_and_secret_free() -> None:
         "status",
         "scope_profile",
         "scope_label",
+        "capability_profile",
         "connected_at",
         "expires_at",
         "revoked_at",
@@ -568,10 +569,28 @@ def test_admin_bitbucket_openapi_is_closed_bounded_and_secret_free() -> None:
         "Reauthorization required",
         "Unavailable",
     ]
-    assert connection_status["properties"]["scope_profile"]["const"] == "repository"
-    assert connection_status["properties"]["scope_label"]["const"] == (
-        "Read-only repository access"
+    assert connection_status["properties"]["scope_profile"]["const"] == (
+        "repository_and_pull_request"
     )
+    assert connection_status["properties"]["scope_label"]["const"] == (
+        "Repository and pull-request access"
+    )
+    capability_profile = schemas["AdminBitbucketCapabilityProfile"]
+    assert capability_profile["additionalProperties"] is False
+    assert set(capability_profile["properties"]) == {
+        "source_read",
+        "source_write",
+        "pull_request",
+        "evaluated_at",
+    }
+    for field in ("source_read", "source_write", "pull_request"):
+        assert capability_profile["properties"][field]["enum"] == [
+            "disconnected",
+            "ready",
+            "ready_for_later_phase",
+            "reauthorization_required",
+            "unavailable",
+        ]
     assert integration_error["additionalProperties"] is False
     assert integration_error["properties"]["detail"]["const"] == (
         "Bitbucket connection unavailable"
@@ -618,6 +637,9 @@ def test_admin_bitbucket_openapi_is_closed_bounded_and_secret_free() -> None:
         "encryption_key",
         "client_secret",
         "provider_body",
+        "source_generation",
+        "raw_scope",
+        "effective_scope",
         "repository:write",
         "pullrequest",
         "webhook",
