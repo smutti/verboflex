@@ -235,6 +235,18 @@ class ImportSourceReference(Base):
             "char_length(sha256) = 64 AND sha256 ~ '^[0-9a-f]{64}$'",
             name="sha256_digest",
         ),
+        UniqueConstraint(
+            "execution_id",
+            "repository_side",
+            "path",
+            name="uq_import_source_references_side_path",
+        ),
+        Index(
+            "ix_import_source_references_execution_side_position",
+            "execution_id",
+            "repository_side",
+            "position",
+        ),
     )
 
     execution_id: Mapped[UUID] = mapped_column(

@@ -17,6 +17,68 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+IMMUTABLE_IMPORT_EXECUTION_GUARD = """
+CREATE FUNCTION verboflex_guard_terminal_import_execution()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF OLD.state IN ('succeeded', 'failed') THEN
+        RAISE EXCEPTION 'terminal import execution is immutable'
+            USING ERRCODE = '55000';
+    END IF;
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+    RETURN NEW;
+END;
+$$
+"""
+
+
+IMPORT_SOURCE_REFERENCE_GUARD = """
+CREATE FUNCTION verboflex_guard_import_source_reference()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    execution_state text;
+BEGIN
+    IF TG_OP IN ('UPDATE', 'DELETE') THEN
+        SELECT state INTO execution_state
+        FROM import_executions
+        WHERE id = OLD.execution_id;
+
+        IF execution_state IN ('succeeded', 'failed') THEN
+            RAISE EXCEPTION 'terminal import source reference is immutable'
+                USING ERRCODE = '55000';
+        END IF;
+        IF TG_OP = 'DELETE' THEN
+            RETURN OLD;
+        END IF;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM import_executions AS execution
+        JOIN import_jobs AS job ON job.id = execution.import_job_id
+        JOIN product_mapping_repository_sides AS side
+          ON side.mapping_id = job.mapping_id
+         AND side.role = NEW.repository_side
+         AND side.repository_id = NEW.repository_id
+         AND side.source_branch = NEW.source_branch
+        WHERE execution.id = NEW.execution_id
+    ) THEN
+        RAISE EXCEPTION 'import source reference ownership violation'
+            USING ERRCODE = '23503';
+    END IF;
+
+    RETURN NEW;
+END;
+$$
+"""
+
+
 def upgrade() -> None:
     """Create logical imports, executions, and metadata-only source references."""
     op.create_table(
@@ -229,11 +291,47 @@ def upgrade() -> None:
             "position",
             name=op.f("pk_import_source_references"),
         ),
+        sa.UniqueConstraint(
+            "execution_id",
+            "repository_side",
+            "path",
+            name="uq_import_source_references_side_path",
+        ),
+    )
+    op.create_index(
+        "ix_import_source_references_execution_side_position",
+        "import_source_references",
+        ["execution_id", "repository_side", "position"],
+    )
+    op.execute(IMMUTABLE_IMPORT_EXECUTION_GUARD)
+    op.execute(
+        "CREATE TRIGGER trg_import_executions_terminal_immutable "
+        "BEFORE UPDATE OR DELETE ON import_executions "
+        "FOR EACH ROW EXECUTE FUNCTION verboflex_guard_terminal_import_execution()"
+    )
+    op.execute(IMPORT_SOURCE_REFERENCE_GUARD)
+    op.execute(
+        "CREATE TRIGGER trg_import_source_references_guard "
+        "BEFORE INSERT OR UPDATE OR DELETE ON import_source_references "
+        "FOR EACH ROW EXECUTE FUNCTION verboflex_guard_import_source_reference()"
     )
 
 
 def downgrade() -> None:
     """Remove only the import persistence introduced by this revision."""
+    op.execute(
+        "DROP TRIGGER trg_import_source_references_guard "
+        "ON import_source_references"
+    )
+    op.execute("DROP FUNCTION verboflex_guard_import_source_reference()")
+    op.execute(
+        "DROP TRIGGER trg_import_executions_terminal_immutable ON import_executions"
+    )
+    op.execute("DROP FUNCTION verboflex_guard_terminal_import_execution()")
+    op.drop_index(
+        "ix_import_source_references_execution_side_position",
+        table_name="import_source_references",
+    )
     op.drop_table("import_source_references")
     op.drop_constraint(
         "fk_import_jobs_active_baseline",
