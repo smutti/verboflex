@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 03
 current_phase_name: Bitbucket Import Integration
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-09-02T20:15:57.669Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-09-02T20:37:26.742Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 03 execution started
-state_head: a3098241a2d6b901d3d9a9e9ed9fe0c757cf7641
+state_head: 9bffeb53448c25fd100052ae1baf8dcdb544ec47
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 77
-  completed_plans: 62
+  completed_plans: 63
   percent: 22
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 03 (Bitbucket Import Integration) — EXECUTING
-Plan: 2 of 16
+Plan: 3 of 16
 Status: Ready to execute
 Last activity: 2026-09-02 — Phase 03 execution started
 
@@ -121,6 +121,7 @@ Progress: [████████████████████] 61/61 p
 | Phase 02 P45 | 26min | 3 tasks | 13 files |
 | Phase 02 P46 | 2h53min | 3 tasks | 11 files |
 | Phase 03 P01 | 1h 58m | 1 tasks | 17 files |
+| Phase 03 P02 | 12min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -323,6 +324,9 @@ Recent decisions affecting current work:
 - [Phase 03]: One published mapping owns one stable logical import UUID while immutable execution identities fence completion.
 - [Phase 03]: Redis carries only the logical import UUID and public import state contains commit-bound metadata, never source bytes.
 - [Phase 03]: Local Bitbucket revocation remains available independently of provider settings and encryption-key construction.
+- [Phase 03]: Active Product state is required at every import list, start, status, and worker-currentness boundary.
+- [Phase 03]: Zero selected source files terminally fail the current execution without replacing the last successful baseline.
+- [Phase 03]: Public import contracts expose repository selectors and commit-bound metadata only; provider, credential, source-byte, queue, and attempt internals remain private.
 
 ### Pending Todos
 
@@ -362,6 +366,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-02T20:15:57.546Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-09-02T20:37:26.613Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
