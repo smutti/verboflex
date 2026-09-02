@@ -1,10 +1,11 @@
 ---
 phase: 3
 slug: bitbucket-import-integration
-status: draft
+status: approved
 shadcn_initialized: true
 preset: official-new-york-v4-radix
 created: 2026-09-02
+reviewed_at: 2026-09-02T14:52:10+02:00
 ---
 
 # Phase 3 — UI Design Contract
@@ -295,17 +296,19 @@ Exact dynamic action and category copy is normative in the Interaction Contracts
 
 > Shape-rooted state coverage for the finite UI-consideration probe. Empty/error copy references the Copywriting Contract and Interaction Contracts instead of duplicating it.
 
-Applicable state considerations: 8 categories covered explicitly, 0 backstop, 0 unresolved.
+Confirmed element kinds: capability profile, mapping imports, and reconciliation dialog are `list-collection`, `interactive-control`, and `static-content`; the product freshness summary is `static-content`.
+
+Applicable state considerations: 26 of 26 resolved explicitly across 8 categories, 0 backstop, 0 unresolved.
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
-| empty | Published mapping import collection; last baseline; rewritten file delta | ✅ covered | The collection uses the named empty state, a row without a baseline says `No successful import yet`, and a readable zero-change rewrite says `No localization file changes detected`. |
+| empty | Capability profile; published mapping import collection; last baseline; rewritten file delta | ✅ covered | Capability rows always show a named server-projected readiness state rather than disappearing; the collection uses the named empty state, a row without a baseline says `No successful import yet`, and a readable zero-change rewrite says `No localization file changes detected`. |
 | loading | Capability profile; mapping collection; import mutation/polling; reconciliation dialog | ✅ covered | Initial regions use geometry-matched Skeletons; submitted controls use `aria-busy`; durable jobs show `Queued`/`Running`; baseline review names its loading state. |
 | error | Page reads; connection profile; import row; reconciliation load/confirm | ✅ covered | Failure stays in the owning region, retains the last baseline, uses fixed sanitized category copy, and exposes recovery only through the normal control area. |
 | populated | Capability rows; mapping rows; commit pairs; file deltas | ✅ covered | Typical data uses server order, text-first state, exact opaque identifiers, compact metadata, and desktop-table/mobile-stacked variants. |
-| partial | Separate mapping sides; retained old baseline; bounded file delta | ✅ covered | Separate sides are atomic, a failed refresh keeps the complete old baseline, and an incomplete/truncated delta cannot be confirmed. |
+| partial | Capability profile; separate mapping sides; retained old baseline; bounded file delta | ✅ covered | Mixed capability readiness remains visible per row; separate sides are atomic, a failed refresh keeps the complete old baseline, and an incomplete/truncated delta cannot be confirmed. |
 | overflow | Mapping rows; actions; commit hashes; branches; file paths; dialog delta | ✅ covered | Actions wrap, mobile stacks, identifiers wrap or scroll locally with keyboard access, dialog content scrolls vertically, and the page does not overflow at `320px`. |
-| zero-one-many | Published mappings; affected mapping count; changed files | ✅ covered | Zero has named copy, singular/plural freshness copy is exact, many mappings remain paginated/server-ordered, and many delta rows remain inside the bounded dialog region. |
+| zero-one-many | Capability profile; published mappings; affected mapping count; changed files | ✅ covered | The capability profile always renders its three contract rows and represents absence as a readiness state; mappings have named zero copy, freshness copy is exact for singular/plural counts, and many delta rows remain inside the bounded dialog region. |
 | long-text | Repository names/slugs; branches; paths; error copy; action labels | ✅ covered | Names and prose wrap, opaque data uses monospace plus `overflow-wrap:anywhere` or local scroll, full commits are copyable, and action labels never truncate. |
 
 ### Open-axis considerations
@@ -358,11 +361,11 @@ No registry install is authorized by this contract. Any new official block requi
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** approved 2026-09-02
