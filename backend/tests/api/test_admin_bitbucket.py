@@ -469,3 +469,48 @@ def test_client_credentials_connect_failure_is_bounded(
     assert revoke_failure.status_code == 503
     assert revoke_failure.json() == {"detail": "Bitbucket connection unavailable"}
     assert "provider detail" not in revoke_failure.text
+
+
+def test_local_revoke_remains_available_without_provider_configuration(
+    bitbucket_api_session_factory: sessionmaker[Session],
+) -> None:
+    """An admin can clear local authority even when provider settings are unavailable."""
+    _admin_id, admin_token = create_authority(
+        bitbucket_api_session_factory,
+        email="revoke-without-settings-admin@example.com",
+        roles=("admin",),
+    )
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        token_exchange=FakeTokenExchange(),
+        clock=lambda: FIXED_NOW,
+    )
+    configure_dependencies(bitbucket_api_session_factory, service)
+    connected = asyncio.run(
+        bitbucket_request(
+            "POST",
+            path=f"{BITBUCKET_PATH}/connect",
+            access_token=admin_token,
+        )
+    )
+    assert_bounded_status(connected, "Connected")
+    before = connection_snapshot(bitbucket_api_session_factory)
+    assert before[0] == 1
+    assert before[1] is not None
+
+    configure_dependencies(bitbucket_api_session_factory, None)
+    revoked = asyncio.run(
+        bitbucket_request(
+            "POST",
+            path=f"{BITBUCKET_PATH}/revoke",
+            access_token=admin_token,
+        )
+    )
+
+    revoked_body = assert_bounded_status(revoked, "Disconnected")
+    assert revoked_body["revoked_at"] is not None
+    after = connection_snapshot(bitbucket_api_session_factory)
+    assert after[0] == 2
+    assert after[1:3] == (None, None)
+    assert after[5] is None
+    assert after[6] is not None
