@@ -5,6 +5,7 @@ import {
   getAdminBitbucketStatus,
   reconnectAdminBitbucketOauth,
   revokeAdminBitbucketConnectionLocally,
+  type AdminBitbucketCapabilityProfile,
   type AdminBitbucketStatusResponse,
 } from "../../../api/client";
 import {
@@ -35,6 +36,38 @@ type LoadState =
   | { status: "ready"; connection: AdminBitbucketStatusResponse };
 
 type ConnectionAction = "connect" | "reconnect";
+type CapabilityKey = "source_read" | "source_write" | "pull_request";
+type CapabilityReadiness = AdminBitbucketCapabilityProfile[CapabilityKey];
+
+const capabilityRows = [
+  {
+    key: "source_read",
+    label: "Read localization sources",
+    supportingCopy: null,
+  },
+  {
+    key: "source_write",
+    label: "Create branches and source commits",
+    supportingCopy: "Not used during imports.",
+  },
+  {
+    key: "pull_request",
+    label: "Open pull requests",
+    supportingCopy: "Not used during imports.",
+  },
+] as const satisfies ReadonlyArray<{
+  key: CapabilityKey;
+  label: string;
+  supportingCopy: string | null;
+}>;
+
+const capabilityReadinessLabels = {
+  disconnected: "Disconnected",
+  ready: "Ready",
+  ready_for_later_phase: "Ready for a later phase",
+  reauthorization_required: "Reauthorization required",
+  unavailable: "Unavailable",
+} as const satisfies Record<CapabilityReadiness, string>;
 
 const timestampFormatter = new Intl.DateTimeFormat("en-GB", {
   day: "2-digit",
@@ -72,6 +105,67 @@ function ConnectionTimestamp({
         <time dateTime={value ?? undefined}>{bounded}</time>
       </dd>
     </div>
+  );
+}
+
+function CapabilityProfile({
+  profile,
+}: {
+  profile: AdminBitbucketCapabilityProfile;
+}) {
+  return (
+    <section aria-label="Capability profile" className="grid gap-4">
+      <h3 className="text-heading font-semibold">Capability profile</h3>
+      <dl className="grid divide-y">
+        {capabilityRows.map((row) => (
+          <div
+            aria-label={row.label}
+            className="grid min-w-0 gap-2 py-4 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,auto)] sm:items-start sm:gap-6"
+            key={row.key}
+            role="group"
+          >
+            <dt className="font-medium">{row.label}</dt>
+            <dd className="grid min-w-0 justify-items-start gap-1 sm:justify-items-end sm:text-right">
+              <Badge
+                variant="outline"
+                className="h-auto max-w-full rounded-md whitespace-normal"
+              >
+                {capabilityReadinessLabels[profile[row.key]]}
+              </Badge>
+              {row.supportingCopy === null ? null : (
+                <span className="text-muted-foreground">
+                  {row.supportingCopy}
+                </span>
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function CapabilityProfileSkeleton() {
+  return (
+    <section aria-label="Capability profile" className="grid gap-4">
+      <h2 className="text-heading font-semibold">Capability profile</h2>
+      <dl className="grid divide-y">
+        {capabilityRows.map((row) => (
+          <div
+            className="grid min-w-0 gap-2 py-4 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,auto)] sm:items-center sm:gap-6"
+            key={row.key}
+          >
+            <dt className="font-medium">{row.label}</dt>
+            <dd className="sm:justify-self-end">
+              <Skeleton
+                aria-label="Loading capability readiness"
+                className="h-6 w-40 max-w-full"
+              />
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
@@ -209,12 +303,20 @@ export function BitbucketConnectionPage({
 
   if (loadState.status === "loading") {
     return (
-      <section className="grid max-w-3xl gap-6">
+      <section className="grid min-w-0 max-w-3xl gap-8">
         <h1 className="text-display font-semibold">Bitbucket</h1>
-        <div className="grid gap-4" role="status" aria-live="polite">
-          <Skeleton className="h-8 w-48 max-w-full" />
-          <Skeleton className="h-40 w-full" />
-          <span>Loading Bitbucket connection</span>
+        <div className="grid gap-6" role="status" aria-live="polite">
+          <section
+            aria-label="Bitbucket connection status"
+            className="grid gap-5 rounded-lg border bg-secondary p-6"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <h2 className="text-heading font-semibold">Connection status</h2>
+              <Skeleton className="h-6 w-28 max-w-full" />
+            </div>
+            <CapabilityProfileSkeleton />
+          </section>
+          <span className="sr-only">Loading Bitbucket connection</span>
         </div>
       </section>
     );
@@ -253,6 +355,9 @@ export function BitbucketConnectionPage({
   const reconnect =
     connection.status === "Reauthorization required" ||
     connection.status === "Unavailable";
+  const hasExpandedCapabilityProfile =
+    connection.scope_label === "Repository and pull-request access" &&
+    connection.scope_profile === "repository_and_pull_request";
 
   return (
     <section className="grid min-w-0 max-w-3xl gap-8">
@@ -299,7 +404,9 @@ export function BitbucketConnectionPage({
           </Badge>
         </div>
 
-        <p className="font-medium">Read-only repository access</p>
+        {hasExpandedCapabilityProfile ? (
+          <p className="font-medium">Repository and pull-request access</p>
+        ) : null}
 
         {hasBoundedTimestamp ? (
           <dl className="grid gap-3 sm:grid-cols-2">
@@ -317,6 +424,8 @@ export function BitbucketConnectionPage({
             />
           </dl>
         ) : null}
+
+        <CapabilityProfile profile={connection.capability_profile} />
 
         <div className="flex flex-wrap gap-3">
           {connection.status === "Disconnected" ? (
@@ -360,8 +469,9 @@ export function BitbucketConnectionPage({
                 Revoke the Bitbucket connection?
               </AlertDialogTitle>
               <AlertDialogDescription>
-                New branch reads, previews, confirmations, and publications will
-                be blocked until an administrator reconnects.
+                New imports, branch reads, previews, confirmations, and
+                publications will be blocked until an administrator reconnects.
+                Existing successful baselines remain recorded.
               </AlertDialogDescription>
             </AlertDialogHeader>
 

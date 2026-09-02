@@ -10,6 +10,7 @@ import {
   listAdminProducts,
   listAdminUsers,
   readSystemStatus,
+  type AdminBitbucketCapabilityProfile,
   type CurrentUserResponse,
   type RoleName,
 } from "../../api/client";
@@ -43,6 +44,13 @@ const ROLE_LABELS: Record<RoleName, string> = {
   product_manager_reviewer: "Product manager / reviewer",
   translator: "Translator",
   viewer: "Viewer",
+};
+
+const disconnectedCapabilityProfile: AdminBitbucketCapabilityProfile = {
+  evaluated_at: null,
+  pull_request: "disconnected",
+  source_read: "disconnected",
+  source_write: "disconnected",
 };
 
 function principalFor(role: RoleName): CurrentUserResponse {
@@ -221,11 +229,17 @@ describe("role-aware Workspace overview", () => {
     });
     getAdminBitbucketStatusMock.mockResolvedValue({
       data: {
+        capability_profile: {
+          evaluated_at: "2026-08-29T19:00:01Z",
+          pull_request: "ready_for_later_phase",
+          source_read: "ready",
+          source_write: "ready_for_later_phase",
+        },
         connected_at: "2026-08-29T19:00:00Z",
         expires_at: "2026-08-29T21:00:00Z",
         revoked_at: null,
-        scope_label: "Read-only repository access",
-        scope_profile: "repository",
+        scope_label: "Repository and pull-request access",
+        scope_profile: "repository_and_pull_request",
         status: "Connected",
       },
       error: undefined,
@@ -299,6 +313,7 @@ describe("role-aware Workspace overview", () => {
     });
     getAdminBitbucketStatusMock.mockResolvedValue({
       data: {
+        capability_profile: disconnectedCapabilityProfile,
         connected_at: null,
         expires_at: null,
         revoked_at: null,
@@ -346,6 +361,7 @@ describe("role-aware Workspace overview", () => {
     });
     getAdminBitbucketStatusMock.mockResolvedValue({
       data: {
+        capability_profile: disconnectedCapabilityProfile,
         connected_at: null,
         expires_at: null,
         revoked_at: null,
@@ -399,6 +415,7 @@ describe("role-aware Workspace overview", () => {
     });
     getAdminBitbucketStatusMock.mockResolvedValue({
       data: {
+        capability_profile: disconnectedCapabilityProfile,
         connected_at: null,
         expires_at: null,
         revoked_at: null,
@@ -446,6 +463,7 @@ describe("role-aware Workspace overview", () => {
     });
     getAdminBitbucketStatusMock.mockResolvedValue({
       data: {
+        capability_profile: disconnectedCapabilityProfile,
         connected_at: null,
         expires_at: null,
         revoked_at: null,

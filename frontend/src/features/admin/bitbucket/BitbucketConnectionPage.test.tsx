@@ -123,12 +123,7 @@ function renderPage() {
 }
 
 function capabilityRow(profile: HTMLElement, label: string) {
-  const term = within(profile).getByText(label);
-  const row = term.closest("div");
-  if (row === null) {
-    throw new Error(`Capability row not found for ${label}`);
-  }
-  return row;
+  return within(profile).getByRole("group", { name: label });
 }
 
 describe("administrator Bitbucket connection page", () => {
@@ -177,14 +172,15 @@ describe("administrator Bitbucket connection page", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Retry loading page" }),
     );
-    expect(await screen.findByText("Disconnected")).toBeVisible();
+    expect((await screen.findAllByText("Disconnected"))[0]).toBeVisible();
   });
 
   it("UI3-C01 keeps every capability row present with a named disconnected state", async () => {
     getStatusMock.mockResolvedValueOnce(ok(disconnected));
     renderPage();
 
-    const profile = await screen.findByRole("region", {
+    await screen.findByRole("button", { name: "Connect Bitbucket" });
+    const profile = screen.getByRole("region", {
       name: "Capability profile",
     });
     for (const label of [
@@ -200,7 +196,8 @@ describe("administrator Bitbucket connection page", () => {
     getStatusMock.mockResolvedValueOnce(ok(connected));
     renderPage();
 
-    const profile = await screen.findByRole("region", {
+    await screen.findByText("Repository and pull-request access");
+    const profile = screen.getByRole("region", {
       name: "Capability profile",
     });
     expect(
@@ -221,9 +218,13 @@ describe("administrator Bitbucket connection page", () => {
       expect(row).toHaveTextContent("Ready for a later phase");
       expect(row).toHaveTextContent("Not used during imports.");
     }
-    expect(screen.getByText("Repository and pull-request access")).toBeVisible();
     expect(
-      screen.queryByRole("button", { name: /create branch|create commit|open pull request/i }),
+      screen.getByText("Repository and pull-request access"),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", {
+        name: /create branch|create commit|open pull request/i,
+      }),
     ).not.toBeInTheDocument();
   });
 
@@ -231,7 +232,8 @@ describe("administrator Bitbucket connection page", () => {
     getStatusMock.mockResolvedValueOnce(ok(mixedReadiness));
     renderPage();
 
-    const profile = await screen.findByRole("region", {
+    await screen.findByRole("button", { name: "Revoke connection" });
+    const profile = screen.getByRole("region", {
       name: "Capability profile",
     });
     expect(
@@ -267,21 +269,18 @@ describe("administrator Bitbucket connection page", () => {
       <BitbucketConnectionPage accessToken="successor-admin-bearer" />,
     );
     await waitFor(() => expect(getStatusMock).toHaveBeenCalledTimes(3));
-    expect(await screen.findByText("Disconnected")).toBeVisible();
+    expect((await screen.findAllByText("Disconnected"))[0]).toBeVisible();
     obsolete.resolve(ok(connected));
     await waitFor(() => {
       expect(screen.queryByText("Connected")).not.toBeInTheDocument();
-      expect(screen.getByText("Disconnected")).toBeVisible();
+      expect(screen.getAllByText("Disconnected")[0]).toBeVisible();
     });
   });
 
   it.each([
     ["Disconnected", disconnected],
     ["Connected", connected],
-    [
-      "Reauthorization required",
-      reauthorizationRequired,
-    ],
+    ["Reauthorization required", reauthorizationRequired],
     [
       "Unavailable",
       {
@@ -331,7 +330,7 @@ describe("administrator Bitbucket connection page", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Disconnected")).toBeVisible();
+    expect((await screen.findAllByText("Disconnected"))[0]).toBeVisible();
     expect(screen.getByRole("heading", { name: "Bitbucket" })).toBeVisible();
     expect(getStatusMock).toHaveBeenCalledWith({
       auth: "memory-only-admin-bearer",
@@ -400,9 +399,7 @@ describe("administrator Bitbucket connection page", () => {
 
   it("keeps only reconnect pending, announces recovery, and preserves revoke availability", async () => {
     getStatusMock
-      .mockResolvedValueOnce(
-        ok(reauthorizationRequired),
-      )
+      .mockResolvedValueOnce(ok(reauthorizationRequired))
       .mockResolvedValueOnce(ok(connected));
     const mutation =
       deferred<ReturnType<typeof ok<AdminBitbucketStatusResponse>>>();
@@ -531,7 +528,7 @@ describe("administrator Bitbucket connection page", () => {
       }),
     ).toBeVisible();
     expect(screen.getByRole("alertdialog")).toHaveTextContent(
-      "New branch reads, previews, confirmations, and publications will be blocked until an administrator reconnects.",
+      "New imports, branch reads, previews, confirmations, and publications will be blocked until an administrator reconnects. Existing successful baselines remain recorded.",
     );
 
     await userEvent.click(
@@ -543,7 +540,7 @@ describe("administrator Bitbucket connection page", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Revoke connection" }),
     );
-    expect(await screen.findByText("Disconnected")).toBeVisible();
+    expect((await screen.findAllByText("Disconnected"))[0]).toBeVisible();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(revokeMock).toHaveBeenCalledTimes(2);
   });
