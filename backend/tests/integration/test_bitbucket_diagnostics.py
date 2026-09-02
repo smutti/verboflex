@@ -9,7 +9,6 @@ from uuid import UUID
 
 import pytest
 
-
 IMPORT_ID = UUID("1e4decb8-fb89-4e92-a27c-1b42b9a30ef2")
 
 
