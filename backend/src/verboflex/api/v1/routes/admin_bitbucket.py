@@ -19,6 +19,7 @@ from verboflex.services.bitbucket_oauth import (
     BitbucketOAuthService,
     BitbucketOAuthTokenExchange,
     OAuthConnectionUnavailable,
+    revoke_local_bitbucket_connection,
 )
 
 router = APIRouter(prefix="/admin/bitbucket", tags=["admin-bitbucket"])
@@ -191,10 +192,15 @@ async def revoke_admin_bitbucket_connection_locally(
     service: ConfiguredOAuthService,
 ) -> AdminBitbucketStatusResponse:
     """Immediately invalidate local credentials without a provider revoke claim."""
-    configured = _configured(service)
     try:
-        configured.revoke_current(session, actor_id=principal.user_id)
-        snapshot = configured.public_status(session)
+        if service is None:
+            snapshot = revoke_local_bitbucket_connection(
+                session,
+                actor_id=principal.user_id,
+            ).public_status
+        else:
+            service.revoke_current(session, actor_id=principal.user_id)
+            snapshot = service.public_status(session)
     except OAuthConnectionUnavailable as error:
         raise _unavailable() from error
     response.headers.update(NO_STORE_HEADERS)

@@ -440,17 +440,16 @@ def test_client_credentials_connect_failure_is_bounded(
     assert "provider-body" not in failed.text
 
     configure_dependencies(bitbucket_api_session_factory, None)
-    for action in ("connect", "revoke"):
-        unavailable = asyncio.run(
-            bitbucket_request(
-                "POST",
-                path=f"{BITBUCKET_PATH}/{action}",
-                access_token=admin_token,
-            )
+    unavailable = asyncio.run(
+        bitbucket_request(
+            "POST",
+            path=f"{BITBUCKET_PATH}/connect",
+            access_token=admin_token,
         )
-        assert unavailable.status_code == 503
-        assert unavailable.json() == {"detail": "Bitbucket connection unavailable"}
-        assert unavailable.headers["cache-control"] == "no-store"
+    )
+    assert unavailable.status_code == 503
+    assert unavailable.json() == {"detail": "Bitbucket connection unavailable"}
+    assert unavailable.headers["cache-control"] == "no-store"
 
     configure_dependencies(bitbucket_api_session_factory, service)
 

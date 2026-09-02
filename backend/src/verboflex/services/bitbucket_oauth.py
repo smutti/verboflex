@@ -152,6 +152,79 @@ class BitbucketCredentialLease:
     access_token: str = field(repr=False)
 
 
+@dataclass(frozen=True, slots=True)
+class BitbucketLocalRevocation:
+    """Local credential invalidation plus its bounded public projection."""
+
+    status: BitbucketConnectionStatus
+    public_status: BitbucketConnectionPublicStatus
+
+
+def revoke_local_bitbucket_connection(
+    session: Session,
+    *,
+    actor_id: UUID,
+    expected_generation: int | None = None,
+    audit_emitter: AuditEventEmitter = emit_audit_event,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+) -> BitbucketLocalRevocation:
+    """Clear local authority without requiring usable provider configuration."""
+    revoked_at = clock()
+    if revoked_at.tzinfo is None or revoked_at.utcoffset() is None:
+        raise OAuthConnectionUnavailable(CONNECTION_UNAVAILABLE_MESSAGE)
+    revoked_at = revoked_at.astimezone(UTC)
+    changed = False
+    with session.begin():
+        connection = session.execute(
+            select(BitbucketConnection).where(BitbucketConnection.id == 1).with_for_update()
+        ).scalar_one_or_none()
+        if connection is None:
+            raise OAuthConnectionUnavailable(CONNECTION_UNAVAILABLE_MESSAGE)
+        previous_generation = connection.generation
+        if (
+            connection.revoked_at is not None
+            and connection.access_token_ciphertext is None
+            and connection.refresh_token_ciphertext is None
+        ):
+            status = BitbucketConnectionStatus(
+                state="revoked",
+                generation=connection.generation,
+                scope_profile=connection.scope_profile or REPOSITORY_SCOPE,
+            )
+        else:
+            if expected_generation is not None and connection.generation != expected_generation:
+                raise OAuthGenerationRejected(GENERATION_REJECTED_MESSAGE)
+            connection.generation += 1
+            connection.access_token_ciphertext = None
+            connection.refresh_token_ciphertext = None
+            connection.provider_expires_at = None
+            connection.revoked_at = revoked_at
+            session.flush()
+            changed = True
+            status = BitbucketConnectionStatus(
+                state="revoked",
+                generation=connection.generation,
+                scope_profile=connection.scope_profile or REPOSITORY_SCOPE,
+            )
+        public_status = BitbucketConnectionPublicStatus(
+            state="disconnected",
+            connected_at=connection.connected_at,
+            expires_at=None,
+            revoked_at=connection.revoked_at,
+        )
+    if changed:
+        audit_emitter(
+            new_audit_event(
+                action="bitbucket.revoked",
+                actor_id=actor_id,
+                from_generation=previous_generation,
+                to_generation=status.generation,
+                occurred_at=revoked_at,
+            )
+        )
+    return BitbucketLocalRevocation(status=status, public_status=public_status)
+
+
 class BitbucketOAuthService:
     """Own encrypted access-only credentials and expiry-safe leases."""
 
@@ -408,48 +481,13 @@ class BitbucketOAuthService:
         actor_id: UUID,
         expected_generation: int | None,
     ) -> BitbucketConnectionStatus:
-        revoked_at = self._now()
-        changed = False
-        with session.begin():
-            connection = self._lock_connection(session)
-            previous_generation = connection.generation
-            if (
-                connection.revoked_at is not None
-                and connection.access_token_ciphertext is None
-                and connection.refresh_token_ciphertext is None
-            ):
-                status = BitbucketConnectionStatus(
-                    state="revoked",
-                    generation=connection.generation,
-                    scope_profile=connection.scope_profile or REPOSITORY_SCOPE,
-                )
-            else:
-                if expected_generation is not None:
-                    self._require_current_generation(
-                        connection,
-                        expected_generation=expected_generation,
-                    )
-                connection.generation += 1
-                connection.access_token_ciphertext = None
-                connection.refresh_token_ciphertext = None
-                connection.provider_expires_at = None
-                connection.revoked_at = revoked_at
-                session.flush()
-                changed = True
-                status = BitbucketConnectionStatus(
-                    state="revoked",
-                    generation=connection.generation,
-                    scope_profile=connection.scope_profile or REPOSITORY_SCOPE,
-                )
-        if changed:
-            self._emit_lifecycle_event(
-                action="bitbucket.revoked",
-                actor_id=actor_id,
-                from_generation=previous_generation,
-                to_generation=status.generation,
-                occurred_at=revoked_at,
-            )
-        return status
+        return revoke_local_bitbucket_connection(
+            session,
+            actor_id=actor_id,
+            expected_generation=expected_generation,
+            audit_emitter=self._audit_emitter,
+            clock=self._clock,
+        ).status
 
     def _require_client_credentials_state(self, connection: BitbucketConnection) -> None:
         if (
