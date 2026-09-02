@@ -21,7 +21,7 @@ from verboflex.integrations.bitbucket.urls import (
     validate_repository_relative_path,
 )
 from verboflex.services.bitbucket_oauth import (
-    REPOSITORY_SCOPE,
+    LEGACY_REPOSITORY_SCOPE,
     BitbucketCredentialLease,
     OAuthConnectionUnavailable,
     OAuthGenerationRejected,
@@ -356,7 +356,7 @@ class BitbucketHttpAdapter:
                     else:
                         kind = "unavailable"
                     raise BitbucketProviderReadError(kind=kind)
-                if response.headers.get("x-oauth-scopes") != REPOSITORY_SCOPE:
+                if response.headers.get("x-oauth-scopes") != LEGACY_REPOSITORY_SCOPE:
                     raise BitbucketProviderReadError(kind="permission_denied")
                 content_encoding = response.headers.get("content-encoding")
                 if content_encoding not in {None, "identity"}:
