@@ -7,6 +7,7 @@ from verboflex.schemas.system import ServiceState
 
 PREVIEW_RUN_TASK_NAME = "verboflex.preview.run"
 PREVIEW_RECONCILE_TASK_NAME = "verboflex.preview.reconcile_stale_jobs"
+IMPORT_RUN_TASK_NAME = "verboflex.import.run"
 
 
 def create_celery_app(settings: Settings | None = None) -> Celery:
@@ -17,7 +18,11 @@ def create_celery_app(settings: Settings | None = None) -> Celery:
         "verboflex",
         broker=redis_url,
         backend=redis_url,
-        include=["verboflex.worker.tasks", "verboflex.worker.preview_tasks"],
+        include=[
+            "verboflex.worker.tasks",
+            "verboflex.worker.preview_tasks",
+            "verboflex.worker.import_tasks",
+        ],
     )
     application.conf.update(
         accept_content=["json"],
@@ -42,7 +47,13 @@ def create_celery_app(settings: Settings | None = None) -> Celery:
                 "reject_on_worker_lost": True,
                 "soft_time_limit": configured.preview_soft_time_limit_seconds,
                 "time_limit": configured.preview_hard_time_limit_seconds,
-            }
+            },
+            IMPORT_RUN_TASK_NAME: {
+                "acks_late": True,
+                "reject_on_worker_lost": True,
+                "soft_time_limit": configured.preview_soft_time_limit_seconds,
+                "time_limit": configured.preview_hard_time_limit_seconds,
+            },
         },
         beat_schedule={
             "preview-stale-job-watchdog": {

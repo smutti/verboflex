@@ -14,12 +14,15 @@ import {
   getAdminProduct,
   getAdminRepositoryBranch,
   listAdminCandidateMappings,
+  listAdminPublishedMappingImports,
   listAdminRepositories,
   listAdminRepositoryBranches,
+  startAdminPublishedMappingImport,
   updateAdminCandidateMapping,
   type AdminBranchResponse,
   type AdminDirectMappingWriteRequest,
   type AdminMappingResponse,
+  type AdminPublishedMappingImportResponse,
   type AdminRepositoryResponse,
   type AdminSeparateMappingWriteRequest,
 } from "../../../api/client";
@@ -39,6 +42,7 @@ import {
   AlertDialogTitle,
 } from "../../../components/ui/alert-dialog";
 import { Button } from "../../../components/ui/button";
+import { Badge } from "../../../components/ui/badge";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Label } from "../../../components/ui/label";
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
@@ -156,6 +160,42 @@ function repositoryLabel(repository: AdminRepositoryResponse) {
   return repository.descriptive_name === null
     ? providerIdentity
     : `${repository.descriptive_name} — ${providerIdentity}`;
+}
+
+function importStatusLabel(item: AdminPublishedMappingImportResponse) {
+  switch (item.state) {
+    case "not_imported":
+      return "Not imported";
+    case "queued":
+      return "Queued";
+    case "running":
+      return "Running";
+    case "current":
+      return "Current";
+    case "import_failed":
+      return item.active_baseline === null ? "Import failed" : "May be stale";
+  }
+}
+
+function importActionLabel(item: AdminPublishedMappingImportResponse) {
+  switch (item.state) {
+    case "not_imported":
+      return "Run import";
+    case "queued":
+    case "running":
+      return "Import in progress";
+    case "current":
+      return "Refresh import";
+    case "import_failed":
+      return "Retry import";
+  }
+}
+
+function importBaselineLabel(item: AdminPublishedMappingImportResponse) {
+  const firstReference = item.active_baseline?.source_references[0];
+  return firstReference === undefined
+    ? "No successful import yet"
+    : firstReference.commit_hash;
 }
 
 function responseStatus(result: { response?: Response }) {
@@ -368,6 +408,9 @@ export function ProductMappingsPage({
   const defaultTargetId = useId();
   const versionControllerRef = useRef<AbortController | null>(null);
   const versionGenerationRef = useRef(0);
+  const importControllerRef = useRef<AbortController | null>(null);
+  const importGenerationRef = useRef(0);
+  const importPendingRef = useRef(new Set<string>());
   const submitPendingRef = useRef(false);
   const [currentCandidateVersion, setCurrentCandidateVersion] =
     useState(candidateVersionProp);
@@ -397,6 +440,15 @@ export function ProductMappingsPage({
   const [editingMapping, setEditingMapping] =
     useState<AdminMappingResponse | null>(null);
   const [submitPending, setSubmitPending] = useState(false);
+  const [publishedImports, setPublishedImports] = useState<
+    AdminPublishedMappingImportResponse[]
+  >([]);
+  const [publishedImportState, setPublishedImportState] = useState<
+    "error" | "loading" | "ready"
+  >("loading");
+  const [pendingImportMappings, setPendingImportMappings] = useState<
+    ReadonlySet<string>
+  >(new Set());
   const [formError, setFormError] = useState<
     | { kind: "conflict"; field: MappingConflictField | null }
     | { kind: "generic" | "invalid" }
@@ -476,6 +528,58 @@ export function ProductMappingsPage({
     loadPage: loadMappingPage,
     queryKey: `candidate-mappings:${productId}:current-candidate:${accessToken}`,
   });
+
+  const loadPublishedImports = useCallback(
+    async (preserveVisibleState = false) => {
+      const generation = ++importGenerationRef.current;
+      importControllerRef.current?.abort();
+      const controller = new AbortController();
+      importControllerRef.current = controller;
+      if (!preserveVisibleState) {
+        setPublishedImportState("loading");
+      }
+      try {
+        const result = await listAdminPublishedMappingImports({
+          auth: accessToken,
+          path: { product_id: productId },
+          signal: controller.signal,
+        });
+        if (
+          controller.signal.aborted ||
+          importGenerationRef.current !== generation
+        ) {
+          return;
+        }
+        if (result.data === undefined) {
+          setPublishedImportState("error");
+          return;
+        }
+        setPublishedImports(result.data.items);
+        setPublishedImportState("ready");
+      } catch {
+        if (
+          !controller.signal.aborted &&
+          importGenerationRef.current === generation
+        ) {
+          setPublishedImportState("error");
+        }
+      }
+    },
+    [accessToken, productId],
+  );
+
+  useEffect(() => {
+    const scheduledGeneration = importGenerationRef.current;
+    queueMicrotask(() => {
+      if (importGenerationRef.current === scheduledGeneration) {
+        void loadPublishedImports();
+      }
+    });
+    return () => {
+      importGenerationRef.current += 1;
+      importControllerRef.current?.abort();
+    };
+  }, [loadPublishedImports]);
 
   const directBranches = useRepositoryBranchCollection({
     accessToken,
@@ -794,6 +898,39 @@ export function ProductMappingsPage({
     }
   }
 
+  async function startPublishedImport(
+    item: AdminPublishedMappingImportResponse,
+  ) {
+    if (
+      item.state === "queued" ||
+      item.state === "running" ||
+      importPendingRef.current.has(item.mapping_id)
+    ) {
+      return;
+    }
+    importPendingRef.current.add(item.mapping_id);
+    setPendingImportMappings(new Set(importPendingRef.current));
+    try {
+      const result = await startAdminPublishedMappingImport({
+        auth: accessToken,
+        path: {
+          product_id: productId,
+          mapping_id: item.mapping_id,
+        },
+      });
+      if (result.data === undefined) {
+        throw new Error("import unavailable");
+      }
+      toast.success("Import started");
+      await loadPublishedImports(true);
+    } catch {
+      setPublishedImportState("error");
+    } finally {
+      importPendingRef.current.delete(item.mapping_id);
+      setPendingImportMappings(new Set(importPendingRef.current));
+    }
+  }
+
   const directBranchItems = mergeBranches(
     directBranches.items,
     exactDirectBranches,
@@ -808,10 +945,12 @@ export function ProductMappingsPage({
   const targetBranchItems =
     topology === "direct" ? directBranchItems : translationsBranchItems;
   const Heading = embedded ? "h2" : "h1";
+  const ImportHeading = embedded ? "h3" : "h2";
 
   function retryPage() {
     void repositoryCollection.reload();
     void mappingCollection.reload();
+    void loadPublishedImports();
     loadCandidateVersion();
   }
 
@@ -839,6 +978,124 @@ export function ProductMappingsPage({
           current candidate draft.
         </p>
       </div>
+
+      <section className="grid min-w-0 max-w-full gap-4 overflow-x-clip">
+        <div className="grid gap-2">
+          <ImportHeading className="text-heading font-semibold">
+            Published mapping imports
+          </ImportHeading>
+          <p className="text-muted-foreground">
+            Import localization sources from the exact published branch.
+          </p>
+        </div>
+
+        {publishedImportState === "loading" ? (
+          <div className="grid gap-3" role="status" aria-live="polite">
+            <Skeleton className="h-12 w-full" />
+            <span>Loading published mappings</span>
+          </div>
+        ) : null}
+
+        {publishedImportState === "error" ? (
+          <Alert variant="destructive">
+            <AlertTitle>Published imports unavailable</AlertTitle>
+            <AlertDescription>
+              <p>
+                We could not load this page. Retry without leaving the
+                administration area.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void loadPublishedImports()}
+              >
+                Retry loading published imports
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {publishedImportState === "ready" && publishedImports.length === 0 ? (
+          <div className="grid gap-2 rounded-lg border bg-secondary p-6">
+            <h4 className="font-semibold">No published mappings to import</h4>
+            <p className="text-muted-foreground">
+              Publish a validated mapping before running an import.
+            </p>
+          </div>
+        ) : null}
+
+        {publishedImportState === "ready" && publishedImports.length > 0 ? (
+          <>
+            <div className="max-w-full overflow-x-auto">
+              <Table aria-label="Published mapping imports">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Repository source</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Last baseline</TableHead>
+                    <TableHead>Latest execution</TableHead>
+                    <TableHead>Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {publishedImports.map((item) => {
+                    const pending = pendingImportMappings.has(item.mapping_id);
+                    const inProgress =
+                      item.state === "queued" || item.state === "running";
+                    return (
+                      <TableRow key={item.mapping_id}>
+                        <TableCell className="whitespace-normal">
+                          {item.repository_sides.map((side) => (
+                            <div key={`${side.role}:${side.repository_id}`}>
+                              <span>{repositoryName(side.repository_id)}</span>
+                              <span className="block break-words font-mono [overflow-wrap:anywhere]">
+                                {side.source_branch}
+                              </span>
+                            </div>
+                          ))}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {importStatusLabel(item)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-xs whitespace-normal break-words font-mono [overflow-wrap:anywhere]">
+                          {importBaselineLabel(item)}
+                        </TableCell>
+                        <TableCell>
+                          {item.latest_execution_at === null
+                            ? "Never"
+                            : new Date(
+                                item.latest_execution_at,
+                              ).toLocaleString()}
+                          {item.retry_count > 0 ? (
+                            <span className="block">
+                              Retry {item.retry_count}
+                            </span>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={pending || inProgress}
+                            aria-busy={pending || inProgress}
+                            onClick={() => void startPublishedImport(item)}
+                          >
+                            {pending
+                              ? "Import in progress"
+                              : importActionLabel(item)}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        ) : null}
+      </section>
 
       {pageState === "loading" ? (
         <section className="grid gap-3" role="status" aria-live="polite">

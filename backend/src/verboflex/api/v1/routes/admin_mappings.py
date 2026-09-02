@@ -1,9 +1,9 @@
 """Administrator-only direct candidate mapping routes."""
 
-from typing import Annotated, Any, NoReturn
+from typing import Annotated, Any, NoReturn, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -18,8 +18,26 @@ from verboflex.schemas.admin_mappings import (
     AdminMappingResponse,
     AdminMappingWriteRequest,
 )
+from verboflex.schemas.imports import (
+    AdminImportBaselineResponse,
+    AdminImportRepositorySideResponse,
+    AdminImportSourceReferenceResponse,
+    AdminPublishedMappingImportListResponse,
+    AdminPublishedMappingImportResponse,
+)
 from verboflex.schemas.system import ErrorResponse
 from verboflex.schemas.users import RoleName
+from verboflex.services.import_jobs import (
+    ImportConflict,
+    ImportConnectionUnavailable,
+    ImportEnqueuer,
+    ImportJobRecord,
+    ImportNotFound,
+    create_or_start_import,
+    enqueue_import_job,
+    get_import_job,
+    list_published_mapping_imports,
+)
 from verboflex.services.mappings import (
     InvalidMappingCursor,
     InvalidMappingInput,
@@ -65,6 +83,25 @@ MUTATION_RESPONSES: dict[int | str, dict[str, Any]] = {
     status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
     status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
 }
+IMPORT_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **AUTH_RESPONSES,
+    status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    status.HTTP_409_CONFLICT: {"model": ErrorResponse},
+    status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
+}
+
+
+def get_import_job_enqueuer(request: Request) -> ImportEnqueuer:
+    """Return the overridable UUID-only queue seam."""
+    candidate = getattr(request.app.state, "import_job_enqueuer", None)
+    if candidate is None:
+        return enqueue_import_job
+    if not callable(candidate):
+        raise RuntimeError("import job enqueuer unavailable")
+    return cast(ImportEnqueuer, candidate)
+
+
+ImportEnqueueDependency = Annotated[ImportEnqueuer, Depends(get_import_job_enqueuer)]
 
 
 def _response(record: MappingRecord) -> AdminMappingResponse:
@@ -81,6 +118,139 @@ def _response(record: MappingRecord) -> AdminMappingResponse:
         selected_layout_version=record.selected_layout_version,
         candidate_version=record.candidate_version,
     )
+
+
+def _import_response(record: ImportJobRecord) -> AdminPublishedMappingImportResponse:
+    return AdminPublishedMappingImportResponse(
+        id=record.id,
+        mapping_id=record.mapping_id,
+        active_revision_id=record.active_revision_id,
+        topology=record.topology,
+        repository_sides=[
+            AdminImportRepositorySideResponse(
+                role=side.role,
+                repository_id=side.repository_id,
+                source_branch=side.source_branch,
+            )
+            for side in record.repository_sides
+        ],
+        state=record.state,
+        active_baseline=(
+            AdminImportBaselineResponse(
+                imported_at=record.active_baseline.imported_at,
+                source_references=[
+                    AdminImportSourceReferenceResponse(
+                        position=reference.position,
+                        repository_side=reference.repository_side,
+                        repository_id=reference.repository_id,
+                        source_branch=reference.source_branch,
+                        commit_hash=reference.commit_hash,
+                        path=reference.path,
+                        size_bytes=reference.size_bytes,
+                        sha256=reference.sha256,
+                    )
+                    for reference in record.active_baseline.source_references
+                ],
+            )
+            if record.active_baseline is not None
+            else None
+        ),
+        latest_execution_at=record.latest_execution_at,
+        retry_count=record.retry_count,
+        error_category=record.error_category,
+        error_message=record.error_message,
+    )
+
+
+def _raise_import_error(
+    error: ImportNotFound | ImportConflict | ImportConnectionUnavailable,
+) -> NoReturn:
+    if isinstance(error, ImportNotFound):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Published import unavailable",
+        ) from error
+    if isinstance(error, ImportConflict):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Published import conflict",
+        ) from error
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Published import connection unavailable",
+    ) from error
+
+
+@router.get(
+    "/published/mapping-imports",
+    operation_id="list_admin_published_mapping_imports",
+    response_model=AdminPublishedMappingImportListResponse,
+    responses=IMPORT_RESPONSES,
+)
+async def list_admin_published_mapping_imports(
+    product_id: UUID,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+) -> AdminPublishedMappingImportListResponse:
+    """List direct mappings from the exact active published revision."""
+    try:
+        records = list_published_mapping_imports(session, product_id=product_id)
+    except ImportNotFound as error:
+        _raise_import_error(error)
+    return AdminPublishedMappingImportListResponse(
+        items=[_import_response(record) for record in records]
+    )
+
+
+@router.post(
+    "/published/mappings/{mapping_id}/imports",
+    operation_id="start_admin_published_mapping_import",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=AdminPublishedMappingImportResponse,
+    responses=IMPORT_RESPONSES,
+)
+async def start_admin_published_mapping_import(
+    product_id: UUID,
+    mapping_id: UUID,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+    enqueuer: ImportEnqueueDependency,
+) -> AdminPublishedMappingImportResponse:
+    """Persist one queued logical import before dispatching its UUID."""
+    try:
+        record = create_or_start_import(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            enqueuer=enqueuer,
+        )
+    except (ImportNotFound, ImportConflict, ImportConnectionUnavailable) as error:
+        _raise_import_error(error)
+    return _import_response(record)
+
+
+@router.get(
+    "/imports/{import_id}",
+    operation_id="get_admin_import",
+    response_model=AdminPublishedMappingImportResponse,
+    responses=IMPORT_RESPONSES,
+)
+async def get_admin_import(
+    product_id: UUID,
+    import_id: UUID,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+) -> AdminPublishedMappingImportResponse:
+    """Read one logical import from PostgreSQL without Celery state."""
+    try:
+        record = get_import_job(
+            session,
+            product_id=product_id,
+            import_id=import_id,
+        )
+    except ImportNotFound as error:
+        _raise_import_error(error)
+    return _import_response(record)
 
 
 def _conflict(detail: str, field: str) -> JSONResponse:

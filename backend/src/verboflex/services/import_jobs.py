@@ -1,0 +1,761 @@
+"""Published-mapping imports with durable UUID-only execution."""
+
+from __future__ import annotations
+
+import hashlib
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Literal, Protocol, cast
+from uuid import UUID, uuid4
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload, sessionmaker
+from sqlalchemy.sql import Select
+
+from verboflex.core.config import get_settings
+from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.models.import_job import (
+    ImportExecution,
+    ImportJob,
+    ImportSourceReference,
+)
+from verboflex.models.product import Product, ProductRevision
+from verboflex.models.product_mapping import ProductRepositoryMapping
+from verboflex.models.repository import Repository
+from verboflex.services.repositories import RepositoryRecord
+from verboflex.services.repository_discovery import (
+    SourceDiscoveryAdapter,
+    discover_repository_sources_for_record,
+)
+
+IMPORT_TASK_NAME = "verboflex.import.run"
+IMPORT_FAILURE_CATEGORY = "provider_unavailable"
+IMPORT_FAILURE_WITHOUT_BASELINE = (
+    "This import did not complete. Review the reason, then retry from the mapping. "
+    "No import baseline was created."
+)
+IMPORT_FAILURE_WITH_BASELINE = (
+    "This import did not complete. Review the reason, then retry from the mapping. "
+    "The last successful baseline is unchanged."
+)
+
+ImportState = Literal[
+    "not_imported",
+    "queued",
+    "running",
+    "current",
+    "import_failed",
+]
+RepositoryRole = Literal["direct", "keys", "translations"]
+
+
+class ImportNotFound(LookupError):
+    """Raised when published import authority is unavailable."""
+
+
+class ImportConflict(ValueError):
+    """Raised when persisted import state disagrees with current authority."""
+
+
+class ImportConnectionUnavailable(RuntimeError):
+    """Raised when the organizational connection cannot authorize a fresh read."""
+
+
+class ImportEnqueuer(Protocol):
+    """Queue seam whose sole payload is the stable logical import UUID."""
+
+    def __call__(self, import_id: UUID) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ImportRepositorySideRecord:
+    role: RepositoryRole
+    repository_id: UUID
+    source_branch: str
+
+
+@dataclass(frozen=True, slots=True)
+class ImportSourceReferenceRecord:
+    position: int
+    repository_side: RepositoryRole
+    repository_id: UUID
+    source_branch: str
+    commit_hash: str
+    path: str
+    size_bytes: int
+    sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class ImportBaselineRecord:
+    imported_at: datetime
+    source_references: tuple[ImportSourceReferenceRecord, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ImportJobRecord:
+    """Closed public projection of one published mapping and its logical import."""
+
+    id: UUID | None
+    mapping_id: UUID
+    active_revision_id: UUID
+    topology: Literal["direct", "separate"]
+    repository_sides: tuple[ImportRepositorySideRecord, ...]
+    state: ImportState
+    active_baseline: ImportBaselineRecord | None
+    latest_execution_at: datetime | None
+    retry_count: int
+    error_category: Literal["provider_unavailable"] | None
+    error_message: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ImportExecutionSide:
+    role: RepositoryRole
+    repository_id: UUID
+    workspace: str
+    repository_slug: str
+    source_branch: str
+
+
+@dataclass(frozen=True, slots=True)
+class ImportExecutionIdentity:
+    import_id: UUID
+    execution_id: UUID
+    sequence: int
+    product_id: UUID
+    revision_id: UUID
+    mapping_id: UUID
+    connection_generation: int
+    repository_sides: tuple[ImportExecutionSide, ...]
+
+
+ImportProcessor = Callable[[ImportExecutionIdentity], tuple[ImportSourceReferenceRecord, ...]]
+ImportClock = Callable[[], datetime]
+
+
+def _connected_generation(session: Session) -> int:
+    connection = session.execute(
+        select(BitbucketConnection).where(BitbucketConnection.id == 1).with_for_update()
+    ).scalar_one_or_none()
+    if (
+        connection is None
+        or connection.access_token_ciphertext is None
+        or connection.refresh_token_ciphertext is not None
+        or connection.scope_profile != "repository"
+        or connection.provider_expires_at is None
+        or connection.provider_expires_at <= datetime.now(UTC)
+        or connection.revoked_at is not None
+    ):
+        raise ImportConnectionUnavailable("import connection unavailable")
+    return connection.generation
+
+
+def _published_mapping_statement(
+    *, product_id: UUID, mapping_id: UUID | None = None
+) -> Select[tuple[ProductRepositoryMapping]]:
+    statement = (
+        select(ProductRepositoryMapping)
+        .options(selectinload(ProductRepositoryMapping.sides))
+        .join(
+            ProductRevision,
+            ProductRevision.id == ProductRepositoryMapping.revision_id,
+        )
+        .join(
+            Product,
+            (Product.id == product_id) & (Product.active_revision_id == ProductRevision.id),
+        )
+        .where(
+            ProductRevision.product_id == product_id,
+            ProductRevision.is_published.is_(True),
+            ProductRepositoryMapping.topology == "direct",
+        )
+    )
+    if mapping_id is not None:
+        statement = statement.where(ProductRepositoryMapping.id == mapping_id)
+    return statement.order_by(ProductRepositoryMapping.id)
+
+
+def _mapping_sides(
+    mapping: ProductRepositoryMapping,
+) -> tuple[ImportRepositorySideRecord, ...]:
+    sides = tuple(
+        ImportRepositorySideRecord(
+            role=cast(RepositoryRole, side.role),
+            repository_id=side.repository_id,
+            source_branch=side.source_branch,
+        )
+        for side in mapping.sides
+    )
+    if mapping.topology != "direct" or tuple(side.role for side in sides) != ("direct",):
+        raise ImportConflict("published import mapping rejected")
+    return sides
+
+
+def _locked_published_mapping(
+    session: Session,
+    *,
+    product_id: UUID,
+    mapping_id: UUID,
+) -> tuple[ProductRevision, ProductRepositoryMapping]:
+    product = session.execute(
+        select(Product).where(Product.id == product_id).with_for_update()
+    ).scalar_one_or_none()
+    if product is None or product.active_revision_id is None:
+        raise ImportNotFound("published import unavailable")
+    revision = session.execute(
+        select(ProductRevision)
+        .where(
+            ProductRevision.id == product.active_revision_id,
+            ProductRevision.product_id == product_id,
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
+    if revision is None or not revision.is_published:
+        raise ImportNotFound("published import unavailable")
+    mapping = session.execute(
+        select(ProductRepositoryMapping)
+        .options(selectinload(ProductRepositoryMapping.sides))
+        .where(
+            ProductRepositoryMapping.id == mapping_id,
+            ProductRepositoryMapping.revision_id == revision.id,
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
+    if mapping is None:
+        raise ImportNotFound("published import unavailable")
+    _mapping_sides(mapping)
+    return revision, mapping
+
+
+def _source_references(
+    session: Session,
+    *,
+    execution_id: UUID,
+) -> tuple[ImportSourceReferenceRecord, ...]:
+    rows = session.execute(
+        select(ImportSourceReference)
+        .where(ImportSourceReference.execution_id == execution_id)
+        .order_by(ImportSourceReference.position)
+    ).scalars()
+    return tuple(
+        ImportSourceReferenceRecord(
+            position=row.position,
+            repository_side=cast(RepositoryRole, row.repository_side),
+            repository_id=row.repository_id,
+            source_branch=row.source_branch,
+            commit_hash=row.commit_hash,
+            path=row.path,
+            size_bytes=row.size_bytes,
+            sha256=row.sha256,
+        )
+        for row in rows
+    )
+
+
+def _record(
+    session: Session,
+    *,
+    mapping: ProductRepositoryMapping,
+    job: ImportJob | None,
+) -> ImportJobRecord:
+    sides = _mapping_sides(mapping)
+    if job is None:
+        return ImportJobRecord(
+            id=None,
+            mapping_id=mapping.id,
+            active_revision_id=mapping.revision_id,
+            topology="direct",
+            repository_sides=sides,
+            state="not_imported",
+            active_baseline=None,
+            latest_execution_at=None,
+            retry_count=0,
+            error_category=None,
+            error_message=None,
+        )
+    if job.state not in {"queued", "running", "current", "import_failed"}:
+        raise ImportConflict("persisted import state rejected")
+    baseline: ImportBaselineRecord | None = None
+    if job.active_baseline_execution_id is not None:
+        baseline_execution = session.get(
+            ImportExecution,
+            job.active_baseline_execution_id,
+        )
+        if (
+            baseline_execution is None
+            or baseline_execution.import_job_id != job.id
+            or baseline_execution.state != "succeeded"
+            or baseline_execution.finished_at is None
+        ):
+            raise ImportConflict("persisted import baseline rejected")
+        baseline = ImportBaselineRecord(
+            imported_at=baseline_execution.finished_at,
+            source_references=_source_references(
+                session,
+                execution_id=baseline_execution.id,
+            ),
+        )
+    return ImportJobRecord(
+        id=job.id,
+        mapping_id=job.mapping_id,
+        active_revision_id=job.revision_id,
+        topology=cast(Literal["direct", "separate"], job.topology),
+        repository_sides=sides,
+        state=cast(ImportState, job.state),
+        active_baseline=baseline,
+        latest_execution_at=job.latest_execution_at,
+        retry_count=job.retry_count,
+        error_category=cast(
+            Literal["provider_unavailable"] | None,
+            job.error_category,
+        ),
+        error_message=job.error_message,
+    )
+
+
+def list_published_mapping_imports(
+    session: Session,
+    *,
+    product_id: UUID,
+) -> tuple[ImportJobRecord, ...]:
+    """List direct mappings from the exact active published revision in server order."""
+    with session.begin():
+        product = session.get(Product, product_id)
+        if product is None or product.active_revision_id is None:
+            raise ImportNotFound("published imports unavailable")
+        mappings = tuple(
+            session.execute(_published_mapping_statement(product_id=product_id)).scalars()
+        )
+        jobs = {
+            job.mapping_id: job
+            for job in session.execute(
+                select(ImportJob).where(ImportJob.revision_id == product.active_revision_id)
+            ).scalars()
+        }
+        return tuple(
+            _record(session, mapping=mapping, job=jobs.get(mapping.id)) for mapping in mappings
+        )
+
+
+def enqueue_import_job(import_id: UUID) -> None:
+    """Dispatch one JSON task carrying only the stable logical import UUID."""
+    from verboflex.worker.celery_app import app
+
+    settings = get_settings()
+    app.send_task(
+        IMPORT_TASK_NAME,
+        args=[str(import_id)],
+        task_id=str(import_id),
+        serializer="json",
+        soft_time_limit=settings.preview_soft_time_limit_seconds,
+        time_limit=settings.preview_hard_time_limit_seconds,
+    )
+
+
+def create_or_start_import(
+    session: Session,
+    *,
+    product_id: UUID,
+    mapping_id: UUID,
+    enqueuer: ImportEnqueuer = enqueue_import_job,
+) -> ImportJobRecord:
+    """Commit one queued logical UUID before dispatching that UUID only."""
+    should_enqueue = False
+    with session.begin():
+        revision, mapping = _locked_published_mapping(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+        )
+        connection_generation = _connected_generation(session)
+        job = session.execute(
+            select(ImportJob).where(ImportJob.mapping_id == mapping.id).with_for_update()
+        ).scalar_one_or_none()
+        if job is None:
+            now = datetime.now(UTC)
+            job_id = uuid4()
+            execution_id = uuid4()
+            job = ImportJob(
+                id=job_id,
+                product_id=product_id,
+                revision_id=revision.id,
+                mapping_id=mapping.id,
+                topology=mapping.topology,
+                state="queued",
+                current_execution_id=execution_id,
+                active_baseline_execution_id=None,
+                retry_count=0,
+                latest_execution_at=now,
+            )
+            execution = ImportExecution(
+                id=execution_id,
+                import_job_id=job_id,
+                sequence=1,
+                state="queued",
+                connection_generation=connection_generation,
+            )
+            # SQLAlchemy cannot infer the insert order from UUID columns alone.
+            # Persist the logical job first; its execution pointer is deferred at
+            # the database boundary until the execution is inserted below.
+            session.add(job)
+            session.flush()
+            session.add(execution)
+            session.flush()
+            should_enqueue = True
+        elif job.state not in {"queued", "running"}:
+            now = datetime.now(UTC)
+            execution = ImportExecution(
+                id=uuid4(),
+                import_job_id=job.id,
+                sequence=job.retry_count + 2,
+                state="queued",
+                connection_generation=connection_generation,
+            )
+            session.add(execution)
+            job.current_execution_id = execution.id
+            job.state = "queued"
+            job.retry_count += 1
+            job.error_category = None
+            job.error_message = None
+            job.latest_execution_at = now
+            job.updated_at = now
+            session.flush()
+            should_enqueue = True
+        record = _record(session, mapping=mapping, job=job)
+
+    if not should_enqueue:
+        return record
+    assert record.id is not None
+    try:
+        enqueuer(record.id)
+    except Exception:
+        with session.begin():
+            job = session.execute(
+                select(ImportJob).where(ImportJob.id == record.id).with_for_update()
+            ).scalar_one()
+            execution = session.execute(
+                select(ImportExecution)
+                .where(
+                    ImportExecution.id == job.current_execution_id,
+                    ImportExecution.import_job_id == job.id,
+                )
+                .with_for_update()
+            ).scalar_one()
+            if job.state == "queued" and execution.state == "queued":
+                now = datetime.now(UTC)
+                execution.state = "failed"
+                execution.started_at = now
+                execution.finished_at = now
+                job.state = "import_failed"
+                job.error_category = IMPORT_FAILURE_CATEGORY
+                job.error_message = (
+                    IMPORT_FAILURE_WITH_BASELINE
+                    if job.active_baseline_execution_id is not None
+                    else IMPORT_FAILURE_WITHOUT_BASELINE
+                )
+                job.updated_at = now
+            mapping = session.execute(
+                select(ProductRepositoryMapping)
+                .options(selectinload(ProductRepositoryMapping.sides))
+                .where(ProductRepositoryMapping.id == job.mapping_id)
+            ).scalar_one()
+            record = _record(session, mapping=mapping, job=job)
+    return record
+
+
+def get_import_job(
+    session: Session,
+    *,
+    product_id: UUID,
+    import_id: UUID,
+) -> ImportJobRecord:
+    """Read PostgreSQL-authoritative import state without consulting Celery."""
+    with session.begin():
+        product = session.get(Product, product_id)
+        job = session.get(ImportJob, import_id)
+        if (
+            product is None
+            or product.active_revision_id is None
+            or job is None
+            or job.product_id != product_id
+            or job.revision_id != product.active_revision_id
+        ):
+            raise ImportNotFound("import unavailable")
+        mapping = session.execute(
+            _published_mapping_statement(
+                product_id=product_id,
+                mapping_id=job.mapping_id,
+            )
+        ).scalar_one_or_none()
+        if mapping is None:
+            raise ImportNotFound("import unavailable")
+        return _record(session, mapping=mapping, job=job)
+
+
+def _current_execution_identity(
+    session: Session,
+    *,
+    job: ImportJob,
+) -> ImportExecutionIdentity | None:
+    product = session.execute(
+        select(Product).where(Product.id == job.product_id).with_for_update()
+    ).scalar_one_or_none()
+    if product is None or product.active_revision_id != job.revision_id:
+        return None
+    revision = session.execute(
+        select(ProductRevision)
+        .where(
+            ProductRevision.id == job.revision_id,
+            ProductRevision.product_id == job.product_id,
+            ProductRevision.is_published.is_(True),
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
+    mapping = session.execute(
+        select(ProductRepositoryMapping)
+        .options(selectinload(ProductRepositoryMapping.sides))
+        .where(
+            ProductRepositoryMapping.id == job.mapping_id,
+            ProductRepositoryMapping.revision_id == job.revision_id,
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
+    if revision is None or mapping is None:
+        return None
+    sides = _mapping_sides(mapping)
+    execution = session.execute(
+        select(ImportExecution)
+        .where(
+            ImportExecution.id == job.current_execution_id,
+            ImportExecution.import_job_id == job.id,
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
+    if execution is None or execution.state != "queued":
+        return None
+    connection_generation = _connected_generation(session)
+    if connection_generation != execution.connection_generation:
+        return None
+    execution_sides: list[ImportExecutionSide] = []
+    for side in sides:
+        repository = session.get(Repository, side.repository_id)
+        if repository is None:
+            return None
+        execution_sides.append(
+            ImportExecutionSide(
+                role=side.role,
+                repository_id=side.repository_id,
+                workspace=repository.workspace,
+                repository_slug=repository.repository_slug,
+                source_branch=side.source_branch,
+            )
+        )
+    return ImportExecutionIdentity(
+        import_id=job.id,
+        execution_id=execution.id,
+        sequence=execution.sequence,
+        product_id=job.product_id,
+        revision_id=job.revision_id,
+        mapping_id=job.mapping_id,
+        connection_generation=execution.connection_generation,
+        repository_sides=tuple(execution_sides),
+    )
+
+
+def _start_import_job(
+    factory: sessionmaker[Session],
+    *,
+    import_id: UUID,
+) -> ImportExecutionIdentity | None:
+    with factory.begin() as session:
+        job = session.execute(
+            select(ImportJob).where(ImportJob.id == import_id).with_for_update()
+        ).scalar_one_or_none()
+        if job is None or job.state != "queued":
+            return None
+        try:
+            identity = _current_execution_identity(session, job=job)
+        except ImportConnectionUnavailable:
+            identity = None
+        now = datetime.now(UTC)
+        if identity is None:
+            execution = session.get(ImportExecution, job.current_execution_id)
+            if execution is not None and execution.state == "queued":
+                execution.state = "failed"
+                execution.started_at = now
+                execution.finished_at = now
+            job.state = "import_failed"
+            job.error_category = IMPORT_FAILURE_CATEGORY
+            job.error_message = (
+                IMPORT_FAILURE_WITH_BASELINE
+                if job.active_baseline_execution_id is not None
+                else IMPORT_FAILURE_WITHOUT_BASELINE
+            )
+            job.updated_at = now
+            return None
+        execution = session.get(ImportExecution, identity.execution_id)
+        assert execution is not None
+        execution.state = "running"
+        execution.started_at = now
+        job.state = "running"
+        job.updated_at = now
+        return identity
+
+
+def _validated_references(
+    identity: ImportExecutionIdentity,
+    references: tuple[ImportSourceReferenceRecord, ...],
+) -> tuple[ImportSourceReferenceRecord, ...]:
+    expected_sides = {
+        (side.role, side.repository_id, side.source_branch) for side in identity.repository_sides
+    }
+    if tuple(reference.position for reference in references) != tuple(range(len(references))):
+        raise ValueError("import references rejected")
+    for reference in references:
+        if (
+            (
+                reference.repository_side,
+                reference.repository_id,
+                reference.source_branch,
+            )
+            not in expected_sides
+            or len(reference.commit_hash) != 40
+            or any(character not in "0123456789abcdef" for character in reference.commit_hash)
+            or not reference.path
+            or reference.size_bytes < 0
+            or len(reference.sha256) != 64
+            or any(character not in "0123456789abcdef" for character in reference.sha256)
+        ):
+            raise ValueError("import references rejected")
+    return references
+
+
+def _finish_import_job(
+    factory: sessionmaker[Session],
+    *,
+    identity: ImportExecutionIdentity,
+    references: tuple[ImportSourceReferenceRecord, ...] | None,
+) -> None:
+    with factory.begin() as session:
+        job = session.execute(
+            select(ImportJob).where(ImportJob.id == identity.import_id).with_for_update()
+        ).scalar_one_or_none()
+        execution = session.execute(
+            select(ImportExecution)
+            .where(
+                ImportExecution.id == identity.execution_id,
+                ImportExecution.import_job_id == identity.import_id,
+                ImportExecution.sequence == identity.sequence,
+                ImportExecution.connection_generation == identity.connection_generation,
+            )
+            .with_for_update()
+        ).scalar_one_or_none()
+        if (
+            job is None
+            or execution is None
+            or job.current_execution_id != identity.execution_id
+            or job.state != "running"
+            or execution.state != "running"
+        ):
+            return
+        now = datetime.now(UTC)
+        if references is None:
+            execution.state = "failed"
+            job.state = "import_failed"
+            job.error_category = IMPORT_FAILURE_CATEGORY
+            job.error_message = (
+                IMPORT_FAILURE_WITH_BASELINE
+                if job.active_baseline_execution_id is not None
+                else IMPORT_FAILURE_WITHOUT_BASELINE
+            )
+        else:
+            for reference in _validated_references(identity, references):
+                session.add(
+                    ImportSourceReference(
+                        execution_id=identity.execution_id,
+                        position=reference.position,
+                        repository_side=reference.repository_side,
+                        repository_id=reference.repository_id,
+                        source_branch=reference.source_branch,
+                        commit_hash=reference.commit_hash,
+                        path=reference.path,
+                        size_bytes=reference.size_bytes,
+                        sha256=reference.sha256,
+                    )
+                )
+            execution.state = "succeeded"
+            job.state = "current"
+            job.active_baseline_execution_id = execution.id
+            job.error_category = None
+            job.error_message = None
+        execution.finished_at = now
+        job.updated_at = now
+
+
+def execute_import_job(
+    factory: sessionmaker[Session],
+    *,
+    import_id: UUID,
+    processor: ImportProcessor,
+) -> None:
+    """Run one current execution and conditionally terminalize the same record."""
+    identity = _start_import_job(factory, import_id=import_id)
+    if identity is None:
+        return
+    try:
+        references = _validated_references(identity, processor(identity))
+    except Exception:
+        _finish_import_job(factory, identity=identity, references=None)
+    else:
+        _finish_import_job(factory, identity=identity, references=references)
+
+
+async def _process_import(
+    identity: ImportExecutionIdentity,
+    *,
+    factory: sessionmaker[Session],
+    adapter: SourceDiscoveryAdapter,
+) -> tuple[ImportSourceReferenceRecord, ...]:
+    references: list[ImportSourceReferenceRecord] = []
+    for side in identity.repository_sides:
+        repository = RepositoryRecord(
+            id=side.repository_id,
+            workspace=side.workspace,
+            repository_slug=side.repository_slug,
+            descriptive_name=None,
+        )
+        with factory() as session:
+            snapshot = await discover_repository_sources_for_record(
+                session,
+                repository=repository,
+                branch=side.source_branch,
+                adapter=adapter,
+            )
+        for source_file in snapshot.files:
+            references.append(
+                ImportSourceReferenceRecord(
+                    position=len(references),
+                    repository_side=side.role,
+                    repository_id=side.repository_id,
+                    source_branch=side.source_branch,
+                    commit_hash=snapshot.commit_hash,
+                    path=source_file.path,
+                    size_bytes=len(source_file.content),
+                    sha256=hashlib.sha256(source_file.content).hexdigest(),
+                )
+            )
+    return tuple(references)
+
+
+def process_import(
+    identity: ImportExecutionIdentity,
+    *,
+    factory: sessionmaker[Session],
+    adapter: SourceDiscoveryAdapter,
+) -> tuple[ImportSourceReferenceRecord, ...]:
+    """Resolve branches once and retain only exact ordered content metadata."""
+    import asyncio
+
+    return asyncio.run(_process_import(identity, factory=factory, adapter=adapter))

@@ -332,6 +332,82 @@ export type AdminDiscoveryErrorResponse = {
 };
 
 /**
+ * AdminImportBaselineResponse
+ *
+ * The last successful baseline retained independently from current work.
+ */
+export type AdminImportBaselineResponse = {
+    /**
+     * Imported At
+     */
+    imported_at: string;
+    /**
+     * Source References
+     */
+    source_references: Array<AdminImportSourceReferenceResponse>;
+};
+
+/**
+ * AdminImportRepositorySideResponse
+ *
+ * One credential-free configured repository selector.
+ */
+export type AdminImportRepositorySideResponse = {
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Role
+     */
+    role: 'direct' | 'keys' | 'translations';
+    /**
+     * Source Branch
+     */
+    source_branch: string;
+};
+
+/**
+ * AdminImportSourceReferenceResponse
+ *
+ * One exact metadata-only file reference from an immutable commit.
+ */
+export type AdminImportSourceReferenceResponse = {
+    /**
+     * Commit Hash
+     */
+    commit_hash: string;
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Position
+     */
+    position: number;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Repository Side
+     */
+    repository_side: 'direct' | 'keys' | 'translations';
+    /**
+     * Sha256
+     */
+    sha256: string;
+    /**
+     * Size Bytes
+     */
+    size_bytes: number;
+    /**
+     * Source Branch
+     */
+    source_branch: string;
+};
+
+/**
  * AdminMappingConflictResponse
  *
  * Form-addressable candidate mapping conflict.
@@ -908,6 +984,71 @@ export type AdminProductUpdateRequest = {
      * Name
      */
     name: string;
+};
+
+/**
+ * AdminPublishedMappingImportListResponse
+ *
+ * Bounded server-ordered published mapping import collection.
+ */
+export type AdminPublishedMappingImportListResponse = {
+    /**
+     * Items
+     */
+    items: Array<AdminPublishedMappingImportResponse>;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: null;
+};
+
+/**
+ * AdminPublishedMappingImportResponse
+ *
+ * One server-owned published mapping and its current logical import state.
+ */
+export type AdminPublishedMappingImportResponse = {
+    active_baseline: AdminImportBaselineResponse | null;
+    /**
+     * Active Revision Id
+     */
+    active_revision_id: string;
+    /**
+     * Error Category
+     */
+    error_category: 'provider_unavailable' | null;
+    /**
+     * Error Message
+     */
+    error_message: string | null;
+    /**
+     * Id
+     */
+    id: string | null;
+    /**
+     * Latest Execution At
+     */
+    latest_execution_at: string | null;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Repository Sides
+     */
+    repository_sides: Array<AdminImportRepositorySideResponse>;
+    /**
+     * Retry Count
+     */
+    retry_count: number;
+    /**
+     * State
+     */
+    state: 'not_imported' | 'queued' | 'running' | 'current' | 'import_failed';
+    /**
+     * Topology
+     */
+    topology: 'direct' | 'separate';
 };
 
 /**
@@ -2112,6 +2253,60 @@ export type DeactivateAdminProductResponses = {
 
 export type DeactivateAdminProductResponse = DeactivateAdminProductResponses[keyof DeactivateAdminProductResponses];
 
+export type GetAdminImportData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Import Id
+         */
+        import_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/imports/{import_id}';
+};
+
+export type GetAdminImportErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetAdminImportError = GetAdminImportErrors[keyof GetAdminImportErrors];
+
+export type GetAdminImportResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPublishedMappingImportResponse;
+};
+
+export type GetAdminImportResponse = GetAdminImportResponses[keyof GetAdminImportResponses];
+
 export type PublishAdminProductCandidateData = {
     body: AdminProductPublishRequest;
     path: {
@@ -2157,6 +2352,110 @@ export type PublishAdminProductCandidateResponses = {
 };
 
 export type PublishAdminProductCandidateResponse = PublishAdminProductCandidateResponses[keyof PublishAdminProductCandidateResponses];
+
+export type ListAdminPublishedMappingImportsData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/published/mapping-imports';
+};
+
+export type ListAdminPublishedMappingImportsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type ListAdminPublishedMappingImportsError = ListAdminPublishedMappingImportsErrors[keyof ListAdminPublishedMappingImportsErrors];
+
+export type ListAdminPublishedMappingImportsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPublishedMappingImportListResponse;
+};
+
+export type ListAdminPublishedMappingImportsResponse = ListAdminPublishedMappingImportsResponses[keyof ListAdminPublishedMappingImportsResponses];
+
+export type StartAdminPublishedMappingImportData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Mapping Id
+         */
+        mapping_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports';
+};
+
+export type StartAdminPublishedMappingImportErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type StartAdminPublishedMappingImportError = StartAdminPublishedMappingImportErrors[keyof StartAdminPublishedMappingImportErrors];
+
+export type StartAdminPublishedMappingImportResponses = {
+    /**
+     * Successful Response
+     */
+    202: AdminPublishedMappingImportResponse;
+};
+
+export type StartAdminPublishedMappingImportResponse = StartAdminPublishedMappingImportResponses[keyof StartAdminPublishedMappingImportResponses];
 
 export type ReactivateAdminProductData = {
     body: AdminProductReactivateRequest;
