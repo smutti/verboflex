@@ -362,19 +362,17 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
             "403",
             "404",
             "409",
-            "422",
             "503",
         },
         (
             "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
             "post",
-        ): {"401", "403", "404", "409", "422", "503"},
+        ): {"401", "403", "404", "409", "503"},
         ("/api/v1/admin/products/{product_id}/imports/{import_id}", "get"): {
             "401",
             "403",
             "404",
             "409",
-            "422",
             "503",
         },
         ("/api/v1/admin/preview-jobs/{job_id}", "get"): {
@@ -1104,7 +1102,7 @@ def test_admin_product_openapi_is_closed_to_exact_lifecycle_operations() -> None
         path
         for path in schema["paths"]
         if path.startswith("/api/v1/admin/products/{product_id}/")
-        and any(action in path for action in ("publish", "deactivate", "reactivate"))
+        and path.rsplit("/", maxsplit=1)[-1] in {"publish", "deactivate", "reactivate"}
     }
     assert lifecycle_paths == {
         "/api/v1/admin/products/{product_id}/deactivate",

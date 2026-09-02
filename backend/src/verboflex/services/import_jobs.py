@@ -167,6 +167,7 @@ def _published_mapping_statement(
             (Product.id == product_id) & (Product.active_revision_id == ProductRevision.id),
         )
         .where(
+            Product.is_active.is_(True),
             ProductRevision.product_id == product_id,
             ProductRevision.is_published.is_(True),
             ProductRepositoryMapping.topology == "direct",
@@ -202,7 +203,7 @@ def _locked_published_mapping(
     product = session.execute(
         select(Product).where(Product.id == product_id).with_for_update()
     ).scalar_one_or_none()
-    if product is None or product.active_revision_id is None:
+    if product is None or not product.is_active or product.active_revision_id is None:
         raise ImportNotFound("published import unavailable")
     revision = session.execute(
         select(ProductRevision)
@@ -323,7 +324,7 @@ def list_published_mapping_imports(
     """List direct mappings from the exact active published revision in server order."""
     with session.begin():
         product = session.get(Product, product_id)
-        if product is None or product.active_revision_id is None:
+        if product is None or not product.is_active or product.active_revision_id is None:
             raise ImportNotFound("published imports unavailable")
         mappings = tuple(
             session.execute(_published_mapping_statement(product_id=product_id)).scalars()
@@ -477,6 +478,7 @@ def get_import_job(
         job = session.get(ImportJob, import_id)
         if (
             product is None
+            or not product.is_active
             or product.active_revision_id is None
             or job is None
             or job.product_id != product_id
@@ -502,7 +504,7 @@ def _current_execution_identity(
     product = session.execute(
         select(Product).where(Product.id == job.product_id).with_for_update()
     ).scalar_one_or_none()
-    if product is None or product.active_revision_id != job.revision_id:
+    if product is None or not product.is_active or product.active_revision_id != job.revision_id:
         return None
     revision = session.execute(
         select(ProductRevision)
@@ -608,6 +610,8 @@ def _validated_references(
     identity: ImportExecutionIdentity,
     references: tuple[ImportSourceReferenceRecord, ...],
 ) -> tuple[ImportSourceReferenceRecord, ...]:
+    if not references:
+        raise ValueError("import references rejected")
     expected_sides = {
         (side.role, side.repository_id, side.source_branch) for side in identity.repository_sides
     }
