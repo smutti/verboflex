@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 03
 current_phase_name: Bitbucket Import Integration
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-09-02T21:27:04.164Z"
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-09-02T21:45:01.725Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 03 execution started
-state_head: 7bb98fc6e76436d5e09e111878c805c8e1b2a2d0
+state_head: 0b58efe331c60dc1707cbee026bdf93a536f30c2
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 77
-  completed_plans: 65
+  completed_plans: 66
   percent: 22
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 03 (Bitbucket Import Integration) — EXECUTING
-Plan: 5 of 16
+Plan: 6 of 16
 Status: Ready to execute
 Last activity: 2026-09-02 — Phase 03 execution started
 
@@ -124,6 +124,7 @@ Progress: [████████████████████] 61/61 p
 | Phase 03 P02 | 12min | 2 tasks | 7 files |
 | Phase 03 P03 | 22min | 2 tasks | 7 files |
 | Phase 03 P04 | 13min | 2 tasks | 8 files |
+| Phase 03 P05 | 13min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -335,6 +336,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Render readiness through an exhaustive closed-literal label map; never derive capability from OAuth scopes, timestamps, or prior success.
 - [Phase 03]: Show Repository and pull-request access only when both generated profile fields exactly identify the expanded server contract.
 - [Phase 03]: Keep future source-write and pull-request readiness descriptive only, with no provider-write control in the browser.
+- [Phase 03]: Use one ten-value application vocabulary: seven Phase 3 read operations and exactly three non-executable Phase 8 write declarations.
+- [Phase 03]: Reject non-read operations and operation/URL mismatches before credential acquisition while retaining a GET-only Phase 3 adapter.
+- [Phase 03]: Pin branch-list continuations to the originating repository and accept only pullrequest:write implication-closure scope evidence.
 
 ### Pending Todos
 
@@ -374,6 +378,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-02T21:27:04.028Z
-Stopped at: Completed 03-04-PLAN.md
+Last session: 2026-09-02T21:45:01.600Z
+Stopped at: Completed 03-05-PLAN.md
 Resume file: None
