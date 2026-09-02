@@ -1,6 +1,13 @@
 import "@testing-library/jest-dom/vitest";
 
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -33,6 +40,12 @@ const reconnectMock = vi.mocked(reconnectAdminBitbucketOauth);
 const revokeMock = vi.mocked(revokeAdminBitbucketConnectionLocally);
 
 const disconnected: AdminBitbucketStatusResponse = {
+  capability_profile: {
+    evaluated_at: null,
+    pull_request: "disconnected",
+    source_read: "disconnected",
+    source_write: "disconnected",
+  },
   connected_at: null,
   expires_at: null,
   revoked_at: "2026-08-28T14:05:59.987654Z",
@@ -40,12 +53,41 @@ const disconnected: AdminBitbucketStatusResponse = {
 };
 
 const connected: AdminBitbucketStatusResponse = {
+  capability_profile: {
+    evaluated_at: "2026-08-28T12:35:01.123456Z",
+    pull_request: "ready_for_later_phase",
+    source_read: "ready",
+    source_write: "ready_for_later_phase",
+  },
   connected_at: "2026-08-28T12:34:56.123456Z",
   expires_at: "2026-09-27T12:34:56.123456Z",
   revoked_at: null,
-  scope_label: "Read-only repository access",
-  scope_profile: "repository",
+  scope_label: "Repository and pull-request access",
+  scope_profile: "repository_and_pull_request",
   status: "Connected",
+};
+
+const reauthorizationRequired: AdminBitbucketStatusResponse = {
+  ...connected,
+  capability_profile: {
+    evaluated_at: "2026-08-28T12:35:01.123456Z",
+    pull_request: "reauthorization_required",
+    source_read: "reauthorization_required",
+    source_write: "reauthorization_required",
+  },
+  scope_label: undefined,
+  scope_profile: undefined,
+  status: "Reauthorization required",
+};
+
+const mixedReadiness: AdminBitbucketStatusResponse = {
+  ...connected,
+  capability_profile: {
+    evaluated_at: "2026-08-28T12:35:01.123456Z",
+    pull_request: "unavailable",
+    source_read: "ready",
+    source_write: "reauthorization_required",
+  },
 };
 
 function ok<T>(data: T, status = 200) {
@@ -80,6 +122,15 @@ function renderPage() {
   );
 }
 
+function capabilityRow(profile: HTMLElement, label: string) {
+  const term = within(profile).getByText(label);
+  const row = term.closest("div");
+  if (row === null) {
+    throw new Error(`Capability row not found for ${label}`);
+  }
+  return row;
+}
+
 describe("administrator Bitbucket connection page", () => {
   beforeEach(() => {
     getStatusMock.mockReset();
@@ -95,7 +146,7 @@ describe("administrator Bitbucket connection page", () => {
     cleanup();
   });
 
-  it("renders stable loading and bounded retry states without provider diagnostics", async () => {
+  it("UI3-C05 renders geometry-matched capability Skeletons during initial load", async () => {
     getStatusMock.mockReturnValueOnce(new Promise<never>(() => undefined));
     const view = renderPage();
 
@@ -103,6 +154,12 @@ describe("administrator Bitbucket connection page", () => {
       "Loading Bitbucket connection",
     );
     expect(screen.getByRole("heading", { name: "Bitbucket" })).toBeVisible();
+    const loadingProfile = screen.getByRole("region", {
+      name: "Capability profile",
+    });
+    expect(
+      within(loadingProfile).getAllByLabelText("Loading capability readiness"),
+    ).toHaveLength(3);
     await waitFor(() => {
       expect(getStatusMock).toHaveBeenCalledTimes(1);
     });
@@ -121,6 +178,71 @@ describe("administrator Bitbucket connection page", () => {
       screen.getByRole("button", { name: "Retry loading page" }),
     );
     expect(await screen.findByText("Disconnected")).toBeVisible();
+  });
+
+  it("UI3-C01 keeps every capability row present with a named disconnected state", async () => {
+    getStatusMock.mockResolvedValueOnce(ok(disconnected));
+    renderPage();
+
+    const profile = await screen.findByRole("region", {
+      name: "Capability profile",
+    });
+    for (const label of [
+      "Read localization sources",
+      "Create branches and source commits",
+      "Open pull requests",
+    ]) {
+      expect(capabilityRow(profile, label)).toHaveTextContent("Disconnected");
+    }
+  });
+
+  it("UI3-C13 renders exactly three server-ordered capability rows with text-first readiness", async () => {
+    getStatusMock.mockResolvedValueOnce(ok(connected));
+    renderPage();
+
+    const profile = await screen.findByRole("region", {
+      name: "Capability profile",
+    });
+    expect(
+      Array.from(profile.querySelectorAll("dt"), (term) => term.textContent),
+    ).toEqual([
+      "Read localization sources",
+      "Create branches and source commits",
+      "Open pull requests",
+    ]);
+    expect(
+      capabilityRow(profile, "Read localization sources"),
+    ).toHaveTextContent("Ready");
+    for (const label of [
+      "Create branches and source commits",
+      "Open pull requests",
+    ]) {
+      const row = capabilityRow(profile, label);
+      expect(row).toHaveTextContent("Ready for a later phase");
+      expect(row).toHaveTextContent("Not used during imports.");
+    }
+    expect(screen.getByText("Repository and pull-request access")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /create branch|create commit|open pull request/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("UI3-C17 keeps mixed server-projected readiness visible without client inference", async () => {
+    getStatusMock.mockResolvedValueOnce(ok(mixedReadiness));
+    renderPage();
+
+    const profile = await screen.findByRole("region", {
+      name: "Capability profile",
+    });
+    expect(
+      capabilityRow(profile, "Read localization sources"),
+    ).toHaveTextContent("Ready");
+    expect(
+      capabilityRow(profile, "Create branches and source commits"),
+    ).toHaveTextContent("Reauthorization required");
+    expect(capabilityRow(profile, "Open pull requests")).toHaveTextContent(
+      "Unavailable",
+    );
   });
 
   it("rejects missing status data and ignores an obsolete successful load", async () => {
@@ -158,9 +280,19 @@ describe("administrator Bitbucket connection page", () => {
     ["Connected", connected],
     [
       "Reauthorization required",
-      { ...connected, status: "Reauthorization required" as const },
+      reauthorizationRequired,
     ],
-    ["Unavailable", { ...connected, status: "Unavailable" as const }],
+    [
+      "Unavailable",
+      {
+        ...mixedReadiness,
+        capability_profile: {
+          ...mixedReadiness.capability_profile,
+          source_read: "unavailable" as const,
+        },
+        status: "Unavailable" as const,
+      },
+    ],
   ])("projects only the approved %s status", async (label, status) => {
     getStatusMock.mockResolvedValueOnce(ok(status));
     renderPage();
@@ -173,7 +305,9 @@ describe("administrator Bitbucket connection page", () => {
     expect(statusPanel).not.toHaveTextContent("provider");
     expect(statusPanel).not.toHaveTextContent("repository:write");
     if (label === "Connected") {
-      expect(statusPanel).toHaveTextContent("Read-only repository access");
+      expect(statusPanel).toHaveTextContent(
+        "Repository and pull-request access",
+      );
       expect(statusPanel).toHaveTextContent("28 Aug 2026, 12:34 UTC");
       expect(statusPanel).toHaveTextContent("27 Sept 2026, 12:34 UTC");
       expect(statusPanel).not.toHaveTextContent("56.123456");
@@ -213,7 +347,7 @@ describe("administrator Bitbucket connection page", () => {
       const status =
         actionLabel === "Connect Bitbucket"
           ? disconnected
-          : { ...connected, status: "Reauthorization required" as const };
+          : reauthorizationRequired;
       getStatusMock
         .mockResolvedValueOnce(ok(status))
         .mockResolvedValueOnce(ok(connected));
@@ -252,7 +386,9 @@ describe("administrator Bitbucket connection page", () => {
       const statusPanel = screen.getByRole("region", {
         name: "Bitbucket connection status",
       });
-      expect(statusPanel).toHaveTextContent("Read-only repository access");
+      expect(statusPanel).toHaveTextContent(
+        "Repository and pull-request access",
+      );
       expect(statusPanel).toHaveTextContent("27 Sept 2026, 12:34 UTC");
       expect(statusPanel).not.toHaveTextContent("workspace");
       expect(window.location.href).toBe(initialLocation);
@@ -265,7 +401,7 @@ describe("administrator Bitbucket connection page", () => {
   it("keeps only reconnect pending, announces recovery, and preserves revoke availability", async () => {
     getStatusMock
       .mockResolvedValueOnce(
-        ok({ ...connected, status: "Reauthorization required" }),
+        ok(reauthorizationRequired),
       )
       .mockResolvedValueOnce(ok(connected));
     const mutation =
@@ -293,10 +429,8 @@ describe("administrator Bitbucket connection page", () => {
     expect(reconnectMock).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps a failed direct recovery on the page with bounded retry guidance", async () => {
-    getStatusMock.mockResolvedValueOnce(
-      ok({ ...connected, status: "Reauthorization required" }),
-    );
+  it("UI3-C10 keeps capability failure in-region and preserves the prior visible profile", async () => {
+    getStatusMock.mockResolvedValueOnce(ok(reauthorizationRequired));
     reconnectMock.mockResolvedValueOnce(failure() as never);
     const initialLocation = window.location.href;
     renderPage();
@@ -311,6 +445,16 @@ describe("administrator Bitbucket connection page", () => {
       "Verify the server configuration, then try again. The current connection status is unchanged.",
     );
     expect(screen.getAllByText("Reauthorization required")[0]).toBeVisible();
+    const profile = screen.getByRole("region", { name: "Capability profile" });
+    for (const label of [
+      "Read localization sources",
+      "Create branches and source commits",
+      "Open pull requests",
+    ]) {
+      expect(capabilityRow(profile, label)).toHaveTextContent(
+        "Reauthorization required",
+      );
+    }
     expect(
       screen.getByRole("button", { name: "Reconnect Bitbucket" }),
     ).toBeEnabled();
