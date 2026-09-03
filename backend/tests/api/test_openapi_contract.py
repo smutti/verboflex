@@ -18,6 +18,40 @@ CHECKED_IN_SCHEMA = REPOSITORY_ROOT / "frontend" / "openapi.json"
 FRONTEND_SOURCE = REPOSITORY_ROOT / "frontend" / "src"
 GENERATED_CLIENT = FRONTEND_SOURCE / "api" / "client"
 
+IMPORT_OPERATIONS = {
+    ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get"): (
+        "list_admin_published_mapping_imports",
+        {"200", "401", "403", "404", "422"},
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+        "post",
+    ): (
+        "start_admin_published_mapping_import",
+        {"202", "401", "403", "404", "409", "422", "503"},
+    ),
+    ("/api/v1/admin/products/{product_id}/imports/{import_id}", "get"): (
+        "get_admin_import",
+        {"200", "401", "403", "404", "409", "422", "503"},
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+        "/imports/{import_id}/rewrite-comparison",
+        "get",
+    ): (
+        "get_admin_import_rewrite_comparison",
+        {"200", "401", "403", "404", "409", "422", "503"},
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+        "/imports/{import_id}/rewrite-confirmation",
+        "post",
+    ): (
+        "confirm_admin_import_rewrite_baseline",
+        {"200", "401", "403", "404", "409", "422", "503"},
+    ),
+}
+
 EXPECTED_OPERATIONS = {
     ("/api/v1/admin/bitbucket", "get"): (
         "get_admin_bitbucket_status",
@@ -325,6 +359,11 @@ def _schema_property_names(value: Any) -> set[str]:
     return set()
 
 
+def _schema_variant(schema: dict[str, Any], *, type_name: str) -> dict[str, Any]:
+    """Return one named nullable-schema variant without depending on its order."""
+    return next(item for item in schema["anyOf"] if item.get("type") == type_name)
+
+
 def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
     """Freeze every approved method, operation id, response, and bearer boundary."""
     schema = app.openapi()
@@ -611,6 +650,239 @@ def test_import_public_contract_is_closed_and_provider_source_history_free() -> 
     }
     assert forbidden.isdisjoint(_schema_property_names(import_schemas))
     assert "workspace" in _schema_property_names(components["AdminRepositoryResponse"])
+
+
+def test_import_operation_surface_is_exact_unique_and_bearer_protected() -> None:
+    """Freeze the five browser operations before generated code consumes them."""
+    schema = app.openapi()
+    operations = _operation_entries(schema)
+    import_operations = {
+        key: operation
+        for key, operation in operations.items()
+        if "/imports" in key[0] or key[0].endswith("/mapping-imports")
+    }
+
+    assert set(import_operations) == set(IMPORT_OPERATIONS)
+    operation_ids: list[str] = []
+    for key, (operation_id, response_codes) in IMPORT_OPERATIONS.items():
+        operation = import_operations[key]
+        operation_ids.append(operation["operationId"])
+        assert operation["operationId"] == operation_id
+        assert set(operation["responses"]) == response_codes
+        assert operation["security"] == [{"OAuth2PasswordBearer": []}]
+
+    assert len(operation_ids) == 5
+    assert len(set(operation_ids)) == 5
+
+    list_operation = import_operations[
+        ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get")
+    ]
+    list_parameters = _parameters_by_name(list_operation)
+    assert set(list_parameters) == {"product_id", "limit", "status", "cursor"}
+    assert list_parameters["product_id"]["in"] == "path"
+    assert list_parameters["product_id"]["required"] is True
+    assert list_parameters["limit"]["schema"] == {
+        "default": 50,
+        "maximum": 100,
+        "minimum": 1,
+        "title": "Limit",
+        "type": "integer",
+    }
+    assert list_parameters["status"]["schema"]["enum"] == ["all", "attention"]
+    assert list_parameters["cursor"]["in"] == "query"
+    assert list_parameters["cursor"]["required"] is False
+
+    confirmation = import_operations[
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+            "/imports/{import_id}/rewrite-confirmation",
+            "post",
+        )
+    ]
+    assert confirmation["requestBody"] == {
+        "content": {
+            "application/json": {
+                "schema": {"$ref": "#/components/schemas/AdminImportRewriteConfirmationRequest"}
+            }
+        },
+        "required": True,
+    }
+    for key, operation in import_operations.items():
+        if key != (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+            "/imports/{import_id}/rewrite-confirmation",
+            "post",
+        ):
+            assert "requestBody" not in operation
+
+
+def test_import_schema_literals_requirements_and_bounds_are_frozen() -> None:
+    """Keep state, readiness, reconciliation, cursor, and baseline shapes closed."""
+    schemas = app.openapi()["components"]["schemas"]
+    published = schemas["AdminPublishedMappingImportResponse"]
+    listing = schemas["AdminPublishedMappingImportListResponse"]
+    repository_side = schemas["AdminImportRepositorySideResponse"]
+    source = schemas["AdminImportSourceReferenceResponse"]
+    baseline = schemas["AdminImportBaselineResponse"]
+    comparison = schemas["AdminImportRewriteComparisonResponse"]
+    comparison_side = schemas["AdminImportRewriteSideResponse"]
+    delta = schemas["AdminImportRewriteDeltaResponse"]
+    confirmation = schemas["AdminImportRewriteConfirmationRequest"]
+    operation_error = schemas["AdminImportOperationErrorResponse"]
+    product = schemas["AdminProductResponse"]
+
+    for contract in (
+        published,
+        listing,
+        repository_side,
+        source,
+        baseline,
+        comparison,
+        comparison_side,
+        delta,
+        confirmation,
+        operation_error,
+        product,
+    ):
+        assert contract["additionalProperties"] is False
+
+    assert set(published["required"]) == set(published["properties"])
+    assert published["properties"]["state"]["enum"] == [
+        "not_imported",
+        "queued",
+        "running",
+        "current",
+        "may_be_stale",
+        "review_required",
+        "import_failed",
+    ]
+    assert published["properties"]["action"]["enum"] == [
+        "run_import",
+        "refresh_import",
+        "retry_import",
+        "import_in_progress",
+        "review_baseline_change",
+    ]
+    assert published["properties"]["capability"]["enum"] == [
+        "ready",
+        "reauthorization_required",
+        "unavailable",
+    ]
+    error_category = _schema_variant(published["properties"]["error_category"], type_name="string")
+    assert error_category["enum"] == [
+        "connection_required",
+        "permission_denied",
+        "rate_limited",
+        "source_not_found",
+        "timeout",
+        "provider_unavailable",
+        "bounded_failure",
+    ]
+    assert published["properties"]["repository_sides"]["minItems"] == 1
+    assert published["properties"]["repository_sides"]["maxItems"] == 2
+    assert published["properties"]["retry_count"]["minimum"] == 0
+    assert (
+        _schema_variant(published["properties"]["execution_number"], type_name="integer")["minimum"]
+        == 1
+    )
+    error_message = _schema_variant(published["properties"]["error_message"], type_name="string")
+    assert error_message["minLength"] == 1
+    assert error_message["maxLength"] == 256
+
+    assert listing["required"] == ["items"]
+    assert listing["properties"]["items"]["maxItems"] == 100
+    next_cursor = _schema_variant(listing["properties"]["next_cursor"], type_name="string")
+    assert next_cursor["minLength"] == 1
+    assert next_cursor["maxLength"] == 2048
+
+    assert set(repository_side["required"]) == set(repository_side["properties"])
+    assert repository_side["properties"]["role"]["enum"] == [
+        "direct",
+        "keys",
+        "translations",
+    ]
+    assert repository_side["properties"]["source_branch"]["minLength"] == 1
+    assert repository_side["properties"]["source_branch"]["maxLength"] == 255
+
+    assert set(source["required"]) == set(source["properties"])
+    assert source["properties"]["commit_hash"]["pattern"] == "^[0-9a-f]{40}$"
+    assert source["properties"]["sha256"]["pattern"] == "^[0-9a-f]{64}$"
+    assert source["properties"]["size_bytes"]["minimum"] == 0
+    assert source["properties"]["size_bytes"]["maximum"] == 1_048_576
+    assert source["properties"]["path"]["maxLength"] == 4096
+    assert set(baseline["required"]) == set(baseline["properties"])
+    assert baseline["properties"]["source_references"]["maxItems"] == 500
+
+    assert set(comparison["required"]) == set(comparison["properties"])
+    assert comparison["properties"]["topology"]["enum"] == ["direct", "separate"]
+    assert comparison["properties"]["confirmable"]["const"] is True
+    assert comparison["properties"]["sides"]["minItems"] == 1
+    assert comparison["properties"]["sides"]["maxItems"] == 2
+    assert comparison["properties"]["files"]["maxItems"] == 500
+    assert comparison["properties"]["proposal_digest"]["pattern"] == "^[0-9a-f]{64}$"
+
+    assert set(comparison_side["required"]) == set(comparison_side["properties"])
+    for count in ("added_count", "modified_count", "removed_count"):
+        assert comparison_side["properties"][count]["minimum"] == 0
+        assert comparison_side["properties"][count]["maximum"] == 500
+    assert set(delta["required"]) == set(delta["properties"])
+    assert delta["properties"]["change"]["enum"] == [
+        "added",
+        "modified",
+        "removed",
+    ]
+    assert delta["properties"]["position"]["minimum"] == 0
+    assert delta["properties"]["position"]["maximum"] == 499
+    assert delta["properties"]["path"]["maxLength"] == 4096
+
+    assert set(confirmation["required"]) == set(confirmation["properties"])
+    assert confirmation["properties"]["proposal_digest"]["pattern"] == ("^[0-9a-f]{64}$")
+    assert operation_error["required"] == ["detail"]
+    assert operation_error["properties"]["detail"]["enum"] == [
+        "Published import unavailable",
+        "Published import already in progress",
+        "Published import requires review",
+        "Published import conflict",
+        "Published import connection unavailable",
+        "Import rewrite proposal stale",
+        "Invalid import cursor",
+    ]
+
+    assert "affected_mapping_count" in product["required"]
+    assert product["properties"]["affected_mapping_count"] == {
+        "minimum": 0.0,
+        "title": "Affected Mapping Count",
+        "type": "integer",
+    }
+
+
+def test_import_generated_client_matches_the_canonical_operation_and_type_set() -> None:
+    """Fail until pinned generation carries every canonical Phase 3 import shape."""
+    sdk_source = (GENERATED_CLIENT / "sdk.gen.ts").read_text()
+    index_source = (GENERATED_CLIENT / "index.ts").read_text()
+    types_source = (GENERATED_CLIENT / "types.gen.ts").read_text()
+    operation_exports = (
+        "listAdminPublishedMappingImports",
+        "startAdminPublishedMappingImport",
+        "getAdminImport",
+        "getAdminImportRewriteComparison",
+        "confirmAdminImportRewriteBaseline",
+    )
+
+    for operation in operation_exports:
+        assert sdk_source.count(f"export const {operation}") == 1
+        assert index_source.count(operation) == 1
+
+    for generated_type in (
+        "AdminImportRewriteComparisonResponse",
+        "AdminImportRewriteConfirmationRequest",
+        "AdminImportRewriteDeltaResponse",
+        "AdminImportRewriteSideResponse",
+    ):
+        assert f"export type {generated_type}" in types_source
+        assert index_source.count(generated_type) == 1
+
+    assert "affected_mapping_count: number" in types_source
 
 
 def test_admin_bitbucket_openapi_is_closed_bounded_and_secret_free() -> None:
