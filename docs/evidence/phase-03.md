@@ -3,7 +3,7 @@
 ## Outcome
 
 - Gauntlet-status: PASS
-- Source-digest: `3072eb3d43244067c8e2aebd37b636c1d4418978507ac305656b751fd0fc1098`
+- Source-digest: `e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c`
 
 The canonical Phase 3 gauntlet completed on 2026-09-03. Its 14 ordered,
 fail-closed layers passed against one unchanged manifest digest. This record contains
@@ -48,14 +48,15 @@ for this mandatory closeout run.
 | Provider resource mutations | 0 |
 | Final source-state | Passed; manifest digest unchanged |
 
-## Post-review-remediation gauntlet
+## First post-review-remediation gauntlet
 
 The first independent closeout review found two source-integrity blockers. The
 remediation was driven by committed failing tests, added a follow-on migration
 that serializes provenance insertion with execution finalization, and required
 complete file deltas for every changed side of a mapping. The complete gauntlet
-then passed again from committed source on 2026-09-03 and established the new
-canonical digest recorded above.
+then passed again from committed source on 2026-09-03. Its intermediate digest
+was superseded after the next fresh review found the remaining
+execution-identity reparenting path described below.
 
 | Measurement | Result |
 | --- | --- |
@@ -74,6 +75,34 @@ canonical digest recorded above.
 | Frontend coverage SHA-256 | `e1cda1bf439ddc9730e23ed939916e959d70c8bef53a4be08b8b803680c469e1` |
 | Cleanup | Passed; no disposable Phase 3 container, network, volume, image, or worker remained |
 | Final source-state | Passed; digest unchanged at `3072eb3d43244067c8e2aebd37b636c1d4418978507ac305656b751fd0fc1098` |
+
+## Final provenance-remediation gauntlet
+
+The next fresh independent review found that an `UPDATE` could reparent a
+source reference from a running execution to a compatible terminal execution.
+A committed PostgreSQL regression reproduced the bypass, and the follow-on
+migration now makes the source-reference execution identity immutable while
+retaining the row lock that serializes allowed running-state updates with
+finalization. The complete gauntlet passed again from committed source on
+2026-09-03 and established the canonical digest recorded in Outcome.
+
+| Measurement | Result |
+| --- | --- |
+| Source commit | `ccb276b8b12d3ca459a5d171eb8637aef6b45122` |
+| Ordered layers | 14/14 passed in 367 seconds |
+| Backend suite | 952/952 passed; 95% combined branch-aware coverage |
+| Frontend suite | 356/356 passed across 24 files; 83.5% statement coverage |
+| Backend targeted mutation | 6/6 mutants killed |
+| Frontend targeted mutation | 25/25 mutants killed |
+| Responsive and accessibility browser checks | 2/2 passed |
+| Migration and OpenAPI contracts | 14/14 migration checks passed; generated client unchanged |
+| Architecture and provider audit | 116/116 passed |
+| API capability matrix | 56 total; 17 integrated and 39 explicitly opted out |
+| Mock deployment provider audit | 1 OAuth POST, 59 resource GETs, 0 resource mutations |
+| Backend JUnit SHA-256 | `c332e60d1b712e1fccb779381cc83106681ef892aa321854dec430b28cf33cd8` |
+| Frontend coverage SHA-256 | `dbdf58045bf511f56631cdc197f89b55e48fc11cef83dddd0c292064f12d9d00` |
+| Cleanup | Passed; no disposable Phase 3 container, network, volume, image, or worker remained |
+| Final source-state | Passed; digest unchanged at `e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c` |
 
 ## Prior deployment evidence
 
