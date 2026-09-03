@@ -209,7 +209,7 @@ const forbiddenWireShapes = [
   ["display_name", "email", "id", "is_active", "must_change_password", "roles"],
 ].map((shape) => shape.sort().join("\u0000"));
 
-const phaseTwoAdminOperationIds = new Map([
+const phaseThreeAdminOperationIds = new Map([
   ["GET /api/v1/admin/bitbucket", "get_admin_bitbucket_status"],
   ["POST /api/v1/admin/bitbucket/connect", "connect_admin_bitbucket_oauth"],
   ["POST /api/v1/admin/bitbucket/reconnect", "reconnect_admin_bitbucket_oauth"],
@@ -284,6 +284,14 @@ const phaseTwoAdminOperationIds = new Map([
   [
     "POST /api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
     "start_admin_published_mapping_import",
+  ],
+  [
+    "GET /api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports/{import_id}/rewrite-comparison",
+    "get_admin_import_rewrite_comparison",
+  ],
+  [
+    "POST /api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports/{import_id}/rewrite-confirmation",
+    "confirm_admin_import_rewrite_baseline",
   ],
   [
     "POST /api/v1/admin/products/{product_id}/reactivate",
@@ -788,7 +796,7 @@ describe("canonical generated Phase 2 admin client", () => {
     );
   });
 
-  it("freezes every Phase 2 admin operation ID", () => {
+  it("freezes every Phase 3 admin operation ID", () => {
     const actual = new Map<string, string>();
 
     for (const [path, pathItem] of Object.entries(openApi.paths).filter(
@@ -803,7 +811,7 @@ describe("canonical generated Phase 2 admin client", () => {
       }
     }
 
-    expect(actual).toEqual(phaseTwoAdminOperationIds);
+    expect(actual).toEqual(phaseThreeAdminOperationIds);
     expect(new Set(actual.values()).size).toBe(actual.size);
   });
 
