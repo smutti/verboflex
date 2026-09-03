@@ -1,6 +1,13 @@
 import "@testing-library/jest-dom/vitest";
 
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +19,14 @@ import {
   type AdminRepositoryResponse,
 } from "../../../api/client";
 import { RewrittenBaselineDialog } from "./RewrittenBaselineDialog";
+
+class TestResizeObserver implements ResizeObserver {
+  disconnect() {}
+  observe() {}
+  unobserve() {}
+}
+
+vi.stubGlobal("ResizeObserver", TestResizeObserver);
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
 
@@ -154,9 +169,9 @@ describe("rewritten baseline reconciliation", () => {
     expect(within(dialog).getByRole("status")).toHaveTextContent(
       "Loading baseline comparison",
     );
-    expect(within(dialog).getByTestId("rewrite-comparison-skeleton")).toHaveClass(
-      "h-32",
-    );
+    expect(
+      within(dialog).getByTestId("rewrite-comparison-skeleton"),
+    ).toHaveClass("h-32");
   });
 
   it("UI3-C04 keeps a complete zero-delta rewrite confirmable", async () => {
@@ -241,11 +256,11 @@ describe("rewritten baseline reconciliation", () => {
     renderDialog();
 
     const summary = await screen.findByLabelText("Source change summary");
-    expect(within(summary).getAllByText(/^(Added|Modified|Removed) 1$/).map((node) => node.textContent)).toEqual([
-      "Added 1",
-      "Modified 1",
-      "Removed 1",
-    ]);
+    expect(
+      within(summary)
+        .getAllByText(/^(Added|Modified|Removed) 1$/)
+        .map((node) => node.textContent),
+    ).toEqual(["Added 1", "Modified 1", "Removed 1"]);
     const rows = within(
       screen.getByRole("table", { name: "Localization file changes" }),
     )
@@ -273,7 +288,9 @@ describe("rewritten baseline reconciliation", () => {
     expect(
       screen.queryByRole("button", { name: "Confirm new baseline" }),
     ).not.toBeInTheDocument();
-    expect(document.body).not.toHaveTextContent("provider body must stay private");
+    expect(document.body).not.toHaveTextContent(
+      "provider body must stay private",
+    );
   });
 
   it("UI3-C12 keeps stale confirmation open, focused, and guarded by exact proposal identity", async () => {
@@ -312,7 +329,9 @@ describe("rewritten baseline reconciliation", () => {
 
   it("confirms separate sides once, locks dismissal while pending, and restores the exact trigger after fresh refetch", async () => {
     let resolveConfirmation:
-      | ((value: ReturnType<typeof ok<AdminPublishedMappingImportResponse>>) => void)
+      | ((
+          value: ReturnType<typeof ok<AdminPublishedMappingImportResponse>>,
+        ) => void)
       | undefined;
     const trigger = document.createElement("button");
     trigger.textContent = "Review baseline change";
@@ -357,11 +376,25 @@ describe("rewritten baseline reconciliation", () => {
     );
     const onClose = vi.fn();
     const onConfirmed = vi.fn().mockResolvedValue(true);
-    renderDialog({
+    const view = renderDialog({
       importRecord: separateImport,
       onClose,
       onConfirmed,
       triggerElement: trigger,
+    });
+    onClose.mockImplementation(() => {
+      view.rerender(
+        <RewrittenBaselineDialog
+          accessToken="memory-only-admin-bearer"
+          importRecord={separateImport}
+          onClose={onClose}
+          onConfirmed={onConfirmed}
+          open={false}
+          productId="product-1"
+          repositories={repositories}
+          triggerElement={trigger}
+        />,
+      );
     });
 
     const keys = await screen.findByRole("region", {
@@ -392,7 +425,9 @@ describe("rewritten baseline reconciliation", () => {
     await act(async () => {
       resolveConfirmation?.(ok(separateImport));
     });
-    await waitFor(() => expect(onConfirmed).toHaveBeenCalledWith(separateImport));
+    await waitFor(() =>
+      expect(onConfirmed).toHaveBeenCalledWith(separateImport),
+    );
     expect(onClose).toHaveBeenCalledOnce();
     await waitFor(() => expect(trigger).toHaveFocus());
     trigger.remove();

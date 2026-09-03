@@ -32,6 +32,7 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { importPollingIdentity, useImportPolling } from "./useImportPolling";
+import { RewrittenBaselineDialog } from "./RewrittenBaselineDialog";
 
 const IMPORT_PAGE_LIMIT = 50;
 const MAX_IMPORT_PAGES = 50;
@@ -305,7 +306,7 @@ function ImportAction({
 }: {
   automaticUpdatesPaused: boolean;
   item: AdminPublishedMappingImportResponse;
-  onAction: () => void;
+  onAction: (trigger: HTMLButtonElement) => void;
   onRefreshStatus: () => void;
   pending: boolean;
 }) {
@@ -318,7 +319,7 @@ function ImportAction({
         className="min-h-11 w-full whitespace-normal"
         disabled={pending || inProgress}
         aria-busy={pending || inProgress}
-        onClick={onAction}
+        onClick={(event) => onAction(event.currentTarget)}
       >
         {ACTION_LABELS[item.action]}
       </Button>
@@ -421,6 +422,10 @@ export function PublishedMappingImports({
     ReadonlyMap<string, PollingSnapshot>
   >(new Map());
   const [announcement, setAnnouncement] = useState("");
+  const [rewriteReview, setRewriteReview] = useState<{
+    importRecord: AdminPublishedMappingImportResponse;
+    triggerElement: HTMLButtonElement;
+  } | null>(null);
 
   const loadCompleteCollection = useCallback(
     async (preserveVisibleState = false) => {
@@ -770,9 +775,13 @@ export function PublishedMappingImports({
                           <ImportAction
                             automaticUpdatesPaused={automaticUpdatesPaused}
                             item={item}
-                            onAction={() => {
+                            onAction={(triggerElement) => {
                               if (item.action === "review_baseline_change") {
                                 onReviewBaselineChange?.(item);
+                                setRewriteReview({
+                                  importRecord: item,
+                                  triggerElement,
+                                });
                               } else {
                                 void startImport(item);
                               }
@@ -839,9 +848,13 @@ export function PublishedMappingImports({
                   <ImportAction
                     automaticUpdatesPaused={automaticUpdatesPaused}
                     item={item}
-                    onAction={() => {
+                    onAction={(triggerElement) => {
                       if (item.action === "review_baseline_change") {
                         onReviewBaselineChange?.(item);
+                        setRewriteReview({
+                          importRecord: item,
+                          triggerElement,
+                        });
                       } else {
                         void startImport(item);
                       }
@@ -859,6 +872,23 @@ export function PublishedMappingImports({
           <p className="sr-only" aria-live="polite" aria-atomic="true">
             {announcement}
           </p>
+
+          {rewriteReview !== null ? (
+            <RewrittenBaselineDialog
+              accessToken={accessToken}
+              importRecord={rewriteReview.importRecord}
+              onClose={() => setRewriteReview(null)}
+              onConfirmed={async () => {
+                const refreshed = await loadCompleteCollection(true);
+                if (refreshed) setAnnouncement("Baseline updated");
+                return refreshed;
+              }}
+              open
+              productId={productId}
+              repositories={repositories}
+              triggerElement={rewriteReview.triggerElement}
+            />
+          ) : null}
         </>
       ) : null}
     </section>
