@@ -7,7 +7,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Literal, Protocol, cast
+from typing import Literal, NoReturn, Protocol, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -15,12 +15,21 @@ from sqlalchemy.orm import Session, selectinload, sessionmaker
 from sqlalchemy.sql import Select
 
 from verboflex.core.config import get_settings
-from verboflex.integrations.bitbucket.client import BitbucketProviderReadError
+from verboflex.integrations.bitbucket.client import (
+    BitbucketCommitDelta,
+    BitbucketFileDelta,
+    BitbucketProviderReadError,
+)
 from verboflex.integrations.bitbucket.diagnostics import (
     BitbucketDiagnosticContext,
     log_bitbucket_operation_failure,
 )
-from verboflex.integrations.bitbucket.urls import BitbucketOperation
+from verboflex.integrations.bitbucket.urls import (
+    BitbucketOperation,
+    repository_metadata_url,
+    validate_provider_commit_hash,
+    validate_repository_relative_path,
+)
 from verboflex.models.bitbucket_connection import BitbucketConnection
 from verboflex.models.import_job import (
     ImportExecution,
@@ -57,6 +66,8 @@ ImportState = Literal[
     "import_failed",
 ]
 RepositoryRole = Literal["direct", "keys", "translations"]
+SourceMovementRelation = Literal["equal", "descendant", "diverged"]
+SourceMovementKind = Literal["equal", "fast-forward", "review-required"]
 
 
 class ImportNotFound(LookupError):
@@ -140,8 +151,189 @@ class ImportExecutionIdentity:
     repository_sides: tuple[ImportExecutionSide, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class SourceMovementInput:
+    """Exact active/proposed identity for one side of a published mapping."""
+
+    repository_side: RepositoryRole
+    repository_id: UUID
+    workspace: str
+    repository_slug: str
+    active_commit_hash: str
+    proposed_commit_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class SourceMovementSideComparison:
+    """Provider-independent, metadata-only comparison for one mapping side."""
+
+    repository_side: RepositoryRole
+    repository_id: UUID
+    active_commit_hash: str
+    proposed_commit_hash: str
+    relation: SourceMovementRelation
+
+
+@dataclass(frozen=True, slots=True)
+class SourceRewriteCandidate:
+    """Complete mapping-scoped rewrite evidence, ready for later persistence."""
+
+    sides: tuple[SourceMovementSideComparison, ...]
+    files: tuple[BitbucketFileDelta, ...]
+    complete: bool
+
+
+@dataclass(frozen=True, slots=True)
+class SourceMovementClassification:
+    """Closed classification of movement for exactly one mapping."""
+
+    movement: SourceMovementKind
+    sides: tuple[SourceMovementSideComparison, ...]
+    rewrite_candidate: SourceRewriteCandidate | None
+
+
 ImportProcessor = Callable[[ImportExecutionIdentity], tuple[ImportSourceReferenceRecord, ...]]
 ImportClock = Callable[[], datetime]
+
+
+def _reject_source_movement(*, operation: BitbucketOperation) -> NoReturn:
+    raise BitbucketProviderReadError(
+        kind="invalid_source",
+        operation=operation,
+    )
+
+
+def _validated_source_movement_inputs(
+    sources: tuple[SourceMovementInput, ...],
+) -> tuple[SourceMovementInput, ...]:
+    roles = tuple(source.repository_side for source in sources)
+    if roles not in {("direct",), ("keys", "translations")}:
+        _reject_source_movement(operation=BitbucketOperation.COMMIT_ANCESTRY)
+    for source in sources:
+        if (
+            not isinstance(source.repository_id, UUID)
+            or source.repository_id.int == 0
+            or not isinstance(source.workspace, str)
+            or not isinstance(source.repository_slug, str)
+        ):
+            _reject_source_movement(operation=BitbucketOperation.COMMIT_ANCESTRY)
+        try:
+            repository_metadata_url(
+                workspace=source.workspace,
+                repository_slug=source.repository_slug,
+            )
+            validate_provider_commit_hash(source.active_commit_hash)
+            validate_provider_commit_hash(source.proposed_commit_hash)
+        except ValueError:
+            _reject_source_movement(operation=BitbucketOperation.COMMIT_ANCESTRY)
+    return sources
+
+
+def _validated_side_delta(
+    source: SourceMovementInput,
+    delta: BitbucketCommitDelta,
+) -> tuple[BitbucketFileDelta, ...]:
+    if (
+        delta.complete is not True
+        or delta.old_commit_hash != source.active_commit_hash
+        or delta.new_commit_hash != source.proposed_commit_hash
+        or tuple(file.ordinal for file in delta.files) != tuple(range(len(delta.files)))
+    ):
+        _reject_source_movement(operation=BitbucketOperation.COMMIT_DIFFSTAT)
+    seen_paths: set[str] = set()
+    for file in delta.files:
+        try:
+            path = validate_repository_relative_path(file.path)
+        except ValueError:
+            _reject_source_movement(operation=BitbucketOperation.COMMIT_DIFFSTAT)
+        if (
+            file.repository_side != source.repository_side
+            or file.change not in {"added", "modified", "removed"}
+            or path != file.path
+            or not path.casefold().endswith((".xml", ".ts", ".json", ".strings"))
+            or path in seen_paths
+        ):
+            _reject_source_movement(operation=BitbucketOperation.COMMIT_DIFFSTAT)
+        seen_paths.add(path)
+    return delta.files
+
+
+async def classify_source_movement(
+    session: Session,
+    *,
+    sources: tuple[SourceMovementInput, ...],
+    adapter: SourceDiscoveryAdapter,
+) -> SourceMovementClassification:
+    """Classify one direct or atomic separate mapping from exact fresh commits."""
+    validated_sources = _validated_source_movement_inputs(sources)
+    comparisons: list[SourceMovementSideComparison] = []
+    for source in validated_sources:
+        if source.active_commit_hash == source.proposed_commit_hash:
+            relation: SourceMovementRelation = "equal"
+        else:
+            ancestry = await adapter.compare_repository_ancestry(
+                session,
+                workspace=source.workspace,
+                repository_slug=source.repository_slug,
+                old_commit_hash=source.active_commit_hash,
+                new_commit_hash=source.proposed_commit_hash,
+            )
+            if (
+                ancestry.complete is not True
+                or ancestry.old_commit_hash != source.active_commit_hash
+                or ancestry.new_commit_hash != source.proposed_commit_hash
+                or ancestry.relation not in {"equal", "descendant", "diverged"}
+                or ancestry.relation == "equal"
+            ):
+                _reject_source_movement(operation=BitbucketOperation.COMMIT_ANCESTRY)
+            relation = ancestry.relation
+        comparisons.append(
+            SourceMovementSideComparison(
+                repository_side=source.repository_side,
+                repository_id=source.repository_id,
+                active_commit_hash=source.active_commit_hash,
+                proposed_commit_hash=source.proposed_commit_hash,
+                relation=relation,
+            )
+        )
+
+    comparison_tuple = tuple(comparisons)
+    if all(comparison.relation == "equal" for comparison in comparison_tuple):
+        return SourceMovementClassification(
+            movement="equal",
+            sides=comparison_tuple,
+            rewrite_candidate=None,
+        )
+    if all(comparison.relation in {"equal", "descendant"} for comparison in comparison_tuple):
+        return SourceMovementClassification(
+            movement="fast-forward",
+            sides=comparison_tuple,
+            rewrite_candidate=None,
+        )
+
+    files: list[BitbucketFileDelta] = []
+    for source, comparison in zip(validated_sources, comparison_tuple, strict=True):
+        if comparison.relation != "diverged":
+            continue
+        delta = await adapter.list_repository_diffstat(
+            session,
+            workspace=source.workspace,
+            repository_slug=source.repository_slug,
+            old_commit_hash=source.active_commit_hash,
+            new_commit_hash=source.proposed_commit_hash,
+            repository_side=source.repository_side,
+        )
+        files.extend(_validated_side_delta(source, delta))
+    candidate = SourceRewriteCandidate(
+        sides=comparison_tuple,
+        files=tuple(files),
+        complete=True,
+    )
+    return SourceMovementClassification(
+        movement="review-required",
+        sides=comparison_tuple,
+        rewrite_candidate=candidate,
+    )
 
 
 def _connected_generation(session: Session) -> int:
