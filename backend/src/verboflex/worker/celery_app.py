@@ -8,6 +8,7 @@ from verboflex.schemas.system import ServiceState
 PREVIEW_RUN_TASK_NAME = "verboflex.preview.run"
 PREVIEW_RECONCILE_TASK_NAME = "verboflex.preview.reconcile_stale_jobs"
 IMPORT_RUN_TASK_NAME = "verboflex.import.run"
+IMPORT_RECONCILE_TASK_NAME = "verboflex.import.reconcile_stale_jobs"
 
 
 def create_celery_app(settings: Settings | None = None) -> Celery:
@@ -51,17 +52,24 @@ def create_celery_app(settings: Settings | None = None) -> Celery:
             IMPORT_RUN_TASK_NAME: {
                 "acks_late": True,
                 "reject_on_worker_lost": True,
-                "soft_time_limit": configured.preview_soft_time_limit_seconds,
-                "time_limit": configured.preview_hard_time_limit_seconds,
+                "soft_time_limit": configured.import_soft_time_limit_seconds,
+                "time_limit": configured.import_hard_time_limit_seconds,
             },
         },
         beat_schedule={
             "preview-stale-job-watchdog": {
                 "task": PREVIEW_RECONCILE_TASK_NAME,
                 "schedule": float(configured.preview_watchdog_interval_seconds),
-            }
+            },
+            "import-stale-execution-watchdog": {
+                "task": IMPORT_RECONCILE_TASK_NAME,
+                "schedule": float(configured.import_watchdog_interval_seconds),
+            },
         },
-        beat_max_loop_interval=configured.preview_watchdog_interval_seconds,
+        beat_max_loop_interval=min(
+            configured.preview_watchdog_interval_seconds,
+            configured.import_watchdog_interval_seconds,
+        ),
     )
     return application
 

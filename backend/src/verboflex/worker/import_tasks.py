@@ -18,6 +18,7 @@ from verboflex.services.import_jobs import (
     ImportSourceReferenceRecord,
     _process_import,
     execute_import_job,
+    reconcile_stale_imports,
 )
 from verboflex.services.import_jobs import (
     process_import as process_import,
@@ -81,8 +82,8 @@ def enqueue_import_job(import_id: UUID) -> None:
 
 @app.task(
     name="verboflex.import.run",
-    soft_time_limit=_import_task_settings.preview_soft_time_limit_seconds,
-    time_limit=_import_task_settings.preview_hard_time_limit_seconds,
+    soft_time_limit=_import_task_settings.import_soft_time_limit_seconds,
+    time_limit=_import_task_settings.import_hard_time_limit_seconds,
     acks_late=True,
     reject_on_worker_lost=True,
     serializer="json",
@@ -98,4 +99,19 @@ def run_import_job(import_id: str) -> None:
         SessionFactory,
         import_id=durable_import_id,
         processor=import_processor,
+    )
+
+
+@app.task(
+    name="verboflex.import.reconcile_stale_jobs",
+    serializer="json",
+    ignore_result=True,
+)  # type: ignore[untyped-decorator]
+def reconcile_stale_import_jobs() -> int:
+    """Terminalize one bounded batch of interrupted imports without redispatch."""
+    settings = get_settings()
+    return reconcile_stale_imports(
+        SessionFactory,
+        hard_time_limit_seconds=settings.import_hard_time_limit_seconds,
+        watchdog_grace_seconds=settings.import_watchdog_grace_seconds,
     )

@@ -6,7 +6,7 @@ import hashlib
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal, Protocol, cast
 from uuid import UUID, uuid4
 
@@ -38,6 +38,7 @@ from verboflex.services.repository_discovery import (
 )
 
 IMPORT_TASK_NAME = "verboflex.import.run"
+IMPORT_WATCHDOG_BATCH_SIZE = 100
 IMPORT_FAILURE_CATEGORY = "provider_unavailable"
 IMPORT_FAILURE_WITHOUT_BASELINE = (
     "This import did not complete. Review the reason, then retry from the mapping. "
@@ -178,7 +179,7 @@ def _published_mapping_statement(
             Product.is_active.is_(True),
             ProductRevision.product_id == product_id,
             ProductRevision.is_published.is_(True),
-            ProductRepositoryMapping.topology == "direct",
+            ProductRepositoryMapping.topology.in_(("direct", "separate")),
         )
     )
     if mapping_id is not None:
@@ -197,7 +198,11 @@ def _mapping_sides(
         )
         for side in mapping.sides
     )
-    if mapping.topology != "direct" or tuple(side.role for side in sides) != ("direct",):
+    expected_roles = {
+        "direct": ("direct",),
+        "separate": ("keys", "translations"),
+    }.get(mapping.topology)
+    if expected_roles is None or tuple(side.role for side in sides) != expected_roles:
         raise ImportConflict("published import mapping rejected")
     return sides
 
@@ -275,7 +280,7 @@ def _record(
             id=None,
             mapping_id=mapping.id,
             active_revision_id=mapping.revision_id,
-            topology="direct",
+            topology=cast(Literal["direct", "separate"], mapping.topology),
             repository_sides=sides,
             state="not_imported",
             active_baseline=None,
@@ -358,8 +363,8 @@ def enqueue_import_job(import_id: UUID) -> None:
         args=[str(import_id)],
         task_id=str(import_id),
         serializer="json",
-        soft_time_limit=settings.preview_soft_time_limit_seconds,
-        time_limit=settings.preview_hard_time_limit_seconds,
+        soft_time_limit=settings.import_soft_time_limit_seconds,
+        time_limit=settings.import_hard_time_limit_seconds,
     )
 
 
@@ -653,27 +658,38 @@ def _validated_references(
 ) -> tuple[ImportSourceReferenceRecord, ...]:
     if not references:
         raise ValueError("import references rejected")
-    expected_sides = {
+    expected_sides = tuple(
         (side.role, side.repository_id, side.source_branch) for side in identity.repository_sides
-    }
+    )
+    expected_side_set = set(expected_sides)
     if tuple(reference.position for reference in references) != tuple(range(len(references))):
         raise ValueError("import references rejected")
+    role_order = {side[0]: position for position, side in enumerate(expected_sides)}
+    reference_roles = tuple(reference.repository_side for reference in references)
+    if set(reference_roles) != set(role_order) or tuple(
+        role_order[role] for role in reference_roles
+    ) != tuple(sorted(role_order[role] for role in reference_roles)):
+        raise ValueError("import references rejected")
+    seen_side_paths: set[tuple[RepositoryRole, str]] = set()
     for reference in references:
+        side_path = (reference.repository_side, reference.path)
         if (
             (
                 reference.repository_side,
                 reference.repository_id,
                 reference.source_branch,
             )
-            not in expected_sides
+            not in expected_side_set
             or len(reference.commit_hash) != 40
             or any(character not in "0123456789abcdef" for character in reference.commit_hash)
             or not reference.path
             or reference.size_bytes < 0
             or len(reference.sha256) != 64
             or any(character not in "0123456789abcdef" for character in reference.sha256)
+            or side_path in seen_side_paths
         ):
             raise ValueError("import references rejected")
+        seen_side_paths.add(side_path)
     return references
 
 
@@ -798,6 +814,70 @@ def finish_import_execution(
         execution.finished_at = now
         job.updated_at = now
     return True
+
+
+def reconcile_stale_imports(
+    factory: sessionmaker[Session],
+    *,
+    hard_time_limit_seconds: int,
+    watchdog_grace_seconds: int,
+    clock: ImportClock = lambda: datetime.now(UTC),
+) -> int:
+    """Fail one locked batch of current executions abandoned by workers."""
+    if hard_time_limit_seconds <= 0 or watchdog_grace_seconds <= 0:
+        raise ValueError("import watchdog limits must be positive")
+    finished_at = clock()
+    if finished_at.tzinfo is None or finished_at.utcoffset() is None:
+        raise ValueError("import watchdog clock must be timezone-aware")
+    finished_at = finished_at.astimezone(UTC)
+    cutoff = finished_at - timedelta(seconds=hard_time_limit_seconds + watchdog_grace_seconds)
+    reconciled = 0
+    with factory.begin() as session:
+        stale_execution_ids = tuple(
+            session.scalars(
+                select(ImportExecution.id)
+                .join(
+                    ImportJob,
+                    (ImportJob.id == ImportExecution.import_job_id)
+                    & (ImportJob.current_execution_id == ImportExecution.id),
+                )
+                .where(
+                    ImportExecution.state == "running",
+                    ImportExecution.started_at <= cutoff,
+                    ImportJob.state == "running",
+                )
+                .order_by(ImportExecution.started_at, ImportExecution.id)
+                .limit(IMPORT_WATCHDOG_BATCH_SIZE)
+                .with_for_update(skip_locked=True)
+            )
+        )
+        for execution_id in stale_execution_ids:
+            execution = session.get(ImportExecution, execution_id)
+            if execution is None or execution.state != "running":
+                continue
+            job = session.execute(
+                select(ImportJob)
+                .where(
+                    ImportJob.id == execution.import_job_id,
+                    ImportJob.current_execution_id == execution.id,
+                    ImportJob.state == "running",
+                )
+                .with_for_update(skip_locked=True)
+            ).scalar_one_or_none()
+            if job is None:
+                continue
+            execution.state = "failed"
+            execution.finished_at = finished_at
+            job.state = "import_failed"
+            job.error_category = IMPORT_FAILURE_CATEGORY
+            job.error_message = (
+                IMPORT_FAILURE_WITH_BASELINE
+                if job.active_baseline_execution_id is not None
+                else IMPORT_FAILURE_WITHOUT_BASELINE
+            )
+            job.updated_at = finished_at
+            reconciled += 1
+    return reconciled
 
 
 def execute_import_job(

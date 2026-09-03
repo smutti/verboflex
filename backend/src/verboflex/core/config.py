@@ -15,6 +15,7 @@ from pydantic import (
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PREVIEW_MAX_TERMINALIZATION_SECONDS = 300
+IMPORT_MAX_TERMINALIZATION_SECONDS = 300
 
 
 class Settings(BaseSettings):
@@ -46,6 +47,10 @@ class Settings(BaseSettings):
     preview_hard_time_limit_seconds: int = Field(default=75, gt=0, le=300)
     preview_watchdog_grace_seconds: int = Field(default=15, gt=0, le=300)
     preview_watchdog_interval_seconds: int = Field(default=5, gt=0, le=300)
+    import_soft_time_limit_seconds: int = Field(default=60, gt=0, le=300)
+    import_hard_time_limit_seconds: int = Field(default=75, gt=0, le=300)
+    import_watchdog_grace_seconds: int = Field(default=15, gt=0, le=300)
+    import_watchdog_interval_seconds: int = Field(default=5, gt=0, le=300)
 
     model_config = SettingsConfigDict(
         env_prefix="VERBOFLEX_",
@@ -114,6 +119,26 @@ class Settings(BaseSettings):
             self.preview_hard_time_limit_seconds
             + self.preview_watchdog_grace_seconds
             + self.preview_watchdog_interval_seconds
+        )
+
+    @model_validator(mode="after")
+    def validate_import_recovery_limits(self) -> Self:
+        """Keep import execution and recovery inside one finite ordered bound."""
+        if self.import_soft_time_limit_seconds >= self.import_hard_time_limit_seconds:
+            raise ValueError("import soft time limit must be below the hard time limit")
+        if self.import_watchdog_interval_seconds >= self.import_watchdog_grace_seconds:
+            raise ValueError("import watchdog interval must be shorter than its grace")
+        if self.import_max_terminalization_seconds > IMPORT_MAX_TERMINALIZATION_SECONDS:
+            raise ValueError("import maximum terminalization bound exceeds 300 seconds")
+        return self
+
+    @property
+    def import_max_terminalization_seconds(self) -> int:
+        """Maximum import age plus one scheduler scan before terminalization."""
+        return (
+            self.import_hard_time_limit_seconds
+            + self.import_watchdog_grace_seconds
+            + self.import_watchdog_interval_seconds
         )
 
     @model_validator(mode="after")
