@@ -525,6 +525,86 @@ describe("rewritten baseline reconciliation", () => {
     replacementTrigger.remove();
   });
 
+  it("ignores confirmation finalization when identity changes during collection refresh", async () => {
+    let resolveRefresh: ((value: boolean) => void) | undefined;
+    const replacementImport = importRecord({
+      id: "import-2",
+      mapping_id: "mapping-2",
+      repository_sides: [
+        {
+          repository_id: "repository-1",
+          role: "direct",
+          source_branch: "replacement/main",
+        },
+      ],
+    });
+    comparisonMock
+      .mockResolvedValueOnce(ok(comparison()))
+      .mockResolvedValueOnce(
+        ok(
+          comparison({
+            import_id: "import-2",
+            mapping_id: "mapping-2",
+            proposal_digest: "e".repeat(64),
+            proposal_id: "proposal-2",
+            proposed_execution_id: "execution-3",
+          }),
+        ),
+      );
+    confirmationMock.mockResolvedValueOnce(ok(importRecord()));
+    const onClose = vi.fn();
+    const onConfirmed = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+    const firstTrigger = document.createElement("button");
+    const replacementTrigger = document.createElement("button");
+    document.body.append(firstTrigger, replacementTrigger);
+    const view = renderDialog({
+      onClose,
+      onConfirmed,
+      triggerElement: firstTrigger,
+    });
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Confirm new baseline" }),
+    );
+    await waitFor(() => expect(onConfirmed).toHaveBeenCalledOnce());
+    view.rerender(
+      <RewrittenBaselineDialog
+        accessToken="replacement-authority"
+        importRecord={replacementImport}
+        onClose={onClose}
+        onConfirmed={onConfirmed}
+        open
+        productId="product-2"
+        repositories={repositories}
+        triggerElement={replacementTrigger}
+      />,
+    );
+    await screen.findByText("replacement/main");
+    const replacementRegion = screen.getByRole("region", {
+      name: "Rewritten baseline comparison content",
+    });
+    replacementRegion.focus();
+
+    await act(async () => resolveRefresh?.(true));
+
+    await waitFor(() => expect(replacementRegion).toHaveFocus());
+    expect(onClose).not.toHaveBeenCalled();
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(firstTrigger).not.toHaveFocus();
+    expect(
+      screen.getByRole("alertdialog", {
+        name: "Review rewritten source history",
+      }),
+    ).toBeVisible();
+    firstTrigger.remove();
+    replacementTrigger.remove();
+  });
+
   it("does not report a committed confirmation as failed or allow proposal resubmission when refresh fails", async () => {
     comparisonMock.mockResolvedValueOnce(ok(comparison()));
     confirmationMock.mockResolvedValueOnce(ok(importRecord()));
@@ -543,6 +623,7 @@ describe("rewritten baseline reconciliation", () => {
     expect(
       screen.queryByText(/The baseline could not be updated safely/),
     ).not.toBeInTheDocument();
+    expect(toastSuccessMock).toHaveBeenCalledWith("Baseline updated");
     expect(confirm).toBeDisabled();
     await userEvent.click(confirm);
     expect(confirmationMock).toHaveBeenCalledOnce();

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Copy } from "lucide-react";
 import { toast } from "sonner";
 
@@ -60,6 +67,10 @@ type ComparisonLoadState =
   | { comparison: AdminImportRewriteComparisonResponse; status: "ready" };
 
 type ConfirmationError = "generic" | "stale" | null;
+type ConfirmationProgress = {
+  identity: string;
+  status: "committed" | "pending";
+} | null;
 
 export interface RewrittenBaselineDialogProps {
   accessToken: string;
@@ -231,12 +242,16 @@ export function RewrittenBaselineDialog({
 }: RewrittenBaselineDialogProps) {
   const requestGenerationRef = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
-  const confirmationPendingRef = useRef(false);
+  const confirmationRequestRef = useRef<{
+    identity: string;
+    token: symbol;
+  } | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
   const [loadState, setLoadState] = useState<ComparisonLoadState>({
     status: "loading",
   });
-  const [confirmationPending, setConfirmationPending] = useState(false);
+  const [confirmationProgress, setConfirmationProgress] =
+    useState<ConfirmationProgress>(null);
   const [confirmationError, setConfirmationError] =
     useState<ConfirmationError>(null);
 
@@ -251,6 +266,16 @@ export function RewrittenBaselineDialog({
       }),
     [importRecord, productId],
   );
+  const importIdentityRef = useRef(importIdentity);
+  useLayoutEffect(() => {
+    importIdentityRef.current = importIdentity;
+  }, [importIdentity]);
+  const confirmationPending =
+    confirmationProgress?.identity === importIdentity &&
+    confirmationProgress.status === "pending";
+  const confirmationCommitted =
+    confirmationProgress?.identity === importIdentity &&
+    confirmationProgress.status === "committed";
 
   const restoreTriggerFocus = useCallback(() => {
     queueMicrotask(() => triggerElement?.focus());
@@ -265,12 +290,15 @@ export function RewrittenBaselineDialog({
 
   const requestClose = useCallback(
     (nextOpen: boolean) => {
-      if (nextOpen || confirmationPendingRef.current) {
+      if (
+        nextOpen ||
+        confirmationRequestRef.current?.identity === importIdentity
+      ) {
         return;
       }
       finishClose();
     },
-    [finishClose],
+    [finishClose, importIdentity],
   );
 
   useEffect(() => {
@@ -340,13 +368,27 @@ export function RewrittenBaselineDialog({
   async function confirmBaseline(
     comparison: AdminImportRewriteComparisonResponse,
   ) {
-    if (confirmationPendingRef.current || importRecord.id === null) {
+    if (
+      confirmationRequestRef.current?.identity === importIdentity ||
+      importRecord.id === null
+    ) {
       return;
     }
     const expectedIdentity = importIdentity;
-    confirmationPendingRef.current = true;
-    setConfirmationPending(true);
+    const requestToken = Symbol(importRecord.id);
+    confirmationRequestRef.current = {
+      identity: expectedIdentity,
+      token: requestToken,
+    };
+    setConfirmationProgress({
+      identity: expectedIdentity,
+      status: "pending",
+    });
     setConfirmationError(null);
+    let committed = false;
+    const isCurrentRequest = () =>
+      importIdentityRef.current === expectedIdentity &&
+      confirmationRequestRef.current?.token === requestToken;
     try {
       const result = await confirmAdminImportRewriteBaseline({
         auth: accessToken,
@@ -361,7 +403,7 @@ export function RewrittenBaselineDialog({
           product_id: productId,
         },
       });
-      if (expectedIdentity !== importIdentity) {
+      if (!isCurrentRequest()) {
         return;
       }
       if (result.data === undefined) {
@@ -377,25 +419,30 @@ export function RewrittenBaselineDialog({
         setConfirmationError("stale");
         return;
       }
-      const refreshed = await onConfirmed(result.data);
-      if (expectedIdentity !== importIdentity) {
-        return;
+      committed = true;
+      setConfirmationProgress({
+        identity: expectedIdentity,
+        status: "committed",
+      });
+      try {
+        await onConfirmed(result.data);
+      } catch {
+        // The provider baseline is already committed; collection refresh is separate.
       }
-      if (!refreshed) {
-        setConfirmationError("generic");
-        return;
-      }
+      if (!isCurrentRequest()) return;
       toast.success("Baseline updated");
-      confirmationPendingRef.current = false;
-      setConfirmationPending(false);
       finishClose();
     } catch {
-      if (expectedIdentity === importIdentity) {
+      if (isCurrentRequest()) {
         setConfirmationError("generic");
       }
     } finally {
-      confirmationPendingRef.current = false;
-      setConfirmationPending(false);
+      if (confirmationRequestRef.current?.token === requestToken) {
+        confirmationRequestRef.current = null;
+      }
+      if (importIdentityRef.current === expectedIdentity && !committed) {
+        setConfirmationProgress(null);
+      }
     }
   }
 
@@ -404,7 +451,9 @@ export function RewrittenBaselineDialog({
       <AlertDialogContent
         className="max-h-[80vh] min-w-0 max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-3xl"
         onEscapeKeyDown={(event) => {
-          if (confirmationPendingRef.current) event.preventDefault();
+          if (confirmationRequestRef.current?.identity === importIdentity) {
+            event.preventDefault();
+          }
         }}
       >
         <AlertDialogHeader>
@@ -540,7 +589,7 @@ export function RewrittenBaselineDialog({
             <Button
               type="button"
               className="min-h-[44px]"
-              disabled={confirmationPending}
+              disabled={confirmationPending || confirmationCommitted}
               aria-busy={confirmationPending}
               onClick={() => void confirmBaseline(loadState.comparison)}
             >
