@@ -1714,6 +1714,10 @@ def finish_import_execution(
                         sha256=reference.sha256,
                     )
                 )
+            # Persist provenance while the execution is still running.  The
+            # database guard locks that row so finalization cannot race a late
+            # source-reference insert.
+            session.flush()
             execution.state = "succeeded"
             execution.finished_at = now
             job.state = "current"
