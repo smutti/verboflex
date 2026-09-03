@@ -316,7 +316,7 @@ function ImportAction({
       <Button
         type="button"
         variant="outline"
-        className="min-h-11 w-full whitespace-normal"
+        className="min-h-[44px] w-full whitespace-normal"
         disabled={pending || inProgress}
         aria-busy={pending || inProgress}
         onClick={(event) => onAction(event.currentTarget)}
@@ -331,7 +331,7 @@ function ImportAction({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 w-full whitespace-normal"
+            className="min-h-[44px] w-full whitespace-normal"
             onClick={onRefreshStatus}
           >
             Refresh status

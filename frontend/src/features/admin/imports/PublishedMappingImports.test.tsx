@@ -523,7 +523,7 @@ describe("published mapping import collection", () => {
     expect(within(mobileList).getByRole("article")).toBeVisible();
     expect(
       within(mobileList).getByRole("button", { name: "Run import" }),
-    ).toHaveClass("min-h-11", "w-full");
+    ).toHaveClass("min-h-[44px]", "w-full");
   });
 
   it("UI3-C22 confines opaque repository and branch values to keyboard-accessible local overflow", async () => {

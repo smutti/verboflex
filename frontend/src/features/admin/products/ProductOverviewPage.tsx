@@ -258,6 +258,27 @@ export function ProductOverviewPage({
           </div>
         </div>
 
+        {product.affected_mapping_count > 0 ? (
+          <section
+            aria-label="Product freshness"
+            className="flex min-w-0 flex-wrap items-center gap-2"
+          >
+            <Badge
+              variant="outline"
+              className="border-warning text-warning rounded-md"
+            >
+              {product.affected_mapping_count}{" "}
+              {product.affected_mapping_count === 1
+                ? "mapping may be stale"
+                : "mappings may be stale"}
+            </Badge>
+            <p className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+              A recent import failed, so the last successful baseline remains
+              active.
+            </p>
+          </section>
+        ) : null}
+
         {product.is_active && product.candidate_revision !== null ? (
           <Alert>
             <AlertTitle>Draft in progress</AlertTitle>

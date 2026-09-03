@@ -1708,23 +1708,33 @@ for (const viewport of [
       page.getByRole("heading", { name: "Published mapping imports" }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Run import", exact: true }).click();
-    await expect(page.getByText("Current", { exact: true })).toBeVisible();
-    await expect(page.getByText(initialCommit.slice(0, 12))).toBeVisible();
+    await expect(
+      page.getByText("Current", { exact: true }).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(initialCommit.slice(0, 12)).filter({ visible: true }),
+    ).toBeVisible();
     expect(state.publishedImports[0]?.id).toBe(logicalImportId);
 
     state.nextImportOutcome = "fast_forward";
     await page
       .getByRole("button", { name: "Refresh import", exact: true })
       .click();
-    await expect(page.getByText(fastForwardCommit.slice(0, 12))).toBeVisible();
+    await expect(
+      page.getByText(fastForwardCommit.slice(0, 12)).filter({ visible: true }),
+    ).toBeVisible();
     expect(state.publishedImports[0]?.id).toBe(logicalImportId);
 
     state.nextImportOutcome = "failed_refresh";
     await page
       .getByRole("button", { name: "Refresh import", exact: true })
       .click();
-    await expect(page.getByText("May be stale", { exact: true })).toBeVisible();
-    await expect(page.getByText(fastForwardCommit.slice(0, 12))).toBeVisible();
+    await expect(
+      page.getByText("May be stale", { exact: true }).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(fastForwardCommit.slice(0, 12)).filter({ visible: true }),
+    ).toBeVisible();
     const retainedBaselineError = page.getByRole("alert").filter({
       hasText: "Bitbucket unavailable",
       visible: true,
@@ -1739,8 +1749,12 @@ for (const viewport of [
     await page
       .getByRole("button", { name: "Retry import", exact: true })
       .click();
-    await expect(page.getByText(retriedCommit.slice(0, 12))).toBeVisible();
-    await expect(page.getByText("Retry 1", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText(retriedCommit.slice(0, 12)).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Retry 1", { exact: true }).filter({ visible: true }),
+    ).toBeVisible();
     expect(state.publishedImports[0]?.id).toBe(retryImportId);
 
     state.publishedImports = [
@@ -1762,7 +1776,9 @@ for (const viewport of [
     await expect(dialog).toContainText("Removed 16");
     await dialog.getByRole("button", { name: "Confirm new baseline" }).click();
     await expect(dialog).toHaveCount(0);
-    await expect(page.getByText(rewrittenCommit.slice(0, 12))).toBeVisible();
+    await expect(
+      page.getByText(rewrittenCommit.slice(0, 12)).filter({ visible: true }),
+    ).toBeVisible();
     expect(state.rewriteConfirmations).toEqual([
       {
         proposal_digest: "d".repeat(64),
@@ -1815,7 +1831,7 @@ test("UI3-C23 keeps mapping pages and the 80vh reconciliation dialog contained a
     { height: 800, width: 768, zoom: 1 },
     { height: 800, width: 1024, zoom: 1 },
     { height: 900, width: 1440, zoom: 1 },
-    { height: 720, width: 640, zoom: 2 },
+    { height: 720, width: 320, zoom: 2 },
   ]) {
     await page.setViewportSize({
       height: viewport.height,
@@ -1823,7 +1839,7 @@ test("UI3-C23 keeps mapping pages and the 80vh reconciliation dialog contained a
     });
     await page.goto("/admin/products/product-1/mappings");
     await page.evaluate((zoom) => {
-      document.documentElement.style.zoom = String(zoom);
+      document.documentElement.style.fontSize = zoom === 2 ? "200%" : "";
     }, viewport.zoom);
     await expectNoPageOverflow(page);
     const review = page.getByRole("button", {

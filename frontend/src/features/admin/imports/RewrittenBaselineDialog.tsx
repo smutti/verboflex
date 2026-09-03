@@ -146,7 +146,7 @@ function FullCommit({ commit }: { commit: string }) {
               type="button"
               variant="outline"
               size="icon"
-              className="min-h-11 min-w-11 shrink-0"
+              className="min-h-[44px] min-w-[44px] shrink-0"
               aria-label="Copy full commit"
               onClick={() => void copyCommit()}
             >
@@ -417,6 +417,7 @@ export function RewrittenBaselineDialog({
         </AlertDialogHeader>
 
         <div
+          role="region"
           aria-label="Rewritten baseline comparison content"
           // The comparison may contain many metadata rows; scrolling remains local and keyboard accessible.
           // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
@@ -529,12 +530,16 @@ export function RewrittenBaselineDialog({
         </div>
 
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={confirmationPending}>
+          <AlertDialogCancel
+            className="min-h-[44px]"
+            disabled={confirmationPending}
+          >
             Keep current baseline
           </AlertDialogCancel>
           {loadState.status === "ready" ? (
             <Button
               type="button"
+              className="min-h-[44px]"
               disabled={confirmationPending}
               aria-busy={confirmationPending}
               onClick={() => void confirmBaseline(loadState.comparison)}
