@@ -2,13 +2,31 @@
 
 ## Outcome
 
-- Gauntlet-status: PENDING
-- Source-digest: `pending`
+- Gauntlet-status: PASS
+- Source-digest: `ddb3e79ad5e00891f8d3bcaa6bd4d8b39ad738bb0e97f0ad16b0d05f25cb9310`
 
-The canonical Phase 3 gauntlet has been assembled and remains pending until its
-immutable source set is committed and all fail-closed layers complete. Only bounded
-counts, durations, digests, commit identities, and pass/fail outcomes will be added
-to this record.
+The canonical Phase 3 gauntlet completed on 2026-09-03. Its 14 ordered,
+fail-closed layers passed against one unchanged manifest digest. This record contains
+only bounded counts, durations, digests, commit identities, and pass/fail outcomes.
+
+## Canonical pre-closeout gauntlet
+
+| Measurement | Result |
+| --- | --- |
+| Ordered layers | 14/14 passed in 367 seconds |
+| Backend suite | 950/950 passed; 95% combined branch-aware coverage |
+| Frontend suite | 356/356 passed across 24 files; 83.5% statement coverage |
+| Backend targeted mutation | 6/6 capability, state, provenance, ancestry, rewrite, and error mutants killed |
+| Frontend targeted mutation | 25/25 polling, action, cursor, and reconciliation-dialog mutants killed |
+| Responsive and accessibility browser checks | 2/2 passed |
+| Migration and OpenAPI contracts | 14/14 migration checks passed; generated client unchanged |
+| Architecture and provider audit | 116/116 passed |
+| Supply-chain, license, secret, and schema gates | Passed |
+| API capability matrix | 56 total; 17 integrated and 39 explicitly opted out |
+| Mock deployment provider audit | 1 OAuth POST, 59 resource GETs, 0 resource mutations |
+| Backend JUnit SHA-256 | `58aa8354cb7d085e0070698fbe319105384ea37afe14e4b4ce1f95f7b3e68962` |
+| Frontend coverage SHA-256 | `cd5f677b9438f0ecc1dc1f659e73eff0f667cdb5222ac4334e06921f3fc6da58` |
+| Cleanup | Passed; no disposable Phase 3 container, network, volume, image, or worker remained |
 
 ## Prior deployment evidence
 
