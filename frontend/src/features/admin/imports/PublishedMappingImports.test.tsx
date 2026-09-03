@@ -1,6 +1,13 @@
 import "@testing-library/jest-dom/vitest";
 
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -154,9 +161,7 @@ describe("published mapping import collection", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Loading published mappings",
     );
-    expect(screen.getByTestId("published-import-skeleton")).toHaveClass(
-      "h-24",
-    );
+    expect(screen.getByTestId("published-import-skeleton")).toHaveClass("h-24");
   });
 
   it("UI3-C14 accumulates every cursor page in server order and keeps only the first duplicate", async () => {
@@ -218,8 +223,7 @@ describe("published mapping import collection", () => {
 
   it("discards an obsolete page chain when product authority changes", async () => {
     let resolveOldSecond:
-      | ((value: ReturnType<typeof ok<unknown>>) => void)
-      | undefined;
+      ((value: ReturnType<typeof ok<unknown>>) => void) | undefined;
     listImportsMock.mockImplementation((options) => {
       if (options.path.product_id === "old-product") {
         if (options.query?.cursor === null) {
@@ -285,7 +289,9 @@ describe("published mapping import collection", () => {
     );
     expect((await screen.findAllByText("branch/mapping-3"))[0]).toBeVisible();
     expect(listImportsMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ query: { cursor: null, limit: 50, status: "all" } }),
+      expect.objectContaining({
+        query: { cursor: null, limit: 50, status: "all" },
+      }),
     );
   });
 
@@ -367,9 +373,15 @@ describe("published mapping import collection", () => {
     ]) {
       expect(within(table).getByText(label)).toBeVisible();
     }
-    expect(within(table).getByRole("button", { name: "Run import" })).toBeEnabled();
-    expect(within(table).getByRole("button", { name: "Refresh import" })).toBeEnabled();
-    expect(within(table).getAllByRole("button", { name: "Retry import" })).toHaveLength(2);
+    expect(
+      within(table).getByRole("button", { name: "Run import" }),
+    ).toBeEnabled();
+    expect(
+      within(table).getByRole("button", { name: "Refresh import" }),
+    ).toBeEnabled();
+    expect(
+      within(table).getAllByRole("button", { name: "Retry import" }),
+    ).toHaveLength(2);
     expect(
       within(table).getAllByRole("button", { name: "Import in progress" }),
     ).toHaveLength(2);
@@ -384,7 +396,9 @@ describe("published mapping import collection", () => {
     );
     renderImports();
 
-    expect(await screen.findAllByText("No successful import yet")).not.toHaveLength(0);
+    expect(
+      await screen.findAllByText("No successful import yet"),
+    ).not.toHaveLength(0);
   });
 
   it("UI3-C11 renders a fixed row-local action-free error without server prose", async () => {
@@ -507,10 +521,9 @@ describe("published mapping import collection", () => {
     );
     expect(mobileList).toHaveClass("min-w-0", "max-w-full", "overflow-x-clip");
     expect(within(mobileList).getByRole("article")).toBeVisible();
-    expect(within(mobileList).getByRole("button", { name: "Run import" })).toHaveClass(
-      "min-h-11",
-      "w-full",
-    );
+    expect(
+      within(mobileList).getByRole("button", { name: "Run import" }),
+    ).toHaveClass("min-h-11", "w-full");
   });
 
   it("UI3-C22 confines opaque repository and branch values to keyboard-accessible local overflow", async () => {
@@ -543,20 +556,23 @@ describe("published mapping import collection", () => {
 
   it("UI3-C25 preserves complete long names, fixed prose, and visible action labels", async () => {
     const longName = `Application ${"localization-".repeat(20)}source`;
-    const longRepositories = [{ ...repositories[0], descriptive_name: longName }];
+    const longRepositories = [
+      { ...repositories[0], descriptive_name: longName },
+    ];
     listImportsMock.mockResolvedValueOnce(
       ok({ items: [publishedImport("mapping-1")], next_cursor: null }),
     );
     renderImports({ repositories: longRepositories });
 
     expect((await screen.findAllByText(longName))[0]).toBeVisible();
-    expect(screen.getAllByRole("button", { name: "Run import" })[0]).toHaveTextContent(
-      "Run import",
-    );
+    expect(
+      screen.getAllByRole("button", { name: "Run import" })[0],
+    ).toHaveTextContent("Run import");
   });
 
   it("submits one generated mutation, keeps server state visible, and then reloads every page", async () => {
-    let resolveStart: ((value: ReturnType<typeof ok<unknown>>) => void) | undefined;
+    let resolveStart:
+      ((value: ReturnType<typeof ok<unknown>>) => void) | undefined;
     const initial = publishedImport("mapping-1");
     const queued = publishedImport("mapping-1", {
       action: "import_in_progress",
@@ -577,7 +593,9 @@ describe("published mapping import collection", () => {
     const desktopTable = await screen.findByRole("table", {
       name: "Published mapping imports",
     });
-    const run = within(desktopTable).getByRole("button", { name: "Run import" });
+    const run = within(desktopTable).getByRole("button", {
+      name: "Run import",
+    });
 
     act(() => {
       run.click();
@@ -620,8 +638,12 @@ describe("published mapping import collection", () => {
     );
     renderImports();
 
-    expect(await screen.findAllByText("Automatic status updates paused")).not.toHaveLength(0);
-    await userEvent.click(screen.getAllByRole("button", { name: "Refresh status" })[0]);
+    expect(
+      await screen.findAllByText("Automatic status updates paused"),
+    ).not.toHaveLength(0);
+    await userEvent.click(
+      screen.getAllByRole("button", { name: "Refresh status" })[0],
+    );
     expect(refreshStatus).toHaveBeenCalledOnce();
   });
 });

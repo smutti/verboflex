@@ -31,10 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import {
-  importPollingIdentity,
-  useImportPolling,
-} from "./useImportPolling";
+import { importPollingIdentity, useImportPolling } from "./useImportPolling";
 
 const IMPORT_PAGE_LIMIT = 50;
 const MAX_IMPORT_PAGES = 50;
@@ -52,9 +49,7 @@ interface PollingSnapshot {
 export interface PublishedMappingImportsProps {
   accessToken: string;
   headingLevel?: "h2" | "h3";
-  onReviewBaselineChange?: (
-    item: AdminPublishedMappingImportResponse,
-  ) => void;
+  onReviewBaselineChange?: (item: AdminPublishedMappingImportResponse) => void;
   productId: string;
   repositories?: readonly AdminRepositoryResponse[];
   statusFilter?: ImportStatusFilter;
@@ -152,9 +147,7 @@ function shortCommit(commit: string) {
   return commit.slice(0, 12);
 }
 
-function isStartAction(
-  action: AdminPublishedMappingImportResponse["action"],
-) {
+function isStartAction(action: AdminPublishedMappingImportResponse["action"]) {
   return (
     action === "run_import" ||
     action === "refresh_import" ||
@@ -170,8 +163,10 @@ function repositoryLabel(
   if (repository === undefined) {
     return repositoryId;
   }
-  return repository.descriptive_name ??
-    `${repository.workspace}/${repository.repository_slug}`;
+  return (
+    repository.descriptive_name ??
+    `${repository.workspace}/${repository.repository_slug}`
+  );
 }
 
 function baselineReferences(item: AdminPublishedMappingImportResponse) {
@@ -416,9 +411,9 @@ export function PublishedMappingImports({
   const [pendingMappings, setPendingMappings] = useState<ReadonlySet<string>>(
     new Set(),
   );
-  const [mutationFailures, setMutationFailures] = useState<
-    ReadonlySet<string>
-  >(new Set());
+  const [mutationFailures, setMutationFailures] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
   const [statusRefreshFailures, setStatusRefreshFailures] = useState<
     ReadonlySet<string>
   >(new Set());
@@ -444,14 +439,18 @@ export function PublishedMappingImports({
         let expectedRevision: string | null = null;
         let cursor: string | null = null;
 
-        for (let pageNumber = 0; pageNumber < MAX_IMPORT_PAGES; pageNumber += 1) {
+        for (
+          let pageNumber = 0;
+          pageNumber < MAX_IMPORT_PAGES;
+          pageNumber += 1
+        ) {
           const result: { data?: AdminPublishedMappingImportListResponse } =
             await listAdminPublishedMappingImports({
-            auth: accessToken,
-            path: { product_id: productId },
-            query: { cursor, limit: IMPORT_PAGE_LIMIT, status: statusFilter },
-            signal: controller.signal,
-          });
+              auth: accessToken,
+              path: { product_id: productId },
+              query: { cursor, limit: IMPORT_PAGE_LIMIT, status: statusFilter },
+              signal: controller.signal,
+            });
           if (
             controller.signal.aborted ||
             generationRef.current !== generation
@@ -591,7 +590,10 @@ export function PublishedMappingImports({
 
   const startImport = useCallback(
     async (item: AdminPublishedMappingImportResponse) => {
-      if (!isStartAction(item.action) || pendingRef.current.has(item.mapping_id)) {
+      if (
+        !isStartAction(item.action) ||
+        pendingRef.current.has(item.mapping_id)
+      ) {
         return;
       }
       pendingRef.current.add(item.mapping_id);
@@ -630,7 +632,9 @@ export function PublishedMappingImports({
           next.add(item.mapping_id);
           return next;
         });
-        queueMicrotask(() => mutationErrorRefs.current.get(item.mapping_id)?.focus());
+        queueMicrotask(() =>
+          mutationErrorRefs.current.get(item.mapping_id)?.focus(),
+        );
       } finally {
         pendingRef.current.delete(item.mapping_id);
         setPendingMappings(new Set(pendingRef.current));
@@ -733,13 +737,18 @@ export function PublishedMappingImports({
                         data-testid={`published-import-row-${item.mapping_id}`}
                       >
                         <TableCell className="max-w-sm whitespace-normal align-top">
-                          <RepositorySides item={item} repositories={repositories} />
+                          <RepositorySides
+                            item={item}
+                            repositories={repositories}
+                          />
                           <RowError
                             focusRef={(element) =>
                               setMutationErrorRef(item.mapping_id, element)
                             }
                             item={item}
-                            mutationFailed={mutationFailures.has(item.mapping_id)}
+                            mutationFailed={mutationFailures.has(
+                              item.mapping_id,
+                            )}
                             pollingFailed={
                               pollingError ||
                               statusRefreshFailures.has(item.mapping_id)
@@ -747,7 +756,9 @@ export function PublishedMappingImports({
                           />
                         </TableCell>
                         <TableCell className="align-top">
-                          <Badge variant="outline">{STATUS_LABELS[item.state]}</Badge>
+                          <Badge variant="outline">
+                            {STATUS_LABELS[item.state]}
+                          </Badge>
                         </TableCell>
                         <TableCell className="max-w-xs whitespace-normal align-top">
                           <Baseline item={item} />
@@ -767,7 +778,9 @@ export function PublishedMappingImports({
                               }
                             }}
                             onRefreshStatus={() =>
-                              void refreshHandlersRef.current.get(item.mapping_id)?.()
+                              void refreshHandlersRef.current.get(
+                                item.mapping_id,
+                              )?.()
                             }
                             pending={pending}
                           />
@@ -811,15 +824,16 @@ export function PublishedMappingImports({
                     <Baseline item={item} />
                   </div>
                   <div className="grid gap-1">
-                    <span className="text-sm font-semibold">Latest execution</span>
+                    <span className="text-sm font-semibold">
+                      Latest execution
+                    </span>
                     <LatestExecution item={item} />
                   </div>
                   <RowError
                     item={item}
                     mutationFailed={mutationFailures.has(item.mapping_id)}
                     pollingFailed={
-                      pollingError ||
-                      statusRefreshFailures.has(item.mapping_id)
+                      pollingError || statusRefreshFailures.has(item.mapping_id)
                     }
                   />
                   <ImportAction
