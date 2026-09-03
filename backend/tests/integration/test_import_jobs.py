@@ -530,13 +530,14 @@ async def _request(
     path: str,
     *,
     access_token: str | None,
+    json_body: dict[str, object] | None = None,
 ) -> httpx.Response:
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://testserver",
     ) as client:
         headers = {"Authorization": f"Bearer {access_token}"} if access_token is not None else None
-        return await client.request(method, path, headers=headers)
+        return await client.request(method, path, headers=headers, json=json_body)
 
 
 def _assert_secret_free(value: object) -> None:
@@ -2541,3 +2542,315 @@ def test_rewrite_proposal_persists_complete_ordered_separate_delta_atomically(
             (0, "keys", "modified", "locales/keys.json"),
             (1, "translations", "removed", "locales/translations.json"),
         ]
+
+
+def _complete_direct_rewrite_proposal(
+    factory: sessionmaker[Session],
+) -> tuple[UUID, UUID, UUID, UUID, UUID, UUID, UUID, str, str, str]:
+    product_id, _revision_id, repository_id, mapping_id = _seed_published_direct_mapping(
+        factory
+    )
+    old_commit = "9" * 40
+    new_commit = "a" * 40
+    import_id, old_execution_id = _complete_initial_direct_baseline(
+        factory,
+        product_id=product_id,
+        mapping_id=mapping_id,
+        repository_id=repository_id,
+        commit_hash=old_commit,
+    )
+    import_job_service.start_or_refresh_import(
+        factory(),
+        product_id=product_id,
+        mapping_id=mapping_id,
+        enqueuer=lambda _import_id: None,
+    )
+    identity = import_job_service.start_import_execution(factory, import_id=import_id)
+    assert identity is not None
+    sides = (
+        import_job_service.SourceMovementSideComparison(
+            repository_side="direct",
+            repository_id=repository_id,
+            active_commit_hash=old_commit,
+            proposed_commit_hash=new_commit,
+            relation="diverged",
+        ),
+    )
+    assert import_job_service.finish_import_execution(
+        factory,
+        identity=identity,
+        references=(
+            _successful_reference_at(repository_id, commit_hash=new_commit),
+        ),
+        movement=_rewrite_classification(
+            sides=sides,
+            files=(
+                BitbucketFileDelta(
+                    repository_side="direct",
+                    ordinal=0,
+                    change="modified",
+                    path="mobile/src/main/res/values/strings.xml",
+                ),
+            ),
+        ),
+    )
+    with factory() as session:
+        proposal = session.scalar(
+            select(ImportRewriteProposal).where(
+                ImportRewriteProposal.import_job_id == import_id,
+                ImportRewriteProposal.status == "pending",
+            )
+        )
+        assert proposal is not None
+        return (
+            product_id,
+            repository_id,
+            mapping_id,
+            import_id,
+            old_execution_id,
+            identity.execution_id,
+            proposal.id,
+            proposal.digest,
+            old_commit,
+            new_commit,
+        )
+
+
+def test_rewrite_comparison_and_confirmation_move_direct_baseline_atomically(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    (
+        product_id,
+        repository_id,
+        mapping_id,
+        import_id,
+        old_execution_id,
+        proposed_execution_id,
+        proposal_id,
+        digest,
+        old_commit,
+        new_commit,
+    ) = _complete_direct_rewrite_proposal(import_session_factory)
+    base_path = (
+        f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+        f"/imports/{import_id}/rewrite-comparison"
+    )
+
+    comparison = asyncio.run(_request("GET", base_path, access_token=admin_token))
+
+    assert comparison.status_code == 200
+    assert comparison.json() == {
+        "proposal_id": str(proposal_id),
+        "import_id": str(import_id),
+        "mapping_id": str(mapping_id),
+        "proposed_execution_id": str(proposed_execution_id),
+        "proposal_digest": digest,
+        "topology": "direct",
+        "confirmable": True,
+        "sides": [
+            {
+                "repository_side": "direct",
+                "repository_id": str(repository_id),
+                "old_commit_hash": old_commit,
+                "new_commit_hash": new_commit,
+                "added_count": 0,
+                "modified_count": 1,
+                "removed_count": 0,
+            }
+        ],
+        "files": [
+            {
+                "position": 0,
+                "repository_side": "direct",
+                "change": "modified",
+                "path": "mobile/src/main/res/values/strings.xml",
+            }
+        ],
+    }
+    _assert_secret_free(comparison.json())
+
+    confirmed = asyncio.run(
+        _request(
+            "POST",
+            base_path,
+            access_token=admin_token,
+            json_body={
+                "proposal_id": str(proposal_id),
+                "proposed_execution_id": str(proposed_execution_id),
+                "proposal_digest": digest,
+            },
+        )
+    )
+
+    assert confirmed.status_code == 200
+    assert confirmed.json()["active_baseline"]["source_references"][0][
+        "commit_hash"
+    ] == new_commit
+    _assert_secret_free(confirmed.json())
+    with import_session_factory() as session:
+        job = session.get_one(ImportJob, import_id)
+        proposal = session.get_one(ImportRewriteProposal, proposal_id)
+        assert job.active_baseline_execution_id == proposed_execution_id
+        assert proposal.status == "confirmed"
+        assert proposal.resolved_at is not None
+        assert proposal.confirmed_by is not None
+        assert session.get_one(ImportExecution, old_execution_id).state == "succeeded"
+        assert session.get_one(ImportExecution, proposed_execution_id).state == "succeeded"
+        with pytest.raises(import_job_service.ImportConflict):
+            import_job_service.require_current_import_baseline(
+                session,
+                product_id=product_id,
+                mapping_id=mapping_id,
+                execution_id=old_execution_id,
+            )
+        current = import_job_service.require_current_import_baseline(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            execution_id=proposed_execution_id,
+        )
+        assert current.source_references[0].commit_hash == new_commit
+
+
+@pytest.mark.parametrize(
+    "identity_field",
+    ["proposal_id", "proposed_execution_id", "proposal_digest"],
+)
+def test_rewrite_confirmation_rejects_stale_identity_without_pointer_change(
+    import_session_factory: sessionmaker[Session],
+    identity_field: str,
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    (
+        product_id,
+        _repository_id,
+        mapping_id,
+        import_id,
+        old_execution_id,
+        proposed_execution_id,
+        proposal_id,
+        digest,
+        _old_commit,
+        _new_commit,
+    ) = _complete_direct_rewrite_proposal(import_session_factory)
+    body: dict[str, object] = {
+        "proposal_id": str(proposal_id),
+        "proposed_execution_id": str(proposed_execution_id),
+        "proposal_digest": digest,
+    }
+    body[identity_field] = "0" * 64 if identity_field == "proposal_digest" else str(uuid4())
+    path = (
+        f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+        f"/imports/{import_id}/rewrite-comparison"
+    )
+
+    response = asyncio.run(
+        _request("POST", path, access_token=admin_token, json_body=body)
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Import rewrite proposal stale"}
+    with import_session_factory() as session:
+        job = session.get_one(ImportJob, import_id)
+        proposal = session.get_one(ImportRewriteProposal, proposal_id)
+        assert job.active_baseline_execution_id == old_execution_id
+        assert proposal.status == "pending"
+        assert proposal.resolved_at is None
+        assert proposal.confirmed_by is None
+
+
+def test_rewrite_confirmation_rechecks_generation_and_rejects_duplicate_confirmation(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    (
+        product_id,
+        _repository_id,
+        mapping_id,
+        import_id,
+        old_execution_id,
+        proposed_execution_id,
+        proposal_id,
+        digest,
+        _old_commit,
+        _new_commit,
+    ) = _complete_direct_rewrite_proposal(import_session_factory)
+    path = (
+        f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+        f"/imports/{import_id}/rewrite-comparison"
+    )
+    body: dict[str, object] = {
+        "proposal_id": str(proposal_id),
+        "proposed_execution_id": str(proposed_execution_id),
+        "proposal_digest": digest,
+    }
+    with import_session_factory.begin() as session:
+        connection = session.get_one(BitbucketConnection, 1)
+        connection.generation += 1
+
+    stale_generation = asyncio.run(
+        _request("POST", path, access_token=admin_token, json_body=body)
+    )
+
+    assert stale_generation.status_code == 409
+    with import_session_factory() as session:
+        assert session.get_one(ImportJob, import_id).active_baseline_execution_id == (
+            old_execution_id
+        )
+    with import_session_factory.begin() as session:
+        connection = session.get_one(BitbucketConnection, 1)
+        connection.generation -= 1
+
+    first = asyncio.run(_request("POST", path, access_token=admin_token, json_body=body))
+    duplicate = asyncio.run(
+        _request("POST", path, access_token=admin_token, json_body=body)
+    )
+
+    assert first.status_code == 200
+    assert duplicate.status_code == 409
+    assert duplicate.json() == {"detail": "Import rewrite proposal stale"}
+    with import_session_factory() as session:
+        assert session.get_one(ImportJob, import_id).active_baseline_execution_id == (
+            proposed_execution_id
+        )
+
+
+def test_rewrite_comparison_is_admin_only_and_mapping_owned(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    viewer_token = _create_principal(import_session_factory, role_name="viewer")
+    (
+        product_id,
+        _repository_id,
+        mapping_id,
+        import_id,
+        _old_execution_id,
+        _proposed_execution_id,
+        _proposal_id,
+        _digest,
+        _old_commit,
+        _new_commit,
+    ) = _complete_direct_rewrite_proposal(import_session_factory)
+    path = (
+        f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+        f"/imports/{import_id}/rewrite-comparison"
+    )
+
+    unauthenticated = asyncio.run(_request("GET", path, access_token=None))
+    forbidden = asyncio.run(_request("GET", path, access_token=viewer_token))
+    wrong_mapping = asyncio.run(
+        _request(
+            "GET",
+            path.replace(str(mapping_id), str(uuid4())),
+            access_token=_create_admin(import_session_factory),
+        )
+    )
+
+    assert unauthenticated.status_code == 401
+    assert forbidden.status_code == 403
+    assert wrong_mapping.status_code == 404
