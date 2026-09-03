@@ -1,4 +1,16 @@
-# Phase 3 pre-closeout evidence
+# Phase 3 Bitbucket Import Integration — Evidence
+
+## Outcome
+
+- Gauntlet-status: PENDING
+- Source-digest: `pending`
+
+The canonical Phase 3 gauntlet has been assembled and remains pending until its
+immutable source set is committed and all fail-closed layers complete. Only bounded
+counts, durations, digests, commit identities, and pass/fail outcomes will be added
+to this record.
+
+## Prior deployment evidence
 
 This record contains only bounded, non-secret verification results. It does not
 contain OAuth credentials, access tokens, provider response bodies, repository or

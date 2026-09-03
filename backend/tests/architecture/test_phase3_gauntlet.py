@@ -6,7 +6,6 @@ import ast
 import re
 from pathlib import Path
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 GAUNTLET_PATH = REPOSITORY_ROOT / "tools" / "phase3_gauntlet.sh"
 MANIFEST_PATH = REPOSITORY_ROOT / "tools" / "phase3_source_manifest.txt"
@@ -61,11 +60,7 @@ def test_phase3_gauntlet_declares_one_exact_ordered_fail_closed_layer_set() -> N
 
 
 def test_phase3_manifest_covers_sources_and_excludes_mutable_closeout_artifacts() -> None:
-    rows = [
-        line
-        for line in _read(MANIFEST_PATH).splitlines()
-        if line and not line.startswith("#")
-    ]
+    rows = [line for line in _read(MANIFEST_PATH).splitlines() if line and not line.startswith("#")]
     includes = {line for line in rows if line.startswith("include|")}
     exclusions = {line for line in rows if line.startswith("exclude|")}
     required = {
