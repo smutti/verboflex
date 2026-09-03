@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 03
 current_phase_name: Bitbucket Import Integration
 status: executing
-stopped_at: Completed 03-14-PLAN.md
-last_updated: "2026-09-03T13:38:30.277Z"
+stopped_at: Completed 03-15-PLAN.md
+last_updated: "2026-09-03T15:15:33.633Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 03 execution started
-state_head: 160836cd083ccb6337f012c89b21350b44af0489
+state_head: bf15abdc62629193ffba9a683a3ba5482502c44d
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 77
-  completed_plans: 75
+  completed_plans: 76
   percent: 22
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 03 (Bitbucket Import Integration) — EXECUTING
-Plan: 15 of 16
+Plan: 16 of 16
 Status: Ready to execute
 Last activity: 2026-09-02 — Phase 03 execution started
 
@@ -134,6 +134,7 @@ Progress: [████████████████████] 61/61 p
 | Phase 03 P12 | 29min | 2 tasks | 7 files |
 | Phase 03 P13 | 50min | 2 tasks | 7 files |
 | Phase 03 P14 | 1h25min | 2 tasks | 7 files |
+| Phase 03 P15 | 1h30min | 2 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -378,6 +379,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Keep live Bitbucket execution supplemental: absent configuration is an explicit successful skip and never substitutes for mandatory mock evidence.
 - [Phase 03]: Route configured live traffic through an ephemeral TLS audit boundary that permits the token POST but rejects every non-GET provider resource request before forwarding.
 - [Phase 03]: Carry source-movement classification alongside imported references so production workers can persist complete rewrite proposals atomically.
+- [Phase 03]: Bind Phase 3 closeout to one canonical manifest digest while excluding mutable evidence, review, verification, and summary artifacts.
+- [Phase 03]: Require exact killed-mutant ownership for backend import authority and frontend polling, action, cursor, and reconciliation boundaries.
+- [Phase 03]: Collect only the approved Phase 3 Playwright owners so unrelated credential-gated specs cannot contaminate closeout.
 
 ### Pending Todos
 
@@ -417,6 +421,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-03T13:38:30.143Z
-Stopped at: Completed 03-14-PLAN.md
+Last session: 2026-09-03T15:15:33.506Z
+Stopped at: Completed 03-15-PLAN.md
 Resume file: None
