@@ -53,6 +53,7 @@ class User(Base):
         secondary=user_roles_table,
         back_populates="users",
         lazy="selectin",
+        order_by="Role.name",
     )
     auth_sessions: Mapped[list[AuthSession]] = relationship(
         back_populates="user",

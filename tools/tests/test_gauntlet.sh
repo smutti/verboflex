@@ -23,7 +23,12 @@ if [ "${VERBOFLEX_CHECKER_ISOLATION_NESTED:-0}" != "1" ]; then
   grep -Fq 'packaged checker layer isolation: PASS' "$output_file"
 fi
 
-"$repo_root/tools/gauntlet.sh" --self-test-openapi-control >"$output_file" 2>&1
+if ! "$repo_root/tools/gauntlet.sh" --self-test-openapi-control \
+  >"$output_file" 2>&1; then
+  printf 'expected OpenAPI drift self-test to pass; output follows:\n' >&2
+  sed -n '1,120p' "$output_file" >&2
+  exit 1
+fi
 grep -Fq 'OpenAPI drift negative control: PASS' "$output_file"
 
 "$repo_root/tools/gauntlet.sh" --self-test-staging-layer >"$output_file" 2>&1

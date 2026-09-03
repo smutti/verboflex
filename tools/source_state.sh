@@ -3,8 +3,8 @@ set -euo pipefail
 
 readonly SOURCE_STATE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 readonly DEFAULT_ROOT=$(CDPATH= cd -- "$SOURCE_STATE_DIR/.." && pwd)
-readonly DEFAULT_MANIFEST="tools/source_manifest.txt"
-readonly REVIEW_PATH="docs/reviews/phase-01-code-security.md"
+readonly DEFAULT_MANIFEST="${VERBOFLEX_SOURCE_MANIFEST:-tools/source_manifest.txt}"
+readonly REVIEW_PATH="${VERBOFLEX_REVIEW_PATH:-docs/reviews/phase-01-code-security.md}"
 readonly DIGEST_RECORD="${VERBOFLEX_GAUNTLET_DIGEST_FILE:-/tmp/verboflex-phase01-gauntlet.digest}"
 
 die() {
@@ -410,8 +410,8 @@ case "$command" in
     verify_digest_value "$expected" "$actual"
     ;;
   --verify-report-digest)
-    report="$DEFAULT_ROOT/docs/evidence/phase-01.md"
-    [ -f "$report" ] || die "evidence report is missing: docs/evidence/phase-01.md"
+    report="$DEFAULT_ROOT/${VERBOFLEX_EVIDENCE_PATH:-docs/evidence/phase-01.md}"
+    [ -f "$report" ] || die "evidence report is missing: ${report#$DEFAULT_ROOT/}"
     expected=$(extract_markdown_value "$report" 'Source-digest')
     actual=$(compute_digest "$DEFAULT_ROOT" "$DEFAULT_MANIFEST" final)
     verify_digest_value "$expected" "$actual"

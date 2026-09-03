@@ -4,22 +4,21 @@ import argparse
 import getpass
 import sys
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Protocol
 
-from sqlalchemy import func, select, text, update
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from verboflex.auth.identity import ASCII_WHITESPACE, normalize_email
 from verboflex.auth.passwords import (
     PasswordPolicyError,
     hash_password,
-    validate_password_for_user,
 )
 from verboflex.db.session import SessionFactory
-from verboflex.models.auth_session import AuthSession
 from verboflex.models.role import Role
 from verboflex.models.user import User
+from verboflex.services import admin_users as admin_user_service
 
 FIRST_ADMIN_LOCK_KEY = 0x564552424F464C58
 
@@ -44,12 +43,8 @@ class BootstrapAdminError(RuntimeError):
     """Raised when the database is not eligible for first-admin bootstrap."""
 
 
-class ResetPasswordError(RuntimeError):
-    """Raised when an administrative reset cannot identify its account."""
-
-
-class DeactivateUserError(RuntimeError):
-    """Raised when an account cannot make an active-to-inactive transition."""
+ResetPasswordError = admin_user_service.ResetPasswordError
+DeactivateUserError = admin_user_service.DeactivateUserError
 
 
 def bootstrap_first_admin(
@@ -97,29 +92,8 @@ def reset_user_password(
     email: str,
     password: str,
 ) -> None:
-    """Replace one user's credential and revoke all authority atomically."""
-    normalized_email = normalize_email(email)
-    with session.begin():
-        user = session.execute(
-            select(User).where(User.email == normalized_email).with_for_update()
-        ).scalar_one_or_none()
-        if user is None:
-            raise ResetPasswordError("reset refused: account unavailable")
-
-        validate_password_for_user(
-            password,
-            normalized_email=normalized_email,
-            current_password_hash=user.hashed_password,
-        )
-        user.hashed_password = hash_password(password)
-        user.must_change_password = True
-        user.token_version += 1
-        session.execute(
-            update(AuthSession)
-            .where(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
-            .values(revoked_at=datetime.now(UTC))
-        )
-        session.flush()
+    """Delegate the privileged CLI reset to shared password authority."""
+    admin_user_service.replace_user_password(session, email=email, password=password)
 
 
 def deactivate_user(
@@ -128,24 +102,8 @@ def deactivate_user(
     email: str,
     now: datetime | None = None,
 ) -> None:
-    """Deactivate one account and destroy all of its existing session authority."""
-    normalized_email = normalize_email(email)
-    deactivated_at = now or datetime.now(UTC)
-    with session.begin():
-        user = session.execute(
-            select(User).where(User.email == normalized_email).with_for_update()
-        ).scalar_one_or_none()
-        if user is None or not user.is_active:
-            raise DeactivateUserError("deactivation refused: account unavailable")
-
-        user.is_active = False
-        user.token_version += 1
-        session.execute(
-            update(AuthSession)
-            .where(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
-            .values(revoked_at=deactivated_at)
-        )
-        session.flush()
+    """Delegate the privileged CLI transition to shared session revocation."""
+    admin_user_service.deactivate_user_by_email(session, email=email, now=now)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -211,6 +169,7 @@ def main(
                 reset_user_password(session, email=arguments.email, password=password)
                 print("Password reset completed; password change is required.")
     except (
+        admin_user_service.AdminUserConflict,
         BootstrapAdminError,
         DeactivateUserError,
         PasswordPolicyError,

@@ -2,7 +2,7 @@
 
 ## Overview
 
-VerboFlex v1 builds the repository-backed localization workflow from the foundation upward: first the separated frontend/backend platform and data model, then admin configuration, Bitbucket read integration, parser/import support, search and review workflows, safe write-back, pull request automation, and final hardening. The roadmap keeps Bitbucket Cloud as the source of truth while giving product managers a dense shadcn/ui-based portal for finding, reviewing, commenting on, approving, and submitting translation changes. Every phase closes with a quality gate covering targeted tests, code review, and deploy/build smoke verification for the current app slice.
+VerboFlex v1 builds the repository-backed localization workflow from the foundation upward: first the separated frontend/backend platform and data model, then admin configuration with read-only Bitbucket discovery, import-grade Bitbucket integration, canonical parser/import support, search and review workflows, safe write-back, pull request automation, and final hardening. The roadmap keeps Bitbucket Cloud as the source of truth while giving product managers a dense shadcn/ui-based portal for finding, reviewing, commenting on, approving, and submitting translation changes. Every phase closes with a quality gate covering targeted tests, code review, and deploy/build smoke verification for the current app slice.
 
 ## Phases
 
@@ -12,12 +12,12 @@ VerboFlex v1 builds the repository-backed localization workflow from the foundat
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Platform Foundation** - Establish separated frontend/backend apps, OAuth2 base, Postgres/Alembic schema, Redis/Celery, and shadcn/ui. (completed 2026-08-26)
-- [ ] **Phase 2: Admin Configuration** - Build internal user, role, product, repository, branch, mapping, and PR behavior configuration.
-- [ ] **Phase 3: Bitbucket Read Integration** - Connect to Bitbucket Cloud, validate permissions, list branches, read configured files, and record import baselines.
-- [ ] **Phase 4: Localization Parser Foundation** - Parse Android XML, Qt `.ts`, JSON, and iOS `.strings` into canonical translation records.
+- [x] **Phase 2: Admin Configuration** - Build the admin control plane, organizational Bitbucket OAuth connection, live repository discovery, and read-only localization preview. (completed 2026-09-01)
+- [x] **Phase 3: Bitbucket Import Integration** - Harden Bitbucket access for imports with capability validation, durable source references, resilience, and actionable errors. (completed 2026-09-03)
+- [ ] **Phase 4: Localization Parser Foundation** - Parse Android XML, Qt `.ts`, JSON, and iOS `.strings` into canonical translation records verified by complete golden fixtures.
 - [ ] **Phase 5: Import, Search, and Constraints** - Import translations, preserve review context, expose search/filter APIs, and calculate max-length violations.
 - [ ] **Phase 6: Review Workspace and Comments** - Deliver the task-focused translation review UI with editing, state changes, comments, and pending-change visibility.
-- [ ] **Phase 7: Format-Safe Write-Back** - Prove file-location metadata, golden fixtures, stale-source detection, and safe writer behavior before PR automation.
+- [ ] **Phase 7: Format-Safe Write-Back** - Prove file-location metadata, stale-source detection, and format-preserving writer behavior before PR automation.
 - [ ] **Phase 8: Change Sets and Pull Requests** - Submit grouped changes through Celery jobs that create Bitbucket branches, commits, and pull requests.
 - [ ] **Phase 9: Verification and Hardening** - Audit role enforcement, mutation audit metadata, UI permissions, error handling, and end-to-end readiness.
 
@@ -30,6 +30,7 @@ Every phase must complete these checks before it can be marked complete:
 3. **Deploy/build verification completed:** Verify the current app slice builds and starts in the closest available deployment-like path, such as Docker Compose, local production build, or staging deployment.
 4. **Smoke check documented:** Record the commands/results or manual smoke checks used to verify the phase.
 5. **Blocking findings resolved:** Fix critical review, test, security, or deploy failures before moving to the next phase.
+6. **Fresh closeout authority:** Keep the phase incomplete until its newest code review records zero unresolved Critical findings and its newest independent verifier frontmatter is exactly `status: passed`; both must bind to the same post-gauntlet source digest.
 
 ## Phase Details
 
@@ -70,60 +71,267 @@ Plans:
 
 ### Phase 2: Admin Configuration
 
-**Goal**: Let admins configure users, roles, products, Bitbucket repositories, branches, localization layouts, and PR behavior.
+**Goal**: Deliver an administrator-only control plane for internal users, versioned products, reusable repositories, one-format mappings, a single organizational Bitbucket OAuth connection, and live read-only validation previews.
 **Depends on**: Phase 1
-**Requirements**: [AUTH-02, AUTH-03, PROD-01, PROD-02, PROD-03, PROD-04, PROD-05, PROD-06, PROD-07, PROD-08, PROD-09, UI-03]
+**Requirements**: [AUTH-02, AUTH-03, PROD-01, PROD-02, PROD-03, PROD-04, PROD-05, PROD-06, PROD-07, PROD-08, PROD-09, BITB-01, BITB-03, BITB-04, UI-03]
 **UI hint**: yes
 **Success Criteria** (what must be TRUE):
 
-  1. Admin can manage internal users and assign multiple roles.
-  2. Admin can create products and configure one or more Bitbucket Cloud repositories.
-  3. Admin can configure source branches, allowed target branches, localization formats, and PR grouping behavior.
-  4. Admin can define direct-repository and cross-repository key/translation mappings.
-  5. Admin sees validation feedback and mapping previews before enabling imports.
-  6. Phase quality gate passes with tests, code review, and deploy/build smoke verification.
+  1. Admin can manage the complete reversible internal-user lifecycle with multiple roles, one-time temporary credentials, and last-active-admin invariants.
+  2. Admin can create products whose candidate configuration remains isolated from the active revision until explicit atomic publication.
+  3. Admin can reuse globally unique Bitbucket Cloud repositories while keeping product-specific branches, mappings, and preview state isolated.
+  4. One organization-wide Bitbucket OAuth connection uses read-only `repository` scope to list branches and read source content for configuration preview.
+  5. Each direct or separate mapping represents exactly one detected format/layout, one source branch, allowed targets, a default target, and the fixed repository+target PR grouping rule.
+  6. Preview detects Android XML, Qt `.ts`, JSON, and iOS `.strings`, surfaces bounded samples, and fails closed on empty, invalid, ambiguous, stale, or disconnected state.
+  7. Guided shadcn admin screens provide actionable user, repository, mapping, OAuth, validation, and background-job states.
+  8. Phase quality gate passes with RED→GREEN TDD evidence, code review, and backend/frontend/worker/deploy smoke verification.
 
-**Plans**: 6 plans
+**Plans**: 46/46 plans executed (20 original plans, 23/26 gap-closure plans executed)
 
 Plans:
+**Wave 1**
 
-- [ ] 02-01: User and role administration
-- [ ] 02-02: Product and repository configuration model/API
-- [ ] 02-03: Branch, format, and PR behavior configuration
-- [ ] 02-04: Cross-repository mapping configuration and validation preview
-- [ ] 02-05: shadcn-based admin UX and validation states
-- [ ] 02-06: Phase quality gate - tests, code review, and deploy/build verification
+- [x] 02-01-PLAN.md — Internal-user and additive-role administration
 
-### Phase 3: Bitbucket Read Integration
+**Wave 2** *(blocked on Wave 1 completion)*
 
-**Goal**: Read configured Bitbucket Cloud repository data safely and expose actionable setup/import errors.
+- [x] 02-02-PLAN.md — Product identity, immutable revisions, and candidate APIs
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 02-03-PLAN.md — Global reusable repository registry and APIs
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 02-04-PLAN.md — Encrypted organizational OAuth connection foundation
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 02-05-PLAN.md — OAuth refresh, reconnect, local revoke, and API lifecycle
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 02-06-PLAN.md — Generation-bound read-only Bitbucket HTTP adapter
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [x] 02-07-PLAN.md — Live branch, commit, tree, and raw-source discovery
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [x] 02-08-PLAN.md — Direct revision-owned mapping persistence and APIs
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [x] 02-09-PLAN.md — Separate topology and fixed repository-target grouping
+
+**Wave 10** *(blocked on Wave 9 completion)*
+
+- [x] 02-10-PLAN.md — Atomic product publication lifecycle
+
+**Wave 11** *(blocked on Wave 10 completion)*
+
+- [x] 02-11-PLAN.md — Durable PostgreSQL/Celery preview-job boundary
+
+**Wave 12** *(blocked on Wave 11 completion)*
+
+- [x] 02-12-PLAN.md — Strict Android XML preview detector
+
+**Wave 13** *(blocked on Wave 12 completion)*
+
+- [x] 02-13-PLAN.md — Strict Qt TS, JSON, and iOS strings detectors
+
+**Wave 14** *(blocked on Wave 13 completion)*
+
+- [x] 02-14-PLAN.md — Stale-safe confirmation and publication integration
+
+**Wave 15** *(blocked on Wave 14 completion)*
+
+- [x] 02-15-PLAN.md — Canonical generated TypeScript admin client
+
+**Wave 16** *(blocked on Wave 15 completion)*
+
+- [x] 02-16-PLAN.md — Responsive guarded administrator routing and shell
+
+**Wave 17** *(blocked on Wave 16 completion)*
+
+- [x] 02-17-PLAN.md — Secret-safe internal-user administration UI
+
+**Wave 18** *(blocked on Wave 17 completion)*
+
+- [x] 02-18-PLAN.md — Product, repository, and mapping administration UI
+
+**Wave 19** *(blocked on Wave 18 completion)*
+
+- [x] 02-19-PLAN.md — OAuth, preview, publication, and responsive E2E UI
+
+**Wave 20** *(blocked on Wave 19 completion)*
+
+- [x] 02-20-PLAN.md — Phase quality gate, review, mutations, and deploy smoke
+
+**Wave 21** *(gap closure; blocked on Wave 20 completion)*
+
+- [x] 02-21-PLAN.md — Access-only credential migration, production client-credentials grant, expiry recovery, and bounded API status
+- [x] 02-23-PLAN.md — CLI last-active-admin authority and role-identity invariant
+
+**Wave 22** *(gap closure; blocked on Wave 21 completion)*
+
+- [x] 02-22-PLAN.md — Generated OAuth client and secret-free administrator recovery UI
+- [x] 02-24-PLAN.md — Product graph ownership and published-child database immutability
+- [x] 02-35-PLAN.md — Repository-scoped live-provider smoke and lossless API coverage reconciliation
+
+**Wave 23** *(gap closure; blocked on Wave 22 completion)*
+
+- [x] 02-25-PLAN.md — Complete active-to-candidate clone and atomic identity publication
+- [x] 02-26-PLAN.md — Revision-scoped mapping reads and exact query-encoded branch resolution
+- [x] 02-36-PLAN.md — Preview watchdog state/started-at index migration and query-plan proof
+
+**Wave 24** *(gap closure; blocked on Wave 23 completion)*
+
+- [x] 02-29-PLAN.md — Bounded durable preview worker-loss and hard-timeout recovery using PreviewJob.id
+- [x] 02-31-PLAN.md — Canonical OpenAPI and generated-client contracts for revision mappings and exact branches
+
+**Wave 25** *(gap closure; blocked on Wave 24 completion)*
+
+- [x] 02-27-PLAN.md — Routed published-product editing and complete five-step mobile wizard
+
+**Wave 26** *(gap closure; blocked on Wave 25 completion)*
+
+- [x] 02-28-PLAN.md — Dependency-free repository, mapping, and exact-branch cursor accumulation
+- [x] 02-32-PLAN.md — Exact unchanged-active-revision product reactivation
+
+**Wave 27** *(gap closure; blocked on Wave 26 completion)*
+
+- [x] 02-33-PLAN.md — Role-aware Workspace overview with zero non-admin administrator requests
+
+**Wave 28** *(gap closure; blocked on Wave 27 completion)*
+
+- [x] 02-34-PLAN.md — Complete preview pagination and mapping-51 lifecycle gating
+
+**Wave 29** *(gap closure traceability; blocked on Waves 21-28 completion)*
+
+- [x] 02-30-PLAN.md — Literal multi-source semantic traceability and deterministic coverage-audit contracts
+
+**Wave 30** *(gap closure runtime gate; blocked on Wave 29 completion)*
+
+- [x] 02-37-PLAN.md — Full architecture, E2E, Compose, worker-loss, security, and unchanged-source gauntlet expansion
+
+**Wave 31** *(gap closure scheduler deployment; blocked on Wave 30 completion)*
+
+- [x] 02-39-PLAN.md — Staging/production scheduler authority and dual-overlay worker-loss recovery
+
+**Wave 32** *(gap closure active-revision revalidation core; blocked on Wave 31 completion)*
+
+- [x] 02-40-PLAN.md — Immutable active-revision revalidation and reconfirmation authority
+
+**Wave 33** *(gap closure revalidation API/client; blocked on Wave 32 completion)*
+
+- [x] 02-41-PLAN.md — Exact active-revision recovery API and generated TypeScript client
+
+**Wave 34** *(gap closure revalidation UI/E2E; blocked on Wave 33 completion)*
+
+- [x] 02-42-PLAN.md — Inactive-product revalidation UI and real reconnect-to-reactivate E2E recovery
+
+**Wave 35** *(gap closure browser anti-framing; blocked on Wave 34 completion)*
+
+- [x] 02-43-PLAN.md — Runtime Nginx CSP and frame-embedding denial
+
+**Wave 36** *(gap closure final authority; blocked on every Plan 02-21 through 02-43)*
+
+- [x] 02-38-PLAN.md — Fresh critical-zero ASVS L1 review and independent `status: passed` verifier closeout
+
+**Wave 37** *(post-review gap closure; blocked on Wave 36 completion)*
+
+- [x] 02-44-PLAN.md — Exact configured-branch detail for candidate and active-revision previews
+
+**Wave 38** *(post-review gap closure; blocked on Wave 37 completion)*
+
+- [x] 02-45-PLAN.md — Router-native dirty product and mapping navigation protection
+
+**Wave 39** *(post-review closeout; blocked on Wave 38 completion)*
+
+- [x] 02-46-PLAN.md — Structured semantic audit, fresh review, and independent verifier closeout
+
+### Phase 3: Bitbucket Import Integration
+
+**Goal**: Turn the Phase 2 read-only Bitbucket boundary into an import-grade integration with capability validation, durable source references, resilient reads, and actionable operational errors.
 **Depends on**: Phase 2
-**Requirements**: [BITB-01, BITB-02, BITB-03, BITB-04, BITB-05, BITB-06]
+**Requirements**: [BITB-02, BITB-05, BITB-06]
 **UI hint**: yes
 **Success Criteria** (what must be TRUE):
 
-  1. Admin can store Bitbucket Cloud credentials or tokens for configured repositories.
-  2. System validates read, write, branch, and pull request capabilities during setup.
-  3. System can list configured repository branches.
-  4. System can read configured localization files from the selected source branch.
-  5. System stores source commit/file references and surfaces actionable connection or permission failures.
-  6. Phase quality gate passes with tests, code review, and deploy/build smoke verification.
+  1. System validates the capabilities required by configured read/import operations and reports the later write/PR capability profile without silently expanding OAuth scopes.
+  2. Import-oriented reads use bounded retry, pagination, rate-limit, and provider-error handling on top of the Phase 2 OAuth/source boundary.
+  3. System stores the exact source commit hash and file reference used by each import attempt.
+  4. Admin receives actionable, sanitized connection, permission, rate-limit, missing-source, and import errors with safe retry guidance.
+  5. Phase quality gate passes with integration tests, code review, and backend/worker/deploy smoke verification.
 
-**Plans**: 5 plans
+**Plans**: 16/16 plans executed
 
 Plans:
+**Wave 1**
 
-- [ ] 03-01: Bitbucket credential storage and secure backend client
-- [ ] 03-02: Permission and capability validation
-- [ ] 03-03: Branch listing and file read APIs
-- [ ] 03-04: Import baseline records and admin-facing errors
-- [ ] 03-05: Phase quality gate - tests, code review, and deploy/build verification
+- [x] 03-01-PLAN.md — Production direct-import tracer through browser, API, PostgreSQL, Celery, and commit-bound reads
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 03-02-PLAN.md — Reversible import schema, immutable provenance, and negative contract hardening
+- [x] 03-03-PLAN.md — Exact expanded OAuth capability acquisition and closed backend projection
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 03-04-PLAN.md — Generated capability client and approved administrator readiness UI
+- [x] 03-05-PLAN.md — One-attempt provider resilience and application-owned GET operation boundary
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 03-06-PLAN.md — Useful sanitized structured provider diagnostics and leakage proof
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 03-07-PLAN.md — Stable logical import state machine, atomic separate baselines, retry, and watchdog
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 03-08-PLAN.md — Exact ancestry, fast-forward classification, and complete bounded rewrite delta
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [x] 03-09-PLAN.md — Durable rewrite proposals and atomic current-baseline confirmation
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [x] 03-10-PLAN.md — Five-operation import API and product-local affected-mapping aggregation
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [x] 03-11-PLAN.md — Canonical OpenAPI and complete generated TypeScript client
+
+**Wave 10** *(blocked on Wave 9 completion)*
+
+- [x] 03-12-PLAN.md — Cursor-complete import collection, bounded polling, and responsive mapping UI
+
+**Wave 11** *(blocked on Wave 10 completion)*
+
+- [x] 03-13-PLAN.md — Rewrite dialog, product freshness, browser journeys, and 26 UI consideration identities
+
+**Wave 12** *(blocked on Wave 11 completion)*
+
+- [x] 03-14-PLAN.md — Deployment mock smoke and pre-digest supplemental live-read implementation
+
+**Wave 13** *(blocked on Wave 12 completion)*
+
+- [x] 03-15-PLAN.md — Exact source/UI/API scope audit, mutation proof, manifest, and final gauntlet
+
+**Wave 14** *(blocked on Wave 13 completion)*
+
+- [x] 03-16-PLAN.md — Digest-bound ASVS L1 review and independent exact-passed verifier closeout
 
 ### Phase 4: Localization Parser Foundation
 
-**Goal**: Convert supported localization files into canonical translation records.
+**Goal**: Convert supported localization files into stable canonical translation records and prove all four parser contracts with complete golden fixtures.
 **Depends on**: Phase 3
-**Requirements**: [FMT-01, FMT-02, FMT-03, FMT-04, FMT-07]
+**Requirements**: [FMT-01, FMT-02, FMT-03, FMT-04, FMT-06, FMT-07]
 **UI hint**: no
 **Success Criteria** (what must be TRUE):
 
@@ -131,10 +339,11 @@ Plans:
   2. System parses Qt `.ts` translations into canonical records.
   3. System parses JSON localization files into canonical records.
   4. System parses iOS `.strings` files into canonical records.
-  5. Canonical records include product, repository, branch, file path, format, key, language, text, state, and locator metadata.
-  6. Phase quality gate passes with parser tests, code review, and backend deploy/build smoke verification.
+  5. Canonical records include product, repository, branch, file path, format, stable key identity, language, text, state, and locator metadata.
+  6. Complete golden fixtures cover valid, empty, malformed, escaped, Unicode, and format-specific boundary cases for every supported parser.
+  7. Phase quality gate passes with parser tests, code review, and backend deploy/build smoke verification.
 
-**Plans**: 6 plans
+**Plans**: 7 plans
 
 Plans:
 
@@ -143,7 +352,8 @@ Plans:
 - [ ] 04-03: Qt `.ts` parser
 - [ ] 04-04: JSON parser
 - [ ] 04-05: iOS `.strings` parser
-- [ ] 04-06: Phase quality gate - parser tests, code review, and deploy/build verification
+- [ ] 04-06: Cross-format golden fixtures and canonical conformance
+- [ ] 04-07: Phase quality gate - parser tests, code review, and deploy/build verification
 
 ### Phase 5: Import, Search, and Constraints
 
@@ -201,12 +411,12 @@ Plans:
 
 **Goal**: Make file write-back safe enough to trust before creating Bitbucket pull requests.
 **Depends on**: Phase 6
-**Requirements**: [FMT-05, FMT-06, PR-04]
+**Requirements**: [FMT-05, PR-04]
 **UI hint**: no
 **Success Criteria** (what must be TRUE):
 
   1. System preserves file location metadata needed to write changed translations back to original files.
-  2. Golden fixtures verify parse/write behavior for Android XML, Qt `.ts`, JSON, and iOS `.strings`.
+  2. Writer fixtures extend the Phase 4 parser corpus to verify format-preserving edits for Android XML, Qt `.ts`, JSON, and iOS `.strings`.
   3. System detects source branch or file changes since import before writing.
   4. Writer output avoids broad unrelated diffs for simple translation edits.
   5. Stale source state blocks write-back with an actionable error.
@@ -281,9 +491,9 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Platform Foundation | 15/15 | Complete    | 2026-08-26 |
-| 2. Admin Configuration | 0/6 | Not started | - |
-| 3. Bitbucket Read Integration | 0/5 | Not started | - |
-| 4. Localization Parser Foundation | 0/6 | Not started | - |
+| 2. Admin Configuration | 46/46 | Complete    | 2026-09-01 |
+| 3. Bitbucket Import Integration | 16/16 | Complete    | 2026-09-03 |
+| 4. Localization Parser Foundation | 0/7 | Not started | - |
 | 5. Import, Search, and Constraints | 0/6 | Not started | - |
 | 6. Review Workspace and Comments | 0/6 | Not started | - |
 | 7. Format-Safe Write-Back | 0/5 | Not started | - |

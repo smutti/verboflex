@@ -1,0 +1,4026 @@
+import { expect, test, type Page, type Route } from "@playwright/test";
+import { execFileSync } from "node:child_process";
+import {
+  chmodSync,
+  existsSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+
+const temporaryPassword = "VF-once-only-secret-29";
+const now = "2026-08-28T19:30:00Z";
+
+type ConnectionStatus =
+  "Connected" | "Disconnected" | "Reauthorization required" | "Unavailable";
+
+interface ProductRevision {
+  description: string | null;
+  id: string;
+  is_published: boolean;
+  version: number;
+}
+
+interface Product {
+  active_revision: ProductRevision | null;
+  affected_mapping_count: number;
+  candidate_revision: ProductRevision | null;
+  id: string;
+  is_active: boolean;
+  name: string;
+}
+
+type ImportOutcome =
+  "failed_refresh" | "fast_forward" | "initial" | "manual_retry";
+
+interface PublishedImport {
+  action:
+    | "run_import"
+    | "refresh_import"
+    | "retry_import"
+    | "import_in_progress"
+    | "review_baseline_change";
+  active_baseline: {
+    imported_at: string;
+    source_references: Array<{
+      commit_hash: string;
+      path: string;
+      position: number;
+      repository_id: string;
+      repository_side: "direct";
+      sha256: string;
+      size_bytes: number;
+      source_branch: string;
+    }>;
+  } | null;
+  active_revision_id: string;
+  capability: "ready";
+  error_category: "provider_unavailable" | null;
+  error_message: string | null;
+  execution_number: number | null;
+  id: string | null;
+  latest_execution_at: string | null;
+  mapping_id: string;
+  repository_sides: Array<{
+    repository_id: string;
+    role: "direct";
+    source_branch: string;
+  }>;
+  retry_count: number;
+  state: "not_imported" | "current" | "may_be_stale" | "review_required";
+  topology: "direct";
+}
+
+interface AdminMockState {
+  branchRequests: Array<{
+    branchName: string | null;
+    cursor: string | null;
+    limit: string | null;
+  }>;
+  branches: Array<{ commit_hash: string; name: string }>;
+  connectionDelayMs: number;
+  connectionFailures: number;
+  connectionMutations: string[];
+  connectionStatus: ConnectionStatus;
+  deactivateFailures: number;
+  importMutations: Array<{ body: unknown; method: string; pathname: string }>;
+  nextImportOutcome: ImportOutcome;
+  mappings: Array<Record<string, unknown>>;
+  paginateBranches: boolean;
+  paginateProducts: boolean;
+  previewAttempts: number;
+  previewMode: "success" | "timeout-then-success";
+  product: Product;
+  productFailures: number;
+  products: Product[];
+  productsDelayMs: number;
+  publicationConflicts: number;
+  reactivationConflicts: number;
+  repositories: Array<Record<string, unknown>>;
+  publishedImports: PublishedImport[];
+  rewriteConfirmations: unknown[];
+  users: Array<Record<string, unknown>>;
+}
+
+const publishedRevision: ProductRevision = {
+  description: "Published localization configuration",
+  id: "revision-published",
+  is_published: true,
+  version: 4,
+};
+
+const candidateRevision: ProductRevision = {
+  description: "Candidate localization configuration",
+  id: "revision-candidate",
+  is_published: false,
+  version: 5,
+};
+
+function product(overrides: Partial<Product> = {}): Product {
+  return {
+    active_revision: publishedRevision,
+    affected_mapping_count: 0,
+    candidate_revision: candidateRevision,
+    id: "product-1",
+    is_active: true,
+    name: "Zulu Mobile",
+    ...overrides,
+  };
+}
+
+const longOpaqueBranch =
+  "release/rebased-history-with-an-intentionally-long-opaque-provider-branch-name";
+const logicalImportId = "import-stable-logical-uuid";
+const initialCommit = "1".repeat(40);
+const fastForwardCommit = "2".repeat(40);
+const retriedCommit = "3".repeat(40);
+const rewrittenCommit = "4".repeat(40);
+
+function importBaseline(commitHash: string) {
+  return {
+    imported_at: now,
+    source_references: [
+      {
+        commit_hash: commitHash,
+        path: `locales/${"nested/".repeat(10)}messages-with-a-long-name.json`,
+        position: 0,
+        repository_id: "repository-app",
+        repository_side: "direct" as const,
+        sha256: "a".repeat(64),
+        size_bytes: 4096,
+        source_branch: longOpaqueBranch,
+      },
+    ],
+  };
+}
+
+function publishedImport(
+  overrides: Partial<PublishedImport> = {},
+): PublishedImport {
+  return {
+    action: "run_import",
+    active_baseline: null,
+    active_revision_id: publishedRevision.id,
+    capability: "ready",
+    error_category: null,
+    error_message: null,
+    execution_number: null,
+    id: null,
+    latest_execution_at: null,
+    mapping_id: "mapping-import",
+    repository_sides: [
+      {
+        repository_id: "repository-app",
+        role: "direct",
+        source_branch: longOpaqueBranch,
+      },
+    ],
+    retry_count: 0,
+    state: "not_imported",
+    topology: "direct",
+    ...overrides,
+  };
+}
+
+function currentPublishedImport(
+  commitHash: string,
+  overrides: Partial<PublishedImport> = {},
+) {
+  return publishedImport({
+    action: "refresh_import",
+    active_baseline: importBaseline(commitHash),
+    execution_number: 1,
+    id: logicalImportId,
+    latest_execution_at: now,
+    state: "current",
+    ...overrides,
+  });
+}
+
+const directMapping = {
+  allowed_target_branches: ["main", "release/very-long-supported-target-name"],
+  candidate_version: 5,
+  default_target_branch: "main",
+  id: "mapping-direct",
+  primary_repository_id: "repository-app",
+  primary_source_branch: "main",
+  selected_layout_candidate_id: null,
+  selected_layout_version: null,
+  topology: "direct",
+  translations_repository_id: null,
+  translations_source_branch: null,
+};
+
+const separateMapping = {
+  allowed_target_branches: ["main"],
+  candidate_version: 5,
+  default_target_branch: "main",
+  id: "mapping-separate",
+  primary_repository_id: "repository-app",
+  primary_source_branch: "keys/main",
+  selected_layout_candidate_id: null,
+  selected_layout_version: null,
+  topology: "separate",
+  translations_repository_id: "repository-translations",
+  translations_source_branch: "translations/main",
+};
+
+function defaultState(): AdminMockState {
+  const current = product();
+  return {
+    branchRequests: [],
+    branches: [
+      { commit_hash: "abcdef0123456789", name: "main" },
+      {
+        commit_hash: "fedcba9876543210",
+        name: "release/very-long-supported-target-name",
+      },
+      { commit_hash: "1234567890abcdef", name: "keys/main" },
+      { commit_hash: "7890abcdef123456", name: "translations/main" },
+    ],
+    connectionDelayMs: 0,
+    connectionFailures: 0,
+    connectionMutations: [],
+    connectionStatus: "Connected",
+    deactivateFailures: 0,
+    importMutations: [],
+    nextImportOutcome: "initial",
+    mappings: [directMapping, separateMapping],
+    paginateBranches: false,
+    paginateProducts: false,
+    previewAttempts: 0,
+    previewMode: "success",
+    product: current,
+    productFailures: 0,
+    products: [
+      current,
+      product({
+        active_revision: null,
+        candidate_revision: {
+          ...candidateRevision,
+          id: "candidate-alpha",
+          version: 1,
+        },
+        id: "product-2",
+        is_active: false,
+        name: "Alpha Embedded",
+      }),
+      product({
+        active_revision: {
+          ...publishedRevision,
+          id: "published-web",
+          version: 2,
+        },
+        candidate_revision: null,
+        id: "product-3",
+        name: "Browser Portal With An Intentionally Long Product Name For Local Overflow",
+      }),
+    ],
+    productsDelayMs: 0,
+    publicationConflicts: 0,
+    reactivationConflicts: 0,
+    repositories: [
+      {
+        descriptive_name: "Application repository",
+        id: "repository-app",
+        repository_slug:
+          "application-with-an-intentionally-long-repository-slug",
+        workspace: "verboflex-workspace",
+      },
+      {
+        descriptive_name: "Translations repository",
+        id: "repository-translations",
+        repository_slug: "translations",
+        workspace: "verboflex-workspace",
+      },
+    ],
+    publishedImports: [publishedImport()],
+    rewriteConfirmations: [],
+    users: [
+      {
+        display_name: "Admin User",
+        email: "admin@verboflex.test",
+        id: "admin-user",
+        is_active: true,
+        must_change_password: false,
+        roles: ["admin"],
+      },
+      {
+        display_name: "Inactive Translator",
+        email: "inactive@verboflex.test",
+        id: "inactive-user",
+        is_active: false,
+        must_change_password: true,
+        roles: ["translator"],
+      },
+    ],
+  };
+}
+
+function connection(state: AdminMockState) {
+  return {
+    connected_at: state.connectionStatus === "Disconnected" ? null : now,
+    expires_at:
+      state.connectionStatus === "Connected" ? "2026-09-28T19:30:00Z" : null,
+    revoked_at: state.connectionStatus === "Disconnected" ? now : null,
+    scope_label: "Read-only repository access",
+    scope_profile: "repository",
+    status: state.connectionStatus,
+  };
+}
+
+function layoutCandidates() {
+  return [
+    ["android_xml", "Android XML", "res/values/strings.xml"],
+    ["qt_ts", "Qt TS", "translations/application_it.ts"],
+    ["json", "JSON", "locales/en.json"],
+    ["ios_strings", "iOS strings", "Resources/en.lproj/Localizable.strings"],
+  ].map(([format, identity, file], index) => ({
+    confidence: 1,
+    files: [file],
+    format,
+    id: `layout-${index + 1}`,
+    keys: ["screen.title"],
+    languages: ["en", "it"],
+    layout_identity: identity,
+    repository_side: "direct",
+    samples: [
+      {
+        key: "screen.title",
+        language: "en",
+        translation: "A bounded preview sample",
+      },
+    ],
+    samples_are_partial: true,
+    version: 1,
+  }));
+}
+
+function previewJob(
+  state: "queued" | "succeeded" | "timed_out",
+  attempt: number,
+) {
+  return {
+    attempt,
+    candidate_revision_id: "revision-candidate",
+    candidate_revision_version: 5,
+    connection_generation: 3,
+    created_at: new Date().toISOString(),
+    detector_version: "detector-v1",
+    error_code: state === "timed_out" ? "time_limit_exceeded" : null,
+    finished_at: state === "queued" ? null : new Date().toISOString(),
+    id: `preview-job-${attempt}`,
+    input_digest: `preview-input-${attempt}`,
+    is_current: true,
+    mapping_id: "mapping-direct",
+    product_id: "product-1",
+    repository_sides: [
+      {
+        commit_hash: "abcdef0123456789",
+        repository_id: "repository-app",
+        role: "direct",
+        source_branch: "main",
+      },
+    ],
+    result:
+      state === "succeeded"
+        ? {
+            detector_version: "detector-v1",
+            digest: `preview-digest-${attempt}`,
+            layout_candidates: layoutCandidates(),
+          }
+        : null,
+    started_at: state === "queued" ? null : new Date().toISOString(),
+    state,
+  };
+}
+
+async function json(route: Route, body: unknown, status = 200) {
+  await route.fulfill({
+    body: JSON.stringify(body),
+    contentType: "application/json",
+    status,
+  });
+}
+
+function requestBody(route: Route): Record<string, unknown> {
+  return route.request().postDataJSON() as Record<string, unknown>;
+}
+
+async function installAdminApi(page: Page, state: AdminMockState) {
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const { pathname, searchParams } = url;
+    const method = request.method();
+
+    if (pathname === "/api/v1/auth/refresh" && method === "POST") {
+      return json(route, {
+        access_token: "memory-only-e2e-access-token",
+        expires_in: 900,
+        must_change_password: false,
+        token_type: "bearer",
+      });
+    }
+    if (pathname === "/api/v1/users/me" && method === "GET") {
+      return json(route, state.users[0]);
+    }
+    if (pathname === "/api/v1/system/status" && method === "GET") {
+      return json(route, {
+        api: "online",
+        checked_at: now,
+        database: "online",
+        redis: "online",
+        worker: "online",
+      });
+    }
+    if (pathname === "/api/v1/admin/products" && method === "GET") {
+      if (state.productsDelayMs > 0) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, state.productsDelayMs),
+        );
+      }
+      if (state.productFailures > 0) {
+        state.productFailures -= 1;
+        return json(route, { detail: "bounded product list failure" }, 503);
+      }
+      const status = searchParams.get("status");
+      const filtered = state.products.filter((item) =>
+        status === "active"
+          ? item.is_active
+          : status === "inactive"
+            ? !item.is_active
+            : true,
+      );
+      const cursor = searchParams.get("cursor");
+      if (state.paginateProducts && cursor === null) {
+        return json(route, {
+          items: filtered.slice(0, 2),
+          next_cursor: "page-2",
+        });
+      }
+      return json(route, {
+        items:
+          state.paginateProducts && cursor === "page-2"
+            ? filtered.slice(2)
+            : filtered,
+        next_cursor: null,
+      });
+    }
+    if (pathname === "/api/v1/admin/products" && method === "POST") {
+      const body = requestBody(route);
+      const created = product({
+        active_revision: null,
+        candidate_revision: {
+          description:
+            typeof body.description === "string" ? body.description : null,
+          id: "new-candidate",
+          is_published: false,
+          version: 1,
+        },
+        id: "product-new",
+        is_active: false,
+        name: String(body.name),
+      });
+      state.product = created;
+      state.products.push(created);
+      return json(route, created, 201);
+    }
+    if (
+      /^\/api\/v1\/admin\/products\/[^/]+$/.test(pathname) &&
+      method === "GET"
+    ) {
+      return json(route, state.product);
+    }
+    if (
+      /^\/api\/v1\/admin\/products\/[^/]+$/.test(pathname) &&
+      method === "PUT"
+    ) {
+      const body = requestBody(route);
+      state.product = {
+        ...state.product,
+        candidate_revision:
+          state.product.candidate_revision === null
+            ? null
+            : {
+                ...state.product.candidate_revision,
+                description:
+                  typeof body.description === "string"
+                    ? body.description
+                    : null,
+                version: state.product.candidate_revision.version + 1,
+              },
+        name: String(body.name),
+      };
+      return json(route, state.product);
+    }
+    if (/\/published\/mapping-imports$/.test(pathname) && method === "GET") {
+      return json(route, {
+        items: state.publishedImports,
+        next_cursor: null,
+      });
+    }
+    if (
+      /\/published\/mappings\/[^/]+\/imports$/.test(pathname) &&
+      method === "POST"
+    ) {
+      state.importMutations.push({
+        body: request.postDataJSON(),
+        method,
+        pathname,
+      });
+      const current = state.publishedImports[0] ?? publishedImport();
+      const next =
+        state.nextImportOutcome === "initial"
+          ? currentPublishedImport(initialCommit)
+          : state.nextImportOutcome === "fast_forward"
+            ? currentPublishedImport(fastForwardCommit, {
+                execution_number: 2,
+              })
+            : state.nextImportOutcome === "failed_refresh"
+              ? currentPublishedImport(fastForwardCommit, {
+                  action: "retry_import",
+                  error_category: "provider_unavailable",
+                  error_message:
+                    "raw provider body https://api.bitbucket.org/private token=secret",
+                  execution_number: 3,
+                  state: "may_be_stale",
+                })
+              : currentPublishedImport(retriedCommit, {
+                  execution_number: 4,
+                  retry_count: current.retry_count + 1,
+                });
+      state.publishedImports = [next];
+      return json(route, next, 202);
+    }
+    if (/\/imports\/[^/]+$/.test(pathname) && method === "GET") {
+      return json(route, state.publishedImports[0]);
+    }
+    if (/\/rewrite-comparison$/.test(pathname) && method === "GET") {
+      return json(route, {
+        confirmable: true,
+        files: Array.from({ length: 48 }, (_, position) => ({
+          change:
+            position % 3 === 0
+              ? "added"
+              : position % 3 === 1
+                ? "modified"
+                : "removed",
+          path: `locales/${"very-long-segment/".repeat(4)}message-${position}.json`,
+          position,
+          repository_side: "direct",
+        })),
+        import_id: logicalImportId,
+        mapping_id: "mapping-import",
+        proposal_digest: "d".repeat(64),
+        proposal_id: "proposal-current",
+        proposed_execution_id: "execution-rewritten",
+        sides: [
+          {
+            added_count: 16,
+            modified_count: 16,
+            new_commit_hash: rewrittenCommit,
+            old_commit_hash: retriedCommit,
+            removed_count: 16,
+            repository_id: "repository-app",
+            repository_side: "direct",
+          },
+        ],
+        topology: "direct",
+      });
+    }
+    if (/\/rewrite-confirmation$/.test(pathname) && method === "POST") {
+      const body = request.postDataJSON();
+      state.rewriteConfirmations.push(body);
+      state.importMutations.push({ body, method, pathname });
+      const confirmed = currentPublishedImport(rewrittenCommit, {
+        execution_number: 5,
+        retry_count: state.publishedImports[0]?.retry_count ?? 1,
+      });
+      state.publishedImports = [confirmed];
+      return json(route, confirmed);
+    }
+    if (pathname.endsWith("/deactivate") && method === "POST") {
+      if (state.deactivateFailures > 0) {
+        state.deactivateFailures -= 1;
+        return json(route, { detail: "bounded lifecycle failure" }, 503);
+      }
+      state.product = { ...state.product, is_active: false };
+      return json(route, state.product);
+    }
+    if (pathname.endsWith("/publish") && method === "POST") {
+      if (state.publicationConflicts > 0) {
+        state.publicationConflicts -= 1;
+        return json(
+          route,
+          {
+            blockers: [
+              "mapping_configuration_invalid",
+              "preview_confirmation_required",
+            ],
+            detail: "Product publication blocked",
+          },
+          409,
+        );
+      }
+      state.product = {
+        ...state.product,
+        active_revision:
+          state.product.candidate_revision === null
+            ? state.product.active_revision
+            : { ...state.product.candidate_revision, is_published: true },
+        candidate_revision: null,
+        is_active: true,
+      };
+      return json(route, state.product);
+    }
+    if (pathname.endsWith("/reactivate") && method === "POST") {
+      if (state.reactivationConflicts > 0) {
+        state.reactivationConflicts -= 1;
+        return json(
+          route,
+          {
+            blockers: ["layout_required", "target_configuration_invalid"],
+            detail: "Product lifecycle conflict",
+          },
+          409,
+        );
+      }
+      state.product = { ...state.product, is_active: true };
+      return json(route, state.product);
+    }
+    if (/\/revisions\/[^/]+\/mappings$/.test(pathname) && method === "GET") {
+      return json(route, { items: state.mappings, next_cursor: null });
+    }
+    if (/\/candidate\/mappings$/.test(pathname) && method === "GET") {
+      return json(route, { items: state.mappings, next_cursor: null });
+    }
+    if (/\/candidate\/mappings$/.test(pathname) && method === "POST") {
+      const body = requestBody(route);
+      const created = {
+        ...directMapping,
+        ...body,
+        candidate_version: Number(body.expected_candidate_version) + 1,
+        id: `mapping-${state.mappings.length + 1}`,
+        primary_repository_id:
+          typeof body.repository_id === "string"
+            ? body.repository_id
+            : "repository-app",
+        primary_source_branch:
+          typeof body.source_branch === "string" ? body.source_branch : "main",
+        selected_layout_candidate_id: null,
+        selected_layout_version: null,
+        translations_repository_id: null,
+        translations_source_branch: null,
+      };
+      state.mappings.push(created);
+      return json(route, created, 201);
+    }
+    if (
+      /\/candidate\/mappings\/[^/]+\/preview-jobs$/.test(pathname) &&
+      method === "POST"
+    ) {
+      state.previewAttempts += 1;
+      const firstAttemptTimesOut =
+        state.previewMode === "timeout-then-success" &&
+        state.previewAttempts === 1;
+      return json(
+        route,
+        previewJob(
+          firstAttemptTimesOut ? "queued" : "succeeded",
+          state.previewAttempts,
+        ),
+        201,
+      );
+    }
+    if (
+      /^\/api\/v1\/admin\/preview-jobs\/[^/]+$/.test(pathname) &&
+      method === "GET"
+    ) {
+      const attempt = pathname.endsWith("-1") ? 1 : state.previewAttempts;
+      return json(
+        route,
+        previewJob(attempt === 1 ? "timed_out" : "succeeded", attempt),
+      );
+    }
+    if (pathname.endsWith("/confirmation") && method === "POST") {
+      const body = requestBody(route);
+      return json(route, {
+        confirmed_at: now,
+        confirmed_by: "admin-user",
+        job_id: `preview-job-${state.previewAttempts}`,
+        layout_candidate_id: body.layout_candidate_id,
+        layout_candidate_version: 1,
+        mapping_id: "mapping-direct",
+        preview_digest: body.preview_digest,
+      });
+    }
+    if (pathname === "/api/v1/admin/repositories" && method === "GET") {
+      return json(route, { items: state.repositories, next_cursor: null });
+    }
+    if (pathname === "/api/v1/admin/repositories" && method === "POST") {
+      const body = requestBody(route);
+      const created = {
+        descriptive_name:
+          typeof body.descriptive_name === "string"
+            ? body.descriptive_name
+            : null,
+        id: `repository-${state.repositories.length + 1}`,
+        repository_slug: String(body.repository_slug),
+        workspace: String(body.workspace),
+      };
+      state.repositories.push(created);
+      return json(route, created, 201);
+    }
+    if (/\/repositories\/[^/]+\/branch$/.test(pathname) && method === "GET") {
+      const branchName = searchParams.get("branch_name");
+      state.branchRequests.push({
+        branchName,
+        cursor: null,
+        limit: searchParams.get("limit"),
+      });
+      const exact = state.branches.find((branch) => branch.name === branchName);
+      return exact === undefined
+        ? json(route, { detail: "Branch not found" }, 404)
+        : json(route, exact);
+    }
+    if (/\/repositories\/[^/]+\/branches$/.test(pathname) && method === "GET") {
+      const cursor = searchParams.get("cursor");
+      state.branchRequests.push({
+        branchName: null,
+        cursor,
+        limit: searchParams.get("limit"),
+      });
+      const boundaryItems = state.paginateBranches
+        ? cursor === null
+          ? state.branches.slice(0, 100)
+          : state.branches.slice(100)
+        : state.branches;
+      return json(route, {
+        items: boundaryItems,
+        next_cursor:
+          state.paginateBranches && cursor === null
+            ? "opaque-branch-page-2"
+            : null,
+      });
+    }
+    if (pathname === "/api/v1/admin/users" && method === "GET") {
+      return json(route, { items: state.users, next_cursor: null });
+    }
+    if (pathname === "/api/v1/admin/users" && method === "POST") {
+      const body = requestBody(route);
+      const created = {
+        display_name: String(body.display_name),
+        email: String(body.email),
+        id: "created-user",
+        is_active: true,
+        must_change_password: true,
+        roles: body.roles,
+      };
+      state.users.push(created);
+      return json(
+        route,
+        { ...created, temporary_password: temporaryPassword },
+        201,
+      );
+    }
+    if (pathname === "/api/v1/admin/bitbucket" && method === "GET") {
+      return json(route, connection(state));
+    }
+    if (pathname.endsWith("/bitbucket/revoke") && method === "POST") {
+      state.connectionStatus = "Disconnected";
+      return json(route, connection(state));
+    }
+    const connectionMutation = pathname.match(
+      /^\/api\/v1\/admin\/bitbucket\/(connect|reconnect)$/,
+    );
+    if (connectionMutation !== null && method === "POST") {
+      const action = connectionMutation[1];
+      state.connectionMutations.push(action);
+      if (state.connectionDelayMs > 0) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, state.connectionDelayMs),
+        );
+      }
+      if (state.connectionFailures > 0) {
+        state.connectionFailures -= 1;
+        return json(route, { detail: "Bitbucket connection unavailable" }, 503);
+      }
+      state.connectionStatus = "Connected";
+      return json(route, connection(state));
+    }
+
+    return json(
+      route,
+      { detail: `Unhandled mock route: ${method} ${pathname}` },
+      501,
+    );
+  });
+}
+
+type NonAdminRole = "product_manager_reviewer" | "translator" | "viewer";
+
+async function installRoleAwareWorkspaceApi(
+  page: Page,
+  role: NonAdminRole,
+  adminRequestTrace: string[],
+) {
+  // React StrictMode mounts effects twice in development, so both initial
+  // status probes fail before the user-authorized retry succeeds.
+  let statusFailures = 2;
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const { pathname } = new URL(request.url());
+    const method = request.method();
+
+    if (pathname === "/api/v1/auth/refresh" && method === "POST") {
+      return json(route, {
+        access_token: `${role}-memory-only-access-token`,
+        expires_in: 900,
+        must_change_password: false,
+        token_type: "bearer",
+      });
+    }
+    if (pathname === "/api/v1/users/me" && method === "GET") {
+      return json(route, {
+        display_name: `${role} e2e user`,
+        email: `${role}@verboflex.test`,
+        id: `${role}-user`,
+        is_active: true,
+        must_change_password: false,
+        roles: [role],
+      });
+    }
+    if (pathname === "/api/v1/system/status" && method === "GET") {
+      if (statusFailures > 0) {
+        statusFailures -= 1;
+        return json(route, { detail: "bounded status failure" }, 503);
+      }
+      return json(route, {
+        api: "online",
+        checked_at: now,
+        database: "online",
+        redis: "online",
+        worker: "online",
+      });
+    }
+    if (pathname.startsWith("/api/v1/admin/")) {
+      adminRequestTrace.push(`${method} ${pathname}`);
+      return json(route, { detail: "Forbidden" }, 403);
+    }
+
+    return json(
+      route,
+      { detail: `Unhandled role-aware route: ${method} ${pathname}` },
+      501,
+    );
+  });
+}
+
+async function expectNoPageOverflow(page: Page) {
+  const widths = await page.evaluate(() => ({
+    body: document.body.scrollWidth,
+    document: document.documentElement.scrollWidth,
+    viewport: innerWidth,
+  }));
+  expect(widths.body).toBeLessThanOrEqual(widths.viewport);
+  expect(widths.document).toBeLessThanOrEqual(widths.viewport);
+}
+
+async function expectNoCredentialResidue(page: Page) {
+  const residue = await page.evaluate(() => ({
+    historyState: history.state,
+    localStorage: Object.entries(localStorage),
+    sessionStorage: Object.entries(sessionStorage),
+    text: document.body.innerText,
+    url: location.href,
+  }));
+  expect(residue.localStorage).toEqual([]);
+  expect(residue.sessionStorage).toEqual([]);
+  expect(residue.url).not.toContain(temporaryPassword);
+  expect(residue.text).not.toContain(temporaryPassword);
+  const serialized = JSON.stringify(residue).toLowerCase();
+  for (const forbidden of [
+    "authorization_url",
+    "callback",
+    "client_secret",
+    "ciphertext",
+    "refresh_token",
+  ]) {
+    expect(serialized).not.toContain(forbidden);
+  }
+}
+
+async function chooseSelect(page: Page, label: string, option: string) {
+  await page.getByLabel(label, { exact: true }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
+}
+
+test("role-aware Workspace navigation stays location-authoritative on desktop and mobile", async ({
+  page,
+}) => {
+  const state = defaultState();
+  await installAdminApi(page, state);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/admin/users");
+  await expect(
+    page.getByRole("heading", { name: "Users", level: 1 }),
+  ).toBeVisible();
+
+  const desktopNavigation = page
+    .locator("aside")
+    .getByRole("navigation", { name: "Primary navigation" });
+  await expect(desktopNavigation.locator('[aria-current="page"]')).toHaveCount(
+    1,
+  );
+  await expect(
+    desktopNavigation.getByRole("link", { name: "Users" }),
+  ).toHaveAttribute("aria-current", "page");
+  const desktopWorkspace = desktopNavigation.getByRole("link", {
+    name: "Workspace",
+  });
+  await expect(desktopWorkspace).toHaveAttribute("href", "/");
+  await desktopWorkspace.click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(
+    page.getByRole("heading", { name: "Workspace", level: 1 }),
+  ).toBeVisible();
+  await expect(
+    desktopNavigation.getByRole("link", { name: "Workspace" }),
+  ).toHaveAttribute("aria-current", "page");
+
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/admin/bitbucket");
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  const sheet = page.getByRole("dialog", { name: "Navigation" });
+  await expect(sheet.locator('[aria-current="page"]')).toHaveCount(1);
+  await expect(sheet.getByRole("link", { name: "Bitbucket" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await sheet.getByRole("link", { name: "Workspace" }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(page).toHaveURL(/\/$/);
+  await expect(
+    page.getByRole("heading", { name: "Workspace", level: 1 }),
+  ).toBeFocused();
+  await expectNoPageOverflow(page);
+});
+
+for (const role of [
+  "product_manager_reviewer",
+  "translator",
+  "viewer",
+] as const) {
+  test(`non-admin admin-request denial: ${role} is denied before child loaders and after Workspace retry`, async ({
+    page,
+  }) => {
+    const adminRequestTrace: string[] = [];
+    await installRoleAwareWorkspaceApi(page, role, adminRequestTrace);
+    await page.goto("/admin/products/private-candidate");
+
+    await expect(
+      page.getByRole("heading", {
+        name: "Administrator access required",
+        level: 1,
+      }),
+    ).toBeFocused();
+    expect(adminRequestTrace).toEqual([]);
+
+    await page.getByRole("link", { name: "Return to workspace" }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(
+      page.getByRole("heading", { name: "Workspace", level: 1 }),
+    ).toBeVisible();
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText(
+      "We could not reach the API. Check that the backend is running, then retry the connection.",
+    );
+    expect(adminRequestTrace).toEqual([]);
+
+    const online = page.getByText("API online");
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await page.getByRole("button", { name: "Retry connection" }).click();
+      const recovered = await online
+        .waitFor({ state: "visible", timeout: 2_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (recovered) {
+        break;
+      }
+    }
+    await expect(online).toBeVisible();
+    expect(adminRequestTrace).toEqual([]);
+  });
+}
+
+test("product collection preserves API order across all states and responsive projections", async ({
+  page,
+}) => {
+  const state = defaultState();
+  state.productsDelayMs = 300;
+  state.productFailures = 1;
+  state.paginateProducts = true;
+  await installAdminApi(page, state);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/admin/products");
+  await expect(page.getByRole("status")).toContainText("Loading products");
+  await expect(page.getByRole("heading", { name: "Products" })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("Products unavailable");
+  await page.getByRole("button", { name: "Retry loading page" }).click();
+  await expect(page.getByRole("table", { name: "Products" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Zulu Mobile" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Alpha Embedded" }),
+  ).toBeVisible();
+
+  const firstPageNames = await page
+    .getByRole("table", { name: "Products" })
+    .getByRole("link")
+    .allTextContents();
+  expect(firstPageNames).toEqual(["Zulu Mobile", "Alpha Embedded"]);
+  await page.getByRole("button", { name: "Load more products" }).click();
+  await expect(
+    page.getByRole("table", { name: "Products" }).getByRole("link"),
+  ).toHaveCount(3);
+
+  await chooseSelect(page, "Product status", "Inactive");
+  await expect(
+    page.getByRole("link", { name: "Alpha Embedded" }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Zulu Mobile" })).toHaveCount(0);
+  await chooseSelect(page, "Products per page", "100");
+
+  state.products = [];
+  state.paginateProducts = false;
+  state.productsDelayMs = 0;
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "No products configured" }),
+  ).toBeVisible();
+
+  state.products = defaultState().products;
+  for (const width of [320, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Products" })).toBeVisible();
+    const navigationTrigger = page.getByRole("button", {
+      name: "Open navigation",
+    });
+    if (width < 1024) {
+      await expect(navigationTrigger).toBeVisible();
+      await navigationTrigger.click();
+      const sheet = page.getByRole("dialog", { name: "Navigation" });
+      await expect(sheet.getByRole("link", { name: "Products" })).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(navigationTrigger).toBeFocused();
+    } else {
+      await expect(navigationTrigger).toBeHidden();
+      await expect(
+        page
+          .locator("aside")
+          .getByRole("navigation", { name: "Primary navigation" }),
+      ).toBeVisible();
+    }
+    if (width < 768) {
+      await expect(page.getByLabel("Products mobile list")).toBeVisible();
+      await expect(page.getByRole("table", { name: "Products" })).toBeHidden();
+    } else {
+      await expect(page.getByRole("table", { name: "Products" })).toBeVisible();
+    }
+    await expectNoPageOverflow(page);
+    expect(
+      await page.evaluate(
+        () => matchMedia("(prefers-reduced-motion: reduce)").matches,
+      ),
+    ).toBe(true);
+  }
+});
+
+test("five-step configuration reuses repositories, exposes both topologies, and clears one-time user secrets", async ({
+  page,
+}) => {
+  const state = defaultState();
+  state.mappings = [];
+  await installAdminApi(page, state);
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await page.goto("/admin/products/new");
+
+  await page
+    .getByLabel("Name", { exact: true })
+    .fill("New Localization Product");
+  await page
+    .getByLabel("Description")
+    .fill("A candidate assembled through the real five-step wizard");
+  await page.getByRole("button", { name: "Save and continue" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Repositories" }),
+  ).toBeVisible();
+  await expect(page.getByRole("table", { name: "Repositories" })).toContainText(
+    "Application repository",
+  );
+  await page
+    .getByRole("button", { name: "Use Application repository" })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Application repository selected" }),
+  ).toBeDisabled();
+
+  await page.getByRole("button", { name: "Mappings" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Add mapping" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Direct")).toBeChecked();
+  await page.getByLabel("Separate").click();
+  await expect(
+    page.getByRole("alertdialog", { name: "Change mapping topology?" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Change topology" }).click();
+  await expect(page.getByLabel("Separate")).toBeChecked();
+  await page.getByLabel("Direct").click();
+  await page.getByRole("button", { name: "Change topology" }).click();
+  await chooseSelect(
+    page,
+    "Repository",
+    "Application repository — verboflex-workspace/application-with-an-intentionally-long-repository-slug",
+  );
+  await expect(page.getByLabel("Source branch")).toBeEnabled();
+  await chooseSelect(page, "Source branch", "main");
+  await page.getByLabel("Allow target main").check();
+  await chooseSelect(page, "Default target", "main");
+  await page.getByRole("button", { name: "Save mapping" }).click();
+  await expect(page.getByRole("table", { name: "Mappings" })).toContainText(
+    "direct",
+  );
+
+  await page.getByRole("button", { name: "Preview" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Validation has not run" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Review and publish" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Review and publish" }),
+  ).toBeVisible();
+
+  state.mappings = [directMapping, separateMapping];
+  await page.goto("/admin/products/product-1/mappings");
+  const mappingsTable = page.getByRole("table", { name: "Mappings" });
+  await expect(mappingsTable).toContainText("direct");
+  await expect(mappingsTable).toContainText("separate");
+  await expect(mappingsTable).toContainText(
+    "release/very-long-supported-target-name",
+  );
+  await expectNoPageOverflow(page);
+
+  await page.goto("/admin/users");
+  await page.getByRole("button", { name: "Add user" }).click();
+  await page.getByLabel("Corporate email").fill("translator@verboflex.test");
+  await page.getByLabel("Display name").fill("New Translator");
+  await page.getByRole("checkbox", { name: "Translator" }).check();
+  await page.getByRole("button", { name: "Create user" }).click();
+  const credentialDialog = page.getByRole("dialog", {
+    name: "Temporary password created",
+  });
+  await expect(credentialDialog.getByLabel("Temporary password")).toHaveText(
+    temporaryPassword,
+  );
+  await credentialDialog
+    .getByRole("button", { name: "I saved the password" })
+    .click();
+  await expect(credentialDialog).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("table", { name: "Internal users" })
+      .getByText("New Translator", {
+        exact: true,
+      }),
+  ).toBeVisible();
+  await expectNoCredentialResidue(page);
+});
+
+test("100/101 exact branches stay fail-closed at 200 percent zoom", async ({
+  page,
+}) => {
+  const state = defaultState();
+  const configuredBranch =
+    "release/2026-with-a-very-long-opaque-provider-branch-name";
+  const configuredKeysBranch = "keys/101%2F?#-opaque-provider-branch";
+  const configuredTranslationsBranch =
+    "translations/102%2F?#-opaque-provider-branch";
+  state.branches = [
+    ...Array.from({ length: 100 }, (_, index) => ({
+      commit_hash: String(index + 1).padStart(40, "0"),
+      name: `provider-branch-${String(index + 1).padStart(3, "0")}`,
+    })),
+    { commit_hash: "f".repeat(40), name: configuredBranch },
+    { commit_hash: "e".repeat(40), name: configuredKeysBranch },
+    { commit_hash: "d".repeat(40), name: configuredTranslationsBranch },
+  ];
+  state.mappings = [
+    {
+      ...directMapping,
+      allowed_target_branches: [configuredBranch],
+      default_target_branch: configuredBranch,
+      primary_source_branch: configuredBranch,
+    },
+    {
+      ...separateMapping,
+      primary_source_branch: configuredKeysBranch,
+      translations_source_branch: configuredTranslationsBranch,
+    },
+  ];
+  state.paginateBranches = true;
+  await installAdminApi(page, state);
+  await page.setViewportSize({ width: 640, height: 900 });
+  await page.goto("/admin/products/product-1/mappings");
+  await page.getByRole("button", { name: "Edit mapping" }).first().click();
+
+  const sourceBranch = page.getByRole("combobox", {
+    name: "Source branch",
+    exact: true,
+  });
+  await expect(sourceBranch).toContainText(configuredBranch);
+  await expect(
+    page.getByText("100 branches loaded — more available"),
+  ).toBeVisible();
+  expect(
+    state.branchRequests.filter(
+      ({ branchName }) => branchName === configuredBranch,
+    ),
+  ).toEqual([{ branchName: configuredBranch, cursor: null, limit: null }]);
+  expect(
+    state.branchRequests.filter(({ branchName }) => branchName === null),
+  ).toEqual([{ branchName: null, cursor: null, limit: "100" }]);
+
+  await page
+    .getByRole("button", { name: "Load more branches for Source branch" })
+    .click();
+  await expect(page.getByText("All 103 branches loaded")).toBeVisible();
+  await expect(sourceBranch).toContainText(configuredBranch);
+  expect(
+    state.branchRequests.filter(({ branchName }) => branchName === null),
+  ).toEqual([
+    { branchName: null, cursor: null, limit: "100" },
+    {
+      branchName: null,
+      cursor: "opaque-branch-page-2",
+      limit: "100",
+    },
+  ]);
+
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = "2";
+  });
+  await expectNoPageOverflow(page);
+
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = "1";
+  });
+  const previewBranchBaseline = state.branchRequests.length;
+  await page.goto("/admin/products/product-1/preview");
+  const runValidationButtons = page.getByRole("button", {
+    name: "Run validation",
+  });
+  await expect(runValidationButtons).toHaveCount(2);
+  await runValidationButtons.nth(0).click();
+  await expect(page.getByText("Succeeded", { exact: true })).toHaveCount(1);
+  await runValidationButtons.nth(1).click();
+  await expect(page.getByText("Succeeded", { exact: true })).toHaveCount(2);
+  expect(state.branchRequests.slice(previewBranchBaseline)).toEqual([
+    { branchName: configuredBranch, cursor: null, limit: null },
+    { branchName: configuredKeysBranch, cursor: null, limit: null },
+    { branchName: configuredTranslationsBranch, cursor: null, limit: null },
+  ]);
+  await expectNoPageOverflow(page);
+});
+
+test("gap-closure mobile wizard traverses step 1 to 5 to 1 at 320 pixels", async ({
+  page,
+}) => {
+  const state = defaultState();
+  state.mappings = [];
+  await installAdminApi(page, state);
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/admin/products/new");
+  await page.getByLabel("Name", { exact: true }).fill("Mobile Gap Product");
+  await page.getByRole("button", { name: "Save and continue" }).click();
+
+  const progress = page.getByLabel("Product setup progress");
+  const navigation = page.getByRole("navigation", {
+    name: "Wizard navigation",
+  });
+  const next = navigation.getByRole("button", { name: /^Next/ });
+  const back = navigation.getByRole("button", { name: "Back" });
+  await expect(progress).toContainText("Step 2 of 5");
+  await page
+    .getByRole("button", { name: "Use Application repository" })
+    .click();
+  for (const step of [3, 4, 5]) {
+    await next.click();
+    await expect(progress).toContainText(`Step ${step} of 5`);
+  }
+  await expect(next).toBeDisabled();
+  for (const step of [4, 3, 2, 1]) {
+    await back.click();
+    await expect(progress).toContainText(`Step ${step} of 5`);
+  }
+  const heights = await navigation
+    .getByRole("button")
+    .evaluateAll((buttons) =>
+      buttons.map((button) => button.getBoundingClientRect().height),
+    );
+  expect(heights.every((height) => height >= 44)).toBe(true);
+  await expectNoPageOverflow(page);
+});
+
+test("dirty product and mapping routes require discard before navigation", async ({
+  page,
+}) => {
+  const state = defaultState();
+  await installAdminApi(page, state);
+  await page.setViewportSize({ width: 1024, height: 900 });
+
+  await page.goto("/admin/products/product-1/edit");
+  const name = page.getByLabel("Name", { exact: true });
+  await expect(name).toHaveValue("Zulu Mobile");
+  await name.fill("Zulu Mobile unsaved");
+  const usersLink = page.locator('aside a[href="/admin/users"]');
+  await usersLink.focus();
+  await usersLink.click();
+  const productDialog = page.getByRole("alertdialog", {
+    name: "Leave without saving?",
+  });
+  await expect(productDialog).toContainText(
+    "Your unsaved entries on this page will be lost.",
+  );
+  await productDialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(name).toHaveValue("Zulu Mobile unsaved");
+  await expect(usersLink).toBeFocused();
+  await expect(page).toHaveURL("/admin/products/product-1/edit");
+
+  await usersLink.click();
+  await page
+    .getByRole("alertdialog", { name: "Leave without saving?" })
+    .getByRole("button", { name: "Discard changes" })
+    .click();
+  await expect(page).toHaveURL("/admin/users");
+
+  await page.goto("/admin/products/product-1/mappings");
+  await page.getByRole("button", { name: "Edit mapping" }).first().click();
+  await chooseSelect(
+    page,
+    "Default target",
+    "release/very-long-supported-target-name",
+  );
+  const productNavigation = page.getByRole("navigation", {
+    name: "Product configuration",
+  });
+  const previewLink = productNavigation.getByRole("link", { name: "Preview" });
+  await previewLink.focus();
+  await previewLink.click();
+  const mappingDialog = page.getByRole("alertdialog", {
+    name: "Leave without saving?",
+  });
+  await mappingDialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(page.getByLabel("Default target")).toContainText(
+    "release/very-long-supported-target-name",
+  );
+  await expect(previewLink).toBeFocused();
+
+  await previewLink.click();
+  await expect(mappingDialog).toBeVisible();
+  await usersLink.evaluate((element) => (element as HTMLElement).click());
+  await mappingDialog.getByRole("button", { name: "Discard changes" }).click();
+  await expect(page).toHaveURL("/admin/products/product-1/preview");
+  await expect(mappingDialog).toHaveCount(0);
+
+  await page
+    .getByRole("navigation", { name: "Product configuration" })
+    .getByRole("link", { name: "Mappings" })
+    .click();
+  await expect(page).toHaveURL("/admin/products/product-1/mappings");
+  await page.getByRole("button", { name: "Edit mapping" }).first().click();
+  await chooseSelect(
+    page,
+    "Default target",
+    "release/very-long-supported-target-name",
+  );
+  void page.goBack().catch(() => null);
+  const backDialog = page.getByRole("alertdialog", {
+    name: "Leave without saving?",
+  });
+  await expect(backDialog).toBeVisible();
+  await backDialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(page).toHaveURL("/admin/products/product-1/mappings");
+
+  const reloadDialogPromise = page.waitForEvent("dialog");
+  void page.reload().catch(() => null);
+  const reloadDialog = await reloadDialogPromise;
+  expect(reloadDialog.type()).toBe("beforeunload");
+  await reloadDialog.dismiss();
+  await expect(page).toHaveURL("/admin/products/product-1/mappings");
+  await expect(page.getByLabel("Default target")).toContainText(
+    "release/very-long-supported-target-name",
+  );
+});
+
+test("dirty mobile mapping navigation restores focus after cancel", async ({
+  page,
+}) => {
+  const state = defaultState();
+  await installAdminApi(page, state);
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/admin/products/product-1/mappings");
+  await page.getByRole("button", { name: "Edit mapping" }).first().click();
+  await chooseSelect(
+    page,
+    "Default target",
+    "release/very-long-supported-target-name",
+  );
+
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  const sheet = page.getByRole("dialog", { name: "Navigation" });
+  const usersLink = sheet.getByRole("link", { name: "Users" });
+  await usersLink.click();
+  const dialog = page.getByRole("alertdialog", {
+    name: "Leave without saving?",
+  });
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(sheet).toBeVisible();
+  await expect(usersLink).toBeFocused();
+  await expect(page.getByLabel("Default target")).toContainText(
+    "release/very-long-supported-target-name",
+  );
+  await expectNoPageOverflow(page);
+
+  await usersLink.click();
+  await page
+    .getByRole("alertdialog", { name: "Leave without saving?" })
+    .getByRole("button", { name: "Discard changes" })
+    .click();
+  await expect(page).toHaveURL("/admin/users");
+  await expect(sheet).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
+  await expectNoPageOverflow(page);
+});
+
+test("product lifecycle remains backend-authoritative for deactivate and reactivation blockers", async ({
+  page,
+}) => {
+  const state = defaultState();
+  state.deactivateFailures = 1;
+  await installAdminApi(page, state);
+  await page.goto("/admin/products/product-1/overview");
+
+  await page.getByRole("button", { name: "Deactivate product" }).click();
+  const dialog = page.getByRole("alertdialog", {
+    name: "Deactivate Zulu Mobile?",
+  });
+  await dialog.getByRole("button", { name: "Deactivate product" }).click();
+  await expect(dialog.getByRole("alert")).toContainText(
+    "active state is unchanged",
+  );
+  await expect(page.getByText("Active", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "Deactivate product" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByText("Inactive", { exact: true })).toBeVisible();
+
+  state.product = product({ candidate_revision: null, is_active: false });
+  state.mappings = [
+    {
+      ...directMapping,
+      candidate_version: publishedRevision.version,
+      selected_layout_candidate_id: "published-layout",
+      selected_layout_version: 1,
+    },
+  ];
+  state.reactivationConflicts = 1;
+  await page.goto("/admin/products/product-1/preview");
+  await expect(page.getByText("Confirmed", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Reactivate product" }).click();
+  const reactivateDialog = page.getByRole("alertdialog", {
+    name: "Reactivate Zulu Mobile?",
+  });
+  await reactivateDialog
+    .getByRole("button", { name: "Reactivate product" })
+    .click();
+  const blockers = page.getByRole("alert", { name: "Publication blocked" });
+  await expect(blockers).toContainText("Layout selection required");
+  await expect(blockers).toContainText("Target configuration invalid");
+  await expect(
+    blockers.getByRole("link", { name: "Review mapping 1" }),
+  ).toHaveAttribute("href", "#preview-mapping-direct");
+
+  await page.getByRole("button", { name: "Reactivate product" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Reactivate Zulu Mobile?" })
+    .getByRole("button", { name: "Reactivate product" })
+    .click();
+  await expect(page.getByText("Active", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Reactivate product" }),
+  ).toHaveCount(0);
+});
+
+test("Bitbucket client credentials recover expiry without navigation or credential residue", async ({
+  page,
+}) => {
+  const state = defaultState();
+  state.connectionStatus = "Disconnected";
+  state.connectionDelayMs = 150;
+  const consoleMessages: string[] = [];
+  page.on("console", (message) => consoleMessages.push(message.text()));
+  await installAdminApi(page, state);
+  await page.setViewportSize({ width: 320, height: 900 });
+  await page.goto("/admin/bitbucket");
+  const initialNavigation = await page.evaluate(() => ({
+    href: location.href,
+    length: history.length,
+  }));
+
+  const connect = page.getByRole("button", { name: "Connect Bitbucket" });
+  await connect.click();
+  await expect(connect).toBeDisabled();
+  await expect(connect).toHaveAttribute("aria-busy", "true");
+  await expect(
+    page.getByRole("status", { name: "Bitbucket connection mutation" }),
+  ).toContainText("Connecting Bitbucket");
+  await expect(page.getByLabel("Bitbucket connection status")).toContainText(
+    "Connected",
+  );
+  await expect(
+    page.getByText("Read-only repository access", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("28 Sept 2026, 19:30 UTC")).toBeVisible();
+  await expect(
+    page.getByLabel("Bitbucket connection status"),
+  ).not.toContainText("workspace");
+  expect(state.connectionMutations).toEqual(["connect"]);
+  expect(await page.evaluate(() => location.href)).toBe(initialNavigation.href);
+  expect(await page.evaluate(() => history.length)).toBe(
+    initialNavigation.length,
+  );
+
+  state.connectionStatus = "Reauthorization required";
+  await page.reload();
+  await expect(page.getByLabel("Bitbucket connection status")).toContainText(
+    "Reauthorization required",
+  );
+  state.connectionFailures = 1;
+  state.connectionDelayMs = 0;
+  const reconnect = page.getByRole("button", {
+    name: "Reconnect Bitbucket",
+  });
+  await reconnect.click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Verify the server configuration, then try again. The current connection status is unchanged.",
+  );
+  await expect(page.getByLabel("Bitbucket connection status")).toContainText(
+    "Reauthorization required",
+  );
+  await expect(reconnect).toBeEnabled();
+  expect(state.connectionMutations).toEqual(["connect", "reconnect"]);
+
+  await reconnect.click();
+  await expect(page.getByLabel("Bitbucket connection status")).toContainText(
+    "Connected",
+  );
+  await expect(
+    page.getByRole("status", { name: "Bitbucket connection mutation" }),
+  ).toContainText("Bitbucket reconnected");
+  expect(state.connectionMutations).toEqual([
+    "connect",
+    "reconnect",
+    "reconnect",
+  ]);
+  expect(await page.evaluate(() => location.href)).toBe(initialNavigation.href);
+  expect(await page.evaluate(() => history.length)).toBe(
+    initialNavigation.length,
+  );
+  await expectNoCredentialResidue(page);
+  const serializedConsole = consoleMessages.join("\n").toLowerCase();
+  for (const forbidden of [
+    "authorization_url",
+    "callback",
+    "client_secret",
+    "ciphertext",
+    "refresh_token",
+  ]) {
+    expect(serializedConsole).not.toContain(forbidden);
+  }
+  await expectNoPageOverflow(page);
+
+  state.product = product();
+  state.mappings = [directMapping];
+  state.previewMode = "timeout-then-success";
+  state.previewAttempts = 0;
+  state.publicationConflicts = 1;
+  await page.goto("/admin/products/product-1/preview");
+  await page.getByRole("button", { name: "Run validation" }).click();
+  await expect(page.getByText("Queued", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Validation timed out" }),
+  ).toBeVisible({
+    timeout: 5_000,
+  });
+  await page.getByRole("button", { name: "Retry validation" }).click();
+  await expect(page.getByText("Succeeded", { exact: true })).toBeVisible();
+  for (const label of [
+    "Android XML — Android XML",
+    "Qt TS — Qt TS",
+    "JSON — JSON",
+    "iOS strings — iOS strings",
+  ]) {
+    await expect(page.getByRole("radio", { name: label })).toBeVisible();
+  }
+  await page.getByRole("radio", { name: "JSON — JSON" }).check();
+  await expect(
+    page.getByText(
+      "Preview samples are partial: up to 10 per language and 100 total.",
+    ),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Confirm preview" }).focus();
+  await expect(
+    page.getByRole("button", { name: "Confirm preview" }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Confirmed", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Publish changes" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Publish Zulu Mobile?" })
+    .getByRole("button", { name: "Publish changes" })
+    .click();
+  await expect(
+    page.getByRole("alert", { name: "Publication blocked" }),
+  ).toContainText("Preview confirmation required");
+  await page.getByRole("button", { name: "Publish changes" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Publish Zulu Mobile?" })
+    .getByRole("button", { name: "Publish changes" })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Publish changes" }),
+  ).toHaveCount(0);
+  await expect(page.getByText("Active", { exact: true })).toBeVisible();
+  await expectNoCredentialResidue(page);
+  await expectNoPageOverflow(page);
+});
+
+for (const viewport of [
+  { height: 900, label: "desktop", width: 1440 },
+  { height: 720, label: "mobile", width: 320 },
+] as const) {
+  test(`initial import, fast-forward, failed refresh, manual retry, and rewritten baseline work on ${viewport.label}`, async ({
+    page,
+  }) => {
+    const state = defaultState();
+    state.product = product({ affected_mapping_count: 2 });
+    state.products[0] = state.product;
+    state.mappings = [directMapping];
+    state.publishedImports = [publishedImport()];
+    const browserRequests: Array<{
+      method: string;
+      pathname: string;
+      url: string;
+    }> = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.startsWith("/api/v1/admin/")) {
+        browserRequests.push({
+          method: request.method(),
+          pathname: url.pathname,
+          url: request.url(),
+        });
+      }
+    });
+    await installAdminApi(page, state);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize(viewport);
+
+    await page.goto("/admin/products/product-1/overview");
+    await expect(page.getByText("2 mappings may be stale")).toBeVisible();
+    const freshness = page.getByText(
+      "A recent import failed, so the last successful baseline remains active.",
+    );
+    await expect(freshness).toBeVisible();
+    await expect(freshness.getByRole("link")).toHaveCount(0);
+
+    await page.goto("/admin/products/product-1/mappings");
+    await expect(
+      page.getByRole("heading", { name: "Published mapping imports" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Run import", exact: true }).click();
+    await expect(
+      page.getByText("Current", { exact: true }).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(initialCommit.slice(0, 12)).filter({ visible: true }),
+    ).toBeVisible();
+    expect(state.publishedImports[0]?.id).toBe(logicalImportId);
+
+    state.nextImportOutcome = "fast_forward";
+    await page
+      .getByRole("button", { name: "Refresh import", exact: true })
+      .click();
+    await expect(
+      page.getByText(fastForwardCommit.slice(0, 12)).filter({ visible: true }),
+    ).toBeVisible();
+    expect(state.publishedImports[0]?.id).toBe(logicalImportId);
+
+    state.nextImportOutcome = "failed_refresh";
+    await page
+      .getByRole("button", { name: "Refresh import", exact: true })
+      .click();
+    await expect(
+      page.getByText("May be stale", { exact: true }).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(fastForwardCommit.slice(0, 12)).filter({ visible: true }),
+    ).toBeVisible();
+    const retainedBaselineError = page.getByRole("alert").filter({
+      hasText: "Bitbucket unavailable",
+      visible: true,
+    });
+    await expect(retainedBaselineError).toContainText(
+      "The last successful baseline is unchanged.",
+    );
+    await expect(retainedBaselineError).not.toContainText("raw provider body");
+
+    const retryImportId = state.publishedImports[0]?.id;
+    state.nextImportOutcome = "manual_retry";
+    await page
+      .getByRole("button", { name: "Retry import", exact: true })
+      .click();
+    await expect(
+      page.getByText(retriedCommit.slice(0, 12)).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Retry 1", { exact: true }).filter({ visible: true }),
+    ).toBeVisible();
+    expect(state.publishedImports[0]?.id).toBe(retryImportId);
+
+    state.publishedImports = [
+      currentPublishedImport(retriedCommit, {
+        action: "review_baseline_change",
+        execution_number: 5,
+        state: "review_required",
+      }),
+    ];
+    await page.reload();
+    await page
+      .getByRole("button", { name: "Review baseline change", exact: true })
+      .click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Review rewritten source history",
+    });
+    await expect(dialog).toContainText("Added 16");
+    await expect(dialog).toContainText("Modified 16");
+    await expect(dialog).toContainText("Removed 16");
+    await dialog.getByRole("button", { name: "Confirm new baseline" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(
+      page.getByText(rewrittenCommit.slice(0, 12)).filter({ visible: true }),
+    ).toBeVisible();
+    expect(state.rewriteConfirmations).toEqual([
+      {
+        proposal_digest: "d".repeat(64),
+        proposal_id: "proposal-current",
+        proposed_execution_id: "execution-rewritten",
+      },
+    ]);
+
+    const importStarts = state.importMutations.filter(({ pathname }) =>
+      pathname.endsWith("/imports"),
+    );
+    expect(importStarts).toHaveLength(4);
+    expect(importStarts.every(({ body }) => body === null)).toBe(true);
+    expect(
+      browserRequests.filter(
+        ({ method, pathname }) =>
+          method === "POST" && pathname.includes("/published/mappings/"),
+      ),
+    ).toHaveLength(5);
+    expect(
+      browserRequests.some(({ pathname }) =>
+        /\/(branches|commits|pullrequests)(?:\/|$)/.test(pathname),
+      ),
+    ).toBe(false);
+    expect(
+      browserRequests.every(({ url }) => !url.includes("api.bitbucket.org")),
+    ).toBe(true);
+    await expect(page.locator("body")).not.toContainText("token=secret");
+    await expectNoCredentialResidue(page);
+    await expectNoPageOverflow(page);
+  });
+}
+
+test("UI3-C23 keeps mapping pages and the 80vh reconciliation dialog contained across reflow boundaries", async ({
+  page,
+}) => {
+  const state = defaultState();
+  state.mappings = [directMapping];
+  state.publishedImports = [
+    currentPublishedImport(retriedCommit, {
+      action: "review_baseline_change",
+      state: "review_required",
+    }),
+  ];
+  await installAdminApi(page, state);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+
+  for (const viewport of [
+    { height: 720, width: 320, zoom: 1 },
+    { height: 800, width: 768, zoom: 1 },
+    { height: 800, width: 1024, zoom: 1 },
+    { height: 900, width: 1440, zoom: 1 },
+    { height: 720, width: 320, zoom: 2 },
+  ]) {
+    await page.setViewportSize({
+      height: viewport.height,
+      width: viewport.width,
+    });
+    await page.goto("/admin/products/product-1/mappings");
+    await page.evaluate((zoom) => {
+      document.documentElement.style.fontSize = zoom === 2 ? "200%" : "";
+    }, viewport.zoom);
+    await expectNoPageOverflow(page);
+    const review = page.getByRole("button", {
+      name: "Review baseline change",
+      exact: true,
+    });
+    const reviewBox = await review.boundingBox();
+    expect(reviewBox?.height).toBeGreaterThanOrEqual(44);
+    await review.click();
+
+    const dialog = page.getByRole("alertdialog", {
+      name: "Review rewritten source history",
+    });
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("table", { name: "Localization file changes" }),
+    ).toBeVisible();
+    const dialogBox = await dialog.boundingBox();
+    expect(dialogBox).not.toBeNull();
+    expect(dialogBox!.height).toBeLessThanOrEqual(viewport.height * 0.8 + 1);
+    const scrollRegion = dialog.getByRole("region", {
+      name: "Rewritten baseline comparison content",
+    });
+    await expect(scrollRegion).toHaveAttribute("tabindex", "0");
+    await scrollRegion.focus();
+    await expect(scrollRegion).toBeFocused();
+    await page.keyboard.press("End");
+    await expectNoPageOverflow(page);
+    await dialog.getByRole("button", { name: "Keep current baseline" }).click();
+    await expect(review).toBeFocused();
+  }
+});
+
+test("UI3-C26 keeps long opaque values local and copies a full commit only on explicit request", async ({
+  page,
+}) => {
+  const state = defaultState();
+  state.mappings = [directMapping];
+  state.publishedImports = [
+    currentPublishedImport(retriedCommit, {
+      action: "review_baseline_change",
+      state: "review_required",
+    }),
+  ];
+  await page.addInitScript(() => {
+    const target = globalThis as typeof globalThis & {
+      __copiedCommit?: string;
+    };
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          target.__copiedCommit = value;
+        },
+      },
+    });
+  });
+  await installAdminApi(page, state);
+  await page.setViewportSize({ height: 720, width: 320 });
+  await page.goto("/admin/products/product-1/mappings");
+
+  const opaqueRegion = page
+    .getByRole("region", { name: "Source repository and branch" })
+    .filter({ visible: true });
+  await expect(opaqueRegion).toContainText(longOpaqueBranch);
+  await expect(opaqueRegion).toHaveAttribute("tabindex", "0");
+  await opaqueRegion.focus();
+  await expect(opaqueRegion).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+
+  await page
+    .getByRole("button", { name: "Review baseline change", exact: true })
+    .click();
+  const dialog = page.getByRole("alertdialog", {
+    name: "Review rewritten source history",
+  });
+  await expect(dialog).toContainText(retriedCommit);
+  await expect(dialog).toContainText(rewrittenCommit);
+  await expect(dialog.getByText("Full commit copied")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Copy full commit" }).nth(1).click();
+  expect(
+    await page.evaluate(
+      () =>
+        (globalThis as typeof globalThis & { __copiedCommit?: string })
+          .__copiedCommit,
+    ),
+  ).toBe(rewrittenCommit);
+  await expect(dialog.getByText("Full commit copied")).toBeVisible();
+  await expectNoPageOverflow(page);
+});
+
+interface RealRevision {
+  description: string | null;
+  id: string;
+  is_published: boolean;
+  name: string;
+  version: number;
+}
+
+interface RealProduct {
+  active_revision: RealRevision | null;
+  candidate_revision: RealRevision | null;
+  id: string;
+  is_active: boolean;
+  name: string;
+}
+
+interface RealMappingPage {
+  items: Array<{
+    allowed_target_branches: string[];
+    default_target_branch: string;
+    primary_repository_id: string;
+    primary_source_branch: string;
+    topology: string;
+    translations_repository_id: string | null;
+    translations_source_branch: string | null;
+  }>;
+  next_cursor: string | null;
+}
+
+interface RealReactivationFixtures {
+  currentProductId: string;
+  email: string;
+  password: string;
+  repositoryIds: string[];
+  staleProductId: string;
+  userId: string;
+}
+
+interface RealReactivationEvidence {
+  graph: {
+    active_revision_id: string;
+    active_revision_version: number;
+    candidate_revision_id: null;
+    mappings: Array<{
+      confirmed_preview: {
+        connection_generation: number;
+        job_id: string;
+        repository_sides: Array<{
+          commit_hash: string;
+          repository_id: string;
+          role: string;
+          source_branch: string;
+        }>;
+        result_digest: string;
+      };
+      id: string;
+      identity_key: string;
+      revision_id: string;
+      selected_layout_candidate_id: string;
+      selected_layout_version: number;
+      sides: Array<{
+        repository_id: string;
+        role: string;
+        source_branch: string;
+      }>;
+      targets: Array<{ branch: string; is_default: boolean }>;
+      topology: string;
+    }>;
+  };
+  is_active: boolean;
+  sidecars: Array<{
+    connection_generation: number;
+    job_id: string;
+    layout_candidate_id: string;
+    layout_candidate_version: number;
+    mapping_id: string;
+    preview_digest: string;
+    product_id: string;
+    revision_id: string;
+    revision_version: number;
+  }>;
+}
+
+interface MockProviderAuditRow {
+  category: string;
+  effective_scope: string;
+  grant_type: string;
+  method: string;
+}
+
+interface Phase3SmokeFixtures {
+  directMappingId: string;
+  email: string;
+  password: string;
+  productId: string;
+  repositoryIds: string[];
+  separateMappingId: string;
+  userId: string;
+  zeroDeltaMappingId: string;
+}
+
+interface Phase3ProviderAuditRow {
+  category: "oauth-token-exchange" | "resource";
+  method: string;
+  resource_family: string;
+  status: number;
+}
+
+const phase3SmokeSeed = String.raw`
+import json
+from datetime import UTC, datetime
+from uuid import uuid4
+
+from sqlalchemy import select
+
+from verboflex.auth.passwords import hash_password
+from verboflex.db.session import SessionFactory
+from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.models.product import Product, ProductRevision
+from verboflex.models.product_mapping import (
+    ProductMappingAllowedTarget,
+    ProductMappingRepositorySide,
+    ProductRepositoryMapping,
+)
+from verboflex.models.repository import Repository
+from verboflex.models.role import Role
+from verboflex.models.user import User
+
+now = datetime.now(UTC)
+user_id = uuid4()
+product_id = uuid4()
+revision_id = uuid4()
+password = f"VF phase3 smoke {uuid4().hex}!"
+email = f"phase3-smoke-{user_id.hex}@example.com"
+
+with SessionFactory.begin() as session:
+    connection = session.get_one(BitbucketConnection, 1)
+    if connection.access_token_ciphertext is not None:
+        raise RuntimeError("phase3 smoke requires a disconnected connection")
+    admin_role = session.scalar(select(Role).where(Role.name == "admin"))
+    if admin_role is None:
+        raise RuntimeError("admin role unavailable")
+    user = User(
+        id=user_id,
+        email=email,
+        display_name="Phase 3 Smoke Admin",
+        hashed_password=hash_password(password),
+        is_active=True,
+        must_change_password=False,
+    )
+    user.roles = [admin_role]
+    product = Product(
+        id=product_id,
+        display_name="Phase 3 Import Smoke",
+        name_key=f"phase-3-import-smoke-{product_id.hex}",
+        is_active=True,
+    )
+    session.add_all([user, product])
+    session.flush()
+    revision = ProductRevision(
+        id=revision_id,
+        product_id=product_id,
+        display_name=product.display_name,
+        name_key=product.name_key,
+        description="Disposable deployment-like import smoke",
+        version=1,
+        is_published=False,
+    )
+    session.add(revision)
+    repositories = {}
+    for slug in (
+        "phase3-direct",
+        "phase3-keys",
+        "phase3-translations",
+        "phase3-zero-delta",
+    ):
+        repository = Repository(
+            id=uuid4(),
+            workspace="verboflex-smoke",
+            repository_slug=slug,
+        )
+        session.add(repository)
+        repositories[slug] = repository
+    session.flush()
+
+    def add_mapping(*, identity, topology, sides):
+        mapping = ProductRepositoryMapping(
+            id=uuid4(),
+            revision_id=revision_id,
+            topology=topology,
+            identity_key=json.dumps(identity, separators=(",", ":")),
+        )
+        mapping.sides = [
+            ProductMappingRepositorySide(
+                role=role,
+                repository_id=repositories[slug].id,
+                source_branch="main",
+            )
+            for role, slug in sides
+        ]
+        mapping.allowed_targets = [
+            ProductMappingAllowedTarget(branch="main", is_default=True)
+        ]
+        session.add(mapping)
+        session.flush()
+        return mapping
+
+    direct = add_mapping(
+        identity=["direct", str(repositories["phase3-direct"].id), "main"],
+        topology="direct",
+        sides=[("direct", "phase3-direct")],
+    )
+    separate = add_mapping(
+        identity=[
+            "separate",
+            str(repositories["phase3-keys"].id),
+            "main",
+            str(repositories["phase3-translations"].id),
+            "main",
+        ],
+        topology="separate",
+        sides=[
+            ("keys", "phase3-keys"),
+            ("translations", "phase3-translations"),
+        ],
+    )
+    zero_delta = add_mapping(
+        identity=["direct", str(repositories["phase3-zero-delta"].id), "main"],
+        topology="direct",
+        sides=[("direct", "phase3-zero-delta")],
+    )
+    session.flush()
+    revision.is_published = True
+    revision.published_at = now
+    session.flush()
+    product.active_revision_id = revision_id
+    product.candidate_revision_id = None
+    session.flush()
+
+print(json.dumps({
+    "directMappingId": str(direct.id),
+    "email": email,
+    "password": password,
+    "productId": str(product_id),
+    "repositoryIds": [str(repository.id) for repository in repositories.values()],
+    "separateMappingId": str(separate.id),
+    "userId": str(user_id),
+    "zeroDeltaMappingId": str(zero_delta.id),
+}))
+`;
+
+const phase3SmokeCleanup = String.raw`
+import json
+import sys
+from uuid import UUID
+
+from sqlalchemy import delete, text
+
+from verboflex.db.session import SessionFactory
+from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.models.repository import Repository
+from verboflex.models.user import User
+
+fixture = json.load(sys.stdin)
+with SessionFactory.begin() as session:
+    session.execute(text("TRUNCATE TABLE products CASCADE"))
+    session.execute(
+        delete(Repository).where(
+            Repository.id.in_(UUID(value) for value in fixture["repositoryIds"])
+        )
+    )
+    user = session.get(User, UUID(fixture["userId"]))
+    if user is not None:
+        session.delete(user)
+    connection = session.get_one(BitbucketConnection, 1)
+    connection.generation = 0
+    connection.access_token_ciphertext = None
+    connection.refresh_token_ciphertext = None
+    connection.scope_profile = None
+    connection.provider_expires_at = None
+    connection.connected_at = None
+    connection.revoked_at = None
+`;
+
+interface RealMapping51Fixtures {
+  blockedActiveProductId: string;
+  candidateBoundaryMappingId: string;
+  candidateProductId: string;
+  email: string;
+  password: string;
+  readyActiveProductId: string;
+  userId: string;
+}
+
+const realReactivationSeed = String.raw`
+import json
+import sys
+from datetime import UTC, datetime, timedelta
+from uuid import UUID, uuid4
+
+from sqlalchemy import select
+
+from verboflex.auth.passwords import hash_password
+from verboflex.db.session import SessionFactory
+from verboflex.localization.preview.core import build_layout_candidate
+from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.models.preview_job import PreviewJob
+from verboflex.models.product import Product, ProductRevision
+from verboflex.models.product_mapping import (
+    ProductMappingAllowedTarget,
+    ProductMappingRepositorySide,
+    ProductRepositoryMapping,
+)
+from verboflex.models.repository import Repository
+from verboflex.models.role import Role
+from verboflex.models.user import User
+from verboflex.services.preview_jobs import (
+    PREVIEW_DETECTOR_VERSION,
+    PREVIEW_LAYOUT_IDENTITY,
+    _canonical_identity,
+    _closed_result,
+    _complete_sides,
+    _identity,
+)
+
+now = datetime.now(UTC)
+user_id = uuid4()
+password = f"VF e2e reactivation {uuid4().hex}!"
+email = f"reactivation-{user_id.hex}@example.com"
+repository_ids = []
+mock_commit_hash = "0123456789abcdef0123456789abcdef01234567"
+
+with SessionFactory.begin() as session:
+    connection = session.get_one(BitbucketConnection, 1)
+    if not (
+        connection.generation == 0
+        and connection.access_token_ciphertext is None
+        and connection.refresh_token_ciphertext is None
+        and connection.scope_profile is None
+        and connection.provider_expires_at is None
+        and connection.connected_at is None
+        and connection.revoked_at is None
+    ):
+        raise RuntimeError("real-backend E2E requires the disconnected local fixture stack")
+    connection.generation = 1
+    connection.access_token_ciphertext = "e2e-non-provider-ciphertext"
+    connection.refresh_token_ciphertext = None
+    connection.scope_profile = "repository"
+    connection.provider_expires_at = now + timedelta(hours=1)
+    connection.connected_at = now
+    connection.revoked_at = None
+
+    admin_role = session.scalar(select(Role).where(Role.name == "admin"))
+    if admin_role is None:
+        raise RuntimeError("admin role unavailable")
+    user = User(
+        id=user_id,
+        email=email,
+        display_name="Reactivation E2E Admin",
+        hashed_password=hash_password(password),
+        is_active=True,
+        must_change_password=False,
+    )
+    user.roles = [admin_role]
+    session.add(user)
+
+    def seed_product(*, stale_confirmation):
+        product_id = uuid4()
+        revision_id = uuid4()
+        repository_id = uuid4()
+        mapping_id = uuid4()
+        name = f"Reactivation {product_id.hex[:12]}"
+        product = Product(
+            id=product_id,
+            display_name=name,
+            name_key=name.casefold(),
+            is_active=False,
+        )
+        session.add(product)
+        session.flush()
+        revision = ProductRevision(
+            id=revision_id,
+            product_id=product_id,
+            display_name=name,
+            name_key=name.casefold(),
+            description="Published active-only E2E revision",
+            version=6,
+            is_published=False,
+        )
+        repository = Repository(
+            id=repository_id,
+            workspace="verboflex-e2e",
+            repository_slug=f"reactivation-{repository_id.hex[:12]}",
+        )
+        mapping = ProductRepositoryMapping(
+            id=mapping_id,
+            revision_id=revision_id,
+            topology="direct",
+            identity_key=f'["direct","{repository_id}","main"]',
+        )
+        mapping.sides = [
+            ProductMappingRepositorySide(
+                role="direct",
+                repository_id=repository_id,
+                source_branch="main",
+            )
+        ]
+        mapping.allowed_targets = [
+            ProductMappingAllowedTarget(branch="main", is_default=True)
+        ]
+        session.add_all([revision, repository, mapping])
+        session.flush()
+
+        repository_sides = _complete_sides(mapping, {"direct": mock_commit_hash})
+        _encoded, input_digest = _canonical_identity(
+            product_id=product_id,
+            revision=revision,
+            mapping=mapping,
+            connection_generation=connection.generation,
+            repository_sides=repository_sides,
+        )
+        job = PreviewJob(
+            id=uuid4(),
+            revision_scope="candidate",
+            input_digest=input_digest,
+            attempt=1,
+            state="succeeded",
+            product_id=product_id,
+            candidate_revision_id=revision_id,
+            candidate_revision_version=revision.version,
+            mapping_id=mapping_id,
+            topology="direct",
+            connection_generation=connection.generation,
+            detector_version=PREVIEW_DETECTOR_VERSION,
+            layout_identity=PREVIEW_LAYOUT_IDENTITY,
+            repository_sides=repository_sides,
+            result={},
+            started_at=now,
+            finished_at=now,
+        )
+        candidate = build_layout_candidate(
+            repository_side="direct",
+            format="android_xml",
+            layout_identity="res",
+            files=("res/values/strings.xml",),
+            values={"default": {"hello": "Hello"}},
+        ).to_mapping()
+        job.result = _closed_result(
+            _identity(job),
+            {
+                "detector_version": PREVIEW_DETECTOR_VERSION,
+                "digest": input_digest,
+                "layout_candidates": [candidate],
+            },
+        )
+        session.add(job)
+        mapping.selected_layout_candidate_id = UUID(str(candidate["id"]))
+        mapping.selected_layout_version = 1
+        mapping.confirmed_preview_job_id = job.id
+        mapping.confirmed_preview_digest = str(job.result["digest"])
+        mapping.preview_confirmed_by = user_id
+        mapping.preview_confirmed_at = now
+        if stale_confirmation:
+            mapping.selected_layout_candidate_id = None
+            mapping.selected_layout_version = None
+        session.flush()
+        revision.is_published = True
+        revision.published_at = now
+        session.flush()
+        product.active_revision_id = revision_id
+        product.candidate_revision_id = None
+        session.flush()
+        repository_ids.append(str(repository_id))
+        return str(product_id)
+
+    current_product_id = seed_product(stale_confirmation=False)
+    stale_product_id = seed_product(stale_confirmation=True)
+
+print(json.dumps({
+    "currentProductId": current_product_id,
+    "email": email,
+    "password": password,
+    "repositoryIds": repository_ids,
+    "staleProductId": stale_product_id,
+    "userId": str(user_id),
+}))
+`;
+
+const realReactivationCleanup = String.raw`
+import json
+import sys
+
+from verboflex.db.session import SessionFactory
+from verboflex.models.bitbucket_connection import BitbucketConnection
+
+json.load(sys.stdin)
+with SessionFactory.begin() as session:
+    connection = session.get_one(BitbucketConnection, 1)
+    connection.generation = 0
+    connection.access_token_ciphertext = None
+    connection.refresh_token_ciphertext = None
+    connection.scope_profile = None
+    connection.provider_expires_at = None
+    connection.connected_at = None
+    connection.revoked_at = None
+`;
+
+const realReactivationExpireConnection = String.raw`
+import json
+import sys
+from datetime import UTC, datetime, timedelta
+
+from verboflex.db.session import SessionFactory
+from verboflex.models.bitbucket_connection import BitbucketConnection
+
+json.load(sys.stdin)
+with SessionFactory.begin() as session:
+    connection = session.get_one(BitbucketConnection, 1)
+    connection.provider_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+`;
+
+const realReactivationEvidence = String.raw`
+import json
+import sys
+from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+from verboflex.db.session import SessionFactory
+from verboflex.models.preview_job import (
+    ActiveRevisionRevalidationConfirmation,
+    PreviewJob,
+)
+from verboflex.models.product import Product, ProductRevision
+from verboflex.models.product_mapping import ProductRepositoryMapping
+
+payload = json.load(sys.stdin)
+product_id = UUID(payload["productId"])
+
+with SessionFactory() as session:
+    product = session.get_one(Product, product_id)
+    revision = session.get_one(ProductRevision, product.active_revision_id)
+    mappings = session.execute(
+        select(ProductRepositoryMapping)
+        .options(
+            selectinload(ProductRepositoryMapping.sides),
+            selectinload(ProductRepositoryMapping.allowed_targets),
+        )
+        .where(ProductRepositoryMapping.revision_id == revision.id)
+        .order_by(ProductRepositoryMapping.id)
+    ).scalars().all()
+    graph_mappings = []
+    for mapping in mappings:
+        confirmed_job = session.get_one(PreviewJob, mapping.confirmed_preview_job_id)
+        graph_mappings.append({
+            "confirmed_preview": {
+                "connection_generation": confirmed_job.connection_generation,
+                "job_id": str(confirmed_job.id),
+                "repository_sides": confirmed_job.repository_sides,
+                "result_digest": confirmed_job.result["digest"],
+            },
+            "id": str(mapping.id),
+            "identity_key": mapping.identity_key,
+            "revision_id": str(mapping.revision_id),
+            "selected_layout_candidate_id": str(mapping.selected_layout_candidate_id),
+            "selected_layout_version": mapping.selected_layout_version,
+            "sides": [
+                {
+                    "repository_id": str(side.repository_id),
+                    "role": side.role,
+                    "source_branch": side.source_branch,
+                }
+                for side in mapping.sides
+            ],
+            "targets": [
+                {"branch": target.branch, "is_default": target.is_default}
+                for target in mapping.allowed_targets
+            ],
+            "topology": mapping.topology,
+        })
+    sidecars = session.execute(
+        select(ActiveRevisionRevalidationConfirmation)
+        .where(ActiveRevisionRevalidationConfirmation.product_id == product_id)
+        .order_by(ActiveRevisionRevalidationConfirmation.job_id)
+    ).scalars().all()
+
+print(json.dumps({
+    "graph": {
+        "active_revision_id": str(revision.id),
+        "active_revision_version": revision.version,
+        "candidate_revision_id": None,
+        "mappings": graph_mappings,
+    },
+    "is_active": product.is_active,
+    "sidecars": [
+        {
+            "connection_generation": row.connection_generation,
+            "job_id": str(row.job_id),
+            "layout_candidate_id": str(row.layout_candidate_id),
+            "layout_candidate_version": row.layout_candidate_version,
+            "mapping_id": str(row.mapping_id),
+            "preview_digest": row.preview_digest,
+            "product_id": str(row.product_id),
+            "revision_id": str(row.revision_id),
+            "revision_version": row.revision_version,
+        }
+        for row in sidecars
+    ],
+}, separators=(",", ":"), sort_keys=True))
+`;
+
+const realMapping51Seed = String.raw`
+import json
+from datetime import UTC, datetime, timedelta
+from uuid import UUID, uuid4
+
+from sqlalchemy import select
+
+from verboflex.auth.passwords import hash_password
+from verboflex.db.session import SessionFactory
+from verboflex.localization.preview.core import build_layout_candidate
+from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.models.preview_job import PreviewJob
+from verboflex.models.product import Product, ProductRevision
+from verboflex.models.product_mapping import (
+    ProductMappingAllowedTarget,
+    ProductMappingRepositorySide,
+    ProductRepositoryMapping,
+)
+from verboflex.models.repository import Repository
+from verboflex.models.role import Role
+from verboflex.models.user import User
+from verboflex.services.preview_jobs import (
+    PREVIEW_DETECTOR_VERSION,
+    PREVIEW_LAYOUT_IDENTITY,
+    _canonical_identity,
+    _closed_result,
+    _complete_sides,
+    _identity,
+)
+
+now = datetime.now(UTC)
+user_id = uuid4()
+password = f"VF e2e terminal cursor {uuid4().hex}!"
+email = f"terminal-cursor-{user_id.hex}@example.com"
+
+with SessionFactory.begin() as session:
+    connection = session.get_one(BitbucketConnection, 1)
+    if not (
+        connection.generation == 0
+        and connection.access_token_ciphertext is None
+        and connection.refresh_token_ciphertext is None
+        and connection.scope_profile is None
+        and connection.provider_expires_at is None
+        and connection.connected_at is None
+        and connection.revoked_at is None
+    ):
+        raise RuntimeError("real-backend E2E requires the disconnected local fixture stack")
+    connection.generation = 1
+    connection.access_token_ciphertext = "e2e-non-provider-ciphertext"
+    connection.refresh_token_ciphertext = None
+    connection.scope_profile = "repository"
+    connection.provider_expires_at = now + timedelta(hours=1)
+    connection.connected_at = now
+    connection.revoked_at = None
+
+    admin_role = session.scalar(select(Role).where(Role.name == "admin"))
+    if admin_role is None:
+        raise RuntimeError("admin role unavailable")
+    user = User(
+        id=user_id,
+        email=email,
+        display_name="Terminal Cursor E2E Admin",
+        hashed_password=hash_password(password),
+        is_active=True,
+        must_change_password=False,
+    )
+    user.roles = [admin_role]
+    session.add(user)
+
+    def confirm_mapping(*, mapping, product_id, revision, source_ref):
+        repository_sides = _complete_sides(mapping, {"direct": source_ref})
+        _encoded, input_digest = _canonical_identity(
+            product_id=product_id,
+            revision=revision,
+            mapping=mapping,
+            connection_generation=connection.generation,
+            repository_sides=repository_sides,
+        )
+        job = PreviewJob(
+            id=uuid4(),
+            revision_scope="candidate",
+            input_digest=input_digest,
+            attempt=1,
+            state="succeeded",
+            product_id=product_id,
+            candidate_revision_id=revision.id,
+            candidate_revision_version=revision.version,
+            mapping_id=mapping.id,
+            topology="direct",
+            connection_generation=connection.generation,
+            detector_version=PREVIEW_DETECTOR_VERSION,
+            layout_identity=PREVIEW_LAYOUT_IDENTITY,
+            repository_sides=repository_sides,
+            result={},
+            started_at=now,
+            finished_at=now,
+        )
+        candidate = build_layout_candidate(
+            repository_side="direct",
+            format="android_xml",
+            layout_identity=f"mobile/{mapping.id}/src/main/res",
+            files=(f"mobile/{mapping.id}/src/main/res/values/strings.xml",),
+            values={"default": {"hello": "Hello"}},
+        ).to_mapping()
+        job.result = _closed_result(
+            _identity(job),
+            {
+                "detector_version": PREVIEW_DETECTOR_VERSION,
+                "digest": input_digest,
+                "layout_candidates": [candidate],
+            },
+        )
+        session.add(job)
+        mapping.selected_layout_candidate_id = UUID(str(candidate["id"]))
+        mapping.selected_layout_version = 1
+        mapping.confirmed_preview_job_id = job.id
+        mapping.confirmed_preview_digest = str(job.result["digest"])
+        mapping.preview_confirmed_by = user_id
+        mapping.preview_confirmed_at = now
+
+    def seed_product(*, candidate, boundary_confirmed):
+        product_id = uuid4()
+        revision_id = uuid4()
+        repository_id = uuid4()
+        name = f"Terminal Cursor {product_id.hex[:12]}"
+        product = Product(
+            id=product_id,
+            display_name=name,
+            name_key=name.casefold(),
+            is_active=False,
+        )
+        revision = ProductRevision(
+            id=revision_id,
+            product_id=product_id,
+            display_name=name,
+            name_key=name.casefold(),
+            description="Fifty-one mapping terminal cursor fixture",
+            version=7,
+            is_published=False,
+        )
+        repository = Repository(
+            id=repository_id,
+            workspace="verboflex-e2e",
+            repository_slug=f"terminal-cursor-{repository_id.hex[:12]}",
+        )
+        session.add(product)
+        session.flush()
+        session.add_all([revision, repository])
+        session.flush()
+
+        boundary_mapping_id = None
+        for index in range(1, 52):
+            mapping_id = uuid4()
+            branch = f"branch-{index:02d}"
+            mapping = ProductRepositoryMapping(
+                id=mapping_id,
+                revision_id=revision_id,
+                topology="direct",
+                identity_key=json.dumps(
+                    ["direct", str(repository_id), branch],
+                    separators=(",", ":"),
+                ),
+            )
+            mapping.sides = [
+                ProductMappingRepositorySide(
+                    role="direct",
+                    repository_id=repository_id,
+                    source_branch=branch,
+                )
+            ]
+            mapping.allowed_targets = [
+                ProductMappingAllowedTarget(branch=branch, is_default=True)
+            ]
+            session.add(mapping)
+            session.flush()
+            confirm_mapping(
+                mapping=mapping,
+                product_id=product_id,
+                revision=revision,
+                source_ref=f"{index:040x}",
+            )
+            if index == 51:
+                boundary_mapping_id = mapping_id
+                if not boundary_confirmed:
+                    if not candidate:
+                        mapping.selected_layout_candidate_id = None
+                        mapping.selected_layout_version = None
+                    mapping.confirmed_preview_job_id = None
+                    mapping.confirmed_preview_digest = None
+                    mapping.preview_confirmed_by = None
+                    mapping.preview_confirmed_at = None
+            session.flush()
+
+        if candidate:
+            product.candidate_revision_id = revision_id
+        else:
+            revision.is_published = True
+            revision.published_at = now
+            session.flush()
+            product.active_revision_id = revision_id
+        session.flush()
+        return str(product_id), str(boundary_mapping_id)
+
+    blocked_active_product_id, _blocked_boundary = seed_product(
+        candidate=False,
+        boundary_confirmed=False,
+    )
+    ready_active_product_id, _ready_boundary = seed_product(
+        candidate=False,
+        boundary_confirmed=True,
+    )
+    candidate_product_id, candidate_boundary_mapping_id = seed_product(
+        candidate=True,
+        boundary_confirmed=False,
+    )
+
+print(json.dumps({
+    "blockedActiveProductId": blocked_active_product_id,
+    "candidateBoundaryMappingId": candidate_boundary_mapping_id,
+    "candidateProductId": candidate_product_id,
+    "email": email,
+    "password": password,
+    "readyActiveProductId": ready_active_product_id,
+    "userId": str(user_id),
+}))
+`;
+
+const realMapping51ConfirmCandidate = String.raw`
+import json
+import sys
+from datetime import UTC, datetime
+from uuid import UUID
+
+from sqlalchemy import select
+
+from verboflex.db.session import SessionFactory
+from verboflex.models.preview_job import PreviewJob
+from verboflex.models.product_mapping import ProductRepositoryMapping
+
+fixture = json.load(sys.stdin)
+mapping_id = UUID(fixture["candidateBoundaryMappingId"])
+with SessionFactory.begin() as session:
+    mapping = session.get_one(ProductRepositoryMapping, mapping_id)
+    job = session.scalar(
+        select(PreviewJob)
+        .where(PreviewJob.mapping_id == mapping_id)
+        .order_by(PreviewJob.attempt.desc())
+    )
+    if job is None or job.result is None:
+        raise RuntimeError("candidate boundary preview unavailable")
+    layout_candidates = job.result.get("layout_candidates", [])
+    if len(layout_candidates) != 1:
+        raise RuntimeError("candidate boundary layout unavailable")
+    mapping.selected_layout_candidate_id = UUID(str(layout_candidates[0]["id"]))
+    mapping.selected_layout_version = 1
+    mapping.confirmed_preview_job_id = job.id
+    mapping.confirmed_preview_digest = str(job.result["digest"])
+    mapping.preview_confirmed_by = UUID(fixture["userId"])
+    mapping.preview_confirmed_at = datetime.now(UTC)
+`;
+
+const realMapping51Cleanup = String.raw`
+import json
+import sys
+
+from verboflex.db.session import SessionFactory
+from verboflex.models.bitbucket_connection import BitbucketConnection
+
+json.load(sys.stdin)
+with SessionFactory.begin() as session:
+    connection = session.get_one(BitbucketConnection, 1)
+    connection.generation = 0
+    connection.access_token_ciphertext = None
+    connection.refresh_token_ciphertext = None
+    connection.scope_profile = None
+    connection.provider_expires_at = None
+    connection.connected_at = None
+    connection.revoked_at = None
+`;
+
+function realBackendContainer() {
+  const configured = process.env.E2E_BACKEND_CONTAINER?.trim();
+  if (configured) {
+    return configured;
+  }
+  const matches = execFileSync(
+    "docker",
+    [
+      "ps",
+      "--filter",
+      "label=com.docker.compose.service=backend",
+      "--format",
+      "{{.Names}}",
+    ],
+    { encoding: "utf8" },
+  )
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  if (matches.length !== 1) {
+    throw new Error(
+      "E2E_BACKEND_CONTAINER must identify one running real backend",
+    );
+  }
+  return matches[0];
+}
+
+function runRealBackendPython(script: string, input?: string) {
+  const python = process.env.E2E_BACKEND_PYTHON?.trim();
+  if (python) {
+    return execFileSync(python, ["-c", script], {
+      cwd: new URL("../../backend/", import.meta.url),
+      encoding: "utf8",
+      env: process.env,
+      input,
+    });
+  }
+  return execFileSync(
+    "docker",
+    ["exec", "-i", realBackendContainer(), "python", "-c", script],
+    { encoding: "utf8", input },
+  );
+}
+
+function seedPhase3SmokeFixtures(): Phase3SmokeFixtures {
+  const output = runRealBackendPython(phase3SmokeSeed);
+  return JSON.parse(output.trim()) as Phase3SmokeFixtures;
+}
+
+function cleanupPhase3SmokeFixtures(fixture: Phase3SmokeFixtures) {
+  if (process.env.E2E_PHASE3_DISPOSABLE_STACK !== "1") {
+    throw new Error("Phase 3 fixture cleanup requires a disposable stack");
+  }
+  runRealBackendPython(phase3SmokeCleanup, JSON.stringify(fixture));
+}
+
+function phase3ProviderControl(
+  heads: Record<string, string>,
+  faults: Record<string, string> = {},
+) {
+  const path = realEnvironment("E2E_PHASE3_PROVIDER_CONTROL_FILE");
+  const nextPath = `${path}.next`;
+  writeFileSync(nextPath, JSON.stringify({ faults, heads }), {
+    encoding: "utf8",
+  });
+  chmodSync(nextPath, 0o600);
+  renameSync(nextPath, path);
+}
+
+function phase3ProviderAudit(): Phase3ProviderAuditRow[] {
+  return readFileSync(realEnvironment("E2E_PHASE3_PROVIDER_AUDIT_FILE"), "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Phase3ProviderAuditRow);
+}
+
+async function waitForPhase3ProviderBlock() {
+  const sentinel = realEnvironment("E2E_PHASE3_PROVIDER_BLOCK_STARTED_FILE");
+  const deadline = Date.now() + 15_000;
+  while (!existsSync(sentinel) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  expect(existsSync(sentinel)).toBe(true);
+}
+
+function phase3ImportRow(page: Page, repositorySlug: string) {
+  return page
+    .getByRole("row")
+    .filter({ hasText: repositorySlug })
+    .filter({ visible: true });
+}
+
+function seedRealReactivationFixtures(): RealReactivationFixtures {
+  const output = runRealBackendPython(realReactivationSeed);
+  return JSON.parse(output.trim()) as RealReactivationFixtures;
+}
+
+function cleanupRealReactivationFixtures(fixture: RealReactivationFixtures) {
+  runRealBackendPython(realReactivationCleanup, JSON.stringify(fixture));
+}
+
+function expireRealReactivationConnection(fixture: RealReactivationFixtures) {
+  runRealBackendPython(
+    realReactivationExpireConnection,
+    JSON.stringify(fixture),
+  );
+}
+
+function readRealReactivationEvidence(
+  productId: string,
+): RealReactivationEvidence {
+  const output = runRealBackendPython(
+    realReactivationEvidence,
+    JSON.stringify({ productId }),
+  );
+  return JSON.parse(output.trim()) as RealReactivationEvidence;
+}
+
+function mockProviderContainer() {
+  const composeProject = execFileSync(
+    "docker",
+    [
+      "inspect",
+      "--format",
+      '{{ index .Config.Labels "com.docker.compose.project" }}',
+      realBackendContainer(),
+    ],
+    { encoding: "utf8" },
+  ).trim();
+  const matches = execFileSync(
+    "docker",
+    [
+      "ps",
+      "--filter",
+      `label=com.docker.compose.project=${composeProject}`,
+      "--filter",
+      "label=com.docker.compose.service=mock-bitbucket",
+      "--format",
+      "{{.Names}}",
+    ],
+    { encoding: "utf8" },
+  )
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  if (matches.length !== 1) {
+    throw new Error("real-backend E2E requires one scoped mock provider");
+  }
+  return matches[0];
+}
+
+function readMockProviderAudit(): MockProviderAuditRow[] {
+  const output = execFileSync(
+    "docker",
+    [
+      "exec",
+      mockProviderContainer(),
+      "cat",
+      "/run/phase2/provider-audit.jsonl",
+    ],
+    { encoding: "utf8" },
+  );
+  return output
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as MockProviderAuditRow);
+}
+
+function seedRealMapping51Fixtures(): RealMapping51Fixtures {
+  const output = runRealBackendPython(realMapping51Seed);
+  return JSON.parse(output.trim()) as RealMapping51Fixtures;
+}
+
+function confirmRealMapping51Candidate(fixture: RealMapping51Fixtures) {
+  runRealBackendPython(realMapping51ConfirmCandidate, JSON.stringify(fixture));
+}
+
+function cleanupRealMapping51Fixtures(fixture: RealMapping51Fixtures) {
+  runRealBackendPython(realMapping51Cleanup, JSON.stringify(fixture));
+}
+
+function realEnvironment(name: string) {
+  const value = process.env[name];
+  if (value === undefined || value.length === 0) {
+    throw new Error(`${name} must be set for the real-backend admin test`);
+  }
+  return value;
+}
+
+async function signInWithRealBackendCredentials(
+  page: Page,
+  email: string,
+  password: string,
+) {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in to VerboFlex" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  return { email, password };
+}
+
+async function signInToRealBackend(page: Page) {
+  return signInWithRealBackendCredentials(
+    page,
+    realEnvironment("E2E_EMAIL"),
+    realEnvironment("E2E_PASSWORD"),
+  );
+}
+
+function productResponse(productId: string, method = "GET") {
+  return (response: {
+    request: () => { method: () => string };
+    url: () => string;
+  }) =>
+    response.request().method() === method &&
+    new URL(response.url()).pathname === `/api/v1/admin/products/${productId}`;
+}
+
+function revisionMappingsResponse(productId: string) {
+  return (response: {
+    request: () => { method: () => string };
+    url: () => string;
+  }) => {
+    const pathname = new URL(response.url()).pathname;
+    return (
+      response.request().method() === "GET" &&
+      pathname.startsWith(`/api/v1/admin/products/${productId}/revisions/`) &&
+      pathname.endsWith("/mappings")
+    );
+  };
+}
+
+function mappingFingerprint(page: RealMappingPage) {
+  return page.items.map((mapping) => ({
+    allowed_target_branches: mapping.allowed_target_branches,
+    default_target_branch: mapping.default_target_branch,
+    primary_repository_id: mapping.primary_repository_id,
+    primary_source_branch: mapping.primary_source_branch,
+    topology: mapping.topology,
+    translations_repository_id: mapping.translations_repository_id,
+    translations_source_branch: mapping.translations_source_branch,
+  }));
+}
+
+async function expectNoSeededSecret(page: Page, secret: string) {
+  const residue = await page.evaluate(() => ({
+    history: JSON.stringify(history.state),
+    local: JSON.stringify(Object.entries(localStorage)),
+    session: JSON.stringify(Object.entries(sessionStorage)),
+    text: document.body.innerText,
+    url: location.href,
+  }));
+  expect(JSON.stringify(residue)).not.toContain(secret);
+}
+
+async function openPublishedEdit(page: Page, productId: string) {
+  const overviewResponse = page.waitForResponse(productResponse(productId));
+  await page.goto(`/admin/products/${productId}/overview`);
+  const published = (await (await overviewResponse).json()) as RealProduct;
+  expect(published.active_revision).not.toBeNull();
+  expect(published.candidate_revision).toBeNull();
+
+  const editProductResponse = page.waitForResponse(productResponse(productId));
+  const editMappingsResponse = page.waitForResponse(
+    revisionMappingsResponse(productId),
+  );
+  await page.getByRole("link", { name: "Edit draft" }).click();
+  const [loadedProduct, loadedMappings] = await Promise.all([
+    editProductResponse,
+    editMappingsResponse,
+  ]);
+  await expect(page).toHaveURL(`/admin/products/${productId}/edit`);
+  return {
+    mappings: (await loadedMappings.json()) as RealMappingPage,
+    product: (await loadedProduct.json()) as RealProduct,
+  };
+}
+
+test("published product edit preserves one complete candidate across refresh", async ({
+  page,
+}) => {
+  const productId = realEnvironment("E2E_PUBLISHED_PRODUCT_ID");
+  const { password } = await signInToRealBackend(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const initial = await openPublishedEdit(page, productId);
+  const activeId = initial.product.active_revision?.id;
+  expect(activeId).toBeTruthy();
+  expect(initial.product.candidate_revision).toBeNull();
+  expect(initial.mappings.items.length).toBeGreaterThan(0);
+  expect(initial.mappings.next_cursor).toBeNull();
+
+  const productMutations: string[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "PATCH" &&
+      new URL(request.url()).pathname === `/api/v1/admin/products/${productId}`
+    ) {
+      productMutations.push(request.url());
+    }
+  });
+  await page
+    .getByLabel("Description")
+    .fill(`Real routed edit ${Date.now().toString(36)}`);
+  const candidateResponse = page.waitForResponse(
+    productResponse(productId, "PATCH"),
+  );
+  await page.getByRole("button", { name: "Save and continue" }).click();
+  const candidate = (await (await candidateResponse).json()) as RealProduct;
+  expect(candidate.active_revision?.id).toBe(activeId);
+  expect(candidate.candidate_revision).not.toBeNull();
+  expect(candidate.candidate_revision?.id).not.toBe(activeId);
+  const candidateId = candidate.candidate_revision!.id;
+  await expect(
+    page.getByRole("heading", { name: "Repositories" }),
+  ).toBeVisible();
+
+  const refreshedProductResponse = page.waitForResponse(
+    productResponse(productId),
+  );
+  const refreshedMappingsResponse = page.waitForResponse(
+    revisionMappingsResponse(productId),
+  );
+  await page.reload();
+  const [refreshedProductRaw, refreshedMappingsRaw] = await Promise.all([
+    refreshedProductResponse,
+    refreshedMappingsResponse,
+  ]);
+  const refreshed = (await refreshedProductRaw.json()) as RealProduct;
+  const refreshedMappings =
+    (await refreshedMappingsRaw.json()) as RealMappingPage;
+  expect(refreshed.active_revision?.id).toBe(activeId);
+  expect(refreshed.candidate_revision?.id).toBe(candidateId);
+  expect(mappingFingerprint(refreshedMappings)).toEqual(
+    mappingFingerprint(initial.mappings),
+  );
+  expect(productMutations).toHaveLength(1);
+
+  const overviewAgain = page.waitForResponse(productResponse(productId));
+  await page.goBack();
+  expect(
+    ((await (await overviewAgain).json()) as RealProduct).active_revision?.id,
+  ).toBe(activeId);
+  await expect(page).toHaveURL(`/admin/products/${productId}/overview`);
+  const forwardProduct = page.waitForResponse(productResponse(productId));
+  const forwardMappings = page.waitForResponse(
+    revisionMappingsResponse(productId),
+  );
+  await page.goForward();
+  const [forwardProductRaw] = await Promise.all([
+    forwardProduct,
+    forwardMappings,
+  ]);
+  const restored = (await forwardProductRaw.json()) as RealProduct;
+  expect(restored.active_revision?.id).toBe(activeId);
+  expect(restored.candidate_revision?.id).toBe(candidateId);
+  expect(productMutations).toHaveLength(1);
+  await expectNoPageOverflow(page);
+  await expectNoSeededSecret(page, password);
+});
+
+test("mobile five-step wizard remains reachable at 320 pixels", async ({
+  page,
+}) => {
+  const productId = realEnvironment("E2E_MOBILE_PRODUCT_ID");
+  const { password } = await signInToRealBackend(page);
+  await page.setViewportSize({ width: 320, height: 720 });
+  await openPublishedEdit(page, productId);
+  await expectNoPageOverflow(page);
+
+  const candidateResponse = page.waitForResponse(
+    productResponse(productId, "PATCH"),
+  );
+  await page
+    .getByLabel("Description")
+    .fill(`Mobile routed edit ${Date.now().toString(36)}`);
+  await page.getByRole("button", { name: "Save and continue" }).click();
+  const candidate = (await (await candidateResponse).json()) as RealProduct;
+  expect(candidate.candidate_revision).not.toBeNull();
+  const progress = page.getByLabel("Product setup progress");
+  const navigation = page.getByRole("navigation", {
+    name: "Wizard navigation",
+  });
+  const next = navigation.getByRole("button", { name: /^Next/ });
+  const back = navigation.getByRole("button", { name: "Back" });
+
+  await expect(progress).toContainText("Step 2 of 5");
+  await next.focus();
+  await expect(next).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(progress).toContainText("Step 3 of 5");
+  await next.click();
+  await expect(progress).toContainText("Step 4 of 5");
+  await next.focus();
+  await page.keyboard.press("Enter");
+  await expect(progress).toContainText("Step 5 of 5");
+  await expect(next).toBeDisabled();
+
+  await back.click();
+  await expect(progress).toContainText("Step 4 of 5");
+  await back.focus();
+  await page.keyboard.press("Enter");
+  await expect(progress).toContainText("Step 3 of 5");
+  await back.click();
+  await expect(progress).toContainText("Step 2 of 5");
+  await back.click();
+  await expect(progress).toContainText("Step 1 of 5");
+  await expectNoPageOverflow(page);
+
+  const navigationSnapshot = await navigation.ariaSnapshot();
+  expect(navigationSnapshot).toContain("Back");
+  expect(navigationSnapshot).toContain("Next: Repositories");
+  const buttonSizes = await navigation
+    .getByRole("button")
+    .evaluateAll((buttons) =>
+      buttons.map((button) => button.getBoundingClientRect().height),
+    );
+  for (const height of buttonSizes) {
+    expect(height).toBeGreaterThanOrEqual(44);
+  }
+
+  const dirtyName = `${candidate.candidate_revision!.name} unsaved`;
+  await page.getByLabel("Name", { exact: true }).fill(dirtyName);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  const cancelDialog = page.waitForEvent("dialog");
+  void page.reload().catch(() => null);
+  const cancel = await cancelDialog;
+  expect(cancel.type()).toBe("beforeunload");
+  await cancel.dismiss();
+  await expect(page).toHaveURL(`/admin/products/${productId}/edit`);
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue(dirtyName);
+
+  await page.setViewportSize({ width: 640, height: 720 });
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = "2";
+  });
+  await expectNoPageOverflow(page);
+  await expectNoSeededSecret(page, password);
+
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = "1";
+  });
+  await page.setViewportSize({ width: 320, height: 720 });
+  const acceptedProductResponse = page.waitForResponse(
+    productResponse(productId),
+  );
+  const acceptedMappingsResponse = page.waitForResponse(
+    revisionMappingsResponse(productId),
+  );
+  const acceptDialog = page.waitForEvent("dialog");
+  const acceptedReload = page.reload();
+  const accept = await acceptDialog;
+  expect(accept.type()).toBe("beforeunload");
+  await accept.accept();
+  await Promise.all([
+    acceptedReload,
+    acceptedProductResponse,
+    acceptedMappingsResponse,
+  ]);
+  await expect(page).toHaveURL(`/admin/products/${productId}/edit`);
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue(
+    candidate.candidate_revision!.name,
+  );
+});
+
+test("unchanged active revision reactivation uses real backend state and blocks stale confirmation", async ({
+  page,
+}) => {
+  const fixture = seedRealReactivationFixtures();
+  const productId = fixture.currentProductId;
+  try {
+    const { password } = await signInWithRealBackendCredentials(
+      page,
+      fixture.email,
+      fixture.password,
+    );
+    const routes: Array<{ method: string; pathname: string }> = [];
+    const branchDetailQueries: string[] = [];
+    const writes: Array<{ body: unknown; method: string; pathname: string }> =
+      [];
+    page.on("request", (request) => {
+      const method = request.method();
+      const pathname = new URL(request.url()).pathname;
+      if (!pathname.startsWith("/api/v1/admin/")) {
+        return;
+      }
+      routes.push({ method, pathname });
+      if (method === "GET" && pathname.endsWith("/branch")) {
+        branchDetailQueries.push(
+          new URL(request.url()).searchParams.get("branch_name") ?? "",
+        );
+      }
+      if (method !== "GET") {
+        writes.push({
+          body: request.postDataJSON(),
+          method,
+          pathname,
+        });
+      }
+    });
+
+    const productLoaded = page.waitForResponse(productResponse(productId));
+    const mappingsLoaded = page.waitForResponse(
+      revisionMappingsResponse(productId),
+    );
+    await page.goto(`/admin/products/${productId}/preview`);
+    const initial = (await (await productLoaded).json()) as RealProduct;
+    const mappingResponse = await mappingsLoaded;
+    expect(initial.is_active).toBe(false);
+    expect(initial.candidate_revision).toBeNull();
+    expect(initial.active_revision).not.toBeNull();
+    expect(new URL(mappingResponse.url()).pathname).toBe(
+      `/api/v1/admin/products/${productId}/revisions/${initial.active_revision!.id}/mappings`,
+    );
+    await expect(page.getByText("Confirmed", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Reactivate product" }),
+    ).toBeEnabled();
+    const before = readRealReactivationEvidence(productId);
+    expect(before.is_active).toBe(false);
+    expect(before.sidecars).toEqual([]);
+    const providerAuditBaseline = readMockProviderAudit().length;
+
+    expireRealReactivationConnection(fixture);
+    await page.goto("/admin/bitbucket");
+    await expect(page.getByLabel("Bitbucket connection status")).toContainText(
+      "Reauthorization required",
+    );
+    const reconnectResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname ===
+          "/api/v1/admin/bitbucket/reconnect",
+    );
+    await page.getByRole("button", { name: "Reconnect Bitbucket" }).click();
+    expect((await reconnectResponse).status()).toBe(200);
+    await expect(
+      page.getByRole("status", { name: "Bitbucket connection mutation" }),
+    ).toContainText("Bitbucket reconnected");
+
+    const staleProductLoaded = page.waitForResponse(productResponse(productId));
+    const staleMappingsLoaded = page.waitForResponse(
+      revisionMappingsResponse(productId),
+    );
+    await page.goto(`/admin/products/${productId}/preview`);
+    const staleProduct = (await (
+      await staleProductLoaded
+    ).json()) as RealProduct;
+    const staleMappingResponse = await staleMappingsLoaded;
+    expect(staleProduct.is_active).toBe(false);
+    expect(staleProduct.candidate_revision).toBeNull();
+    expect(staleProduct.active_revision).toEqual(initial.active_revision);
+    expect(new URL(staleMappingResponse.url()).pathname).toBe(
+      `/api/v1/admin/products/${productId}/revisions/${initial.active_revision!.id}/mappings`,
+    );
+    await expect(page.getByText("Preview out of date")).toBeVisible();
+    const reactivate = page.getByRole("button", {
+      name: "Reactivate product",
+    });
+    await expect(reactivate).toBeDisabled();
+
+    await page.getByRole("button", { name: "Run validation again" }).click();
+    await expect(
+      page.locator('[data-slot="badge"]').filter({ hasText: /^Succeeded$/ }),
+    ).toBeVisible();
+    await page.getByRole("radio", { name: "Android XML — res" }).click();
+    await page.getByRole("button", { name: "Confirm preview" }).click();
+    await expect(
+      page.locator('[data-slot="badge"]').filter({ hasText: /^Confirmed$/ }),
+    ).toBeVisible();
+    await expect(reactivate).toBeEnabled();
+
+    const reactivateResponse = page.waitForResponse((response) => {
+      const request = response.request();
+      return (
+        request.method() === "POST" &&
+        new URL(response.url()).pathname ===
+          `/api/v1/admin/products/${productId}/reactivate`
+      );
+    });
+    await reactivate.click();
+    await page
+      .getByRole("alertdialog", {
+        name: `Reactivate ${initial.name}?`,
+      })
+      .getByRole("button", { name: "Reactivate product" })
+      .click();
+    const terminal = (await (await reactivateResponse).json()) as RealProduct;
+    expect(terminal).toMatchObject({
+      active_revision: { id: initial.active_revision!.id },
+      candidate_revision: null,
+      id: productId,
+      is_active: true,
+    });
+    await expect(page.getByText("Active", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Reactivate product" }),
+    ).toHaveCount(0);
+
+    const after = readRealReactivationEvidence(productId);
+    expect(after.graph).toEqual(before.graph);
+    expect(after.is_active).toBe(true);
+    expect(after.sidecars).toHaveLength(1);
+    expect(after.sidecars[0]).toMatchObject({
+      connection_generation:
+        before.graph.mappings[0].confirmed_preview.connection_generation + 1,
+      layout_candidate_id:
+        before.graph.mappings[0].selected_layout_candidate_id,
+      layout_candidate_version:
+        before.graph.mappings[0].selected_layout_version,
+      mapping_id: before.graph.mappings[0].id,
+      product_id: productId,
+      revision_id: before.graph.active_revision_id,
+      revision_version: before.graph.active_revision_version,
+    });
+
+    const expectedRouteSequence: Array<
+      (route: { method: string; pathname: string }) => boolean
+    > = [
+      (route) =>
+        route.method === "POST" &&
+        route.pathname === "/api/v1/admin/bitbucket/reconnect",
+      (route) =>
+        route.method === "GET" &&
+        route.pathname ===
+          `/api/v1/admin/products/${productId}/revisions/${initial.active_revision!.id}/reactivation-eligibility`,
+      (route) =>
+        route.method === "GET" &&
+        route.pathname ===
+          `/api/v1/admin/repositories/${fixture.repositoryIds[0]}/branch`,
+      (route) =>
+        route.method === "POST" &&
+        route.pathname.endsWith("/revalidation-preview-jobs"),
+      (route) =>
+        route.method === "GET" &&
+        route.pathname.includes("/active-revision-revalidation-jobs/"),
+      (route) =>
+        route.method === "POST" &&
+        route.pathname.endsWith("/confirmation") &&
+        route.pathname.includes("/active-revision-revalidation-jobs/"),
+      (route) =>
+        route.method === "POST" &&
+        route.pathname === `/api/v1/admin/products/${productId}/reactivate`,
+    ];
+    let routeCursor = -1;
+    for (const matches of expectedRouteSequence) {
+      const next = routes.findIndex(
+        (route, index) => index > routeCursor && matches(route),
+      );
+      expect(next).toBeGreaterThan(routeCursor);
+      routeCursor = next;
+    }
+    expect(branchDetailQueries).toEqual(["main"]);
+    expect(
+      writes.filter(
+        ({ pathname }) =>
+          pathname.includes("/candidate") ||
+          pathname.endsWith("/publish") ||
+          (pathname.endsWith("/preview-jobs") &&
+            !pathname.endsWith("/revalidation-preview-jobs")),
+      ),
+    ).toEqual([]);
+    expect(writes.at(-1)).toEqual({
+      body: {
+        active_revision_id: initial.active_revision!.id,
+        expected_active_version: initial.active_revision!.version,
+      },
+      method: "POST",
+      pathname: `/api/v1/admin/products/${productId}/reactivate`,
+    });
+
+    const providerAudit = readMockProviderAudit().slice(providerAuditBaseline);
+    expect(
+      providerAudit.filter(
+        ({ category }) => category === "oauth-token-exchange",
+      ),
+    ).toHaveLength(1);
+    expect(
+      providerAudit.filter(({ category }) => category === "repository-read"),
+    ).not.toHaveLength(0);
+    expect(
+      providerAudit.filter(({ category }) => category === "forbidden-mutation"),
+    ).toEqual([]);
+    expect(
+      providerAudit.filter(({ category }) => category === "repository-read"),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          effective_scope: "repository",
+          method: "GET",
+        }),
+      ]),
+    );
+    await expectNoSeededSecret(page, password);
+  } finally {
+    cleanupRealReactivationFixtures(fixture);
+  }
+});
+
+test("51st mapping preview readiness consumes terminal cursor before lifecycle authority", async ({
+  page,
+}) => {
+  const fixture = seedRealMapping51Fixtures();
+  const cursorTrace = new Map<string, Array<string | null>>();
+  const browserWrites: Array<{ method: string; pathname: string }> = [];
+  let failCandidatePageTwo = true;
+  try {
+    const tokenResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/v1/auth/token",
+    );
+    await signInWithRealBackendCredentials(
+      page,
+      fixture.email,
+      fixture.password,
+    );
+    const tokenPayload = (await (await tokenResponse).json()) as {
+      access_token: string;
+    };
+
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      const productMatch = url.pathname.match(
+        /^\/api\/v1\/admin\/products\/([^/]+)\/revisions\/[^/]+\/mappings$/,
+      );
+      if (request.method() === "GET" && productMatch !== null) {
+        const productId = productMatch[1];
+        cursorTrace.set(productId, [
+          ...(cursorTrace.get(productId) ?? []),
+          url.searchParams.get("cursor"),
+        ]);
+      }
+      if (
+        request.method() !== "GET" &&
+        url.pathname.startsWith("/api/v1/admin/")
+      ) {
+        browserWrites.push({
+          method: request.method(),
+          pathname: url.pathname,
+        });
+      }
+    });
+    await page.route(
+      `**/api/v1/admin/products/${fixture.candidateProductId}/revisions/*/mappings**`,
+      async (route) => {
+        const cursor = new URL(route.request().url()).searchParams.get(
+          "cursor",
+        );
+        if (cursor !== null && failCandidatePageTwo) {
+          failCandidatePageTwo = false;
+          await route.fulfill({
+            body: JSON.stringify({ detail: "bounded page-two failure" }),
+            contentType: "application/json",
+            status: 503,
+          });
+          return;
+        }
+        await route.continue();
+      },
+    );
+
+    const candidateLoaded = page.waitForResponse(
+      productResponse(fixture.candidateProductId),
+    );
+    await page.goto(`/admin/products/${fixture.candidateProductId}/preview`);
+    const candidateResponse = await candidateLoaded;
+    const candidate = (await candidateResponse.json()) as RealProduct;
+    const backendOrigin = new URL(candidateResponse.url()).origin;
+    expect(candidate.active_revision).toBeNull();
+    expect(candidate.candidate_revision).not.toBeNull();
+    const incomplete = page.getByRole("alert", {
+      name: "Mapping collection incomplete",
+    });
+    await expect(incomplete).toContainText("50 mappings loaded");
+    await expect(
+      page.getByRole("heading", { name: "Mapping 50" }),
+    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Mapping 51" })).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByRole("button", { name: "Run validation" }),
+    ).toHaveCount(50);
+    await expect(
+      page.getByRole("button", { name: "Run validation" }).first(),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Publish product" }),
+    ).toBeDisabled();
+    expect(browserWrites).toEqual([]);
+
+    await incomplete
+      .getByRole("button", { name: "Retry loading mappings" })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Mapping 51" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /^Mapping \d+$/ }),
+    ).toHaveCount(51);
+    await expect(
+      page.getByRole("button", { name: "Run validation" }),
+    ).toHaveCount(51);
+    await expect(
+      page.getByRole("button", { name: "Run validation" }).first(),
+    ).toBeEnabled();
+    const candidateCursors = cursorTrace.get(fixture.candidateProductId);
+    expect(candidateCursors).toHaveLength(3);
+    expect(candidateCursors?.[0]).toBeNull();
+    expect(candidateCursors?.[1]).not.toBeNull();
+    expect(candidateCursors?.[2]).toBe(candidateCursors?.[1]);
+    await expect(
+      page.getByRole("button", { name: "Publish product" }),
+    ).toBeDisabled();
+    expect(browserWrites).toEqual([]);
+
+    const publishBody = {
+      candidate_revision_id: candidate.candidate_revision!.id,
+      expected_candidate_version: candidate.candidate_revision!.version,
+    };
+    const blockedPublication = await page.request.post(
+      `${backendOrigin}/api/v1/admin/products/${fixture.candidateProductId}/publish`,
+      {
+        data: publishBody,
+        headers: { Authorization: `Bearer ${tokenPayload.access_token}` },
+      },
+    );
+    expect(blockedPublication.status()).toBe(409);
+    expect(await blockedPublication.json()).toMatchObject({
+      blockers: expect.arrayContaining(["preview_confirmation_required"]),
+    });
+    confirmRealMapping51Candidate(fixture);
+    const publishedResponse = await page.request.post(
+      `${backendOrigin}/api/v1/admin/products/${fixture.candidateProductId}/publish`,
+      {
+        data: publishBody,
+        headers: { Authorization: `Bearer ${tokenPayload.access_token}` },
+      },
+    );
+    expect(publishedResponse.status()).toBe(200);
+    expect(await publishedResponse.json()).toMatchObject({
+      active_revision: { id: candidate.candidate_revision!.id },
+      candidate_revision: null,
+      id: fixture.candidateProductId,
+      is_active: true,
+    });
+
+    await page.goto(
+      `/admin/products/${fixture.blockedActiveProductId}/preview`,
+    );
+    await expect(
+      page.getByRole("heading", { name: "Mapping 51" }),
+    ).toBeVisible();
+    expect(cursorTrace.get(fixture.blockedActiveProductId)).toEqual([
+      null,
+      expect.any(String),
+    ]);
+    await expect(
+      page.getByRole("button", { name: "Reactivate product" }),
+    ).toBeDisabled();
+    expect(
+      browserWrites.filter(({ pathname }) => pathname.endsWith("/reactivate")),
+    ).toEqual([]);
+
+    const readyLoaded = page.waitForResponse(
+      productResponse(fixture.readyActiveProductId),
+    );
+    await page.goto(`/admin/products/${fixture.readyActiveProductId}/preview`);
+    const ready = (await (await readyLoaded).json()) as RealProduct;
+    await expect(
+      page.getByRole("heading", { name: "Mapping 51" }),
+    ).toBeVisible();
+    expect(cursorTrace.get(fixture.readyActiveProductId)).toEqual([
+      null,
+      expect.any(String),
+    ]);
+    await expect(
+      page.getByRole("button", { name: "Reactivate product" }),
+    ).toBeEnabled();
+    const reactivationResponse = page.waitForResponse((response) => {
+      return (
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname ===
+          `/api/v1/admin/products/${fixture.readyActiveProductId}/reactivate`
+      );
+    });
+    await page.getByRole("button", { name: "Reactivate product" }).click();
+    await page
+      .getByRole("alertdialog", { name: `Reactivate ${ready.name}?` })
+      .getByRole("button", { name: "Reactivate product" })
+      .click();
+    expect((await reactivationResponse).status()).toBe(200);
+    await expect(page.getByText("Active", { exact: true })).toBeVisible();
+    expect(
+      browserWrites.filter(({ pathname }) => pathname.endsWith("/reactivate")),
+    ).toEqual([
+      {
+        method: "POST",
+        pathname: `/api/v1/admin/products/${fixture.readyActiveProductId}/reactivate`,
+      },
+    ]);
+    await expectNoSeededSecret(page, fixture.password);
+  } finally {
+    cleanupRealMapping51Fixtures(fixture);
+  }
+});
+
+test("deployment-like Phase 3 import, recovery, watchdog, and rewrite journeys use only provider reads", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const initialCommit = "1".repeat(40);
+  const fastForwardCommit = "2".repeat(40);
+  const rewrittenCommit = "3".repeat(40);
+  const zeroDeltaCommit = "4".repeat(40);
+  const heads = {
+    "phase3-direct": initialCommit,
+    "phase3-keys": initialCommit,
+    "phase3-translations": initialCommit,
+    "phase3-zero-delta": initialCommit,
+  };
+  phase3ProviderControl(heads);
+  const fixture = seedPhase3SmokeFixtures();
+  const worker = realEnvironment("E2E_PHASE3_WORKER_CONTAINER");
+  let workerKilled = false;
+  let backendOrigin = "";
+  let token = "";
+
+  const visibleRow = (slug: string) => phase3ImportRow(page, slug);
+  const clickAndWait = async (
+    slug: string,
+    action: "Refresh import" | "Retry import" | "Run import",
+    state: "Current" | "May be stale" | "Review required",
+  ) => {
+    const row = visibleRow(slug);
+    const startResponsePromise = page.waitForResponse((response) => {
+      const request = response.request();
+      const pathname = new URL(response.url()).pathname;
+      return (
+        request.method() === "POST" &&
+        pathname.startsWith(
+          `/api/v1/admin/products/${fixture.productId}/published/mappings/`,
+        ) &&
+        pathname.endsWith("/imports")
+      );
+    });
+    await row.getByRole("button", { name: action, exact: true }).click();
+    const startResponse = await startResponsePromise;
+    expect(startResponse.status()).toBe(202);
+    const started = (await startResponse.json()) as {
+      id: string;
+      state: string;
+    };
+    expect(started.state).toBe("queued");
+    const expectedApiState = {
+      Current: "current",
+      "May be stale": "may_be_stale",
+      "Review required": "review_required",
+    }[state];
+    try {
+      await expect
+        .poll(
+          async () => {
+            const response = await page.request.get(
+              `${backendOrigin}/api/v1/admin/products/${fixture.productId}/imports/${started.id}`,
+              { headers: { Authorization: `Bearer ${token}` } },
+            );
+            expect(response.status()).toBe(200);
+            return ((await response.json()) as { state: string }).state;
+          },
+          { timeout: 30_000 },
+        )
+        .toBe(expectedApiState);
+      await expect(row.getByText(state, { exact: true })).toBeVisible({
+        timeout: 30_000,
+      });
+    } catch (error) {
+      const providerAuditTail = phase3ProviderAudit().slice(-8);
+      throw new Error(
+        `Expected ${slug} to reach ${state}; public row was: ${await row.innerText()}; provider audit tail: ${JSON.stringify(providerAuditTail)}`,
+        { cause: error },
+      );
+    }
+    return row;
+  };
+
+  try {
+    const tokenResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/v1/auth/token",
+    );
+    await signInWithRealBackendCredentials(
+      page,
+      fixture.email,
+      fixture.password,
+    );
+    const authenticationResponse = await tokenResponse;
+    backendOrigin = new URL(authenticationResponse.url()).origin;
+    token = ((await authenticationResponse.json()) as { access_token: string })
+      .access_token;
+
+    await page.goto("/admin/bitbucket");
+    await page.getByRole("button", { name: "Connect Bitbucket" }).click();
+    await expect(page.getByLabel("Bitbucket connection status")).toContainText(
+      "Connected",
+    );
+
+    await page.goto(`/admin/products/${fixture.productId}/mappings`);
+    await clickAndWait("phase3-direct", "Run import", "Current");
+    const initialResponse = await page.request.get(
+      `${backendOrigin}/api/v1/admin/products/${fixture.productId}/published/mapping-imports`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    expect(initialResponse.status()).toBe(200);
+    const initialRecords = (await initialResponse.json()) as {
+      items: Array<{ id: string; mapping_id: string; retry_count: number }>;
+    };
+    const logicalImportId = initialRecords.items.find(
+      ({ mapping_id }) => mapping_id === fixture.directMappingId,
+    )?.id;
+    expect(logicalImportId).toBeTruthy();
+
+    await clickAndWait("phase3-direct", "Refresh import", "Current");
+    heads["phase3-direct"] = fastForwardCommit;
+    phase3ProviderControl(heads);
+    const fastForwardRow = await clickAndWait(
+      "phase3-direct",
+      "Refresh import",
+      "Current",
+    );
+    await expect(fastForwardRow).toContainText(fastForwardCommit.slice(0, 12));
+
+    for (const [fault, expectedHeading, expectedStatus] of [
+      ["rate_limited", "Bitbucket request limit reached", 429],
+      ["timeout", "Import timed out", 504],
+      ["not_found", "Import source not found", 404],
+      ["permission_denied", "Repository access denied", 403],
+    ] as const) {
+      const before = phase3ProviderAudit().length;
+      phase3ProviderControl(heads, { "phase3-direct": fault });
+      const failedRow = await clickAndWait(
+        "phase3-direct",
+        "Refresh import",
+        "May be stale",
+      );
+      await expect(failedRow.getByRole("alert")).toContainText(expectedHeading);
+      await expect(failedRow).toContainText(fastForwardCommit.slice(0, 12));
+      const faultRows = phase3ProviderAudit().slice(before);
+      expect(
+        faultRows.filter(
+          ({ category, status }) =>
+            category === "resource" && status === expectedStatus,
+        ),
+      ).toHaveLength(1);
+      phase3ProviderControl(heads);
+      await clickAndWait("phase3-direct", "Retry import", "Current");
+    }
+
+    phase3ProviderControl(heads, { "phase3-direct": "block" });
+    const blockedRow = visibleRow("phase3-direct");
+    await blockedRow
+      .getByRole("button", { name: "Refresh import", exact: true })
+      .click();
+    await waitForPhase3ProviderBlock();
+    execFileSync("docker", ["kill", "--signal=KILL", worker]);
+    workerKilled = true;
+    phase3ProviderControl(heads);
+    await new Promise((resolve) => setTimeout(resolve, 15_000));
+    expect(
+      runRealBackendPython(
+        "from verboflex.worker.import_tasks import reconcile_stale_import_jobs; print(reconcile_stale_import_jobs.run())",
+      ).trim(),
+    ).toBe("1");
+    await expect(
+      blockedRow.getByText("May be stale", { exact: true }),
+    ).toBeVisible({ timeout: 30_000 });
+    execFileSync("docker", ["start", worker]);
+    workerKilled = false;
+    await clickAndWait("phase3-direct", "Retry import", "Current");
+
+    heads["phase3-direct"] = rewrittenCommit;
+    phase3ProviderControl(heads);
+    const rewrittenRow = await clickAndWait(
+      "phase3-direct",
+      "Refresh import",
+      "Review required",
+    );
+    await rewrittenRow
+      .getByRole("button", { name: "Review baseline change", exact: true })
+      .click();
+    const directDialog = page.getByRole("alertdialog", {
+      name: "Review rewritten source history",
+    });
+    await expect(directDialog).toContainText("Added 1");
+    await expect(directDialog).toContainText("Modified 1");
+    await expect(directDialog).toContainText("Removed 1");
+    await directDialog
+      .getByRole("button", { name: "Confirm new baseline" })
+      .click();
+    await expect(directDialog).toHaveCount(0);
+
+    await clickAndWait("phase3-keys", "Run import", "Current");
+    heads["phase3-keys"] = rewrittenCommit;
+    heads["phase3-translations"] = rewrittenCommit;
+    phase3ProviderControl(heads);
+    const separateRow = await clickAndWait(
+      "phase3-keys",
+      "Refresh import",
+      "Review required",
+    );
+    await separateRow
+      .getByRole("button", { name: "Review baseline change", exact: true })
+      .click();
+    const separateDialog = page.getByRole("alertdialog", {
+      name: "Review rewritten source history",
+    });
+    await expect(separateDialog).toContainText("Keys");
+    await expect(separateDialog).toContainText("Translations");
+    await separateDialog
+      .getByRole("button", { name: "Confirm new baseline" })
+      .click();
+    await expect(separateDialog).toHaveCount(0);
+
+    await clickAndWait("phase3-zero-delta", "Run import", "Current");
+    heads["phase3-zero-delta"] = zeroDeltaCommit;
+    phase3ProviderControl(heads);
+    const zeroRow = await clickAndWait(
+      "phase3-zero-delta",
+      "Refresh import",
+      "Review required",
+    );
+    await zeroRow
+      .getByRole("button", { name: "Review baseline change", exact: true })
+      .click();
+    const zeroDialog = page.getByRole("alertdialog", {
+      name: "Review rewritten source history",
+    });
+    await expect(zeroDialog).toContainText(
+      "No localization file changes detected",
+    );
+    await zeroDialog
+      .getByRole("button", { name: "Confirm new baseline" })
+      .click();
+
+    const finalResponse = await page.request.get(
+      `${backendOrigin}/api/v1/admin/products/${fixture.productId}/published/mapping-imports`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const finalRecords = (await finalResponse.json()) as {
+      items: Array<{ id: string; mapping_id: string; retry_count: number }>;
+    };
+    const directRecord = finalRecords.items.find(
+      ({ mapping_id }) => mapping_id === fixture.directMappingId,
+    );
+    expect(directRecord?.id).toBe(logicalImportId);
+    expect(directRecord?.retry_count).toBe(5);
+
+    const audit = phase3ProviderAudit();
+    expect(
+      audit.filter(({ category }) => category === "oauth-token-exchange"),
+    ).not.toHaveLength(0);
+    expect(
+      audit
+        .filter(({ category }) => category === "resource")
+        .every(({ method }) => method === "GET"),
+    ).toBe(true);
+    expect(
+      audit.some(({ resource_family }) =>
+        ["branch-create", "source-commit", "pull-request-create"].includes(
+          resource_family,
+        ),
+      ),
+    ).toBe(false);
+    await expectNoSeededSecret(page, fixture.password);
+    await expectNoPageOverflow(page);
+  } finally {
+    if (workerKilled) {
+      execFileSync("docker", ["start", worker]);
+    }
+    const sentinel = realEnvironment("E2E_PHASE3_PROVIDER_BLOCK_STARTED_FILE");
+    if (existsSync(sentinel)) {
+      unlinkSync(sentinel);
+    }
+    cleanupPhase3SmokeFixtures(fixture);
+  }
+});

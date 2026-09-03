@@ -7,6 +7,7 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
 COPY frontend/index.html frontend/tsconfig.json frontend/vite.config.ts ./
+COPY frontend/openapi.json ./openapi.json
 COPY frontend/src ./src
 
 ARG VITE_API_BASE_URL=http://localhost:8000

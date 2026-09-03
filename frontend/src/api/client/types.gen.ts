@@ -29,6 +29,1469 @@ export type AccessTokenResponse = {
 };
 
 /**
+ * AdminActiveRevisionRevalidationConfirmationRequest
+ *
+ * Complete caller compare identity for one active-revision confirmation.
+ */
+export type AdminActiveRevisionRevalidationConfirmationRequest = {
+    /**
+     * Active Revision Id
+     */
+    active_revision_id: string;
+    /**
+     * Active Revision Version
+     */
+    active_revision_version: number;
+    /**
+     * Commits
+     */
+    commits: Array<AdminPreviewCommitRequest>;
+    /**
+     * Connection Generation
+     */
+    connection_generation: number;
+    /**
+     * Layout Candidate Id
+     */
+    layout_candidate_id: string;
+    /**
+     * Layout Candidate Version
+     */
+    layout_candidate_version: 1;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Preview Digest
+     */
+    preview_digest: string;
+};
+
+/**
+ * AdminActiveRevisionRevalidationConfirmationResponse
+ *
+ * Immutable bounded evidence for one exact published-revision job.
+ */
+export type AdminActiveRevisionRevalidationConfirmationResponse = {
+    /**
+     * Active Revision Id
+     */
+    active_revision_id: string;
+    /**
+     * Active Revision Version
+     */
+    active_revision_version: number;
+    /**
+     * Commits
+     */
+    commits: Array<AdminPreviewRepositorySideResponse>;
+    /**
+     * Confirmed At
+     */
+    confirmed_at: string;
+    /**
+     * Confirmed By
+     */
+    confirmed_by: string;
+    /**
+     * Connection Generation
+     */
+    connection_generation: number;
+    /**
+     * Job Id
+     */
+    job_id: string;
+    /**
+     * Layout Candidate Id
+     */
+    layout_candidate_id: string;
+    /**
+     * Layout Candidate Version
+     */
+    layout_candidate_version: 1;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Preview Digest
+     */
+    preview_digest: string;
+    /**
+     * Product Id
+     */
+    product_id: string;
+};
+
+/**
+ * AdminActiveRevisionRevalidationJobCreateRequest
+ *
+ * Exact published-revision compare values with commit-only provider identity.
+ */
+export type AdminActiveRevisionRevalidationJobCreateRequest = {
+    /**
+     * Commits
+     */
+    commits: Array<AdminPreviewCommitRequest>;
+    /**
+     * Expected Active Revision Version
+     */
+    expected_active_revision_version: number;
+};
+
+/**
+ * AdminActiveRevisionRevalidationJobResponse
+ *
+ * Bounded active-revision job projection with no candidate terminology.
+ */
+export type AdminActiveRevisionRevalidationJobResponse = {
+    /**
+     * Active Revision Id
+     */
+    active_revision_id: string;
+    /**
+     * Active Revision Version
+     */
+    active_revision_version: number;
+    /**
+     * Attempt
+     */
+    attempt: number;
+    /**
+     * Connection Generation
+     */
+    connection_generation: number;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Detector Version
+     */
+    detector_version: string;
+    /**
+     * Error Code
+     */
+    error_code: 'enqueue_failed' | 'processing_failed' | 'stale_attempt' | 'stale_active_revision' | 'stale_connection' | 'stale_identity' | 'time_limit_exceeded' | null;
+    /**
+     * Finished At
+     */
+    finished_at: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Input Digest
+     */
+    input_digest: string;
+    /**
+     * Is Current
+     */
+    is_current: boolean;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Repository Sides
+     */
+    repository_sides: Array<AdminPreviewRepositorySideResponse>;
+    result: AdminPreviewJobResultResponse | null;
+    /**
+     * Started At
+     */
+    started_at: string | null;
+    /**
+     * State
+     */
+    state: 'queued' | 'running' | 'succeeded' | 'failed' | 'timed_out';
+};
+
+/**
+ * AdminBitbucketCapabilityProfile
+ *
+ * Closed readiness evidence without provider authority or generation detail.
+ */
+export type AdminBitbucketCapabilityProfile = {
+    /**
+     * Evaluated At
+     */
+    evaluated_at: string | null;
+    /**
+     * Pull Request
+     */
+    pull_request: 'disconnected' | 'ready' | 'ready_for_later_phase' | 'reauthorization_required' | 'unavailable';
+    /**
+     * Source Read
+     */
+    source_read: 'disconnected' | 'ready' | 'ready_for_later_phase' | 'reauthorization_required' | 'unavailable';
+    /**
+     * Source Write
+     */
+    source_write: 'disconnected' | 'ready' | 'ready_for_later_phase' | 'reauthorization_required' | 'unavailable';
+};
+
+/**
+ * AdminBitbucketErrorResponse
+ *
+ * Stable integration failures without provider diagnostic material.
+ */
+export type AdminBitbucketErrorResponse = {
+    /**
+     * Detail
+     */
+    detail: 'Bitbucket connection unavailable';
+};
+
+/**
+ * AdminBitbucketStatusResponse
+ *
+ * Bounded connection state safe for browser projection.
+ */
+export type AdminBitbucketStatusResponse = {
+    capability_profile: AdminBitbucketCapabilityProfile;
+    /**
+     * Connected At
+     */
+    connected_at: string | null;
+    /**
+     * Expires At
+     */
+    expires_at: string | null;
+    /**
+     * Revoked At
+     */
+    revoked_at: string | null;
+    /**
+     * Scope Label
+     */
+    scope_label?: 'Repository and pull-request access';
+    /**
+     * Scope Profile
+     */
+    scope_profile?: 'repository_and_pull_request';
+    /**
+     * Status
+     */
+    status: 'Disconnected' | 'Connected' | 'Reauthorization required' | 'Unavailable';
+};
+
+/**
+ * AdminBranchListResponse
+ */
+export type AdminBranchListResponse = {
+    /**
+     * Items
+     */
+    items: Array<AdminBranchResponse>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * AdminBranchResponse
+ */
+export type AdminBranchResponse = {
+    /**
+     * Commit Hash
+     */
+    commit_hash: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * AdminDirectMappingWriteRequest
+ *
+ * Create or replace one direct mapping under candidate-version authority.
+ */
+export type AdminDirectMappingWriteRequest = {
+    /**
+     * Allowed Target Branches
+     */
+    allowed_target_branches: Array<string>;
+    /**
+     * Default Target Branch
+     */
+    default_target_branch: string;
+    /**
+     * Expected Candidate Version
+     */
+    expected_candidate_version: number;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Source Branch
+     */
+    source_branch: string;
+    /**
+     * Topology
+     */
+    topology: 'direct';
+};
+
+/**
+ * AdminDiscoveryErrorResponse
+ */
+export type AdminDiscoveryErrorResponse = {
+    /**
+     * Detail
+     */
+    detail: 'Bitbucket discovery unavailable';
+    /**
+     * State
+     */
+    state: 'disconnected' | 'reauthorization_required' | 'permission_denied' | 'not_found' | 'rate_limited' | 'unavailable' | 'timeout' | 'invalid_source' | 'limit_exceeded';
+};
+
+/**
+ * AdminImportBaselineResponse
+ *
+ * The last successful baseline retained independently from current work.
+ */
+export type AdminImportBaselineResponse = {
+    /**
+     * Imported At
+     */
+    imported_at: string;
+    /**
+     * Source References
+     */
+    source_references: Array<AdminImportSourceReferenceResponse>;
+};
+
+/**
+ * AdminImportOperationErrorResponse
+ *
+ * One fixed operation error without provider prose or recovery controls.
+ */
+export type AdminImportOperationErrorResponse = {
+    /**
+     * Detail
+     */
+    detail: 'Published import unavailable' | 'Published import already in progress' | 'Published import requires review' | 'Published import conflict' | 'Published import connection unavailable' | 'Import rewrite proposal stale' | 'Invalid import cursor';
+};
+
+/**
+ * AdminImportRepositorySideResponse
+ *
+ * One credential-free configured repository selector.
+ */
+export type AdminImportRepositorySideResponse = {
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Role
+     */
+    role: 'direct' | 'keys' | 'translations';
+    /**
+     * Source Branch
+     */
+    source_branch: string;
+};
+
+/**
+ * AdminImportRewriteComparisonResponse
+ *
+ * Complete current proposal authority for one mapping-level decision.
+ */
+export type AdminImportRewriteComparisonResponse = {
+    /**
+     * Confirmable
+     */
+    confirmable: true;
+    /**
+     * Files
+     */
+    files: Array<AdminImportRewriteDeltaResponse>;
+    /**
+     * Import Id
+     */
+    import_id: string;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Proposal Digest
+     */
+    proposal_digest: string;
+    /**
+     * Proposal Id
+     */
+    proposal_id: string;
+    /**
+     * Proposed Execution Id
+     */
+    proposed_execution_id: string;
+    /**
+     * Sides
+     */
+    sides: Array<AdminImportRewriteSideResponse>;
+    /**
+     * Topology
+     */
+    topology: 'direct' | 'separate';
+};
+
+/**
+ * AdminImportRewriteConfirmationRequest
+ *
+ * Expected immutable proposal identity supplied by an untrusted browser.
+ */
+export type AdminImportRewriteConfirmationRequest = {
+    /**
+     * Proposal Digest
+     */
+    proposal_digest: string;
+    /**
+     * Proposal Id
+     */
+    proposal_id: string;
+    /**
+     * Proposed Execution Id
+     */
+    proposed_execution_id: string;
+};
+
+/**
+ * AdminImportRewriteDeltaResponse
+ *
+ * One ordered localization-file metadata row without provider content.
+ */
+export type AdminImportRewriteDeltaResponse = {
+    /**
+     * Change
+     */
+    change: 'added' | 'modified' | 'removed';
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Position
+     */
+    position: number;
+    /**
+     * Repository Side
+     */
+    repository_side: 'direct' | 'keys' | 'translations';
+};
+
+/**
+ * AdminImportRewriteSideResponse
+ *
+ * Exact old/new commits and bounded change counts for one mapping side.
+ */
+export type AdminImportRewriteSideResponse = {
+    /**
+     * Added Count
+     */
+    added_count: number;
+    /**
+     * Modified Count
+     */
+    modified_count: number;
+    /**
+     * New Commit Hash
+     */
+    new_commit_hash: string;
+    /**
+     * Old Commit Hash
+     */
+    old_commit_hash: string;
+    /**
+     * Removed Count
+     */
+    removed_count: number;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Repository Side
+     */
+    repository_side: 'direct' | 'keys' | 'translations';
+};
+
+/**
+ * AdminImportSourceReferenceResponse
+ *
+ * One exact metadata-only file reference from an immutable commit.
+ */
+export type AdminImportSourceReferenceResponse = {
+    /**
+     * Commit Hash
+     */
+    commit_hash: string;
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Position
+     */
+    position: number;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Repository Side
+     */
+    repository_side: 'direct' | 'keys' | 'translations';
+    /**
+     * Sha256
+     */
+    sha256: string;
+    /**
+     * Size Bytes
+     */
+    size_bytes: number;
+    /**
+     * Source Branch
+     */
+    source_branch: string;
+};
+
+/**
+ * AdminMappingConflictResponse
+ *
+ * Form-addressable candidate mapping conflict.
+ */
+export type AdminMappingConflictResponse = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Field
+     */
+    field: 'mapping_identity' | 'candidate_version' | 'source_branch' | 'keys_source_branch' | 'translations_source_branch' | 'allowed_target_branches';
+};
+
+/**
+ * AdminMappingListResponse
+ *
+ * One bounded exact-order candidate mapping page.
+ */
+export type AdminMappingListResponse = {
+    /**
+     * Items
+     */
+    items: Array<AdminMappingResponse>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * AdminMappingResponse
+ *
+ * One lifecycle-free direct or separate mapping projection.
+ */
+export type AdminMappingResponse = {
+    /**
+     * Allowed Target Branches
+     */
+    allowed_target_branches: Array<string>;
+    /**
+     * Candidate Version
+     */
+    candidate_version: number;
+    /**
+     * Default Target Branch
+     */
+    default_target_branch: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Primary Repository Id
+     */
+    primary_repository_id: string;
+    /**
+     * Primary Source Branch
+     */
+    primary_source_branch: string;
+    /**
+     * Selected Layout Candidate Id
+     */
+    selected_layout_candidate_id: string | null;
+    /**
+     * Selected Layout Version
+     */
+    selected_layout_version: number | null;
+    /**
+     * Topology
+     */
+    topology: 'direct' | 'separate';
+    /**
+     * Translations Repository Id
+     */
+    translations_repository_id: string | null;
+    /**
+     * Translations Source Branch
+     */
+    translations_source_branch: string | null;
+};
+
+/**
+ * AdminPreviewCommitRequest
+ *
+ * One resolved commit associated with a server-owned mapping role.
+ */
+export type AdminPreviewCommitRequest = {
+    /**
+     * Commit Hash
+     */
+    commit_hash: string;
+    /**
+     * Role
+     */
+    role: 'direct' | 'keys' | 'translations';
+};
+
+/**
+ * AdminPreviewConfirmationRequest
+ *
+ * Exact compare values for one explicit current layout assignment.
+ */
+export type AdminPreviewConfirmationRequest = {
+    /**
+     * Layout Candidate Id
+     */
+    layout_candidate_id: string;
+    /**
+     * Layout Candidate Version
+     */
+    layout_candidate_version: 1;
+    /**
+     * Preview Digest
+     */
+    preview_digest: string;
+};
+
+/**
+ * AdminPreviewConfirmationResponse
+ *
+ * Bounded actor/time evidence for one confirmed preview layout.
+ */
+export type AdminPreviewConfirmationResponse = {
+    /**
+     * Confirmed At
+     */
+    confirmed_at: string;
+    /**
+     * Confirmed By
+     */
+    confirmed_by: string;
+    /**
+     * Job Id
+     */
+    job_id: string;
+    /**
+     * Layout Candidate Id
+     */
+    layout_candidate_id: string;
+    /**
+     * Layout Candidate Version
+     */
+    layout_candidate_version: 1;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Preview Digest
+     */
+    preview_digest: string;
+};
+
+/**
+ * AdminPreviewJobCreateRequest
+ *
+ * Candidate compare value plus exact resolved commits, with no source bytes.
+ */
+export type AdminPreviewJobCreateRequest = {
+    /**
+     * Commits
+     */
+    commits: Array<AdminPreviewCommitRequest>;
+    /**
+     * Expected Candidate Version
+     */
+    expected_candidate_version: number;
+};
+
+/**
+ * AdminPreviewJobResponse
+ *
+ * Bounded PostgreSQL-authoritative attempt state and deterministic result.
+ */
+export type AdminPreviewJobResponse = {
+    /**
+     * Attempt
+     */
+    attempt: number;
+    /**
+     * Candidate Revision Id
+     */
+    candidate_revision_id: string;
+    /**
+     * Candidate Revision Version
+     */
+    candidate_revision_version: number;
+    /**
+     * Connection Generation
+     */
+    connection_generation: number;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Detector Version
+     */
+    detector_version: string;
+    /**
+     * Error Code
+     */
+    error_code: 'enqueue_failed' | 'processing_failed' | 'stale_attempt' | 'stale_candidate' | 'stale_connection' | 'stale_identity' | 'time_limit_exceeded' | null;
+    /**
+     * Finished At
+     */
+    finished_at: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Input Digest
+     */
+    input_digest: string;
+    /**
+     * Is Current
+     */
+    is_current: boolean;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Repository Sides
+     */
+    repository_sides: Array<AdminPreviewRepositorySideResponse>;
+    result: AdminPreviewJobResultResponse | null;
+    /**
+     * Started At
+     */
+    started_at: string | null;
+    /**
+     * State
+     */
+    state: 'queued' | 'running' | 'succeeded' | 'failed' | 'timed_out';
+};
+
+/**
+ * AdminPreviewJobResultResponse
+ *
+ * Exact noncanonical preview result with no provider or source payload.
+ */
+export type AdminPreviewJobResultResponse = {
+    /**
+     * Detector Version
+     */
+    detector_version: string;
+    /**
+     * Digest
+     */
+    digest: string;
+    /**
+     * Layout Candidates
+     */
+    layout_candidates: Array<AdminPreviewLayoutCandidateResponse>;
+};
+
+/**
+ * AdminPreviewLayoutCandidateResponse
+ *
+ * One bounded noncanonical exact-layout preview candidate.
+ */
+export type AdminPreviewLayoutCandidateResponse = {
+    /**
+     * Confidence
+     */
+    confidence: number;
+    /**
+     * Files
+     */
+    files: Array<string>;
+    /**
+     * Format
+     */
+    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings';
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Keys
+     */
+    keys: Array<string>;
+    /**
+     * Languages
+     */
+    languages: Array<string>;
+    /**
+     * Layout Identity
+     */
+    layout_identity: string;
+    /**
+     * Repository Side
+     */
+    repository_side: 'direct' | 'keys' | 'translations';
+    /**
+     * Samples
+     */
+    samples: Array<AdminPreviewSampleResponse>;
+    /**
+     * Samples Are Partial
+     */
+    samples_are_partial: true;
+    /**
+     * Version
+     */
+    version: 1;
+};
+
+/**
+ * AdminPreviewRepositorySideResponse
+ *
+ * One credential-free commit-bound repository side.
+ */
+export type AdminPreviewRepositorySideResponse = {
+    /**
+     * Commit Hash
+     */
+    commit_hash: string;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Role
+     */
+    role: 'direct' | 'keys' | 'translations';
+    /**
+     * Source Branch
+     */
+    source_branch: string;
+};
+
+/**
+ * AdminPreviewSampleResponse
+ *
+ * One bounded read-only sample, not a canonical translation.
+ */
+export type AdminPreviewSampleResponse = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Translation
+     */
+    translation: string;
+};
+
+/**
+ * AdminProductConflictResponse
+ *
+ * Bounded conflict with optional field affinity for form recovery.
+ */
+export type AdminProductConflictResponse = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Field
+     */
+    field?: 'name' | null;
+};
+
+/**
+ * AdminProductCreateRequest
+ *
+ * Create one stable product identity and its initial candidate revision.
+ */
+export type AdminProductCreateRequest = {
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * AdminProductLifecycleConflictResponse
+ *
+ * Stable lifecycle conflict with a closed ordered blocker vocabulary.
+ */
+export type AdminProductLifecycleConflictResponse = {
+    /**
+     * Blockers
+     */
+    blockers: Array<'mappings_required' | 'mapping_configuration_invalid' | 'target_configuration_invalid' | 'layout_required' | 'preview_confirmation_required'>;
+    /**
+     * Detail
+     */
+    detail: 'Product lifecycle conflict' | 'Product publication blocked';
+};
+
+/**
+ * AdminProductListResponse
+ *
+ * One bounded stable keyset page of products.
+ */
+export type AdminProductListResponse = {
+    /**
+     * Items
+     */
+    items: Array<AdminProductResponse>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * AdminProductPublishRequest
+ *
+ * Publish one exact candidate under optimistic version authority.
+ */
+export type AdminProductPublishRequest = {
+    /**
+     * Candidate Revision Id
+     */
+    candidate_revision_id: string;
+    /**
+     * Expected Candidate Version
+     */
+    expected_candidate_version: number;
+};
+
+/**
+ * AdminProductReactivateRequest
+ *
+ * Reactivate one exact published revision under version authority.
+ */
+export type AdminProductReactivateRequest = {
+    /**
+     * Active Revision Id
+     */
+    active_revision_id: string;
+    /**
+     * Expected Active Version
+     */
+    expected_active_version: number;
+};
+
+/**
+ * AdminProductReactivationEligibilityResponse
+ *
+ * Exact active-revision recovery state without configuration contents.
+ */
+export type AdminProductReactivationEligibilityResponse = {
+    /**
+     * Active Revision Id
+     */
+    active_revision_id: string;
+    /**
+     * Active Revision Version
+     */
+    active_revision_version: number;
+    /**
+     * Blocker Codes
+     */
+    blocker_codes: Array<'product_active' | 'candidate_revision_present' | 'mappings_required' | 'mapping_configuration_invalid' | 'layout_required' | 'revalidation_confirmation_required'>;
+    /**
+     * Eligible
+     */
+    eligible: boolean;
+    /**
+     * Mappings
+     */
+    mappings: Array<AdminProductReactivationMappingResponse>;
+    /**
+     * Product Id
+     */
+    product_id: string;
+};
+
+/**
+ * AdminProductReactivationMappingResponse
+ *
+ * Bounded currentness projection for one published mapping.
+ */
+export type AdminProductReactivationMappingResponse = {
+    /**
+     * Blocker Codes
+     */
+    blocker_codes: Array<'product_active' | 'candidate_revision_present' | 'mappings_required' | 'mapping_configuration_invalid' | 'layout_required' | 'revalidation_confirmation_required'>;
+    /**
+     * Is Current
+     */
+    is_current: boolean;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+};
+
+/**
+ * AdminProductResponse
+ *
+ * Stable product identity with explicitly separate revision states.
+ */
+export type AdminProductResponse = {
+    active_revision: AdminProductRevisionSummary | null;
+    /**
+     * Affected Mapping Count
+     */
+    affected_mapping_count: number;
+    candidate_revision: AdminProductRevisionSummary | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Is Active
+     */
+    is_active: boolean;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * AdminProductRevisionSummary
+ *
+ * Bounded active or candidate revision projection.
+ */
+export type AdminProductRevisionSummary = {
+    /**
+     * Description
+     */
+    description: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Is Published
+     */
+    is_published: boolean;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * AdminProductUpdateRequest
+ *
+ * Compare and save the current candidate configuration.
+ */
+export type AdminProductUpdateRequest = {
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Expected Candidate Version
+     */
+    expected_candidate_version: number;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * AdminPublishedMappingImportListResponse
+ *
+ * Bounded server-ordered published mapping import collection.
+ */
+export type AdminPublishedMappingImportListResponse = {
+    /**
+     * Items
+     */
+    items: Array<AdminPublishedMappingImportResponse>;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
+};
+
+/**
+ * AdminPublishedMappingImportResponse
+ *
+ * One server-owned published mapping and its current logical import state.
+ */
+export type AdminPublishedMappingImportResponse = {
+    /**
+     * Action
+     */
+    action: 'run_import' | 'refresh_import' | 'retry_import' | 'import_in_progress' | 'review_baseline_change';
+    active_baseline: AdminImportBaselineResponse | null;
+    /**
+     * Active Revision Id
+     */
+    active_revision_id: string;
+    /**
+     * Capability
+     */
+    capability: 'ready' | 'reauthorization_required' | 'unavailable';
+    /**
+     * Error Category
+     */
+    error_category: 'connection_required' | 'permission_denied' | 'rate_limited' | 'source_not_found' | 'timeout' | 'provider_unavailable' | 'bounded_failure' | null;
+    /**
+     * Error Message
+     */
+    error_message: string | null;
+    /**
+     * Execution Number
+     */
+    execution_number: number | null;
+    /**
+     * Id
+     */
+    id: string | null;
+    /**
+     * Latest Execution At
+     */
+    latest_execution_at: string | null;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Repository Sides
+     */
+    repository_sides: Array<AdminImportRepositorySideResponse>;
+    /**
+     * Retry Count
+     */
+    retry_count: number;
+    /**
+     * State
+     */
+    state: 'not_imported' | 'queued' | 'running' | 'current' | 'may_be_stale' | 'review_required' | 'import_failed';
+    /**
+     * Topology
+     */
+    topology: 'direct' | 'separate';
+};
+
+/**
+ * AdminRepositoryCreateRequest
+ *
+ * Register one provider identity without credentials or product settings.
+ */
+export type AdminRepositoryCreateRequest = {
+    /**
+     * Descriptive Name
+     */
+    descriptive_name?: string | null;
+    /**
+     * Repository Slug
+     */
+    repository_slug: string;
+    /**
+     * Workspace
+     */
+    workspace: string;
+};
+
+/**
+ * AdminRepositoryListResponse
+ *
+ * One bounded stable keyset page of repository identities.
+ */
+export type AdminRepositoryListResponse = {
+    /**
+     * Items
+     */
+    items: Array<AdminRepositoryResponse>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * AdminRepositoryResponse
+ *
+ * Credential-free reusable repository selection projection.
+ */
+export type AdminRepositoryResponse = {
+    /**
+     * Descriptive Name
+     */
+    descriptive_name: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Repository Slug
+     */
+    repository_slug: string;
+    /**
+     * Workspace
+     */
+    workspace: string;
+};
+
+/**
+ * AdminSeparateMappingSideWriteRequest
+ *
+ * One closed explicit side of a separate mapping.
+ */
+export type AdminSeparateMappingSideWriteRequest = {
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Role
+     */
+    role: 'keys' | 'translations';
+    /**
+     * Source Branch
+     */
+    source_branch: string;
+};
+
+/**
+ * AdminSeparateMappingWriteRequest
+ *
+ * Create or replace one mapping with exact Keys and Translations sides.
+ */
+export type AdminSeparateMappingWriteRequest = {
+    /**
+     * Allowed Target Branches
+     */
+    allowed_target_branches: Array<string>;
+    /**
+     * Default Target Branch
+     */
+    default_target_branch: string;
+    /**
+     * Expected Candidate Version
+     */
+    expected_candidate_version: number;
+    /**
+     * Sides
+     */
+    sides: [
+        AdminSeparateMappingSideWriteRequest,
+        AdminSeparateMappingSideWriteRequest
+    ];
+    /**
+     * Topology
+     */
+    topology: 'separate';
+};
+
+/**
+ * AdminSourceDiscoveryResponse
+ */
+export type AdminSourceDiscoveryResponse = {
+    /**
+     * Commit Hash
+     */
+    commit_hash: string;
+    /**
+     * Files
+     */
+    files: Array<AdminSourceFileResponse>;
+    /**
+     * Total Bytes
+     */
+    total_bytes: number;
+};
+
+/**
+ * AdminSourceFileResponse
+ */
+export type AdminSourceFileResponse = {
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Size
+     */
+    size: number;
+};
+
+/**
+ * AdminUserCreateRequest
+ *
+ * Create one immutable corporate-email identity with additive roles.
+ */
+export type AdminUserCreateRequest = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Roles
+     */
+    roles: Array<RoleName>;
+};
+
+/**
+ * AdminUserCredentialResponse
+ *
+ * One successful lifecycle response that reveals a temporary password once.
+ */
+export type AdminUserCredentialResponse = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Is Active
+     */
+    is_active: boolean;
+    /**
+     * Must Change Password
+     */
+    must_change_password: boolean;
+    /**
+     * Roles
+     */
+    roles: Array<RoleName>;
+    /**
+     * Temporary Password
+     */
+    temporary_password: string;
+};
+
+/**
+ * AdminUserListResponse
+ *
+ * Stable keyset page of internal users.
+ */
+export type AdminUserListResponse = {
+    /**
+     * Items
+     */
+    items: Array<AdminUserResponse>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * AdminUserResponse
+ *
+ * Ordinary internal-user projection with no credential material.
+ */
+export type AdminUserResponse = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Is Active
+     */
+    is_active: boolean;
+    /**
+     * Must Change Password
+     */
+    must_change_password: boolean;
+    /**
+     * Roles
+     */
+    roles: Array<RoleName>;
+};
+
+/**
+ * AdminUserUpdateRequest
+ *
+ * The only ordinary fields an administrator may change.
+ */
+export type AdminUserUpdateRequest = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Roles
+     */
+    roles: Array<RoleName>;
+};
+
+/**
  * Body_issue_token
  */
 export type BodyIssueToken = {
@@ -198,6 +1661,1900 @@ export type ValidationError = {
      */
     type: string;
 };
+
+export type GetAdminActiveRevisionRevalidationJobData = {
+    body?: never;
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/active-revision-revalidation-jobs/{job_id}';
+};
+
+export type GetAdminActiveRevisionRevalidationJobErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetAdminActiveRevisionRevalidationJobError = GetAdminActiveRevisionRevalidationJobErrors[keyof GetAdminActiveRevisionRevalidationJobErrors];
+
+export type GetAdminActiveRevisionRevalidationJobResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminActiveRevisionRevalidationJobResponse;
+};
+
+export type GetAdminActiveRevisionRevalidationJobResponse = GetAdminActiveRevisionRevalidationJobResponses[keyof GetAdminActiveRevisionRevalidationJobResponses];
+
+export type ConfirmAdminActiveRevisionRevalidationData = {
+    body: AdminActiveRevisionRevalidationConfirmationRequest;
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/active-revision-revalidation-jobs/{job_id}/confirmation';
+};
+
+export type ConfirmAdminActiveRevisionRevalidationErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type ConfirmAdminActiveRevisionRevalidationError = ConfirmAdminActiveRevisionRevalidationErrors[keyof ConfirmAdminActiveRevisionRevalidationErrors];
+
+export type ConfirmAdminActiveRevisionRevalidationResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminActiveRevisionRevalidationConfirmationResponse;
+};
+
+export type ConfirmAdminActiveRevisionRevalidationResponse = ConfirmAdminActiveRevisionRevalidationResponses[keyof ConfirmAdminActiveRevisionRevalidationResponses];
+
+export type GetAdminBitbucketStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/bitbucket';
+};
+
+export type GetAdminBitbucketStatusErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: AdminBitbucketErrorResponse;
+};
+
+export type GetAdminBitbucketStatusError = GetAdminBitbucketStatusErrors[keyof GetAdminBitbucketStatusErrors];
+
+export type GetAdminBitbucketStatusResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminBitbucketStatusResponse;
+};
+
+export type GetAdminBitbucketStatusResponse = GetAdminBitbucketStatusResponses[keyof GetAdminBitbucketStatusResponses];
+
+export type ConnectAdminBitbucketOauthData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/bitbucket/connect';
+};
+
+export type ConnectAdminBitbucketOauthErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: AdminBitbucketErrorResponse;
+};
+
+export type ConnectAdminBitbucketOauthError = ConnectAdminBitbucketOauthErrors[keyof ConnectAdminBitbucketOauthErrors];
+
+export type ConnectAdminBitbucketOauthResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminBitbucketStatusResponse;
+};
+
+export type ConnectAdminBitbucketOauthResponse = ConnectAdminBitbucketOauthResponses[keyof ConnectAdminBitbucketOauthResponses];
+
+export type ReconnectAdminBitbucketOauthData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/bitbucket/reconnect';
+};
+
+export type ReconnectAdminBitbucketOauthErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: AdminBitbucketErrorResponse;
+};
+
+export type ReconnectAdminBitbucketOauthError = ReconnectAdminBitbucketOauthErrors[keyof ReconnectAdminBitbucketOauthErrors];
+
+export type ReconnectAdminBitbucketOauthResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminBitbucketStatusResponse;
+};
+
+export type ReconnectAdminBitbucketOauthResponse = ReconnectAdminBitbucketOauthResponses[keyof ReconnectAdminBitbucketOauthResponses];
+
+export type RevokeAdminBitbucketConnectionLocallyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/bitbucket/revoke';
+};
+
+export type RevokeAdminBitbucketConnectionLocallyErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: AdminBitbucketErrorResponse;
+};
+
+export type RevokeAdminBitbucketConnectionLocallyError = RevokeAdminBitbucketConnectionLocallyErrors[keyof RevokeAdminBitbucketConnectionLocallyErrors];
+
+export type RevokeAdminBitbucketConnectionLocallyResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminBitbucketStatusResponse;
+};
+
+export type RevokeAdminBitbucketConnectionLocallyResponse = RevokeAdminBitbucketConnectionLocallyResponses[keyof RevokeAdminBitbucketConnectionLocallyResponses];
+
+export type GetAdminPreviewJobData = {
+    body?: never;
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/preview-jobs/{job_id}';
+};
+
+export type GetAdminPreviewJobErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetAdminPreviewJobError = GetAdminPreviewJobErrors[keyof GetAdminPreviewJobErrors];
+
+export type GetAdminPreviewJobResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPreviewJobResponse;
+};
+
+export type GetAdminPreviewJobResponse = GetAdminPreviewJobResponses[keyof GetAdminPreviewJobResponses];
+
+export type ConfirmAdminPreviewJobData = {
+    body: AdminPreviewConfirmationRequest;
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/preview-jobs/{job_id}/confirmation';
+};
+
+export type ConfirmAdminPreviewJobErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type ConfirmAdminPreviewJobError = ConfirmAdminPreviewJobErrors[keyof ConfirmAdminPreviewJobErrors];
+
+export type ConfirmAdminPreviewJobResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPreviewConfirmationResponse;
+};
+
+export type ConfirmAdminPreviewJobResponse = ConfirmAdminPreviewJobResponses[keyof ConfirmAdminPreviewJobResponses];
+
+export type ListAdminProductsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Status
+         */
+        status?: 'active' | 'inactive' | null;
+    };
+    url: '/api/v1/admin/products';
+};
+
+export type ListAdminProductsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ListAdminProductsError = ListAdminProductsErrors[keyof ListAdminProductsErrors];
+
+export type ListAdminProductsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminProductListResponse;
+};
+
+export type ListAdminProductsResponse = ListAdminProductsResponses[keyof ListAdminProductsResponses];
+
+export type CreateAdminProductData = {
+    body: AdminProductCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/products';
+};
+
+export type CreateAdminProductErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminProductConflictResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type CreateAdminProductError = CreateAdminProductErrors[keyof CreateAdminProductErrors];
+
+export type CreateAdminProductResponses = {
+    /**
+     * Successful Response
+     */
+    201: AdminProductResponse;
+};
+
+export type CreateAdminProductResponse = CreateAdminProductResponses[keyof CreateAdminProductResponses];
+
+export type GetAdminProductData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}';
+};
+
+export type GetAdminProductErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type GetAdminProductError = GetAdminProductErrors[keyof GetAdminProductErrors];
+
+export type GetAdminProductResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminProductResponse;
+};
+
+export type GetAdminProductResponse = GetAdminProductResponses[keyof GetAdminProductResponses];
+
+export type UpdateAdminProductCandidateData = {
+    body: AdminProductUpdateRequest;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}';
+};
+
+export type UpdateAdminProductCandidateErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminProductConflictResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type UpdateAdminProductCandidateError = UpdateAdminProductCandidateErrors[keyof UpdateAdminProductCandidateErrors];
+
+export type UpdateAdminProductCandidateResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminProductResponse;
+};
+
+export type UpdateAdminProductCandidateResponse = UpdateAdminProductCandidateResponses[keyof UpdateAdminProductCandidateResponses];
+
+export type ListAdminCandidateMappingsData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/products/{product_id}/candidate/mappings';
+};
+
+export type ListAdminCandidateMappingsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ListAdminCandidateMappingsError = ListAdminCandidateMappingsErrors[keyof ListAdminCandidateMappingsErrors];
+
+export type ListAdminCandidateMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminMappingListResponse;
+};
+
+export type ListAdminCandidateMappingsResponse = ListAdminCandidateMappingsResponses[keyof ListAdminCandidateMappingsResponses];
+
+export type CreateAdminCandidateMappingData = {
+    /**
+     * Payload
+     */
+    body: ({
+        topology: 'direct';
+    } & AdminDirectMappingWriteRequest) | ({
+        topology: 'separate';
+    } & AdminSeparateMappingWriteRequest);
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/candidate/mappings';
+};
+
+export type CreateAdminCandidateMappingErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminMappingConflictResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type CreateAdminCandidateMappingError = CreateAdminCandidateMappingErrors[keyof CreateAdminCandidateMappingErrors];
+
+export type CreateAdminCandidateMappingResponses = {
+    /**
+     * Successful Response
+     */
+    201: AdminMappingResponse;
+};
+
+export type CreateAdminCandidateMappingResponse = CreateAdminCandidateMappingResponses[keyof CreateAdminCandidateMappingResponses];
+
+export type UpdateAdminCandidateMappingData = {
+    /**
+     * Payload
+     */
+    body: ({
+        topology: 'direct';
+    } & AdminDirectMappingWriteRequest) | ({
+        topology: 'separate';
+    } & AdminSeparateMappingWriteRequest);
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Mapping Id
+         */
+        mapping_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}';
+};
+
+export type UpdateAdminCandidateMappingErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminMappingConflictResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type UpdateAdminCandidateMappingError = UpdateAdminCandidateMappingErrors[keyof UpdateAdminCandidateMappingErrors];
+
+export type UpdateAdminCandidateMappingResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminMappingResponse;
+};
+
+export type UpdateAdminCandidateMappingResponse = UpdateAdminCandidateMappingResponses[keyof UpdateAdminCandidateMappingResponses];
+
+export type CreateAdminPreviewJobData = {
+    body: AdminPreviewJobCreateRequest;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Mapping Id
+         */
+        mapping_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs';
+};
+
+export type CreateAdminPreviewJobErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type CreateAdminPreviewJobError = CreateAdminPreviewJobErrors[keyof CreateAdminPreviewJobErrors];
+
+export type CreateAdminPreviewJobResponses = {
+    /**
+     * Successful Response
+     */
+    202: AdminPreviewJobResponse;
+};
+
+export type CreateAdminPreviewJobResponse = CreateAdminPreviewJobResponses[keyof CreateAdminPreviewJobResponses];
+
+export type DeactivateAdminProductData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/deactivate';
+};
+
+export type DeactivateAdminProductErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeactivateAdminProductError = DeactivateAdminProductErrors[keyof DeactivateAdminProductErrors];
+
+export type DeactivateAdminProductResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminProductResponse;
+};
+
+export type DeactivateAdminProductResponse = DeactivateAdminProductResponses[keyof DeactivateAdminProductResponses];
+
+export type GetAdminImportData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Import Id
+         */
+        import_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/imports/{import_id}';
+};
+
+export type GetAdminImportErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: AdminImportOperationErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminImportOperationErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Service Unavailable
+     */
+    503: AdminImportOperationErrorResponse;
+};
+
+export type GetAdminImportError = GetAdminImportErrors[keyof GetAdminImportErrors];
+
+export type GetAdminImportResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPublishedMappingImportResponse;
+};
+
+export type GetAdminImportResponse = GetAdminImportResponses[keyof GetAdminImportResponses];
+
+export type PublishAdminProductCandidateData = {
+    body: AdminProductPublishRequest;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/publish';
+};
+
+export type PublishAdminProductCandidateErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminProductLifecycleConflictResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type PublishAdminProductCandidateError = PublishAdminProductCandidateErrors[keyof PublishAdminProductCandidateErrors];
+
+export type PublishAdminProductCandidateResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminProductResponse;
+};
+
+export type PublishAdminProductCandidateResponse = PublishAdminProductCandidateResponses[keyof PublishAdminProductCandidateResponses];
+
+export type ListAdminPublishedMappingImportsData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Status
+         */
+        status?: 'all' | 'attention';
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/products/{product_id}/published/mapping-imports';
+};
+
+export type ListAdminPublishedMappingImportsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: AdminImportOperationErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: AdminImportOperationErrorResponse;
+};
+
+export type ListAdminPublishedMappingImportsError = ListAdminPublishedMappingImportsErrors[keyof ListAdminPublishedMappingImportsErrors];
+
+export type ListAdminPublishedMappingImportsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPublishedMappingImportListResponse;
+};
+
+export type ListAdminPublishedMappingImportsResponse = ListAdminPublishedMappingImportsResponses[keyof ListAdminPublishedMappingImportsResponses];
+
+export type StartAdminPublishedMappingImportData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Mapping Id
+         */
+        mapping_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports';
+};
+
+export type StartAdminPublishedMappingImportErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: AdminImportOperationErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminImportOperationErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Service Unavailable
+     */
+    503: AdminImportOperationErrorResponse;
+};
+
+export type StartAdminPublishedMappingImportError = StartAdminPublishedMappingImportErrors[keyof StartAdminPublishedMappingImportErrors];
+
+export type StartAdminPublishedMappingImportResponses = {
+    /**
+     * Successful Response
+     */
+    202: AdminPublishedMappingImportResponse;
+};
+
+export type StartAdminPublishedMappingImportResponse = StartAdminPublishedMappingImportResponses[keyof StartAdminPublishedMappingImportResponses];
+
+export type GetAdminImportRewriteComparisonData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Mapping Id
+         */
+        mapping_id: string;
+        /**
+         * Import Id
+         */
+        import_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports/{import_id}/rewrite-comparison';
+};
+
+export type GetAdminImportRewriteComparisonErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: AdminImportOperationErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminImportOperationErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Service Unavailable
+     */
+    503: AdminImportOperationErrorResponse;
+};
+
+export type GetAdminImportRewriteComparisonError = GetAdminImportRewriteComparisonErrors[keyof GetAdminImportRewriteComparisonErrors];
+
+export type GetAdminImportRewriteComparisonResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminImportRewriteComparisonResponse;
+};
+
+export type GetAdminImportRewriteComparisonResponse = GetAdminImportRewriteComparisonResponses[keyof GetAdminImportRewriteComparisonResponses];
+
+export type ConfirmAdminImportRewriteBaselineData = {
+    body: AdminImportRewriteConfirmationRequest;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Mapping Id
+         */
+        mapping_id: string;
+        /**
+         * Import Id
+         */
+        import_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports/{import_id}/rewrite-confirmation';
+};
+
+export type ConfirmAdminImportRewriteBaselineErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: AdminImportOperationErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminImportOperationErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Service Unavailable
+     */
+    503: AdminImportOperationErrorResponse;
+};
+
+export type ConfirmAdminImportRewriteBaselineError = ConfirmAdminImportRewriteBaselineErrors[keyof ConfirmAdminImportRewriteBaselineErrors];
+
+export type ConfirmAdminImportRewriteBaselineResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPublishedMappingImportResponse;
+};
+
+export type ConfirmAdminImportRewriteBaselineResponse = ConfirmAdminImportRewriteBaselineResponses[keyof ConfirmAdminImportRewriteBaselineResponses];
+
+export type ReactivateAdminProductData = {
+    body: AdminProductReactivateRequest;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/reactivate';
+};
+
+export type ReactivateAdminProductErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminProductLifecycleConflictResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ReactivateAdminProductError = ReactivateAdminProductErrors[keyof ReactivateAdminProductErrors];
+
+export type ReactivateAdminProductResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminProductResponse;
+};
+
+export type ReactivateAdminProductResponse = ReactivateAdminProductResponses[keyof ReactivateAdminProductResponses];
+
+export type ListAdminRevisionMappingsData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Revision Id
+         */
+        revision_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings';
+};
+
+export type ListAdminRevisionMappingsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ListAdminRevisionMappingsError = ListAdminRevisionMappingsErrors[keyof ListAdminRevisionMappingsErrors];
+
+export type ListAdminRevisionMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminMappingListResponse;
+};
+
+export type ListAdminRevisionMappingsResponse = ListAdminRevisionMappingsResponses[keyof ListAdminRevisionMappingsResponses];
+
+export type CreateAdminActiveRevisionRevalidationJobData = {
+    body: AdminActiveRevisionRevalidationJobCreateRequest;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Revision Id
+         */
+        revision_id: string;
+        /**
+         * Mapping Id
+         */
+        mapping_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings/{mapping_id}/revalidation-preview-jobs';
+};
+
+export type CreateAdminActiveRevisionRevalidationJobErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type CreateAdminActiveRevisionRevalidationJobError = CreateAdminActiveRevisionRevalidationJobErrors[keyof CreateAdminActiveRevisionRevalidationJobErrors];
+
+export type CreateAdminActiveRevisionRevalidationJobResponses = {
+    /**
+     * Successful Response
+     */
+    202: AdminActiveRevisionRevalidationJobResponse;
+};
+
+export type CreateAdminActiveRevisionRevalidationJobResponse = CreateAdminActiveRevisionRevalidationJobResponses[keyof CreateAdminActiveRevisionRevalidationJobResponses];
+
+export type GetAdminProductReactivationEligibilityData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Revision Id
+         */
+        revision_id: string;
+    };
+    query: {
+        /**
+         * Expected Active Revision Version
+         */
+        expected_active_revision_version: number;
+    };
+    url: '/api/v1/admin/products/{product_id}/revisions/{revision_id}/reactivation-eligibility';
+};
+
+export type GetAdminProductReactivationEligibilityErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetAdminProductReactivationEligibilityError = GetAdminProductReactivationEligibilityErrors[keyof GetAdminProductReactivationEligibilityErrors];
+
+export type GetAdminProductReactivationEligibilityResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminProductReactivationEligibilityResponse;
+};
+
+export type GetAdminProductReactivationEligibilityResponse = GetAdminProductReactivationEligibilityResponses[keyof GetAdminProductReactivationEligibilityResponses];
+
+export type ListAdminRepositoriesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/repositories';
+};
+
+export type ListAdminRepositoriesErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ListAdminRepositoriesError = ListAdminRepositoriesErrors[keyof ListAdminRepositoriesErrors];
+
+export type ListAdminRepositoriesResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminRepositoryListResponse;
+};
+
+export type ListAdminRepositoriesResponse = ListAdminRepositoriesResponses[keyof ListAdminRepositoriesResponses];
+
+export type CreateAdminRepositoryData = {
+    body: AdminRepositoryCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/repositories';
+};
+
+export type CreateAdminRepositoryErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type CreateAdminRepositoryError = CreateAdminRepositoryErrors[keyof CreateAdminRepositoryErrors];
+
+export type CreateAdminRepositoryResponses = {
+    /**
+     * Successful Response
+     */
+    201: AdminRepositoryResponse;
+};
+
+export type CreateAdminRepositoryResponse = CreateAdminRepositoryResponses[keyof CreateAdminRepositoryResponses];
+
+export type GetAdminRepositoryData = {
+    body?: never;
+    path: {
+        /**
+         * Repository Id
+         */
+        repository_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/repositories/{repository_id}';
+};
+
+export type GetAdminRepositoryErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type GetAdminRepositoryError = GetAdminRepositoryErrors[keyof GetAdminRepositoryErrors];
+
+export type GetAdminRepositoryResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminRepositoryResponse;
+};
+
+export type GetAdminRepositoryResponse = GetAdminRepositoryResponses[keyof GetAdminRepositoryResponses];
+
+export type GetAdminRepositoryBranchData = {
+    body?: never;
+    path: {
+        /**
+         * Repository Id
+         */
+        repository_id: string;
+    };
+    query: {
+        /**
+         * Branch Name
+         */
+        branch_name: string;
+    };
+    url: '/api/v1/admin/repositories/{repository_id}/branch';
+};
+
+export type GetAdminRepositoryBranchErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Response 403 Get Admin Repository Branch
+     *
+     * Forbidden
+     */
+    403: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Response 404 Get Admin Repository Branch
+     *
+     * Not Found
+     */
+    404: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminDiscoveryErrorResponse;
+    /**
+     * Response 422 Get Admin Repository Branch
+     *
+     * Unprocessable Content
+     */
+    422: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: AdminDiscoveryErrorResponse;
+    /**
+     * Gateway Timeout
+     */
+    504: AdminDiscoveryErrorResponse;
+};
+
+export type GetAdminRepositoryBranchError = GetAdminRepositoryBranchErrors[keyof GetAdminRepositoryBranchErrors];
+
+export type GetAdminRepositoryBranchResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminBranchResponse;
+};
+
+export type GetAdminRepositoryBranchResponse = GetAdminRepositoryBranchResponses[keyof GetAdminRepositoryBranchResponses];
+
+export type ListAdminRepositoryBranchesData = {
+    body?: never;
+    path: {
+        /**
+         * Repository Id
+         */
+        repository_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/repositories/{repository_id}/branches';
+};
+
+export type ListAdminRepositoryBranchesErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Response 403 List Admin Repository Branches
+     *
+     * Forbidden
+     */
+    403: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Response 404 List Admin Repository Branches
+     *
+     * Not Found
+     */
+    404: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminDiscoveryErrorResponse;
+    /**
+     * Response 422 List Admin Repository Branches
+     *
+     * Unprocessable Content
+     */
+    422: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: AdminDiscoveryErrorResponse;
+    /**
+     * Gateway Timeout
+     */
+    504: AdminDiscoveryErrorResponse;
+};
+
+export type ListAdminRepositoryBranchesError = ListAdminRepositoryBranchesErrors[keyof ListAdminRepositoryBranchesErrors];
+
+export type ListAdminRepositoryBranchesResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminBranchListResponse;
+};
+
+export type ListAdminRepositoryBranchesResponse = ListAdminRepositoryBranchesResponses[keyof ListAdminRepositoryBranchesResponses];
+
+export type DiscoverAdminRepositorySourcesData = {
+    body?: never;
+    path: {
+        /**
+         * Repository Id
+         */
+        repository_id: string;
+    };
+    query: {
+        /**
+         * Branch
+         */
+        branch: string;
+    };
+    url: '/api/v1/admin/repositories/{repository_id}/sources';
+};
+
+export type DiscoverAdminRepositorySourcesErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Response 403 Discover Admin Repository Sources
+     *
+     * Forbidden
+     */
+    403: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Response 404 Discover Admin Repository Sources
+     *
+     * Not Found
+     */
+    404: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminDiscoveryErrorResponse;
+    /**
+     * Response 422 Discover Admin Repository Sources
+     *
+     * Unprocessable Content
+     */
+    422: ErrorResponse | AdminDiscoveryErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: AdminDiscoveryErrorResponse;
+    /**
+     * Gateway Timeout
+     */
+    504: AdminDiscoveryErrorResponse;
+};
+
+export type DiscoverAdminRepositorySourcesError = DiscoverAdminRepositorySourcesErrors[keyof DiscoverAdminRepositorySourcesErrors];
+
+export type DiscoverAdminRepositorySourcesResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminSourceDiscoveryResponse;
+};
+
+export type DiscoverAdminRepositorySourcesResponse = DiscoverAdminRepositorySourcesResponses[keyof DiscoverAdminRepositorySourcesResponses];
+
+export type ListAdminUsersData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/users';
+};
+
+export type ListAdminUsersErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ListAdminUsersError = ListAdminUsersErrors[keyof ListAdminUsersErrors];
+
+export type ListAdminUsersResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminUserListResponse;
+};
+
+export type ListAdminUsersResponse = ListAdminUsersResponses[keyof ListAdminUsersResponses];
+
+export type CreateAdminUserData = {
+    body: AdminUserCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/users';
+};
+
+export type CreateAdminUserErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type CreateAdminUserError = CreateAdminUserErrors[keyof CreateAdminUserErrors];
+
+export type CreateAdminUserResponses = {
+    /**
+     * Successful Response
+     */
+    201: AdminUserCredentialResponse;
+};
+
+export type CreateAdminUserResponse = CreateAdminUserResponses[keyof CreateAdminUserResponses];
+
+export type UpdateAdminUserData = {
+    body: AdminUserUpdateRequest;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/users/{user_id}';
+};
+
+export type UpdateAdminUserErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type UpdateAdminUserError = UpdateAdminUserErrors[keyof UpdateAdminUserErrors];
+
+export type UpdateAdminUserResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminUserResponse;
+};
+
+export type UpdateAdminUserResponse = UpdateAdminUserResponses[keyof UpdateAdminUserResponses];
+
+export type DeactivateAdminUserData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/users/{user_id}/deactivate';
+};
+
+export type DeactivateAdminUserErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type DeactivateAdminUserError = DeactivateAdminUserErrors[keyof DeactivateAdminUserErrors];
+
+export type DeactivateAdminUserResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminUserResponse;
+};
+
+export type DeactivateAdminUserResponse = DeactivateAdminUserResponses[keyof DeactivateAdminUserResponses];
+
+export type ReactivateAdminUserData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/users/{user_id}/reactivate';
+};
+
+export type ReactivateAdminUserErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ReactivateAdminUserError = ReactivateAdminUserErrors[keyof ReactivateAdminUserErrors];
+
+export type ReactivateAdminUserResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminUserCredentialResponse;
+};
+
+export type ReactivateAdminUserResponse = ReactivateAdminUserResponses[keyof ReactivateAdminUserResponses];
+
+export type ResetAdminUserPasswordData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/users/{user_id}/reset-password';
+};
+
+export type ResetAdminUserPasswordErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ResetAdminUserPasswordError = ResetAdminUserPasswordErrors[keyof ResetAdminUserPasswordErrors];
+
+export type ResetAdminUserPasswordResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminUserCredentialResponse;
+};
+
+export type ResetAdminUserPasswordResponse = ResetAdminUserPasswordResponses[keyof ResetAdminUserPasswordResponses];
 
 export type ChangePasswordData = {
     body: ChangePasswordRequest;

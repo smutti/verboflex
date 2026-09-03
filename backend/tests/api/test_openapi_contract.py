@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import runpy
 import subprocess
 from contextlib import redirect_stdout
@@ -18,7 +19,266 @@ CHECKED_IN_SCHEMA = REPOSITORY_ROOT / "frontend" / "openapi.json"
 FRONTEND_SOURCE = REPOSITORY_ROOT / "frontend" / "src"
 GENERATED_CLIENT = FRONTEND_SOURCE / "api" / "client"
 
+IMPORT_OPERATIONS = {
+    ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get"): (
+        "list_admin_published_mapping_imports",
+        {"200", "401", "403", "404", "422"},
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+        "post",
+    ): (
+        "start_admin_published_mapping_import",
+        {"202", "401", "403", "404", "409", "422", "503"},
+    ),
+    ("/api/v1/admin/products/{product_id}/imports/{import_id}", "get"): (
+        "get_admin_import",
+        {"200", "401", "403", "404", "409", "422", "503"},
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+        "/imports/{import_id}/rewrite-comparison",
+        "get",
+    ): (
+        "get_admin_import_rewrite_comparison",
+        {"200", "401", "403", "404", "409", "422", "503"},
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+        "/imports/{import_id}/rewrite-confirmation",
+        "post",
+    ): (
+        "confirm_admin_import_rewrite_baseline",
+        {"200", "401", "403", "404", "409", "422", "503"},
+    ),
+}
+
 EXPECTED_OPERATIONS = {
+    ("/api/v1/admin/bitbucket", "get"): (
+        "get_admin_bitbucket_status",
+        {"200", "401", "403", "503"},
+        True,
+    ),
+    ("/api/v1/admin/bitbucket/connect", "post"): (
+        "connect_admin_bitbucket_oauth",
+        {"200", "401", "403", "503"},
+        True,
+    ),
+    ("/api/v1/admin/bitbucket/reconnect", "post"): (
+        "reconnect_admin_bitbucket_oauth",
+        {"200", "401", "403", "503"},
+        True,
+    ),
+    ("/api/v1/admin/bitbucket/revoke", "post"): (
+        "revoke_admin_bitbucket_connection_locally",
+        {"200", "401", "403", "503"},
+        True,
+    ),
+    ("/api/v1/admin/repositories", "get"): (
+        "list_admin_repositories",
+        {"200", "401", "403", "422"},
+        True,
+    ),
+    ("/api/v1/admin/repositories", "post"): (
+        "create_admin_repository",
+        {"201", "401", "403", "409", "422"},
+        True,
+    ),
+    ("/api/v1/admin/repositories/{repository_id}/branch", "get"): (
+        "get_admin_repository_branch",
+        {"200", "401", "403", "404", "409", "422", "503", "504"},
+        True,
+    ),
+    ("/api/v1/admin/repositories/{repository_id}/branches", "get"): (
+        "list_admin_repository_branches",
+        {"200", "401", "403", "404", "409", "422", "503", "504"},
+        True,
+    ),
+    ("/api/v1/admin/repositories/{repository_id}/sources", "get"): (
+        "discover_admin_repository_sources",
+        {"200", "401", "403", "404", "409", "422", "503", "504"},
+        True,
+    ),
+    ("/api/v1/admin/repositories/{repository_id}", "get"): (
+        "get_admin_repository",
+        {"200", "401", "403", "404", "422"},
+        True,
+    ),
+    ("/api/v1/admin/products", "get"): (
+        "list_admin_products",
+        {"200", "401", "403", "422"},
+        True,
+    ),
+    ("/api/v1/admin/products", "post"): (
+        "create_admin_product",
+        {"201", "401", "403", "409", "422"},
+        True,
+    ),
+    ("/api/v1/admin/products/{product_id}/candidate/mappings", "get"): (
+        "list_admin_candidate_mappings",
+        {"200", "401", "403", "404", "422"},
+        True,
+    ),
+    ("/api/v1/admin/products/{product_id}/candidate/mappings", "post"): (
+        "create_admin_candidate_mapping",
+        {"201", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings",
+        "get",
+    ): (
+        "list_admin_revision_mappings",
+        {"200", "401", "403", "404", "422"},
+        True,
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}",
+        "patch",
+    ): (
+        "update_admin_candidate_mapping",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get"): (
+        "list_admin_published_mapping_imports",
+        {"200", "401", "403", "404", "422"},
+        True,
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+        "post",
+    ): (
+        "start_admin_published_mapping_import",
+        {"202", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    ("/api/v1/admin/products/{product_id}/imports/{import_id}", "get"): (
+        "get_admin_import",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+        "/imports/{import_id}/rewrite-comparison",
+        "get",
+    ): (
+        "get_admin_import_rewrite_comparison",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+        "/imports/{import_id}/rewrite-confirmation",
+        "post",
+    ): (
+        "confirm_admin_import_rewrite_baseline",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs",
+        "post",
+    ): (
+        "create_admin_preview_job",
+        {"202", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    ("/api/v1/admin/preview-jobs/{job_id}", "get"): (
+        "get_admin_preview_job",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    ("/api/v1/admin/preview-jobs/{job_id}/confirmation", "post"): (
+        "confirm_admin_preview_job",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    ("/api/v1/admin/active-revision-revalidation-jobs/{job_id}", "get"): (
+        "get_admin_active_revision_revalidation_job",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    (
+        "/api/v1/admin/active-revision-revalidation-jobs/{job_id}/confirmation",
+        "post",
+    ): (
+        "confirm_admin_active_revision_revalidation",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    ("/api/v1/admin/products/{product_id}", "get"): (
+        "get_admin_product",
+        {"200", "401", "403", "404", "422"},
+        True,
+    ),
+    ("/api/v1/admin/products/{product_id}", "patch"): (
+        "update_admin_product_candidate",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
+    ("/api/v1/admin/products/{product_id}/deactivate", "post"): (
+        "deactivate_admin_product",
+        {"200", "401", "403", "404", "422"},
+        True,
+    ),
+    ("/api/v1/admin/products/{product_id}/publish", "post"): (
+        "publish_admin_product_candidate",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
+    ("/api/v1/admin/products/{product_id}/reactivate", "post"): (
+        "reactivate_admin_product",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/revisions/{revision_id}/reactivation-eligibility",
+        "get",
+    ): (
+        "get_admin_product_reactivation_eligibility",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/revisions/{revision_id}"
+        "/mappings/{mapping_id}/revalidation-preview-jobs",
+        "post",
+    ): (
+        "create_admin_active_revision_revalidation_job",
+        {"202", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    ("/api/v1/admin/users", "get"): (
+        "list_admin_users",
+        {"200", "401", "403", "422"},
+        True,
+    ),
+    ("/api/v1/admin/users", "post"): (
+        "create_admin_user",
+        {"201", "401", "403", "409", "422"},
+        True,
+    ),
+    ("/api/v1/admin/users/{user_id}", "patch"): (
+        "update_admin_user",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
+    ("/api/v1/admin/users/{user_id}/deactivate", "post"): (
+        "deactivate_admin_user",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
+    ("/api/v1/admin/users/{user_id}/reactivate", "post"): (
+        "reactivate_admin_user",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
+    ("/api/v1/admin/users/{user_id}/reset-password", "post"): (
+        "reset_admin_user_password",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
     ("/api/v1/auth/change-password", "post"): (
         "change_password",
         {"204", "400", "401", "422", "429", "503"},
@@ -73,6 +333,38 @@ def _response_schema(operation: dict[str, Any], status_code: str) -> str | None:
     return reference if isinstance(reference, str) else None
 
 
+def _parameters_by_name(operation: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {parameter["name"]: parameter for parameter in operation["parameters"]}
+
+
+def _schema_references(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        references = {
+            reference.rsplit("/", maxsplit=1)[-1]
+            for key, reference in value.items()
+            if key == "$ref" and isinstance(reference, str)
+        }
+        return references.union(*(_schema_references(nested) for nested in value.values()))
+    if isinstance(value, list):
+        return set().union(*(_schema_references(nested) for nested in value))
+    return set()
+
+
+def _schema_property_names(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        properties = value.get("properties")
+        names = set(properties) if isinstance(properties, dict) else set()
+        return names.union(*(_schema_property_names(nested) for nested in value.values()))
+    if isinstance(value, list):
+        return set().union(*(_schema_property_names(nested) for nested in value))
+    return set()
+
+
+def _schema_variant(schema: dict[str, Any], *, type_name: str) -> dict[str, Any]:
+    """Return one named nullable-schema variant without depending on its order."""
+    return next(item for item in schema["anyOf"] if item.get("type") == type_name)
+
+
 def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
     """Freeze every approved method, operation id, response, and bearer boundary."""
     schema = app.openapi()
@@ -88,6 +380,129 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
         )
 
     error_response_codes = {
+        ("/api/v1/admin/bitbucket", "get"): {"401", "403"},
+        ("/api/v1/admin/bitbucket/connect", "post"): {"401", "403"},
+        ("/api/v1/admin/bitbucket/reconnect", "post"): {"401", "403"},
+        ("/api/v1/admin/bitbucket/revoke", "post"): {"401", "403"},
+        ("/api/v1/admin/repositories", "get"): {"401", "403", "422"},
+        ("/api/v1/admin/repositories", "post"): {"401", "403", "409", "422"},
+        ("/api/v1/admin/repositories/{repository_id}", "get"): {
+            "401",
+            "403",
+            "404",
+            "422",
+        },
+        ("/api/v1/admin/products", "get"): {"401", "403", "422"},
+        ("/api/v1/admin/products", "post"): {"401", "403", "422"},
+        ("/api/v1/admin/products/{product_id}/candidate/mappings", "get"): {
+            "401",
+            "403",
+            "404",
+            "422",
+        },
+        ("/api/v1/admin/products/{product_id}/candidate/mappings", "post"): {
+            "401",
+            "403",
+            "404",
+            "422",
+            "503",
+        },
+        (
+            "/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}",
+            "patch",
+        ): {"401", "403", "404", "422", "503"},
+        (
+            "/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs",
+            "post",
+        ): {"401", "403", "404", "409", "422", "503"},
+        ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get"): {
+            "401",
+            "403",
+        },
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+            "post",
+        ): {"401", "403"},
+        ("/api/v1/admin/products/{product_id}/imports/{import_id}", "get"): {
+            "401",
+            "403",
+        },
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+            "/imports/{import_id}/rewrite-comparison",
+            "get",
+        ): {"401", "403"},
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+            "/imports/{import_id}/rewrite-confirmation",
+            "post",
+        ): {"401", "403"},
+        ("/api/v1/admin/preview-jobs/{job_id}", "get"): {
+            "401",
+            "403",
+            "404",
+            "409",
+            "422",
+            "503",
+        },
+        ("/api/v1/admin/active-revision-revalidation-jobs/{job_id}", "get"): {
+            "401",
+            "403",
+            "404",
+            "409",
+            "422",
+            "503",
+        },
+        (
+            "/api/v1/admin/active-revision-revalidation-jobs/{job_id}/confirmation",
+            "post",
+        ): {"401", "403", "404", "409", "422", "503"},
+        (
+            "/api/v1/admin/products/{product_id}/revisions/{revision_id}/reactivation-eligibility",
+            "get",
+        ): {"401", "403", "404", "409", "422", "503"},
+        (
+            "/api/v1/admin/products/{product_id}/revisions/{revision_id}"
+            "/mappings/{mapping_id}/revalidation-preview-jobs",
+            "post",
+        ): {"401", "403", "404", "409", "422", "503"},
+        ("/api/v1/admin/products/{product_id}", "get"): {"401", "403", "404", "422"},
+        ("/api/v1/admin/products/{product_id}", "patch"): {
+            "401",
+            "403",
+            "404",
+            "422",
+        },
+        ("/api/v1/admin/users", "get"): {"401", "403", "422"},
+        ("/api/v1/admin/users", "post"): {"401", "403", "409", "422"},
+        ("/api/v1/admin/users/{user_id}", "patch"): {
+            "401",
+            "403",
+            "404",
+            "409",
+            "422",
+        },
+        ("/api/v1/admin/users/{user_id}/deactivate", "post"): {
+            "401",
+            "403",
+            "404",
+            "409",
+            "422",
+        },
+        ("/api/v1/admin/users/{user_id}/reactivate", "post"): {
+            "401",
+            "403",
+            "404",
+            "409",
+            "422",
+        },
+        ("/api/v1/admin/users/{user_id}/reset-password", "post"): {
+            "401",
+            "403",
+            "404",
+            "409",
+            "422",
+        },
         ("/api/v1/auth/change-password", "post"): {"400", "401", "422", "429", "503"},
         ("/api/v1/auth/logout", "post"): {"403", "429"},
         ("/api/v1/auth/refresh", "post"): {"401", "403", "429", "503"},
@@ -102,6 +517,37 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
                 "#/components/schemas/ErrorResponse"
             )
 
+    import_error_response_codes = {
+        ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get"): {
+            "404",
+            "422",
+        },
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+            "post",
+        ): {"404", "409", "503"},
+        ("/api/v1/admin/products/{product_id}/imports/{import_id}", "get"): {
+            "404",
+            "409",
+            "503",
+        },
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+            "/imports/{import_id}/rewrite-comparison",
+            "get",
+        ): {"404", "409", "503"},
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+            "/imports/{import_id}/rewrite-confirmation",
+            "post",
+        ): {"404", "409", "503"},
+    }
+    for key, status_codes in import_error_response_codes.items():
+        for status_code in status_codes:
+            assert _response_schema(operations[key], status_code) == (
+                "#/components/schemas/AdminImportOperationErrorResponse"
+            )
+
     assert schema["components"]["securitySchemes"] == {
         "OAuth2PasswordBearer": {
             "flows": {
@@ -113,6 +559,958 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
             "type": "oauth2",
         }
     }
+
+    assert _response_schema(operations[("/api/v1/admin/products", "post")], "409") == (
+        "#/components/schemas/AdminProductConflictResponse"
+    )
+    assert (
+        _response_schema(operations[("/api/v1/admin/products/{product_id}", "patch")], "409")
+        == "#/components/schemas/AdminProductConflictResponse"
+    )
+    mapping_collection = "/api/v1/admin/products/{product_id}/candidate/mappings"
+    mapping_detail = mapping_collection + "/{mapping_id}"
+    assert _response_schema(operations[(mapping_collection, "post")], "409") == (
+        "#/components/schemas/AdminMappingConflictResponse"
+    )
+    assert _response_schema(operations[(mapping_detail, "patch")], "409") == (
+        "#/components/schemas/AdminMappingConflictResponse"
+    )
+
+
+def test_import_public_contract_is_closed_and_provider_source_history_free() -> None:
+    schema = app.openapi()
+    operations = _operation_entries(schema)
+    paths = {
+        ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get"),
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+            "post",
+        ),
+        ("/api/v1/admin/products/{product_id}/imports/{import_id}", "get"),
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+            "/imports/{import_id}/rewrite-comparison",
+            "get",
+        ),
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+            "/imports/{import_id}/rewrite-confirmation",
+            "post",
+        ),
+    }
+    roots = set().union(*(_schema_references(operations[path]) for path in paths))
+    components = schema["components"]["schemas"]
+    pending = list(roots)
+    import_schema_names: set[str] = set()
+    while pending:
+        name = pending.pop()
+        if name in import_schema_names or name not in components:
+            continue
+        import_schema_names.add(name)
+        pending.extend(_schema_references(components[name]) - import_schema_names)
+
+    import_schemas = {
+        name: components[name]
+        for name in import_schema_names
+        if name.startswith("AdminImport") or name.startswith("AdminPublishedMappingImport")
+    }
+    assert set(import_schemas) == {
+        "AdminImportBaselineResponse",
+        "AdminImportOperationErrorResponse",
+        "AdminImportRepositorySideResponse",
+        "AdminImportRewriteComparisonResponse",
+        "AdminImportRewriteConfirmationRequest",
+        "AdminImportRewriteDeltaResponse",
+        "AdminImportRewriteSideResponse",
+        "AdminImportSourceReferenceResponse",
+        "AdminPublishedMappingImportListResponse",
+        "AdminPublishedMappingImportResponse",
+    }
+    forbidden = {
+        "access_token",
+        "attempt",
+        "attempt_history",
+        "attempts",
+        "authorization",
+        "ciphertext",
+        "client_secret",
+        "credential",
+        "credentials",
+        "execution_history",
+        "provider_body",
+        "provider_response",
+        "provider_url",
+        "raw_authority",
+        "raw_source",
+        "refresh_token",
+        "source_bytes",
+        "stack",
+        "stack_trace",
+        "task_id",
+        "url",
+    }
+    assert forbidden.isdisjoint(_schema_property_names(import_schemas))
+    assert "workspace" in _schema_property_names(components["AdminRepositoryResponse"])
+
+
+def test_import_operation_surface_is_exact_unique_and_bearer_protected() -> None:
+    """Freeze the five browser operations before generated code consumes them."""
+    schema = app.openapi()
+    operations = _operation_entries(schema)
+    import_operations = {
+        key: operation
+        for key, operation in operations.items()
+        if "/imports" in key[0] or key[0].endswith("/mapping-imports")
+    }
+
+    assert set(import_operations) == set(IMPORT_OPERATIONS)
+    operation_ids: list[str] = []
+    for key, (operation_id, response_codes) in IMPORT_OPERATIONS.items():
+        operation = import_operations[key]
+        operation_ids.append(operation["operationId"])
+        assert operation["operationId"] == operation_id
+        assert set(operation["responses"]) == response_codes
+        assert operation["security"] == [{"OAuth2PasswordBearer": []}]
+
+    assert len(operation_ids) == 5
+    assert len(set(operation_ids)) == 5
+
+    list_operation = import_operations[
+        ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get")
+    ]
+    list_parameters = _parameters_by_name(list_operation)
+    assert set(list_parameters) == {"product_id", "limit", "status", "cursor"}
+    assert list_parameters["product_id"]["in"] == "path"
+    assert list_parameters["product_id"]["required"] is True
+    assert list_parameters["limit"]["schema"] == {
+        "default": 50,
+        "maximum": 100,
+        "minimum": 1,
+        "title": "Limit",
+        "type": "integer",
+    }
+    assert list_parameters["status"]["schema"]["enum"] == ["all", "attention"]
+    assert list_parameters["cursor"]["in"] == "query"
+    assert list_parameters["cursor"]["required"] is False
+
+    confirmation = import_operations[
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+            "/imports/{import_id}/rewrite-confirmation",
+            "post",
+        )
+    ]
+    assert confirmation["requestBody"] == {
+        "content": {
+            "application/json": {
+                "schema": {"$ref": "#/components/schemas/AdminImportRewriteConfirmationRequest"}
+            }
+        },
+        "required": True,
+    }
+    for key, operation in import_operations.items():
+        if key != (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+            "/imports/{import_id}/rewrite-confirmation",
+            "post",
+        ):
+            assert "requestBody" not in operation
+
+
+def test_import_schema_literals_requirements_and_bounds_are_frozen() -> None:
+    """Keep state, readiness, reconciliation, cursor, and baseline shapes closed."""
+    schemas = app.openapi()["components"]["schemas"]
+    published = schemas["AdminPublishedMappingImportResponse"]
+    listing = schemas["AdminPublishedMappingImportListResponse"]
+    repository_side = schemas["AdminImportRepositorySideResponse"]
+    source = schemas["AdminImportSourceReferenceResponse"]
+    baseline = schemas["AdminImportBaselineResponse"]
+    comparison = schemas["AdminImportRewriteComparisonResponse"]
+    comparison_side = schemas["AdminImportRewriteSideResponse"]
+    delta = schemas["AdminImportRewriteDeltaResponse"]
+    confirmation = schemas["AdminImportRewriteConfirmationRequest"]
+    operation_error = schemas["AdminImportOperationErrorResponse"]
+    product = schemas["AdminProductResponse"]
+
+    for contract in (
+        published,
+        listing,
+        repository_side,
+        source,
+        baseline,
+        comparison,
+        comparison_side,
+        delta,
+        confirmation,
+        operation_error,
+        product,
+    ):
+        assert contract["additionalProperties"] is False
+
+    assert set(published["required"]) == set(published["properties"])
+    assert published["properties"]["state"]["enum"] == [
+        "not_imported",
+        "queued",
+        "running",
+        "current",
+        "may_be_stale",
+        "review_required",
+        "import_failed",
+    ]
+    assert published["properties"]["action"]["enum"] == [
+        "run_import",
+        "refresh_import",
+        "retry_import",
+        "import_in_progress",
+        "review_baseline_change",
+    ]
+    assert published["properties"]["capability"]["enum"] == [
+        "ready",
+        "reauthorization_required",
+        "unavailable",
+    ]
+    error_category = _schema_variant(published["properties"]["error_category"], type_name="string")
+    assert error_category["enum"] == [
+        "connection_required",
+        "permission_denied",
+        "rate_limited",
+        "source_not_found",
+        "timeout",
+        "provider_unavailable",
+        "bounded_failure",
+    ]
+    assert published["properties"]["repository_sides"]["minItems"] == 1
+    assert published["properties"]["repository_sides"]["maxItems"] == 2
+    assert published["properties"]["retry_count"]["minimum"] == 0
+    assert (
+        _schema_variant(published["properties"]["execution_number"], type_name="integer")["minimum"]
+        == 1
+    )
+    error_message = _schema_variant(published["properties"]["error_message"], type_name="string")
+    assert error_message["minLength"] == 1
+    assert error_message["maxLength"] == 256
+
+    assert listing["required"] == ["items"]
+    assert listing["properties"]["items"]["maxItems"] == 100
+    next_cursor = _schema_variant(listing["properties"]["next_cursor"], type_name="string")
+    assert next_cursor["minLength"] == 1
+    assert next_cursor["maxLength"] == 2048
+
+    assert set(repository_side["required"]) == set(repository_side["properties"])
+    assert repository_side["properties"]["role"]["enum"] == [
+        "direct",
+        "keys",
+        "translations",
+    ]
+    assert repository_side["properties"]["source_branch"]["minLength"] == 1
+    assert repository_side["properties"]["source_branch"]["maxLength"] == 255
+
+    assert set(source["required"]) == set(source["properties"])
+    assert source["properties"]["commit_hash"]["pattern"] == "^[0-9a-f]{40}$"
+    assert source["properties"]["sha256"]["pattern"] == "^[0-9a-f]{64}$"
+    assert source["properties"]["size_bytes"]["minimum"] == 0
+    assert source["properties"]["size_bytes"]["maximum"] == 1_048_576
+    assert source["properties"]["path"]["maxLength"] == 4096
+    assert set(baseline["required"]) == set(baseline["properties"])
+    assert baseline["properties"]["source_references"]["maxItems"] == 500
+
+    assert set(comparison["required"]) == set(comparison["properties"])
+    assert comparison["properties"]["topology"]["enum"] == ["direct", "separate"]
+    assert comparison["properties"]["confirmable"]["const"] is True
+    assert comparison["properties"]["sides"]["minItems"] == 1
+    assert comparison["properties"]["sides"]["maxItems"] == 2
+    assert comparison["properties"]["files"]["maxItems"] == 500
+    assert comparison["properties"]["proposal_digest"]["pattern"] == "^[0-9a-f]{64}$"
+
+    assert set(comparison_side["required"]) == set(comparison_side["properties"])
+    for count in ("added_count", "modified_count", "removed_count"):
+        assert comparison_side["properties"][count]["minimum"] == 0
+        assert comparison_side["properties"][count]["maximum"] == 500
+    assert set(delta["required"]) == set(delta["properties"])
+    assert delta["properties"]["change"]["enum"] == [
+        "added",
+        "modified",
+        "removed",
+    ]
+    assert delta["properties"]["position"]["minimum"] == 0
+    assert delta["properties"]["position"]["maximum"] == 499
+    assert delta["properties"]["path"]["maxLength"] == 4096
+
+    assert set(confirmation["required"]) == set(confirmation["properties"])
+    assert confirmation["properties"]["proposal_digest"]["pattern"] == ("^[0-9a-f]{64}$")
+    assert operation_error["required"] == ["detail"]
+    assert operation_error["properties"]["detail"]["enum"] == [
+        "Published import unavailable",
+        "Published import already in progress",
+        "Published import requires review",
+        "Published import conflict",
+        "Published import connection unavailable",
+        "Import rewrite proposal stale",
+        "Invalid import cursor",
+    ]
+
+    assert "affected_mapping_count" in product["required"]
+    assert product["properties"]["affected_mapping_count"] == {
+        "minimum": 0.0,
+        "title": "Affected Mapping Count",
+        "type": "integer",
+    }
+
+
+def test_import_generated_client_matches_the_canonical_operation_and_type_set() -> None:
+    """Fail until pinned generation carries every canonical Phase 3 import shape."""
+    sdk_source = (GENERATED_CLIENT / "sdk.gen.ts").read_text()
+    index_source = (GENERATED_CLIENT / "index.ts").read_text()
+    types_source = (GENERATED_CLIENT / "types.gen.ts").read_text()
+    operation_exports = (
+        "listAdminPublishedMappingImports",
+        "startAdminPublishedMappingImport",
+        "getAdminImport",
+        "getAdminImportRewriteComparison",
+        "confirmAdminImportRewriteBaseline",
+    )
+
+    for operation in operation_exports:
+        assert sdk_source.count(f"export const {operation} =") == 1
+        assert len(re.findall(rf"\b{re.escape(operation)}\b", index_source)) == 1
+
+    for generated_type in (
+        "AdminImportRewriteComparisonResponse",
+        "AdminImportRewriteConfirmationRequest",
+        "AdminImportRewriteDeltaResponse",
+        "AdminImportRewriteSideResponse",
+    ):
+        assert f"export type {generated_type}" in types_source
+        assert len(re.findall(rf"\b{re.escape(generated_type)}\b", index_source)) == 1
+
+    assert "affected_mapping_count: number" in types_source
+
+
+def test_admin_bitbucket_openapi_is_closed_bounded_and_secret_free() -> None:
+    """Expose only approved lifecycle state and closed capability readiness."""
+    schema = app.openapi()
+    schemas = schema["components"]["schemas"]
+    connection_status = schemas["AdminBitbucketStatusResponse"]
+    integration_error = schemas["AdminBitbucketErrorResponse"]
+
+    assert "AdminBitbucketAuthorizationResponse" not in schemas
+    assert connection_status["additionalProperties"] is False
+    assert set(connection_status["properties"]) == {
+        "status",
+        "scope_profile",
+        "scope_label",
+        "capability_profile",
+        "connected_at",
+        "expires_at",
+        "revoked_at",
+    }
+    assert connection_status["properties"]["status"]["enum"] == [
+        "Disconnected",
+        "Connected",
+        "Reauthorization required",
+        "Unavailable",
+    ]
+    assert connection_status["properties"]["scope_profile"]["const"] == (
+        "repository_and_pull_request"
+    )
+    assert connection_status["properties"]["scope_label"]["const"] == (
+        "Repository and pull-request access"
+    )
+    capability_profile = schemas["AdminBitbucketCapabilityProfile"]
+    assert capability_profile["additionalProperties"] is False
+    assert set(capability_profile["properties"]) == {
+        "source_read",
+        "source_write",
+        "pull_request",
+        "evaluated_at",
+    }
+    for field in ("source_read", "source_write", "pull_request"):
+        assert capability_profile["properties"][field]["enum"] == [
+            "disconnected",
+            "ready",
+            "ready_for_later_phase",
+            "reauthorization_required",
+            "unavailable",
+        ]
+    assert integration_error["additionalProperties"] is False
+    assert integration_error["properties"]["detail"]["const"] == (
+        "Bitbucket connection unavailable"
+    )
+
+    bitbucket_paths = {
+        path: value
+        for path, value in schema["paths"].items()
+        if path.startswith("/api/v1/admin/bitbucket")
+    }
+    assert set(bitbucket_paths) == {
+        "/api/v1/admin/bitbucket",
+        "/api/v1/admin/bitbucket/connect",
+        "/api/v1/admin/bitbucket/reconnect",
+        "/api/v1/admin/bitbucket/revoke",
+    }
+    assert {
+        operation["operationId"]
+        for path_item in bitbucket_paths.values()
+        for operation in path_item.values()
+    } == {
+        "get_admin_bitbucket_status",
+        "connect_admin_bitbucket_oauth",
+        "reconnect_admin_bitbucket_oauth",
+        "revoke_admin_bitbucket_connection_locally",
+    }
+
+    bitbucket_contract = json.dumps(
+        {
+            "paths": bitbucket_paths,
+            "schemas": {
+                name: value for name, value in schemas.items() if name.startswith("AdminBitbucket")
+            },
+        },
+        sort_keys=True,
+    ).casefold()
+    for forbidden in (
+        "access_token",
+        "authorization_url",
+        "callback",
+        "ciphertext",
+        "client_id",
+        "refresh_token",
+        "encryption_key",
+        "client_secret",
+        "provider_body",
+        "source_generation",
+        "raw_scope",
+        "effective_scope",
+        "repository:write",
+        "pullrequest",
+        "webhook",
+        "provider_revoke",
+        "state_expires_in",
+        "workspace",
+    ):
+        assert forbidden not in bitbucket_contract
+
+
+def test_admin_discovery_openapi_is_commit_bound_bounded_and_body_free() -> None:
+    """Expose exact branch/source metadata without raw provider bytes or provider URLs."""
+    schema = app.openapi()
+    schemas = schema["components"]["schemas"]
+    source = schemas["AdminSourceDiscoveryResponse"]
+    source_file = schemas["AdminSourceFileResponse"]
+    discovery_error = schemas["AdminDiscoveryErrorResponse"]
+
+    assert source["additionalProperties"] is False
+    assert set(source["properties"]) == {"commit_hash", "files", "total_bytes"}
+    assert source_file["additionalProperties"] is False
+    assert set(source_file["properties"]) == {"path", "size"}
+    assert discovery_error["additionalProperties"] is False
+    assert discovery_error["properties"]["state"]["enum"] == [
+        "disconnected",
+        "reauthorization_required",
+        "permission_denied",
+        "not_found",
+        "rate_limited",
+        "unavailable",
+        "timeout",
+        "invalid_source",
+        "limit_exceeded",
+    ]
+
+    discovery_contract = json.dumps(
+        {
+            "paths": {
+                path: value
+                for path, value in schema["paths"].items()
+                if path.startswith("/api/v1/admin/repositories/")
+                and (path.endswith("/branches") or path.endswith("/sources"))
+            },
+            "schemas": {
+                name: value
+                for name, value in schemas.items()
+                if name.startswith("AdminBranch")
+                or name.startswith("AdminSource")
+                or name == "AdminDiscoveryErrorResponse"
+            },
+        },
+        sort_keys=True,
+    ).casefold()
+    for forbidden in (
+        "provider_url",
+        "provider_body",
+        "access_token",
+        "refresh_token",
+        "file_content",
+        "file_bytes",
+        "raw_bytes",
+        "repository:write",
+        "pullrequest",
+    ):
+        assert forbidden not in discovery_contract
+
+
+def test_revision_mapping_and_exact_branch_openapi_contract_is_structurally_frozen() -> None:
+    """Freeze owned revision IDs, opaque branch queries, cursors, and closed schemas."""
+    schema = app.openapi()
+    schemas = schema["components"]["schemas"]
+    revision_path = "/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings"
+    branch_path = "/api/v1/admin/repositories/{repository_id}/branch"
+    revision_operation = schema["paths"][revision_path]["get"]
+    branch_operation = schema["paths"][branch_path]["get"]
+
+    assert revision_operation["operationId"] == "list_admin_revision_mappings"
+    revision_parameters = _parameters_by_name(revision_operation)
+    assert set(revision_parameters) == {"product_id", "revision_id", "limit", "cursor"}
+    assert {
+        name: (parameter["in"], parameter["required"])
+        for name, parameter in revision_parameters.items()
+    } == {
+        "product_id": ("path", True),
+        "revision_id": ("path", True),
+        "limit": ("query", False),
+        "cursor": ("query", False),
+    }
+    for name in ("product_id", "revision_id"):
+        assert revision_parameters[name]["schema"] == {
+            "type": "string",
+            "format": "uuid",
+            "title": " ".join(part.title() for part in name.split("_")),
+        }
+    assert revision_parameters["limit"]["schema"] == {
+        "type": "integer",
+        "maximum": 100,
+        "minimum": 1,
+        "default": 50,
+        "title": "Limit",
+    }
+    assert revision_parameters["cursor"]["schema"]["anyOf"] == [
+        {"type": "string"},
+        {"type": "null"},
+    ]
+    assert _response_schema(revision_operation, "200") == (
+        "#/components/schemas/AdminMappingListResponse"
+    )
+
+    assert branch_operation["operationId"] == "get_admin_repository_branch"
+    branch_parameters = _parameters_by_name(branch_operation)
+    assert set(branch_parameters) == {"repository_id", "branch_name"}
+    assert branch_parameters["repository_id"]["in"] == "path"
+    assert branch_parameters["repository_id"]["required"] is True
+    assert branch_parameters["branch_name"]["in"] == "query"
+    assert branch_parameters["branch_name"]["required"] is True
+    assert branch_parameters["branch_name"]["schema"] == {
+        "type": "string",
+        "maxLength": 255,
+        "minLength": 1,
+        "title": "Branch Name",
+    }
+    assert _response_schema(branch_operation, "200") == ("#/components/schemas/AdminBranchResponse")
+    assert not any("{branch" in path for path in schema["paths"])
+
+    for list_schema_name, item_schema_name in (
+        ("AdminRepositoryListResponse", "AdminRepositoryResponse"),
+        ("AdminBranchListResponse", "AdminBranchResponse"),
+        ("AdminMappingListResponse", "AdminMappingResponse"),
+    ):
+        list_schema = schemas[list_schema_name]
+        assert list_schema["additionalProperties"] is False
+        assert set(list_schema["properties"]) == {"items", "next_cursor"}
+        assert set(list_schema["required"]) == {"items", "next_cursor"}
+        assert list_schema["properties"]["items"]["items"]["$ref"] == (
+            f"#/components/schemas/{item_schema_name}"
+        )
+        assert list_schema["properties"]["next_cursor"]["anyOf"] == [
+            {"type": "string"},
+            {"type": "null"},
+        ]
+
+    public_operation_schemas = {
+        name
+        for operation in (revision_operation, branch_operation)
+        for name in _schema_references(operation["responses"])
+    }
+    assert public_operation_schemas == {
+        "AdminBranchResponse",
+        "AdminDiscoveryErrorResponse",
+        "AdminMappingListResponse",
+        "ErrorResponse",
+    }
+    for schema_name in public_operation_schemas:
+        assert schemas[schema_name]["additionalProperties"] is False
+
+    public_contract_schemas = {
+        name: value
+        for name, value in schemas.items()
+        if name.startswith(("AdminBranch", "AdminDiscovery", "AdminMapping"))
+        or name in {"AdminRepositoryListResponse", "AdminBitbucketStatusResponse"}
+    }
+    assert _schema_property_names(public_contract_schemas).isdisjoint(
+        {
+            "access_token",
+            "authorization_url",
+            "ciphertext",
+            "client_secret",
+            "credentials",
+            "next",
+            "next_url",
+            "provider_next",
+            "provider_next_url",
+            "provider_url",
+            "refresh_token",
+        }
+    )
+    assert "workspace" not in schemas["AdminBitbucketStatusResponse"]["properties"]
+
+
+def test_admin_preview_openapi_is_closed_current_and_source_free() -> None:
+    """Freeze durable attempt metadata while excluding source/provider/worker payloads."""
+    schema = app.openapi()
+    schemas = schema["components"]["schemas"]
+    create_request = schemas["AdminPreviewJobCreateRequest"]
+    response = schemas["AdminPreviewJobResponse"]
+    result = schemas["AdminPreviewJobResultResponse"]
+    repository_side = schemas["AdminPreviewRepositorySideResponse"]
+    layout_candidate = schemas["AdminPreviewLayoutCandidateResponse"]
+    preview_sample = schemas["AdminPreviewSampleResponse"]
+    confirmation_request = schemas["AdminPreviewConfirmationRequest"]
+    confirmation_response = schemas["AdminPreviewConfirmationResponse"]
+
+    assert create_request["additionalProperties"] is False
+    assert set(create_request["properties"]) == {"expected_candidate_version", "commits"}
+    assert response["additionalProperties"] is False
+    assert set(response["properties"]) == {
+        "id",
+        "input_digest",
+        "attempt",
+        "state",
+        "product_id",
+        "candidate_revision_id",
+        "candidate_revision_version",
+        "mapping_id",
+        "connection_generation",
+        "detector_version",
+        "repository_sides",
+        "result",
+        "error_code",
+        "is_current",
+        "created_at",
+        "started_at",
+        "finished_at",
+    }
+    assert result["additionalProperties"] is False
+    assert set(result["properties"]) == {"detector_version", "digest", "layout_candidates"}
+    assert result["properties"]["layout_candidates"]["maxItems"] == 500
+    assert layout_candidate["additionalProperties"] is False
+    assert set(layout_candidate["properties"]) == {
+        "id",
+        "version",
+        "repository_side",
+        "format",
+        "layout_identity",
+        "confidence",
+        "files",
+        "languages",
+        "keys",
+        "samples",
+        "samples_are_partial",
+    }
+    assert layout_candidate["properties"]["languages"]["maxItems"] == 32
+    assert layout_candidate["properties"]["keys"]["maxItems"] == 100
+    assert layout_candidate["properties"]["samples"]["maxItems"] == 100
+    assert layout_candidate["properties"]["samples_are_partial"]["const"] is True
+    assert preview_sample["additionalProperties"] is False
+    assert set(preview_sample["properties"]) == {"language", "key", "translation"}
+    assert repository_side["additionalProperties"] is False
+    assert confirmation_request["additionalProperties"] is False
+    assert set(confirmation_request["properties"]) == {
+        "preview_digest",
+        "layout_candidate_id",
+        "layout_candidate_version",
+    }
+    assert confirmation_request["properties"]["preview_digest"]["pattern"] == "^[0-9a-f]{64}$"
+    assert confirmation_request["properties"]["layout_candidate_version"]["const"] == 1
+    assert confirmation_response["additionalProperties"] is False
+    assert set(confirmation_response["properties"]) == {
+        "job_id",
+        "mapping_id",
+        "preview_digest",
+        "layout_candidate_id",
+        "layout_candidate_version",
+        "confirmed_by",
+        "confirmed_at",
+    }
+
+    preview_contract = json.dumps(
+        {
+            "paths": {
+                path: value for path, value in schema["paths"].items() if "preview-jobs" in path
+            },
+            "schemas": {
+                name: value for name, value in schemas.items() if name.startswith("AdminPreview")
+            },
+        },
+        sort_keys=True,
+    ).casefold()
+    for forbidden in (
+        "source_bytes",
+        "access_token",
+        "provider_body",
+        "celery_result",
+        "canonical_translation",
+        "source_file_content",
+    ):
+        assert forbidden not in preview_contract
+
+
+def test_active_revision_revalidation_openapi_is_exact_bounded_and_source_free() -> None:
+    """Freeze the four recovery operations and their active-revision vocabulary."""
+    schema = app.openapi()
+    schemas = schema["components"]["schemas"]
+    eligibility_path = (
+        "/api/v1/admin/products/{product_id}/revisions/{revision_id}/reactivation-eligibility"
+    )
+    create_path = (
+        "/api/v1/admin/products/{product_id}/revisions/{revision_id}"
+        "/mappings/{mapping_id}/revalidation-preview-jobs"
+    )
+    job_path = "/api/v1/admin/active-revision-revalidation-jobs/{job_id}"
+    confirmation_path = f"{job_path}/confirmation"
+    operation_ids = {
+        schema["paths"][eligibility_path]["get"]["operationId"],
+        schema["paths"][create_path]["post"]["operationId"],
+        schema["paths"][job_path]["get"]["operationId"],
+        schema["paths"][confirmation_path]["post"]["operationId"],
+    }
+    assert operation_ids == {
+        "get_admin_product_reactivation_eligibility",
+        "create_admin_active_revision_revalidation_job",
+        "get_admin_active_revision_revalidation_job",
+        "confirm_admin_active_revision_revalidation",
+    }
+
+    eligibility_parameters = _parameters_by_name(schema["paths"][eligibility_path]["get"])
+    assert set(eligibility_parameters) == {
+        "product_id",
+        "revision_id",
+        "expected_active_revision_version",
+    }
+    assert eligibility_parameters["expected_active_revision_version"]["required"] is True
+    assert eligibility_parameters["expected_active_revision_version"]["schema"]["minimum"] == 1
+
+    create_request = schemas["AdminActiveRevisionRevalidationJobCreateRequest"]
+    confirmation_request = schemas["AdminActiveRevisionRevalidationConfirmationRequest"]
+    job_response = schemas["AdminActiveRevisionRevalidationJobResponse"]
+    confirmation_response = schemas["AdminActiveRevisionRevalidationConfirmationResponse"]
+    eligibility_response = schemas["AdminProductReactivationEligibilityResponse"]
+    mapping_response = schemas["AdminProductReactivationMappingResponse"]
+    expected_properties = {
+        "AdminActiveRevisionRevalidationJobCreateRequest": {
+            "expected_active_revision_version",
+            "commits",
+        },
+        "AdminActiveRevisionRevalidationConfirmationRequest": {
+            "active_revision_id",
+            "active_revision_version",
+            "mapping_id",
+            "connection_generation",
+            "commits",
+            "preview_digest",
+            "layout_candidate_id",
+            "layout_candidate_version",
+        },
+        "AdminActiveRevisionRevalidationJobResponse": {
+            "id",
+            "input_digest",
+            "attempt",
+            "state",
+            "product_id",
+            "active_revision_id",
+            "active_revision_version",
+            "mapping_id",
+            "connection_generation",
+            "detector_version",
+            "repository_sides",
+            "result",
+            "error_code",
+            "is_current",
+            "created_at",
+            "started_at",
+            "finished_at",
+        },
+        "AdminActiveRevisionRevalidationConfirmationResponse": {
+            "job_id",
+            "product_id",
+            "active_revision_id",
+            "active_revision_version",
+            "mapping_id",
+            "connection_generation",
+            "commits",
+            "preview_digest",
+            "layout_candidate_id",
+            "layout_candidate_version",
+            "confirmed_by",
+            "confirmed_at",
+        },
+        "AdminProductReactivationEligibilityResponse": {
+            "product_id",
+            "active_revision_id",
+            "active_revision_version",
+            "eligible",
+            "blocker_codes",
+            "mappings",
+        },
+        "AdminProductReactivationMappingResponse": {
+            "mapping_id",
+            "is_current",
+            "blocker_codes",
+        },
+    }
+    for schema_name, properties in expected_properties.items():
+        contract = schemas[schema_name]
+        assert contract["additionalProperties"] is False
+        assert set(contract["properties"]) == properties
+        assert set(contract["required"]) == properties
+
+    assert create_request["properties"]["commits"]["minItems"] == 1
+    assert create_request["properties"]["commits"]["maxItems"] == 2
+    assert confirmation_request["properties"]["commits"]["maxItems"] == 2
+    assert confirmation_request["properties"]["preview_digest"]["pattern"] == ("^[0-9a-f]{64}$")
+    assert confirmation_request["properties"]["layout_candidate_version"]["const"] == 1
+    assert job_response["properties"]["repository_sides"]["maxItems"] == 2
+    assert confirmation_response["properties"]["commits"]["maxItems"] == 2
+    assert eligibility_response["properties"]["mappings"]["maxItems"] == 500
+    assert mapping_response["properties"]["blocker_codes"]["maxItems"] == 6
+
+    error_code = job_response["properties"]["error_code"]["anyOf"][0]
+    assert "stale_active_revision" in error_code["enum"]
+    assert "stale_candidate" not in error_code["enum"]
+    active_contract = json.dumps(
+        {
+            "paths": {
+                path: schema["paths"][path]
+                for path in (
+                    eligibility_path,
+                    create_path,
+                    job_path,
+                    confirmation_path,
+                )
+            },
+            "schemas": {name: schemas[name] for name in expected_properties},
+        },
+        sort_keys=True,
+    ).casefold()
+    for forbidden in (
+        "access_token",
+        "candidate_revision_id",
+        "candidate_revision_version",
+        "client_secret",
+        "credentials",
+        "provider_body",
+        "provider_write",
+        "raw_body",
+        "refresh_token",
+        "repository:write",
+        "source_bytes",
+        "source_file_content",
+    ):
+        assert forbidden not in active_contract
+
+
+def test_admin_product_openapi_is_closed_to_exact_lifecycle_operations() -> None:
+    """Expose only typed product lifecycle actions over publication authority."""
+    schema = app.openapi()
+    product = schema["components"]["schemas"]["AdminProductResponse"]
+    revision = schema["components"]["schemas"]["AdminProductRevisionSummary"]
+    conflict = schema["components"]["schemas"]["AdminProductConflictResponse"]
+    lifecycle_conflict = schema["components"]["schemas"]["AdminProductLifecycleConflictResponse"]
+    publish_request = schema["components"]["schemas"]["AdminProductPublishRequest"]
+    reactivate_request = schema["components"]["schemas"]["AdminProductReactivateRequest"]
+
+    assert product["additionalProperties"] is False
+    assert set(product["properties"]) == {
+        "id",
+        "name",
+        "is_active",
+        "affected_mapping_count",
+        "active_revision",
+        "candidate_revision",
+    }
+    assert revision["additionalProperties"] is False
+    assert set(revision["properties"]) == {
+        "id",
+        "version",
+        "name",
+        "description",
+        "is_published",
+    }
+    assert conflict["additionalProperties"] is False
+    assert set(conflict["properties"]) == {"detail", "field"}
+    assert lifecycle_conflict["additionalProperties"] is False
+    assert set(lifecycle_conflict["properties"]) == {"detail", "blockers"}
+    assert publish_request["additionalProperties"] is False
+    assert set(publish_request["properties"]) == {
+        "candidate_revision_id",
+        "expected_candidate_version",
+    }
+    assert reactivate_request["additionalProperties"] is False
+    assert set(reactivate_request["properties"]) == {
+        "active_revision_id",
+        "expected_active_version",
+    }
+    assert lifecycle_conflict["properties"]["blockers"]["items"]["enum"] == [
+        "mappings_required",
+        "mapping_configuration_invalid",
+        "target_configuration_invalid",
+        "layout_required",
+        "preview_confirmation_required",
+    ]
+    lifecycle_paths = {
+        path
+        for path in schema["paths"]
+        if path.startswith("/api/v1/admin/products/{product_id}/")
+        and path.rsplit("/", maxsplit=1)[-1] in {"publish", "deactivate", "reactivate"}
+    }
+    assert lifecycle_paths == {
+        "/api/v1/admin/products/{product_id}/deactivate",
+        "/api/v1/admin/products/{product_id}/publish",
+        "/api/v1/admin/products/{product_id}/reactivate",
+    }
+    revision_paths = {path for path in schema["paths"] if "/revisions/" in path}
+    assert revision_paths == {
+        "/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings",
+        ("/api/v1/admin/products/{product_id}/revisions/{revision_id}/reactivation-eligibility"),
+        (
+            "/api/v1/admin/products/{product_id}/revisions/{revision_id}"
+            "/mappings/{mapping_id}/revalidation-preview-jobs"
+        ),
+    }
+    assert set(
+        schema["paths"]["/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings"]
+    ) == {"get"}
+    assert set(
+        schema["paths"][
+            "/api/v1/admin/products/{product_id}/revisions/{revision_id}/reactivation-eligibility"
+        ]
+    ) == {"get"}
+    assert set(
+        schema["paths"][
+            "/api/v1/admin/products/{product_id}/revisions/{revision_id}"
+            "/mappings/{mapping_id}/revalidation-preview-jobs"
+        ]
+    ) == {"post"}
+    lifecycle_contract = json.dumps(
+        {path: schema["paths"][path] for path in sorted(lifecycle_paths)},
+        sort_keys=True,
+    ).casefold()
+    for forbidden in (
+        "access_token",
+        "canonical_translation",
+        "commit_create",
+        "provider_write",
+        "pull_request_create",
+        "refresh_token",
+        "webhook_create",
+    ):
+        assert forbidden not in lifecycle_contract
 
 
 def test_export_is_canonical_and_matches_the_checked_in_schema() -> None:
@@ -174,6 +1572,36 @@ def test_authentication_credential_fields_have_explicit_maximum_lengths() -> Non
     assert login_fields["password"]["maxLength"] == 128
     assert change_fields["current_password"]["maxLength"] == 128
     assert change_fields["new_password"]["maxLength"] == 128
+
+
+def test_admin_user_openapi_keeps_temporary_credentials_on_one_time_responses_only() -> None:
+    """Ordinary list/update/deactivate contracts cannot project credential material."""
+    schema = app.openapi()
+    schemas = schema["components"]["schemas"]
+    ordinary = schemas["AdminUserResponse"]["properties"]
+    listed = schemas["AdminUserListResponse"]["properties"]
+    credential = schemas["AdminUserCredentialResponse"]["properties"]
+
+    assert "temporary_password" not in ordinary
+    assert "temporary_password" not in listed
+    assert "temporary_password" in credential
+    assert "hashed_password" not in json.dumps(schemas)
+
+    operations = _operation_entries(schema)
+    credential_paths = {
+        ("/api/v1/admin/users", "post"),
+        ("/api/v1/admin/users/{user_id}/reactivate", "post"),
+        ("/api/v1/admin/users/{user_id}/reset-password", "post"),
+    }
+    for key, operation in operations.items():
+        if not key[0].startswith("/api/v1/admin/users"):
+            continue
+        success_code = "201" if key == ("/api/v1/admin/users", "post") else "200"
+        reference = _response_schema(operation, success_code)
+        if key in credential_paths:
+            assert reference == "#/components/schemas/AdminUserCredentialResponse"
+        elif key != ("/api/v1/admin/users", "get"):
+            assert reference == "#/components/schemas/AdminUserResponse"
 
 
 def _handwritten_api_type_declarations(source: str) -> set[str]:

@@ -1,0 +1,355 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+
+import {
+  deactivateAdminProduct,
+  getAdminProduct,
+  type AdminProductResponse,
+  type AdminProductRevisionSummary,
+} from "../../../api/client";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "../../../components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../../components/ui/alert-dialog";
+import { Badge } from "../../../components/ui/badge";
+import { Button } from "../../../components/ui/button";
+import { Skeleton } from "../../../components/ui/skeleton";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../../../components/ui/tabs";
+import { ProductDetailLayout } from "./ProductDetailLayout";
+
+export interface ProductOverviewPageProps {
+  accessToken: string;
+  productId?: string;
+}
+
+type ProductLoadState =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "ready"; product: AdminProductResponse; productId: string };
+
+type ReadyProductLoadState = Extract<ProductLoadState, { status: "ready" }>;
+
+function RevisionSummary({
+  label,
+  revision,
+}: {
+  label: string;
+  revision: AdminProductRevisionSummary | null;
+}) {
+  return (
+    <section
+      aria-label={label}
+      className="grid gap-3 rounded-lg border bg-secondary p-6"
+    >
+      <h2 className="text-heading font-semibold">{label}</h2>
+      {revision === null ? (
+        <p className="text-muted-foreground">Not configured</p>
+      ) : (
+        <>
+          <Badge variant="outline" className="w-fit rounded-md">
+            Version {revision.version}
+          </Badge>
+          <p className="break-words [overflow-wrap:anywhere]">
+            {revision.description ?? "No description"}
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+export function ProductOverviewPage({
+  accessToken,
+  productId,
+}: ProductOverviewPageProps) {
+  const routeProductId = useParams<"productId">().productId;
+  const resolvedProductId = productId ?? routeProductId;
+  const loadGeneration = useRef(0);
+  const deactivateTriggerRef = useRef<HTMLButtonElement>(null);
+  const deactivateErrorRef = useRef<HTMLDivElement>(null);
+  const deactivatePendingRef = useRef(false);
+  const [loadState, setLoadState] = useState<ProductLoadState>({
+    status: "loading",
+  });
+  const [deactivateOpen, setDeactivateOpen] = useState(false);
+  const [deactivatePending, setDeactivatePending] = useState(false);
+  const [deactivateError, setDeactivateError] = useState(false);
+
+  const loadProduct = useCallback(async () => {
+    const generation = ++loadGeneration.current;
+    setLoadState({ status: "loading" });
+    if (resolvedProductId === undefined) {
+      setLoadState({ status: "error" });
+      return;
+    }
+
+    try {
+      const result = await getAdminProduct({
+        auth: accessToken,
+        path: { product_id: resolvedProductId },
+      });
+      if (generation !== loadGeneration.current) {
+        return;
+      }
+      if (result.data === undefined) {
+        throw new Error();
+      }
+      setLoadState({
+        // Stryker disable next-line StringLiteral: a validated response transitions this non-ready branch into the erased TypeScript ready discriminant.
+        status: "ready",
+        product: result.data,
+        productId: resolvedProductId,
+      });
+    } catch {
+      if (generation === loadGeneration.current) {
+        setLoadState({ status: "error" });
+      }
+    }
+  }, [accessToken, resolvedProductId]);
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (active) {
+        void loadProduct();
+      }
+    });
+    return () => {
+      active = false;
+      loadGeneration.current += 1;
+    };
+  }, [loadProduct]);
+
+  useEffect(() => {
+    if (deactivateError) {
+      deactivateErrorRef.current!.focus();
+    }
+  }, [deactivateError]);
+
+  function closeDeactivate(open: boolean) {
+    if (deactivatePending) {
+      return;
+    }
+    setDeactivateOpen(open);
+    // Stryker disable next-line ConditionalExpression: this controlled dialog can request only closure after it has mounted open.
+    if (!open) {
+      setDeactivateError(false);
+      queueMicrotask(() => deactivateTriggerRef.current!.focus());
+    }
+  }
+
+  async function submitDeactivate(readyState: ReadyProductLoadState) {
+    if (deactivatePendingRef.current) {
+      return;
+    }
+    deactivatePendingRef.current = true;
+    setDeactivatePending(true);
+    setDeactivateError(false);
+    try {
+      const result = await deactivateAdminProduct({
+        auth: accessToken,
+        path: { product_id: readyState.productId },
+      });
+      if (result.data === undefined) {
+        setDeactivateError(true);
+        return;
+      }
+      setLoadState({
+        // Stryker disable next-line StringLiteral: a validated response keeps this already-ready branch ready; the literal is the erased TypeScript discriminant.
+        status: "ready",
+        product: result.data,
+        productId: readyState.productId,
+      });
+      setDeactivateOpen(false);
+    } catch {
+      setDeactivateError(true);
+    } finally {
+      deactivatePendingRef.current = false;
+      setDeactivatePending(false);
+    }
+  }
+
+  if (loadState.status === "loading") {
+    return (
+      <section className="grid gap-4" role="status" aria-live="polite">
+        <Skeleton className="h-9 w-64 max-w-full" />
+        <Skeleton className="h-48 w-full" />
+        <span>Loading product overview</span>
+      </section>
+    );
+  }
+
+  if (loadState.status === "error") {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>Product unavailable</AlertTitle>
+        <AlertDescription>
+          <p>
+            We could not load this page. Retry without leaving the
+            administration area.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void loadProduct()}
+          >
+            Retry loading page
+          </Button>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  const product = loadState.product;
+
+  return (
+    <ProductDetailLayout
+      productId={loadState.productId}
+      productName={product.name}
+    >
+      <section
+        className="grid min-w-0 max-w-full gap-8 overflow-x-clip"
+        aria-label="Product overview"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="grid min-w-0 gap-2">
+            <span className="text-heading font-semibold">Lifecycle status</span>
+            <Badge variant="outline" className="w-fit rounded-md">
+              {product.is_active ? "Active" : "Inactive"}
+            </Badge>
+          </div>
+          <div className="flex w-full flex-wrap gap-3 sm:w-auto">
+            {product.active_revision !== null ||
+            product.candidate_revision !== null ? (
+              <Button asChild variant="outline" className="w-full sm:w-auto">
+                <Link
+                  to={`/admin/products/${encodeURIComponent(loadState.productId)}/edit`}
+                >
+                  Edit draft
+                </Link>
+              </Button>
+            ) : null}
+            {product.is_active ? (
+              <Button
+                ref={deactivateTriggerRef}
+                type="button"
+                variant="destructive"
+                className="w-full sm:w-auto"
+                onClick={() => setDeactivateOpen(true)}
+              >
+                Deactivate product
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        {product.affected_mapping_count > 0 ? (
+          <section
+            aria-label="Product freshness"
+            className="flex min-w-0 flex-wrap items-center gap-2"
+          >
+            <Badge
+              variant="outline"
+              className="border-warning text-warning rounded-md"
+            >
+              {product.affected_mapping_count}{" "}
+              {product.affected_mapping_count === 1
+                ? "mapping may be stale"
+                : "mappings may be stale"}
+            </Badge>
+            <p className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+              A recent import failed, so the last successful baseline remains
+              active.
+            </p>
+          </section>
+        ) : null}
+
+        {product.is_active && product.candidate_revision !== null ? (
+          <Alert>
+            <AlertTitle>Draft in progress</AlertTitle>
+            <AlertDescription>
+              Published configuration remains active while you edit this draft.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        <Tabs defaultValue="published" className="min-w-0 max-w-full">
+          <TabsList aria-label="Configuration revisions">
+            <TabsTrigger value="published">Published</TabsTrigger>
+            <TabsTrigger value="draft">Draft</TabsTrigger>
+          </TabsList>
+          <TabsContent value="published" forceMount>
+            <RevisionSummary
+              label="Published configuration"
+              revision={product.active_revision}
+            />
+          </TabsContent>
+          <TabsContent value="draft" forceMount>
+            <RevisionSummary
+              label="Draft configuration"
+              revision={product.candidate_revision}
+            />
+          </TabsContent>
+        </Tabs>
+
+        {deactivateOpen ? (
+          <AlertDialog open onOpenChange={closeDeactivate}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Deactivate {product.name}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Its mappings will stop operating, but its published
+                  configuration will be kept.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+
+              {deactivateError ? (
+                <Alert
+                  ref={deactivateErrorRef}
+                  tabIndex={-1}
+                  variant="destructive"
+                >
+                  <AlertTitle>Product not deactivated</AlertTitle>
+                  <AlertDescription>
+                    We could not deactivate this product. Its active state is
+                    unchanged.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deactivatePending}>
+                  Cancel
+                </AlertDialogCancel>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={deactivatePending}
+                  aria-busy={deactivatePending}
+                  onClick={() => void submitDeactivate(loadState)}
+                >
+                  Deactivate product
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        ) : null}
+      </section>
+    </ProductDetailLayout>
+  );
+}

@@ -24,6 +24,10 @@ services:
     image: verboflex-backend:${VERBOFLEX_IMAGE_TAG:-staging}
     environment: *deployment-environment
     restart: unless-stopped
+  scheduler:
+    image: verboflex-backend:${VERBOFLEX_IMAGE_TAG:-staging}
+    environment: *deployment-environment
+    restart: unless-stopped
   frontend:
     image: verboflex-frontend:${VERBOFLEX_IMAGE_TAG:-staging}
     build:

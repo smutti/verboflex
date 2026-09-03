@@ -68,6 +68,95 @@ async function expectBoundedLayout(page: Page) {
   expect(layout.nestedSectionCount).toBe(0);
 }
 
+async function expectCompactDesktopNavigation(page: Page) {
+  const navigation = page.locator("aside").getByRole("navigation", {
+    name: "Primary navigation",
+  });
+  const overview = navigation.getByRole("button", {
+    name: "Workspace overview",
+  });
+  const administration = navigation.getByRole("heading", {
+    name: "Administration",
+    level: 2,
+  });
+  const destinations = ["Products", "Users", "Bitbucket"].map((name) =>
+    navigation.getByRole("link", { name }),
+  );
+  const [overviewBox, administrationBox, ...destinationBoxes] =
+    await Promise.all([
+      overview.boundingBox(),
+      administration.boundingBox(),
+      ...destinations.map((destination) => destination.boundingBox()),
+    ]);
+
+  expect(overviewBox).not.toBeNull();
+  expect(administrationBox).not.toBeNull();
+  expect(destinationBoxes).not.toContain(null);
+  if (
+    overviewBox === null ||
+    administrationBox === null ||
+    destinationBoxes.some((box) => box === null)
+  ) {
+    return;
+  }
+
+  expect(
+    administrationBox.y - (overviewBox.y + overviewBox.height),
+  ).toBeLessThanOrEqual(40);
+  expect(administrationBox.height).toBeLessThanOrEqual(24);
+  for (const box of destinationBoxes) {
+    expect(box?.height).toBeLessThanOrEqual(48);
+  }
+}
+
+async function expectCenteredProductWizard(page: Page) {
+  const main = page.locator("main");
+  const wizard = page.locator(
+    'section[aria-labelledby="product-wizard-title"]',
+  );
+  const [mainBox, wizardBox] = await Promise.all([
+    main.boundingBox(),
+    wizard.boundingBox(),
+  ]);
+
+  expect(mainBox).not.toBeNull();
+  expect(wizardBox).not.toBeNull();
+  if (mainBox === null || wizardBox === null) {
+    return;
+  }
+
+  const leftSpace = wizardBox.x - mainBox.x;
+  const rightSpace =
+    mainBox.x + mainBox.width - (wizardBox.x + wizardBox.width);
+  expect(Math.abs(leftSpace - rightSpace)).toBeLessThanOrEqual(1);
+
+  const stepMetrics = await wizard
+    .getByRole("navigation", { name: "Product setup steps" })
+    .getByRole("button")
+    .evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const range = document.createRange();
+        range.selectNodeContents(button);
+        const lineTops = new Set(
+          Array.from(range.getClientRects()).map((rect) =>
+            Math.round(rect.top * 100),
+          ),
+        );
+        return {
+          clientWidth: button.clientWidth,
+          lineCount: lineTops.size,
+          scrollWidth: button.scrollWidth,
+        };
+      }),
+    );
+
+  expect(stepMetrics).toHaveLength(5);
+  for (const metric of stepMetrics) {
+    expect(metric.lineCount).toBe(1);
+    expect(metric.scrollWidth).toBeLessThanOrEqual(metric.clientWidth + 1);
+  }
+}
+
 async function expectWorkspaceCopy(page: Page) {
   await expect(
     page.getByRole("heading", { name: "Workspace overview", level: 1 }),
@@ -166,6 +255,13 @@ test("auth shell completes forced change, refresh, responsive navigation, and lo
   await expect(page.getByText("API online", { exact: true })).toBeVisible();
   await expectNoAuthInWebStorage(page);
 
+  await page.goto("/admin/products/new");
+  await expect(
+    page.getByRole("heading", { name: "Create product", level: 1 }),
+  ).toBeVisible();
+  await expectCenteredProductWizard(page);
+  await page.goto("/");
+
   for (const width of [1440, 768, 375]) {
     await page.setViewportSize({ width, height: 900 });
     await expectWorkspaceCopy(page);
@@ -181,6 +277,7 @@ test("auth shell completes forced change, refresh, responsive navigation, and lo
           name: "Primary navigation",
         }),
       ).toBeVisible();
+      await expectCompactDesktopNavigation(page);
     } else {
       await expect(navigationTrigger).toBeVisible();
       for (const cycle of [1, 2, 3, 4]) {
