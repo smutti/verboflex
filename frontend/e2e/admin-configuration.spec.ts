@@ -1,5 +1,12 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { execFileSync } from "node:child_process";
+import {
+  chmodSync,
+  existsSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 
 const temporaryPassword = "VF-once-only-secret-29";
 const now = "2026-08-28T19:30:00Z";
@@ -2021,6 +2028,207 @@ interface MockProviderAuditRow {
   method: string;
 }
 
+interface Phase3SmokeFixtures {
+  directMappingId: string;
+  email: string;
+  password: string;
+  productId: string;
+  repositoryIds: string[];
+  separateMappingId: string;
+  userId: string;
+  zeroDeltaMappingId: string;
+}
+
+interface Phase3ProviderAuditRow {
+  category: "oauth-token-exchange" | "resource";
+  method: string;
+  resource_family: string;
+  status: number;
+}
+
+const phase3SmokeSeed = String.raw`
+import json
+from datetime import UTC, datetime
+from uuid import uuid4
+
+from sqlalchemy import select
+
+from verboflex.auth.passwords import hash_password
+from verboflex.db.session import SessionFactory
+from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.models.product import Product, ProductRevision
+from verboflex.models.product_mapping import (
+    ProductMappingAllowedTarget,
+    ProductMappingRepositorySide,
+    ProductRepositoryMapping,
+)
+from verboflex.models.repository import Repository
+from verboflex.models.role import Role
+from verboflex.models.user import User
+
+now = datetime.now(UTC)
+user_id = uuid4()
+product_id = uuid4()
+revision_id = uuid4()
+password = f"VF phase3 smoke {uuid4().hex}!"
+email = f"phase3-smoke-{user_id.hex}@example.com"
+
+with SessionFactory.begin() as session:
+    connection = session.get_one(BitbucketConnection, 1)
+    if connection.access_token_ciphertext is not None:
+        raise RuntimeError("phase3 smoke requires a disconnected connection")
+    admin_role = session.scalar(select(Role).where(Role.name == "admin"))
+    if admin_role is None:
+        raise RuntimeError("admin role unavailable")
+    user = User(
+        id=user_id,
+        email=email,
+        display_name="Phase 3 Smoke Admin",
+        hashed_password=hash_password(password),
+        is_active=True,
+        must_change_password=False,
+    )
+    user.roles = [admin_role]
+    product = Product(
+        id=product_id,
+        display_name="Phase 3 Import Smoke",
+        name_key=f"phase-3-import-smoke-{product_id.hex}",
+        is_active=True,
+    )
+    session.add_all([user, product])
+    session.flush()
+    revision = ProductRevision(
+        id=revision_id,
+        product_id=product_id,
+        display_name=product.display_name,
+        name_key=product.name_key,
+        description="Disposable deployment-like import smoke",
+        version=1,
+        is_published=False,
+    )
+    session.add(revision)
+    repositories = {}
+    for slug in (
+        "phase3-direct",
+        "phase3-keys",
+        "phase3-translations",
+        "phase3-zero-delta",
+    ):
+        repository = Repository(
+            id=uuid4(),
+            workspace="verboflex-smoke",
+            repository_slug=slug,
+        )
+        session.add(repository)
+        repositories[slug] = repository
+    session.flush()
+
+    def add_mapping(*, identity, topology, sides):
+        mapping = ProductRepositoryMapping(
+            id=uuid4(),
+            revision_id=revision_id,
+            topology=topology,
+            identity_key=json.dumps(identity, separators=(",", ":")),
+        )
+        mapping.sides = [
+            ProductMappingRepositorySide(
+                role=role,
+                repository_id=repositories[slug].id,
+                source_branch="main",
+            )
+            for role, slug in sides
+        ]
+        mapping.allowed_targets = [
+            ProductMappingAllowedTarget(branch="main", is_default=True)
+        ]
+        session.add(mapping)
+        session.flush()
+        return mapping
+
+    direct = add_mapping(
+        identity=["direct", str(repositories["phase3-direct"].id), "main"],
+        topology="direct",
+        sides=[("direct", "phase3-direct")],
+    )
+    separate = add_mapping(
+        identity=[
+            "separate",
+            str(repositories["phase3-keys"].id),
+            "main",
+            str(repositories["phase3-translations"].id),
+            "main",
+        ],
+        topology="separate",
+        sides=[
+            ("keys", "phase3-keys"),
+            ("translations", "phase3-translations"),
+        ],
+    )
+    zero_delta = add_mapping(
+        identity=["direct", str(repositories["phase3-zero-delta"].id), "main"],
+        topology="direct",
+        sides=[("direct", "phase3-zero-delta")],
+    )
+    session.flush()
+    revision.is_published = True
+    revision.published_at = now
+    session.flush()
+    product.active_revision_id = revision_id
+    product.candidate_revision_id = None
+    session.flush()
+
+print(json.dumps({
+    "directMappingId": str(direct.id),
+    "email": email,
+    "password": password,
+    "productId": str(product_id),
+    "repositoryIds": [str(repository.id) for repository in repositories.values()],
+    "separateMappingId": str(separate.id),
+    "userId": str(user_id),
+    "zeroDeltaMappingId": str(zero_delta.id),
+}))
+`;
+
+const phase3SmokeCleanup = String.raw`
+import json
+import sys
+from uuid import UUID
+
+from sqlalchemy import delete
+
+from verboflex.db.session import SessionFactory
+from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.models.product import Product
+from verboflex.models.repository import Repository
+from verboflex.models.user import User
+
+fixture = json.load(sys.stdin)
+with SessionFactory.begin() as session:
+    product = session.get(Product, UUID(fixture["productId"]))
+    if product is not None:
+        product.active_revision_id = None
+        product.candidate_revision_id = None
+        session.flush()
+        session.delete(product)
+        session.flush()
+    session.execute(
+        delete(Repository).where(
+            Repository.id.in_(UUID(value) for value in fixture["repositoryIds"])
+        )
+    )
+    user = session.get(User, UUID(fixture["userId"]))
+    if user is not None:
+        session.delete(user)
+    connection = session.get_one(BitbucketConnection, 1)
+    connection.generation = 0
+    connection.access_token_ciphertext = None
+    connection.refresh_token_ciphertext = None
+    connection.scope_profile = None
+    connection.provider_expires_at = None
+    connection.connected_at = None
+    connection.revoked_at = None
+`;
+
 interface RealMapping51Fixtures {
   blockedActiveProductId: string;
   candidateBoundaryMappingId: string;
@@ -2671,6 +2879,47 @@ function runRealBackendPython(script: string, input?: string) {
     ["exec", "-i", realBackendContainer(), "python", "-c", script],
     { encoding: "utf8", input },
   );
+}
+
+function seedPhase3SmokeFixtures(): Phase3SmokeFixtures {
+  const output = runRealBackendPython(phase3SmokeSeed);
+  return JSON.parse(output.trim()) as Phase3SmokeFixtures;
+}
+
+function cleanupPhase3SmokeFixtures(fixture: Phase3SmokeFixtures) {
+  runRealBackendPython(phase3SmokeCleanup, JSON.stringify(fixture));
+}
+
+function phase3ProviderControl(
+  heads: Record<string, string>,
+  faults: Record<string, string> = {},
+) {
+  const path = realEnvironment("E2E_PHASE3_PROVIDER_CONTROL_FILE");
+  writeFileSync(path, JSON.stringify({ faults, heads }), { encoding: "utf8" });
+  chmodSync(path, 0o600);
+}
+
+function phase3ProviderAudit(): Phase3ProviderAuditRow[] {
+  return readFileSync(realEnvironment("E2E_PHASE3_PROVIDER_AUDIT_FILE"), "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Phase3ProviderAuditRow);
+}
+
+async function waitForPhase3ProviderBlock() {
+  const sentinel = realEnvironment("E2E_PHASE3_PROVIDER_BLOCK_STARTED_FILE");
+  const deadline = Date.now() + 15_000;
+  while (!existsSync(sentinel) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  expect(existsSync(sentinel)).toBe(true);
+}
+
+function phase3ImportRow(page: Page, repositorySlug: string) {
+  return page
+    .getByRole("row")
+    .filter({ hasText: repositorySlug })
+    .filter({ visible: true });
 }
 
 function seedRealReactivationFixtures(): RealReactivationFixtures {
@@ -3491,5 +3740,232 @@ test("51st mapping preview readiness consumes terminal cursor before lifecycle a
     await expectNoSeededSecret(page, fixture.password);
   } finally {
     cleanupRealMapping51Fixtures(fixture);
+  }
+});
+
+test("deployment-like Phase 3 import, recovery, watchdog, and rewrite journeys use only provider reads", async ({
+  page,
+}) => {
+  const initialCommit = "1".repeat(40);
+  const fastForwardCommit = "2".repeat(40);
+  const rewrittenCommit = "3".repeat(40);
+  const zeroDeltaCommit = "4".repeat(40);
+  const heads = {
+    "phase3-direct": initialCommit,
+    "phase3-keys": initialCommit,
+    "phase3-translations": initialCommit,
+    "phase3-zero-delta": initialCommit,
+  };
+  phase3ProviderControl(heads);
+  const fixture = seedPhase3SmokeFixtures();
+  const worker = realEnvironment("E2E_PHASE3_WORKER_CONTAINER");
+  let workerKilled = false;
+
+  const visibleRow = (slug: string) => phase3ImportRow(page, slug);
+  const clickAndWait = async (
+    slug: string,
+    action: "Refresh import" | "Retry import" | "Run import",
+    state: "Current" | "May be stale" | "Review required",
+  ) => {
+    const row = visibleRow(slug);
+    await row.getByRole("button", { name: action, exact: true }).click();
+    await expect(row.getByText(state, { exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
+    return row;
+  };
+
+  try {
+    const tokenResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/v1/auth/token",
+    );
+    await signInWithRealBackendCredentials(
+      page,
+      fixture.email,
+      fixture.password,
+    );
+    const token = (
+      (await (await tokenResponse).json()) as { access_token: string }
+    ).access_token;
+
+    await page.goto("/admin/bitbucket");
+    await page.getByRole("button", { name: "Connect Bitbucket" }).click();
+    await expect(page.getByLabel("Bitbucket connection status")).toContainText(
+      "Connected",
+    );
+
+    await page.goto(`/admin/products/${fixture.productId}/mappings`);
+    await clickAndWait("phase3-direct", "Run import", "Current");
+    const initialResponse = await page.request.get(
+      `/api/v1/admin/products/${fixture.productId}/published/mapping-imports`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    expect(initialResponse.status()).toBe(200);
+    const initialRecords = (await initialResponse.json()) as {
+      items: Array<{ id: string; mapping_id: string; retry_count: number }>;
+    };
+    const logicalImportId = initialRecords.items.find(
+      ({ mapping_id }) => mapping_id === fixture.directMappingId,
+    )?.id;
+    expect(logicalImportId).toBeTruthy();
+
+    await clickAndWait("phase3-direct", "Refresh import", "Current");
+    heads["phase3-direct"] = fastForwardCommit;
+    phase3ProviderControl(heads);
+    const fastForwardRow = await clickAndWait(
+      "phase3-direct",
+      "Refresh import",
+      "Current",
+    );
+    await expect(fastForwardRow).toContainText(fastForwardCommit.slice(0, 12));
+
+    for (const [fault, expectedHeading, expectedStatus] of [
+      ["rate_limited", "Bitbucket request limit reached", 429],
+      ["timeout", "Import timed out", 504],
+      ["not_found", "Import source not found", 404],
+      ["permission_denied", "Repository access denied", 403],
+    ] as const) {
+      const before = phase3ProviderAudit().length;
+      phase3ProviderControl(heads, { "phase3-direct": fault });
+      const failedRow = await clickAndWait(
+        "phase3-direct",
+        "Refresh import",
+        "May be stale",
+      );
+      await expect(failedRow.getByRole("alert")).toContainText(expectedHeading);
+      await expect(failedRow).toContainText(fastForwardCommit.slice(0, 12));
+      const faultRows = phase3ProviderAudit().slice(before);
+      expect(
+        faultRows.filter(
+          ({ category, status }) =>
+            category === "resource" && status === expectedStatus,
+        ),
+      ).toHaveLength(1);
+      phase3ProviderControl(heads);
+      await clickAndWait("phase3-direct", "Retry import", "Current");
+    }
+
+    phase3ProviderControl(heads, { "phase3-direct": "block" });
+    const blockedRow = visibleRow("phase3-direct");
+    await blockedRow
+      .getByRole("button", { name: "Refresh import", exact: true })
+      .click();
+    await waitForPhase3ProviderBlock();
+    execFileSync("docker", ["kill", "--signal=KILL", worker]);
+    workerKilled = true;
+    phase3ProviderControl(heads);
+    await expect(
+      blockedRow.getByText("May be stale", { exact: true }),
+    ).toBeVisible({ timeout: 30_000 });
+    execFileSync("docker", ["start", worker]);
+    workerKilled = false;
+    await clickAndWait("phase3-direct", "Retry import", "Current");
+
+    heads["phase3-direct"] = rewrittenCommit;
+    phase3ProviderControl(heads);
+    const rewrittenRow = await clickAndWait(
+      "phase3-direct",
+      "Refresh import",
+      "Review required",
+    );
+    await rewrittenRow
+      .getByRole("button", { name: "Review baseline change", exact: true })
+      .click();
+    const directDialog = page.getByRole("alertdialog", {
+      name: "Review rewritten source history",
+    });
+    await expect(directDialog).toContainText("Added 1");
+    await expect(directDialog).toContainText("Modified 1");
+    await expect(directDialog).toContainText("Removed 1");
+    await directDialog
+      .getByRole("button", { name: "Confirm new baseline" })
+      .click();
+    await expect(directDialog).toHaveCount(0);
+
+    await clickAndWait("phase3-keys", "Run import", "Current");
+    heads["phase3-keys"] = rewrittenCommit;
+    heads["phase3-translations"] = rewrittenCommit;
+    phase3ProviderControl(heads);
+    const separateRow = await clickAndWait(
+      "phase3-keys",
+      "Refresh import",
+      "Review required",
+    );
+    await separateRow
+      .getByRole("button", { name: "Review baseline change", exact: true })
+      .click();
+    const separateDialog = page.getByRole("alertdialog", {
+      name: "Review rewritten source history",
+    });
+    await expect(separateDialog).toContainText("Keys");
+    await expect(separateDialog).toContainText("Translations");
+    await separateDialog
+      .getByRole("button", { name: "Confirm new baseline" })
+      .click();
+    await expect(separateDialog).toHaveCount(0);
+
+    await clickAndWait("phase3-zero-delta", "Run import", "Current");
+    heads["phase3-zero-delta"] = zeroDeltaCommit;
+    phase3ProviderControl(heads);
+    const zeroRow = await clickAndWait(
+      "phase3-zero-delta",
+      "Refresh import",
+      "Review required",
+    );
+    await zeroRow
+      .getByRole("button", { name: "Review baseline change", exact: true })
+      .click();
+    const zeroDialog = page.getByRole("alertdialog", {
+      name: "Review rewritten source history",
+    });
+    await expect(zeroDialog).toContainText(
+      "No localization file changes detected",
+    );
+    await zeroDialog
+      .getByRole("button", { name: "Confirm new baseline" })
+      .click();
+
+    const finalResponse = await page.request.get(
+      `/api/v1/admin/products/${fixture.productId}/published/mapping-imports`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const finalRecords = (await finalResponse.json()) as {
+      items: Array<{ id: string; mapping_id: string; retry_count: number }>;
+    };
+    const directRecord = finalRecords.items.find(
+      ({ mapping_id }) => mapping_id === fixture.directMappingId,
+    );
+    expect(directRecord?.id).toBe(logicalImportId);
+    expect(directRecord?.retry_count).toBe(5);
+
+    const audit = phase3ProviderAudit();
+    expect(
+      audit.filter(({ category }) => category === "oauth-token-exchange"),
+    ).not.toHaveLength(0);
+    expect(
+      audit
+        .filter(({ category }) => category === "resource")
+        .every(({ method }) => method === "GET"),
+    ).toBe(true);
+    expect(
+      audit.some(({ resource_family }) =>
+        ["branch-create", "source-commit", "pull-request-create"].includes(
+          resource_family,
+        ),
+      ),
+    ).toBe(false);
+    await expectNoSeededSecret(page, fixture.password);
+    await expectNoPageOverflow(page);
+  } finally {
+    if (workerKilled) {
+      execFileSync("docker", ["start", worker]);
+    }
+    const sentinel = realEnvironment("E2E_PHASE3_PROVIDER_BLOCK_STARTED_FILE");
+    if (existsSync(sentinel)) {
+      unlinkSync(sentinel);
+    }
+    cleanupPhase3SmokeFixtures(fixture);
   }
 });

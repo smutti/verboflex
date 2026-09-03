@@ -50,6 +50,13 @@ EXPECTED_ROLES = {
     "translator",
     "viewer",
 }
+PHASE3_IMPORT_TABLES = {
+    "import_executions",
+    "import_jobs",
+    "import_rewrite_deltas",
+    "import_rewrite_proposals",
+    "import_source_references",
+}
 PREVIEW_WATCHDOG_INDEX = "ix_preview_jobs_watchdog_state_started_at"
 
 
@@ -81,7 +88,7 @@ def migrated_database() -> Iterator[tuple[Config, Engine]]:
 def test_complete_schema_upgrades_downgrades_and_upgrades_reversibly(
     migrated_database: tuple[Config, Engine],
 ) -> None:
-    """Create the exact Phase 2 schema twice without leaving residual objects."""
+    """Create the exact Phase 3 schema twice without leaving residual objects."""
     config, engine = migrated_database
 
     command.upgrade(config, "head")
@@ -93,6 +100,33 @@ def test_complete_schema_upgrades_downgrades_and_upgrades_reversibly(
     command.upgrade(config, "head")
     assert_complete_schema(engine)
 
+
+def test_phase3_deployment_cycle_removes_and_recreates_every_import_table(
+    migrated_database: tuple[Config, Engine],
+) -> None:
+    """Rehearse the deployment head-to-pre-import-to-head migration boundary."""
+    config, engine = migrated_database
+
+    command.upgrade(config, "head")
+    assert PHASE3_IMPORT_TABLES <= set(inspect(engine).get_table_names())
+
+    command.downgrade(config, "0011_active_revision_revalidations")
+    assert PHASE3_IMPORT_TABLES.isdisjoint(inspect(engine).get_table_names())
+
+    command.upgrade(config, "head")
+    inspector = inspect(engine)
+    assert PHASE3_IMPORT_TABLES <= set(inspector.get_table_names())
+    assert {
+        "ix_import_executions_job_sequence",
+        "ix_import_jobs_revision_mapping",
+        "ix_import_rewrite_deltas_proposal_position",
+        "ix_import_rewrite_proposals_mapping_status",
+        "ix_import_source_references_execution_side_position",
+    } <= {
+        index["name"]
+        for table_name in PHASE3_IMPORT_TABLES
+        for index in inspector.get_indexes(table_name)
+    }
 
 def assert_complete_schema(engine: Engine) -> None:
     """Assert the complete authority/configuration tables and the original auth seed."""
