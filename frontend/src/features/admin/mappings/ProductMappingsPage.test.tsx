@@ -291,6 +291,30 @@ describe("administrator mapping cursor collections", () => {
     expect(listAdminPublishedMappingImportsMock).toHaveBeenCalledTimes(2);
   });
 
+  it("UI3-C09 keeps a published-import page failure inside its region and before draft mappings", async () => {
+    listAdminPublishedMappingImportsMock.mockResolvedValueOnce(
+      ok(undefined as never),
+    );
+    listAdminCandidateMappingsMock.mockResolvedValueOnce(
+      ok({ items: [], next_cursor: null }),
+    );
+    renderMappings();
+
+    const error = await screen.findByRole("heading", {
+      name: "Published imports unavailable",
+    });
+    expect(error).toBeVisible();
+    expect(screen.getByText("No mappings configured")).toBeVisible();
+    const importHeading = screen.getByRole("heading", {
+      name: "Published mapping imports",
+    });
+    expect(
+      importHeading.compareDocumentPosition(
+        screen.getByRole("heading", { name: "No mappings configured" }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("appends mapping 51 in API order with one request and no repeated identity", async () => {
     const firstPage = Array.from({ length: 50 }, (_, index) =>
       mapping(index + 1),
