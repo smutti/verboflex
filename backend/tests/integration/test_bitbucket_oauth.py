@@ -37,6 +37,11 @@ FERNET_KEY = base64.urlsafe_b64encode(b"0" * 32).decode()
 ACCESS_TOKEN = "provider-access-token-must-never-leak"
 PROVIDER_ERROR_BODY = "provider-body-must-never-leak"
 CLIENT_CREDENTIALS_NOW = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
+_MAX_DATETIME_SAFE_LIFETIME = datetime.max.replace(tzinfo=UTC) - CLIENT_CREDENTIALS_NOW
+MAX_DATETIME_SAFE_LIFETIME_SECONDS = (
+    _MAX_DATETIME_SAFE_LIFETIME.days * 86_400 + _MAX_DATETIME_SAFE_LIFETIME.seconds
+)
+BEYOND_TIMEDELTA_LIFETIME_SECONDS = timedelta.max.days * 86_400 + timedelta.max.seconds + 1
 
 
 @dataclass
@@ -531,6 +536,66 @@ def test_client_credentials_expiry_boundary_is_authoritative(
                 session,
                 type("Lease", (), {"generation": 1})(),
             )
+
+
+def test_client_credentials_accepts_maximum_datetime_safe_token_lifetime(
+    oauth_session_factory: sessionmaker[Session],
+) -> None:
+    """Persist the largest lifetime that can be added to the acquisition time."""
+    from verboflex.services.bitbucket_oauth import BitbucketOAuthService
+
+    exchange = FakeTokenExchange(expires_in=MAX_DATETIME_SAFE_LIFETIME_SECONDS)
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        token_exchange=exchange,
+        clock=lambda: CLIENT_CREDENTIALS_NOW,
+    )
+
+    with oauth_session_factory() as session:
+        service.acquire_client_credentials(session)
+
+    snapshot = _connection_snapshot(oauth_session_factory)
+    assert snapshot[4] == CLIENT_CREDENTIALS_NOW + timedelta(
+        seconds=MAX_DATETIME_SAFE_LIFETIME_SECONDS
+    )
+
+
+@pytest.mark.parametrize(
+    "expires_in",
+    (
+        pytest.param(
+            MAX_DATETIME_SAFE_LIFETIME_SECONDS + 1,
+            id="maximum-plus-one",
+        ),
+        pytest.param(
+            BEYOND_TIMEDELTA_LIFETIME_SECONDS,
+            id="beyond-timedelta-arithmetic",
+        ),
+    ),
+)
+def test_client_credentials_rejects_unsafe_token_lifetime_with_closed_error(
+    oauth_session_factory: sessionmaker[Session],
+    expires_in: int,
+) -> None:
+    """Oversized provider lifetimes fail through the closed OAuth contract."""
+    from verboflex.services.bitbucket_oauth import (
+        BitbucketOAuthService,
+        OAuthConnectionUnavailable,
+    )
+
+    service = BitbucketOAuthService(
+        settings=oauth_settings(),
+        token_exchange=FakeTokenExchange(expires_in=expires_in),
+        clock=lambda: CLIENT_CREDENTIALS_NOW,
+    )
+
+    with (
+        oauth_session_factory() as session,
+        pytest.raises(OAuthConnectionUnavailable, match="connection unavailable"),
+    ):
+        service.acquire_client_credentials(session)
+
+    assert _connection_snapshot(oauth_session_factory)[0] == 0
 
 
 def test_client_credentials_malformed_durable_states_and_clock_fail_closed(

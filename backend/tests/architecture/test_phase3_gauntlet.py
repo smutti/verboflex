@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import ast
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -11,6 +14,10 @@ GAUNTLET_PATH = REPOSITORY_ROOT / "tools" / "phase3_gauntlet.sh"
 MANIFEST_PATH = REPOSITORY_ROOT / "tools" / "phase3_source_manifest.txt"
 MUTATION_PATH = REPOSITORY_ROOT / "tools" / "verify_import_job_mutants.py"
 EVIDENCE_PATH = REPOSITORY_ROOT / "docs" / "evidence" / "phase-03.md"
+SOURCE_STATE_PATH = REPOSITORY_ROOT / "tools" / "source_state.sh"
+EDGE_MATRIX_PATH = (
+    REPOSITORY_ROOT / "backend" / "tests" / "architecture" / "phase2_spec_edge_matrix.json"
+)
 
 EXPECTED_LAYERS = (
     "source-state",
@@ -68,6 +75,7 @@ def test_phase3_manifest_covers_sources_and_excludes_mutable_closeout_artifacts(
         "include|implementation|:(glob)frontend/src/**/*.ts",
         "include|implementation|:(glob)frontend/src/**/*.tsx",
         "include|tests|:(glob)backend/tests/**/*.py",
+        "include|tests|backend/tests/architecture/phase2_spec_edge_matrix.json",
         "include|tests|:(glob)frontend/src/**/*.test.ts",
         "include|tests|:(glob)frontend/src/**/*.test.tsx",
         "include|tests|:(glob)frontend/e2e/**/*.ts",
@@ -79,6 +87,113 @@ def test_phase3_manifest_covers_sources_and_excludes_mutable_closeout_artifacts(
     assert any("03-*-SUMMARY.md" in row for row in exclusions)
     assert any("03-REVIEW.md" in row for row in exclusions)
     assert any("03-VERIFICATION.md" in row for row in exclusions)
+
+
+def test_source_state_digest_changes_when_executable_json_registry_changes(
+    tmp_path: Path,
+) -> None:
+    """A tracked semantic registry is a digest-bearing executable test input."""
+    fixture = tmp_path / "source-state-json-registry"
+    for directory in (
+        "app",
+        "backend/tests/architecture",
+        "config",
+        "docs",
+        "locks",
+        "migrations",
+        "tools",
+    ):
+        (fixture / directory).mkdir(parents=True, exist_ok=True)
+    shutil.copy2(SOURCE_STATE_PATH, fixture / "tools" / "source_state.sh")
+    shutil.copy2(
+        EDGE_MATRIX_PATH,
+        fixture / "backend/tests/architecture/phase2_spec_edge_matrix.json",
+    )
+    files = {
+        "app/main.py": "implementation\n",
+        "backend/tests/test_contract.py": "def test_contract(): assert True\n",
+        "config/app.conf": "config\n",
+        "docs/review.md": "review\n",
+        "docs/smoke.md": "smoke\n",
+        "locks/deps.lock": "lock\n",
+        "migrations/001.sql": "migration\n",
+    }
+    for relative_path, content in files.items():
+        target = fixture / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    manifest = fixture / "tools" / "phase3_source_manifest.txt"
+    manifest.write_text(
+        "\n".join(
+            (
+                "include|implementation|:(glob)app/**",
+                "include|tests|:(glob)backend/tests/**/*.py",
+                "include|tests|backend/tests/architecture/phase2_spec_edge_matrix.json",
+                "include|config|:(glob)config/**",
+                "include|lockfiles|:(glob)locks/**",
+                "include|migrations|:(glob)migrations/**",
+                "include|verifier-scripts|:(glob)tools/**",
+                "include|deployment-contract|docs/smoke.md",
+                "include|review|docs/review.md",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "init", "-q"], cwd=fixture, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "nyquist@example.invalid"],
+        cwd=fixture,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "nyquist-auditor"],
+        cwd=fixture,
+        check=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=fixture, check=True)
+    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=fixture, check=True)
+    environment = {
+        **os.environ,
+        "VERBOFLEX_SOURCE_MANIFEST": "tools/phase3_source_manifest.txt",
+    }
+
+    baseline = subprocess.run(
+        [str(fixture / "tools" / "source_state.sh"), "--digest"],
+        cwd=fixture,
+        check=True,
+        capture_output=True,
+        env=environment,
+        text=True,
+    ).stdout.strip()
+    registry = fixture / "backend/tests/architecture/phase2_spec_edge_matrix.json"
+    registry.write_text(registry.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    dirty_result = subprocess.run(
+        [str(fixture / "tools" / "source_state.sh"), "--digest"],
+        cwd=fixture,
+        check=False,
+        capture_output=True,
+        env=environment,
+        text=True,
+    )
+    assert dirty_result.returncode != 0
+    assert "included source has unstaged changes" in dirty_result.stderr
+
+    subprocess.run(["git", "add", str(registry)], cwd=fixture, check=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "mutate executable registry"],
+        cwd=fixture,
+        check=True,
+    )
+    changed = subprocess.run(
+        [str(fixture / "tools" / "source_state.sh"), "--digest"],
+        cwd=fixture,
+        check=True,
+        capture_output=True,
+        env=environment,
+        text=True,
+    ).stdout.strip()
+    assert changed != baseline
 
 
 def test_import_mutation_proof_has_exact_nonempty_domain_ownership() -> None:
