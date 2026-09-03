@@ -1885,6 +1885,67 @@ describe("administrator product configuration tracer", () => {
     );
   });
 
+  it("UI3-C24 renders the complete server-owned freshness zero-one-many cardinality matrix", async () => {
+    const user = userEvent.setup();
+    const zeroView = renderOverview();
+
+    expect(
+      await screen.findByRole("heading", { name: activeProduct.name }),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/mapping(?:s)? may be stale/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "A recent import failed, so the last successful baseline remains active.",
+      ),
+    ).not.toBeInTheDocument();
+    expect(listAdminPublishedMappingImportsMock).not.toHaveBeenCalled();
+    zeroView.unmount();
+
+    getAdminProductMock.mockResolvedValueOnce(
+      ok({ ...activeProduct, affected_mapping_count: 1 }),
+    );
+    const oneView = renderOverview();
+    const singular = await screen.findByText("1 mapping may be stale");
+    const singularSummary = singular.closest("section");
+    expect(singularSummary).not.toBeNull();
+    expect(singularSummary).toHaveTextContent(
+      "A recent import failed, so the last successful baseline remains active.",
+    );
+    expect(
+      within(singularSummary!).queryByRole("link"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(singularSummary!).queryByRole("button"),
+    ).not.toBeInTheDocument();
+    expect(
+      singularSummary!.compareDocumentPosition(
+        screen.getByRole("tablist", { name: "Configuration revisions" }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Deactivate product" })
+        .compareDocumentPosition(singularSummary!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    oneView.unmount();
+
+    getAdminProductMock.mockResolvedValueOnce(
+      ok({ ...activeProduct, affected_mapping_count: 37 }),
+    );
+    renderOverview();
+    expect(await screen.findByText("37 mappings may be stale")).toBeVisible();
+    expect(
+      screen.queryByText("37 mapping may be stale"),
+    ).not.toBeInTheDocument();
+    expect(listAdminPublishedMappingImportsMock).not.toHaveBeenCalled();
+
+    await user.tab();
+    expect(document.body).not.toHaveTextContent("all current");
+  });
+
   it("renders the default product detail title and nested outlet contract", () => {
     render(
       <MemoryRouter

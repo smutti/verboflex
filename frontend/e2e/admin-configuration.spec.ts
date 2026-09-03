@@ -16,10 +16,52 @@ interface ProductRevision {
 
 interface Product {
   active_revision: ProductRevision | null;
+  affected_mapping_count: number;
   candidate_revision: ProductRevision | null;
   id: string;
   is_active: boolean;
   name: string;
+}
+
+type ImportOutcome =
+  "failed_refresh" | "fast_forward" | "initial" | "manual_retry";
+
+interface PublishedImport {
+  action:
+    | "run_import"
+    | "refresh_import"
+    | "retry_import"
+    | "import_in_progress"
+    | "review_baseline_change";
+  active_baseline: {
+    imported_at: string;
+    source_references: Array<{
+      commit_hash: string;
+      path: string;
+      position: number;
+      repository_id: string;
+      repository_side: "direct";
+      sha256: string;
+      size_bytes: number;
+      source_branch: string;
+    }>;
+  } | null;
+  active_revision_id: string;
+  capability: "ready";
+  error_category: "provider_unavailable" | null;
+  error_message: string | null;
+  execution_number: number | null;
+  id: string | null;
+  latest_execution_at: string | null;
+  mapping_id: string;
+  repository_sides: Array<{
+    repository_id: string;
+    role: "direct";
+    source_branch: string;
+  }>;
+  retry_count: number;
+  state: "not_imported" | "current" | "may_be_stale" | "review_required";
+  topology: "direct";
 }
 
 interface AdminMockState {
@@ -34,6 +76,8 @@ interface AdminMockState {
   connectionMutations: string[];
   connectionStatus: ConnectionStatus;
   deactivateFailures: number;
+  importMutations: Array<{ body: unknown; method: string; pathname: string }>;
+  nextImportOutcome: ImportOutcome;
   mappings: Array<Record<string, unknown>>;
   paginateBranches: boolean;
   paginateProducts: boolean;
@@ -46,6 +90,8 @@ interface AdminMockState {
   publicationConflicts: number;
   reactivationConflicts: number;
   repositories: Array<Record<string, unknown>>;
+  publishedImports: PublishedImport[];
+  rewriteConfirmations: unknown[];
   users: Array<Record<string, unknown>>;
 }
 
@@ -66,12 +112,82 @@ const candidateRevision: ProductRevision = {
 function product(overrides: Partial<Product> = {}): Product {
   return {
     active_revision: publishedRevision,
+    affected_mapping_count: 0,
     candidate_revision: candidateRevision,
     id: "product-1",
     is_active: true,
     name: "Zulu Mobile",
     ...overrides,
   };
+}
+
+const longOpaqueBranch =
+  "release/rebased-history-with-an-intentionally-long-opaque-provider-branch-name";
+const logicalImportId = "import-stable-logical-uuid";
+const initialCommit = "1".repeat(40);
+const fastForwardCommit = "2".repeat(40);
+const retriedCommit = "3".repeat(40);
+const rewrittenCommit = "4".repeat(40);
+
+function importBaseline(commitHash: string) {
+  return {
+    imported_at: now,
+    source_references: [
+      {
+        commit_hash: commitHash,
+        path: `locales/${"nested/".repeat(10)}messages-with-a-long-name.json`,
+        position: 0,
+        repository_id: "repository-app",
+        repository_side: "direct" as const,
+        sha256: "a".repeat(64),
+        size_bytes: 4096,
+        source_branch: longOpaqueBranch,
+      },
+    ],
+  };
+}
+
+function publishedImport(
+  overrides: Partial<PublishedImport> = {},
+): PublishedImport {
+  return {
+    action: "run_import",
+    active_baseline: null,
+    active_revision_id: publishedRevision.id,
+    capability: "ready",
+    error_category: null,
+    error_message: null,
+    execution_number: null,
+    id: null,
+    latest_execution_at: null,
+    mapping_id: "mapping-import",
+    repository_sides: [
+      {
+        repository_id: "repository-app",
+        role: "direct",
+        source_branch: longOpaqueBranch,
+      },
+    ],
+    retry_count: 0,
+    state: "not_imported",
+    topology: "direct",
+    ...overrides,
+  };
+}
+
+function currentPublishedImport(
+  commitHash: string,
+  overrides: Partial<PublishedImport> = {},
+) {
+  return publishedImport({
+    action: "refresh_import",
+    active_baseline: importBaseline(commitHash),
+    execution_number: 1,
+    id: logicalImportId,
+    latest_execution_at: now,
+    state: "current",
+    ...overrides,
+  });
 }
 
 const directMapping = {
@@ -120,6 +236,8 @@ function defaultState(): AdminMockState {
     connectionMutations: [],
     connectionStatus: "Connected",
     deactivateFailures: 0,
+    importMutations: [],
+    nextImportOutcome: "initial",
     mappings: [directMapping, separateMapping],
     paginateBranches: false,
     paginateProducts: false,
@@ -169,6 +287,8 @@ function defaultState(): AdminMockState {
         workspace: "verboflex-workspace",
       },
     ],
+    publishedImports: [publishedImport()],
+    rewriteConfirmations: [],
     users: [
       {
         display_name: "Admin User",
@@ -386,6 +506,92 @@ async function installAdminApi(page: Page, state: AdminMockState) {
         name: String(body.name),
       };
       return json(route, state.product);
+    }
+    if (/\/published\/mapping-imports$/.test(pathname) && method === "GET") {
+      return json(route, {
+        items: state.publishedImports,
+        next_cursor: null,
+      });
+    }
+    if (
+      /\/published\/mappings\/[^/]+\/imports$/.test(pathname) &&
+      method === "POST"
+    ) {
+      state.importMutations.push({
+        body: request.postDataJSON(),
+        method,
+        pathname,
+      });
+      const current = state.publishedImports[0] ?? publishedImport();
+      const next =
+        state.nextImportOutcome === "initial"
+          ? currentPublishedImport(initialCommit)
+          : state.nextImportOutcome === "fast_forward"
+            ? currentPublishedImport(fastForwardCommit, {
+                execution_number: 2,
+              })
+            : state.nextImportOutcome === "failed_refresh"
+              ? currentPublishedImport(fastForwardCommit, {
+                  action: "retry_import",
+                  error_category: "provider_unavailable",
+                  error_message:
+                    "raw provider body https://api.bitbucket.org/private token=secret",
+                  execution_number: 3,
+                  state: "may_be_stale",
+                })
+              : currentPublishedImport(retriedCommit, {
+                  execution_number: 4,
+                  retry_count: current.retry_count + 1,
+                });
+      state.publishedImports = [next];
+      return json(route, next, 202);
+    }
+    if (/\/imports\/[^/]+$/.test(pathname) && method === "GET") {
+      return json(route, state.publishedImports[0]);
+    }
+    if (/\/rewrite-comparison$/.test(pathname) && method === "GET") {
+      return json(route, {
+        confirmable: true,
+        files: Array.from({ length: 48 }, (_, position) => ({
+          change:
+            position % 3 === 0
+              ? "added"
+              : position % 3 === 1
+                ? "modified"
+                : "removed",
+          path: `locales/${"very-long-segment/".repeat(4)}message-${position}.json`,
+          position,
+          repository_side: "direct",
+        })),
+        import_id: logicalImportId,
+        mapping_id: "mapping-import",
+        proposal_digest: "d".repeat(64),
+        proposal_id: "proposal-current",
+        proposed_execution_id: "execution-rewritten",
+        sides: [
+          {
+            added_count: 16,
+            modified_count: 16,
+            new_commit_hash: rewrittenCommit,
+            old_commit_hash: retriedCommit,
+            removed_count: 16,
+            repository_id: "repository-app",
+            repository_side: "direct",
+          },
+        ],
+        topology: "direct",
+      });
+    }
+    if (/\/rewrite-confirmation$/.test(pathname) && method === "POST") {
+      const body = request.postDataJSON();
+      state.rewriteConfirmations.push(body);
+      state.importMutations.push({ body, method, pathname });
+      const confirmed = currentPublishedImport(rewrittenCommit, {
+        execution_number: 5,
+        retry_count: state.publishedImports[0]?.retry_count ?? 1,
+      });
+      state.publishedImports = [confirmed];
+      return json(route, confirmed);
     }
     if (pathname.endsWith("/deactivate") && method === "POST") {
       if (state.deactivateFailures > 0) {
@@ -1455,6 +1661,257 @@ test("Bitbucket client credentials recover expiry without navigation or credenti
   ).toHaveCount(0);
   await expect(page.getByText("Active", { exact: true })).toBeVisible();
   await expectNoCredentialResidue(page);
+  await expectNoPageOverflow(page);
+});
+
+for (const viewport of [
+  { height: 900, label: "desktop", width: 1440 },
+  { height: 720, label: "mobile", width: 320 },
+] as const) {
+  test(`initial import, fast-forward, failed refresh, manual retry, and rewritten baseline work on ${viewport.label}`, async ({
+    page,
+  }) => {
+    const state = defaultState();
+    state.product = product({ affected_mapping_count: 2 });
+    state.products[0] = state.product;
+    state.mappings = [directMapping];
+    state.publishedImports = [publishedImport()];
+    const browserRequests: Array<{
+      method: string;
+      pathname: string;
+      url: string;
+    }> = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.startsWith("/api/v1/admin/")) {
+        browserRequests.push({
+          method: request.method(),
+          pathname: url.pathname,
+          url: request.url(),
+        });
+      }
+    });
+    await installAdminApi(page, state);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize(viewport);
+
+    await page.goto("/admin/products/product-1/overview");
+    await expect(page.getByText("2 mappings may be stale")).toBeVisible();
+    const freshness = page.getByText(
+      "A recent import failed, so the last successful baseline remains active.",
+    );
+    await expect(freshness).toBeVisible();
+    await expect(freshness.getByRole("link")).toHaveCount(0);
+
+    await page.goto("/admin/products/product-1/mappings");
+    await expect(
+      page.getByRole("heading", { name: "Published mapping imports" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Run import", exact: true }).click();
+    await expect(page.getByText("Current", { exact: true })).toBeVisible();
+    await expect(page.getByText(initialCommit.slice(0, 12))).toBeVisible();
+    expect(state.publishedImports[0]?.id).toBe(logicalImportId);
+
+    state.nextImportOutcome = "fast_forward";
+    await page
+      .getByRole("button", { name: "Refresh import", exact: true })
+      .click();
+    await expect(page.getByText(fastForwardCommit.slice(0, 12))).toBeVisible();
+    expect(state.publishedImports[0]?.id).toBe(logicalImportId);
+
+    state.nextImportOutcome = "failed_refresh";
+    await page
+      .getByRole("button", { name: "Refresh import", exact: true })
+      .click();
+    await expect(page.getByText("May be stale", { exact: true })).toBeVisible();
+    await expect(page.getByText(fastForwardCommit.slice(0, 12))).toBeVisible();
+    const retainedBaselineError = page.getByRole("alert").filter({
+      hasText: "Bitbucket unavailable",
+      visible: true,
+    });
+    await expect(retainedBaselineError).toContainText(
+      "The last successful baseline is unchanged.",
+    );
+    await expect(retainedBaselineError).not.toContainText("raw provider body");
+
+    const retryImportId = state.publishedImports[0]?.id;
+    state.nextImportOutcome = "manual_retry";
+    await page
+      .getByRole("button", { name: "Retry import", exact: true })
+      .click();
+    await expect(page.getByText(retriedCommit.slice(0, 12))).toBeVisible();
+    await expect(page.getByText("Retry 1", { exact: true })).toBeVisible();
+    expect(state.publishedImports[0]?.id).toBe(retryImportId);
+
+    state.publishedImports = [
+      currentPublishedImport(retriedCommit, {
+        action: "review_baseline_change",
+        execution_number: 5,
+        state: "review_required",
+      }),
+    ];
+    await page.reload();
+    await page
+      .getByRole("button", { name: "Review baseline change", exact: true })
+      .click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Review rewritten source history",
+    });
+    await expect(dialog).toContainText("Added 16");
+    await expect(dialog).toContainText("Modified 16");
+    await expect(dialog).toContainText("Removed 16");
+    await dialog.getByRole("button", { name: "Confirm new baseline" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByText(rewrittenCommit.slice(0, 12))).toBeVisible();
+    expect(state.rewriteConfirmations).toEqual([
+      {
+        proposal_digest: "d".repeat(64),
+        proposal_id: "proposal-current",
+        proposed_execution_id: "execution-rewritten",
+      },
+    ]);
+
+    const importStarts = state.importMutations.filter(({ pathname }) =>
+      pathname.endsWith("/imports"),
+    );
+    expect(importStarts).toHaveLength(4);
+    expect(importStarts.every(({ body }) => body === null)).toBe(true);
+    expect(
+      browserRequests.filter(
+        ({ method, pathname }) =>
+          method === "POST" && pathname.includes("/published/mappings/"),
+      ),
+    ).toHaveLength(5);
+    expect(
+      browserRequests.some(({ pathname }) =>
+        /\/(branches|commits|pullrequests)(?:\/|$)/.test(pathname),
+      ),
+    ).toBe(false);
+    expect(
+      browserRequests.every(({ url }) => !url.includes("api.bitbucket.org")),
+    ).toBe(true);
+    await expect(page.locator("body")).not.toContainText("token=secret");
+    await expectNoCredentialResidue(page);
+    await expectNoPageOverflow(page);
+  });
+}
+
+test("UI3-C23 keeps mapping pages and the 80vh reconciliation dialog contained across reflow boundaries", async ({
+  page,
+}) => {
+  const state = defaultState();
+  state.mappings = [directMapping];
+  state.publishedImports = [
+    currentPublishedImport(retriedCommit, {
+      action: "review_baseline_change",
+      state: "review_required",
+    }),
+  ];
+  await installAdminApi(page, state);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+
+  for (const viewport of [
+    { height: 720, width: 320, zoom: 1 },
+    { height: 800, width: 768, zoom: 1 },
+    { height: 800, width: 1024, zoom: 1 },
+    { height: 900, width: 1440, zoom: 1 },
+    { height: 720, width: 640, zoom: 2 },
+  ]) {
+    await page.setViewportSize({
+      height: viewport.height,
+      width: viewport.width,
+    });
+    await page.goto("/admin/products/product-1/mappings");
+    await page.evaluate((zoom) => {
+      document.documentElement.style.zoom = String(zoom);
+    }, viewport.zoom);
+    await expectNoPageOverflow(page);
+    const review = page.getByRole("button", {
+      name: "Review baseline change",
+      exact: true,
+    });
+    const reviewBox = await review.boundingBox();
+    expect(reviewBox?.height).toBeGreaterThanOrEqual(44);
+    await review.click();
+
+    const dialog = page.getByRole("alertdialog", {
+      name: "Review rewritten source history",
+    });
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("table", { name: "Localization file changes" }),
+    ).toBeVisible();
+    const dialogBox = await dialog.boundingBox();
+    expect(dialogBox).not.toBeNull();
+    expect(dialogBox!.height).toBeLessThanOrEqual(viewport.height * 0.8 + 1);
+    const scrollRegion = dialog.getByRole("region", {
+      name: "Rewritten baseline comparison content",
+    });
+    await expect(scrollRegion).toHaveAttribute("tabindex", "0");
+    await scrollRegion.focus();
+    await expect(scrollRegion).toBeFocused();
+    await page.keyboard.press("End");
+    await expectNoPageOverflow(page);
+    await dialog.getByRole("button", { name: "Keep current baseline" }).click();
+    await expect(review).toBeFocused();
+  }
+});
+
+test("UI3-C26 keeps long opaque values local and copies a full commit only on explicit request", async ({
+  page,
+}) => {
+  const state = defaultState();
+  state.mappings = [directMapping];
+  state.publishedImports = [
+    currentPublishedImport(retriedCommit, {
+      action: "review_baseline_change",
+      state: "review_required",
+    }),
+  ];
+  await page.addInitScript(() => {
+    const target = globalThis as typeof globalThis & {
+      __copiedCommit?: string;
+    };
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          target.__copiedCommit = value;
+        },
+      },
+    });
+  });
+  await installAdminApi(page, state);
+  await page.setViewportSize({ height: 720, width: 320 });
+  await page.goto("/admin/products/product-1/mappings");
+
+  const opaqueRegion = page
+    .getByRole("region", { name: "Source repository and branch" })
+    .filter({ visible: true });
+  await expect(opaqueRegion).toContainText(longOpaqueBranch);
+  await expect(opaqueRegion).toHaveAttribute("tabindex", "0");
+  await opaqueRegion.focus();
+  await expect(opaqueRegion).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+
+  await page
+    .getByRole("button", { name: "Review baseline change", exact: true })
+    .click();
+  const dialog = page.getByRole("alertdialog", {
+    name: "Review rewritten source history",
+  });
+  await expect(dialog).toContainText(retriedCommit);
+  await expect(dialog).toContainText(rewrittenCommit);
+  await expect(dialog.getByText("Full commit copied")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Copy full commit" }).nth(1).click();
+  expect(
+    await page.evaluate(
+      () =>
+        (globalThis as typeof globalThis & { __copiedCommit?: string })
+          .__copiedCommit,
+    ),
+  ).toBe(rewrittenCommit);
+  await expect(dialog.getByText("Full commit copied")).toBeVisible();
   await expectNoPageOverflow(page);
 });
 
