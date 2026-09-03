@@ -177,3 +177,31 @@ after artifact creation.
 | Reviewed source digest | `e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c` |
 | Provider resource mutations | 0 |
 | Review source-state | Passed; digest unchanged |
+
+## Final independent verifier authority
+
+The fresh typed `gsd-verifier` independently verified the Phase 3 roadmap goal,
+BITB-02/05/06, D-01 through D-18, the six cross-artifact edges, the two
+prohibitions, and UI3-C01 through UI3-C26 against implementation, tests, and
+digest-bound runtime evidence. It recorded exactly `status: passed` with 60/60
+must-haves verified, zero gaps, and zero human-verification items.
+
+The verifier independently reproduced the reviewed source digest and confirmed
+the exact API capability split, the five generated import operations, D-15
+positive and negative logging evidence, provenance/retry/watchdog/rewrite
+authority, the mandatory mock smoke, all quality gates, and the Phase 4-8
+provider-write fences. No source-manifest file changed after the accepted final
+gauntlet, and provider resource writes remained zero.
+
+| Measurement | Result |
+| --- | --- |
+| Verifier | Fresh typed `gsd-verifier` (`phase3_plan16_verifier`) |
+| Verifier status | `passed` |
+| Goal-backward score | 60/60 must-haves verified |
+| Requirements | BITB-02, BITB-05, and BITB-06 verified |
+| Decisions and UI | D-01..D-18 and UI3-C01..UI3-C26 verified |
+| API capability matrix | 56 total; 17 integrated and 39 explicitly opted out |
+| Gaps / human verification | 0 / 0 |
+| Verified source digest | `e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c` |
+| Provider resource mutations | 0 |
+| Final source-state | Passed; review, verifier, evidence, and manifest digest are identical |
