@@ -32,6 +32,10 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
+import {
+  hasLivePublishedAuthority,
+  ownsPublishedRequestToken,
+} from "./mutationAuthority";
 import { importPollingIdentity, useImportPolling } from "./useImportPolling";
 import { RewrittenBaselineDialog } from "./RewrittenBaselineDialog";
 
@@ -413,7 +417,14 @@ export function PublishedMappingImports({
   const controllerRef = useRef<AbortController | null>(null);
   const generationRef = useRef(0);
   const pendingRef = useRef(
-    new Map<string, { authorityIdentity: string; requestToken: symbol }>(),
+    new Map<
+      string,
+      {
+        authorityIdentity: string;
+        controller: AbortController;
+        requestToken: symbol;
+      }
+    >(),
   );
   const refreshHandlersRef = useRef(new Map<string, () => Promise<void>>());
   const desktopMutationErrorRefs = useRef(new Map<string, HTMLDivElement>());
@@ -439,6 +450,33 @@ export function PublishedMappingImports({
     importRecord: AdminPublishedMappingImportResponse;
     triggerElement: HTMLButtonElement;
   } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const pendingRequests = pendingRef.current;
+    queueMicrotask(() => {
+      if (active) {
+        setPendingMappings(
+          new Set(
+            [...pendingRequests]
+              .filter(
+                ([, pending]) =>
+                  pending.authorityIdentity === authorityIdentity,
+              )
+              .map(([mappingId]) => mappingId),
+          ),
+        );
+      }
+    });
+    return () => {
+      active = false;
+      for (const pending of pendingRequests.values()) {
+        pending.controller.abort();
+      }
+      pendingRequests.clear();
+      pendingErrorFocusRef.current = null;
+    };
+  }, [authorityIdentity]);
 
   const loadCompleteCollection = useCallback(
     async (preserveVisibleState = false) => {
@@ -651,8 +689,10 @@ export function PublishedMappingImports({
         return;
       }
       const requestToken = Symbol(item.mapping_id);
+      const controller = new AbortController();
       pendingRef.current.set(item.mapping_id, {
         authorityIdentity,
+        controller,
         requestToken,
       });
       setPendingMappings(
@@ -675,12 +715,23 @@ export function PublishedMappingImports({
         return next;
       });
       let accepted = false;
+      const isCurrentRequest = () =>
+        !controller.signal.aborted &&
+        hasLivePublishedAuthority(
+          authorityIdentityRef.current,
+          authorityIdentity,
+        ) &&
+        ownsPublishedRequestToken(
+          pendingRef.current.get(item.mapping_id)?.requestToken,
+          requestToken,
+        );
       try {
         const result = await startAdminPublishedMappingImport({
           auth: accessToken,
           path: { mapping_id: item.mapping_id, product_id: productId },
+          signal: controller.signal,
         });
-        if (authorityIdentityRef.current !== authorityIdentity) {
+        if (!isCurrentRequest()) {
           return;
         }
         if (result.data === undefined) {
@@ -693,7 +744,7 @@ export function PublishedMappingImports({
           throw new Error("import status unavailable");
         }
       } catch {
-        if (authorityIdentityRef.current !== authorityIdentity) {
+        if (!isCurrentRequest()) {
           return;
         }
         const setFailure = accepted
@@ -707,11 +758,19 @@ export function PublishedMappingImports({
         });
       } finally {
         if (
-          pendingRef.current.get(item.mapping_id)?.requestToken === requestToken
+          ownsPublishedRequestToken(
+            pendingRef.current.get(item.mapping_id)?.requestToken,
+            requestToken,
+          )
         ) {
           pendingRef.current.delete(item.mapping_id);
         }
-        if (authorityIdentityRef.current === authorityIdentity) {
+        if (
+          hasLivePublishedAuthority(
+            authorityIdentityRef.current,
+            authorityIdentity,
+          )
+        ) {
           setPendingMappings(
             new Set(
               [...pendingRef.current]

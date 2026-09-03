@@ -609,6 +609,7 @@ describe("published mapping import collection", () => {
     expect(startImportMock).toHaveBeenCalledWith({
       auth: "memory-only-admin-bearer",
       path: { mapping_id: "mapping-1", product_id: "product-1" },
+      signal: expect.any(AbortSignal),
     });
     await act(async () => {
       resolveStart?.(ok(queued));

@@ -327,6 +327,7 @@ describe("rewritten baseline reconciliation", () => {
         mapping_id: "mapping-1",
         product_id: "product-1",
       },
+      signal: expect.any(AbortSignal),
     });
   });
 

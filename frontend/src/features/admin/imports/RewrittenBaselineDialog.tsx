@@ -48,6 +48,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../../../components/ui/tooltip";
+import {
+  isLiveRewriteConfirmationRequest,
+  shouldClearUncommittedConfirmation,
+} from "./mutationAuthority";
 
 const SIDE_LABELS = {
   direct: "Source",
@@ -242,6 +246,7 @@ export function RewrittenBaselineDialog({
 }: RewrittenBaselineDialogProps) {
   const requestGenerationRef = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
+  const confirmationControllerRef = useRef<AbortController | null>(null);
   const confirmationRequestRef = useRef<{
     identity: string;
     token: symbol;
@@ -258,18 +263,27 @@ export function RewrittenBaselineDialog({
   const importIdentity = useMemo(
     () =>
       JSON.stringify({
+        accessToken,
         id: importRecord.id,
         mappingId: importRecord.mapping_id,
         productId,
         repositorySides: importRecord.repository_sides,
         topology: importRecord.topology,
       }),
-    [importRecord, productId],
+    [accessToken, importRecord, productId],
   );
   const importIdentityRef = useRef(importIdentity);
   useLayoutEffect(() => {
     importIdentityRef.current = importIdentity;
   }, [importIdentity]);
+  useEffect(
+    () => () => {
+      confirmationControllerRef.current?.abort();
+      confirmationControllerRef.current = null;
+      confirmationRequestRef.current = null;
+    },
+    [importIdentity],
+  );
   const confirmationPending =
     confirmationProgress?.identity === importIdentity &&
     confirmationProgress.status === "pending";
@@ -284,6 +298,9 @@ export function RewrittenBaselineDialog({
   const finishClose = useCallback(() => {
     requestGenerationRef.current += 1;
     controllerRef.current?.abort();
+    confirmationControllerRef.current?.abort();
+    confirmationControllerRef.current = null;
+    confirmationRequestRef.current = null;
     onClose();
     restoreTriggerFocus();
   }, [onClose, restoreTriggerFocus]);
@@ -376,6 +393,9 @@ export function RewrittenBaselineDialog({
     }
     const expectedIdentity = importIdentity;
     const requestToken = Symbol(importRecord.id);
+    confirmationControllerRef.current?.abort();
+    const controller = new AbortController();
+    confirmationControllerRef.current = controller;
     confirmationRequestRef.current = {
       identity: expectedIdentity,
       token: requestToken,
@@ -387,8 +407,13 @@ export function RewrittenBaselineDialog({
     setConfirmationError(null);
     let committed = false;
     const isCurrentRequest = () =>
-      importIdentityRef.current === expectedIdentity &&
-      confirmationRequestRef.current?.token === requestToken;
+      !controller.signal.aborted &&
+      isLiveRewriteConfirmationRequest(
+        importIdentityRef.current,
+        expectedIdentity,
+        confirmationRequestRef.current?.token,
+        requestToken,
+      );
     try {
       const result = await confirmAdminImportRewriteBaseline({
         auth: accessToken,
@@ -402,6 +427,7 @@ export function RewrittenBaselineDialog({
           mapping_id: importRecord.mapping_id,
           product_id: productId,
         },
+        signal: controller.signal,
       });
       if (!isCurrentRequest()) {
         return;
@@ -437,10 +463,20 @@ export function RewrittenBaselineDialog({
         setConfirmationError("generic");
       }
     } finally {
-      if (confirmationRequestRef.current?.token === requestToken) {
+      if (
+        confirmationRequestRef.current?.token === requestToken &&
+        confirmationControllerRef.current === controller
+      ) {
         confirmationRequestRef.current = null;
+        confirmationControllerRef.current = null;
       }
-      if (importIdentityRef.current === expectedIdentity && !committed) {
+      if (
+        shouldClearUncommittedConfirmation(
+          importIdentityRef.current,
+          expectedIdentity,
+          committed,
+        )
+      ) {
         setConfirmationProgress(null);
       }
     }

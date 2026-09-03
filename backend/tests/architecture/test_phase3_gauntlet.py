@@ -50,19 +50,19 @@ EXPECTED_PLAYWRIGHT_IDS = ("UI3-C23", "UI3-C26", "UI3-C27")
 
 EXPECTED_FRONTEND_MUTATION_MARKERS = {
     (
-        "src/features/admin/imports/PublishedMappingImports.tsx",
+        "src/features/admin/imports/mutationAuthority.ts",
         "published-live-authority",
     ),
     (
-        "src/features/admin/imports/PublishedMappingImports.tsx",
+        "src/features/admin/imports/mutationAuthority.ts",
         "published-request-token-ownership",
     ),
     (
-        "src/features/admin/imports/RewrittenBaselineDialog.tsx",
+        "src/features/admin/imports/mutationAuthority.ts",
         "rewrite-live-authority-request-token",
     ),
     (
-        "src/features/admin/imports/RewrittenBaselineDialog.tsx",
+        "src/features/admin/imports/mutationAuthority.ts",
         "rewrite-uncommitted-finalization",
     ),
 }

@@ -14,9 +14,15 @@ readonly BACKEND_COVERAGE="/tmp/verboflex-phase03-backend-coverage.xml"
 readonly BACKEND_JUNIT="/tmp/verboflex-phase03-backend-junit.xml"
 readonly FRONTEND_COVERAGE_DIR="/tmp/verboflex-phase03-frontend-coverage"
 readonly STRYKER_REPORT="/tmp/verboflex-phase03-stryker.json"
+readonly STRYKER_MARKER_RECORD="/tmp/verboflex-phase03-stryker-markers.txt"
 readonly SECRET_SCAN="/tmp/verboflex-phase03-secrets.json"
 readonly NPM_PROVENANCE="/tmp/verboflex-phase03-npm-provenance.json"
 readonly PYTHON_LICENSES="/tmp/verboflex-phase03-python-licenses.txt"
+
+readonly FRONTEND_MUTATION_MARKERS="src/features/admin/imports/mutationAuthority.ts|published-live-authority
+src/features/admin/imports/mutationAuthority.ts|published-request-token-ownership
+src/features/admin/imports/mutationAuthority.ts|rewrite-live-authority-request-token
+src/features/admin/imports/mutationAuthority.ts|rewrite-uncommitted-finalization"
 
 readonly EXPECTED_LAYERS="source-state
 checker-negative-controls
@@ -212,7 +218,7 @@ cleanup_runtime() {
   VITE_PID=""
   VITE_LOG=""
   rm -f "$BACKEND_COVERAGE" "$BACKEND_JUNIT" "$STRYKER_REPORT" \
-    "$SECRET_SCAN" "$NPM_PROVENANCE" "$PYTHON_LICENSES" \
+    "$SECRET_SCAN" "$NPM_PROVENANCE" "$PYTHON_LICENSES" "$STRYKER_MARKER_RECORD" \
     /tmp/verboflex-phase01-stryker.json
   rm -rf "$FRONTEND_COVERAGE_DIR" /tmp/verboflex-phase03-stryker-tmp
 }
@@ -301,9 +307,35 @@ frontend_types_lint_format_build() {
   (cd "$FRONTEND_ROOT" && npm run build)
 }
 
+resolve_frontend_mutation_markers() {
+  local relative_path marker source marker_text marker_count marker_line target_line selectors
+  selectors=""
+  : >"$STRYKER_MARKER_RECORD"
+  while IFS='|' read -r relative_path marker; do
+    [ -n "$relative_path" ] || continue
+    source="$FRONTEND_ROOT/$relative_path"
+    marker_text="phase3-mutation:$marker"
+    [ -f "$source" ] || die "Stryker marker source is missing: $relative_path"
+    marker_count=$(grep -Fc "$marker_text" "$source")
+    [ "$marker_count" -eq 1 ] \
+      || die "Stryker marker must occur exactly once: $relative_path|$marker"
+    marker_line=$(grep -nF "$marker_text" "$source" | cut -d: -f1)
+    target_line=$((marker_line + 1))
+    sed -n "${target_line}p" "$source" | grep -Eq '[^[:space:]]' \
+      || die "Stryker marker has no following target line: $relative_path|$marker"
+    printf '%s|%s\n' "$relative_path" "$target_line" >>"$STRYKER_MARKER_RECORD"
+    if [ -n "$selectors" ]; then
+      selectors="$selectors,"
+    fi
+    selectors="${selectors}${relative_path}:${target_line}-${target_line}"
+  done <<<"$FRONTEND_MUTATION_MARKERS"
+  printf '%s\n' "$selectors"
+}
+
 assert_stryker_report() {
   [ -s "$STRYKER_REPORT" ] || die "Stryker report is missing"
-  "$BACKEND_ROOT/.venv/bin/python" - "$STRYKER_REPORT" <<'PY'
+  [ -s "$STRYKER_MARKER_RECORD" ] || die "Stryker marker ownership is missing"
+  "$BACKEND_ROOT/.venv/bin/python" - "$STRYKER_REPORT" "$STRYKER_MARKER_RECORD" <<'PY'
 import json
 import sys
 
@@ -312,10 +344,17 @@ mutants = [item for file in data.get("files", {}).values() for item in file.get(
 if not mutants:
     raise SystemExit("Stryker executed zero mutants")
 expected_locations = {
-    "src/features/admin/imports/PublishedMappingImports.tsx": {77, 78, 79, 80, 81, 493},
-    "src/features/admin/imports/RewrittenBaselineDialog.tsx": {409},
+    "src/features/admin/imports/PublishedMappingImports.tsx": {81, 82, 83, 84, 85, 530},
+    "src/features/admin/imports/RewrittenBaselineDialog.tsx": {435},
     "src/features/admin/imports/useImportPolling.ts": {34, 35, 37, 38},
 }
+expected_marker_locations = {}
+with open(sys.argv[2], encoding="utf-8") as marker_record:
+    for row in marker_record:
+        path, line = row.rstrip("\n").split("|", 1)
+        expected_marker_locations.setdefault(path, set()).add(int(line))
+for path, locations in expected_marker_locations.items():
+    expected_locations.setdefault(path, set()).update(locations)
 actual_locations = {
     path: {item["location"]["start"]["line"] for item in file.get("mutants", [])}
     for path, file in data.get("files", {}).items()
@@ -341,12 +380,14 @@ backend_targeted_mutations() {
 }
 
 targeted_mutation_proof() {
+  local marker_targets
   with_test_infra backend_targeted_mutations
+  marker_targets=$(resolve_frontend_mutation_markers)
   : >/tmp/verboflex-phase01-stryker.json
   (
     cd "$FRONTEND_ROOT"
     npm run test:mutation -- \
-      --mutate 'src/features/admin/imports/useImportPolling.ts:33-40,src/features/admin/imports/PublishedMappingImports.tsx:77-81,src/features/admin/imports/PublishedMappingImports.tsx:493-493,src/features/admin/imports/RewrittenBaselineDialog.tsx:409-409' \
+      --mutate "src/features/admin/imports/useImportPolling.ts:33-40,src/features/admin/imports/PublishedMappingImports.tsx:81-85,src/features/admin/imports/PublishedMappingImports.tsx:530-530,src/features/admin/imports/RewrittenBaselineDialog.tsx:435-435,$marker_targets" \
       --reporters clear-text,json \
       --tempDirName '/tmp/verboflex-phase03-stryker-tmp' \
       --cleanTempDir always
@@ -385,7 +426,7 @@ playwright_responsive_accessibility() {
     cd "$FRONTEND_ROOT"
     PLAYWRIGHT_BASE_URL="$url" \
     PLAYWRIGHT_OUTPUT_DIR="/tmp/verboflex-phase03-playwright" \
-      npm run e2e -- e2e/admin-configuration.spec.ts --grep 'UI3-C23|UI3-C26'
+      npm run e2e -- e2e/admin-configuration.spec.ts --grep 'UI3-C23|UI3-C26|UI3-C27'
   )
   kill "$VITE_PID" >/dev/null 2>&1 || true
   wait "$VITE_PID" >/dev/null 2>&1 || true

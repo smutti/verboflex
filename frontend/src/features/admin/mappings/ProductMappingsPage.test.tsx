@@ -281,6 +281,7 @@ describe("administrator mapping cursor collections", () => {
         product_id: "product-one",
         mapping_id: publishedImport.mapping_id,
       },
+      signal: expect.any(AbortSignal),
     });
     expect(within(importTable).getByText("Not imported")).toBeVisible();
 
