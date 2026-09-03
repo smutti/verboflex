@@ -6,7 +6,6 @@ import os
 import subprocess
 from pathlib import Path
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 SMOKE_HARNESS = REPOSITORY_ROOT / "tools" / "phase3_smoke.sh"
 LIVE_VARIABLES = (
