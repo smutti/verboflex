@@ -43,6 +43,7 @@ class AdminDiscoveryErrorResponse(BaseModel):
         "reauthorization_required",
         "permission_denied",
         "not_found",
+        "rate_limited",
         "unavailable",
         "timeout",
         "invalid_source",

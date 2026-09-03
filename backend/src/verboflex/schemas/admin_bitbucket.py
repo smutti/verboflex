@@ -37,9 +37,9 @@ class AdminBitbucketStatusResponse(BaseModel):
         "Unavailable",
     ]
     scope_profile: Literal["repository_and_pull_request"] = "repository_and_pull_request"
-    scope_label: Literal[
+    scope_label: Literal["Repository and pull-request access"] = (
         "Repository and pull-request access"
-    ] = "Repository and pull-request access"
+    )
     capability_profile: AdminBitbucketCapabilityProfile
     connected_at: datetime | None
     expires_at: datetime | None

@@ -391,9 +391,7 @@ def test_legacy_authority_projects_reauthorization_required_capability(
         connection = session.get_one(BitbucketConnection, 1)
         connection.scope_profile = "repository"
 
-    legacy = asyncio.run(
-        bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token)
-    )
+    legacy = asyncio.run(bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token))
     assert_bounded_status(legacy, "Reauthorization required")
 
 

@@ -661,7 +661,8 @@ def test_client_credentials_provider_exchange_is_exact_and_bounded() -> None:
 
     class Opener:
         payload = (
-            b'{"access_token":"token","token_type":"bearer","scope":"pullrequest:write","expires_in":3600}'
+            b'{"access_token":"token","token_type":"bearer",'
+            b'"scope":"pullrequest:write","expires_in":3600}'
         )
         request: Any = None
         timeout: int | None = None
@@ -682,9 +683,7 @@ def test_client_credentials_provider_exchange_is_exact_and_bounded() -> None:
     )
     assert response["scope"] == "pullrequest:write"
     assert opener.request.full_url == "https://bitbucket.org/site/oauth2/access_token"
-    assert opener.request.data == (
-        b"grant_type=client_credentials&scope=pullrequest%3Awrite"
-    )
+    assert opener.request.data == (b"grant_type=client_credentials&scope=pullrequest%3Awrite")
     expected = base64.b64encode(b"client-id:client-secret").decode()
     assert opener.request.headers["Authorization"] == f"Basic {expected}"
     assert opener.timeout == 10

@@ -127,6 +127,7 @@ def test_phase3_deployment_cycle_removes_and_recreates_every_import_table(
         for index in inspector.get_indexes(table_name)
     }
 
+
 def assert_complete_schema(engine: Engine) -> None:
     """Assert the complete authority/configuration tables and the original auth seed."""
     inspector = inspect(engine)

@@ -58,8 +58,7 @@ def test_unconfigured_live_mode_is_an_explicit_successful_supplemental_skip() ->
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout == (
-        "phase3 live provider: SKIP "
-        "(supplemental variables are not configured)\n"
+        "phase3 live provider: SKIP (supplemental variables are not configured)\n"
     )
     assert result.stderr == ""
 
@@ -71,12 +70,12 @@ def test_live_mode_contract_is_bounded_get_only_and_trap_cleaned() -> None:
         "run_live_provider_read_only()",
         "self_test_live_mode()",
         "verify_live_provider_audit()",
-        'trap cleanup EXIT INT TERM',
+        "trap cleanup EXIT INT TERM",
         'chmod 600 "$SMOKE_ENV_FILE"',
-        'resource_mutations=0',
+        "resource_mutations=0",
         'all(row["method"] == "GET" for row in resources)',
-        'hashlib.sha256',
-        'final_local_revoke=PASS',
+        "hashlib.sha256",
+        "final_local_revoke=PASS",
     )
     assert all(fragment in source for fragment in required_fragments)
 
