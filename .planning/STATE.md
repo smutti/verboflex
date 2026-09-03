@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 03
 current_phase_name: Bitbucket Import Integration
 status: executing
-stopped_at: Completed 03-09-PLAN.md
-last_updated: "2026-09-03T08:47:58.502Z"
+stopped_at: Completed 03-10-PLAN.md
+last_updated: "2026-09-03T10:19:19.493Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 03 execution started
-state_head: a6e302cbf7ae9011cc9b3ecde33698d7134de1a6
+state_head: 90a902d1db66be600eb32d9d9cce256fd99eecad
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 77
-  completed_plans: 70
+  completed_plans: 71
   percent: 22
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 03 (Bitbucket Import Integration) — EXECUTING
-Plan: 10 of 16
+Plan: 11 of 16
 Status: Ready to execute
 Last activity: 2026-09-02 — Phase 03 execution started
 
@@ -129,6 +129,7 @@ Progress: [████████████████████] 61/61 p
 | Phase 03 P07 | 12min | 2 tasks | 7 files |
 | Phase 03 P08 | 20min | 2 tasks | 8 files |
 | Phase 03 P09 | 46min | 2 tasks | 8 files |
+| Phase 03 P10 | 1h 22m | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -357,6 +358,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Bind rewrite confirmation to proposal UUID, proposed execution UUID, and a reconstructible full-authority digest under stable locks.
 - [Phase 03]: Treat direct and separate mappings as one confirmation boundary so Keys and Translations advance together.
 - [Phase 03]: Return a distinct bounded stale-proposal 409 for obsolete or mismatched confirmation authority.
+- [Phase 03]: Count an affected mapping only for the product active revision when an active baseline exists and the current logical import state is import_failed.
+- [Phase 03]: Compute affected_mapping_count in the product root projection with one correlated database aggregate so page size does not cause N+1 queries.
+- [Phase 03]: Keep canonical OpenAPI current in Plan 03-10 and defer generated TypeScript client regeneration to Plan 03-11.
 
 ### Pending Todos
 
@@ -396,6 +400,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-03T08:47:58.381Z
-Stopped at: Completed 03-09-PLAN.md
+Last session: 2026-09-03T10:19:19.370Z
+Stopped at: Completed 03-10-PLAN.md
 Resume file: None
