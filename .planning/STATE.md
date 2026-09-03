@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 current_phase: 03
 current_phase_name: Bitbucket Import Integration
-status: executing
-stopped_at: Completed 03-15-PLAN.md
-last_updated: "2026-09-03T15:15:33.633Z"
+status: verifying
+stopped_at: Completed 03-16-PLAN.md
+last_updated: "2026-09-03T17:56:43.316Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 03 execution started
-state_head: bf15abdc62629193ffba9a683a3ba5482502c44d
+state_head: 59a6dd79c6a38d383175b5cfc0372ca9ce2d83d6
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 77
-  completed_plans: 76
+  completed_plans: 77
   percent: 22
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 
 Phase: 03 (Bitbucket Import Integration) — EXECUTING
 Plan: 16 of 16
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-02 — Phase 03 execution started
 
 Progress: [████████████████████] 61/61 plans ([██░░░░░░░░] 22%)
@@ -135,6 +135,7 @@ Progress: [████████████████████] 61/61 p
 | Phase 03 P13 | 50min | 2 tasks | 7 files |
 | Phase 03 P14 | 1h25min | 2 tasks | 7 files |
 | Phase 03 P15 | 1h30min | 2 tasks | 20 files |
+| Phase 03 P16 | 1h35min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -382,6 +383,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Bind Phase 3 closeout to one canonical manifest digest while excluding mutable evidence, review, verification, and summary artifacts.
 - [Phase 03]: Require exact killed-mutant ownership for backend import authority and frontend polling, action, cursor, and reconciliation boundaries.
 - [Phase 03]: Collect only the approved Phase 3 Playwright owners so unrelated credential-gated specs cannot contaminate closeout.
+- [Phase 03]: Close Phase 3 only when the fresh ASVS L1 review and independent verifier reproduce the exact post-gauntlet source digest.
+- [Phase 03]: Make import source-reference execution identity immutable and require inserts while the owning execution is locked in running state.
+- [Phase 03]: Collect changed-file deltas for every non-equal repository side so mixed descendant and diverged movements remain complete.
 
 ### Pending Todos
 
@@ -421,6 +425,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-03T15:15:33.506Z
-Stopped at: Completed 03-15-PLAN.md
+Last session: 2026-09-03T17:56:43.086Z
+Stopped at: Completed 03-16-PLAN.md
 Resume file: None
