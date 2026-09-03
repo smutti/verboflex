@@ -159,6 +159,30 @@ describe("bounded published import polling", () => {
     });
   });
 
+  it.each([
+    ["not_imported", "run_import"],
+    ["current", "refresh_import"],
+    ["may_be_stale", "retry_import"],
+    ["import_failed", "retry_import"],
+  ] as const)(
+    "does not poll the terminal %s projection",
+    async (state, action) => {
+      renderHook(() =>
+        useImportPolling({
+          accessToken: "memory-only-admin-bearer",
+          initialImport: publishedImport({ action, state }),
+          productId: "product-1",
+        }),
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(120_000);
+      });
+
+      expect(getImportMock).not.toHaveBeenCalled();
+    },
+  );
+
   it("pauses at ninety seconds and allows explicit status refresh without resuming", async () => {
     getImportMock.mockResolvedValue(ok(publishedImport({ state: "running" })));
     const { result } = renderHook(() =>
@@ -198,9 +222,7 @@ describe("bounded published import polling", () => {
   it("ignores a superseded response across the complete import identity", async () => {
     let resolveOld:
       | ((
-          value: ReturnType<
-            typeof ok<AdminPublishedMappingImportResponse>
-          >,
+          value: ReturnType<typeof ok<AdminPublishedMappingImportResponse>>,
         ) => void)
       | undefined;
     const oldRequest = new Promise<
@@ -253,12 +275,32 @@ describe("bounded published import polling", () => {
     expect(result.current.pollingError).toBe(false);
   });
 
+  it("pauses observation after a bounded status-read failure", async () => {
+    getImportMock.mockRejectedValueOnce(new Error("provider detail excluded"));
+    const { result } = renderHook(() =>
+      useImportPolling({
+        accessToken: "memory-only-admin-bearer",
+        initialImport: publishedImport(),
+        productId: "product-1",
+      }),
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(result.current.pollingError).toBe(true);
+    expect(result.current.automaticUpdatesPaused).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120_000);
+    });
+    expect(getImportMock).toHaveBeenCalledTimes(1);
+  });
+
   it("drops late responses after unmount without cancelling durable worker work", async () => {
     let resolveRequest:
       | ((
-          value: ReturnType<
-            typeof ok<AdminPublishedMappingImportResponse>
-          >,
+          value: ReturnType<typeof ok<AdminPublishedMappingImportResponse>>,
         ) => void)
       | undefined;
     getImportMock.mockReturnValueOnce(
