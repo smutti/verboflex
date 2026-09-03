@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -288,7 +289,7 @@ function RowError({
   return (
     <Alert
       ref={focusRef}
-      tabIndex={mutationFailed ? -1 : undefined}
+      tabIndex={mutationFailed || pollingFailed ? -1 : undefined}
       variant={item.active_baseline === null ? "destructive" : "default"}
     >
       <AlertTitle>{copy.heading}</AlertTitle>
@@ -401,11 +402,23 @@ export function PublishedMappingImports({
   repositories = [],
   statusFilter = "all",
 }: PublishedMappingImportsProps) {
+  const authorityIdentity = useMemo(
+    () => JSON.stringify({ accessToken, productId, statusFilter }),
+    [accessToken, productId, statusFilter],
+  );
+  const authorityIdentityRef = useRef(authorityIdentity);
+  useLayoutEffect(() => {
+    authorityIdentityRef.current = authorityIdentity;
+  }, [authorityIdentity]);
   const controllerRef = useRef<AbortController | null>(null);
   const generationRef = useRef(0);
-  const pendingRef = useRef(new Set<string>());
+  const pendingRef = useRef(
+    new Map<string, { authorityIdentity: string; requestToken: symbol }>(),
+  );
   const refreshHandlersRef = useRef(new Map<string, () => Promise<void>>());
-  const mutationErrorRefs = useRef(new Map<string, HTMLDivElement>());
+  const desktopMutationErrorRefs = useRef(new Map<string, HTMLDivElement>());
+  const mobileMutationErrorRefs = useRef(new Map<string, HTMLDivElement>());
+  const pendingErrorFocusRef = useRef<string | null>(null);
   const [collectionState, setCollectionState] =
     useState<CollectionState>("loading");
   const [items, setItems] = useState<AdminPublishedMappingImportResponse[]>([]);
@@ -583,26 +596,74 @@ export function PublishedMappingImports({
   );
 
   const setMutationErrorRef = useCallback(
-    (mappingId: string, element: HTMLDivElement | null) => {
+    (
+      surface: "desktop" | "mobile",
+      mappingId: string,
+      element: HTMLDivElement | null,
+    ) => {
+      const refs =
+        surface === "desktop"
+          ? desktopMutationErrorRefs.current
+          : mobileMutationErrorRefs.current;
       if (element === null) {
-        mutationErrorRefs.current.delete(mappingId);
+        refs.delete(mappingId);
       } else {
-        mutationErrorRefs.current.set(mappingId, element);
+        refs.set(mappingId, element);
       }
     },
     [],
   );
 
+  const focusMutationError = useCallback((mappingId: string) => {
+    const candidates = [
+      mobileMutationErrorRefs.current.get(mappingId),
+      desktopMutationErrorRefs.current.get(mappingId),
+    ].filter(
+      (element): element is HTMLDivElement =>
+        element !== undefined && element.isConnected,
+    );
+    const focusTarget =
+      candidates.find((element) => element.getClientRects().length > 0) ??
+      candidates[0];
+    focusTarget?.focus();
+  }, []);
+
+  useEffect(() => {
+    const mappingId = pendingErrorFocusRef.current;
+    if (
+      mappingId === null ||
+      (!mutationFailures.has(mappingId) &&
+        !statusRefreshFailures.has(mappingId))
+    ) {
+      return;
+    }
+    pendingErrorFocusRef.current = null;
+    focusMutationError(mappingId);
+  }, [focusMutationError, mutationFailures, statusRefreshFailures]);
+
   const startImport = useCallback(
     async (item: AdminPublishedMappingImportResponse) => {
+      const activePending = pendingRef.current.get(item.mapping_id);
       if (
         !isStartAction(item.action) ||
-        pendingRef.current.has(item.mapping_id)
+        activePending?.authorityIdentity === authorityIdentity
       ) {
         return;
       }
-      pendingRef.current.add(item.mapping_id);
-      setPendingMappings(new Set(pendingRef.current));
+      const requestToken = Symbol(item.mapping_id);
+      pendingRef.current.set(item.mapping_id, {
+        authorityIdentity,
+        requestToken,
+      });
+      setPendingMappings(
+        new Set(
+          [...pendingRef.current]
+            .filter(
+              ([, pending]) => pending.authorityIdentity === authorityIdentity,
+            )
+            .map(([mappingId]) => mappingId),
+        ),
+      );
       setMutationFailures((current) => {
         const next = new Set(current);
         next.delete(item.mapping_id);
@@ -619,6 +680,9 @@ export function PublishedMappingImports({
           auth: accessToken,
           path: { mapping_id: item.mapping_id, product_id: productId },
         });
+        if (authorityIdentityRef.current !== authorityIdentity) {
+          return;
+        }
         if (result.data === undefined) {
           throw new Error("import unavailable");
         }
@@ -629,23 +693,39 @@ export function PublishedMappingImports({
           throw new Error("import status unavailable");
         }
       } catch {
+        if (authorityIdentityRef.current !== authorityIdentity) {
+          return;
+        }
         const setFailure = accepted
           ? setStatusRefreshFailures
           : setMutationFailures;
+        pendingErrorFocusRef.current = item.mapping_id;
         setFailure((current) => {
           const next = new Set(current);
           next.add(item.mapping_id);
           return next;
         });
-        queueMicrotask(() =>
-          mutationErrorRefs.current.get(item.mapping_id)?.focus(),
-        );
       } finally {
-        pendingRef.current.delete(item.mapping_id);
-        setPendingMappings(new Set(pendingRef.current));
+        if (
+          pendingRef.current.get(item.mapping_id)?.requestToken === requestToken
+        ) {
+          pendingRef.current.delete(item.mapping_id);
+        }
+        if (authorityIdentityRef.current === authorityIdentity) {
+          setPendingMappings(
+            new Set(
+              [...pendingRef.current]
+                .filter(
+                  ([, pending]) =>
+                    pending.authorityIdentity === authorityIdentity,
+                )
+                .map(([mappingId]) => mappingId),
+            ),
+          );
+        }
       }
     },
-    [accessToken, loadCompleteCollection, productId],
+    [accessToken, authorityIdentity, loadCompleteCollection, productId],
   );
 
   const Heading = headingLevel as ElementType;
@@ -748,7 +828,11 @@ export function PublishedMappingImports({
                           />
                           <RowError
                             focusRef={(element) =>
-                              setMutationErrorRef(item.mapping_id, element)
+                              setMutationErrorRef(
+                                "desktop",
+                                item.mapping_id,
+                                element,
+                              )
                             }
                             item={item}
                             mutationFailed={mutationFailures.has(
@@ -839,6 +923,9 @@ export function PublishedMappingImports({
                     <LatestExecution item={item} />
                   </div>
                   <RowError
+                    focusRef={(element) =>
+                      setMutationErrorRef("mobile", item.mapping_id, element)
+                    }
                     item={item}
                     mutationFailed={mutationFailures.has(item.mapping_id)}
                     pollingFailed={
