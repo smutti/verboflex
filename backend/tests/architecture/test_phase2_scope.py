@@ -14,7 +14,6 @@ FRONTEND_SOURCE = REPOSITORY_ROOT / "frontend" / "src"
 FORBIDDEN_RESOURCE_SEGMENTS = {
     "/comments",
     "/constraints",
-    "/imports",
     "/pull-requests",
     "/translations",
 }
@@ -33,6 +32,7 @@ FORBIDDEN_PROVIDER_TOKENS = {
 EXPECTED_MODEL_MODULES = {
     "auth_session.py",
     "bitbucket_connection.py",
+    "import_job.py",
     "preview_job.py",
     "product.py",
     "product_mapping.py",
@@ -43,7 +43,7 @@ EXPECTED_MODEL_MODULES = {
 
 
 def test_openapi_has_no_deferred_resource_or_provider_write_surface() -> None:
-    """The assembled API cannot silently grow Phase 3+ resources or provider writes."""
+    """The assembled API cannot grow still-deferred resources or provider writes."""
     schema = create_app().openapi()
     paths = set(schema["paths"])
     assert not {
@@ -64,7 +64,7 @@ def test_openapi_has_no_deferred_resource_or_provider_write_surface() -> None:
 
 
 def test_phase2_persists_configuration_and_preview_authority_only() -> None:
-    """No canonical translation, review-comment, constraint, or import model exists."""
+    """Only the approved Phase 2 graph and Phase 3 import authority are persisted."""
     model_modules = {
         path.name for path in (BACKEND_SOURCE / "models").glob("*.py") if path.name != "__init__.py"
     }

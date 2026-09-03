@@ -1243,10 +1243,7 @@ def test_phase2_verifier_contract_accepts_truthful_state_transitions() -> None:
     else:
         assert current["review"]["open_blockers"] == []
         assert current["gaps"] == []
-        assert all(
-            record["count"] == record["total"]
-            for record in current["inventories"].values()
-        )
+        assert all(record["count"] == record["total"] for record in current["inventories"].values())
 
     passed = _verifier_groups(_verifier_fixture(status="passed"))
     assert passed["status"] == "passed"
@@ -1352,6 +1349,7 @@ def test_phase2_gap_authorities_are_wired() -> None:
     schema = AdminBitbucketStatusResponse.model_json_schema()
     assert schema["required"] == [
         "status",
+        "capability_profile",
         "connected_at",
         "expires_at",
         "revoked_at",
@@ -1436,11 +1434,11 @@ def test_phase2_forbidden_bypasses_are_absent() -> None:
     assert not any(
         token in model_name
         for model_name in model_names
-        for token in ("canonical", "translation", "import", "pull_request", "comment")
+        for token in ("canonical", "translation", "pull_request", "comment")
     )
 
     admin_routes = _admin_route_functions()
-    assert len(admin_routes) == 34
+    assert len(admin_routes) == 34 + 5  # Phase 2 routes plus five sealed Phase 3 import operations.
     for path, function in admin_routes:
         annotations = {
             ast.unparse(argument.annotation)
