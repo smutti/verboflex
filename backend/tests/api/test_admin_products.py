@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import os
 import unicodedata
@@ -20,7 +21,7 @@ import pytest
 from alembic.config import Config
 from psycopg import connect, sql
 from pydantic import SecretStr
-from sqlalchemy import create_engine, delete, func, select, text
+from sqlalchemy import create_engine, delete, event, func, select, text
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 from sqlalchemy.sql import Executable
 
@@ -32,6 +33,7 @@ from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
 from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
+from verboflex.models.import_job import ImportExecution, ImportJob
 from verboflex.models.preview_job import PreviewJob
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
@@ -251,6 +253,7 @@ def test_admin_create_and_detail_return_closed_active_and_candidate_summaries(
         "id": body["id"],
         "name": "Mobile Suite",
         "is_active": False,
+        "affected_mapping_count": 0,
         "active_revision": None,
         "candidate_revision": {
             "id": body["candidate_revision"]["id"],
@@ -599,6 +602,7 @@ def _seed_published_mapping_graph(
     factory: sessionmaker[Session],
     *,
     confirmed_by: UUID,
+    name: str = "Published Graph",
 ) -> tuple[UUID, UUID]:
     """Seed one immutable active graph containing both mapping topologies."""
     now = datetime.now(UTC)
@@ -610,15 +614,15 @@ def _seed_published_mapping_graph(
     with factory.begin() as session:
         product = Product(
             id=product_id,
-            display_name="Published Graph",
-            name_key="published graph",
+            display_name=name,
+            name_key=_a01_key(name),
             is_active=True,
         )
         revision = ProductRevision(
             id=revision_id,
             product_id=product_id,
-            display_name="Published Graph",
-            name_key="published graph",
+            display_name=name,
+            name_key=_a01_key(name),
             description="published graph description",
             version=4,
             is_published=False,
@@ -694,7 +698,7 @@ def _seed_published_mapping_graph(
         session.flush()
 
         for index, mapping in enumerate((direct_mapping, separate_mapping), start=1):
-            digest = f"{index}" * 64
+            digest = hashlib.sha256(f"{product_id}:{index}".encode()).hexdigest()
             preview_job = PreviewJob(
                 id=uuid4(),
                 input_digest=digest,
@@ -753,6 +757,167 @@ def _revision_mapping_graph(
             .order_by(ProductRepositoryMapping.identity_key)
         ).scalars()
     )
+
+
+def _seed_import_state(
+    session: Session,
+    *,
+    product_id: UUID,
+    revision_id: UUID,
+    mapping_id: UUID,
+    failed: bool,
+    has_baseline: bool,
+) -> None:
+    """Persist one logical import state without involving provider behavior."""
+    job_id = uuid4()
+    current_execution_id = uuid4()
+    baseline_execution_id = uuid4() if has_baseline and failed else current_execution_id
+    now = datetime.now(UTC)
+    session.add(
+        ImportJob(
+            id=job_id,
+            product_id=product_id,
+            revision_id=revision_id,
+            mapping_id=mapping_id,
+            topology="direct",
+            state="import_failed" if failed else "current",
+            current_execution_id=current_execution_id,
+            active_baseline_execution_id=(baseline_execution_id if has_baseline else None),
+            retry_count=1 if failed else 0,
+            error_category="provider_unavailable" if failed else None,
+            error_message="Import provider unavailable" if failed else None,
+            latest_execution_at=now,
+        )
+    )
+    session.flush()
+    if has_baseline and failed:
+        session.add(
+            ImportExecution(
+                id=baseline_execution_id,
+                import_job_id=job_id,
+                sequence=1,
+                state="succeeded",
+                connection_generation=1,
+                started_at=now,
+                finished_at=now,
+            )
+        )
+    session.add(
+        ImportExecution(
+            id=current_execution_id,
+            import_job_id=job_id,
+            sequence=2 if has_baseline and failed else 1,
+            state="failed" if failed else "succeeded",
+            connection_generation=1,
+            started_at=now,
+            finished_at=now,
+        )
+    )
+
+
+def _seed_historical_mapping(
+    session: Session,
+    *,
+    product_id: UUID,
+) -> tuple[UUID, UUID]:
+    """Create one published revision that is not the product's active pointer."""
+    revision_id = uuid4()
+    repository_id = uuid4()
+    mapping_id = uuid4()
+    revision = ProductRevision(
+        id=revision_id,
+        product_id=product_id,
+        description="historical",
+        version=2,
+        is_published=False,
+    )
+    session.add_all(
+        [
+            revision,
+            Repository(
+                id=repository_id,
+                workspace="history-team",
+                repository_slug=f"history-{repository_id.hex[:12]}",
+            ),
+        ]
+    )
+    session.flush()
+    session.add(
+        ProductRepositoryMapping(
+            id=mapping_id,
+            revision_id=revision_id,
+            topology="direct",
+            identity_key=f'["direct","{repository_id}","history"]',
+            sides=[
+                ProductMappingRepositorySide(
+                    role="direct",
+                    repository_id=repository_id,
+                    source_branch="history",
+                )
+            ],
+            allowed_targets=[ProductMappingAllowedTarget(branch="history", is_default=True)],
+        )
+    )
+    session.flush()
+    revision.is_published = True
+    revision.published_at = datetime.now(UTC)
+    session.flush()
+    return revision_id, mapping_id
+
+
+def _seed_candidate_mapping(
+    factory: sessionmaker[Session],
+    *,
+    product_id: UUID,
+) -> UUID:
+    """Attach one non-published candidate mapping to an existing product."""
+    revision_id = uuid4()
+    repository_id = uuid4()
+    mapping_id = uuid4()
+    with factory.begin() as session:
+        product = session.get_one(Product, product_id)
+        session.add_all(
+            [
+                ProductRevision(
+                    id=revision_id,
+                    product_id=product_id,
+                    description="candidate",
+                    version=8,
+                    is_published=False,
+                ),
+                Repository(
+                    id=repository_id,
+                    workspace="candidate-team",
+                    repository_slug=f"candidate-{repository_id.hex[:12]}",
+                ),
+            ]
+        )
+        session.flush()
+        session.add(
+            ProductRepositoryMapping(
+                id=mapping_id,
+                revision_id=revision_id,
+                topology="direct",
+                identity_key=f'["direct","{repository_id}","candidate"]',
+                sides=[
+                    ProductMappingRepositorySide(
+                        role="direct",
+                        repository_id=repository_id,
+                        source_branch="candidate",
+                    )
+                ],
+                allowed_targets=[
+                    ProductMappingAllowedTarget(
+                        branch="candidate",
+                        is_default=True,
+                    )
+                ],
+            )
+        )
+        session.flush()
+        product.candidate_revision_id = revision_id
+        session.flush()
+    return mapping_id
 
 
 def test_existing_product_edit_clones_complete_graph_once_and_isolates_candidate_identity(
@@ -1314,6 +1479,207 @@ def test_product_collection_is_bounded_filtered_opaque_and_server_ordered(
         == wrong_filter_cursor.json()
         == {"detail": "Invalid cursor"}
     )
+
+
+def test_affected_mapping_count_is_product_local_complete_and_response_consistent(
+    product_session_factory: sessionmaker[Session],
+) -> None:
+    """Count only failed active mappings retaining a successful baseline."""
+    admin_id, admin_token = create_authority(
+        product_session_factory,
+        email="admin@example.com",
+        roles=("admin",),
+    )
+    zero_product_id, zero_revision_id = _seed_published_mapping_graph(
+        product_session_factory,
+        confirmed_by=admin_id,
+        name="Zero affected mappings",
+    )
+    one_product_id, one_revision_id = _seed_published_mapping_graph(
+        product_session_factory,
+        confirmed_by=admin_id,
+        name="One affected mapping",
+    )
+    many_product_id, many_revision_id = _seed_published_mapping_graph(
+        product_session_factory,
+        confirmed_by=admin_id,
+        name="Many affected mappings",
+    )
+    candidate_mapping_id = _seed_candidate_mapping(
+        product_session_factory,
+        product_id=one_product_id,
+    )
+
+    with product_session_factory.begin() as session:
+        zero_mapping_ids = tuple(
+            session.scalars(
+                select(ProductRepositoryMapping.id).where(
+                    ProductRepositoryMapping.revision_id == zero_revision_id
+                )
+            )
+        )
+        one_mapping_ids = tuple(
+            session.scalars(
+                select(ProductRepositoryMapping.id).where(
+                    ProductRepositoryMapping.revision_id == one_revision_id
+                )
+            )
+        )
+        many_mapping_ids = tuple(
+            session.scalars(
+                select(ProductRepositoryMapping.id).where(
+                    ProductRepositoryMapping.revision_id == many_revision_id
+                )
+            )
+        )
+        candidate_mapping = session.get_one(
+            ProductRepositoryMapping,
+            candidate_mapping_id,
+        )
+        historical_revision_id, historical_mapping_id = _seed_historical_mapping(
+            session,
+            product_id=one_product_id,
+        )
+
+        _seed_import_state(
+            session,
+            product_id=zero_product_id,
+            revision_id=zero_revision_id,
+            mapping_id=zero_mapping_ids[0],
+            failed=True,
+            has_baseline=False,
+        )
+        _seed_import_state(
+            session,
+            product_id=zero_product_id,
+            revision_id=zero_revision_id,
+            mapping_id=zero_mapping_ids[1],
+            failed=False,
+            has_baseline=True,
+        )
+        _seed_import_state(
+            session,
+            product_id=one_product_id,
+            revision_id=one_revision_id,
+            mapping_id=one_mapping_ids[0],
+            failed=True,
+            has_baseline=True,
+        )
+        _seed_import_state(
+            session,
+            product_id=one_product_id,
+            revision_id=one_revision_id,
+            mapping_id=one_mapping_ids[1],
+            failed=True,
+            has_baseline=False,
+        )
+        _seed_import_state(
+            session,
+            product_id=one_product_id,
+            revision_id=candidate_mapping.revision_id,
+            mapping_id=candidate_mapping_id,
+            failed=True,
+            has_baseline=True,
+        )
+        _seed_import_state(
+            session,
+            product_id=one_product_id,
+            revision_id=historical_revision_id,
+            mapping_id=historical_mapping_id,
+            failed=True,
+            has_baseline=True,
+        )
+        for mapping_id in many_mapping_ids:
+            _seed_import_state(
+                session,
+                product_id=many_product_id,
+                revision_id=many_revision_id,
+                mapping_id=mapping_id,
+                failed=True,
+                has_baseline=True,
+            )
+
+    configure_dependencies(product_session_factory)
+    collection = asyncio.run(
+        product_request(
+            "GET",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}?limit=100",
+        )
+    )
+    assert collection.status_code == 200
+    counts = {item["id"]: item["affected_mapping_count"] for item in collection.json()["items"]}
+    assert counts[str(zero_product_id)] == 0
+    assert counts[str(one_product_id)] == 1
+    assert counts[str(many_product_id)] == 2
+
+    detail = asyncio.run(
+        product_request(
+            "GET",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{one_product_id}",
+        )
+    )
+    assert detail.status_code == 200
+    assert detail.json()["affected_mapping_count"] == 1
+
+    deactivated = asyncio.run(
+        product_request(
+            "POST",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{many_product_id}/deactivate",
+        )
+    )
+    assert deactivated.status_code == 200
+    assert deactivated.json()["affected_mapping_count"] == 2
+
+
+def test_affected_mapping_query_count_is_constant_across_product_page_sizes(
+    product_session_factory: sessionmaker[Session],
+) -> None:
+    """The aggregate stays inside the product query rather than expanding per row."""
+    admin_id, _admin_token = create_authority(
+        product_session_factory,
+        email="query-count-admin@example.com",
+        roles=("admin",),
+    )
+    for index in range(3):
+        _seed_published_mapping_graph(
+            product_session_factory,
+            confirmed_by=admin_id,
+            name=f"Query count product {index}",
+        )
+
+    engine = product_session_factory.kw["bind"]
+
+    def statements_for(limit: int) -> tuple[str, ...]:
+        statements: list[str] = []
+
+        def record_select(
+            _connection: object,
+            _cursor: object,
+            statement: str,
+            _parameters: object,
+            _context: object,
+            _executemany: bool,
+        ) -> None:
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement.casefold())
+
+        event.listen(engine, "before_cursor_execute", record_select)
+        try:
+            with product_session_factory() as session:
+                list_products(session, limit=limit)
+        finally:
+            event.remove(engine, "before_cursor_execute", record_select)
+        return tuple(statements)
+
+    one_product_page = statements_for(1)
+    many_product_page = statements_for(100)
+    assert len(one_product_page) == len(many_product_page) == 3
+    assert sum("import_jobs" in statement for statement in one_product_page) == 1
+    assert sum("import_jobs" in statement for statement in many_product_page) == 1
+    assert all("bitbucket" not in statement for statement in many_product_page)
 
 
 def test_product_mutation_cors_preflight_allows_the_registered_patch_contract(

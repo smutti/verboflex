@@ -1088,6 +1088,7 @@ def test_admin_product_openapi_is_closed_to_exact_lifecycle_operations() -> None
         "id",
         "name",
         "is_active",
+        "affected_mapping_count",
         "active_revision",
         "candidate_revision",
     }
