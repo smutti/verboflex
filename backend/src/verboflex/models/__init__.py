@@ -2,7 +2,13 @@
 
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.bitbucket_connection import BitbucketConnection
-from verboflex.models.import_job import ImportExecution, ImportJob, ImportSourceReference
+from verboflex.models.import_job import (
+    ImportExecution,
+    ImportJob,
+    ImportRewriteDelta,
+    ImportRewriteProposal,
+    ImportSourceReference,
+)
 from verboflex.models.preview_job import ActiveRevisionRevalidationConfirmation, PreviewJob
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
@@ -20,6 +26,8 @@ __all__ = [
     "BitbucketConnection",
     "ImportExecution",
     "ImportJob",
+    "ImportRewriteDelta",
+    "ImportRewriteProposal",
     "ImportSourceReference",
     "PreviewJob",
     "Product",

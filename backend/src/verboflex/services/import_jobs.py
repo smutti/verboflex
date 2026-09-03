@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -34,6 +35,8 @@ from verboflex.models.bitbucket_connection import BitbucketConnection
 from verboflex.models.import_job import (
     ImportExecution,
     ImportJob,
+    ImportRewriteDelta,
+    ImportRewriteProposal,
     ImportSourceReference,
 )
 from verboflex.models.product import Product, ProductRevision
@@ -885,11 +888,209 @@ def _validated_references(
     return references
 
 
+def _single_commit_per_side(
+    references: tuple[ImportSourceReferenceRecord, ...],
+) -> dict[RepositoryRole, tuple[UUID, str]]:
+    commits: dict[RepositoryRole, tuple[UUID, str]] = {}
+    for reference in references:
+        identity = (reference.repository_id, reference.commit_hash)
+        existing = commits.setdefault(reference.repository_side, identity)
+        if existing != identity:
+            raise ValueError("rewrite proposal references rejected")
+    return commits
+
+
+def _validated_rewrite_candidate(
+    *,
+    identity: ImportExecutionIdentity,
+    revision: ProductRevision,
+    mapping: ProductRepositoryMapping,
+    job: ImportJob,
+    references: tuple[ImportSourceReferenceRecord, ...],
+    baseline_references: tuple[ImportSourceReferenceRecord, ...],
+    movement: SourceMovementClassification,
+) -> tuple[SourceRewriteCandidate, str]:
+    candidate = movement.rewrite_candidate
+    if (
+        movement.movement != "review-required"
+        or candidate is None
+        or candidate.complete is not True
+        or candidate.sides != movement.sides
+        or job.active_baseline_execution_id is None
+    ):
+        raise ValueError("rewrite proposal evidence rejected")
+
+    expected_sides = _mapping_sides(mapping)
+    expected_roles = tuple(side.role for side in expected_sides)
+    if tuple(side.repository_side for side in candidate.sides) != expected_roles:
+        raise ValueError("rewrite proposal sides rejected")
+    baseline_commits = _single_commit_per_side(baseline_references)
+    proposed_commits = _single_commit_per_side(references)
+    expected_side_identity = {side.role: side.repository_id for side in expected_sides}
+    if set(baseline_commits) != set(expected_roles) or set(proposed_commits) != set(expected_roles):
+        raise ValueError("rewrite proposal references rejected")
+
+    diverged = False
+    for side in candidate.sides:
+        if (
+            side.repository_id != expected_side_identity[side.repository_side]
+            or baseline_commits[side.repository_side]
+            != (side.repository_id, side.active_commit_hash)
+            or proposed_commits[side.repository_side]
+            != (side.repository_id, side.proposed_commit_hash)
+            or side.relation not in {"equal", "descendant", "diverged"}
+        ):
+            raise ValueError("rewrite proposal identity rejected")
+        diverged = diverged or side.relation == "diverged"
+    if not diverged:
+        raise ValueError("rewrite proposal movement rejected")
+
+    role_positions = {role: position for position, role in enumerate(expected_roles)}
+    last_role_position = -1
+    side_ordinals: dict[RepositoryRole, int] = {role: 0 for role in expected_roles}
+    seen_paths: set[tuple[RepositoryRole, str]] = set()
+    for file in candidate.files:
+        role = file.repository_side
+        if role not in role_positions:
+            raise ValueError("rewrite proposal delta rejected")
+        try:
+            path = validate_repository_relative_path(file.path)
+        except ValueError as error:
+            raise ValueError("rewrite proposal delta rejected") from error
+        if (
+            role_positions[role] < last_role_position
+            or file.ordinal != side_ordinals[role]
+            or file.change not in {"added", "modified", "removed"}
+            or path != file.path
+            or not path.casefold().endswith((".xml", ".ts", ".json", ".strings"))
+            or (role, path) in seen_paths
+        ):
+            raise ValueError("rewrite proposal delta rejected")
+        last_role_position = role_positions[role]
+        side_ordinals[role] += 1
+        seen_paths.add((role, path))
+
+    digest_payload = {
+        "import_id": str(identity.import_id),
+        "product_id": str(identity.product_id),
+        "revision_id": str(identity.revision_id),
+        "revision_version": revision.version,
+        "mapping_id": str(identity.mapping_id),
+        "topology": mapping.topology,
+        "connection_generation": identity.connection_generation,
+        "proposed_execution_id": str(identity.execution_id),
+        "old_baseline_execution_id": str(job.active_baseline_execution_id),
+        "sides": [
+            {
+                "repository_side": side.repository_side,
+                "repository_id": str(side.repository_id),
+                "active_commit_hash": side.active_commit_hash,
+                "proposed_commit_hash": side.proposed_commit_hash,
+                "relation": side.relation,
+            }
+            for side in candidate.sides
+        ],
+        "files": [
+            {
+                "repository_side": file.repository_side,
+                "ordinal": file.ordinal,
+                "change": file.change,
+                "path": file.path,
+            }
+            for file in candidate.files
+        ],
+    }
+    digest = hashlib.sha256(
+        json.dumps(
+            digest_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    return candidate, digest
+
+
+def _persist_rewrite_proposal(
+    session: Session,
+    *,
+    identity: ImportExecutionIdentity,
+    revision: ProductRevision,
+    mapping: ProductRepositoryMapping,
+    job: ImportJob,
+    candidate: SourceRewriteCandidate,
+    digest: str,
+    now: datetime,
+) -> ImportRewriteProposal:
+    previous = session.execute(
+        select(ImportRewriteProposal)
+        .where(
+            ImportRewriteProposal.import_job_id == identity.import_id,
+            ImportRewriteProposal.status == "pending",
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
+    if previous is not None:
+        previous.status = "superseded"
+        previous.resolved_at = now
+        session.flush()
+
+    sides = {side.repository_side: side for side in candidate.sides}
+    direct = sides.get("direct")
+    keys = sides.get("keys")
+    translations = sides.get("translations")
+    assert job.active_baseline_execution_id is not None
+    proposal = ImportRewriteProposal(
+        id=uuid4(),
+        import_job_id=identity.import_id,
+        product_id=identity.product_id,
+        revision_id=identity.revision_id,
+        revision_version=revision.version,
+        mapping_id=identity.mapping_id,
+        topology=mapping.topology,
+        connection_generation=identity.connection_generation,
+        proposed_execution_id=identity.execution_id,
+        old_baseline_execution_id=job.active_baseline_execution_id,
+        direct_repository_id=direct.repository_id if direct is not None else None,
+        direct_old_commit_hash=(direct.active_commit_hash if direct is not None else None),
+        direct_new_commit_hash=(direct.proposed_commit_hash if direct is not None else None),
+        keys_repository_id=keys.repository_id if keys is not None else None,
+        keys_old_commit_hash=keys.active_commit_hash if keys is not None else None,
+        keys_new_commit_hash=keys.proposed_commit_hash if keys is not None else None,
+        translations_repository_id=(
+            translations.repository_id if translations is not None else None
+        ),
+        translations_old_commit_hash=(
+            translations.active_commit_hash if translations is not None else None
+        ),
+        translations_new_commit_hash=(
+            translations.proposed_commit_hash if translations is not None else None
+        ),
+        complete=True,
+        digest=digest,
+        status="pending",
+    )
+    session.add(proposal)
+    session.flush()
+    for position, file in enumerate(candidate.files):
+        session.add(
+            ImportRewriteDelta(
+                proposal_id=proposal.id,
+                position=position,
+                repository_side=file.repository_side,
+                change=file.change,
+                path=file.path,
+            )
+        )
+        session.flush()
+    return proposal
+
+
 def finish_import_execution(
     factory: sessionmaker[Session],
     *,
     identity: ImportExecutionIdentity,
     references: tuple[ImportSourceReferenceRecord, ...] | None,
+    movement: SourceMovementClassification | None = None,
 ) -> bool:
     """Conditionally terminalize only the exact current execution and authority."""
     with factory.begin() as session:
@@ -964,7 +1165,36 @@ def finish_import_execution(
                 for side in identity.repository_sides
             )
         )
-        if references is None or not authority_is_current:
+        validated_references: tuple[ImportSourceReferenceRecord, ...] | None = None
+        rewrite_authority: tuple[SourceRewriteCandidate, str] | None = None
+        if references is not None and authority_is_current:
+            try:
+                validated_references = _validated_references(identity, references)
+                if movement is not None:
+                    baseline_references = (
+                        _source_references(
+                            session,
+                            execution_id=job.active_baseline_execution_id,
+                        )
+                        if job.active_baseline_execution_id is not None
+                        else ()
+                    )
+                    assert revision is not None
+                    assert mapping is not None
+                    rewrite_authority = _validated_rewrite_candidate(
+                        identity=identity,
+                        revision=revision,
+                        mapping=mapping,
+                        job=job,
+                        references=validated_references,
+                        baseline_references=baseline_references,
+                        movement=movement,
+                    )
+            except ValueError:
+                validated_references = None
+                rewrite_authority = None
+
+        if validated_references is None or not authority_is_current:
             execution.state = "failed"
             job.state = "import_failed"
             job.error_category = IMPORT_FAILURE_CATEGORY
@@ -974,7 +1204,6 @@ def finish_import_execution(
                 else IMPORT_FAILURE_WITHOUT_BASELINE
             )
         else:
-            validated_references = _validated_references(identity, references)
             baseline_matches = (
                 job.active_baseline_execution_id is not None
                 and _source_references(
@@ -998,11 +1227,27 @@ def finish_import_execution(
                     )
                 )
             execution.state = "succeeded"
+            execution.finished_at = now
             job.state = "current"
-            if not baseline_matches:
+            if rewrite_authority is None and not baseline_matches:
                 job.active_baseline_execution_id = execution.id
             job.error_category = None
             job.error_message = None
+            session.flush()
+            if rewrite_authority is not None:
+                assert revision is not None
+                assert mapping is not None
+                candidate, digest = rewrite_authority
+                _persist_rewrite_proposal(
+                    session,
+                    identity=identity,
+                    revision=revision,
+                    mapping=mapping,
+                    job=job,
+                    candidate=candidate,
+                    digest=digest,
+                    now=now,
+                )
         execution.finished_at = now
         job.updated_at = now
     return True

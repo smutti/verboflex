@@ -575,17 +575,34 @@ def test_rewrite_migration_is_reversible_complete_and_ownership_safe(
         )
         connection.execute(
             text(
-                "UPDATE import_jobs SET current_execution_id = :execution_id "
-                "WHERE id = :import_id"
+                "UPDATE import_jobs SET current_execution_id = :execution_id WHERE id = :import_id"
             ),
             {"execution_id": proposed_execution_id, "import_id": import_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO import_source_references "
+                "(execution_id, position, repository_side, repository_id, source_branch, "
+                "commit_hash, path, size_bytes, sha256) VALUES "
+                "(:baseline, 0, 'direct', :repository, 'main', :old_commit, "
+                "'values/strings.xml', 1, :old_digest), "
+                "(:proposed, 0, 'direct', :repository, 'main', :new_commit, "
+                "'values/strings.xml', 1, :new_digest)"
+            ),
+            {
+                **identities,
+                "baseline": baseline_execution_id,
+                "proposed": proposed_execution_id,
+                "old_commit": "1" * 40,
+                "new_commit": "2" * 40,
+                "old_digest": "c" * 64,
+                "new_digest": "d" * 64,
+            },
         )
 
     command.upgrade(config, "0013_import_rewrite_proposals")
     inspector = inspect(engine)
-    assert {"import_rewrite_proposals", "import_rewrite_deltas"} <= set(
-        inspector.get_table_names()
-    )
+    assert {"import_rewrite_proposals", "import_rewrite_deltas"} <= set(inspector.get_table_names())
     assert {
         "pk_import_rewrite_proposals",
         "fk_import_rewrite_proposals_owned_mapping",
@@ -606,7 +623,7 @@ def test_rewrite_migration_is_reversible_complete_and_ownership_safe(
         "topology, connection_generation, proposed_execution_id, "
         "old_baseline_execution_id, direct_repository_id, direct_old_commit_hash, "
         "direct_new_commit_hash, complete, digest, status) VALUES "
-        "(:id, :import_id, :product, :revision, 7, :mapping, 'direct', 1, "
+        "(:id, :import_id, :product, :revision, 1, :mapping, 'direct', 1, "
         ":proposed_execution_id, :baseline_execution_id, :repository, :old_commit, "
         ":new_commit, true, :digest, 'pending')"
     )
@@ -641,7 +658,7 @@ def test_rewrite_migration_is_reversible_complete_and_ownership_safe(
                 "topology, connection_generation, proposed_execution_id, "
                 "old_baseline_execution_id, direct_repository_id, direct_old_commit_hash, "
                 "direct_new_commit_hash, complete, digest, status) VALUES "
-                "(:id, :import_id, :product, :revision, 7, :mapping, 'direct', 1, "
+                "(:id, :import_id, :product, :revision, 1, :mapping, 'direct', 1, "
                 ":proposed_execution_id, :baseline_execution_id, :repository, :old_commit, "
                 ":new_commit, false, :digest, 'superseded')"
             ),

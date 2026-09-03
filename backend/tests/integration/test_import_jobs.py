@@ -2247,9 +2247,7 @@ def _complete_initial_direct_baseline(
     assert import_job_service.finish_import_execution(
         factory,
         identity=identity,
-        references=(
-            _successful_reference_at(repository_id, commit_hash=commit_hash),
-        ),
+        references=(_successful_reference_at(repository_id, commit_hash=commit_hash),),
     )
     return record.id, identity.execution_id
 
@@ -2311,9 +2309,7 @@ def test_rewrite_proposal_persists_complete_zero_delta_without_moving_baseline(
     assert import_job_service.finish_import_execution(
         import_session_factory,
         identity=identity,
-        references=(
-            _successful_reference_at(repository_id, commit_hash=new_commit),
-        ),
+        references=(_successful_reference_at(repository_id, commit_hash=new_commit),),
         movement=_rewrite_classification(sides=sides),
     )
 
@@ -2346,11 +2342,14 @@ def test_rewrite_proposal_persists_complete_zero_delta_without_moving_baseline(
         assert proposal.complete is True
         assert proposal.status == "pending"
         assert len(proposal.digest) == 64
-        assert session.scalar(
-            select(func.count()).select_from(ImportRewriteDelta).where(
-                ImportRewriteDelta.proposal_id == proposal.id
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(ImportRewriteDelta)
+                .where(ImportRewriteDelta.proposal_id == proposal.id)
             )
-        ) == 0
+            == 0
+        )
 
 
 def test_rewrite_proposal_rejects_incomplete_evidence_and_retains_old_baseline(
@@ -2392,9 +2391,7 @@ def test_rewrite_proposal_rejects_incomplete_evidence_and_retains_old_baseline(
     assert import_job_service.finish_import_execution(
         import_session_factory,
         identity=identity,
-        references=(
-            _successful_reference_at(repository_id, commit_hash=new_commit),
-        ),
+        references=(_successful_reference_at(repository_id, commit_hash=new_commit),),
         movement=_rewrite_classification(sides=sides, complete=False),
     )
 
@@ -2402,12 +2399,17 @@ def test_rewrite_proposal_rejects_incomplete_evidence_and_retains_old_baseline(
         job = session.get_one(ImportJob, import_id)
         assert job.state == "import_failed"
         assert job.active_baseline_execution_id == baseline_execution_id
-        assert session.scalar(
-            select(func.count()).select_from(ImportRewriteProposal).where(
-                ImportRewriteProposal.import_job_id == import_id,
-                ImportRewriteProposal.status == "pending",
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(ImportRewriteProposal)
+                .where(
+                    ImportRewriteProposal.import_job_id == import_id,
+                    ImportRewriteProposal.status == "pending",
+                )
             )
-        ) == 0
+            == 0
+        )
 
 
 def test_rewrite_proposal_persists_complete_ordered_separate_delta_atomically(
@@ -2534,8 +2536,7 @@ def test_rewrite_proposal_persists_complete_ordered_separate_delta_atomically(
             )
         )
         assert [
-            (delta.position, delta.repository_side, delta.change, delta.path)
-            for delta in deltas
+            (delta.position, delta.repository_side, delta.change, delta.path) for delta in deltas
         ] == [
             (0, "keys", "modified", "locales/keys.json"),
             (1, "translations", "removed", "locales/translations.json"),
