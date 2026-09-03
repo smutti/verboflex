@@ -725,11 +725,7 @@ def test_immutable_source_reference_and_terminal_execution_provenance(
     config, engine = migrated_database
     command.upgrade(config, "head")
     identities = _seed_import_schema_graph(engine)
-    _import_id, execution_id = _insert_import_execution(
-        engine,
-        identities,
-        state="succeeded",
-    )
+    _import_id, execution_id = _insert_import_execution(engine, identities)
     with engine.begin() as connection:
         connection.execute(
             text(
@@ -744,6 +740,36 @@ def test_immutable_source_reference_and_terminal_execution_provenance(
                 "execution_id": execution_id,
                 "commit_hash": "a" * 40,
                 "sha256": "b" * 64,
+            },
+        )
+        connection.execute(
+            text(
+                "UPDATE import_executions SET state = 'succeeded', "
+                "finished_at = CURRENT_TIMESTAMP WHERE id = :id"
+            ),
+            {"id": execution_id},
+        )
+
+    with (
+        pytest.raises(
+            DBAPIError,
+            match="terminal import source reference is immutable",
+        ),
+        engine.begin() as connection,
+    ):
+        connection.execute(
+            text(
+                "INSERT INTO import_source_references "
+                "(execution_id, position, repository_side, repository_id, source_branch, "
+                "commit_hash, path, size_bytes, sha256) VALUES "
+                "(:execution_id, 1, 'direct', :repository, 'main', :commit_hash, "
+                "'values/late.xml', 11, :sha256)"
+            ),
+            {
+                **identities,
+                "execution_id": execution_id,
+                "commit_hash": "c" * 40,
+                "sha256": "d" * 64,
             },
         )
 

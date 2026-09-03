@@ -2091,6 +2091,191 @@ def test_classify_separate_rewrite_is_one_ordered_mapping_candidate() -> None:
     ]
 
 
+def test_classify_mixed_descendant_and_diverged_rewrite_includes_both_side_deltas() -> None:
+    keys_previous = "4" * 40
+    keys_proposed = "5" * 40
+    translations_previous = "6" * 40
+    translations_proposed = "7" * 40
+    sources = (
+        _movement_input(
+            "keys",
+            active_commit_hash=keys_previous,
+            proposed_commit_hash=keys_proposed,
+        ),
+        _movement_input(
+            "translations",
+            active_commit_hash=translations_previous,
+            proposed_commit_hash=translations_proposed,
+        ),
+    )
+    adapter = SourceMovementAdapterSpy(
+        ancestries={
+            ("keys-repository", keys_previous, keys_proposed): BitbucketAncestry(
+                old_commit_hash=keys_previous,
+                new_commit_hash=keys_proposed,
+                relation="descendant",
+                complete=True,
+            ),
+            (
+                "translations-repository",
+                translations_previous,
+                translations_proposed,
+            ): BitbucketAncestry(
+                old_commit_hash=translations_previous,
+                new_commit_hash=translations_proposed,
+                relation="diverged",
+                complete=True,
+            ),
+        },
+        deltas={
+            (
+                "keys-repository",
+                keys_previous,
+                keys_proposed,
+                "keys",
+            ): BitbucketCommitDelta(
+                old_commit_hash=keys_previous,
+                new_commit_hash=keys_proposed,
+                files=(
+                    BitbucketFileDelta(
+                        repository_side="keys",
+                        ordinal=0,
+                        change="modified",
+                        path="keys/catalog.json",
+                    ),
+                ),
+                complete=True,
+            ),
+            (
+                "translations-repository",
+                translations_previous,
+                translations_proposed,
+                "translations",
+            ): BitbucketCommitDelta(
+                old_commit_hash=translations_previous,
+                new_commit_hash=translations_proposed,
+                files=(
+                    BitbucketFileDelta(
+                        repository_side="translations",
+                        ordinal=0,
+                        change="added",
+                        path="translations/catalog.json",
+                    ),
+                ),
+                complete=True,
+            ),
+        },
+    )
+
+    with Session() as session:
+        classification = asyncio.run(
+            import_job_service.classify_source_movement(
+                session,
+                sources=sources,
+                adapter=adapter,
+            )
+        )
+
+    assert classification.movement == "review-required"
+    candidate = classification.rewrite_candidate
+    assert candidate is not None
+    assert [side.relation for side in candidate.sides] == ["descendant", "diverged"]
+    assert [
+        (file.repository_side, file.ordinal, file.change, file.path) for file in candidate.files
+    ] == [
+        ("keys", 0, "modified", "keys/catalog.json"),
+        ("translations", 0, "added", "translations/catalog.json"),
+    ]
+    assert adapter.requests == [
+        ("ancestry", "keys-repository", keys_previous, keys_proposed),
+        (
+            "ancestry",
+            "translations-repository",
+            translations_previous,
+            translations_proposed,
+        ),
+        ("diffstat", "keys-repository", keys_previous, keys_proposed),
+        (
+            "diffstat",
+            "translations-repository",
+            translations_previous,
+            translations_proposed,
+        ),
+    ]
+
+
+def test_classify_mixed_rewrite_rejects_incomplete_descendant_delta() -> None:
+    keys_previous = "8" * 40
+    keys_proposed = "9" * 40
+    translations_previous = "a" * 40
+    translations_proposed = "b" * 40
+    sources = (
+        _movement_input(
+            "keys",
+            active_commit_hash=keys_previous,
+            proposed_commit_hash=keys_proposed,
+        ),
+        _movement_input(
+            "translations",
+            active_commit_hash=translations_previous,
+            proposed_commit_hash=translations_proposed,
+        ),
+    )
+    adapter = SourceMovementAdapterSpy(
+        ancestries={
+            ("keys-repository", keys_previous, keys_proposed): BitbucketAncestry(
+                old_commit_hash=keys_previous,
+                new_commit_hash=keys_proposed,
+                relation="descendant",
+                complete=True,
+            ),
+            (
+                "translations-repository",
+                translations_previous,
+                translations_proposed,
+            ): BitbucketAncestry(
+                old_commit_hash=translations_previous,
+                new_commit_hash=translations_proposed,
+                relation="diverged",
+                complete=True,
+            ),
+        },
+        deltas={
+            (
+                "keys-repository",
+                keys_previous,
+                keys_proposed,
+                "keys",
+            ): BitbucketCommitDelta(
+                old_commit_hash=keys_previous,
+                new_commit_hash=keys_proposed,
+                files=(),
+                complete=False,
+            ),
+            (
+                "translations-repository",
+                translations_previous,
+                translations_proposed,
+                "translations",
+            ): BitbucketCommitDelta(
+                old_commit_hash=translations_previous,
+                new_commit_hash=translations_proposed,
+                files=(),
+                complete=True,
+            ),
+        },
+    )
+
+    with Session() as session, pytest.raises(BitbucketProviderReadError):
+        asyncio.run(
+            import_job_service.classify_source_movement(
+                session,
+                sources=sources,
+                adapter=adapter,
+            )
+        )
+
+
 def test_classify_one_rewritten_separate_side_holds_the_whole_mapping() -> None:
     keys_commit = "8" * 40
     translations_previous = "9" * 40
