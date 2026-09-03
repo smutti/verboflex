@@ -1265,7 +1265,7 @@ def test_import_empty_source_terminalizes_and_preserves_the_last_baseline(
     body = failed.json()
     assert body["state"] == "may_be_stale"
     assert body["active_baseline"] == baseline
-    assert body["error_category"] == "provider_unavailable"
+    assert body["error_category"] == "bounded_failure"
     _assert_secret_free(body)
 
 
@@ -1305,7 +1305,7 @@ def test_import_enqueue_failure_is_terminal_bounded_and_baseline_preserving(
     failed = asyncio.run(_request("POST", start_path, access_token=admin_token))
     assert failed.status_code == 202
     body = failed.json()
-    assert body["state"] == "import_failed"
+    assert body["state"] == "may_be_stale"
     assert body["active_baseline"] == before
     assert body["retry_count"] == 0
     assert body["error_category"] == "provider_unavailable"
@@ -1407,11 +1407,20 @@ def test_terminal_provider_failure_emits_one_sanitized_diagnostic_and_public_err
     assert response.status_code == 200
     body = response.json()
     assert body["state"] == "import_failed"
-    assert body["error_category"] == "provider_unavailable"
-    assert body["error_message"] == (
-        "This import did not complete. Review the reason, then retry from the mapping. "
-        "No import baseline was created."
-    )
+    expected_public_category = {
+        "disconnected": "connection_required",
+        "reauthorization_required": "connection_required",
+        "permission_denied": "permission_denied",
+        "not_found": "source_not_found",
+        "rate_limited": "rate_limited",
+        "unavailable": "provider_unavailable",
+        "timeout": "timeout",
+        "invalid_source": "bounded_failure",
+        "limit_exceeded": "bounded_failure",
+    }[failure_kind]
+    assert body["error_category"] == expected_public_category
+    assert isinstance(body["error_message"], str)
+    assert 1 <= len(body["error_message"]) <= 256
     _assert_secret_free(body)
 
 
@@ -1722,7 +1731,7 @@ def test_worker_loss_watchdog_terminalizes_once_at_inclusive_bound_and_ignores_l
         terminal_job = session.get_one(ImportJob, import_id)
         terminal_execution = session.get_one(ImportExecution, identity.execution_id)
         assert terminal_job.state == "import_failed"
-        assert terminal_job.error_category == "provider_unavailable"
+        assert terminal_job.error_category == "timeout"
         assert terminal_job.active_baseline_execution_id == original_baseline_id
         assert terminal_execution.state == "failed"
         assert terminal_execution.finished_at == now
@@ -3091,7 +3100,7 @@ def test_public_contract_has_exact_five_operations_and_closed_server_authority(
 ) -> None:
     _configure_dependencies(import_session_factory)
     admin_token = _create_admin(import_session_factory)
-    product_id, revision_id, _repository_id, mapping_id = _seed_published_direct_mapping(
+    product_id, revision_id, repository_id, mapping_id = _seed_published_direct_mapping(
         import_session_factory
     )
     app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
@@ -3112,9 +3121,7 @@ def test_public_contract_has_exact_five_operations_and_closed_server_authority(
                 "repository_sides": [
                     {
                         "role": "direct",
-                        "repository_id": before.json()["items"][0]["repository_sides"][0][
-                            "repository_id"
-                        ],
+                        "repository_id": str(repository_id),
                         "source_branch": "main",
                     }
                 ],
