@@ -18,9 +18,12 @@ from verboflex.integrations.bitbucket.urls import (
     BitbucketOperation,
     repository_branch_url,
     repository_branches_url,
+    repository_commit_ancestry_url,
+    repository_diffstat_url,
     repository_metadata_url,
     repository_source_url,
     validate_bitbucket_api_url,
+    validate_provider_commit_hash,
     validate_repository_relative_path,
 )
 from verboflex.services.bitbucket_oauth import (
@@ -61,6 +64,16 @@ _PROVIDER_FAILURE_KINDS = frozenset(
 )
 
 _MAX_JSON_RESPONSE_BYTES = 1_048_576
+MAX_ANCESTRY_PAGES = 50
+MAX_ANCESTRY_COMMITS = 5_000
+MAX_DIFFSTAT_PAGES = 50
+MAX_DIFFSTAT_ROWS = 5_000
+MAX_DIFFSTAT_PATH_LENGTH = 4_096
+MAX_DIFFSTAT_PATH_BYTES = 1_048_576
+
+RepositorySide = Literal["direct", "keys", "translations"]
+AncestryRelation = Literal["equal", "descendant", "diverged"]
+FileDeltaChange = Literal["added", "modified", "removed"]
 
 
 class BitbucketProviderReadError(RuntimeError):
@@ -113,6 +126,36 @@ class BitbucketSourcePage:
 
     entries: tuple[BitbucketSourceEntry, ...]
     next_url: str | None
+
+
+@dataclass(frozen=True)
+class BitbucketAncestry:
+    """Complete bounded reachability result for two immutable commits."""
+
+    old_commit_hash: str
+    new_commit_hash: str
+    relation: AncestryRelation
+    complete: bool
+
+
+@dataclass(frozen=True)
+class BitbucketFileDelta:
+    """One metadata-only localization-file change in provider traversal order."""
+
+    repository_side: RepositorySide
+    ordinal: int
+    change: FileDeltaChange
+    path: str
+
+
+@dataclass(frozen=True)
+class BitbucketCommitDelta:
+    """One complete bounded diffstat between exact source commits."""
+
+    old_commit_hash: str
+    new_commit_hash: str
+    files: tuple[BitbucketFileDelta, ...]
+    complete: bool
 
 
 class BitbucketCredentialLeaseAuthority(Protocol):
@@ -243,6 +286,187 @@ class BitbucketHttpAdapter:
             )
         return resolved
 
+    async def compare_repository_ancestry(
+        self,
+        session: Session,
+        *,
+        workspace: str,
+        repository_slug: str,
+        old_commit_hash: str,
+        new_commit_hash: str,
+    ) -> BitbucketAncestry:
+        """Prove equality or bounded reachability from the proposed commit."""
+        previous = validate_provider_commit_hash(old_commit_hash)
+        proposed = validate_provider_commit_hash(new_commit_hash)
+        if previous == proposed:
+            return BitbucketAncestry(
+                old_commit_hash=previous,
+                new_commit_hash=proposed,
+                relation="equal",
+                complete=True,
+            )
+
+        first_url = repository_commit_ancestry_url(
+            workspace=workspace,
+            repository_slug=repository_slug,
+            old_commit_hash=previous,
+            new_commit_hash=proposed,
+        )
+        expected_path = urlsplit(first_url).path
+        next_url: str | None = first_url
+        visited_urls: set[str] = set()
+        visited_commits: set[str] = set()
+        first_commit = True
+        while next_url is not None:
+            if next_url in visited_urls:
+                raise BitbucketProviderReadError(
+                    kind="invalid_source",
+                    operation=BitbucketOperation.COMMIT_ANCESTRY,
+                )
+            if len(visited_urls) >= MAX_ANCESTRY_PAGES:
+                raise BitbucketProviderReadError(
+                    kind="limit_exceeded",
+                    operation=BitbucketOperation.COMMIT_ANCESTRY,
+                )
+            visited_urls.add(next_url)
+            page = await self._read_json(
+                session,
+                operation=BitbucketOperation.COMMIT_ANCESTRY,
+                url=next_url,
+            )
+            commit_hashes, next_url = self._parse_commit_page(page)
+            if not commit_hashes:
+                raise BitbucketProviderReadError(
+                    kind="invalid_source",
+                    operation=BitbucketOperation.COMMIT_ANCESTRY,
+                )
+            if first_commit and commit_hashes[0] != proposed:
+                raise BitbucketProviderReadError(
+                    kind="invalid_source",
+                    operation=BitbucketOperation.COMMIT_ANCESTRY,
+                )
+            first_commit = False
+            for commit_hash in commit_hashes:
+                if commit_hash in visited_commits:
+                    raise BitbucketProviderReadError(
+                        kind="invalid_source",
+                        operation=BitbucketOperation.COMMIT_ANCESTRY,
+                    )
+                visited_commits.add(commit_hash)
+                if len(visited_commits) > MAX_ANCESTRY_COMMITS:
+                    raise BitbucketProviderReadError(
+                        kind="limit_exceeded",
+                        operation=BitbucketOperation.COMMIT_ANCESTRY,
+                    )
+                if commit_hash == previous:
+                    return BitbucketAncestry(
+                        old_commit_hash=previous,
+                        new_commit_hash=proposed,
+                        relation="descendant",
+                        complete=True,
+                    )
+            if next_url is not None and urlsplit(next_url).path != expected_path:
+                raise BitbucketProviderReadError(
+                    kind="invalid_source",
+                    operation=BitbucketOperation.COMMIT_ANCESTRY,
+                )
+        return BitbucketAncestry(
+            old_commit_hash=previous,
+            new_commit_hash=proposed,
+            relation="diverged",
+            complete=True,
+        )
+
+    async def list_repository_diffstat(
+        self,
+        session: Session,
+        *,
+        workspace: str,
+        repository_slug: str,
+        old_commit_hash: str,
+        new_commit_hash: str,
+        repository_side: RepositorySide,
+    ) -> BitbucketCommitDelta:
+        """Return every bounded localization-file change without provider payloads."""
+        if repository_side not in {"direct", "keys", "translations"}:
+            raise BitbucketProviderReadError(
+                kind="invalid_source",
+                operation=BitbucketOperation.COMMIT_DIFFSTAT,
+            )
+        previous = validate_provider_commit_hash(old_commit_hash)
+        proposed = validate_provider_commit_hash(new_commit_hash)
+        first_url = repository_diffstat_url(
+            workspace=workspace,
+            repository_slug=repository_slug,
+            old_commit_hash=previous,
+            new_commit_hash=proposed,
+        )
+        expected_path = urlsplit(first_url).path
+        next_url: str | None = first_url
+        visited_urls: set[str] = set()
+        seen_paths: set[str] = set()
+        files: list[BitbucketFileDelta] = []
+        row_count = 0
+        path_bytes = 0
+        while next_url is not None:
+            if next_url in visited_urls:
+                raise BitbucketProviderReadError(
+                    kind="invalid_source",
+                    operation=BitbucketOperation.COMMIT_DIFFSTAT,
+                )
+            if len(visited_urls) >= MAX_DIFFSTAT_PAGES:
+                raise BitbucketProviderReadError(
+                    kind="limit_exceeded",
+                    operation=BitbucketOperation.COMMIT_DIFFSTAT,
+                )
+            visited_urls.add(next_url)
+            page = await self._read_json(
+                session,
+                operation=BitbucketOperation.COMMIT_DIFFSTAT,
+                url=next_url,
+            )
+            rows, next_url = self._parse_diffstat_page(page)
+            row_count += len(rows)
+            if row_count > MAX_DIFFSTAT_ROWS:
+                raise BitbucketProviderReadError(
+                    kind="limit_exceeded",
+                    operation=BitbucketOperation.COMMIT_DIFFSTAT,
+                )
+            for change, path in rows:
+                path_bytes += len(path.encode("utf-8"))
+                if len(path) > MAX_DIFFSTAT_PATH_LENGTH or path_bytes > MAX_DIFFSTAT_PATH_BYTES:
+                    raise BitbucketProviderReadError(
+                        kind="limit_exceeded",
+                        operation=BitbucketOperation.COMMIT_DIFFSTAT,
+                    )
+                if not path.casefold().endswith((".xml", ".ts", ".json", ".strings")):
+                    continue
+                if path in seen_paths:
+                    raise BitbucketProviderReadError(
+                        kind="invalid_source",
+                        operation=BitbucketOperation.COMMIT_DIFFSTAT,
+                    )
+                seen_paths.add(path)
+                files.append(
+                    BitbucketFileDelta(
+                        repository_side=repository_side,
+                        ordinal=len(files),
+                        change=change,
+                        path=path,
+                    )
+                )
+            if next_url is not None and urlsplit(next_url).path != expected_path:
+                raise BitbucketProviderReadError(
+                    kind="invalid_source",
+                    operation=BitbucketOperation.COMMIT_DIFFSTAT,
+                )
+        return BitbucketCommitDelta(
+            old_commit_hash=previous,
+            new_commit_hash=proposed,
+            files=tuple(files),
+            complete=True,
+        )
+
     async def list_repository_source_page(
         self,
         session: Session,
@@ -332,6 +556,127 @@ class BitbucketHttpAdapter:
             )
         except ValueError:
             raise BitbucketProviderReadError(operation=BitbucketOperation.BRANCH_LIST) from None
+
+    @staticmethod
+    def _parse_pagination_next(
+        page: Mapping[str, object],
+        *,
+        operation: BitbucketOperation,
+    ) -> str | None:
+        raw_next = page.get("next")
+        if raw_next is None:
+            return None
+        if not isinstance(raw_next, str):
+            raise BitbucketProviderReadError(kind="invalid_source", operation=operation)
+        try:
+            return validate_bitbucket_api_url(raw_next, operation=operation)
+        except ValueError:
+            raise BitbucketProviderReadError(
+                kind="invalid_source",
+                operation=operation,
+            ) from None
+
+    @classmethod
+    def _parse_commit_page(
+        cls,
+        page: Mapping[str, object],
+    ) -> tuple[tuple[str, ...], str | None]:
+        values = page.get("values")
+        if not isinstance(values, list):
+            raise BitbucketProviderReadError(
+                kind="invalid_source",
+                operation=BitbucketOperation.COMMIT_ANCESTRY,
+            )
+        commits: list[str] = []
+        for value in values:
+            commit_hash = value.get("hash") if isinstance(value, dict) else None
+            if not isinstance(commit_hash, str):
+                raise BitbucketProviderReadError(
+                    kind="invalid_source",
+                    operation=BitbucketOperation.COMMIT_ANCESTRY,
+                )
+            try:
+                commits.append(validate_provider_commit_hash(commit_hash))
+            except ValueError:
+                raise BitbucketProviderReadError(
+                    kind="invalid_source",
+                    operation=BitbucketOperation.COMMIT_ANCESTRY,
+                ) from None
+        return tuple(commits), cls._parse_pagination_next(
+            page,
+            operation=BitbucketOperation.COMMIT_ANCESTRY,
+        )
+
+    @classmethod
+    def _parse_diffstat_page(
+        cls,
+        page: Mapping[str, object],
+    ) -> tuple[tuple[tuple[FileDeltaChange, str], ...], str | None]:
+        values = page.get("values")
+        if not isinstance(values, list):
+            raise BitbucketProviderReadError(
+                kind="invalid_source",
+                operation=BitbucketOperation.COMMIT_DIFFSTAT,
+            )
+        rows: list[tuple[FileDeltaChange, str]] = []
+        for value in values:
+            if not isinstance(value, dict):
+                raise BitbucketProviderReadError(
+                    kind="invalid_source",
+                    operation=BitbucketOperation.COMMIT_DIFFSTAT,
+                )
+            raw_status = value.get("status")
+            old_entry = value.get("old")
+            new_entry = value.get("new")
+            old_path = cls._diffstat_file_path(old_entry)
+            new_path = cls._diffstat_file_path(new_entry)
+            if raw_status == "added" and new_path is not None:
+                change: FileDeltaChange = "added"
+                path = new_path
+            elif raw_status == "removed" and old_path is not None:
+                change = "removed"
+                path = old_path
+            elif (
+                raw_status == "modified"
+                and old_path is not None
+                and new_path is not None
+                and old_path == new_path
+            ):
+                change = "modified"
+                path = new_path
+            else:
+                raise BitbucketProviderReadError(
+                    kind="invalid_source",
+                    operation=BitbucketOperation.COMMIT_DIFFSTAT,
+                )
+            rows.append((change, path))
+        return tuple(rows), cls._parse_pagination_next(
+            page,
+            operation=BitbucketOperation.COMMIT_DIFFSTAT,
+        )
+
+    @staticmethod
+    def _diffstat_file_path(raw_entry: object) -> str | None:
+        if raw_entry is None:
+            return None
+        if not isinstance(raw_entry, dict) or raw_entry.get("type") != "commit_file":
+            raise BitbucketProviderReadError(
+                kind="invalid_source",
+                operation=BitbucketOperation.COMMIT_DIFFSTAT,
+            )
+        raw_path = raw_entry.get("path")
+        if not isinstance(raw_path, str):
+            raise BitbucketProviderReadError(
+                kind="invalid_source",
+                operation=BitbucketOperation.COMMIT_DIFFSTAT,
+            )
+        try:
+            return validate_repository_relative_path(raw_path)
+        except ValueError:
+            raise BitbucketProviderReadError(
+                kind="invalid_source",
+                operation=BitbucketOperation.COMMIT_DIFFSTAT,
+            ) from None
 
     @staticmethod
     def _parse_branch(
@@ -599,6 +944,9 @@ __all__ = [
     "PHASE_8_WRITE_OPERATIONS",
     "BitbucketCredentialLease",
     "BitbucketBranch",
+    "BitbucketAncestry",
+    "BitbucketCommitDelta",
+    "BitbucketFileDelta",
     "BitbucketHttpAdapter",
     "BitbucketOperation",
     "BitbucketProviderReadError",

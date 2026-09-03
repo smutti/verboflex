@@ -16,11 +16,7 @@ CLIENT_PATH = (
     REPOSITORY_ROOT / "backend" / "src" / "verboflex" / "integrations" / "bitbucket" / "client.py"
 )
 COVERAGE_PATH = (
-    REPOSITORY_ROOT
-    / ".planning"
-    / "phases"
-    / "03-bitbucket-import-integration"
-    / "COVERAGE.md"
+    REPOSITORY_ROOT / ".planning" / "phases" / "03-bitbucket-import-integration" / "COVERAGE.md"
 )
 
 EXPECTED_INTEGRATED_CAPABILITIES = {
@@ -97,7 +93,9 @@ EXPECTED_OPERATION_VALUES = {
 }
 ALLOWED_ADAPTER_METHODS = {
     "aclose",
+    "compare_repository_ancestry",
     "list_repository_branches",
+    "list_repository_diffstat",
     "list_repository_source_page",
     "read_repository_metadata",
     "read_repository_source_file",

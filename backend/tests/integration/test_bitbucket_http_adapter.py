@@ -651,7 +651,10 @@ def test_ancestry_and_diffstat_preserve_complete_provider_order() -> None:
             ("direct", 3, "modified", "android/strings.xml"),
         ]
         assert set(vars(delta)) == {"complete", "files", "new_commit_hash", "old_commit_hash"}
-        assert all(set(vars(row)) == {"change", "ordinal", "path", "repository_side"} for row in delta.files)
+        assert all(
+            set(vars(row)) == {"change", "ordinal", "path", "repository_side"}
+            for row in delta.files
+        )
         assert all(request.method == "GET" for request in requests)
         assert all(request.url.host == "api.bitbucket.org" for request in requests)
         assert [request.url.path for request in requests] == [
@@ -785,7 +788,11 @@ def test_ancestry_and_diffstat_incomplete_or_ambiguous_results_fail_closed(
                     new_commit_hash=new_commit,
                     repository_side="keys",
                 )
-        assert captured.value.kind in {"invalid_source", "limit_exceeded", "reauthorization_required"}
+        assert captured.value.kind in {
+            "invalid_source",
+            "limit_exceeded",
+            "reauthorization_required",
+        }
         assert str(captured.value) == "Bitbucket provider read failed"
         assert "locale.json" not in f"{captured.value!r} {captured.value}"
         assert all(request.method == "GET" for request in requests)

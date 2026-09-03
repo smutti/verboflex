@@ -54,8 +54,13 @@ _BRANCH_LIST_PATH = re.compile(rf"{_REPOSITORY_READ_BASE}/refs/branches/?")
 _BRANCH_RESOLVE_PATH = re.compile(
     rf"{_REPOSITORY_READ_BASE}/refs/branches/{_ENCODED_PATH_SEGMENT}/?"
 )
+_COMMIT_HASH = r"[0-9A-Fa-f]{40}"
+_COMMIT_ANCESTRY_PATH = re.compile(rf"{_REPOSITORY_READ_BASE}/commits/{_COMMIT_HASH}/?")
+_COMMIT_DIFFSTAT_PATH = re.compile(
+    rf"{_REPOSITORY_READ_BASE}/diffstat/{_COMMIT_HASH}\.\.{_COMMIT_HASH}/?"
+)
 _SOURCE_PATH = re.compile(
-    rf"{_REPOSITORY_READ_BASE}/src/[0-9A-Fa-f]{{40}}"
+    rf"{_REPOSITORY_READ_BASE}/src/{_COMMIT_HASH}"
     rf"(?:/{_ENCODED_PATH_SEGMENT}(?:/{_ENCODED_PATH_SEGMENT})*)?/?"
 )
 _READ_PATHS_BY_OPERATION: dict[BitbucketOperation, tuple[re.Pattern[str], ...]] = {
@@ -64,14 +69,11 @@ _READ_PATHS_BY_OPERATION: dict[BitbucketOperation, tuple[re.Pattern[str], ...]] 
     BitbucketOperation.BRANCH_RESOLVE: (_BRANCH_RESOLVE_PATH,),
     BitbucketOperation.SOURCE_TREE: (_SOURCE_PATH,),
     BitbucketOperation.SOURCE_FILE: (_SOURCE_PATH,),
-    # Plan 03-08 adds the exact commit ancestry and diffstat path families.
-    BitbucketOperation.COMMIT_ANCESTRY: (),
-    BitbucketOperation.COMMIT_DIFFSTAT: (),
+    BitbucketOperation.COMMIT_ANCESTRY: (_COMMIT_ANCESTRY_PATH,),
+    BitbucketOperation.COMMIT_DIFFSTAT: (_COMMIT_DIFFSTAT_PATH,),
 }
 _ALLOWED_READ_PATHS = tuple(
-    pattern
-    for patterns in _READ_PATHS_BY_OPERATION.values()
-    for pattern in patterns
+    pattern for patterns in _READ_PATHS_BY_OPERATION.values() for pattern in patterns
 )
 
 
@@ -202,6 +204,52 @@ def validate_repository_relative_path(path: str) -> str:
     return "/".join(parts)
 
 
+def validate_provider_commit_hash(commit_hash: str) -> str:
+    """Return one full provider commit hash without accepting symbolic revisions."""
+    if (
+        not isinstance(commit_hash, str)
+        or len(commit_hash) != 40
+        or any(character not in "0123456789abcdefABCDEF" for character in commit_hash)
+    ):
+        raise ValueError(BITBUCKET_URL_REJECTED_MESSAGE)
+    return commit_hash
+
+
+def repository_commit_ancestry_url(
+    *,
+    workspace: str,
+    repository_slug: str,
+    old_commit_hash: str,
+    new_commit_hash: str,
+) -> str:
+    """Build the exact proposed-commit history used for bounded reachability."""
+    validate_provider_commit_hash(old_commit_hash)
+    proposed = validate_provider_commit_hash(new_commit_hash)
+    base = repository_metadata_url(workspace=workspace, repository_slug=repository_slug)
+    return validate_bitbucket_api_url(
+        f"{base}/commits/{proposed}?{urlencode({'pagelen': 100})}",
+        operation=BitbucketOperation.COMMIT_ANCESTRY,
+    )
+
+
+def repository_diffstat_url(
+    *,
+    workspace: str,
+    repository_slug: str,
+    old_commit_hash: str,
+    new_commit_hash: str,
+) -> str:
+    """Build a two-commit diffstat from proposed state to the prior baseline."""
+    previous = validate_provider_commit_hash(old_commit_hash)
+    proposed = validate_provider_commit_hash(new_commit_hash)
+    base = repository_metadata_url(workspace=workspace, repository_slug=repository_slug)
+    query = urlencode({"pagelen": 100, "renames": "false", "topic": "false"})
+    return validate_bitbucket_api_url(
+        f"{base}/diffstat/{proposed}..{previous}?{query}",
+        operation=BitbucketOperation.COMMIT_DIFFSTAT,
+    )
+
+
 def repository_source_url(
     *,
     workspace: str,
@@ -211,12 +259,7 @@ def repository_source_url(
     paginated: bool = False,
 ) -> str:
     """Build one commit-bound source tree or raw-file endpoint."""
-    if (
-        not isinstance(commit_hash, str)
-        or len(commit_hash) != 40
-        or any(character not in "0123456789abcdefABCDEF" for character in commit_hash)
-    ):
-        raise ValueError(BITBUCKET_URL_REJECTED_MESSAGE)
+    validate_provider_commit_hash(commit_hash)
     base = repository_metadata_url(workspace=workspace, repository_slug=repository_slug)
     url = f"{base}/src/{commit_hash}/"
     if path is not None:

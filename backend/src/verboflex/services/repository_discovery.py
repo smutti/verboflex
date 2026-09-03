@@ -7,13 +7,15 @@ import binascii
 import json
 from collections import deque
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from verboflex.integrations.bitbucket.client import (
+    BitbucketAncestry,
     BitbucketBranch,
+    BitbucketCommitDelta,
     BitbucketProviderReadError,
     BitbucketSourcePage,
 )
@@ -40,6 +42,27 @@ class BranchDiscoveryAdapter(Protocol):
 
 
 class SourceDiscoveryAdapter(Protocol):
+    async def compare_repository_ancestry(
+        self,
+        session: Session,
+        *,
+        workspace: str,
+        repository_slug: str,
+        old_commit_hash: str,
+        new_commit_hash: str,
+    ) -> BitbucketAncestry: ...
+
+    async def list_repository_diffstat(
+        self,
+        session: Session,
+        *,
+        workspace: str,
+        repository_slug: str,
+        old_commit_hash: str,
+        new_commit_hash: str,
+        repository_side: Literal["direct", "keys", "translations"],
+    ) -> BitbucketCommitDelta: ...
+
     async def resolve_repository_branch(
         self,
         session: Session,
