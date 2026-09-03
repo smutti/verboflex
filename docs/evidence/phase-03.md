@@ -152,3 +152,28 @@ smoke. No live provider result is claimed. When deliberately configured, only cl
 readiness, OAuth/resource method counts, duration, result count, SHA-256 identities,
 zero resource mutations, and successful local revoke may be emitted; the owner-only
 runtime and credentials are removed on every exit.
+
+## Final independent review authority
+
+The final fresh typed `gsd-code-reviewer` independently reproduced source digest
+`e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c`
+and reconciled 331 manifest paths plus 21 diff-only paths, 352 unique paths in
+total. The review applied OWASP ASVS 5.0 Level 1 at the configured High blocking
+threshold and closed with zero unresolved Critical/High-equivalent findings.
+Eight nonblocking Warning findings remain explicit in the structured and
+canonical review artifacts. The review confirmed all three provenance and
+rewrite remediations, and the review-mode digest remained unchanged before and
+after artifact creation.
+
+| Measurement | Result |
+| --- | --- |
+| Reviewer | Fresh typed `gsd-code-reviewer` (`phase3_plan16_review_final2`) |
+| Structured status | `issues_found` because Warning findings remain; `closeout_blocked: false` |
+| OWASP standard | ASVS 5.0 Level 1 |
+| Reviewed paths | 352 unique: 331 manifest-selected plus 21 diff-only |
+| Critical/High-equivalent findings | 0 open |
+| Warning findings | 8 open and visible |
+| Canonical review | `Review-status: CLOSED`; `Open-critical-high: 0` |
+| Reviewed source digest | `e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c` |
+| Provider resource mutations | 0 |
+| Review source-state | Passed; digest unchanged |
