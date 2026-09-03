@@ -107,7 +107,7 @@ EXPECTED_OPERATIONS = {
     ),
     ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get"): (
         "list_admin_published_mapping_imports",
-        {"200", "401", "403", "404", "409", "422", "503"},
+        {"200", "401", "403", "404", "422"},
         True,
     ),
     (
@@ -120,6 +120,24 @@ EXPECTED_OPERATIONS = {
     ),
     ("/api/v1/admin/products/{product_id}/imports/{import_id}", "get"): (
         "get_admin_import",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+        "/imports/{import_id}/rewrite-comparison",
+        "get",
+    ): (
+        "get_admin_import_rewrite_comparison",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+        "/imports/{import_id}/rewrite-confirmation",
+        "post",
+    ): (
+        "confirm_admin_import_rewrite_baseline",
         {"200", "401", "403", "404", "409", "422", "503"},
         True,
     ),
@@ -360,21 +378,25 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
         ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get"): {
             "401",
             "403",
-            "404",
-            "409",
-            "503",
         },
         (
             "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
             "post",
-        ): {"401", "403", "404", "409", "503"},
+        ): {"401", "403"},
         ("/api/v1/admin/products/{product_id}/imports/{import_id}", "get"): {
             "401",
             "403",
-            "404",
-            "409",
-            "503",
         },
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+            "/imports/{import_id}/rewrite-comparison",
+            "get",
+        ): {"401", "403"},
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+            "/imports/{import_id}/rewrite-confirmation",
+            "post",
+        ): {"401", "403"},
         ("/api/v1/admin/preview-jobs/{job_id}", "get"): {
             "401",
             "403",
@@ -455,6 +477,37 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
                 "#/components/schemas/ErrorResponse"
             )
 
+    import_error_response_codes = {
+        ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get"): {
+            "404",
+            "422",
+        },
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+            "post",
+        ): {"404", "409", "503"},
+        ("/api/v1/admin/products/{product_id}/imports/{import_id}", "get"): {
+            "404",
+            "409",
+            "503",
+        },
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+            "/imports/{import_id}/rewrite-comparison",
+            "get",
+        ): {"404", "409", "503"},
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+            "/imports/{import_id}/rewrite-confirmation",
+            "post",
+        ): {"404", "409", "503"},
+    }
+    for key, status_codes in import_error_response_codes.items():
+        for status_code in status_codes:
+            assert _response_schema(operations[key], status_code) == (
+                "#/components/schemas/AdminImportOperationErrorResponse"
+            )
+
     assert schema["components"]["securitySchemes"] == {
         "OAuth2PasswordBearer": {
             "flows": {
@@ -494,6 +547,16 @@ def test_import_public_contract_is_closed_and_provider_source_history_free() -> 
             "post",
         ),
         ("/api/v1/admin/products/{product_id}/imports/{import_id}", "get"),
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+            "/imports/{import_id}/rewrite-comparison",
+            "get",
+        ),
+        (
+            "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+            "/imports/{import_id}/rewrite-confirmation",
+            "post",
+        ),
     }
     roots = set().union(*(_schema_references(operations[path]) for path in paths))
     components = schema["components"]["schemas"]
@@ -513,7 +576,12 @@ def test_import_public_contract_is_closed_and_provider_source_history_free() -> 
     }
     assert set(import_schemas) == {
         "AdminImportBaselineResponse",
+        "AdminImportOperationErrorResponse",
         "AdminImportRepositorySideResponse",
+        "AdminImportRewriteComparisonResponse",
+        "AdminImportRewriteConfirmationRequest",
+        "AdminImportRewriteDeltaResponse",
+        "AdminImportRewriteSideResponse",
         "AdminImportSourceReferenceResponse",
         "AdminPublishedMappingImportListResponse",
         "AdminPublishedMappingImportResponse",

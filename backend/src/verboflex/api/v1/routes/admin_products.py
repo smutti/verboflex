@@ -76,6 +76,7 @@ def _response(record: ProductRecord) -> AdminProductResponse:
         id=record.id,
         name=record.name,
         is_active=record.is_active,
+        affected_mapping_count=record.affected_mapping_count,
         active_revision=_revision_response(record.active_revision),
         candidate_revision=_revision_response(record.candidate_revision),
     )

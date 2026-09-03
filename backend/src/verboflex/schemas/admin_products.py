@@ -63,6 +63,7 @@ class AdminProductResponse(BaseModel):
     id: UUID
     name: str
     is_active: bool
+    affected_mapping_count: Annotated[int, Field(ge=0)]
     active_revision: AdminProductRevisionSummary | None
     candidate_revision: AdminProductRevisionSummary | None
 

@@ -298,6 +298,17 @@ def test_admin_create_and_detail_return_closed_active_and_candidate_summaries(
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/candidate/mappings",
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/candidate/mappings/{{mapping_id}}",
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/candidate/mappings/{{mapping_id}}/preview-jobs",
+        f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/published/mapping-imports",
+        f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/published/mappings/{{mapping_id}}/imports",
+        f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/imports/{{import_id}}",
+        (
+            f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/published/mappings/{{mapping_id}}"
+            "/imports/{import_id}/rewrite-comparison"
+        ),
+        (
+            f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/published/mappings/{{mapping_id}}"
+            "/imports/{import_id}/rewrite-confirmation"
+        ),
         f"{revision_mappings_path}/{{mapping_id}}/revalidation-preview-jobs",
         revision_mappings_path,
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/revisions/{{revision_id}}/reactivation-eligibility",

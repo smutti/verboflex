@@ -9,10 +9,11 @@ import unicodedata
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
-from sqlalchemy import Select, and_, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from verboflex.models.import_job import ImportJob
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
     ProductMappingAllowedTarget,
@@ -61,6 +62,7 @@ class ProductRecord:
     id: UUID
     name: str
     is_active: bool
+    affected_mapping_count: int
     active_revision: ProductRevisionRecord | None
     candidate_revision: ProductRevisionRecord | None
 
@@ -329,18 +331,46 @@ def _revision_record(revision: ProductRevision | None) -> ProductRevisionRecord 
     )
 
 
-def _product_record(product: Product) -> ProductRecord:
+def _product_record(
+    product: Product,
+    *,
+    affected_mapping_count: int,
+) -> ProductRecord:
     return ProductRecord(
         id=product.id,
         name=product.display_name,
         is_active=product.is_active,
+        affected_mapping_count=affected_mapping_count,
         active_revision=_revision_record(product.active_revision),
         candidate_revision=_revision_record(product.candidate_revision),
     )
 
 
-def _product_projection_statement() -> Select[tuple[Product]]:
-    return select(Product).options(
+def _product_projection_statement() -> Select[tuple[Product, int]]:
+    affected_mapping_count = (
+        select(func.count(ProductRepositoryMapping.id))
+        .select_from(ProductRepositoryMapping)
+        .join(
+            ImportJob,
+            and_(
+                ImportJob.mapping_id == ProductRepositoryMapping.id,
+                ImportJob.revision_id == ProductRepositoryMapping.revision_id,
+            ),
+        )
+        .where(
+            ProductRepositoryMapping.revision_id == Product.active_revision_id,
+            ImportJob.product_id == Product.id,
+            ImportJob.revision_id == Product.active_revision_id,
+            ImportJob.state == "import_failed",
+            ImportJob.active_baseline_execution_id.is_not(None),
+        )
+        .correlate(Product)
+        .scalar_subquery()
+    )
+    return select(
+        Product,
+        affected_mapping_count.label("affected_mapping_count"),
+    ).options(
         selectinload(Product.active_revision),
         selectinload(Product.candidate_revision),
     )
@@ -349,12 +379,15 @@ def _product_projection_statement() -> Select[tuple[Product]]:
 def get_product(session: Session, *, product_id: UUID) -> ProductRecord:
     """Return one product through the closed active/candidate projection."""
     with session.begin():
-        product = session.execute(
+        row = session.execute(
             _product_projection_statement().where(Product.id == product_id)
-        ).scalar_one_or_none()
-        if product is None:
+        ).one_or_none()
+        if row is None:
             raise ProductNotFound("product unavailable")
-        return _product_record(product)
+        return _product_record(
+            row[0],
+            affected_mapping_count=row[1],
+        )
 
 
 def _encode_cursor(position: _CursorPosition) -> str:
@@ -438,21 +471,26 @@ def list_products(
                     ),
                 )
             )
-        products = list(
-            session.execute(
-                statement.order_by(Product.name_key, Product.id).limit(limit + 1)
-            ).scalars()
+        rows = list(
+            session.execute(statement.order_by(Product.name_key, Product.id).limit(limit + 1))
         )
-        records = tuple(_product_record(product) for product in products[:limit])
+        page_rows = rows[:limit]
+        records = tuple(
+            _product_record(
+                row[0],
+                affected_mapping_count=row[1],
+            )
+            for row in page_rows
+        )
         next_cursor = (
             _encode_cursor(
                 _CursorPosition(
-                    name_key=products[limit - 1].name_key,
-                    product_id=products[limit - 1].id,
+                    name_key=page_rows[-1][0].name_key,
+                    product_id=page_rows[-1][0].id,
                     status=status,
                 )
             )
-            if len(products) > limit
+            if len(rows) > limit and page_rows
             else None
         )
     return ProductPage(items=records, next_cursor=next_cursor)
