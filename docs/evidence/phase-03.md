@@ -28,6 +28,26 @@ only bounded counts, durations, digests, commit identities, and pass/fail outcom
 | Frontend coverage SHA-256 | `cd5f677b9438f0ecc1dc1f659e73eff0f667cdb5222ac4334e06921f3fc6da58` |
 | Cleanup | Passed; no disposable Phase 3 container, network, volume, image, or worker remained |
 
+## Final pre-review reconfirmation
+
+The complete gauntlet was rerun from committed source on 2026-09-03 before the
+independent review. All 14 ordered layers passed in 384 seconds, the API pre-seal
+reconfirmed exactly 56 capabilities (17 integrated and 39 explicitly opted out),
+and the manifest remained unchanged at the canonical source digest recorded
+above. The supplemental live-mode implementation is included by the manifest's
+`tools/**` verifier-script rule; no live credentials or invocation were required
+for this mandatory closeout run.
+
+| Measurement | Result |
+| --- | --- |
+| Source commit | `616e3fcec361ae7dc3634193f21aafbf7510179d` |
+| Ordered layers | 14/14 passed in 384 seconds |
+| Backend JUnit SHA-256 | `f6564550eb9705470aaa17e61e46a82eefcc744d443dbd1fd013d83518f00ae3` |
+| Frontend coverage SHA-256 | `e51ce70ee556179e8a21b55ea96196b8916aa4bfb1aae359428aa1394fd3ec0f` |
+| API capability matrix | 56 total; 17 integrated and 39 explicitly opted out |
+| Provider resource mutations | 0 |
+| Final source-state | Passed; manifest digest unchanged |
+
 ## Prior deployment evidence
 
 This record contains only bounded, non-secret verification results. It does not
