@@ -508,3 +508,288 @@ def test_oauth_credential_lease_authority_fails_closed_for_unreadable_rows() -> 
     connection.generation = 7
     with pytest.raises(OAuthConnectionUnavailable, match="connection unavailable"):
         service.acquire_repository_read_lease(FakeSession(connection))  # type: ignore[arg-type]
+
+
+def test_equal_commit_ancestry_short_circuits_without_provider_read() -> None:
+    """Exact equality is authoritative and never spends provider or lease budget."""
+    from verboflex.integrations.bitbucket.client import BitbucketHttpAdapter
+
+    requests: list[httpx.Request] = []
+    authority = FakeCredentialLeaseAuthority()
+    adapter = BitbucketHttpAdapter(
+        settings=Settings(),
+        credential_leases=authority,
+        transport=httpx.MockTransport(
+            lambda request: requests.append(request) or httpx.Response(500, request=request)
+        ),
+    )
+    commit_hash = "a" * 40
+
+    async def exercise() -> None:
+        result = await adapter.compare_repository_ancestry(
+            object(),
+            workspace="acme",
+            repository_slug="mobile",
+            old_commit_hash=commit_hash,
+            new_commit_hash=commit_hash,
+        )
+        assert result.old_commit_hash == commit_hash
+        assert result.new_commit_hash == commit_hash
+        assert result.relation == "equal"
+        assert result.complete is True
+        assert requests == []
+        assert authority.acquired == 0
+        assert authority.validated == []
+        await adapter.aclose()
+
+    asyncio.run(exercise())
+
+
+def test_ancestry_and_diffstat_preserve_complete_provider_order() -> None:
+    """Reachability and rewrite rows use exact commits and safe provider pagination."""
+    from verboflex.integrations.bitbucket.client import BitbucketHttpAdapter
+
+    old_commit = "1" * 40
+    new_commit = "2" * 40
+    middle_commit = "3" * 40
+    ancestry_next = (
+        f"https://api.bitbucket.org/2.0/repositories/acme/mobile/commits/{new_commit}"
+        "?pagelen=100&page=2"
+    )
+    diffstat_next = (
+        f"https://api.bitbucket.org/2.0/repositories/acme/mobile/diffstat/"
+        f"{new_commit}..{old_commit}?pagelen=100&page=2"
+    )
+    requests: list[httpx.Request] = []
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if "/commits/" in request.url.path:
+            payload = (
+                {"values": [{"hash": new_commit}, {"hash": middle_commit}], "next": ancestry_next}
+                if request.url.params.get("page") is None
+                else {"values": [{"hash": old_commit}]}
+            )
+        elif request.url.params.get("page") is None:
+            payload = {
+                "values": [
+                    {
+                        "status": "added",
+                        "old": None,
+                        "new": {"path": "locales/en.json", "type": "commit_file"},
+                    },
+                    {
+                        "status": "modified",
+                        "old": {"path": "README.md", "type": "commit_file"},
+                        "new": {"path": "README.md", "type": "commit_file"},
+                    },
+                    {
+                        "status": "modified",
+                        "old": {"path": "qt/app.ts", "type": "commit_file"},
+                        "new": {"path": "qt/app.ts", "type": "commit_file"},
+                    },
+                ],
+                "next": diffstat_next,
+            }
+        else:
+            payload = {
+                "values": [
+                    {
+                        "status": "removed",
+                        "old": {"path": "ios/Localizable.strings", "type": "commit_file"},
+                        "new": None,
+                    },
+                    {
+                        "status": "modified",
+                        "old": {"path": "android/strings.xml", "type": "commit_file"},
+                        "new": {"path": "android/strings.xml", "type": "commit_file"},
+                    },
+                ]
+            }
+        return httpx.Response(
+            200,
+            json=payload,
+            headers={"x-oauth-scopes": "pullrequest:write"},
+            request=request,
+        )
+
+    authority = FakeCredentialLeaseAuthority()
+    adapter = BitbucketHttpAdapter(
+        settings=Settings(),
+        credential_leases=authority,
+        transport=httpx.MockTransport(provider),
+    )
+
+    async def exercise() -> None:
+        ancestry = await adapter.compare_repository_ancestry(
+            object(),
+            workspace="acme",
+            repository_slug="mobile",
+            old_commit_hash=old_commit,
+            new_commit_hash=new_commit,
+        )
+        assert ancestry.relation == "descendant"
+        assert ancestry.complete is True
+
+        delta = await adapter.list_repository_diffstat(
+            object(),
+            workspace="acme",
+            repository_slug="mobile",
+            old_commit_hash=old_commit,
+            new_commit_hash=new_commit,
+            repository_side="direct",
+        )
+        assert delta.old_commit_hash == old_commit
+        assert delta.new_commit_hash == new_commit
+        assert delta.complete is True
+        assert [
+            (row.repository_side, row.ordinal, row.change, row.path) for row in delta.files
+        ] == [
+            ("direct", 0, "added", "locales/en.json"),
+            ("direct", 1, "modified", "qt/app.ts"),
+            ("direct", 2, "removed", "ios/Localizable.strings"),
+            ("direct", 3, "modified", "android/strings.xml"),
+        ]
+        assert set(vars(delta)) == {"complete", "files", "new_commit_hash", "old_commit_hash"}
+        assert all(set(vars(row)) == {"change", "ordinal", "path", "repository_side"} for row in delta.files)
+        assert all(request.method == "GET" for request in requests)
+        assert all(request.url.host == "api.bitbucket.org" for request in requests)
+        assert [request.url.path for request in requests] == [
+            f"/2.0/repositories/acme/mobile/commits/{new_commit}",
+            f"/2.0/repositories/acme/mobile/commits/{new_commit}",
+            f"/2.0/repositories/acme/mobile/diffstat/{new_commit}..{old_commit}",
+            f"/2.0/repositories/acme/mobile/diffstat/{new_commit}..{old_commit}",
+        ]
+        assert authority.acquired == 4
+        assert authority.validated == [authority.generation] * 8
+        await adapter.aclose()
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        "malformed_commit",
+        "repeated_ancestry_cursor",
+        "cross_repository_ancestry",
+        "ancestry_page_budget",
+        "malformed_diffstat",
+        "repeated_diffstat_cursor",
+        "cross_spec_diffstat",
+        "diffstat_row_budget",
+        "diffstat_path_budget",
+        "diffstat_byte_budget",
+        "generation_drift",
+    ],
+)
+def test_ancestry_and_diffstat_incomplete_or_ambiguous_results_fail_closed(
+    scenario: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No malformed, stale, cross-resource, repeated, or truncated result is complete."""
+    import verboflex.integrations.bitbucket.client as client_module
+    from verboflex.integrations.bitbucket.client import (
+        BitbucketHttpAdapter,
+        BitbucketProviderReadError,
+    )
+
+    old_commit = "4" * 40
+    new_commit = "5" * 40
+    requests: list[httpx.Request] = []
+    authority = FakeCredentialLeaseAuthority()
+    repeated_ancestry = (
+        f"https://api.bitbucket.org/2.0/repositories/acme/mobile/commits/{new_commit}"
+        "?pagelen=100&page=2"
+    )
+    repeated_diffstat = (
+        f"https://api.bitbucket.org/2.0/repositories/acme/mobile/diffstat/"
+        f"{new_commit}..{old_commit}?pagelen=100&page=2"
+    )
+    if scenario == "ancestry_page_budget":
+        monkeypatch.setattr(client_module, "MAX_ANCESTRY_PAGES", 1)
+    if scenario == "diffstat_row_budget":
+        monkeypatch.setattr(client_module, "MAX_DIFFSTAT_ROWS", 0)
+    if scenario == "diffstat_path_budget":
+        monkeypatch.setattr(client_module, "MAX_DIFFSTAT_PATH_LENGTH", 3)
+    if scenario == "diffstat_byte_budget":
+        monkeypatch.setattr(client_module, "MAX_DIFFSTAT_PATH_BYTES", 3)
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if scenario == "generation_drift":
+            authority.generation += 1
+        if "/commits/" in request.url.path:
+            value_hash = "not-a-commit" if scenario == "malformed_commit" else new_commit
+            payload: dict[str, object] = {"values": [{"hash": value_hash}]}
+            if scenario in {"repeated_ancestry_cursor", "ancestry_page_budget"}:
+                payload["next"] = repeated_ancestry
+            elif scenario == "cross_repository_ancestry":
+                payload["next"] = (
+                    f"https://api.bitbucket.org/2.0/repositories/acme/other/commits/{new_commit}"
+                    "?pagelen=100&page=2"
+                )
+        else:
+            old_path = "locale.json"
+            new_path = "other.json" if scenario == "malformed_diffstat" else old_path
+            payload = {
+                "values": [
+                    {
+                        "status": "modified",
+                        "old": {"path": old_path, "type": "commit_file"},
+                        "new": {"path": new_path, "type": "commit_file"},
+                    }
+                ]
+            }
+            if scenario == "repeated_diffstat_cursor":
+                payload["next"] = repeated_diffstat
+            elif scenario == "cross_spec_diffstat":
+                payload["next"] = (
+                    "https://api.bitbucket.org/2.0/repositories/acme/mobile/diffstat/"
+                    f"{'6' * 40}..{old_commit}?pagelen=100&page=2"
+                )
+        return httpx.Response(
+            200,
+            json=payload,
+            headers={"x-oauth-scopes": "pullrequest:write"},
+            request=request,
+        )
+
+    adapter = BitbucketHttpAdapter(
+        settings=Settings(),
+        credential_leases=authority,
+        transport=httpx.MockTransport(provider),
+    )
+
+    async def exercise() -> None:
+        with pytest.raises(BitbucketProviderReadError) as captured:
+            if scenario.startswith("ancestry") or scenario in {
+                "malformed_commit",
+                "repeated_ancestry_cursor",
+                "cross_repository_ancestry",
+                "generation_drift",
+            }:
+                await adapter.compare_repository_ancestry(
+                    object(),
+                    workspace="acme",
+                    repository_slug="mobile",
+                    old_commit_hash=old_commit,
+                    new_commit_hash=new_commit,
+                )
+            else:
+                await adapter.list_repository_diffstat(
+                    object(),
+                    workspace="acme",
+                    repository_slug="mobile",
+                    old_commit_hash=old_commit,
+                    new_commit_hash=new_commit,
+                    repository_side="keys",
+                )
+        assert captured.value.kind in {"invalid_source", "limit_exceeded", "reauthorization_required"}
+        assert str(captured.value) == "Bitbucket provider read failed"
+        assert "locale.json" not in f"{captured.value!r} {captured.value}"
+        assert all(request.method == "GET" for request in requests)
+        assert len(requests) <= 2
+        await adapter.aclose()
+
+    asyncio.run(exercise())

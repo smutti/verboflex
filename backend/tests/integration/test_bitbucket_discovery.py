@@ -853,3 +853,13 @@ def test_repository_relative_path_normalization_is_idempotent(parts: list[str]) 
         with pytest.raises(BitbucketProviderReadError) as captured:
             normalize_repository_relative_path(hostile)
         assert captured.value.kind == "invalid_source"
+
+
+def test_diffstat_contract_is_available_on_the_source_discovery_boundary() -> None:
+    """Import discovery exposes exact ancestry and diffstat reads without generic transport."""
+    from verboflex.services.repository_discovery import SourceDiscoveryAdapter
+
+    assert set(SourceDiscoveryAdapter.__dict__) >= {
+        "compare_repository_ancestry",
+        "list_repository_diffstat",
+    }
