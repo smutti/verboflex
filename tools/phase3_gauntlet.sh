@@ -311,6 +311,21 @@ data = json.load(open(sys.argv[1], encoding="utf-8"))
 mutants = [item for file in data.get("files", {}).values() for item in file.get("mutants", [])]
 if not mutants:
     raise SystemExit("Stryker executed zero mutants")
+expected_locations = {
+    "src/features/admin/imports/PublishedMappingImports.tsx": {76, 77, 78, 79, 80, 480},
+    "src/features/admin/imports/RewrittenBaselineDialog.tsx": {367},
+    "src/features/admin/imports/useImportPolling.ts": {34, 35, 37, 38},
+}
+actual_locations = {
+    path: {item["location"]["start"]["line"] for item in file.get("mutants", [])}
+    for path, file in data.get("files", {}).items()
+    if file.get("mutants")
+}
+if actual_locations != expected_locations:
+    raise SystemExit(
+        f"Stryker target ownership drifted: expected {expected_locations!r}, "
+        f"got {actual_locations!r}"
+    )
 bad = [item for item in mutants if item.get("status") != "Killed"]
 if bad:
     raise SystemExit(
@@ -331,7 +346,7 @@ targeted_mutation_proof() {
   (
     cd "$FRONTEND_ROOT"
     npm run test:mutation -- \
-      --mutate 'src/features/admin/imports/useImportPolling.ts:33-40,src/features/admin/imports/PublishedMappingImports.tsx:151-156,src/features/admin/imports/PublishedMappingImports.tsx:487-495,src/features/admin/imports/RewrittenBaselineDialog.tsx:351-378' \
+      --mutate 'src/features/admin/imports/useImportPolling.ts:33-40,src/features/admin/imports/PublishedMappingImports.tsx:76-80,src/features/admin/imports/PublishedMappingImports.tsx:480-480,src/features/admin/imports/RewrittenBaselineDialog.tsx:367-367' \
       --reporters clear-text,json \
       --tempDirName '/tmp/verboflex-phase03-stryker-tmp' \
       --cleanTempDir always
