@@ -1,6 +1,7 @@
 """Fail-closed architecture checks for the HTTP/worker process boundary."""
 
 import ast
+from collections.abc import Mapping
 from pathlib import Path
 
 from verboflex.worker.celery_app import app
@@ -19,26 +20,41 @@ def _api_trees() -> list[tuple[Path, ast.Module]]:
     return trees
 
 
-def test_fastapi_modules_never_import_or_call_worker_task_bodies() -> None:
-    """Keep enqueue/worker mechanics entirely outside HTTP route modules."""
+def _assert_no_worker_boundary_violations(
+    sources: Mapping[str, str | ast.Module],
+) -> None:
+    """Reject imports, task dispatch, and task bodies from HTTP-owned modules."""
     violations: list[str] = []
-    for path, tree in _api_trees():
+    forbidden_bodies = {
+        "run_import_job",
+        "reconcile_stale_import_jobs",
+        "reconcile_stale_imports",
+    }
+    for label, source in sources.items():
+        tree = ast.parse(source, filename=label) if isinstance(source, str) else source
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name.startswith("verboflex.worker"):
-                        violations.append(f"{path}:{node.lineno}: imports {alias.name}")
+                        violations.append(f"{label}:{node.lineno}: imports {alias.name}")
             elif isinstance(node, ast.ImportFrom):
                 if (node.module or "").startswith("verboflex.worker"):
-                    violations.append(f"{path}:{node.lineno}: imports {node.module}")
+                    violations.append(f"{label}:{node.lineno}: imports {node.module}")
             elif (
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Attribute)
                 and node.func.attr in {"delay", "apply_async", "run"}
             ):
-                violations.append(f"{path}:{node.lineno}: calls .{node.func.attr}()")
+                violations.append(f"{label}:{node.lineno}: calls .{node.func.attr}()")
+            elif isinstance(node, ast.Name) and node.id in forbidden_bodies:
+                violations.append(f"{label}:{node.lineno}: reaches {node.id}")
 
     assert violations == []
+
+
+def test_fastapi_modules_never_import_or_call_worker_task_bodies() -> None:
+    """Keep enqueue/worker mechanics entirely outside HTTP route modules."""
+    _assert_no_worker_boundary_violations({str(path): tree for path, tree in _api_trees()})
 
 
 def test_production_celery_configuration_cannot_execute_tasks_eagerly() -> None:
@@ -66,11 +82,4 @@ def test_import_background_boundary_registers_run_and_watchdog_without_route_dis
     assert app.conf.beat_schedule["import-stale-execution-watchdog"]["task"] == (
         "verboflex.import.reconcile_stale_jobs"
     )
-    for path, tree in _api_trees():
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Name):
-                assert node.id not in {
-                    "run_import_job",
-                    "reconcile_stale_import_jobs",
-                    "reconcile_stale_imports",
-                }, f"{path}:{node.lineno}: route reaches an import worker body"
+    _assert_no_worker_boundary_violations({str(path): tree for path, tree in _api_trees()})

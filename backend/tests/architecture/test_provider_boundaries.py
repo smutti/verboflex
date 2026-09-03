@@ -119,6 +119,54 @@ def _client_tree() -> ast.Module:
     return ast.parse(CLIENT_PATH.read_text(), filename=str(CLIENT_PATH))
 
 
+def _assert_phase3_provider_tree(source: str | ast.Module) -> None:
+    """Reject any provider surface beyond the audited GET-only adapter."""
+    tree = ast.parse(source) if isinstance(source, str) else source
+    adapters = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "BitbucketHttpAdapter"
+    ]
+    assert len(adapters) == 1, "expected exactly one BitbucketHttpAdapter"
+    adapter = adapters[0]
+
+    public_methods = {
+        node.name
+        for node in adapter.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and not node.name.startswith("_")
+    }
+    assert public_methods == ALLOWED_ADAPTER_METHODS
+
+    request_calls = [
+        node
+        for node in ast.walk(adapter)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in {"request", "stream"}
+    ]
+    assert request_calls, "provider adapter contains no auditable HTTP request"
+    for call in request_calls:
+        assert call.args and isinstance(call.args[0], ast.Constant), "dynamic provider method"
+        assert call.args[0].value == "GET", "provider resource method is not GET"
+
+    direct_mutations = [
+        node.func.attr
+        for node in ast.walk(adapter)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr.casefold() in {"post", "put", "patch", "delete"}
+    ]
+    assert direct_mutations == []
+    assert not {
+        node.value
+        for node in ast.walk(adapter)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and node.value in MUTATING_HTTP_METHODS
+    }
+
+
 def test_phase_three_coverage_accounts_for_all_56_capabilities_exactly_once() -> None:
     """The reviewed capability ledger remains the exact provider authority manifest."""
     rows = _coverage_decisions()
@@ -239,39 +287,7 @@ def test_operation_and_url_are_rejected_before_credential_acquisition() -> None:
 
 def test_http_adapter_exports_only_current_read_capabilities_and_get_transport() -> None:
     """No public adapter method or dynamic verb can grow a provider mutation surface."""
-    tree = _client_tree()
-    adapter = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.ClassDef) and node.name == "BitbucketHttpAdapter"
-    )
-    public_methods = {
-        node.name
-        for node in adapter.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and not node.name.startswith("_")
-    }
-    assert public_methods == ALLOWED_ADAPTER_METHODS
-
-    stream_calls = [
-        node
-        for node in ast.walk(adapter)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "stream"
-    ]
-    assert stream_calls
-    assert all(
-        call.args and isinstance(call.args[0], ast.Constant) and call.args[0].value == "GET"
-        for call in stream_calls
-    )
-    assert not {
-        node.value
-        for node in ast.walk(adapter)
-        if isinstance(node, ast.Constant)
-        and isinstance(node.value, str)
-        and node.value in MUTATING_HTTP_METHODS
-    }
+    _assert_phase3_provider_tree(_client_tree())
 
 
 def test_http_adapter_pool_disables_redirects_proxies_and_retries() -> None:
