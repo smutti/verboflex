@@ -1,18 +1,18 @@
 ---
 phase: 03-bitbucket-import-integration
-verified: 2026-09-03T17:49:22Z
+verified: 2026-09-03T18:22:13Z
 status: passed
 source_digest: e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c
 score: 60/60 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
-verification_mode: initial
-verifier_identity: phase3_plan16_verifier
+verification_mode: final_refresh
+verifier_identity: phase3_final_verifier
 verifier_role: gsd-verifier
-review_identity: phase3_plan16_review_final2
+review_identity: phase3_plan16_review_final2-plus-standard-addendum
 review_open_critical: 0
 review_open_high: 0
-review_open_warnings: 8
+review_open_warnings: 10
 api_capability_rows: 56
 api_capabilities_integrated: 17
 api_capabilities_opted_out: 39
@@ -25,10 +25,10 @@ human_verification_count: 0
 
 **Phase Goal:** Turn the Phase 2 read-only Bitbucket boundary into an import-grade integration with capability validation, durable source references, resilient reads, and actionable operational errors.
 
-**Verified:** 2026-09-03T17:49:22Z
-**Result:** PASS — fresh independent verification
-**Re-verification:** No; no earlier Phase 3 verification report existed.
-**Fresh typed verifier:** `phase3_plan16_verifier` (`gsd-verifier`)
+**Verified:** 2026-09-03T18:22:13Z
+**Result:** PASS — final independent refresh against the current source digest
+**Re-verification:** Final refresh of the earlier passed report; no prior gap required closure and no regression was found.
+**Fresh typed verifier:** `phase3_final_verifier` (`gsd-verifier`)
 
 The starting hypothesis was that task completion had not proved goal achievement. The current code, migrations, generated contracts, behavioral tests, exact-digest review, and deployment evidence falsify that hypothesis. No SUMMARY claim was accepted without tracing it to implementation and executable evidence.
 
@@ -38,11 +38,11 @@ The starting hypothesis was that task completion had not proved goal achievement
 |---|---|---|
 | Review-mode digest | `VERBOFLEX_SOURCE_MANIFEST=tools/phase3_source_manifest.txt VERBOFLEX_REVIEW_PATH=docs/reviews/phase-03-code-security.md tools/source_state.sh --review-digest` → `e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c` | VERIFIED |
 | Review/source binding | `tools/source_state.sh --verify-review-source` accepted the same digest | VERIFIED |
-| Typed security review | `phase3_plan16_review_final2`, ASVS 5.0 L1, 0 Critical and 0 High | VERIFIED |
-| Review scope | 331 manifest-selected paths + 21 additional Phase 3 diff paths = 352 unique paths | VERIFIED |
+| Typed security review | `03-REVIEW.md` final state, ASVS 5.0 L1, 0 Critical, 0 High, 10 Warning, `closeout_blocked=false` | VERIFIED |
+| Review scope | 331 manifest-selected paths + 21 additional Phase 3 diff paths = 352 unique paths; final standard addendum inspected 65 changed runtime/support files | VERIFIED |
 | Drift after focused checks | Digest recomputed unchanged | VERIFIED |
 
-The exact source digest matches the accepted review digest. The eight remaining review findings are Warning severity and are preserved verbatim below; none contradicts a must-have or meets the configured blocking threshold.
+The exact source digest matches the accepted review digest. The ten remaining review findings are Warning severity and are preserved below; none defeats a roadmap success criterion or meets the configured High blocking threshold. The canonical prose review and evidence file still enumerate the original eight warnings, while the structured final `03-REVIEW.md` adds WR-09 and WR-10. Because review artifacts are outside the source manifest, this is not source drift; this report uses the latest structured total of ten and does not hide the addendum findings.
 
 ## Goal Achievement
 
@@ -221,12 +221,10 @@ The focused component run executed 32 matching assertions. The two browser-only 
 
 | Behavior set | Read-only verifier execution/result | Verdict |
 |---|---|---|
-| Scope, edge/prohibition, API equality, provider/background and D-15 contracts | 12 selected backend tests → 12 passed in 0.91s | PASS |
-| Provenance, five API operations, cursor, migration guards, retry/watchdog, rewrite atomicity/remediations | 20 selected backend tests → 20 passed in 8.36s | PASS |
-| Provider one-attempt behavior, equality/ancestry/diffstat, exact OAuth closure/profile/generation | 27 selected backend tests → 27 passed in 0.85s | PASS |
+| Scope, provider/background boundaries and D-15 diagnostics | `test_phase3_scope.py`, `test_provider_boundaries.py`, `test_background_boundaries.py`, `test_bitbucket_diagnostics.py` → 33 passed in 1.95s | PASS |
+| Provenance, concurrency, retry/watchdog, rewrite classification and atomic confirmation | Nine named import/migration tests → 16 parameterized cases passed in 7.81s | PASS |
+| Provider one-attempt behavior and exact OAuth closure/profile/generation | Four named OAuth/HTTP-adapter tests → 11 parameterized cases passed in 0.71s | PASS |
 | UI3-C executable component/hook assertions | Six owner files filtered by `UI3-C` → 32 passed; 83 non-matching tests skipped by the filter, no disabled Phase 3 case | PASS |
-| Backend static/types/format | Ruff check; mypy over 86 files; Ruff format check over 143 files | PASS |
-| Frontend static/types/format | TypeScript typecheck; ESLint with zero warnings; Prettier check | PASS |
 | API preseal | `check api-coverage.verify-pre` → `block=false`, `passed=true`, `56/17/39` | PASS |
 
 A supplementary attempt against the pre-existing `localhost:8080` container was rejected as evidence because that runtime was not source-digest-bound and did not contain the current Phase 3 UI. The verifier did not start or mutate services. The authoritative browser result is the canonical exact-digest run that started its own current-source frontend and passed 2/2.
@@ -269,6 +267,7 @@ No `probe-*.sh` is declared by the Phase 3 plans. `tools/phase3_gauntlet.sh` is 
 | Empty/static implementations | Candidate `return null`/empty values are bounded helpers, initial state, validators, or presentational bridge behavior with real fetch/state flow; no user-visible stub found. | None |
 | Mock-only confidence | Critical provider, persistence, concurrency, migration, UI, and browser paths all have behavioral tests; mock smoke additionally audits methods and write count. | None |
 | Test self-fulfillment | Architecture guards include semantic/mutation controls; production authorization, ordering, and state transitions are enforced outside fixtures. | None |
+| Fixture generation | No requirement test writes its own expected result. The E2E `writeFileSync` calls change mock-provider heads/faults; assertions independently observe API/provider-audit state. | None |
 
 ## Open Review Warnings
 
@@ -282,6 +281,8 @@ No `probe-*.sh` is declared by the Phase 3 plans. `tools/phase3_gauntlet.sh` is 
 | WR-06 | Retained Phase 2 Compose verifier targets the removed OAuth callback contract. | Not the canonical Phase 3 smoke runner and does not affect current application behavior. |
 | WR-07 | `.env.example` omits Bitbucket and Phase 3 timing/watchdog variables. | Deployment smoke supplies validated settings; documentation completeness warning remains visible. |
 | WR-08 | Container inputs use mutable tags rather than content digests. | Reproducibility hardening warning; exact source/review digest and current smoke are still proven. |
+| WR-09 | After rewrite confirmation succeeds, a collection-refresh failure reports a generic baseline-update error and suggests importing again. | The server-side confirmation has already committed atomically and remains correct; this is recovery-copy/state-refresh hardening after success, not a failed import-grade source transition. It should be fixed before treating that recovery path as polished UX. |
+| WR-10 | A mobile import mutation failure can focus the hidden desktop alert because only the desktop row error registers the focus ref. | The error remains rendered, sanitized, row-local, and actionable on mobile; the defect is focus/accessibility hardening and does not disconnect or corrupt the import operation. |
 
 ## Final Scoring
 
@@ -307,5 +308,5 @@ No gap, missing artifact, broken key link, behavior-unverified truth, unresolved
 
 ---
 
-_Verified: 2026-09-03T17:49:22Z_
-_Verifier: `phase3_plan16_verifier` (fresh typed `gsd-verifier`)_
+_Verified: 2026-09-03T18:22:13Z_
+_Verifier: `phase3_final_verifier` (fresh typed `gsd-verifier`)_
