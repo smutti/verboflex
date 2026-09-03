@@ -266,7 +266,7 @@ Plans:
   4. Admin receives actionable, sanitized connection, permission, rate-limit, missing-source, and import errors with safe retry guidance.
   5. Phase quality gate passes with integration tests, code review, and backend/worker/deploy smoke verification.
 
-**Plans**: 13/16 plans executed
+**Plans**: 14/16 plans executed
 
 Plans:
 **Wave 1**
@@ -317,7 +317,7 @@ Plans:
 
 **Wave 12** *(blocked on Wave 11 completion)*
 
-- [ ] 03-14-PLAN.md — Deployment mock smoke and pre-digest supplemental live-read implementation
+- [x] 03-14-PLAN.md — Deployment mock smoke and pre-digest supplemental live-read implementation
 
 **Wave 13** *(blocked on Wave 12 completion)*
 
@@ -492,7 +492,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 |-------|----------------|--------|-----------|
 | 1. Platform Foundation | 15/15 | Complete    | 2026-08-26 |
 | 2. Admin Configuration | 46/46 | Complete    | 2026-09-01 |
-| 3. Bitbucket Import Integration | 13/16 | In Progress|  |
+| 3. Bitbucket Import Integration | 14/16 | In Progress|  |
 | 4. Localization Parser Foundation | 0/7 | Not started | - |
 | 5. Import, Search, and Constraints | 0/6 | Not started | - |
 | 6. Review Workspace and Comments | 0/6 | Not started | - |
