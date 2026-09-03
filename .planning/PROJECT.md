@@ -19,6 +19,9 @@ Product teams can quickly find, review, constrain, modify, comment on, and appro
 - [x] Admin can configure project-specific pull request behavior for translation updates. — Phase 2
 - [x] Platform supports internal corporate-email/password accounts and a role model with users able to hold multiple roles. — Phases 1–2
 - [x] Initial roles include admin, product manager/reviewer, translator, and viewer. — Phases 1–2
+- [x] Bitbucket imports validate the exact read/import capability set while reporting later write and pull-request readiness without silently expanding authority. — Phase 3
+- [x] Every import attempt persists immutable commit-bound source references and isolates branch-history reconciliation to the affected mapping. — Phase 3
+- [x] Admins receive sanitized, actionable import failures and can explicitly reconcile rewritten branch history without replacing the last successful baseline prematurely. — Phase 3
 
 ### Active
 
@@ -97,6 +100,10 @@ The initial review model is intentionally simple. Translations have draft, appro
 | Keep repository identity global and mappings revision-specific | Repositories are reusable global identities, while branches, layouts, translation targets, and PR grouping belong to the product revision; each mapping represents exactly one layout. | Accepted 2026-09-01 |
 | Bind previews to immutable repository commits | Preview resolves a branch once, then parses bounded content from that immutable commit with fail-closed format handling. | Accepted 2026-09-01 |
 | Let the router own dirty-form navigation transactions | Product and mapping navigation cannot discard unsaved changes until the authoritative route transition commits. | Accepted 2026-09-01 |
+| Keep Phase 3 provider resources read-only while validating the future PR capability profile | Import readiness needs the expanded organizational credential, but source writes and pull-request mutations remain deferred to Phase 8 and structurally unavailable in Phase 3. | Accepted 2026-09-03 |
+| Bind imports to immutable execution and source identities | One stable logical import UUID owns generation-fenced executions; source references are persisted while the owning execution is locked and running so late insertion or reparenting cannot change provenance. | Accepted 2026-09-03 |
+| Reconcile rewritten history per mapping through explicit confirmation | Fast-forward baselines can advance automatically, while divergent or rebased histories produce a complete proposal and preserve the active baseline until an admin confirms the current proposal identity. | Accepted 2026-09-03 |
+| Keep separate mappings atomic across both repository sides | Keys and Translations are compared in a fixed order and activate together only after both sides validate, including mixed descendant/diverged movement. | Accepted 2026-09-03 |
 
 ## Evolution
 
@@ -116,4 +123,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-01 after Phase 2*
+*Last updated: 2026-09-03 after Phase 3*
