@@ -9,7 +9,7 @@ import os
 import time
 from collections.abc import Generator, Iterator
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Barrier, Lock
@@ -23,7 +23,7 @@ from alembic.config import Config
 from celery import Celery
 from psycopg import connect, sql
 from pydantic import SecretStr, ValidationError
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
@@ -44,7 +44,12 @@ from verboflex.integrations.bitbucket.urls import BitbucketOperation
 from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.bitbucket_connection import BitbucketConnection
-from verboflex.models.import_job import ImportExecution, ImportJob
+from verboflex.models.import_job import (
+    ImportExecution,
+    ImportJob,
+    ImportRewriteDelta,
+    ImportRewriteProposal,
+)
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
     ProductMappingAllowedTarget,
@@ -2220,3 +2225,318 @@ def test_classify_rejects_noncanonical_mapping_side_shape_before_provider_reads(
         )
 
     assert adapter.requests == []
+
+
+def _complete_initial_direct_baseline(
+    factory: sessionmaker[Session],
+    *,
+    product_id: UUID,
+    mapping_id: UUID,
+    repository_id: UUID,
+    commit_hash: str,
+) -> tuple[UUID, UUID]:
+    record = import_job_service.start_or_refresh_import(
+        factory(),
+        product_id=product_id,
+        mapping_id=mapping_id,
+        enqueuer=lambda _import_id: None,
+    )
+    assert record.id is not None
+    identity = import_job_service.start_import_execution(factory, import_id=record.id)
+    assert identity is not None
+    assert import_job_service.finish_import_execution(
+        factory,
+        identity=identity,
+        references=(
+            _successful_reference_at(repository_id, commit_hash=commit_hash),
+        ),
+    )
+    return record.id, identity.execution_id
+
+
+def _rewrite_classification(
+    *,
+    sides: tuple[import_job_service.SourceMovementSideComparison, ...],
+    files: tuple[BitbucketFileDelta, ...] = (),
+    complete: bool = True,
+) -> import_job_service.SourceMovementClassification:
+    return import_job_service.SourceMovementClassification(
+        movement="review-required",
+        sides=sides,
+        rewrite_candidate=import_job_service.SourceRewriteCandidate(
+            sides=sides,
+            files=files,
+            complete=complete,
+        ),
+    )
+
+
+def test_rewrite_proposal_persists_complete_zero_delta_without_moving_baseline(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    product_id, revision_id, repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    old_commit = "1" * 40
+    new_commit = "2" * 40
+    import_id, baseline_execution_id = _complete_initial_direct_baseline(
+        import_session_factory,
+        product_id=product_id,
+        mapping_id=mapping_id,
+        repository_id=repository_id,
+        commit_hash=old_commit,
+    )
+    refresh = import_job_service.start_or_refresh_import(
+        import_session_factory(),
+        product_id=product_id,
+        mapping_id=mapping_id,
+        enqueuer=lambda _import_id: None,
+    )
+    assert refresh.id == import_id
+    identity = import_job_service.start_import_execution(
+        import_session_factory,
+        import_id=import_id,
+    )
+    assert identity is not None
+    sides = (
+        import_job_service.SourceMovementSideComparison(
+            repository_side="direct",
+            repository_id=repository_id,
+            active_commit_hash=old_commit,
+            proposed_commit_hash=new_commit,
+            relation="diverged",
+        ),
+    )
+
+    assert import_job_service.finish_import_execution(
+        import_session_factory,
+        identity=identity,
+        references=(
+            _successful_reference_at(repository_id, commit_hash=new_commit),
+        ),
+        movement=_rewrite_classification(sides=sides),
+    )
+
+    with import_session_factory() as session:
+        job = session.get_one(ImportJob, import_id)
+        proposals = tuple(
+            session.scalars(
+                select(ImportRewriteProposal).where(
+                    ImportRewriteProposal.import_job_id == import_id
+                )
+            )
+        )
+        assert job.active_baseline_execution_id == baseline_execution_id
+        assert job.current_execution_id == identity.execution_id
+        assert len(proposals) == 1
+        proposal = proposals[0]
+        assert proposal.product_id == product_id
+        assert proposal.revision_id == revision_id
+        assert proposal.revision_version == 7
+        assert proposal.mapping_id == mapping_id
+        assert proposal.topology == "direct"
+        assert proposal.connection_generation == identity.connection_generation
+        assert proposal.proposed_execution_id == identity.execution_id
+        assert proposal.old_baseline_execution_id == baseline_execution_id
+        assert proposal.direct_repository_id == repository_id
+        assert proposal.direct_old_commit_hash == old_commit
+        assert proposal.direct_new_commit_hash == new_commit
+        assert proposal.keys_repository_id is None
+        assert proposal.translations_repository_id is None
+        assert proposal.complete is True
+        assert proposal.status == "pending"
+        assert len(proposal.digest) == 64
+        assert session.scalar(
+            select(func.count()).select_from(ImportRewriteDelta).where(
+                ImportRewriteDelta.proposal_id == proposal.id
+            )
+        ) == 0
+
+
+def test_rewrite_proposal_rejects_incomplete_evidence_and_retains_old_baseline(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    product_id, _revision_id, repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    old_commit = "3" * 40
+    new_commit = "4" * 40
+    import_id, baseline_execution_id = _complete_initial_direct_baseline(
+        import_session_factory,
+        product_id=product_id,
+        mapping_id=mapping_id,
+        repository_id=repository_id,
+        commit_hash=old_commit,
+    )
+    import_job_service.start_or_refresh_import(
+        import_session_factory(),
+        product_id=product_id,
+        mapping_id=mapping_id,
+        enqueuer=lambda _import_id: None,
+    )
+    identity = import_job_service.start_import_execution(
+        import_session_factory,
+        import_id=import_id,
+    )
+    assert identity is not None
+    sides = (
+        import_job_service.SourceMovementSideComparison(
+            repository_side="direct",
+            repository_id=repository_id,
+            active_commit_hash=old_commit,
+            proposed_commit_hash=new_commit,
+            relation="diverged",
+        ),
+    )
+
+    assert import_job_service.finish_import_execution(
+        import_session_factory,
+        identity=identity,
+        references=(
+            _successful_reference_at(repository_id, commit_hash=new_commit),
+        ),
+        movement=_rewrite_classification(sides=sides, complete=False),
+    )
+
+    with import_session_factory() as session:
+        job = session.get_one(ImportJob, import_id)
+        assert job.state == "import_failed"
+        assert job.active_baseline_execution_id == baseline_execution_id
+        assert session.scalar(
+            select(func.count()).select_from(ImportRewriteProposal).where(
+                ImportRewriteProposal.import_job_id == import_id,
+                ImportRewriteProposal.status == "pending",
+            )
+        ) == 0
+
+
+def test_rewrite_proposal_persists_complete_ordered_separate_delta_atomically(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    (
+        product_id,
+        revision_id,
+        keys_repository_id,
+        translations_repository_id,
+        mapping_id,
+    ) = _seed_published_separate_mapping(import_session_factory)
+    initial = import_job_service.start_or_refresh_import(
+        import_session_factory(),
+        product_id=product_id,
+        mapping_id=mapping_id,
+        enqueuer=lambda _import_id: None,
+    )
+    assert initial.id is not None
+    first = import_job_service.start_import_execution(
+        import_session_factory,
+        import_id=initial.id,
+    )
+    assert first is not None
+    keys_old, keys_new = "5" * 40, "6" * 40
+    translations_old, translations_new = "7" * 40, "8" * 40
+    baseline_references = (
+        ImportSourceReferenceRecord(
+            position=0,
+            repository_side="keys",
+            repository_id=keys_repository_id,
+            source_branch="main",
+            commit_hash=keys_old,
+            path="locales/keys.json",
+            size_bytes=1,
+            sha256="a" * 64,
+        ),
+        ImportSourceReferenceRecord(
+            position=1,
+            repository_side="translations",
+            repository_id=translations_repository_id,
+            source_branch="main",
+            commit_hash=translations_old,
+            path="locales/translations.json",
+            size_bytes=1,
+            sha256="b" * 64,
+        ),
+    )
+    assert import_job_service.finish_import_execution(
+        import_session_factory,
+        identity=first,
+        references=baseline_references,
+    )
+    import_job_service.start_or_refresh_import(
+        import_session_factory(),
+        product_id=product_id,
+        mapping_id=mapping_id,
+        enqueuer=lambda _import_id: None,
+    )
+    second = import_job_service.start_import_execution(
+        import_session_factory,
+        import_id=initial.id,
+    )
+    assert second is not None
+    proposed_references = (
+        replace(baseline_references[0], commit_hash=keys_new),
+        replace(baseline_references[1], commit_hash=translations_new),
+    )
+    sides = (
+        import_job_service.SourceMovementSideComparison(
+            repository_side="keys",
+            repository_id=keys_repository_id,
+            active_commit_hash=keys_old,
+            proposed_commit_hash=keys_new,
+            relation="diverged",
+        ),
+        import_job_service.SourceMovementSideComparison(
+            repository_side="translations",
+            repository_id=translations_repository_id,
+            active_commit_hash=translations_old,
+            proposed_commit_hash=translations_new,
+            relation="diverged",
+        ),
+    )
+    files = (
+        BitbucketFileDelta(
+            repository_side="keys",
+            ordinal=0,
+            change="modified",
+            path="locales/keys.json",
+        ),
+        BitbucketFileDelta(
+            repository_side="translations",
+            ordinal=0,
+            change="removed",
+            path="locales/translations.json",
+        ),
+    )
+
+    assert import_job_service.finish_import_execution(
+        import_session_factory,
+        identity=second,
+        references=proposed_references,
+        movement=_rewrite_classification(sides=sides, files=files),
+    )
+
+    with import_session_factory() as session:
+        proposal = session.scalar(
+            select(ImportRewriteProposal).where(
+                ImportRewriteProposal.import_job_id == initial.id,
+                ImportRewriteProposal.status == "pending",
+            )
+        )
+        assert proposal is not None
+        assert proposal.product_id == product_id
+        assert proposal.revision_id == revision_id
+        assert proposal.keys_repository_id == keys_repository_id
+        assert proposal.translations_repository_id == translations_repository_id
+        deltas = tuple(
+            session.scalars(
+                select(ImportRewriteDelta)
+                .where(ImportRewriteDelta.proposal_id == proposal.id)
+                .order_by(ImportRewriteDelta.position)
+            )
+        )
+        assert [
+            (delta.position, delta.repository_side, delta.change, delta.path)
+            for delta in deltas
+        ] == [
+            (0, "keys", "modified", "locales/keys.json"),
+            (1, "translations", "removed", "locales/translations.json"),
+        ]

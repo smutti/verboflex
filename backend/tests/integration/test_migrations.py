@@ -30,6 +30,8 @@ EXPECTED_TABLES = {
     "bitbucket_connections",
     "import_executions",
     "import_jobs",
+    "import_rewrite_deltas",
+    "import_rewrite_proposals",
     "import_source_references",
     "preview_jobs",
     "product_mapping_allowed_targets",
@@ -538,6 +540,131 @@ def test_import_schema_is_reversible_and_database_authoritative(
         "import_executions",
         "import_source_references",
     } <= set(inspect(engine).get_table_names())
+
+
+def test_rewrite_migration_is_reversible_complete_and_ownership_safe(
+    migrated_database: tuple[Config, Engine],
+) -> None:
+    config, engine = migrated_database
+    command.upgrade(config, "0012_import_jobs")
+    identities = _seed_import_schema_graph(engine)
+    import_id, baseline_execution_id = _insert_import_execution(
+        engine,
+        identities,
+        state="succeeded",
+    )
+    proposed_execution_id = uuid4()
+    proposal_id = uuid4()
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE import_jobs SET state = 'current', "
+                "active_baseline_execution_id = :baseline WHERE id = :import_id"
+            ),
+            {"baseline": baseline_execution_id, "import_id": import_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO import_executions "
+                "(id, import_job_id, sequence, state, connection_generation, "
+                "started_at, finished_at) VALUES "
+                "(:id, :import_id, 2, 'succeeded', 1, CURRENT_TIMESTAMP, "
+                "CURRENT_TIMESTAMP)"
+            ),
+            {"id": proposed_execution_id, "import_id": import_id},
+        )
+        connection.execute(
+            text(
+                "UPDATE import_jobs SET current_execution_id = :execution_id "
+                "WHERE id = :import_id"
+            ),
+            {"execution_id": proposed_execution_id, "import_id": import_id},
+        )
+
+    command.upgrade(config, "0013_import_rewrite_proposals")
+    inspector = inspect(engine)
+    assert {"import_rewrite_proposals", "import_rewrite_deltas"} <= set(
+        inspector.get_table_names()
+    )
+    assert {
+        "pk_import_rewrite_proposals",
+        "fk_import_rewrite_proposals_owned_mapping",
+        "fk_import_rewrite_proposals_old_baseline",
+        "fk_import_rewrite_proposals_proposed_execution",
+        "ck_import_rewrite_proposals_complete_authority",
+        "ck_import_rewrite_proposals_topology_commits",
+    } <= _constraint_names(engine, "import_rewrite_proposals")
+    assert {
+        "pk_import_rewrite_deltas",
+        "ck_import_rewrite_deltas_position_non_negative",
+        "ck_import_rewrite_deltas_change_value",
+    } <= _constraint_names(engine, "import_rewrite_deltas")
+
+    insert_proposal = text(
+        "INSERT INTO import_rewrite_proposals "
+        "(id, import_job_id, product_id, revision_id, revision_version, mapping_id, "
+        "topology, connection_generation, proposed_execution_id, "
+        "old_baseline_execution_id, direct_repository_id, direct_old_commit_hash, "
+        "direct_new_commit_hash, complete, digest, status) VALUES "
+        "(:id, :import_id, :product, :revision, 7, :mapping, 'direct', 1, "
+        ":proposed_execution_id, :baseline_execution_id, :repository, :old_commit, "
+        ":new_commit, true, :digest, 'pending')"
+    )
+    with engine.begin() as connection:
+        connection.execute(
+            insert_proposal,
+            {
+                **identities,
+                "id": proposal_id,
+                "import_id": import_id,
+                "proposed_execution_id": proposed_execution_id,
+                "baseline_execution_id": baseline_execution_id,
+                "old_commit": "1" * 40,
+                "new_commit": "2" * 40,
+                "digest": "a" * 64,
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO import_rewrite_deltas "
+                "(proposal_id, position, repository_side, change, path) VALUES "
+                "(:proposal_id, 0, 'direct', 'modified', 'values/strings.xml')"
+            ),
+            {"proposal_id": proposal_id},
+        )
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO import_rewrite_proposals "
+                "(id, import_job_id, product_id, revision_id, revision_version, mapping_id, "
+                "topology, connection_generation, proposed_execution_id, "
+                "old_baseline_execution_id, direct_repository_id, direct_old_commit_hash, "
+                "direct_new_commit_hash, complete, digest, status) VALUES "
+                "(:id, :import_id, :product, :revision, 7, :mapping, 'direct', 1, "
+                ":proposed_execution_id, :baseline_execution_id, :repository, :old_commit, "
+                ":new_commit, false, :digest, 'superseded')"
+            ),
+            {
+                **identities,
+                "id": uuid4(),
+                "import_id": import_id,
+                "proposed_execution_id": proposed_execution_id,
+                "baseline_execution_id": baseline_execution_id,
+                "old_commit": "1" * 40,
+                "new_commit": "2" * 40,
+                "digest": "b" * 64,
+            },
+        )
+
+    command.downgrade(config, "0012_import_jobs")
+    assert {"import_rewrite_proposals", "import_rewrite_deltas"}.isdisjoint(
+        inspect(engine).get_table_names()
+    )
+    command.upgrade(config, "head")
+    assert {"import_rewrite_proposals", "import_rewrite_deltas"} <= set(
+        inspect(engine).get_table_names()
+    )
 
 
 def test_immutable_source_reference_and_terminal_execution_provenance(
