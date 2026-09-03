@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 import time
@@ -11,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal, NoReturn, Protocol, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 from sqlalchemy.sql import Select
 
@@ -51,22 +53,38 @@ from verboflex.services.repository_discovery import (
 
 IMPORT_TASK_NAME = "verboflex.import.run"
 IMPORT_WATCHDOG_BATCH_SIZE = 100
-IMPORT_FAILURE_CATEGORY = "provider_unavailable"
-IMPORT_FAILURE_WITHOUT_BASELINE = (
-    "This import did not complete. Review the reason, then retry from the mapping. "
-    "No import baseline was created."
-)
-IMPORT_FAILURE_WITH_BASELINE = (
-    "This import did not complete. Review the reason, then retry from the mapping. "
-    "The last successful baseline is unchanged."
-)
+DEFAULT_IMPORT_PAGE_SIZE = 50
+MAX_IMPORT_PAGE_SIZE = 100
+MAX_IMPORT_CURSOR_LENGTH = 2048
+_IMPORT_CURSOR_VERSION = 1
+_IMPORT_ORDER_IDENTITY = "mapping_identity_v1"
 
 ImportState = Literal[
     "not_imported",
     "queued",
     "running",
     "current",
+    "may_be_stale",
+    "review_required",
     "import_failed",
+]
+ImportCapability = Literal["ready", "reauthorization_required", "unavailable"]
+ImportAction = Literal[
+    "run_import",
+    "refresh_import",
+    "retry_import",
+    "import_in_progress",
+    "review_baseline_change",
+]
+ImportStatusFilter = Literal["all", "attention"]
+ImportErrorCategory = Literal[
+    "connection_required",
+    "permission_denied",
+    "rate_limited",
+    "source_not_found",
+    "timeout",
+    "provider_unavailable",
+    "bounded_failure",
 ]
 RepositoryRole = Literal["direct", "keys", "translations"]
 SourceMovementRelation = Literal["equal", "descendant", "diverged"]
@@ -80,6 +98,18 @@ class ImportNotFound(LookupError):
 
 class ImportConflict(ValueError):
     """Raised when persisted import state disagrees with current authority."""
+
+
+class ImportAlreadyInProgress(ImportConflict):
+    """Raised when one current execution is already queued or running."""
+
+
+class ImportReviewRequired(ImportConflict):
+    """Raised when a complete rewrite proposal awaits administrator review."""
+
+
+class InvalidImportCursor(ValueError):
+    """Raised when a cursor is malformed or belongs to another collection."""
 
 
 class ImportConnectionUnavailable(RuntimeError):
@@ -132,10 +162,31 @@ class ImportJobRecord:
     repository_sides: tuple[ImportRepositorySideRecord, ...]
     state: ImportState
     active_baseline: ImportBaselineRecord | None
+    execution_number: int | None
     latest_execution_at: datetime | None
     retry_count: int
-    error_category: Literal["provider_unavailable"] | None
+    capability: ImportCapability
+    error_category: ImportErrorCategory | None
     error_message: str | None
+    action: ImportAction
+
+
+@dataclass(frozen=True, slots=True)
+class ImportJobPage:
+    """One bounded page tied to an immutable active revision and filter."""
+
+    items: tuple[ImportJobRecord, ...]
+    next_cursor: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ImportCursor:
+    product_id: UUID
+    revision_id: UUID
+    status_filter: ImportStatusFilter
+    order: Literal["mapping_identity_v1"]
+    identity_key: str
+    mapping_id: UUID
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,6 +291,134 @@ class SourceMovementClassification:
 
 ImportProcessor = Callable[[ImportExecutionIdentity], tuple[ImportSourceReferenceRecord, ...]]
 ImportClock = Callable[[], datetime]
+
+
+_PUBLIC_FAILURE_MESSAGES: dict[ImportErrorCategory, str] = {
+    "connection_required": (
+        "The organizational Bitbucket connection is not ready for imports. "
+        "An administrator must reconnect it before retrying this mapping."
+    ),
+    "permission_denied": (
+        "Bitbucket denied access to this repository or branch. Review the organizational "
+        "connection and repository permissions, then retry from this mapping."
+    ),
+    "rate_limited": (
+        "Bitbucket is temporarily limiting requests. Wait a few minutes, then retry this "
+        "import from the mapping."
+    ),
+    "source_not_found": (
+        "The configured repository, branch, or localization file could not be found. "
+        "Review the mapping configuration before retrying."
+    ),
+    "timeout": (
+        "Bitbucket did not respond within the safe time limit. {baseline_sentence} Retry later."
+    ),
+    "provider_unavailable": (
+        "Bitbucket could not complete this import. {baseline_sentence} Retry later."
+    ),
+    "bounded_failure": (
+        "The source could not be read within the safe import limits. {baseline_sentence} "
+        "Review the mapping before retrying."
+    ),
+}
+
+_PROVIDER_FAILURE_CATEGORIES: dict[str, ImportErrorCategory] = {
+    "disconnected": "connection_required",
+    "reauthorization_required": "connection_required",
+    "permission_denied": "permission_denied",
+    "rate_limited": "rate_limited",
+    "not_found": "source_not_found",
+    "timeout": "timeout",
+    "unavailable": "provider_unavailable",
+    "invalid_source": "bounded_failure",
+    "limit_exceeded": "bounded_failure",
+}
+
+
+def _public_failure_message(
+    category: ImportErrorCategory,
+    *,
+    has_baseline: bool,
+) -> str:
+    baseline_sentence = (
+        "The last successful baseline is unchanged."
+        if has_baseline
+        else "No import baseline was created."
+    )
+    return _PUBLIC_FAILURE_MESSAGES[category].format(
+        baseline_sentence=baseline_sentence,
+    )
+
+
+def _provider_failure_category(kind: str) -> ImportErrorCategory:
+    return _PROVIDER_FAILURE_CATEGORIES.get(kind, "provider_unavailable")
+
+
+def _encode_import_cursor(position: _ImportCursor) -> str:
+    payload = json.dumps(
+        {
+            "f": position.status_filter,
+            "i": str(position.mapping_id),
+            "k": position.identity_key,
+            "o": position.order,
+            "p": str(position.product_id),
+            "r": str(position.revision_id),
+            "v": _IMPORT_CURSOR_VERSION,
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+
+
+def _decode_import_cursor(
+    cursor: str,
+    *,
+    product_id: UUID,
+    revision_id: UUID,
+    status_filter: ImportStatusFilter,
+) -> _ImportCursor:
+    if not isinstance(cursor, str) or not cursor or len(cursor) > MAX_IMPORT_CURSOR_LENGTH:
+        raise InvalidImportCursor("invalid import cursor")
+    try:
+        padding = "=" * (-len(cursor) % 4)
+        raw = base64.b64decode(cursor + padding, altchars=b"-_", validate=True)
+        payload = json.loads(raw.decode("utf-8"))
+        if not isinstance(payload, dict) or set(payload) != {"f", "i", "k", "o", "p", "r", "v"}:
+            raise ValueError
+        position = _ImportCursor(
+            product_id=UUID(payload["p"]),
+            revision_id=UUID(payload["r"]),
+            status_filter=cast(ImportStatusFilter, payload["f"]),
+            order=cast(Literal["mapping_identity_v1"], payload["o"]),
+            identity_key=payload["k"],
+            mapping_id=UUID(payload["i"]),
+        )
+        if (
+            payload["v"] != _IMPORT_CURSOR_VERSION
+            or position.product_id != product_id
+            or position.revision_id != revision_id
+            or position.status_filter != status_filter
+            or position.status_filter not in {"all", "attention"}
+            or position.order != _IMPORT_ORDER_IDENTITY
+            or not isinstance(position.identity_key, str)
+            or not position.identity_key
+            or len(position.identity_key) > 1024
+            or position.mapping_id.int == 0
+            or _encode_import_cursor(position) != cursor
+        ):
+            raise ValueError
+    except (
+        AttributeError,
+        ValueError,
+        TypeError,
+        UnicodeDecodeError,
+        binascii.Error,
+        json.JSONDecodeError,
+    ) as error:
+        raise InvalidImportCursor("invalid import cursor") from error
+    return position
 
 
 def _reject_source_movement(*, operation: BitbucketOperation) -> NoReturn:
@@ -506,11 +685,48 @@ def _source_references(
     )
 
 
+def _current_import_capability(session: Session) -> ImportCapability:
+    connection = session.get(BitbucketConnection, 1)
+    if connection is None or connection.revoked_at is not None:
+        return "unavailable"
+    if (
+        connection.access_token_ciphertext is not None
+        and connection.refresh_token_ciphertext is None
+        and connection.scope_profile == PULLREQUEST_WRITE_SCOPE
+        and connection.provider_expires_at is not None
+        and connection.provider_expires_at > datetime.now(UTC)
+    ):
+        return "ready"
+    if connection.access_token_ciphertext is not None:
+        return "reauthorization_required"
+    return "unavailable"
+
+
+def _pending_rewrite_mapping_ids(
+    session: Session,
+    *,
+    import_ids: tuple[UUID, ...],
+) -> frozenset[UUID]:
+    if not import_ids:
+        return frozenset()
+    return frozenset(
+        session.scalars(
+            select(ImportRewriteProposal.mapping_id).where(
+                ImportRewriteProposal.import_job_id.in_(import_ids),
+                ImportRewriteProposal.status == "pending",
+                ImportRewriteProposal.complete.is_(True),
+            )
+        )
+    )
+
+
 def _record(
     session: Session,
     *,
     mapping: ProductRepositoryMapping,
     job: ImportJob | None,
+    capability: ImportCapability,
+    review_required: bool = False,
 ) -> ImportJobRecord:
     sides = _mapping_sides(mapping)
     if job is None:
@@ -522,10 +738,13 @@ def _record(
             repository_sides=sides,
             state="not_imported",
             active_baseline=None,
+            execution_number=None,
             latest_execution_at=None,
             retry_count=0,
+            capability=capability,
             error_category=None,
             error_message=None,
+            action="run_import",
         )
     if job.state not in {"queued", "running", "current", "import_failed"}:
         raise ImportConflict("persisted import state rejected")
@@ -549,21 +768,59 @@ def _record(
                 execution_id=baseline_execution.id,
             ),
         )
+    current_execution = session.execute(
+        select(ImportExecution).where(
+            ImportExecution.id == job.current_execution_id,
+            ImportExecution.import_job_id == job.id,
+        )
+    ).scalar_one_or_none()
+    if current_execution is None:
+        raise ImportConflict("persisted import execution rejected")
+    public_state: ImportState
+    action: ImportAction
+    if review_required:
+        public_state = "review_required"
+        action = "review_baseline_change"
+    elif job.state == "import_failed" and baseline is not None:
+        public_state = "may_be_stale"
+        action = "retry_import"
+    elif job.state == "import_failed":
+        public_state = "import_failed"
+        action = "retry_import"
+    elif job.state in {"queued", "running"}:
+        public_state = cast(ImportState, job.state)
+        action = "import_in_progress"
+    else:
+        public_state = "current"
+        action = "refresh_import"
+    if job.error_category is not None and job.error_category not in {
+        "connection_required",
+        "permission_denied",
+        "rate_limited",
+        "source_not_found",
+        "timeout",
+        "provider_unavailable",
+        "bounded_failure",
+    }:
+        raise ImportConflict("persisted import error rejected")
     return ImportJobRecord(
         id=job.id,
         mapping_id=job.mapping_id,
         active_revision_id=job.revision_id,
         topology=cast(Literal["direct", "separate"], job.topology),
         repository_sides=sides,
-        state=cast(ImportState, job.state),
+        state=public_state,
         active_baseline=baseline,
+        execution_number=current_execution.sequence,
         latest_execution_at=job.latest_execution_at,
         retry_count=job.retry_count,
+        capability=capability,
         error_category=cast(
-            Literal["provider_unavailable"] | None,
+            ImportErrorCategory | None,
             job.error_category,
         ),
         error_message=job.error_message,
+        action=action,
     )
 
 
@@ -571,24 +828,105 @@ def list_published_mapping_imports(
     session: Session,
     *,
     product_id: UUID,
-) -> tuple[ImportJobRecord, ...]:
-    """List direct mappings from the exact active published revision in server order."""
+    limit: int = DEFAULT_IMPORT_PAGE_SIZE,
+    cursor: str | None = None,
+    status_filter: ImportStatusFilter = "all",
+) -> ImportJobPage:
+    """List a bounded active-revision page in canonical mapping identity order."""
+    if not 1 <= limit <= MAX_IMPORT_PAGE_SIZE or status_filter not in {"all", "attention"}:
+        raise ValueError("invalid import collection input")
     with session.begin():
         product = session.get(Product, product_id)
         if product is None or not product.is_active or product.active_revision_id is None:
             raise ImportNotFound("published imports unavailable")
-        mappings = tuple(
-            session.execute(_published_mapping_statement(product_id=product_id)).scalars()
+        revision_id = product.active_revision_id
+        position = (
+            _decode_import_cursor(
+                cursor,
+                product_id=product_id,
+                revision_id=revision_id,
+                status_filter=status_filter,
+            )
+            if cursor is not None
+            else None
         )
+        statement = _published_mapping_statement(product_id=product_id).order_by(None)
+        if status_filter == "attention":
+            pending_proposal = exists(
+                select(ImportRewriteProposal.id)
+                .join(ImportJob, ImportJob.id == ImportRewriteProposal.import_job_id)
+                .where(
+                    ImportJob.mapping_id == ProductRepositoryMapping.id,
+                    ImportRewriteProposal.status == "pending",
+                    ImportRewriteProposal.complete.is_(True),
+                )
+            )
+            failed_import = exists(
+                select(ImportJob.id).where(
+                    ImportJob.mapping_id == ProductRepositoryMapping.id,
+                    ImportJob.revision_id == revision_id,
+                    ImportJob.state == "import_failed",
+                )
+            )
+            statement = statement.where(or_(pending_proposal, failed_import))
+        if position is not None:
+            statement = statement.where(
+                or_(
+                    ProductRepositoryMapping.identity_key > position.identity_key,
+                    and_(
+                        ProductRepositoryMapping.identity_key == position.identity_key,
+                        ProductRepositoryMapping.id > position.mapping_id,
+                    ),
+                )
+            )
+        mappings = tuple(
+            session.execute(
+                statement.order_by(
+                    ProductRepositoryMapping.identity_key,
+                    ProductRepositoryMapping.id,
+                ).limit(limit + 1)
+            ).scalars()
+        )
+        page_mappings = mappings[:limit]
         jobs = {
             job.mapping_id: job
             for job in session.execute(
-                select(ImportJob).where(ImportJob.revision_id == product.active_revision_id)
+                select(ImportJob).where(
+                    ImportJob.revision_id == revision_id,
+                    ImportJob.mapping_id.in_(tuple(mapping.id for mapping in page_mappings)),
+                )
             ).scalars()
         }
-        return tuple(
-            _record(session, mapping=mapping, job=jobs.get(mapping.id)) for mapping in mappings
+        pending_mapping_ids = _pending_rewrite_mapping_ids(
+            session,
+            import_ids=tuple(job.id for job in jobs.values()),
         )
+        capability = _current_import_capability(session)
+        items = tuple(
+            _record(
+                session,
+                mapping=mapping,
+                job=jobs.get(mapping.id),
+                capability=capability,
+                review_required=mapping.id in pending_mapping_ids,
+            )
+            for mapping in page_mappings
+        )
+        next_cursor = (
+            _encode_import_cursor(
+                _ImportCursor(
+                    product_id=product_id,
+                    revision_id=revision_id,
+                    status_filter=status_filter,
+                    order="mapping_identity_v1",
+                    identity_key=page_mappings[-1].identity_key,
+                    mapping_id=page_mappings[-1].id,
+                )
+            )
+            if len(mappings) > limit and page_mappings
+            else None
+        )
+        return ImportJobPage(items=items, next_cursor=next_cursor)
 
 
 def enqueue_import_job(import_id: UUID) -> None:
@@ -625,6 +963,17 @@ def start_or_refresh_import(
         job = session.execute(
             select(ImportJob).where(ImportJob.mapping_id == mapping.id).with_for_update()
         ).scalar_one_or_none()
+        if job is not None:
+            pending_proposal = session.scalar(
+                select(ImportRewriteProposal.id).where(
+                    ImportRewriteProposal.import_job_id == job.id,
+                    ImportRewriteProposal.mapping_id == mapping.id,
+                    ImportRewriteProposal.status == "pending",
+                    ImportRewriteProposal.complete.is_(True),
+                )
+            )
+            if pending_proposal is not None:
+                raise ImportReviewRequired("published import requires review")
         if job is None:
             now = datetime.now(UTC)
             job_id = uuid4()
@@ -689,9 +1038,16 @@ def start_or_refresh_import(
             job.updated_at = now
             session.flush()
             should_enqueue = True
-        elif job.state not in {"queued", "running"}:
+        elif job.state in {"queued", "running"}:
+            raise ImportAlreadyInProgress("published import already in progress")
+        else:
             raise ImportConflict("persisted import state rejected")
-        record = _record(session, mapping=mapping, job=job)
+        record = _record(
+            session,
+            mapping=mapping,
+            job=job,
+            capability="ready",
+        )
 
     if not should_enqueue:
         return record
@@ -717,11 +1073,10 @@ def start_or_refresh_import(
                 execution.started_at = now
                 execution.finished_at = now
                 job.state = "import_failed"
-                job.error_category = IMPORT_FAILURE_CATEGORY
-                job.error_message = (
-                    IMPORT_FAILURE_WITH_BASELINE
-                    if job.active_baseline_execution_id is not None
-                    else IMPORT_FAILURE_WITHOUT_BASELINE
+                job.error_category = "provider_unavailable"
+                job.error_message = _public_failure_message(
+                    "provider_unavailable",
+                    has_baseline=job.active_baseline_execution_id is not None,
                 )
                 job.updated_at = now
             mapping = session.execute(
@@ -729,7 +1084,12 @@ def start_or_refresh_import(
                 .options(selectinload(ProductRepositoryMapping.sides))
                 .where(ProductRepositoryMapping.id == job.mapping_id)
             ).scalar_one()
-            record = _record(session, mapping=mapping, job=job)
+            record = _record(
+                session,
+                mapping=mapping,
+                job=job,
+                capability=_current_import_capability(session),
+            )
     return record
 
 
@@ -765,7 +1125,24 @@ def get_import_job(
         ).scalar_one_or_none()
         if mapping is None:
             raise ImportNotFound("import unavailable")
-        return _record(session, mapping=mapping, job=job)
+        review_required = (
+            session.scalar(
+                select(ImportRewriteProposal.id).where(
+                    ImportRewriteProposal.import_job_id == job.id,
+                    ImportRewriteProposal.mapping_id == mapping.id,
+                    ImportRewriteProposal.status == "pending",
+                    ImportRewriteProposal.complete.is_(True),
+                )
+            )
+            is not None
+        )
+        return _record(
+            session,
+            mapping=mapping,
+            job=job,
+            capability=_current_import_capability(session),
+            review_required=review_required,
+        )
 
 
 def start_import_execution(
@@ -865,11 +1242,16 @@ def start_import_execution(
                 execution.started_at = now
                 execution.finished_at = now
             job.state = "import_failed"
-            job.error_category = IMPORT_FAILURE_CATEGORY
-            job.error_message = (
-                IMPORT_FAILURE_WITH_BASELINE
-                if job.active_baseline_execution_id is not None
-                else IMPORT_FAILURE_WITHOUT_BASELINE
+            failure_category: ImportErrorCategory = (
+                "connection_required"
+                if execution is not None
+                and connection_generation != execution.connection_generation
+                else "bounded_failure"
+            )
+            job.error_category = failure_category
+            job.error_message = _public_failure_message(
+                failure_category,
+                has_baseline=job.active_baseline_execution_id is not None,
             )
             job.updated_at = now
             return None
@@ -1180,6 +1562,7 @@ def finish_import_execution(
     identity: ImportExecutionIdentity,
     references: tuple[ImportSourceReferenceRecord, ...] | None,
     movement: SourceMovementClassification | None = None,
+    failure_category: ImportErrorCategory = "bounded_failure",
 ) -> bool:
     """Conditionally terminalize only the exact current execution and authority."""
     with factory.begin() as session:
@@ -1286,11 +1669,16 @@ def finish_import_execution(
         if validated_references is None or not authority_is_current:
             execution.state = "failed"
             job.state = "import_failed"
-            job.error_category = IMPORT_FAILURE_CATEGORY
-            job.error_message = (
-                IMPORT_FAILURE_WITH_BASELINE
-                if job.active_baseline_execution_id is not None
-                else IMPORT_FAILURE_WITHOUT_BASELINE
+            resolved_failure_category = (
+                "connection_required"
+                if not authority_is_current
+                and connection_generation != identity.connection_generation
+                else failure_category
+            )
+            job.error_category = resolved_failure_category
+            job.error_message = _public_failure_message(
+                resolved_failure_category,
+                has_baseline=job.active_baseline_execution_id is not None,
             )
         else:
             baseline_matches = (
@@ -1691,7 +2079,12 @@ def confirm_rewrite_baseline(
         proposal.resolved_at = confirmed_at
         proposal.confirmed_by = actor_id
         session.flush()
-        return _record(session, mapping=mapping, job=job)
+        return _record(
+            session,
+            mapping=mapping,
+            job=job,
+            capability=_current_import_capability(session),
+        )
 
 
 def require_current_import_baseline(
@@ -1794,11 +2187,10 @@ def reconcile_stale_imports(
             execution.state = "failed"
             execution.finished_at = finished_at
             job.state = "import_failed"
-            job.error_category = IMPORT_FAILURE_CATEGORY
-            job.error_message = (
-                IMPORT_FAILURE_WITH_BASELINE
-                if job.active_baseline_execution_id is not None
-                else IMPORT_FAILURE_WITHOUT_BASELINE
+            job.error_category = "timeout"
+            job.error_message = _public_failure_message(
+                "timeout",
+                has_baseline=job.active_baseline_execution_id is not None,
             )
             job.updated_at = finished_at
             reconciled += 1
@@ -1819,7 +2211,12 @@ def execute_import_job(
     try:
         references = _validated_references(identity, processor(identity))
     except BitbucketProviderReadError as error:
-        terminalized = finish_import_execution(factory, identity=identity, references=None)
+        terminalized = finish_import_execution(
+            factory,
+            identity=identity,
+            references=None,
+            failure_category=_provider_failure_category(error.kind),
+        )
         if terminalized:
             log_bitbucket_operation_failure(
                 context=BitbucketDiagnosticContext(
@@ -1832,7 +2229,12 @@ def execute_import_job(
                 elapsed_ms=(time.monotonic() - started_at) * 1000,
             )
     except Exception:
-        finish_import_execution(factory, identity=identity, references=None)
+        finish_import_execution(
+            factory,
+            identity=identity,
+            references=None,
+            failure_category="bounded_failure",
+        )
     else:
         finish_import_execution(factory, identity=identity, references=references)
 

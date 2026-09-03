@@ -185,6 +185,8 @@ def _create_admin(factory: sessionmaker[Session]) -> str:
 
 def _seed_published_direct_mapping(
     factory: sessionmaker[Session],
+    *,
+    additional_source_branches: tuple[str, ...] = (),
 ) -> tuple[UUID, UUID, UUID, UUID]:
     product_id = uuid4()
     revision_id = uuid4()
@@ -235,6 +237,39 @@ def _seed_published_direct_mapping(
                 allowed_targets=[ProductMappingAllowedTarget(branch="main", is_default=True)],
             )
         )
+        for source_branch in additional_source_branches:
+            additional_repository_id = uuid4()
+            session.add(
+                Repository(
+                    id=additional_repository_id,
+                    workspace="import-team",
+                    repository_slug=f"page-{additional_repository_id.hex}",
+                    descriptive_name=f"Page source {additional_repository_id}",
+                    descriptive_name_key=f"page source {additional_repository_id}",
+                )
+            )
+            session.flush()
+            session.add(
+                ProductRepositoryMapping(
+                    id=uuid4(),
+                    revision_id=revision_id,
+                    topology="direct",
+                    identity_key=(f'["direct","{additional_repository_id}","{source_branch}"]'),
+                    sides=[
+                        ProductMappingRepositorySide(
+                            role="direct",
+                            repository_id=additional_repository_id,
+                            source_branch=source_branch,
+                        )
+                    ],
+                    allowed_targets=[
+                        ProductMappingAllowedTarget(
+                            branch=source_branch,
+                            is_default=True,
+                        )
+                    ],
+                )
+            )
         session.flush()
         revision = session.get(ProductRevision, revision_id)
         assert revision is not None
@@ -1517,10 +1552,13 @@ def test_separate_import_activates_keys_then_translations_as_one_ordered_baselin
             ],
             "state": "not_imported",
             "active_baseline": None,
+            "execution_number": None,
             "latest_execution_at": None,
             "retry_count": 0,
+            "capability": "ready",
             "error_category": None,
             "error_message": None,
+            "action": "run_import",
         }
     ]
 
@@ -3055,46 +3093,6 @@ def test_rewrite_comparison_is_admin_only_and_mapping_owned(
     assert wrong_product.status_code == 404
 
 
-def _add_published_direct_mapping(
-    factory: sessionmaker[Session],
-    *,
-    revision_id: UUID,
-    source_branch: str,
-) -> UUID:
-    repository_id = uuid4()
-    mapping_id = uuid4()
-    with factory.begin() as session:
-        session.add(
-            Repository(
-                id=repository_id,
-                workspace="import-team",
-                repository_slug=f"page-{repository_id.hex}",
-                descriptive_name=f"Page source {repository_id}",
-                descriptive_name_key=f"page source {repository_id}",
-            )
-        )
-        session.flush()
-        session.add(
-            ProductRepositoryMapping(
-                id=mapping_id,
-                revision_id=revision_id,
-                topology="direct",
-                identity_key=f'["direct","{repository_id}","{source_branch}"]',
-                sides=[
-                    ProductMappingRepositorySide(
-                        role="direct",
-                        repository_id=repository_id,
-                        source_branch=source_branch,
-                    )
-                ],
-                allowed_targets=[
-                    ProductMappingAllowedTarget(branch=source_branch, is_default=True)
-                ],
-            )
-        )
-    return mapping_id
-
-
 def test_public_contract_has_exact_five_operations_and_closed_server_authority(
     import_session_factory: sessionmaker[Session],
 ) -> None:
@@ -3105,9 +3103,7 @@ def test_public_contract_has_exact_five_operations_and_closed_server_authority(
     )
     app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
     collection_path = f"/api/v1/admin/products/{product_id}/published/mapping-imports"
-    start_path = (
-        f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
-    )
+    start_path = f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
 
     before = asyncio.run(_request("GET", collection_path, access_token=admin_token))
     assert before.status_code == 200
@@ -3197,17 +3193,8 @@ def test_cursor_is_bounded_canonical_and_bound_to_product_revision_filter_and_or
     _configure_dependencies(import_session_factory)
     admin_token = _create_admin(import_session_factory)
     product_id, revision_id, _repository_id, _mapping_id = _seed_published_direct_mapping(
-        import_session_factory
-    )
-    _add_published_direct_mapping(
         import_session_factory,
-        revision_id=revision_id,
-        source_branch="release/one",
-    )
-    _add_published_direct_mapping(
-        import_session_factory,
-        revision_id=revision_id,
-        source_branch="release/two",
+        additional_source_branches=("release/one", "release/two"),
     )
     candidate_mapping_id = _seed_candidate_mapping(
         import_session_factory,
@@ -3216,9 +3203,7 @@ def test_cursor_is_bounded_canonical_and_bound_to_product_revision_filter_and_or
     other_product_id, _other_revision_id, _other_repository_id, _other_mapping_id = (
         _seed_published_direct_mapping(import_session_factory)
     )
-    base_path = (
-        f"/api/v1/admin/products/{product_id}/published/mapping-imports?limit=1&status=all"
-    )
+    base_path = f"/api/v1/admin/products/{product_id}/published/mapping-imports?limit=1&status=all"
 
     pages: list[dict[str, Any]] = []
     cursor: str | None = None
@@ -3288,6 +3273,10 @@ def test_cursor_is_bounded_canonical_and_bound_to_product_revision_filter_and_or
         malformed.status_code,
         oversized.status_code,
     ] == [422, 422, 422, 422]
+    assert all(
+        response.json() == {"detail": "Invalid import cursor"}
+        for response in (wrong_product, wrong_filter, malformed, oversized)
+    )
 
 
 def test_rewrite_public_contract_projects_review_required_and_blocks_new_execution(
@@ -3335,9 +3324,7 @@ def test_rewrite_public_contract_projects_review_required_and_blocks_new_executi
         f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
         f"/imports/{import_id}/rewrite-comparison"
     )
-    comparison = asyncio.run(
-        _request("GET", comparison_path, access_token=admin_token)
-    )
+    comparison = asyncio.run(_request("GET", comparison_path, access_token=admin_token))
     assert comparison.status_code == 200
     assert comparison.json()["proposal_id"] == str(proposal_id)
     confirmed = asyncio.run(
@@ -3382,9 +3369,7 @@ def test_public_contract_maps_provider_failures_to_closed_fixed_errors(
         import_session_factory
     )
     app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
-    start_path = (
-        f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
-    )
+    start_path = f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
     created = asyncio.run(_request("POST", start_path, access_token=admin_token))
     import_id = UUID(created.json()["id"])
 

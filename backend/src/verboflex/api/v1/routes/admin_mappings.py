@@ -1,6 +1,6 @@
 """Administrator-only direct candidate mapping routes."""
 
-from typing import Annotated, Any, NoReturn, cast
+from typing import Annotated, Any, Literal, NoReturn, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -20,6 +20,7 @@ from verboflex.schemas.admin_mappings import (
 )
 from verboflex.schemas.imports import (
     AdminImportBaselineResponse,
+    AdminImportOperationErrorResponse,
     AdminImportRepositorySideResponse,
     AdminImportRewriteComparisonResponse,
     AdminImportRewriteConfirmationRequest,
@@ -32,13 +33,16 @@ from verboflex.schemas.imports import (
 from verboflex.schemas.system import ErrorResponse
 from verboflex.schemas.users import RoleName
 from verboflex.services.import_jobs import (
+    ImportAlreadyInProgress,
     ImportConflict,
     ImportConnectionUnavailable,
     ImportEnqueuer,
     ImportJobRecord,
     ImportNotFound,
+    ImportReviewRequired,
     ImportRewriteComparisonRecord,
     ImportRewriteStale,
+    InvalidImportCursor,
     confirm_rewrite_baseline,
     enqueue_import_job,
     get_import_job,
@@ -93,9 +97,14 @@ MUTATION_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 IMPORT_RESPONSES: dict[int | str, dict[str, Any]] = {
     **AUTH_RESPONSES,
-    status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-    status.HTTP_409_CONFLICT: {"model": ErrorResponse},
-    status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
+    status.HTTP_404_NOT_FOUND: {"model": AdminImportOperationErrorResponse},
+    status.HTTP_409_CONFLICT: {"model": AdminImportOperationErrorResponse},
+    status.HTTP_503_SERVICE_UNAVAILABLE: {"model": AdminImportOperationErrorResponse},
+}
+IMPORT_COLLECTION_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **AUTH_RESPONSES,
+    status.HTTP_404_NOT_FOUND: {"model": AdminImportOperationErrorResponse},
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": AdminImportOperationErrorResponse},
 }
 
 
@@ -163,10 +172,13 @@ def _import_response(record: ImportJobRecord) -> AdminPublishedMappingImportResp
             if record.active_baseline is not None
             else None
         ),
+        execution_number=record.execution_number,
         latest_execution_at=record.latest_execution_at,
         retry_count=record.retry_count,
+        capability=record.capability,
         error_category=record.error_category,
         error_message=record.error_message,
+        action=record.action,
     )
 
 
@@ -213,6 +225,16 @@ def _raise_import_error(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Published import unavailable",
         ) from error
+    if isinstance(error, ImportAlreadyInProgress):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Published import already in progress",
+        ) from error
+    if isinstance(error, ImportReviewRequired):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Published import requires review",
+        ) from error
     if isinstance(error, ImportConflict):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -228,20 +250,35 @@ def _raise_import_error(
     "/published/mapping-imports",
     operation_id="list_admin_published_mapping_imports",
     response_model=AdminPublishedMappingImportListResponse,
-    responses=IMPORT_RESPONSES,
+    responses=IMPORT_COLLECTION_RESPONSES,
 )
 async def list_admin_published_mapping_imports(
     product_id: UUID,
     _principal: AdminPrincipal,
     session: AdminSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    import_status: Annotated[Literal["all", "attention"], Query(alias="status")] = "all",
+    cursor: str | None = None,
 ) -> AdminPublishedMappingImportListResponse:
-    """List direct mappings from the exact active published revision."""
+    """List published mappings from the exact active revision in bounded order."""
     try:
-        records = list_published_mapping_imports(session, product_id=product_id)
+        page = list_published_mapping_imports(
+            session,
+            product_id=product_id,
+            limit=limit,
+            cursor=cursor,
+            status_filter=import_status,
+        )
+    except InvalidImportCursor as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid import cursor",
+        ) from error
     except ImportNotFound as error:
         _raise_import_error(error)
     return AdminPublishedMappingImportListResponse(
-        items=[_import_response(record) for record in records]
+        items=[_import_response(record) for record in page.items],
+        next_cursor=page.next_cursor,
     )
 
 

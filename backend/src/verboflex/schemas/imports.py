@@ -62,13 +62,35 @@ class AdminPublishedMappingImportResponse(BaseModel):
         "queued",
         "running",
         "current",
+        "may_be_stale",
+        "review_required",
         "import_failed",
     ]
     active_baseline: AdminImportBaselineResponse | None
+    execution_number: Annotated[int, Field(ge=1)] | None
     latest_execution_at: datetime | None
     retry_count: Annotated[int, Field(ge=0)]
-    error_category: Literal["provider_unavailable"] | None
+    capability: Literal["ready", "reauthorization_required", "unavailable"]
+    error_category: (
+        Literal[
+            "connection_required",
+            "permission_denied",
+            "rate_limited",
+            "source_not_found",
+            "timeout",
+            "provider_unavailable",
+            "bounded_failure",
+        ]
+        | None
+    )
     error_message: Annotated[str, Field(min_length=1, max_length=256)] | None
+    action: Literal[
+        "run_import",
+        "refresh_import",
+        "retry_import",
+        "import_in_progress",
+        "review_baseline_change",
+    ]
 
 
 class AdminPublishedMappingImportListResponse(BaseModel):
@@ -77,7 +99,23 @@ class AdminPublishedMappingImportListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: Annotated[list[AdminPublishedMappingImportResponse], Field(max_length=100)]
-    next_cursor: None = None
+    next_cursor: Annotated[str, Field(min_length=1, max_length=2048)] | None = None
+
+
+class AdminImportOperationErrorResponse(BaseModel):
+    """One fixed operation error without provider prose or recovery controls."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    detail: Literal[
+        "Published import unavailable",
+        "Published import already in progress",
+        "Published import requires review",
+        "Published import conflict",
+        "Published import connection unavailable",
+        "Import rewrite proposal stale",
+        "Invalid import cursor",
+    ]
 
 
 class AdminImportRewriteSideResponse(BaseModel):
