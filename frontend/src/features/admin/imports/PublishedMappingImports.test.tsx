@@ -646,4 +646,33 @@ describe("published mapping import collection", () => {
     );
     expect(refreshStatus).toHaveBeenCalledOnce();
   });
+
+  it("opens one mapping-scoped rewrite review from the activated responsive action", async () => {
+    listImportsMock.mockResolvedValueOnce(
+      ok({
+        items: [
+          publishedImport("mapping-1", {
+            action: "review_baseline_change",
+            execution_number: 2,
+            id: "import-1",
+            state: "review_required",
+          }),
+        ],
+        next_cursor: null,
+      }),
+    );
+    renderImports();
+
+    const table = await screen.findByRole("table", {
+      name: "Published mapping imports",
+    });
+    await userEvent.click(
+      within(table).getByRole("button", { name: "Review baseline change" }),
+    );
+    expect(
+      screen.getByRole("alertdialog", {
+        name: "Review rewritten source history",
+      }),
+    ).toBeVisible();
+  });
 });
