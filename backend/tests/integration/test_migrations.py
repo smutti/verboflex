@@ -773,6 +773,55 @@ def test_immutable_source_reference_and_terminal_execution_provenance(
             },
         )
 
+    running_execution_id = uuid4()
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO import_executions "
+                "(id, import_job_id, sequence, state, connection_generation, started_at) "
+                "SELECT :running_execution_id, import_job_id, 2, 'running', "
+                "connection_generation, CURRENT_TIMESTAMP "
+                "FROM import_executions WHERE id = :terminal_execution_id"
+            ),
+            {
+                "running_execution_id": running_execution_id,
+                "terminal_execution_id": execution_id,
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO import_source_references "
+                "(execution_id, position, repository_side, repository_id, source_branch, "
+                "commit_hash, path, size_bytes, sha256) VALUES "
+                "(:execution_id, 1, 'direct', :repository, 'main', :commit_hash, "
+                "'values/reparent.xml', 12, :sha256)"
+            ),
+            {
+                **identities,
+                "execution_id": running_execution_id,
+                "commit_hash": "e" * 40,
+                "sha256": "f" * 64,
+            },
+        )
+
+    with (
+        pytest.raises(
+            DBAPIError,
+            match="terminal import source reference is immutable",
+        ),
+        engine.begin() as connection,
+    ):
+        connection.execute(
+            text(
+                "UPDATE import_source_references SET execution_id = :terminal_execution_id "
+                "WHERE execution_id = :running_execution_id"
+            ),
+            {
+                "terminal_execution_id": execution_id,
+                "running_execution_id": running_execution_id,
+            },
+        )
+
     with (
         pytest.raises(DBAPIError, match="terminal import execution is immutable"),
         engine.begin() as connection,
