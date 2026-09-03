@@ -697,10 +697,11 @@ def test_concurrent_start_serializes_to_one_logical_import_and_execution(
     with ThreadPoolExecutor(max_workers=2) as executor:
         responses = list(executor.map(lambda _index: start(), range(2)))
 
-    assert [response.status_code for response in responses] == [202, 202]
-    records = [response.json() for response in responses]
-    assert records[0]["id"] == records[1]["id"]
-    assert enqueuer.payloads == [(records[0]["id"],)]
+    assert sorted(response.status_code for response in responses) == [202, 409]
+    accepted = next(response for response in responses if response.status_code == 202)
+    conflict = next(response for response in responses if response.status_code == 409)
+    assert conflict.json() == {"detail": "Published import already in progress"}
+    assert enqueuer.payloads == [(accepted.json()["id"],)]
     with import_session_factory() as session:
         assert session.scalar(text("SELECT count(*) FROM import_jobs")) == 1
         assert session.scalar(text("SELECT count(*) FROM import_executions")) == 1
@@ -733,6 +734,15 @@ def test_import_authorization_fails_before_mapping_or_dispatch_work(
     app.state.import_job_enqueuer = enqueuer
     unknown_import_id = uuid4()
 
+    rewrite_path = (
+        f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+        f"/imports/{unknown_import_id}"
+    )
+    confirmation_body = {
+        "proposal_id": str(uuid4()),
+        "proposed_execution_id": str(uuid4()),
+        "proposal_digest": "a" * 64,
+    }
     responses = [
         asyncio.run(
             _request(
@@ -755,9 +765,24 @@ def test_import_authorization_fails_before_mapping_or_dispatch_work(
                 access_token=token,
             )
         ),
+        asyncio.run(
+            _request(
+                "GET",
+                f"{rewrite_path}/rewrite-comparison",
+                access_token=token,
+            )
+        ),
+        asyncio.run(
+            _request(
+                "POST",
+                f"{rewrite_path}/rewrite-confirmation",
+                access_token=token,
+                json_body=confirmation_body,
+            )
+        ),
     ]
 
-    assert [response.status_code for response in responses] == [expected_status] * 3
+    assert [response.status_code for response in responses] == [expected_status] * 5
     assert enqueuer.payloads == []
     with import_session_factory() as session:
         assert session.scalar(text("SELECT count(*) FROM import_jobs")) == 0
@@ -904,8 +929,8 @@ def test_transition_current_refresh_increments_execution_without_retry(
     assert enqueuer.payloads == [(str(import_id),), (str(import_id),)]
 
     duplicate_queued = asyncio.run(_request("POST", start_path, access_token=admin_token))
-    assert duplicate_queued.status_code == 202
-    assert duplicate_queued.json()["state"] == "queued"
+    assert duplicate_queued.status_code == 409
+    assert duplicate_queued.json() == {"detail": "Published import already in progress"}
     assert enqueuer.payloads == [(str(import_id),), (str(import_id),)]
     running_identity = import_job_service.start_import_execution(
         import_session_factory,
@@ -913,8 +938,8 @@ def test_transition_current_refresh_increments_execution_without_retry(
     )
     assert running_identity is not None
     duplicate_running = asyncio.run(_request("POST", start_path, access_token=admin_token))
-    assert duplicate_running.status_code == 202
-    assert duplicate_running.json()["state"] == "running"
+    assert duplicate_running.status_code == 409
+    assert duplicate_running.json() == {"detail": "Published import already in progress"}
     assert enqueuer.payloads == [(str(import_id),), (str(import_id),)]
     with import_session_factory() as session:
         job = session.get(ImportJob, import_id)
@@ -1060,7 +1085,7 @@ def test_retry_replaces_current_projection_and_retains_the_previous_baseline(
         processor=lambda _identity: (),
     )
     failed = asyncio.run(_request("GET", status_path, access_token=admin_token)).json()
-    assert failed["state"] == "import_failed"
+    assert failed["state"] == "may_be_stale"
     assert failed["retry_count"] == 0
     assert failed["active_baseline"] == original["active_baseline"]
 
@@ -1238,7 +1263,7 @@ def test_import_empty_source_terminalizes_and_preserves_the_last_baseline(
     )
     assert failed.status_code == 200
     body = failed.json()
-    assert body["state"] == "import_failed"
+    assert body["state"] == "may_be_stale"
     assert body["active_baseline"] == baseline
     assert body["error_category"] == "provider_unavailable"
     _assert_secret_free(body)
@@ -3019,3 +3044,363 @@ def test_rewrite_comparison_is_admin_only_and_mapping_owned(
     assert forbidden.status_code == 403
     assert wrong_mapping.status_code == 404
     assert wrong_product.status_code == 404
+
+
+def _add_published_direct_mapping(
+    factory: sessionmaker[Session],
+    *,
+    revision_id: UUID,
+    source_branch: str,
+) -> UUID:
+    repository_id = uuid4()
+    mapping_id = uuid4()
+    with factory.begin() as session:
+        session.add(
+            Repository(
+                id=repository_id,
+                workspace="import-team",
+                repository_slug=f"page-{repository_id.hex}",
+                descriptive_name=f"Page source {repository_id}",
+                descriptive_name_key=f"page source {repository_id}",
+            )
+        )
+        session.flush()
+        session.add(
+            ProductRepositoryMapping(
+                id=mapping_id,
+                revision_id=revision_id,
+                topology="direct",
+                identity_key=f'["direct","{repository_id}","{source_branch}"]',
+                sides=[
+                    ProductMappingRepositorySide(
+                        role="direct",
+                        repository_id=repository_id,
+                        source_branch=source_branch,
+                    )
+                ],
+                allowed_targets=[
+                    ProductMappingAllowedTarget(branch=source_branch, is_default=True)
+                ],
+            )
+        )
+    return mapping_id
+
+
+def test_public_contract_has_exact_five_operations_and_closed_server_authority(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    product_id, revision_id, _repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
+    collection_path = f"/api/v1/admin/products/{product_id}/published/mapping-imports"
+    start_path = (
+        f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
+    )
+
+    before = asyncio.run(_request("GET", collection_path, access_token=admin_token))
+    assert before.status_code == 200
+    assert before.json() == {
+        "items": [
+            {
+                "id": None,
+                "mapping_id": str(mapping_id),
+                "active_revision_id": str(revision_id),
+                "topology": "direct",
+                "repository_sides": [
+                    {
+                        "role": "direct",
+                        "repository_id": before.json()["items"][0]["repository_sides"][0][
+                            "repository_id"
+                        ],
+                        "source_branch": "main",
+                    }
+                ],
+                "state": "not_imported",
+                "active_baseline": None,
+                "execution_number": None,
+                "latest_execution_at": None,
+                "retry_count": 0,
+                "capability": "ready",
+                "error_category": None,
+                "error_message": None,
+                "action": "run_import",
+            }
+        ],
+        "next_cursor": None,
+    }
+
+    started = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert started.status_code == 202
+    assert started.json()["execution_number"] == 1
+    assert started.json()["capability"] == "ready"
+    assert started.json()["action"] == "import_in_progress"
+    duplicate = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert duplicate.status_code == 409
+    assert duplicate.json() == {"detail": "Published import already in progress"}
+
+    import_id = started.json()["id"]
+    status_response = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/imports/{import_id}",
+            access_token=admin_token,
+        )
+    )
+    assert status_response.status_code == 200
+    assert set(status_response.json()) == {
+        "id",
+        "mapping_id",
+        "active_revision_id",
+        "topology",
+        "repository_sides",
+        "state",
+        "active_baseline",
+        "execution_number",
+        "latest_execution_at",
+        "retry_count",
+        "capability",
+        "error_category",
+        "error_message",
+        "action",
+    }
+    _assert_secret_free(status_response.json())
+
+    import_operation_ids = {
+        operation["operationId"]
+        for path, path_item in app.openapi()["paths"].items()
+        for method, operation in path_item.items()
+        if method in {"get", "post", "put", "patch", "delete"}
+        and ("/mapping-imports" in path or "/imports" in path)
+    }
+    assert import_operation_ids == {
+        "list_admin_published_mapping_imports",
+        "start_admin_published_mapping_import",
+        "get_admin_import",
+        "get_admin_import_rewrite_comparison",
+        "confirm_admin_import_rewrite_baseline",
+    }
+
+
+def test_cursor_is_bounded_canonical_and_bound_to_product_revision_filter_and_order(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    product_id, revision_id, _repository_id, _mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    _add_published_direct_mapping(
+        import_session_factory,
+        revision_id=revision_id,
+        source_branch="release/one",
+    )
+    _add_published_direct_mapping(
+        import_session_factory,
+        revision_id=revision_id,
+        source_branch="release/two",
+    )
+    candidate_mapping_id = _seed_candidate_mapping(
+        import_session_factory,
+        product_id=product_id,
+    )
+    other_product_id, _other_revision_id, _other_repository_id, _other_mapping_id = (
+        _seed_published_direct_mapping(import_session_factory)
+    )
+    base_path = (
+        f"/api/v1/admin/products/{product_id}/published/mapping-imports?limit=1&status=all"
+    )
+
+    pages: list[dict[str, Any]] = []
+    cursor: str | None = None
+    while True:
+        path = base_path if cursor is None else f"{base_path}&cursor={quote(cursor, safe='')}"
+        response = asyncio.run(_request("GET", path, access_token=admin_token))
+        assert response.status_code == 200
+        pages.append(response.json())
+        cursor = response.json()["next_cursor"]
+        if cursor is None:
+            break
+        assert 1 <= len(cursor) <= 2048
+
+    mapping_ids = [page["items"][0]["mapping_id"] for page in pages]
+    with import_session_factory() as session:
+        expected = [
+            str(value)
+            for value in session.scalars(
+                select(ProductRepositoryMapping.id)
+                .where(ProductRepositoryMapping.revision_id == revision_id)
+                .order_by(
+                    ProductRepositoryMapping.identity_key,
+                    ProductRepositoryMapping.id,
+                )
+            )
+        ]
+    assert mapping_ids == expected
+    assert str(candidate_mapping_id) not in mapping_ids
+    first_cursor = pages[0]["next_cursor"]
+    assert first_cursor is not None
+
+    wrong_product = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{other_product_id}/published/mapping-imports"
+            f"?limit=1&status=all&cursor={quote(first_cursor, safe='')}",
+            access_token=admin_token,
+        )
+    )
+    wrong_filter = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/published/mapping-imports"
+            f"?limit=1&status=attention&cursor={quote(first_cursor, safe='')}",
+            access_token=admin_token,
+        )
+    )
+    malformed = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/published/mapping-imports"
+            "?limit=1&status=all&cursor=not-canonical",
+            access_token=admin_token,
+        )
+    )
+    oversized = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/published/mapping-imports"
+            f"?limit=1&status=all&cursor={'a' * 2049}",
+            access_token=admin_token,
+        )
+    )
+    assert [
+        wrong_product.status_code,
+        wrong_filter.status_code,
+        malformed.status_code,
+        oversized.status_code,
+    ] == [422, 422, 422, 422]
+
+
+def test_rewrite_public_contract_projects_review_required_and_blocks_new_execution(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    (
+        product_id,
+        _repository_id,
+        mapping_id,
+        import_id,
+        _old_execution_id,
+        proposed_execution_id,
+        proposal_id,
+        digest,
+        _old_commit,
+        _new_commit,
+    ) = _complete_direct_rewrite_proposal(import_session_factory)
+    app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
+
+    status_response = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/imports/{import_id}",
+            access_token=admin_token,
+        )
+    )
+    assert status_response.status_code == 200
+    assert status_response.json()["state"] == "review_required"
+    assert status_response.json()["execution_number"] == 2
+    assert status_response.json()["action"] == "review_baseline_change"
+
+    blocked = asyncio.run(
+        _request(
+            "POST",
+            f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+            access_token=admin_token,
+        )
+    )
+    assert blocked.status_code == 409
+    assert blocked.json() == {"detail": "Published import requires review"}
+
+    comparison_path = (
+        f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}"
+        f"/imports/{import_id}/rewrite-comparison"
+    )
+    comparison = asyncio.run(
+        _request("GET", comparison_path, access_token=admin_token)
+    )
+    assert comparison.status_code == 200
+    assert comparison.json()["proposal_id"] == str(proposal_id)
+    confirmed = asyncio.run(
+        _request(
+            "POST",
+            comparison_path.replace("rewrite-comparison", "rewrite-confirmation"),
+            access_token=admin_token,
+            json_body={
+                "proposal_id": str(proposal_id),
+                "proposed_execution_id": str(proposed_execution_id),
+                "proposal_digest": digest,
+            },
+        )
+    )
+    assert confirmed.status_code == 200
+    assert confirmed.json()["state"] == "current"
+    assert confirmed.json()["action"] == "refresh_import"
+
+
+@pytest.mark.parametrize(
+    ("failure_kind", "expected_category"),
+    [
+        ("disconnected", "connection_required"),
+        ("reauthorization_required", "connection_required"),
+        ("permission_denied", "permission_denied"),
+        ("rate_limited", "rate_limited"),
+        ("not_found", "source_not_found"),
+        ("timeout", "timeout"),
+        ("unavailable", "provider_unavailable"),
+        ("invalid_source", "bounded_failure"),
+        ("limit_exceeded", "bounded_failure"),
+    ],
+)
+def test_public_contract_maps_provider_failures_to_closed_fixed_errors(
+    import_session_factory: sessionmaker[Session],
+    failure_kind: str,
+    expected_category: str,
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    product_id, _revision_id, _repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
+    start_path = (
+        f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
+    )
+    created = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    import_id = UUID(created.json()["id"])
+
+    def fail(_identity: object) -> tuple[ImportSourceReferenceRecord, ...]:
+        raise BitbucketProviderReadError(
+            kind=failure_kind,  # type: ignore[arg-type]
+            provider_status=503,
+            operation=BitbucketOperation.SOURCE_TREE,
+        )
+
+    execute_import_job(import_session_factory, import_id=import_id, processor=fail)
+    response = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/imports/{import_id}",
+            access_token=admin_token,
+        )
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "import_failed"
+    assert body["error_category"] == expected_category
+    assert isinstance(body["error_message"], str)
+    assert 1 <= len(body["error_message"]) <= 256
+    assert body["action"] == "retry_import"
+    _assert_secret_free(body)
