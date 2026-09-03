@@ -12,6 +12,75 @@ manifest_files_reviewed: 331
 diff_files_reviewed: 84
 additional_diff_files_reviewed: 21
 files_reviewed: 352
+final_reviewed: 2026-09-03T18:10:41Z
+final_review_depth: standard
+final_review_files_reviewed: 65
+final_review_files_reviewed_list:
+  - backend/alembic/versions/0012_import_jobs.py
+  - backend/alembic/versions/0013_import_rewrite_proposals.py
+  - backend/alembic/versions/0014_import_source_reference_insert_guard.py
+  - backend/src/verboflex/api/v1/routes/admin_bitbucket.py
+  - backend/src/verboflex/api/v1/routes/admin_mappings.py
+  - backend/src/verboflex/api/v1/routes/admin_products.py
+  - backend/src/verboflex/core/config.py
+  - backend/src/verboflex/integrations/bitbucket/client.py
+  - backend/src/verboflex/integrations/bitbucket/diagnostics.py
+  - backend/src/verboflex/integrations/bitbucket/urls.py
+  - backend/src/verboflex/models/__init__.py
+  - backend/src/verboflex/models/import_job.py
+  - backend/src/verboflex/schemas/admin_bitbucket.py
+  - backend/src/verboflex/schemas/admin_discovery.py
+  - backend/src/verboflex/schemas/admin_products.py
+  - backend/src/verboflex/schemas/imports.py
+  - backend/src/verboflex/services/bitbucket_oauth.py
+  - backend/src/verboflex/services/import_jobs.py
+  - backend/src/verboflex/services/products.py
+  - backend/src/verboflex/services/repository_discovery.py
+  - backend/src/verboflex/worker/celery_app.py
+  - backend/src/verboflex/worker/import_tasks.py
+  - backend/tests/api/test_admin_bitbucket.py
+  - backend/tests/api/test_admin_products.py
+  - backend/tests/api/test_openapi_contract.py
+  - backend/tests/architecture/test_background_boundaries.py
+  - backend/tests/architecture/test_phase2_gap_closure.py
+  - backend/tests/architecture/test_phase2_scope.py
+  - backend/tests/architecture/test_phase3_gauntlet.py
+  - backend/tests/architecture/test_phase3_live_provider_smoke.py
+  - backend/tests/architecture/test_phase3_scope.py
+  - backend/tests/architecture/test_provider_boundaries.py
+  - backend/tests/integration/test_bitbucket_diagnostics.py
+  - backend/tests/integration/test_bitbucket_discovery.py
+  - backend/tests/integration/test_bitbucket_http_adapter.py
+  - backend/tests/integration/test_bitbucket_oauth.py
+  - backend/tests/integration/test_import_jobs.py
+  - backend/tests/integration/test_migrations.py
+  - docs/evidence/phase-03.md
+  - docs/reviews/phase-03-code-security.md
+  - frontend/e2e/admin-configuration.spec.ts
+  - frontend/openapi.json
+  - frontend/src/api/admin-client-contract.test.ts
+  - frontend/src/api/client/index.ts
+  - frontend/src/api/client/sdk.gen.ts
+  - frontend/src/api/client/types.gen.ts
+  - frontend/src/features/admin/bitbucket/BitbucketConnectionPage.test.tsx
+  - frontend/src/features/admin/bitbucket/BitbucketConnectionPage.tsx
+  - frontend/src/features/admin/imports/PublishedMappingImports.test.tsx
+  - frontend/src/features/admin/imports/PublishedMappingImports.tsx
+  - frontend/src/features/admin/imports/RewrittenBaselineDialog.test.tsx
+  - frontend/src/features/admin/imports/RewrittenBaselineDialog.tsx
+  - frontend/src/features/admin/imports/useImportPolling.test.ts
+  - frontend/src/features/admin/imports/useImportPolling.ts
+  - frontend/src/features/admin/mappings/ProductMappingsPage.test.tsx
+  - frontend/src/features/admin/mappings/ProductMappingsPage.tsx
+  - frontend/src/features/admin/previews/ProductPreviewPage.test.tsx
+  - frontend/src/features/admin/products/ProductConfiguration.test.tsx
+  - frontend/src/features/admin/products/ProductOverviewPage.tsx
+  - frontend/src/features/workspace/WorkspaceOverviewPage.test.tsx
+  - frontend/src/router.test.tsx
+  - tools/phase3_gauntlet.sh
+  - tools/phase3_smoke.sh
+  - tools/phase3_source_manifest.txt
+  - tools/verify_import_job_mutants.py
 files_reviewed_list:
   - .env.example
   - .planning/REQUIREMENTS.md
@@ -367,9 +436,9 @@ files_reviewed_list:
   - tools/verify_repository_api_mutants.py
 findings:
   critical: 0
-  warning: 8
+  warning: 10
   info: 0
-  total: 8
+  total: 10
 status: issues_found
 closeout_blocked: false
 ---
@@ -398,6 +467,12 @@ All three requested provenance remediations hold on this digest. Migration 0014 
 - Open-critical-high: 0
 - Full-gauntlet-status: PASS
 - Reviewed-source-digest: `e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c`
+
+### Final standard review addendum
+
+The mandatory final pass was completed on 2026-09-03T18:10:41Z over the 65 files supplied by the Phase 3 closeout workflow. The earlier digest-bound deep/ASVS review remains intact above: its source digest was independently reproduced again as `e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c`, so its provenance, closed remediation evidence, and eight original warnings still apply to the same source bytes. The final pass reviewed the explicitly supplied source, migration, test, generated-contract, evidence, and verifier paths, including `docs/reviews/phase-03-code-security.md`, which is intentionally outside the self-excluding review digest.
+
+No BLOCKER/Critical issue was proven. The final pass found two additional WARNING defects (WR-09 and WR-10), bringing the combined report total to ten warnings. These findings do not change `Open-critical-high: 0`, `Review-status: CLOSED`, or the recorded ASVS blocking-threshold decision; they do require follow-up for correct recovery and accessible error focus.
 
 ## Closed Remediation Findings
 
@@ -502,9 +577,34 @@ All three requested provenance remediations hold on this digest. Migration 0014 
 
 **Fix:** Pin external images by immutable digest (while retaining human-readable tags if desired), deploy application images by content digest or immutable release identifier, and automate reviewed digest updates with rebuild/smoke/security gates.
 
+### WR-09: A successful baseline confirmation is reported as a failed update when collection refresh fails
+
+**Classification:** WARNING
+**File:** `frontend/src/features/admin/imports/RewrittenBaselineDialog.tsx:350-395`
+**Supporting path:** `frontend/src/features/admin/imports/PublishedMappingImports.tsx:876-885`
+
+**Evidence:** The server mutation completes and returns a valid updated import at lines 351-379. The dialog then awaits the parent collection refresh at line 380. If that separate GET path returns `false`, lines 384-386 set the generic confirmation error; the rendered message at lines 519-524 states that the baseline could not be updated and instructs the administrator to run the import again. The parent callback confirms that the boolean represents only `loadCompleteCollection(true)`, not the already completed mutation. The dialog tests cover a successful refresh and a 409 mutation but do not cover `onConfirmed()` resolving `false`.
+
+**Issue:** The API has already atomically confirmed the new baseline before the refresh begins. Reporting that committed operation as failed gives the administrator false state and leaves the confirmation dialog open with an action that can only become stale on retry. This can drive unnecessary imports and obscures the actual recovery action: refresh the view, not reconfirm the baseline.
+
+**Fix:** Model mutation success and collection-refresh failure as distinct states. Once a valid confirmation response is received, mark the confirmation successful and prevent resubmission; if refresh fails, show a bounded message such as “Baseline updated; current status could not be refreshed” with a status-refresh/close path. Add a regression test where confirmation succeeds and `onConfirmed()` resolves `false`, asserting that the UI never claims the baseline update failed and cannot submit the same proposal again.
+
+### WR-10: Mobile import failures attempt to focus the hidden desktop error
+
+**Classification:** WARNING
+**File:** `frontend/src/features/admin/imports/PublishedMappingImports.tsx:585-642`
+**Supporting paths:** `frontend/src/features/admin/imports/PublishedMappingImports.tsx:719-803`, `frontend/src/features/admin/imports/PublishedMappingImports.tsx:805-870`
+
+**Evidence:** `mutationErrorRefs` stores one element per mapping and the failure handler focuses that element at lines 640-642. Only the desktop `RowError` installs `focusRef` at lines 749-752. The mobile `RowError` at lines 841-847 installs no ref, while the desktop table remains mounted under `hidden ... md:block` and is therefore `display:none` on the mobile breakpoint.
+
+**Issue:** At mobile widths, a mutation or post-acceptance refresh failure renders the visible mobile alert but attempts to focus its hidden desktop duplicate. Browsers cannot reliably move focus into a `display:none` subtree, so keyboard and assistive-technology users are not taken to the visible row-local error. The current mobile test checks layout/action sizing only and does not exercise failure focus in a real browser viewport.
+
+**Fix:** Keep a ref to the active responsive error (or render one shared row error instead of two mounted duplicates) and focus only an element whose layout is visible. Add a mobile-viewport browser regression that rejects the mutation and verifies `document.activeElement` is the visible mobile alert.
+
 ---
 
 _Reviewed: 2026-09-03T17:25:05Z_  
 _Reviewer: independent typed agent (gsd-code-reviewer)_  
 _Depth: deep_  
 _ASVS: OWASP ASVS 5.0 Level 1_  
+_Final standard pass: 2026-09-03T18:10:41Z over 65 workflow-supplied files_
