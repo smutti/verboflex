@@ -6,14 +6,19 @@ import { createClient } from "./client/client";
 import {
   connectAdminBitbucketOauth,
   confirmAdminActiveRevisionRevalidation,
+  confirmAdminImportRewriteBaseline,
   createAdminActiveRevisionRevalidationJob,
   getAdminBitbucketStatus,
   getAdminActiveRevisionRevalidationJob,
+  getAdminImport,
+  getAdminImportRewriteComparison,
   getAdminProductReactivationEligibility,
   getAdminRepositoryBranch,
+  listAdminPublishedMappingImports,
   listAdminRevisionMappings,
   listAdminUsers,
   reconnectAdminBitbucketOauth,
+  startAdminPublishedMappingImport,
 } from "./client/sdk.gen";
 import type {
   AdminActiveRevisionRevalidationConfirmationRequest,
@@ -22,23 +27,38 @@ import type {
   AdminActiveRevisionRevalidationJobResponse,
   AdminBranchListResponse,
   AdminBranchResponse,
+  AdminImportRewriteConfirmationRequest,
+  AdminImportRewriteComparisonResponse,
   AdminMappingListResponse,
+  AdminProductResponse,
+  AdminPublishedMappingImportListResponse,
+  AdminPublishedMappingImportResponse,
   AdminRepositoryListResponse,
   AdminProductReactivationEligibilityResponse,
   AdminUserListResponse,
   ConfirmAdminActiveRevisionRevalidationData,
   ConfirmAdminActiveRevisionRevalidationResponse,
+  ConfirmAdminImportRewriteBaselineData,
+  ConfirmAdminImportRewriteBaselineResponse,
   CreateAdminActiveRevisionRevalidationJobData,
   CreateAdminActiveRevisionRevalidationJobResponse,
   GetAdminActiveRevisionRevalidationJobData,
   GetAdminActiveRevisionRevalidationJobResponse,
+  GetAdminImportData,
+  GetAdminImportResponse,
+  GetAdminImportRewriteComparisonData,
+  GetAdminImportRewriteComparisonResponse,
   GetAdminProductReactivationEligibilityData,
   GetAdminProductReactivationEligibilityResponse,
   GetAdminRepositoryBranchData,
   GetAdminRepositoryBranchResponse,
   ListAdminRevisionMappingsData,
   ListAdminRevisionMappingsResponse,
+  ListAdminPublishedMappingImportsData,
+  ListAdminPublishedMappingImportsResponse,
   ListAdminUsersResponse,
+  StartAdminPublishedMappingImportData,
+  StartAdminPublishedMappingImportResponse,
 } from "./client/types.gen";
 
 type OpenApiSchema = {
@@ -70,6 +90,8 @@ const openApi = openApiDocument as OpenApiDocument;
 const sensitiveAdminProperties = new Set([
   "access_token",
   "access_token_ciphertext",
+  "attempt_history",
+  "attempts",
   "authorization_url",
   "client_secret",
   "credentials",
@@ -77,19 +99,25 @@ const sensitiveAdminProperties = new Set([
   "next",
   "next_url",
   "provider_body",
+  "provider_response",
+  "provider_status_text",
   "provider_next",
   "provider_next_url",
   "provider_url",
   "raw_authority",
   "raw_body",
+  "raw_source",
   "refresh_token",
   "refresh_token_ciphertext",
   "source_bytes",
+  "stack",
+  "stack_trace",
   "state_expires_in",
   "temporary_password",
   "token",
   "token_ciphertext",
   "token_type",
+  "task_id",
   "effective_authority",
   "generation",
   "scope",
@@ -366,7 +394,194 @@ function findHandwrittenAdminUserWireTypes(
   return duplicates;
 }
 
-describe("canonical generated Phase 2 admin client", () => {
+describe("canonical generated Phase 3 admin client", () => {
+  it("calls exactly five generated import operations through VerboFlex bearer routes", async () => {
+    const productId = "10000000-0000-4000-8000-000000000001";
+    const mappingId = "20000000-0000-4000-8000-000000000002";
+    const importId = "30000000-0000-4000-8000-000000000003";
+    const proposalId = "40000000-0000-4000-8000-000000000004";
+    const proposedExecutionId = "50000000-0000-4000-8000-000000000005";
+    const proposalDigest = "a".repeat(64);
+    const cursor = "vf.import/cursor?opaque#value%2F";
+    const confirmationBody = {
+      proposal_id: proposalId,
+      proposed_execution_id: proposedExecutionId,
+      proposal_digest: proposalDigest,
+    } satisfies AdminImportRewriteConfirmationRequest;
+    const { apiClient, requests } = createRecordingApiClient({});
+    const authority = "phase-three-memory-bearer";
+
+    await listAdminPublishedMappingImports({
+      auth: authority,
+      client: apiClient,
+      path: { product_id: productId },
+      query: { cursor, limit: 100, status: "attention" },
+    });
+    await startAdminPublishedMappingImport({
+      auth: authority,
+      client: apiClient,
+      path: { product_id: productId, mapping_id: mappingId },
+    });
+    await getAdminImport({
+      auth: authority,
+      client: apiClient,
+      path: { product_id: productId, import_id: importId },
+    });
+    await getAdminImportRewriteComparison({
+      auth: authority,
+      client: apiClient,
+      path: {
+        product_id: productId,
+        mapping_id: mappingId,
+        import_id: importId,
+      },
+    });
+    await confirmAdminImportRewriteBaseline({
+      auth: authority,
+      body: confirmationBody,
+      client: apiClient,
+      path: {
+        product_id: productId,
+        mapping_id: mappingId,
+        import_id: importId,
+      },
+    });
+
+    expect(requests.map((request) => request.method)).toEqual([
+      "GET",
+      "POST",
+      "GET",
+      "GET",
+      "POST",
+    ]);
+    expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+      `/api/v1/admin/products/${productId}/published/mapping-imports`,
+      `/api/v1/admin/products/${productId}/published/mappings/${mappingId}/imports`,
+      `/api/v1/admin/products/${productId}/imports/${importId}`,
+      `/api/v1/admin/products/${productId}/published/mappings/${mappingId}/imports/${importId}/rewrite-comparison`,
+      `/api/v1/admin/products/${productId}/published/mappings/${mappingId}/imports/${importId}/rewrite-confirmation`,
+    ]);
+    expect(
+      requests.every(
+        (request) =>
+          new URL(request.url).origin === "https://api.verboflex.test",
+      ),
+    ).toBe(true);
+    expect(
+      requests.every(
+        (request) =>
+          request.headers.get("Authorization") === `Bearer ${authority}`,
+      ),
+    ).toBe(true);
+
+    const listUrl = new URL(requests[0]!.url);
+    expect(listUrl.searchParams.get("cursor")).toBe(cursor);
+    expect(listUrl.searchParams.get("limit")).toBe("100");
+    expect(listUrl.searchParams.get("status")).toBe("attention");
+    expect(listUrl.searchParams.get("product_id")).toBeNull();
+    expect(await requests[4]!.clone().json()).toEqual(confirmationBody);
+    expect(requests.slice(0, 4).every((request) => request.body === null)).toBe(
+      true,
+    );
+  });
+
+  it("generates closed import and product types without provider mutation surface", () => {
+    expectTypeOf<
+      NonNullable<ListAdminPublishedMappingImportsData["query"]>
+    >().toEqualTypeOf<{
+      cursor?: string | null;
+      limit?: number;
+      status?: "all" | "attention";
+    }>();
+    expectTypeOf<ListAdminPublishedMappingImportsData["path"]>().toEqualTypeOf<{
+      product_id: string;
+    }>();
+    expectTypeOf<StartAdminPublishedMappingImportData["path"]>().toEqualTypeOf<{
+      product_id: string;
+      mapping_id: string;
+    }>();
+    expectTypeOf<GetAdminImportData["path"]>().toEqualTypeOf<{
+      product_id: string;
+      import_id: string;
+    }>();
+    expectTypeOf<GetAdminImportRewriteComparisonData["path"]>().toEqualTypeOf<{
+      product_id: string;
+      mapping_id: string;
+      import_id: string;
+    }>();
+    expectTypeOf<
+      ConfirmAdminImportRewriteBaselineData["body"]
+    >().toEqualTypeOf<AdminImportRewriteConfirmationRequest>();
+    expectTypeOf<
+      ConfirmAdminImportRewriteBaselineData["path"]
+    >().toEqualTypeOf<{
+      product_id: string;
+      mapping_id: string;
+      import_id: string;
+    }>();
+    expectTypeOf<ListAdminPublishedMappingImportsResponse>().toEqualTypeOf<AdminPublishedMappingImportListResponse>();
+    expectTypeOf<StartAdminPublishedMappingImportResponse>().toEqualTypeOf<AdminPublishedMappingImportResponse>();
+    expectTypeOf<GetAdminImportResponse>().toEqualTypeOf<AdminPublishedMappingImportResponse>();
+    expectTypeOf<GetAdminImportRewriteComparisonResponse>().toEqualTypeOf<AdminImportRewriteComparisonResponse>();
+    expectTypeOf<ConfirmAdminImportRewriteBaselineResponse>().toEqualTypeOf<AdminPublishedMappingImportResponse>();
+    expectTypeOf<
+      AdminProductResponse["affected_mapping_count"]
+    >().toEqualTypeOf<number>();
+    expectTypeOf<AdminPublishedMappingImportResponse["state"]>().toEqualTypeOf<
+      | "not_imported"
+      | "queued"
+      | "running"
+      | "current"
+      | "may_be_stale"
+      | "review_required"
+      | "import_failed"
+    >();
+    expectTypeOf<AdminPublishedMappingImportResponse["action"]>().toEqualTypeOf<
+      | "run_import"
+      | "refresh_import"
+      | "retry_import"
+      | "import_in_progress"
+      | "review_baseline_change"
+    >();
+
+    const guardedSchemas = Object.keys(openApi.components.schemas).filter(
+      (name) =>
+        /^(?:AdminImport|AdminPublishedMappingImport|AdminProductResponse$)/u.test(
+          name,
+        ),
+    );
+    for (const schemaName of guardedSchemas) {
+      const schema = openApi.components.schemas[schemaName];
+      expect(schema, `${schemaName} must remain generated`).toBeDefined();
+      const leaked = [...collectSchemaProperties(schema!)].filter((property) =>
+        sensitiveAdminProperties.has(property),
+      );
+      expect(leaked, `${schemaName} leaked internal/provider material`).toEqual(
+        [],
+      );
+    }
+
+    for (const operation of [
+      "listAdminPublishedMappingImports",
+      "startAdminPublishedMappingImport",
+      "getAdminImport",
+      "getAdminImportRewriteComparison",
+      "confirmAdminImportRewriteBaseline",
+    ]) {
+      expect(
+        generatedSdkSource.match(
+          new RegExp(`export const ${operation}\\b`, "gu"),
+        ),
+      ).toHaveLength(1);
+    }
+    expect(generatedSdkSource).not.toMatch(
+      /(?:cancel|schedule|bulk|attemptHistory|createBranch|createCommit|createPullRequest|mergePullRequest|approvePullRequest|declinePullRequest)/u,
+    );
+    expect(generatedTypesSource).not.toMatch(
+      /(?:provider_body|provider_status_text|raw_authority|raw_source|source_bytes|stack_trace|task_id|attempt_history)/u,
+    );
+  });
+
   it("exposes exact active-revision recovery operations and closed generated shapes", async () => {
     const productId = "10000000-0000-4000-8000-000000000001";
     const revisionId = "20000000-0000-4000-8000-000000000002";
