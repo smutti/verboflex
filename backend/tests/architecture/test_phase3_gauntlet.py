@@ -15,6 +15,7 @@ MANIFEST_PATH = REPOSITORY_ROOT / "tools" / "phase3_source_manifest.txt"
 MUTATION_PATH = REPOSITORY_ROOT / "tools" / "verify_import_job_mutants.py"
 EVIDENCE_PATH = REPOSITORY_ROOT / "docs" / "evidence" / "phase-03.md"
 SOURCE_STATE_PATH = REPOSITORY_ROOT / "tools" / "source_state.sh"
+PLAYWRIGHT_SPEC_PATH = REPOSITORY_ROOT / "frontend" / "e2e" / "admin-configuration.spec.ts"
 EDGE_MATRIX_PATH = (
     REPOSITORY_ROOT / "backend" / "tests" / "architecture" / "phase2_spec_edge_matrix.json"
 )
@@ -45,6 +46,27 @@ EXPECTED_MUTATION_DOMAINS = {
     "error",
 }
 
+EXPECTED_PLAYWRIGHT_IDS = ("UI3-C23", "UI3-C26", "UI3-C27")
+
+EXPECTED_FRONTEND_MUTATION_MARKERS = {
+    (
+        "src/features/admin/imports/PublishedMappingImports.tsx",
+        "published-live-authority",
+    ),
+    (
+        "src/features/admin/imports/PublishedMappingImports.tsx",
+        "published-request-token-ownership",
+    ),
+    (
+        "src/features/admin/imports/RewrittenBaselineDialog.tsx",
+        "rewrite-live-authority-request-token",
+    ),
+    (
+        "src/features/admin/imports/RewrittenBaselineDialog.tsx",
+        "rewrite-uncommitted-finalization",
+    ),
+}
+
 
 def _read(path: Path) -> str:
     assert path.is_file(), f"required Phase 3 closeout source is missing: {path.name}"
@@ -64,6 +86,36 @@ def test_phase3_gauntlet_declares_one_exact_ordered_fail_closed_layer_set() -> N
     assert '"$GAUNTLET_DIR/phase3_smoke.sh" --mock-provider' in source
     assert "api-coverage.verify-pre" in source
     assert "--live-provider-read-only" not in source
+
+
+def test_phase3_browser_layer_selects_every_owned_responsive_regression() -> None:
+    source = _read(GAUNTLET_PATH)
+    spec = _read(PLAYWRIGHT_SPEC_PATH)
+    grep = re.search(
+        r"npm run e2e -- e2e/admin-configuration\.spec\.ts --grep '([^']+)'",
+        source,
+    )
+    assert grep is not None
+    assert tuple(grep.group(1).split("|")) == EXPECTED_PLAYWRIGHT_IDS
+    for consideration_id in EXPECTED_PLAYWRIGHT_IDS:
+        assert f'test("{consideration_id} ' in spec
+
+
+def test_phase3_frontend_mutation_proof_owns_exact_semantic_markers() -> None:
+    source = _read(GAUNTLET_PATH)
+    registry = re.search(
+        r'readonly FRONTEND_MUTATION_MARKERS="(?P<rows>.*?)"',
+        source,
+        flags=re.DOTALL,
+    )
+    assert registry is not None
+    owners = {tuple(row.split("|", 1)) for row in registry.group("rows").splitlines() if row}
+    assert owners == EXPECTED_FRONTEND_MUTATION_MARKERS
+    for relative_path, marker in owners:
+        implementation = _read(REPOSITORY_ROOT / "frontend" / relative_path)
+        assert implementation.count(f"phase3-mutation:{marker}") == 1
+    assert "resolve_frontend_mutation_markers" in source
+    assert "expected_marker_locations" in source
 
 
 def test_phase3_manifest_covers_sources_and_excludes_mutable_closeout_artifacts() -> None:

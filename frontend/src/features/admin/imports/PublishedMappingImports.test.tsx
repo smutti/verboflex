@@ -687,6 +687,56 @@ describe("published mapping import collection", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("invalidates a deferred start response when the component unmounts", async () => {
+    let resolveStart:
+      ((value: ReturnType<typeof ok<unknown>>) => void) | undefined;
+    listImportsMock.mockResolvedValueOnce(
+      ok({ items: [publishedImport("mapping-1")], next_cursor: null }),
+    );
+    startImportMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveStart = resolve;
+      }) as never,
+    );
+    const outsideFocus = document.createElement("button");
+    outsideFocus.textContent = "Outside import screen";
+    document.body.append(outsideFocus);
+    const view = renderImports();
+
+    const table = await screen.findByRole("table", {
+      name: "Published mapping imports",
+    });
+    await userEvent.click(
+      within(table).getByRole("button", { name: "Run import" }),
+    );
+    await waitFor(() => expect(startImportMock).toHaveBeenCalledOnce());
+    const requestSignal = startImportMock.mock.calls[0]?.[0].signal;
+    const collectionCallsBeforeUnmount = listImportsMock.mock.calls.length;
+
+    view.unmount();
+    outsideFocus.focus();
+    expect(outsideFocus).toHaveFocus();
+    await act(async () => {
+      resolveStart?.(
+        ok(
+          publishedImport("mapping-1", {
+            action: "import_in_progress",
+            execution_number: 1,
+            id: "import-1",
+            state: "queued",
+          }),
+        ),
+      );
+    });
+
+    expect(requestSignal).toBeInstanceOf(AbortSignal);
+    expect(requestSignal?.aborted).toBe(true);
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(listImportsMock).toHaveBeenCalledTimes(collectionCallsBeforeUnmount);
+    expect(outsideFocus).toHaveFocus();
+    outsideFocus.remove();
+  });
+
   it("shows bounded manual observation recovery after polling pauses", async () => {
     const refreshStatus = vi.fn();
     useImportPollingMock.mockImplementation((options) => ({

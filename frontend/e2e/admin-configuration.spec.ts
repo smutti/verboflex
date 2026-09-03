@@ -1820,7 +1820,7 @@ for (const viewport of [
   });
 }
 
-test("mobile import failure focuses the visible mobile alert", async ({
+test("UI3-C27 mobile import failure focuses the visible mobile alert", async ({
   page,
 }) => {
   const state = defaultState();
