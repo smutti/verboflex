@@ -131,6 +131,7 @@ const activeProduct: AdminProductResponse = {
   id: "00000000-0000-4000-8000-000000000101",
   name: "Zulu Mobile",
   is_active: true,
+  affected_mapping_count: 0,
   active_revision: {
     id: "00000000-0000-4000-8000-000000000201",
     description: "Published mobile strings",
@@ -151,6 +152,7 @@ const candidateOnlyProduct: AdminProductResponse = {
   id: "00000000-0000-4000-8000-000000000102",
   name: "Alpha Embedded",
   is_active: false,
+  affected_mapping_count: 0,
   active_revision: null,
   candidate_revision: {
     id: "00000000-0000-4000-8000-000000000203",
@@ -165,6 +167,7 @@ const inactivePublishedProduct: AdminProductResponse = {
   id: "00000000-0000-4000-8000-000000000103",
   name: "Middle Desktop",
   is_active: false,
+  affected_mapping_count: 0,
   active_revision: {
     id: "00000000-0000-4000-8000-000000000204",
     description: "Retained published desktop strings",

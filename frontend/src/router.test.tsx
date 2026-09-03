@@ -136,6 +136,7 @@ describe("session routes", () => {
         id: productId,
         name: "Published product name",
         is_active: true,
+        affected_mapping_count: 0,
         active_revision: {
           id: "00000000-0000-4000-8000-000000000201",
           description: "Published description",

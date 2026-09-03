@@ -90,6 +90,7 @@ const toastSuccessMock = vi.mocked(toast.success);
 
 const product: AdminProductResponse = {
   active_revision: null,
+  affected_mapping_count: 0,
   candidate_revision: {
     description: "Candidate localization configuration",
     id: "00000000-0000-4000-8000-000000000201",

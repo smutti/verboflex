@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import runpy
 import subprocess
 from contextlib import redirect_stdout
@@ -870,8 +871,8 @@ def test_import_generated_client_matches_the_canonical_operation_and_type_set() 
     )
 
     for operation in operation_exports:
-        assert sdk_source.count(f"export const {operation}") == 1
-        assert index_source.count(operation) == 1
+        assert sdk_source.count(f"export const {operation} =") == 1
+        assert len(re.findall(rf"\b{re.escape(operation)}\b", index_source)) == 1
 
     for generated_type in (
         "AdminImportRewriteComparisonResponse",
@@ -880,7 +881,7 @@ def test_import_generated_client_matches_the_canonical_operation_and_type_set() 
         "AdminImportRewriteSideResponse",
     ):
         assert f"export type {generated_type}" in types_source
-        assert index_source.count(generated_type) == 1
+        assert len(re.findall(rf"\b{re.escape(generated_type)}\b", index_source)) == 1
 
     assert "affected_mapping_count: number" in types_source
 

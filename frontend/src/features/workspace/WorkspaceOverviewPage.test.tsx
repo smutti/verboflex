@@ -181,12 +181,14 @@ describe("role-aware Workspace overview", () => {
               version: 3,
             },
             candidate_revision: null,
+            affected_mapping_count: 0,
             id: "published-product",
             is_active: true,
             name: "Published product",
           },
           {
             active_revision: null,
+            affected_mapping_count: 0,
             candidate_revision: {
               description: "Draft configuration",
               id: "draft-revision",

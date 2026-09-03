@@ -373,6 +373,18 @@ export type AdminImportBaselineResponse = {
 };
 
 /**
+ * AdminImportOperationErrorResponse
+ *
+ * One fixed operation error without provider prose or recovery controls.
+ */
+export type AdminImportOperationErrorResponse = {
+    /**
+     * Detail
+     */
+    detail: 'Published import unavailable' | 'Published import already in progress' | 'Published import requires review' | 'Published import conflict' | 'Published import connection unavailable' | 'Import rewrite proposal stale' | 'Invalid import cursor';
+};
+
+/**
  * AdminImportRepositorySideResponse
  *
  * One credential-free configured repository selector.
@@ -390,6 +402,130 @@ export type AdminImportRepositorySideResponse = {
      * Source Branch
      */
     source_branch: string;
+};
+
+/**
+ * AdminImportRewriteComparisonResponse
+ *
+ * Complete current proposal authority for one mapping-level decision.
+ */
+export type AdminImportRewriteComparisonResponse = {
+    /**
+     * Confirmable
+     */
+    confirmable: true;
+    /**
+     * Files
+     */
+    files: Array<AdminImportRewriteDeltaResponse>;
+    /**
+     * Import Id
+     */
+    import_id: string;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Proposal Digest
+     */
+    proposal_digest: string;
+    /**
+     * Proposal Id
+     */
+    proposal_id: string;
+    /**
+     * Proposed Execution Id
+     */
+    proposed_execution_id: string;
+    /**
+     * Sides
+     */
+    sides: Array<AdminImportRewriteSideResponse>;
+    /**
+     * Topology
+     */
+    topology: 'direct' | 'separate';
+};
+
+/**
+ * AdminImportRewriteConfirmationRequest
+ *
+ * Expected immutable proposal identity supplied by an untrusted browser.
+ */
+export type AdminImportRewriteConfirmationRequest = {
+    /**
+     * Proposal Digest
+     */
+    proposal_digest: string;
+    /**
+     * Proposal Id
+     */
+    proposal_id: string;
+    /**
+     * Proposed Execution Id
+     */
+    proposed_execution_id: string;
+};
+
+/**
+ * AdminImportRewriteDeltaResponse
+ *
+ * One ordered localization-file metadata row without provider content.
+ */
+export type AdminImportRewriteDeltaResponse = {
+    /**
+     * Change
+     */
+    change: 'added' | 'modified' | 'removed';
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Position
+     */
+    position: number;
+    /**
+     * Repository Side
+     */
+    repository_side: 'direct' | 'keys' | 'translations';
+};
+
+/**
+ * AdminImportRewriteSideResponse
+ *
+ * Exact old/new commits and bounded change counts for one mapping side.
+ */
+export type AdminImportRewriteSideResponse = {
+    /**
+     * Added Count
+     */
+    added_count: number;
+    /**
+     * Modified Count
+     */
+    modified_count: number;
+    /**
+     * New Commit Hash
+     */
+    new_commit_hash: string;
+    /**
+     * Old Commit Hash
+     */
+    old_commit_hash: string;
+    /**
+     * Removed Count
+     */
+    removed_count: number;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Repository Side
+     */
+    repository_side: 'direct' | 'keys' | 'translations';
 };
 
 /**
@@ -948,6 +1084,10 @@ export type AdminProductReactivationMappingResponse = {
  */
 export type AdminProductResponse = {
     active_revision: AdminProductRevisionSummary | null;
+    /**
+     * Affected Mapping Count
+     */
+    affected_mapping_count: number;
     candidate_revision: AdminProductRevisionSummary | null;
     /**
      * Id
@@ -1024,7 +1164,7 @@ export type AdminPublishedMappingImportListResponse = {
     /**
      * Next Cursor
      */
-    next_cursor?: null;
+    next_cursor?: string | null;
 };
 
 /**
@@ -1033,19 +1173,31 @@ export type AdminPublishedMappingImportListResponse = {
  * One server-owned published mapping and its current logical import state.
  */
 export type AdminPublishedMappingImportResponse = {
+    /**
+     * Action
+     */
+    action: 'run_import' | 'refresh_import' | 'retry_import' | 'import_in_progress' | 'review_baseline_change';
     active_baseline: AdminImportBaselineResponse | null;
     /**
      * Active Revision Id
      */
     active_revision_id: string;
     /**
+     * Capability
+     */
+    capability: 'ready' | 'reauthorization_required' | 'unavailable';
+    /**
      * Error Category
      */
-    error_category: 'provider_unavailable' | null;
+    error_category: 'connection_required' | 'permission_denied' | 'rate_limited' | 'source_not_found' | 'timeout' | 'provider_unavailable' | 'bounded_failure' | null;
     /**
      * Error Message
      */
     error_message: string | null;
+    /**
+     * Execution Number
+     */
+    execution_number: number | null;
     /**
      * Id
      */
@@ -1069,7 +1221,7 @@ export type AdminPublishedMappingImportResponse = {
     /**
      * State
      */
-    state: 'not_imported' | 'queued' | 'running' | 'current' | 'import_failed';
+    state: 'not_imported' | 'queued' | 'running' | 'current' | 'may_be_stale' | 'review_required' | 'import_failed';
     /**
      * Topology
      */
@@ -2306,11 +2458,11 @@ export type GetAdminImportErrors = {
     /**
      * Not Found
      */
-    404: ErrorResponse;
+    404: AdminImportOperationErrorResponse;
     /**
      * Conflict
      */
-    409: ErrorResponse;
+    409: AdminImportOperationErrorResponse;
     /**
      * Validation Error
      */
@@ -2318,7 +2470,7 @@ export type GetAdminImportErrors = {
     /**
      * Service Unavailable
      */
-    503: ErrorResponse;
+    503: AdminImportOperationErrorResponse;
 };
 
 export type GetAdminImportError = GetAdminImportErrors[keyof GetAdminImportErrors];
@@ -2386,7 +2538,20 @@ export type ListAdminPublishedMappingImportsData = {
          */
         product_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Status
+         */
+        status?: 'all' | 'attention';
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
     url: '/api/v1/admin/products/{product_id}/published/mapping-imports';
 };
 
@@ -2402,19 +2567,11 @@ export type ListAdminPublishedMappingImportsErrors = {
     /**
      * Not Found
      */
-    404: ErrorResponse;
+    404: AdminImportOperationErrorResponse;
     /**
-     * Conflict
+     * Unprocessable Content
      */
-    409: ErrorResponse;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-    /**
-     * Service Unavailable
-     */
-    503: ErrorResponse;
+    422: AdminImportOperationErrorResponse;
 };
 
 export type ListAdminPublishedMappingImportsError = ListAdminPublishedMappingImportsErrors[keyof ListAdminPublishedMappingImportsErrors];
@@ -2456,11 +2613,11 @@ export type StartAdminPublishedMappingImportErrors = {
     /**
      * Not Found
      */
-    404: ErrorResponse;
+    404: AdminImportOperationErrorResponse;
     /**
      * Conflict
      */
-    409: ErrorResponse;
+    409: AdminImportOperationErrorResponse;
     /**
      * Validation Error
      */
@@ -2468,7 +2625,7 @@ export type StartAdminPublishedMappingImportErrors = {
     /**
      * Service Unavailable
      */
-    503: ErrorResponse;
+    503: AdminImportOperationErrorResponse;
 };
 
 export type StartAdminPublishedMappingImportError = StartAdminPublishedMappingImportErrors[keyof StartAdminPublishedMappingImportErrors];
@@ -2481,6 +2638,122 @@ export type StartAdminPublishedMappingImportResponses = {
 };
 
 export type StartAdminPublishedMappingImportResponse = StartAdminPublishedMappingImportResponses[keyof StartAdminPublishedMappingImportResponses];
+
+export type GetAdminImportRewriteComparisonData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Mapping Id
+         */
+        mapping_id: string;
+        /**
+         * Import Id
+         */
+        import_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports/{import_id}/rewrite-comparison';
+};
+
+export type GetAdminImportRewriteComparisonErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: AdminImportOperationErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminImportOperationErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Service Unavailable
+     */
+    503: AdminImportOperationErrorResponse;
+};
+
+export type GetAdminImportRewriteComparisonError = GetAdminImportRewriteComparisonErrors[keyof GetAdminImportRewriteComparisonErrors];
+
+export type GetAdminImportRewriteComparisonResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminImportRewriteComparisonResponse;
+};
+
+export type GetAdminImportRewriteComparisonResponse = GetAdminImportRewriteComparisonResponses[keyof GetAdminImportRewriteComparisonResponses];
+
+export type ConfirmAdminImportRewriteBaselineData = {
+    body: AdminImportRewriteConfirmationRequest;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Mapping Id
+         */
+        mapping_id: string;
+        /**
+         * Import Id
+         */
+        import_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports/{import_id}/rewrite-confirmation';
+};
+
+export type ConfirmAdminImportRewriteBaselineErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: AdminImportOperationErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminImportOperationErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Service Unavailable
+     */
+    503: AdminImportOperationErrorResponse;
+};
+
+export type ConfirmAdminImportRewriteBaselineError = ConfirmAdminImportRewriteBaselineErrors[keyof ConfirmAdminImportRewriteBaselineErrors];
+
+export type ConfirmAdminImportRewriteBaselineResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPublishedMappingImportResponse;
+};
+
+export type ConfirmAdminImportRewriteBaselineResponse = ConfirmAdminImportRewriteBaselineResponses[keyof ConfirmAdminImportRewriteBaselineResponses];
 
 export type ReactivateAdminProductData = {
     body: AdminProductReactivateRequest;
