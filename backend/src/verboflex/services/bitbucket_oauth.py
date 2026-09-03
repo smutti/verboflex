@@ -472,11 +472,15 @@ class BitbucketOAuthService:
         acquired_at: datetime,
         replace_connected_at: bool,
     ) -> BitbucketConnectionStatus:
+        try:
+            provider_expires_at = acquired_at + timedelta(seconds=expires_in)
+        except OverflowError as error:
+            raise OAuthConnectionUnavailable(CONNECTION_UNAVAILABLE_MESSAGE) from error
         connection.generation += 1
         connection.access_token_ciphertext = self._secret_box.encrypt(access_token)
         connection.refresh_token_ciphertext = None
         connection.scope_profile = PULLREQUEST_WRITE_SCOPE
-        connection.provider_expires_at = acquired_at + timedelta(seconds=expires_in)
+        connection.provider_expires_at = provider_expires_at
         if replace_connected_at or connection.connected_at is None:
             connection.connected_at = acquired_at
         connection.revoked_at = None
