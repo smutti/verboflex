@@ -3,7 +3,7 @@
 ## Outcome
 
 - Gauntlet-status: PASS
-- Source-digest: `ddb3e79ad5e00891f8d3bcaa6bd4d8b39ad738bb0e97f0ad16b0d05f25cb9310`
+- Source-digest: `3072eb3d43244067c8e2aebd37b636c1d4418978507ac305656b751fd0fc1098`
 
 The canonical Phase 3 gauntlet completed on 2026-09-03. Its 14 ordered,
 fail-closed layers passed against one unchanged manifest digest. This record contains
@@ -47,6 +47,33 @@ for this mandatory closeout run.
 | API capability matrix | 56 total; 17 integrated and 39 explicitly opted out |
 | Provider resource mutations | 0 |
 | Final source-state | Passed; manifest digest unchanged |
+
+## Post-review-remediation gauntlet
+
+The first independent closeout review found two source-integrity blockers. The
+remediation was driven by committed failing tests, added a follow-on migration
+that serializes provenance insertion with execution finalization, and required
+complete file deltas for every changed side of a mapping. The complete gauntlet
+then passed again from committed source on 2026-09-03 and established the new
+canonical digest recorded above.
+
+| Measurement | Result |
+| --- | --- |
+| Source commit | `9088147c52559c813dd4ffe8169df03d41f591a3` |
+| Ordered layers | 14/14 passed in 368 seconds |
+| Backend suite | 952/952 passed; 95% combined branch-aware coverage |
+| Frontend suite | 356/356 passed across 24 files; 83.5% statement coverage |
+| Backend targeted mutation | 6/6 mutants killed |
+| Frontend targeted mutation | 25/25 mutants killed |
+| Responsive and accessibility browser checks | 2/2 passed |
+| Migration and OpenAPI contracts | 14/14 migration checks passed; generated client unchanged |
+| Architecture and provider audit | 116/116 passed |
+| API capability matrix | 56 total; 17 integrated and 39 explicitly opted out |
+| Mock deployment provider audit | 1 OAuth POST, 59 resource GETs, 0 resource mutations |
+| Backend JUnit SHA-256 | `87e4968b425d34c303db6881e7332913a6f8b7636cbad47f70837d8c2f370e27` |
+| Frontend coverage SHA-256 | `e1cda1bf439ddc9730e23ed939916e959d70c8bef53a4be08b8b803680c469e1` |
+| Cleanup | Passed; no disposable Phase 3 container, network, volume, image, or worker remained |
+| Final source-state | Passed; digest unchanged at `3072eb3d43244067c8e2aebd37b636c1d4418978507ac305656b751fd0fc1098` |
 
 ## Prior deployment evidence
 
