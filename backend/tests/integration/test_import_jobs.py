@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Barrier, Lock
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 from uuid import UUID, uuid4
 
@@ -1206,6 +1206,46 @@ def test_current_capability_generation_is_revalidated_before_completion(
     assert response.json()["active_baseline"] is None
 
 
+def test_terminal_completion_requires_the_persisted_execution_generation(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    product_id, _revision_id, repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
+    start_path = f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
+
+    created = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert created.status_code == 202
+    import_id = UUID(created.json()["id"])
+    identity = import_job_service.start_import_execution(
+        import_session_factory,
+        import_id=import_id,
+    )
+    assert identity is not None
+
+    with import_session_factory.begin() as session:
+        execution = session.get_one(ImportExecution, identity.execution_id)
+        execution.connection_generation += 1
+
+    assert (
+        import_job_service.finish_import_execution(
+            import_session_factory,
+            identity=identity,
+            references=(_successful_reference(repository_id),),
+        )
+        is False
+    )
+    with import_session_factory() as session:
+        job = session.get_one(ImportJob, import_id)
+        execution = session.get_one(ImportExecution, identity.execution_id)
+        assert job.state == "running"
+        assert job.active_baseline_execution_id is None
+        assert execution.state == "running"
+
+
 def test_late_worker_completion_cannot_overwrite_a_newer_retry(
     import_session_factory: sessionmaker[Session],
 ) -> None:
@@ -2164,6 +2204,7 @@ def test_classify_separate_equal_and_descendant_is_fast_forward_without_delta() 
     "boundary",
     [
         "ancestry_incomplete",
+        "ancestry_non_boolean",
         "ancestry_mismatch",
         "delta_incomplete",
         "delta_mismatch",
@@ -2185,7 +2226,11 @@ def test_classify_incomplete_or_forged_comparison_has_no_confirmation_authority(
         old_commit_hash="0" * 40 if boundary == "ancestry_mismatch" else previous,
         new_commit_hash=proposed,
         relation="diverged",
-        complete=boundary != "ancestry_incomplete",
+        complete=(
+            cast(bool, None)
+            if boundary == "ancestry_non_boolean"
+            else boundary != "ancestry_incomplete"
+        ),
     )
     delta = BitbucketCommitDelta(
         old_commit_hash="0" * 40 if boundary == "delta_mismatch" else previous,

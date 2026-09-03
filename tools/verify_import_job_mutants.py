@@ -20,6 +20,7 @@ TEST_EXPRESSION = " or ".join(
         "test_current_capability_and_branch_resolution_are_fresh_for_every_execution",
         "test_retry_replaces_current_projection_and_retains_the_previous_baseline",
         "test_current_capability_generation_is_revalidated_before_completion",
+        "test_terminal_completion_requires_the_persisted_execution_generation",
         "test_late_worker_completion_cannot_overwrite_a_newer_retry",
         "test_classify_incomplete_or_forged_comparison_has_no_confirmation_authority",
         "test_rewrite_confirmation_rejects_stale_identity_without_pointer_change",
