@@ -43,3 +43,13 @@ Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypothe
 - **Why not caught:** No deterministic gate existed for ORM collection ordering; the behavioral combination test depended on incidental PostgreSQL ordering, while lint and type checks cannot infer the relationship's runtime order contract.
 - **Recurrence guard:** Regression test `backend/tests/unit/services/test_admin_users.py::test_user_roles_relationship_declares_fixed_role_order` requires `User.roles` to declare `Role.name` ordering.
 ---
+
+## phase3-nyquist-regressions — Six import-boundary regressions escaped happy-path Phase 3 gates
+- **Date:** 2026-09-03
+- **Error patterns:** raw OverflowError for oversized OAuth lifetime, obsolete deferred completion mutates current UI, committed baseline reported failed after refresh failure, executable JSON registry absent from source digest, mobile row error does not receive visible focus
+- **Root cause(s):** `_persist_access_only` performed unchecked timedelta/datetime arithmetic outside the closed OAuth boundary; import-start and rewrite-confirmation completions trusted captured rather than live authority; confirmation state coupled a committed mutation to collection refresh; the source manifest omitted an executable JSON registry; responsive focus registered only the desktop alert and ran before conditional refs committed
+- **Fix:** Compute and validate expiry before persistence; fence async completion with live identity and request ownership; represent server commit independently from refresh; include the JSON registry in the canonical manifest; register both responsive alerts and consume focus after commit; rebind the gauntlet's exact mutation targets to their relocated semantic lines
+- **Files changed:** backend/src/verboflex/services/bitbucket_oauth.py, frontend/src/features/admin/imports/PublishedMappingImports.tsx, frontend/src/features/admin/imports/RewrittenBaselineDialog.tsx, frontend/src/features/admin/imports/RewrittenBaselineDialog.test.tsx, tools/phase3_source_manifest.txt, tools/phase3_gauntlet.sh
+- **Why not caught:** Existing unit, type, lint, build, and closeout gates exercised normal provider values and live-request UI flows but lacked executable expiry-neighbor, authority-supersession, commit-versus-refresh, executable-registry membership, and responsive-focus tests; review warnings remained non-blocking prose.
+- **Recurrence guard:** Test-first commit `7cae046` adds exact backend, manifest, async-authority, refresh-separation, and mobile-focus regressions; `tools/phase3_gauntlet.sh` binds them and exact mutation ownership into the canonical 14-layer gate, verified 14/14 with 25/25 frontend mutants killed.
+---
