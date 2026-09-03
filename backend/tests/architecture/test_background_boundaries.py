@@ -57,3 +57,20 @@ def test_compose_runs_backend_and_worker_as_distinct_commands() -> None:
     assert '"uvicorn", "verboflex.main:app"' in compose
     assert '"celery", "-A", "verboflex.worker.celery_app", "worker"' in compose
     assert "task_always_eager" not in compose
+
+
+def test_import_background_boundary_registers_run_and_watchdog_without_route_dispatch() -> None:
+    """Import execution and recovery stay named worker commands behind the service seam."""
+    assert "verboflex.worker.import_tasks" in app.conf.include
+    assert "verboflex.import.run" in app.conf.task_annotations
+    assert app.conf.beat_schedule["import-stale-execution-watchdog"]["task"] == (
+        "verboflex.import.reconcile_stale_jobs"
+    )
+    for path, tree in _api_trees():
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name):
+                assert node.id not in {
+                    "run_import_job",
+                    "reconcile_stale_import_jobs",
+                    "reconcile_stale_imports",
+                }, f"{path}:{node.lineno}: route reaches an import worker body"

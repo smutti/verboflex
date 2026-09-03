@@ -22,7 +22,7 @@ import pytest
 from alembic.config import Config
 from celery import Celery
 from psycopg import connect, sql
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -56,6 +56,8 @@ from verboflex.services.bitbucket_oauth import PULLREQUEST_WRITE_SCOPE
 from verboflex.services.import_jobs import (
     ImportSourceReferenceRecord,
     execute_import_job,
+    finish_import_execution,
+    start_import_execution,
 )
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -242,6 +244,99 @@ def _seed_published_direct_mapping(
         connection.connected_at = now
         connection.revoked_at = None
     return product_id, revision_id, repository_id, mapping_id
+
+
+def _seed_published_separate_mapping(
+    factory: sessionmaker[Session],
+) -> tuple[UUID, UUID, UUID, UUID, UUID]:
+    product_id = uuid4()
+    revision_id = uuid4()
+    keys_repository_id = uuid4()
+    translations_repository_id = uuid4()
+    mapping_id = uuid4()
+    now = datetime.now(UTC)
+    with factory.begin() as session:
+        product = Product(
+            id=product_id,
+            display_name=f"Separate Import Product {product_id}",
+            name_key=f"separate import product {product_id}",
+            is_active=True,
+        )
+        session.add(product)
+        session.flush()
+        session.add_all(
+            [
+                ProductRevision(
+                    id=revision_id,
+                    product_id=product_id,
+                    description="published separate",
+                    version=7,
+                    is_published=False,
+                ),
+                Repository(
+                    id=keys_repository_id,
+                    workspace="import-team",
+                    repository_slug=f"keys-{keys_repository_id.hex[:12]}",
+                    descriptive_name="Keys source",
+                    descriptive_name_key="keys source",
+                ),
+                Repository(
+                    id=translations_repository_id,
+                    workspace="import-team",
+                    repository_slug=f"translations-{translations_repository_id.hex[:12]}",
+                    descriptive_name="Translations source",
+                    descriptive_name_key="translations source",
+                ),
+            ]
+        )
+        session.flush()
+        session.add(
+            ProductRepositoryMapping(
+                id=mapping_id,
+                revision_id=revision_id,
+                topology="separate",
+                identity_key=(
+                    f'[["keys","{keys_repository_id}","main"],'
+                    f'["translations","{translations_repository_id}","main"]]'
+                ),
+                sides=[
+                    ProductMappingRepositorySide(
+                        role="keys",
+                        repository_id=keys_repository_id,
+                        source_branch="main",
+                    ),
+                    ProductMappingRepositorySide(
+                        role="translations",
+                        repository_id=translations_repository_id,
+                        source_branch="main",
+                    ),
+                ],
+                allowed_targets=[ProductMappingAllowedTarget(branch="main", is_default=True)],
+            )
+        )
+        session.flush()
+        revision = session.get(ProductRevision, revision_id)
+        assert revision is not None
+        revision.is_published = True
+        revision.published_at = now
+        session.flush()
+        product.active_revision_id = revision_id
+        connection = session.get(BitbucketConnection, 1)
+        assert connection is not None
+        connection.generation = 9
+        connection.access_token_ciphertext = "encrypted-access"
+        connection.refresh_token_ciphertext = None
+        connection.scope_profile = PULLREQUEST_WRITE_SCOPE
+        connection.provider_expires_at = now + timedelta(hours=1)
+        connection.connected_at = now
+        connection.revoked_at = None
+    return (
+        product_id,
+        revision_id,
+        keys_repository_id,
+        translations_repository_id,
+        mapping_id,
+    )
 
 
 def _seed_candidate_mapping(
@@ -1301,3 +1396,342 @@ def test_diagnostic_handler_failure_cannot_change_import_terminalization(
     assert response.json()["state"] == "import_failed"
     assert response.json()["error_category"] == "provider_unavailable"
     assert "canary" not in str(response.json()).casefold()
+
+
+def test_separate_import_activates_keys_then_translations_as_one_ordered_baseline(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    (
+        product_id,
+        revision_id,
+        keys_repository_id,
+        translations_repository_id,
+        mapping_id,
+    ) = _seed_published_separate_mapping(import_session_factory)
+    enqueuer = PersistedImportEnqueuer(import_session_factory)
+    app.state.import_job_enqueuer = enqueuer
+    start_path = f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
+
+    before = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/published/mapping-imports",
+            access_token=admin_token,
+        )
+    )
+    assert before.status_code == 200
+    assert before.json()["items"] == [
+        {
+            "id": None,
+            "mapping_id": str(mapping_id),
+            "active_revision_id": str(revision_id),
+            "topology": "separate",
+            "repository_sides": [
+                {
+                    "role": "keys",
+                    "repository_id": str(keys_repository_id),
+                    "source_branch": "main",
+                },
+                {
+                    "role": "translations",
+                    "repository_id": str(translations_repository_id),
+                    "source_branch": "main",
+                },
+            ],
+            "state": "not_imported",
+            "active_baseline": None,
+            "latest_execution_at": None,
+            "retry_count": 0,
+            "error_category": None,
+            "error_message": None,
+        }
+    ]
+
+    created = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert created.status_code == 202
+    import_id = UUID(created.json()["id"])
+    spy = ProviderResourceSpy(
+        files={"locales/messages.json": b'{"hello":"ciao"}'},
+        commit_hashes=["c" * 40, "d" * 40],
+    )
+    identity = start_import_execution(import_session_factory, import_id=import_id)
+    assert identity is not None
+    references = import_job_service.process_import(
+        identity,
+        factory=import_session_factory,
+        adapter=spy,
+    )
+    assert finish_import_execution(
+        import_session_factory,
+        identity=identity,
+        references=references,
+    )
+
+    completed = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/imports/{import_id}",
+            access_token=admin_token,
+        )
+    )
+    assert completed.status_code == 200
+    source_references = completed.json()["active_baseline"]["source_references"]
+    assert [reference["position"] for reference in source_references] == [0, 1]
+    assert [reference["repository_side"] for reference in source_references] == [
+        "keys",
+        "translations",
+    ]
+    assert [reference["repository_id"] for reference in source_references] == [
+        str(keys_repository_id),
+        str(translations_repository_id),
+    ]
+    assert [reference["commit_hash"] for reference in source_references] == [
+        "c" * 40,
+        "d" * 40,
+    ]
+    assert [reference["path"] for reference in source_references] == [
+        "locales/messages.json",
+        "locales/messages.json",
+    ]
+
+
+def test_separate_one_side_failure_preserves_prior_complete_pair(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    (
+        product_id,
+        _revision_id,
+        keys_repository_id,
+        translations_repository_id,
+        mapping_id,
+    ) = _seed_published_separate_mapping(import_session_factory)
+    app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
+    start_path = f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
+    created = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    import_id = UUID(created.json()["id"])
+
+    def complete_pair(_identity: object) -> tuple[ImportSourceReferenceRecord, ...]:
+        return (
+            ImportSourceReferenceRecord(
+                position=0,
+                repository_side="keys",
+                repository_id=keys_repository_id,
+                source_branch="main",
+                commit_hash="1" * 40,
+                path="same/messages.json",
+                size_bytes=10,
+                sha256="a" * 64,
+            ),
+            ImportSourceReferenceRecord(
+                position=1,
+                repository_side="translations",
+                repository_id=translations_repository_id,
+                source_branch="main",
+                commit_hash="2" * 40,
+                path="same/messages.json",
+                size_bytes=11,
+                sha256="b" * 64,
+            ),
+        )
+
+    execute_import_job(import_session_factory, import_id=import_id, processor=complete_pair)
+    with import_session_factory() as session:
+        original_job = session.get_one(ImportJob, import_id)
+        original_baseline_id = original_job.active_baseline_execution_id
+    assert original_baseline_id is not None
+
+    refresh = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert refresh.status_code == 202
+
+    def incomplete_pair(_identity: object) -> tuple[ImportSourceReferenceRecord, ...]:
+        return complete_pair(_identity)[:1]
+
+    execute_import_job(import_session_factory, import_id=import_id, processor=incomplete_pair)
+
+    with import_session_factory() as session:
+        failed_job = session.get_one(ImportJob, import_id)
+        failed_execution_id = failed_job.current_execution_id
+        failed_execution = session.get_one(ImportExecution, failed_execution_id)
+        assert failed_job.state == "import_failed"
+        assert failed_execution.state == "failed"
+        assert failed_job.active_baseline_execution_id == original_baseline_id
+        assert (
+            session.scalar(
+                text(
+                    "SELECT count(*) FROM import_source_references "
+                    "WHERE execution_id = :execution_id"
+                ),
+                {"execution_id": failed_execution_id},
+            )
+            == 0
+        )
+    failed = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/imports/{import_id}",
+            access_token=admin_token,
+        )
+    ).json()
+    assert [
+        reference["repository_side"] for reference in failed["active_baseline"]["source_references"]
+    ] == [
+        "keys",
+        "translations",
+    ]
+
+
+def test_worker_loss_watchdog_terminalizes_once_at_inclusive_bound_and_ignores_late_finish(
+    import_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(import_session_factory)
+    admin_token = _create_admin(import_session_factory)
+    product_id, _revision_id, repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
+    start_path = f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports"
+    initial = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    import_id = UUID(initial.json()["id"])
+    execute_import_job(
+        import_session_factory,
+        import_id=import_id,
+        processor=lambda _identity: (_successful_reference(repository_id),),
+    )
+    with import_session_factory() as session:
+        original_baseline_id = session.get_one(ImportJob, import_id).active_baseline_execution_id
+    assert original_baseline_id is not None
+
+    refreshed = asyncio.run(_request("POST", start_path, access_token=admin_token))
+    assert refreshed.status_code == 202
+    identity = start_import_execution(import_session_factory, import_id=import_id)
+    assert identity is not None
+    now = datetime(2030, 1, 2, 3, 4, 5, tzinfo=UTC)
+    cutoff = now - timedelta(seconds=90)
+    with import_session_factory.begin() as session:
+        execution = session.get_one(ImportExecution, identity.execution_id)
+        execution.started_at = cutoff + timedelta(seconds=1)
+
+    assert (
+        import_job_service.reconcile_stale_imports(
+            import_session_factory,
+            hard_time_limit_seconds=75,
+            watchdog_grace_seconds=15,
+            clock=lambda: now,
+        )
+        == 0
+    )
+    with import_session_factory.begin() as session:
+        execution = session.get_one(ImportExecution, identity.execution_id)
+        execution.started_at = cutoff
+
+    assert (
+        import_job_service.reconcile_stale_imports(
+            import_session_factory,
+            hard_time_limit_seconds=75,
+            watchdog_grace_seconds=15,
+            clock=lambda: now,
+        )
+        == 1
+    )
+    assert (
+        import_job_service.reconcile_stale_imports(
+            import_session_factory,
+            hard_time_limit_seconds=75,
+            watchdog_grace_seconds=15,
+            clock=lambda: now,
+        )
+        == 0
+    )
+    assert not finish_import_execution(
+        import_session_factory,
+        identity=identity,
+        references=(_successful_reference(repository_id),),
+    )
+
+    with import_session_factory() as session:
+        terminal_job = session.get_one(ImportJob, import_id)
+        terminal_execution = session.get_one(ImportExecution, identity.execution_id)
+        assert terminal_job.state == "import_failed"
+        assert terminal_job.error_category == "provider_unavailable"
+        assert terminal_job.active_baseline_execution_id == original_baseline_id
+        assert terminal_execution.state == "failed"
+        assert terminal_execution.finished_at == now
+        assert (
+            session.scalar(
+                text(
+                    "SELECT count(*) FROM import_source_references "
+                    "WHERE execution_id = :execution_id"
+                ),
+                {"execution_id": identity.execution_id},
+            )
+            == 0
+        )
+
+
+def test_import_watchdog_settings_and_named_tasks_are_bounded_and_do_not_redispatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    celery_app = importlib.import_module("verboflex.worker.celery_app")
+    import_tasks = importlib.import_module("verboflex.worker.import_tasks")
+    settings = Settings(
+        import_soft_time_limit_seconds=10,
+        import_hard_time_limit_seconds=20,
+        import_watchdog_grace_seconds=8,
+        import_watchdog_interval_seconds=2,
+    )
+    application = celery_app.create_celery_app(settings)
+
+    assert settings.import_max_terminalization_seconds == 30
+    assert application.conf.task_annotations["verboflex.import.run"] == {
+        "acks_late": True,
+        "reject_on_worker_lost": True,
+        "soft_time_limit": 10,
+        "time_limit": 20,
+    }
+    assert application.conf.beat_schedule["import-stale-execution-watchdog"] == {
+        "task": "verboflex.import.reconcile_stale_jobs",
+        "schedule": 2.0,
+    }
+    assert application.conf.beat_max_loop_interval == 2
+    application.close()
+
+    calls: list[tuple[object, int, int]] = []
+
+    def reconcile(
+        factory: object,
+        *,
+        hard_time_limit_seconds: int,
+        watchdog_grace_seconds: int,
+    ) -> int:
+        calls.append((factory, hard_time_limit_seconds, watchdog_grace_seconds))
+        return 3
+
+    factory = object()
+    monkeypatch.setattr(import_tasks, "get_settings", lambda: settings)
+    monkeypatch.setattr(import_tasks, "SessionFactory", factory)
+    monkeypatch.setattr(import_tasks, "reconcile_stale_imports", reconcile)
+    assert import_tasks.reconcile_stale_import_jobs.run() == 3
+    assert calls == [(factory, 20, 8)]
+    assert import_tasks.reconcile_stale_import_jobs.name == (
+        "verboflex.import.reconcile_stale_jobs"
+    )
+
+    for overrides in (
+        {"import_soft_time_limit_seconds": 0},
+        {"import_hard_time_limit_seconds": 0},
+        {"import_watchdog_grace_seconds": 0},
+        {"import_watchdog_interval_seconds": 0},
+        {"import_soft_time_limit_seconds": 20, "import_hard_time_limit_seconds": 20},
+        {"import_watchdog_grace_seconds": 5, "import_watchdog_interval_seconds": 5},
+        {
+            "import_hard_time_limit_seconds": 280,
+            "import_watchdog_grace_seconds": 15,
+            "import_watchdog_interval_seconds": 10,
+        },
+    ):
+        with pytest.raises(ValidationError):
+            Settings(**overrides)
