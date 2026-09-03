@@ -426,7 +426,7 @@ playwright_responsive_accessibility() {
     cd "$FRONTEND_ROOT"
     PLAYWRIGHT_BASE_URL="$url" \
     PLAYWRIGHT_OUTPUT_DIR="/tmp/verboflex-phase03-playwright" \
-      npm run e2e -- e2e/admin-configuration.spec.ts --grep 'UI3-C23|UI3-C26|UI3-C27'
+      npm run e2e -- e2e/admin-configuration.spec.ts --grep 'UI3-C23|UI3-C26|PW3-C27'
   )
   kill "$VITE_PID" >/dev/null 2>&1 || true
   wait "$VITE_PID" >/dev/null 2>&1 || true
