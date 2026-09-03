@@ -807,7 +807,7 @@ def test_immutable_source_reference_and_terminal_execution_provenance(
     with (
         pytest.raises(
             DBAPIError,
-            match="terminal import source reference is immutable",
+            match="import source reference execution identity is immutable",
         ),
         engine.begin() as connection,
     ):

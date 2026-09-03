@@ -37,6 +37,12 @@ BEGIN
                 USING ERRCODE = '55000';
         END IF;
     ELSE
+        IF TG_OP = 'UPDATE'
+           AND NEW.execution_id IS DISTINCT FROM OLD.execution_id THEN
+            RAISE EXCEPTION 'import source reference execution identity is immutable'
+                USING ERRCODE = '55000';
+        END IF;
+
         SELECT state INTO execution_state
         FROM import_executions
         WHERE id = OLD.execution_id
