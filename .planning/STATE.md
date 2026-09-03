@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 03
 current_phase_name: Bitbucket Import Integration
 status: executing
-stopped_at: Completed 03-11-PLAN.md
-last_updated: "2026-09-03T10:31:44.455Z"
+stopped_at: Completed 03-12-PLAN.md
+last_updated: "2026-09-03T11:07:19.666Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 03 execution started
-state_head: 64c3e39c6ac00d914cfc637d9eca3e6a3cfed7a2
+state_head: 5d41a419df4c961ddf5d35f36691e343851d2c5e
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 77
-  completed_plans: 72
+  completed_plans: 73
   percent: 22
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 03 (Bitbucket Import Integration) — EXECUTING
-Plan: 12 of 16
+Plan: 13 of 16
 Status: Ready to execute
 Last activity: 2026-09-02 — Phase 03 execution started
 
@@ -131,6 +131,7 @@ Progress: [████████████████████] 61/61 p
 | Phase 03 P09 | 46min | 2 tasks | 8 files |
 | Phase 03 P10 | 1h 22m | 2 tasks | 11 files |
 | Phase 03 P11 | 9min | 2 tasks | 9 files |
+| Phase 03 P12 | 29min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -365,6 +366,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Keep exactly five Phase 3 import operations generated from canonical FastAPI OpenAPI; every provider mutation remains structurally absent.
 - [Phase 03]: Prove browser import authority with exact VerboFlex-origin runtime requests and in-memory bearer credentials.
 - [Phase 03]: Treat affected_mapping_count as a required server-owned product field throughout generated TypeScript consumers.
+- [Phase 03]: Publish a cursor-loaded collection only after the complete bounded server chain succeeds; repeated, empty, over-budget, mixed-revision, or superseded chains expose no partial authority.
+- [Phase 03]: Run exactly one polling hook per logical import and project its result into both desktop and mobile layouts so responsive duplication never duplicates API observation.
+- [Phase 03]: Treat the generated action literal as the sole browser affordance authority and retain server state until a fresh complete projection follows an accepted mutation.
 
 ### Pending Todos
 
@@ -404,6 +408,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-03T10:31:44.299Z
-Stopped at: Completed 03-11-PLAN.md
+Last session: 2026-09-03T11:07:19.535Z
+Stopped at: Completed 03-12-PLAN.md
 Resume file: None
