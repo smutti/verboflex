@@ -289,7 +289,18 @@ class SourceMovementClassification:
     rewrite_candidate: SourceRewriteCandidate | None
 
 
-ImportProcessor = Callable[[ImportExecutionIdentity], tuple[ImportSourceReferenceRecord, ...]]
+@dataclass(frozen=True, slots=True)
+class ImportProcessingResult:
+    """Provider-read result plus optional complete rewrite authority."""
+
+    references: tuple[ImportSourceReferenceRecord, ...]
+    movement: SourceMovementClassification | None = None
+
+
+ImportProcessor = Callable[
+    [ImportExecutionIdentity],
+    tuple[ImportSourceReferenceRecord, ...] | ImportProcessingResult,
+]
 ImportClock = Callable[[], datetime]
 
 
@@ -2209,7 +2220,13 @@ def execute_import_job(
         return
     started_at = time.monotonic()
     try:
-        references = _validated_references(identity, processor(identity))
+        processed = processor(identity)
+        if isinstance(processed, ImportProcessingResult):
+            references = _validated_references(identity, processed.references)
+            movement = processed.movement
+        else:
+            references = _validated_references(identity, processed)
+            movement = None
     except BitbucketProviderReadError as error:
         terminalized = finish_import_execution(
             factory,
@@ -2236,7 +2253,12 @@ def execute_import_job(
             failure_category="bounded_failure",
         )
     else:
-        finish_import_execution(factory, identity=identity, references=references)
+        finish_import_execution(
+            factory,
+            identity=identity,
+            references=references,
+            movement=movement,
+        )
 
 
 async def _process_import(
@@ -2274,6 +2296,55 @@ async def _process_import(
                 )
             )
     return tuple(references)
+
+
+async def classify_import_movement(
+    identity: ImportExecutionIdentity,
+    *,
+    references: tuple[ImportSourceReferenceRecord, ...],
+    factory: sessionmaker[Session],
+    adapter: SourceDiscoveryAdapter,
+) -> SourceMovementClassification | None:
+    """Return complete rewrite authority for a current imported baseline, if needed."""
+    validated = _validated_references(identity, references)
+    with factory() as session:
+        job = session.get(ImportJob, identity.import_id)
+        if job is None or job.active_baseline_execution_id is None:
+            return None
+        baseline_references = _source_references(
+            session,
+            execution_id=job.active_baseline_execution_id,
+        )
+        baseline_commits = _single_commit_per_side(baseline_references)
+        proposed_commits = _single_commit_per_side(validated)
+        sources: list[SourceMovementInput] = []
+        for side in identity.repository_sides:
+            baseline = baseline_commits.get(side.role)
+            proposed = proposed_commits.get(side.role)
+            if (
+                baseline is None
+                or proposed is None
+                or baseline[0] != side.repository_id
+                or proposed[0] != side.repository_id
+            ):
+                raise ValueError("import movement references rejected")
+            sources.append(
+                SourceMovementInput(
+                    repository_side=side.role,
+                    repository_id=side.repository_id,
+                    workspace=side.workspace,
+                    repository_slug=side.repository_slug,
+                    active_commit_hash=baseline[1],
+                    proposed_commit_hash=proposed[1],
+                )
+            )
+    with factory() as provider_session:
+        movement = await classify_source_movement(
+            provider_session,
+            sources=tuple(sources),
+            adapter=adapter,
+        )
+    return movement if movement.movement == "review-required" else None
 
 
 def process_import(

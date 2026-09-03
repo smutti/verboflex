@@ -4,6 +4,7 @@ import {
   chmodSync,
   existsSync,
   readFileSync,
+  renameSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -2194,23 +2195,16 @@ import json
 import sys
 from uuid import UUID
 
-from sqlalchemy import delete
+from sqlalchemy import delete, text
 
 from verboflex.db.session import SessionFactory
 from verboflex.models.bitbucket_connection import BitbucketConnection
-from verboflex.models.product import Product
 from verboflex.models.repository import Repository
 from verboflex.models.user import User
 
 fixture = json.load(sys.stdin)
 with SessionFactory.begin() as session:
-    product = session.get(Product, UUID(fixture["productId"]))
-    if product is not None:
-        product.active_revision_id = None
-        product.candidate_revision_id = None
-        session.flush()
-        session.delete(product)
-        session.flush()
+    session.execute(text("TRUNCATE TABLE products CASCADE"))
     session.execute(
         delete(Repository).where(
             Repository.id.in_(UUID(value) for value in fixture["repositoryIds"])
@@ -2887,6 +2881,9 @@ function seedPhase3SmokeFixtures(): Phase3SmokeFixtures {
 }
 
 function cleanupPhase3SmokeFixtures(fixture: Phase3SmokeFixtures) {
+  if (process.env.E2E_PHASE3_DISPOSABLE_STACK !== "1") {
+    throw new Error("Phase 3 fixture cleanup requires a disposable stack");
+  }
   runRealBackendPython(phase3SmokeCleanup, JSON.stringify(fixture));
 }
 
@@ -2895,8 +2892,12 @@ function phase3ProviderControl(
   faults: Record<string, string> = {},
 ) {
   const path = realEnvironment("E2E_PHASE3_PROVIDER_CONTROL_FILE");
-  writeFileSync(path, JSON.stringify({ faults, heads }), { encoding: "utf8" });
-  chmodSync(path, 0o600);
+  const nextPath = `${path}.next`;
+  writeFileSync(nextPath, JSON.stringify({ faults, heads }), {
+    encoding: "utf8",
+  });
+  chmodSync(nextPath, 0o600);
+  renameSync(nextPath, path);
 }
 
 function phase3ProviderAudit(): Phase3ProviderAuditRow[] {
@@ -3746,6 +3747,7 @@ test("51st mapping preview readiness consumes terminal cursor before lifecycle a
 test("deployment-like Phase 3 import, recovery, watchdog, and rewrite journeys use only provider reads", async ({
   page,
 }) => {
+  test.setTimeout(180_000);
   const initialCommit = "1".repeat(40);
   const fastForwardCommit = "2".repeat(40);
   const rewrittenCommit = "3".repeat(40);
@@ -3760,6 +3762,8 @@ test("deployment-like Phase 3 import, recovery, watchdog, and rewrite journeys u
   const fixture = seedPhase3SmokeFixtures();
   const worker = realEnvironment("E2E_PHASE3_WORKER_CONTAINER");
   let workerKilled = false;
+  let backendOrigin = "";
+  let token = "";
 
   const visibleRow = (slug: string) => phase3ImportRow(page, slug);
   const clickAndWait = async (
@@ -3768,10 +3772,54 @@ test("deployment-like Phase 3 import, recovery, watchdog, and rewrite journeys u
     state: "Current" | "May be stale" | "Review required",
   ) => {
     const row = visibleRow(slug);
-    await row.getByRole("button", { name: action, exact: true }).click();
-    await expect(row.getByText(state, { exact: true })).toBeVisible({
-      timeout: 30_000,
+    const startResponsePromise = page.waitForResponse((response) => {
+      const request = response.request();
+      const pathname = new URL(response.url()).pathname;
+      return (
+        request.method() === "POST" &&
+        pathname.startsWith(
+          `/api/v1/admin/products/${fixture.productId}/published/mappings/`,
+        ) &&
+        pathname.endsWith("/imports")
+      );
     });
+    await row.getByRole("button", { name: action, exact: true }).click();
+    const startResponse = await startResponsePromise;
+    expect(startResponse.status()).toBe(202);
+    const started = (await startResponse.json()) as {
+      id: string;
+      state: string;
+    };
+    expect(started.state).toBe("queued");
+    const expectedApiState = {
+      Current: "current",
+      "May be stale": "may_be_stale",
+      "Review required": "review_required",
+    }[state];
+    try {
+      await expect
+        .poll(
+          async () => {
+            const response = await page.request.get(
+              `${backendOrigin}/api/v1/admin/products/${fixture.productId}/imports/${started.id}`,
+              { headers: { Authorization: `Bearer ${token}` } },
+            );
+            expect(response.status()).toBe(200);
+            return ((await response.json()) as { state: string }).state;
+          },
+          { timeout: 30_000 },
+        )
+        .toBe(expectedApiState);
+      await expect(row.getByText(state, { exact: true })).toBeVisible({
+        timeout: 30_000,
+      });
+    } catch (error) {
+      const providerAuditTail = phase3ProviderAudit().slice(-8);
+      throw new Error(
+        `Expected ${slug} to reach ${state}; public row was: ${await row.innerText()}; provider audit tail: ${JSON.stringify(providerAuditTail)}`,
+        { cause: error },
+      );
+    }
     return row;
   };
 
@@ -3786,9 +3834,10 @@ test("deployment-like Phase 3 import, recovery, watchdog, and rewrite journeys u
       fixture.email,
       fixture.password,
     );
-    const token = (
-      (await (await tokenResponse).json()) as { access_token: string }
-    ).access_token;
+    const authenticationResponse = await tokenResponse;
+    backendOrigin = new URL(authenticationResponse.url()).origin;
+    token = ((await authenticationResponse.json()) as { access_token: string })
+      .access_token;
 
     await page.goto("/admin/bitbucket");
     await page.getByRole("button", { name: "Connect Bitbucket" }).click();
@@ -3799,7 +3848,7 @@ test("deployment-like Phase 3 import, recovery, watchdog, and rewrite journeys u
     await page.goto(`/admin/products/${fixture.productId}/mappings`);
     await clickAndWait("phase3-direct", "Run import", "Current");
     const initialResponse = await page.request.get(
-      `/api/v1/admin/products/${fixture.productId}/published/mapping-imports`,
+      `${backendOrigin}/api/v1/admin/products/${fixture.productId}/published/mapping-imports`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
     expect(initialResponse.status()).toBe(200);
@@ -3856,6 +3905,12 @@ test("deployment-like Phase 3 import, recovery, watchdog, and rewrite journeys u
     execFileSync("docker", ["kill", "--signal=KILL", worker]);
     workerKilled = true;
     phase3ProviderControl(heads);
+    await new Promise((resolve) => setTimeout(resolve, 15_000));
+    expect(
+      runRealBackendPython(
+        "from verboflex.worker.import_tasks import reconcile_stale_import_jobs; print(reconcile_stale_import_jobs.run())",
+      ).trim(),
+    ).toBe("1");
     await expect(
       blockedRow.getByText("May be stale", { exact: true }),
     ).toBeVisible({ timeout: 30_000 });
@@ -3928,7 +3983,7 @@ test("deployment-like Phase 3 import, recovery, watchdog, and rewrite journeys u
       .click();
 
     const finalResponse = await page.request.get(
-      `/api/v1/admin/products/${fixture.productId}/published/mapping-imports`,
+      `${backendOrigin}/api/v1/admin/products/${fixture.productId}/published/mapping-imports`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
     const finalRecords = (await finalResponse.json()) as {

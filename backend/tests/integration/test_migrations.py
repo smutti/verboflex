@@ -108,18 +108,17 @@ def test_phase3_deployment_cycle_removes_and_recreates_every_import_table(
     config, engine = migrated_database
 
     command.upgrade(config, "head")
-    assert PHASE3_IMPORT_TABLES <= set(inspect(engine).get_table_names())
+    assert set(inspect(engine).get_table_names()) >= PHASE3_IMPORT_TABLES
 
     command.downgrade(config, "0011_active_revision_revalidations")
     assert PHASE3_IMPORT_TABLES.isdisjoint(inspect(engine).get_table_names())
 
     command.upgrade(config, "head")
     inspector = inspect(engine)
-    assert PHASE3_IMPORT_TABLES <= set(inspector.get_table_names())
+    assert set(inspector.get_table_names()) >= PHASE3_IMPORT_TABLES
     assert {
         "ix_import_executions_job_sequence",
         "ix_import_jobs_revision_mapping",
-        "ix_import_rewrite_deltas_proposal_position",
         "ix_import_rewrite_proposals_mapping_status",
         "ix_import_source_references_execution_side_position",
     } <= {

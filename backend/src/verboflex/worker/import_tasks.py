@@ -14,9 +14,11 @@ from verboflex.services.bitbucket_oauth import (
 )
 from verboflex.services.import_jobs import (
     ImportExecutionIdentity,
+    ImportProcessingResult,
     ImportProcessor,
     ImportSourceReferenceRecord,
     _process_import,
+    classify_import_movement,
     execute_import_job,
     reconcile_stale_imports,
 )
@@ -29,7 +31,7 @@ from verboflex.worker.celery_app import app
 
 async def _production_import(
     identity: ImportExecutionIdentity,
-) -> tuple[ImportSourceReferenceRecord, ...]:
+) -> ImportProcessingResult:
     settings = get_settings()
     oauth_service = BitbucketOAuthService(
         settings=settings,
@@ -40,11 +42,18 @@ async def _production_import(
         credential_leases=oauth_service,
     )
     try:
-        return await _process_import_with_adapter(
+        references = await _process_import_with_adapter(
             identity,
             factory=SessionFactory,
             adapter=adapter,
         )
+        movement = await classify_import_movement(
+            identity,
+            references=references,
+            factory=SessionFactory,
+            adapter=adapter,
+        )
+        return ImportProcessingResult(references=references, movement=movement)
     finally:
         await adapter.aclose()
 
@@ -64,7 +73,7 @@ async def _process_import_with_adapter(
 
 def production_import_processor(
     identity: ImportExecutionIdentity,
-) -> tuple[ImportSourceReferenceRecord, ...]:
+) -> ImportProcessingResult:
     """Own and close one provider adapter for an exact durable execution."""
     return asyncio.run(_production_import(identity))
 
