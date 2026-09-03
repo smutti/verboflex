@@ -549,7 +549,7 @@ async def classify_source_movement(
 
     files: list[BitbucketFileDelta] = []
     for source, comparison in zip(validated_sources, comparison_tuple, strict=True):
-        if comparison.relation != "diverged":
+        if comparison.relation == "equal":
             continue
         delta = await adapter.list_repository_diffstat(
             session,
