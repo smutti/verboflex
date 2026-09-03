@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 03
 current_phase_name: Bitbucket Import Integration
 status: executing
-stopped_at: Completed 03-08-PLAN.md
-last_updated: "2026-09-03T07:56:53.519Z"
+stopped_at: Completed 03-09-PLAN.md
+last_updated: "2026-09-03T08:47:58.502Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 03 execution started
-state_head: e2313c7c7c11d99af0ee149dcf54743c578ad6f9
+state_head: a6e302cbf7ae9011cc9b3ecde33698d7134de1a6
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 77
-  completed_plans: 69
+  completed_plans: 70
   percent: 22
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 03 (Bitbucket Import Integration) — EXECUTING
-Plan: 9 of 16
+Plan: 10 of 16
 Status: Ready to execute
 Last activity: 2026-09-02 — Phase 03 execution started
 
@@ -128,6 +128,7 @@ Progress: [████████████████████] 61/61 p
 | Phase 03 P06 | 15min | 2 tasks | 6 files |
 | Phase 03 P07 | 12min | 2 tasks | 7 files |
 | Phase 03 P08 | 20min | 2 tasks | 8 files |
+| Phase 03 P09 | 46min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -352,6 +353,10 @@ Recent decisions affecting current work:
 - [Phase 03]: Compare all mapping sides before rewrite diffstat and preserve Keys then Translations plus provider traversal order in one candidate.
 - [Phase 03]: Incomplete, mismatched, forged, unsafe, over-budget, or stale comparison evidence creates no rewrite authority.
 - [Phase 03]: A divergent zero-file delta remains complete and review-required because commit history changed.
+- [Phase 03]: Keep the active baseline pointer unchanged until a complete current proposal is explicitly confirmed; old and proposed executions remain immutable.
+- [Phase 03]: Bind rewrite confirmation to proposal UUID, proposed execution UUID, and a reconstructible full-authority digest under stable locks.
+- [Phase 03]: Treat direct and separate mappings as one confirmation boundary so Keys and Translations advance together.
+- [Phase 03]: Return a distinct bounded stale-proposal 409 for obsolete or mismatched confirmation authority.
 
 ### Pending Todos
 
@@ -391,6 +396,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-03T07:56:53.389Z
-Stopped at: Completed 03-08-PLAN.md
+Last session: 2026-09-03T08:47:58.381Z
+Stopped at: Completed 03-09-PLAN.md
 Resume file: None
