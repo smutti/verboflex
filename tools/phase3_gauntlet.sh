@@ -312,8 +312,8 @@ mutants = [item for file in data.get("files", {}).values() for item in file.get(
 if not mutants:
     raise SystemExit("Stryker executed zero mutants")
 expected_locations = {
-    "src/features/admin/imports/PublishedMappingImports.tsx": {76, 77, 78, 79, 80, 480},
-    "src/features/admin/imports/RewrittenBaselineDialog.tsx": {367},
+    "src/features/admin/imports/PublishedMappingImports.tsx": {77, 78, 79, 80, 81, 493},
+    "src/features/admin/imports/RewrittenBaselineDialog.tsx": {409},
     "src/features/admin/imports/useImportPolling.ts": {34, 35, 37, 38},
 }
 actual_locations = {
@@ -346,7 +346,7 @@ targeted_mutation_proof() {
   (
     cd "$FRONTEND_ROOT"
     npm run test:mutation -- \
-      --mutate 'src/features/admin/imports/useImportPolling.ts:33-40,src/features/admin/imports/PublishedMappingImports.tsx:76-80,src/features/admin/imports/PublishedMappingImports.tsx:480-480,src/features/admin/imports/RewrittenBaselineDialog.tsx:367-367' \
+      --mutate 'src/features/admin/imports/useImportPolling.ts:33-40,src/features/admin/imports/PublishedMappingImports.tsx:77-81,src/features/admin/imports/PublishedMappingImports.tsx:493-493,src/features/admin/imports/RewrittenBaselineDialog.tsx:409-409' \
       --reporters clear-text,json \
       --tempDirName '/tmp/verboflex-phase03-stryker-tmp' \
       --cleanTempDir always
