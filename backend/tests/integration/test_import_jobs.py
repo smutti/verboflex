@@ -32,7 +32,10 @@ from verboflex.auth.passwords import hash_password
 from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
 from verboflex.integrations.bitbucket.client import (
+    BitbucketAncestry,
     BitbucketBranch,
+    BitbucketCommitDelta,
+    BitbucketFileDelta,
     BitbucketProviderReadError,
     BitbucketSourceEntry,
     BitbucketSourcePage,
@@ -483,6 +486,38 @@ class ProviderResourceSpy:
             )
         )
         return content
+
+
+@dataclass
+class SourceMovementAdapterSpy:
+    ancestries: dict[tuple[str, str, str], BitbucketAncestry]
+    deltas: dict[tuple[str, str, str, str], BitbucketCommitDelta] = field(default_factory=dict)
+    requests: list[tuple[str, str, str, str]] = field(default_factory=list)
+
+    async def compare_repository_ancestry(
+        self,
+        _session: Session,
+        *,
+        workspace: str,
+        repository_slug: str,
+        old_commit_hash: str,
+        new_commit_hash: str,
+    ) -> BitbucketAncestry:
+        self.requests.append(("ancestry", repository_slug, old_commit_hash, new_commit_hash))
+        return self.ancestries[(repository_slug, old_commit_hash, new_commit_hash)]
+
+    async def list_repository_diffstat(
+        self,
+        _session: Session,
+        *,
+        workspace: str,
+        repository_slug: str,
+        old_commit_hash: str,
+        new_commit_hash: str,
+        repository_side: str,
+    ) -> BitbucketCommitDelta:
+        self.requests.append(("diffstat", repository_slug, old_commit_hash, new_commit_hash))
+        return self.deltas[(repository_slug, old_commit_hash, new_commit_hash, repository_side)]
 
 
 async def _request(
@@ -1735,3 +1770,453 @@ def test_import_watchdog_settings_and_named_tasks_are_bounded_and_do_not_redispa
     ):
         with pytest.raises(ValidationError):
             Settings(**overrides)
+
+
+def _movement_input(
+    repository_side: str,
+    *,
+    repository_id: UUID | None = None,
+    active_commit_hash: str,
+    proposed_commit_hash: str,
+) -> object:
+    return import_job_service.SourceMovementInput(
+        repository_side=repository_side,
+        repository_id=repository_id or uuid4(),
+        workspace="import-team",
+        repository_slug=f"{repository_side}-repository",
+        active_commit_hash=active_commit_hash,
+        proposed_commit_hash=proposed_commit_hash,
+    )
+
+
+def test_classify_direct_equal_short_circuits_without_provider_reads() -> None:
+    commit_hash = "1" * 40
+    source = _movement_input(
+        "direct",
+        active_commit_hash=commit_hash,
+        proposed_commit_hash=commit_hash,
+    )
+    adapter = SourceMovementAdapterSpy(ancestries={})
+
+    with Session() as session:
+        classification = asyncio.run(
+            import_job_service.classify_source_movement(
+                session,
+                sources=(source,),
+                adapter=adapter,
+            )
+        )
+
+    assert classification.movement == "equal"
+    assert classification.rewrite_candidate is None
+    assert [side.relation for side in classification.sides] == ["equal"]
+    assert adapter.requests == []
+
+
+def test_classify_direct_fast_forward_requires_exact_complete_ancestry() -> None:
+    previous = "2" * 40
+    proposed = "3" * 40
+    source = _movement_input(
+        "direct",
+        active_commit_hash=previous,
+        proposed_commit_hash=proposed,
+    )
+    adapter = SourceMovementAdapterSpy(
+        ancestries={
+            ("direct-repository", previous, proposed): BitbucketAncestry(
+                old_commit_hash=previous,
+                new_commit_hash=proposed,
+                relation="descendant",
+                complete=True,
+            )
+        }
+    )
+
+    with Session() as session:
+        classification = asyncio.run(
+            import_job_service.classify_source_movement(
+                session,
+                sources=(source,),
+                adapter=adapter,
+            )
+        )
+
+    assert classification.movement == "fast-forward"
+    assert classification.rewrite_candidate is None
+    assert [side.relation for side in classification.sides] == ["descendant"]
+    assert adapter.requests == [("ancestry", "direct-repository", previous, proposed)]
+
+
+def test_classify_separate_rewrite_is_one_ordered_mapping_candidate() -> None:
+    keys_previous = "4" * 40
+    keys_proposed = "5" * 40
+    translations_previous = "6" * 40
+    translations_proposed = "7" * 40
+    keys_id = uuid4()
+    translations_id = uuid4()
+    sources = (
+        _movement_input(
+            "keys",
+            repository_id=keys_id,
+            active_commit_hash=keys_previous,
+            proposed_commit_hash=keys_proposed,
+        ),
+        _movement_input(
+            "translations",
+            repository_id=translations_id,
+            active_commit_hash=translations_previous,
+            proposed_commit_hash=translations_proposed,
+        ),
+    )
+    adapter = SourceMovementAdapterSpy(
+        ancestries={
+            ("keys-repository", keys_previous, keys_proposed): BitbucketAncestry(
+                old_commit_hash=keys_previous,
+                new_commit_hash=keys_proposed,
+                relation="diverged",
+                complete=True,
+            ),
+            (
+                "translations-repository",
+                translations_previous,
+                translations_proposed,
+            ): BitbucketAncestry(
+                old_commit_hash=translations_previous,
+                new_commit_hash=translations_proposed,
+                relation="diverged",
+                complete=True,
+            ),
+        },
+        deltas={
+            (
+                "keys-repository",
+                keys_previous,
+                keys_proposed,
+                "keys",
+            ): BitbucketCommitDelta(
+                old_commit_hash=keys_previous,
+                new_commit_hash=keys_proposed,
+                files=(
+                    BitbucketFileDelta(
+                        repository_side="keys",
+                        ordinal=0,
+                        change="added",
+                        path="locales/messages.json",
+                    ),
+                ),
+                complete=True,
+            ),
+            (
+                "translations-repository",
+                translations_previous,
+                translations_proposed,
+                "translations",
+            ): BitbucketCommitDelta(
+                old_commit_hash=translations_previous,
+                new_commit_hash=translations_proposed,
+                files=(
+                    BitbucketFileDelta(
+                        repository_side="translations",
+                        ordinal=0,
+                        change="removed",
+                        path="locales/messages.json",
+                    ),
+                ),
+                complete=True,
+            ),
+        },
+    )
+
+    with Session() as session:
+        classification = asyncio.run(
+            import_job_service.classify_source_movement(
+                session,
+                sources=sources,
+                adapter=adapter,
+            )
+        )
+
+    assert classification.movement == "review-required"
+    candidate = classification.rewrite_candidate
+    assert candidate is not None
+    assert candidate.complete is True
+    assert [side.repository_side for side in candidate.sides] == [
+        "keys",
+        "translations",
+    ]
+    assert [side.repository_id for side in candidate.sides] == [
+        keys_id,
+        translations_id,
+    ]
+    assert [side.relation for side in candidate.sides] == ["diverged", "diverged"]
+    assert [
+        (file.repository_side, file.ordinal, file.change, file.path) for file in candidate.files
+    ] == [
+        ("keys", 0, "added", "locales/messages.json"),
+        ("translations", 0, "removed", "locales/messages.json"),
+    ]
+    assert adapter.requests == [
+        ("ancestry", "keys-repository", keys_previous, keys_proposed),
+        (
+            "ancestry",
+            "translations-repository",
+            translations_previous,
+            translations_proposed,
+        ),
+        ("diffstat", "keys-repository", keys_previous, keys_proposed),
+        (
+            "diffstat",
+            "translations-repository",
+            translations_previous,
+            translations_proposed,
+        ),
+    ]
+
+
+def test_classify_one_rewritten_separate_side_holds_the_whole_mapping() -> None:
+    keys_commit = "8" * 40
+    translations_previous = "9" * 40
+    translations_proposed = "a" * 40
+    sources = (
+        _movement_input(
+            "keys",
+            active_commit_hash=keys_commit,
+            proposed_commit_hash=keys_commit,
+        ),
+        _movement_input(
+            "translations",
+            active_commit_hash=translations_previous,
+            proposed_commit_hash=translations_proposed,
+        ),
+    )
+    adapter = SourceMovementAdapterSpy(
+        ancestries={
+            (
+                "translations-repository",
+                translations_previous,
+                translations_proposed,
+            ): BitbucketAncestry(
+                old_commit_hash=translations_previous,
+                new_commit_hash=translations_proposed,
+                relation="diverged",
+                complete=True,
+            )
+        },
+        deltas={
+            (
+                "translations-repository",
+                translations_previous,
+                translations_proposed,
+                "translations",
+            ): BitbucketCommitDelta(
+                old_commit_hash=translations_previous,
+                new_commit_hash=translations_proposed,
+                files=(),
+                complete=True,
+            )
+        },
+    )
+
+    with Session() as session:
+        classification = asyncio.run(
+            import_job_service.classify_source_movement(
+                session,
+                sources=sources,
+                adapter=adapter,
+            )
+        )
+
+    assert classification.movement == "review-required"
+    assert [side.relation for side in classification.sides] == ["equal", "diverged"]
+    assert classification.rewrite_candidate is not None
+    assert classification.rewrite_candidate.files == ()
+    assert classification.rewrite_candidate.complete is True
+
+
+def test_classify_separate_equal_and_descendant_is_fast_forward_without_delta() -> None:
+    keys_commit = "b" * 40
+    translations_previous = "c" * 40
+    translations_proposed = "d" * 40
+    sources = (
+        _movement_input(
+            "keys",
+            active_commit_hash=keys_commit,
+            proposed_commit_hash=keys_commit,
+        ),
+        _movement_input(
+            "translations",
+            active_commit_hash=translations_previous,
+            proposed_commit_hash=translations_proposed,
+        ),
+    )
+    adapter = SourceMovementAdapterSpy(
+        ancestries={
+            (
+                "translations-repository",
+                translations_previous,
+                translations_proposed,
+            ): BitbucketAncestry(
+                old_commit_hash=translations_previous,
+                new_commit_hash=translations_proposed,
+                relation="descendant",
+                complete=True,
+            )
+        }
+    )
+
+    with Session() as session:
+        classification = asyncio.run(
+            import_job_service.classify_source_movement(
+                session,
+                sources=sources,
+                adapter=adapter,
+            )
+        )
+
+    assert classification.movement == "fast-forward"
+    assert classification.rewrite_candidate is None
+    assert [side.relation for side in classification.sides] == [
+        "equal",
+        "descendant",
+    ]
+    assert all(request[0] != "diffstat" for request in adapter.requests)
+
+
+@pytest.mark.parametrize(
+    "boundary",
+    [
+        "ancestry_incomplete",
+        "ancestry_mismatch",
+        "delta_incomplete",
+        "delta_mismatch",
+        "delta_forged_side",
+        "delta_bad_order",
+    ],
+)
+def test_classify_incomplete_or_forged_comparison_has_no_confirmation_authority(
+    boundary: str,
+) -> None:
+    previous = "e" * 40
+    proposed = "f" * 40
+    source = _movement_input(
+        "direct",
+        active_commit_hash=previous,
+        proposed_commit_hash=proposed,
+    )
+    ancestry = BitbucketAncestry(
+        old_commit_hash="0" * 40 if boundary == "ancestry_mismatch" else previous,
+        new_commit_hash=proposed,
+        relation="diverged",
+        complete=boundary != "ancestry_incomplete",
+    )
+    delta = BitbucketCommitDelta(
+        old_commit_hash="0" * 40 if boundary == "delta_mismatch" else previous,
+        new_commit_hash=proposed,
+        files=(
+            BitbucketFileDelta(
+                repository_side=("keys" if boundary == "delta_forged_side" else "direct"),
+                ordinal=1 if boundary == "delta_bad_order" else 0,
+                change="modified",
+                path="locales/messages.json",
+            ),
+        ),
+        complete=boundary != "delta_incomplete",
+    )
+    adapter = SourceMovementAdapterSpy(
+        ancestries={("direct-repository", previous, proposed): ancestry},
+        deltas={("direct-repository", previous, proposed, "direct"): delta},
+    )
+
+    with Session() as session, pytest.raises(BitbucketProviderReadError):
+        asyncio.run(
+            import_job_service.classify_source_movement(
+                session,
+                sources=(source,),
+                adapter=adapter,
+            )
+        )
+
+
+def test_classify_reuses_no_proposed_commit_between_manual_retry_calls() -> None:
+    previous = "1" * 40
+    first_proposed = "2" * 40
+    retry_proposed = "3" * 40
+    adapter = SourceMovementAdapterSpy(
+        ancestries={
+            ("direct-repository", previous, first_proposed): BitbucketAncestry(
+                old_commit_hash=previous,
+                new_commit_hash=first_proposed,
+                relation="descendant",
+                complete=True,
+            ),
+            ("direct-repository", previous, retry_proposed): BitbucketAncestry(
+                old_commit_hash=previous,
+                new_commit_hash=retry_proposed,
+                relation="descendant",
+                complete=True,
+            ),
+        }
+    )
+
+    with Session() as session:
+        first = asyncio.run(
+            import_job_service.classify_source_movement(
+                session,
+                sources=(
+                    _movement_input(
+                        "direct",
+                        active_commit_hash=previous,
+                        proposed_commit_hash=first_proposed,
+                    ),
+                ),
+                adapter=adapter,
+            )
+        )
+        retry = asyncio.run(
+            import_job_service.classify_source_movement(
+                session,
+                sources=(
+                    _movement_input(
+                        "direct",
+                        active_commit_hash=previous,
+                        proposed_commit_hash=retry_proposed,
+                    ),
+                ),
+                adapter=adapter,
+            )
+        )
+
+    assert first.movement == retry.movement == "fast-forward"
+    assert [request[3] for request in adapter.requests] == [
+        first_proposed,
+        retry_proposed,
+    ]
+
+
+@pytest.mark.parametrize(
+    "roles",
+    [(), ("translations", "keys"), ("keys",), ("direct", "direct")],
+)
+def test_classify_rejects_noncanonical_mapping_side_shape_before_provider_reads(
+    roles: tuple[str, ...],
+) -> None:
+    adapter = SourceMovementAdapterSpy(ancestries={})
+    sources = tuple(
+        _movement_input(
+            role,
+            active_commit_hash="4" * 40,
+            proposed_commit_hash="5" * 40,
+        )
+        for role in roles
+    )
+
+    with Session() as session, pytest.raises(BitbucketProviderReadError):
+        asyncio.run(
+            import_job_service.classify_source_movement(
+                session,
+                sources=sources,
+                adapter=adapter,
+            )
+        )
+
+    assert adapter.requests == []
