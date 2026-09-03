@@ -21,6 +21,10 @@ from verboflex.schemas.admin_mappings import (
 from verboflex.schemas.imports import (
     AdminImportBaselineResponse,
     AdminImportRepositorySideResponse,
+    AdminImportRewriteComparisonResponse,
+    AdminImportRewriteConfirmationRequest,
+    AdminImportRewriteDeltaResponse,
+    AdminImportRewriteSideResponse,
     AdminImportSourceReferenceResponse,
     AdminPublishedMappingImportListResponse,
     AdminPublishedMappingImportResponse,
@@ -33,8 +37,12 @@ from verboflex.services.import_jobs import (
     ImportEnqueuer,
     ImportJobRecord,
     ImportNotFound,
+    ImportRewriteComparisonRecord,
+    ImportRewriteStale,
+    confirm_rewrite_baseline,
     enqueue_import_job,
     get_import_job,
+    get_rewrite_comparison,
     list_published_mapping_imports,
     start_or_refresh_import,
 )
@@ -162,6 +170,41 @@ def _import_response(record: ImportJobRecord) -> AdminPublishedMappingImportResp
     )
 
 
+def _rewrite_comparison_response(
+    record: ImportRewriteComparisonRecord,
+) -> AdminImportRewriteComparisonResponse:
+    return AdminImportRewriteComparisonResponse(
+        proposal_id=record.proposal_id,
+        import_id=record.import_id,
+        mapping_id=record.mapping_id,
+        proposed_execution_id=record.proposed_execution_id,
+        proposal_digest=record.proposal_digest,
+        topology=record.topology,
+        confirmable=record.confirmable,
+        sides=[
+            AdminImportRewriteSideResponse(
+                repository_side=side.repository_side,
+                repository_id=side.repository_id,
+                old_commit_hash=side.old_commit_hash,
+                new_commit_hash=side.new_commit_hash,
+                added_count=side.added_count,
+                modified_count=side.modified_count,
+                removed_count=side.removed_count,
+            )
+            for side in record.sides
+        ],
+        files=[
+            AdminImportRewriteDeltaResponse(
+                position=file.position,
+                repository_side=file.repository_side,
+                change=file.change,
+                path=file.path,
+            )
+            for file in record.files
+        ],
+    )
+
+
 def _raise_import_error(
     error: ImportNotFound | ImportConflict | ImportConnectionUnavailable,
 ) -> NoReturn:
@@ -248,6 +291,73 @@ async def get_admin_import(
             product_id=product_id,
             import_id=import_id,
         )
+    except ImportNotFound as error:
+        _raise_import_error(error)
+    return _import_response(record)
+
+
+@router.get(
+    "/published/mappings/{mapping_id}/imports/{import_id}/rewrite-comparison",
+    operation_id="get_admin_import_rewrite_comparison",
+    response_model=AdminImportRewriteComparisonResponse,
+    responses=IMPORT_RESPONSES,
+)
+async def get_admin_import_rewrite_comparison(
+    product_id: UUID,
+    mapping_id: UUID,
+    import_id: UUID,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+) -> AdminImportRewriteComparisonResponse:
+    """Read only one complete and still-current mapping rewrite proposal."""
+    try:
+        record = get_rewrite_comparison(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            import_id=import_id,
+        )
+    except ImportRewriteStale as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Import rewrite proposal stale",
+        ) from error
+    except ImportNotFound as error:
+        _raise_import_error(error)
+    return _rewrite_comparison_response(record)
+
+
+@router.post(
+    "/published/mappings/{mapping_id}/imports/{import_id}/rewrite-confirmation",
+    operation_id="confirm_admin_import_rewrite_baseline",
+    response_model=AdminPublishedMappingImportResponse,
+    responses=IMPORT_RESPONSES,
+)
+async def confirm_admin_import_rewrite_baseline(
+    product_id: UUID,
+    mapping_id: UUID,
+    import_id: UUID,
+    body: AdminImportRewriteConfirmationRequest,
+    principal: AdminPrincipal,
+    session: AdminSession,
+) -> AdminPublishedMappingImportResponse:
+    """Atomically accept one complete current mapping baseline proposal."""
+    try:
+        record = confirm_rewrite_baseline(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            import_id=import_id,
+            proposal_id=body.proposal_id,
+            proposed_execution_id=body.proposed_execution_id,
+            proposal_digest=body.proposal_digest,
+            actor_id=principal.user_id,
+        )
+    except ImportRewriteStale as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Import rewrite proposal stale",
+        ) from error
     except ImportNotFound as error:
         _raise_import_error(error)
     return _import_response(record)

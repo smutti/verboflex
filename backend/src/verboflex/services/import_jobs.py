@@ -71,6 +71,7 @@ ImportState = Literal[
 RepositoryRole = Literal["direct", "keys", "translations"]
 SourceMovementRelation = Literal["equal", "descendant", "diverged"]
 SourceMovementKind = Literal["equal", "fast-forward", "review-required"]
+RewriteDeltaChange = Literal["added", "modified", "removed"]
 
 
 class ImportNotFound(LookupError):
@@ -83,6 +84,10 @@ class ImportConflict(ValueError):
 
 class ImportConnectionUnavailable(RuntimeError):
     """Raised when the organizational connection cannot authorize a fresh read."""
+
+
+class ImportRewriteStale(ImportConflict):
+    """Raised when rewrite authority no longer matches the current mapping state."""
 
 
 class ImportEnqueuer(Protocol):
@@ -131,6 +136,44 @@ class ImportJobRecord:
     retry_count: int
     error_category: Literal["provider_unavailable"] | None
     error_message: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ImportRewriteSideRecord:
+    """One exact metadata-only side of a current rewrite proposal."""
+
+    repository_side: RepositoryRole
+    repository_id: UUID
+    old_commit_hash: str
+    new_commit_hash: str
+    added_count: int
+    modified_count: int
+    removed_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class ImportRewriteDeltaRecord:
+    """One bounded ordered localization-file delta row."""
+
+    position: int
+    repository_side: RepositoryRole
+    change: RewriteDeltaChange
+    path: str
+
+
+@dataclass(frozen=True, slots=True)
+class ImportRewriteComparisonRecord:
+    """Complete current confirmation authority exposed without provider data."""
+
+    proposal_id: UUID
+    import_id: UUID
+    mapping_id: UUID
+    proposed_execution_id: UUID
+    proposal_digest: str
+    topology: Literal["direct", "separate"]
+    confirmable: Literal[True]
+    sides: tuple[ImportRewriteSideRecord, ...]
+    files: tuple[ImportRewriteDeltaRecord, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -900,6 +943,60 @@ def _single_commit_per_side(
     return commits
 
 
+def _rewrite_authority_digest(
+    *,
+    import_id: UUID,
+    product_id: UUID,
+    revision_id: UUID,
+    revision_version: int,
+    mapping_id: UUID,
+    topology: str,
+    connection_generation: int,
+    proposed_execution_id: UUID,
+    old_baseline_execution_id: UUID,
+    sides: tuple[tuple[RepositoryRole, UUID, str, str], ...],
+    files: tuple[tuple[RepositoryRole, int, RewriteDeltaChange, str], ...],
+) -> str:
+    """Hash every persisted confirmation input in a reconstructible closed shape."""
+
+    digest_payload = {
+        "import_id": str(import_id),
+        "product_id": str(product_id),
+        "revision_id": str(revision_id),
+        "revision_version": revision_version,
+        "mapping_id": str(mapping_id),
+        "topology": topology,
+        "connection_generation": connection_generation,
+        "proposed_execution_id": str(proposed_execution_id),
+        "old_baseline_execution_id": str(old_baseline_execution_id),
+        "sides": [
+            {
+                "repository_side": role,
+                "repository_id": str(repository_id),
+                "active_commit_hash": old_commit,
+                "proposed_commit_hash": new_commit,
+            }
+            for role, repository_id, old_commit, new_commit in sides
+        ],
+        "files": [
+            {
+                "repository_side": role,
+                "ordinal": ordinal,
+                "change": change,
+                "path": path,
+            }
+            for role, ordinal, change, path in files
+        ],
+    }
+    return hashlib.sha256(
+        json.dumps(
+            digest_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 def _validated_rewrite_candidate(
     *,
     identity: ImportExecutionIdentity,
@@ -970,43 +1067,35 @@ def _validated_rewrite_candidate(
         side_ordinals[role] += 1
         seen_paths.add((role, path))
 
-    digest_payload = {
-        "import_id": str(identity.import_id),
-        "product_id": str(identity.product_id),
-        "revision_id": str(identity.revision_id),
-        "revision_version": revision.version,
-        "mapping_id": str(identity.mapping_id),
-        "topology": mapping.topology,
-        "connection_generation": identity.connection_generation,
-        "proposed_execution_id": str(identity.execution_id),
-        "old_baseline_execution_id": str(job.active_baseline_execution_id),
-        "sides": [
-            {
-                "repository_side": side.repository_side,
-                "repository_id": str(side.repository_id),
-                "active_commit_hash": side.active_commit_hash,
-                "proposed_commit_hash": side.proposed_commit_hash,
-                "relation": side.relation,
-            }
+    digest = _rewrite_authority_digest(
+        import_id=identity.import_id,
+        product_id=identity.product_id,
+        revision_id=identity.revision_id,
+        revision_version=revision.version,
+        mapping_id=identity.mapping_id,
+        topology=mapping.topology,
+        connection_generation=identity.connection_generation,
+        proposed_execution_id=identity.execution_id,
+        old_baseline_execution_id=job.active_baseline_execution_id,
+        sides=tuple(
+            (
+                side.repository_side,
+                side.repository_id,
+                side.active_commit_hash,
+                side.proposed_commit_hash,
+            )
             for side in candidate.sides
-        ],
-        "files": [
-            {
-                "repository_side": file.repository_side,
-                "ordinal": file.ordinal,
-                "change": file.change,
-                "path": file.path,
-            }
+        ),
+        files=tuple(
+            (
+                file.repository_side,
+                file.ordinal,
+                file.change,
+                file.path,
+            )
             for file in candidate.files
-        ],
-    }
-    digest = hashlib.sha256(
-        json.dumps(
-            digest_payload,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    ).hexdigest()
+        ),
+    )
     return candidate, digest
 
 
@@ -1251,6 +1340,405 @@ def finish_import_execution(
         execution.finished_at = now
         job.updated_at = now
     return True
+
+
+def _rewrite_proposal_sides(
+    proposal: ImportRewriteProposal,
+) -> tuple[tuple[RepositoryRole, UUID, str, str], ...]:
+    if proposal.topology == "direct":
+        if (
+            proposal.direct_repository_id is None
+            or proposal.direct_old_commit_hash is None
+            or proposal.direct_new_commit_hash is None
+        ):
+            raise ImportRewriteStale("import rewrite proposal stale")
+        return (
+            (
+                "direct",
+                proposal.direct_repository_id,
+                proposal.direct_old_commit_hash,
+                proposal.direct_new_commit_hash,
+            ),
+        )
+    if proposal.topology == "separate":
+        if (
+            proposal.keys_repository_id is None
+            or proposal.keys_old_commit_hash is None
+            or proposal.keys_new_commit_hash is None
+            or proposal.translations_repository_id is None
+            or proposal.translations_old_commit_hash is None
+            or proposal.translations_new_commit_hash is None
+        ):
+            raise ImportRewriteStale("import rewrite proposal stale")
+        return (
+            (
+                "keys",
+                proposal.keys_repository_id,
+                proposal.keys_old_commit_hash,
+                proposal.keys_new_commit_hash,
+            ),
+            (
+                "translations",
+                proposal.translations_repository_id,
+                proposal.translations_old_commit_hash,
+                proposal.translations_new_commit_hash,
+            ),
+        )
+    raise ImportRewriteStale("import rewrite proposal stale")
+
+
+def _current_rewrite_authority(
+    session: Session,
+    *,
+    product_id: UUID,
+    mapping_id: UUID,
+    import_id: UUID,
+    proposal_id: UUID | None,
+    for_update: bool,
+) -> tuple[
+    ProductRevision,
+    ProductRepositoryMapping,
+    ImportJob,
+    ImportRewriteProposal,
+    ImportExecution,
+    tuple[ImportRewriteDeltaRecord, ...],
+]:
+    """Load and revalidate one complete proposal under the confirmation lock order."""
+
+    product_statement = select(Product).where(Product.id == product_id)
+    if for_update:
+        product_statement = product_statement.with_for_update()
+    product = session.execute(product_statement).scalar_one_or_none()
+    if product is None or not product.is_active:
+        raise ImportNotFound("published import unavailable")
+
+    mapping_statement = (
+        select(ProductRepositoryMapping)
+        .options(selectinload(ProductRepositoryMapping.sides))
+        .where(ProductRepositoryMapping.id == mapping_id)
+    )
+    if for_update:
+        mapping_statement = mapping_statement.with_for_update()
+    mapping = session.execute(mapping_statement).scalar_one_or_none()
+    if mapping is None:
+        raise ImportNotFound("published import unavailable")
+
+    revision = session.execute(
+        select(ProductRevision).where(
+            ProductRevision.id == mapping.revision_id,
+            ProductRevision.product_id == product_id,
+        )
+    ).scalar_one_or_none()
+    if revision is None:
+        raise ImportNotFound("published import unavailable")
+
+    job_statement = select(ImportJob).where(
+        ImportJob.id == import_id,
+        ImportJob.product_id == product_id,
+        ImportJob.revision_id == revision.id,
+        ImportJob.mapping_id == mapping_id,
+    )
+    if for_update:
+        job_statement = job_statement.with_for_update()
+    job = session.execute(job_statement).scalar_one_or_none()
+    if job is None:
+        raise ImportNotFound("published import unavailable")
+
+    proposal_statement = select(ImportRewriteProposal).where(
+        ImportRewriteProposal.import_job_id == import_id,
+        ImportRewriteProposal.mapping_id == mapping_id,
+        ImportRewriteProposal.status == "pending",
+    )
+    if proposal_id is not None:
+        proposal_statement = proposal_statement.where(ImportRewriteProposal.id == proposal_id)
+    if for_update:
+        proposal_statement = proposal_statement.with_for_update()
+    proposal = session.execute(proposal_statement).scalar_one_or_none()
+    if proposal is None:
+        raise ImportRewriteStale("import rewrite proposal stale")
+
+    proposed_execution = session.execute(
+        select(ImportExecution).where(
+            ImportExecution.id == proposal.proposed_execution_id,
+            ImportExecution.import_job_id == import_id,
+        )
+    ).scalar_one_or_none()
+    old_execution = session.execute(
+        select(ImportExecution).where(
+            ImportExecution.id == proposal.old_baseline_execution_id,
+            ImportExecution.import_job_id == import_id,
+        )
+    ).scalar_one_or_none()
+    try:
+        connection_generation = _connected_generation(session)
+        mapping_sides = _mapping_sides(mapping)
+    except (ImportConnectionUnavailable, ImportConflict) as error:
+        raise ImportRewriteStale("import rewrite proposal stale") from error
+
+    if (
+        product.active_revision_id != revision.id
+        or not revision.is_published
+        or revision.version != proposal.revision_version
+        or mapping.revision_id != revision.id
+        or mapping.topology != proposal.topology
+        or job.state != "current"
+        or job.topology != proposal.topology
+        or job.current_execution_id != proposal.proposed_execution_id
+        or job.active_baseline_execution_id != proposal.old_baseline_execution_id
+        or proposal.product_id != product_id
+        or proposal.revision_id != revision.id
+        or proposal.import_job_id != import_id
+        or proposal.mapping_id != mapping_id
+        or proposal.complete is not True
+        or len(proposal.digest) != 64
+        or any(character not in "0123456789abcdef" for character in proposal.digest)
+        or connection_generation != proposal.connection_generation
+        or proposed_execution is None
+        or proposed_execution.state != "succeeded"
+        or proposed_execution.connection_generation != proposal.connection_generation
+        or old_execution is None
+        or old_execution.state != "succeeded"
+    ):
+        raise ImportRewriteStale("import rewrite proposal stale")
+
+    proposal_sides = _rewrite_proposal_sides(proposal)
+    if tuple((side.role, side.repository_id) for side in mapping_sides) != tuple(
+        (role, repository_id) for role, repository_id, _old, _new in proposal_sides
+    ):
+        raise ImportRewriteStale("import rewrite proposal stale")
+    try:
+        old_commits = _single_commit_per_side(
+            _source_references(
+                session,
+                execution_id=proposal.old_baseline_execution_id,
+            )
+        )
+        proposed_commits = _single_commit_per_side(
+            _source_references(
+                session,
+                execution_id=proposal.proposed_execution_id,
+            )
+        )
+    except ValueError as error:
+        raise ImportRewriteStale("import rewrite proposal stale") from error
+    if set(old_commits) != {side[0] for side in proposal_sides} or set(proposed_commits) != {
+        side[0] for side in proposal_sides
+    }:
+        raise ImportRewriteStale("import rewrite proposal stale")
+    for role, repository_id, old_commit, new_commit in proposal_sides:
+        if old_commits[role] != (repository_id, old_commit) or proposed_commits[role] != (
+            repository_id,
+            new_commit,
+        ):
+            raise ImportRewriteStale("import rewrite proposal stale")
+
+    delta_rows = tuple(
+        session.scalars(
+            select(ImportRewriteDelta)
+            .where(ImportRewriteDelta.proposal_id == proposal.id)
+            .order_by(ImportRewriteDelta.position)
+        )
+    )
+    if len(delta_rows) > 500:
+        raise ImportRewriteStale("import rewrite proposal stale")
+    role_order = {role: index for index, (role, *_rest) in enumerate(proposal_sides)}
+    last_role_index = -1
+    seen_paths: set[tuple[RepositoryRole, str]] = set()
+    deltas: list[ImportRewriteDeltaRecord] = []
+    for expected_position, row in enumerate(delta_rows):
+        role = cast(RepositoryRole, row.repository_side)
+        change = cast(RewriteDeltaChange, row.change)
+        try:
+            path = validate_repository_relative_path(row.path)
+        except ValueError as error:
+            raise ImportRewriteStale("import rewrite proposal stale") from error
+        if (
+            row.position != expected_position
+            or role not in role_order
+            or role_order[role] < last_role_index
+            or change not in {"added", "modified", "removed"}
+            or path != row.path
+            or not path.casefold().endswith((".xml", ".ts", ".json", ".strings"))
+            or (role, path) in seen_paths
+        ):
+            raise ImportRewriteStale("import rewrite proposal stale")
+        last_role_index = role_order[role]
+        seen_paths.add((role, path))
+        deltas.append(
+            ImportRewriteDeltaRecord(
+                position=row.position,
+                repository_side=role,
+                change=change,
+                path=path,
+            )
+        )
+    side_ordinals: dict[RepositoryRole, int] = {role: 0 for role in role_order}
+    digest_files: list[tuple[RepositoryRole, int, RewriteDeltaChange, str]] = []
+    for delta in deltas:
+        digest_files.append(
+            (
+                delta.repository_side,
+                side_ordinals[delta.repository_side],
+                delta.change,
+                delta.path,
+            )
+        )
+        side_ordinals[delta.repository_side] += 1
+    expected_digest = _rewrite_authority_digest(
+        import_id=proposal.import_job_id,
+        product_id=proposal.product_id,
+        revision_id=proposal.revision_id,
+        revision_version=proposal.revision_version,
+        mapping_id=proposal.mapping_id,
+        topology=proposal.topology,
+        connection_generation=proposal.connection_generation,
+        proposed_execution_id=proposal.proposed_execution_id,
+        old_baseline_execution_id=proposal.old_baseline_execution_id,
+        sides=proposal_sides,
+        files=tuple(digest_files),
+    )
+    if proposal.digest != expected_digest:
+        raise ImportRewriteStale("import rewrite proposal stale")
+    return revision, mapping, job, proposal, proposed_execution, tuple(deltas)
+
+
+def _rewrite_comparison_record(
+    proposal: ImportRewriteProposal,
+    deltas: tuple[ImportRewriteDeltaRecord, ...],
+) -> ImportRewriteComparisonRecord:
+    sides: list[ImportRewriteSideRecord] = []
+    for role, repository_id, old_commit, new_commit in _rewrite_proposal_sides(proposal):
+        side_deltas = tuple(delta for delta in deltas if delta.repository_side == role)
+        sides.append(
+            ImportRewriteSideRecord(
+                repository_side=role,
+                repository_id=repository_id,
+                old_commit_hash=old_commit,
+                new_commit_hash=new_commit,
+                added_count=sum(delta.change == "added" for delta in side_deltas),
+                modified_count=sum(delta.change == "modified" for delta in side_deltas),
+                removed_count=sum(delta.change == "removed" for delta in side_deltas),
+            )
+        )
+    return ImportRewriteComparisonRecord(
+        proposal_id=proposal.id,
+        import_id=proposal.import_job_id,
+        mapping_id=proposal.mapping_id,
+        proposed_execution_id=proposal.proposed_execution_id,
+        proposal_digest=proposal.digest,
+        topology=cast(Literal["direct", "separate"], proposal.topology),
+        confirmable=True,
+        sides=tuple(sides),
+        files=deltas,
+    )
+
+
+def get_rewrite_comparison(
+    session: Session,
+    *,
+    product_id: UUID,
+    mapping_id: UUID,
+    import_id: UUID,
+) -> ImportRewriteComparisonRecord:
+    """Return one complete, current, mapping-scoped rewrite comparison."""
+
+    with session.begin():
+        _revision, _mapping, _job, proposal, _execution, deltas = _current_rewrite_authority(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            import_id=import_id,
+            proposal_id=None,
+            for_update=False,
+        )
+        return _rewrite_comparison_record(proposal, deltas)
+
+
+def confirm_rewrite_baseline(
+    session: Session,
+    *,
+    product_id: UUID,
+    mapping_id: UUID,
+    import_id: UUID,
+    proposal_id: UUID,
+    proposed_execution_id: UUID,
+    proposal_digest: str,
+    actor_id: UUID,
+) -> ImportJobRecord:
+    """Atomically move one mapping baseline after full currentness revalidation."""
+
+    if not isinstance(actor_id, UUID) or actor_id.int == 0:
+        raise ImportRewriteStale("import rewrite proposal stale")
+    with session.begin():
+        _revision, mapping, job, proposal, proposed_execution, _deltas = _current_rewrite_authority(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            import_id=import_id,
+            proposal_id=proposal_id,
+            for_update=True,
+        )
+        if (
+            proposal.proposed_execution_id != proposed_execution_id
+            or proposal.digest != proposal_digest
+            or proposed_execution.id != proposed_execution_id
+        ):
+            raise ImportRewriteStale("import rewrite proposal stale")
+        confirmed_at = datetime.now(UTC)
+        job.active_baseline_execution_id = proposed_execution_id
+        job.updated_at = confirmed_at
+        proposal.status = "confirmed"
+        proposal.resolved_at = confirmed_at
+        proposal.confirmed_by = actor_id
+        session.flush()
+        return _record(session, mapping=mapping, job=job)
+
+
+def require_current_import_baseline(
+    session: Session,
+    *,
+    product_id: UUID,
+    mapping_id: UUID,
+    execution_id: UUID,
+) -> ImportBaselineRecord:
+    """Require an immutable execution to remain the current mapping baseline."""
+
+    product = session.get(Product, product_id)
+    mapping = session.execute(
+        _published_mapping_statement(
+            product_id=product_id,
+            mapping_id=mapping_id,
+        )
+    ).scalar_one_or_none()
+    job = session.execute(
+        select(ImportJob).where(
+            ImportJob.product_id == product_id,
+            ImportJob.mapping_id == mapping_id,
+        )
+    ).scalar_one_or_none()
+    execution = session.execute(
+        select(ImportExecution).where(
+            ImportExecution.id == execution_id,
+            ImportExecution.import_job_id == (job.id if job is not None else UUID(int=0)),
+        )
+    ).scalar_one_or_none()
+    if (
+        product is None
+        or not product.is_active
+        or product.active_revision_id is None
+        or mapping is None
+        or job is None
+        or job.revision_id != product.active_revision_id
+        or job.active_baseline_execution_id != execution_id
+        or execution is None
+        or execution.state != "succeeded"
+        or execution.finished_at is None
+    ):
+        raise ImportConflict("import baseline is not current")
+    return ImportBaselineRecord(
+        imported_at=execution.finished_at,
+        source_references=_source_references(session, execution_id=execution_id),
+    )
 
 
 def reconcile_stale_imports(

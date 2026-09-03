@@ -78,3 +78,54 @@ class AdminPublishedMappingImportListResponse(BaseModel):
 
     items: Annotated[list[AdminPublishedMappingImportResponse], Field(max_length=100)]
     next_cursor: None = None
+
+
+class AdminImportRewriteSideResponse(BaseModel):
+    """Exact old/new commits and bounded change counts for one mapping side."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    repository_side: Literal["direct", "keys", "translations"]
+    repository_id: UUID
+    old_commit_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
+    new_commit_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
+    added_count: Annotated[int, Field(ge=0, le=500)]
+    modified_count: Annotated[int, Field(ge=0, le=500)]
+    removed_count: Annotated[int, Field(ge=0, le=500)]
+
+
+class AdminImportRewriteDeltaResponse(BaseModel):
+    """One ordered localization-file metadata row without provider content."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    position: Annotated[int, Field(ge=0, le=499)]
+    repository_side: Literal["direct", "keys", "translations"]
+    change: Literal["added", "modified", "removed"]
+    path: Annotated[str, Field(min_length=1, max_length=4096)]
+
+
+class AdminImportRewriteComparisonResponse(BaseModel):
+    """Complete current proposal authority for one mapping-level decision."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    proposal_id: UUID
+    import_id: UUID
+    mapping_id: UUID
+    proposed_execution_id: UUID
+    proposal_digest: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    topology: Literal["direct", "separate"]
+    confirmable: Literal[True]
+    sides: Annotated[list[AdminImportRewriteSideResponse], Field(min_length=1, max_length=2)]
+    files: Annotated[list[AdminImportRewriteDeltaResponse], Field(max_length=500)]
+
+
+class AdminImportRewriteConfirmationRequest(BaseModel):
+    """Expected immutable proposal identity supplied by an untrusted browser."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    proposal_id: UUID
+    proposed_execution_id: UUID
+    proposal_digest: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
