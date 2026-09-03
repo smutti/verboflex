@@ -29,6 +29,7 @@ import {
   getAdminProduct,
   getAdminRepositoryBranch,
   listAdminCandidateMappings,
+  listAdminPublishedMappingImports,
   listAdminProducts,
   listAdminRepositories,
   listAdminRepositoryBranches,
@@ -93,6 +94,7 @@ vi.mock("../../../api/client", async (importOriginal) => {
     getAdminProduct: vi.fn(),
     getAdminRepositoryBranch: vi.fn(),
     listAdminCandidateMappings: vi.fn(),
+    listAdminPublishedMappingImports: vi.fn(),
     listAdminProducts: vi.fn(),
     listAdminRepositories: vi.fn(),
     listAdminRepositoryBranches: vi.fn(),
@@ -118,6 +120,9 @@ const deactivateAdminProductMock = vi.mocked(deactivateAdminProduct);
 const getAdminProductMock = vi.mocked(getAdminProduct);
 const getAdminRepositoryBranchMock = vi.mocked(getAdminRepositoryBranch);
 const listAdminCandidateMappingsMock = vi.mocked(listAdminCandidateMappings);
+const listAdminPublishedMappingImportsMock = vi.mocked(
+  listAdminPublishedMappingImports,
+);
 const listAdminProductsMock = vi.mocked(listAdminProducts);
 const listAdminRepositoriesMock = vi.mocked(listAdminRepositories);
 const listAdminRepositoryBranchesMock = vi.mocked(listAdminRepositoryBranches);
@@ -423,6 +428,10 @@ describe("administrator product configuration tracer", () => {
     getAdminRepositoryBranchMock.mockReset();
     listAdminCandidateMappingsMock.mockReset();
     listAdminCandidateMappingsMock.mockResolvedValue(
+      ok({ items: [], next_cursor: null }),
+    );
+    listAdminPublishedMappingImportsMock.mockReset();
+    listAdminPublishedMappingImportsMock.mockResolvedValue(
       ok({ items: [], next_cursor: null }),
     );
     listAdminProductsMock.mockReset();

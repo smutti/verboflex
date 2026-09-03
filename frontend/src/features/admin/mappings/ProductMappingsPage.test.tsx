@@ -97,9 +97,12 @@ const repository: AdminRepositoryResponse = {
 };
 
 const publishedImport = {
+  action: "run_import",
   id: null,
   mapping_id: "00000000-0000-4000-8000-000000000099",
   active_revision_id: "00000000-0000-4000-8000-000000000098",
+  capability: "ready",
+  execution_number: null,
   topology: "direct",
   repository_sides: [
     {
@@ -242,7 +245,10 @@ describe("administrator mapping cursor collections", () => {
     startAdminPublishedMappingImportMock.mockResolvedValueOnce(
       ok({
         ...publishedImport,
+        action: "import_in_progress",
+        execution_number: 1,
         id: "00000000-0000-4000-8000-000000000097",
+        latest_execution_at: "2026-09-03T12:00:00Z",
         state: "queued",
       }),
     );
@@ -254,8 +260,13 @@ describe("administrator mapping cursor collections", () => {
     expect(
       await screen.findByRole("heading", { name: "Published mapping imports" }),
     ).toBeVisible();
-    expect(screen.getByText("Not imported")).toBeVisible();
-    const runImport = screen.getByRole("button", { name: "Run import" });
+    const importTable = screen.getByRole("table", {
+      name: "Published mapping imports",
+    });
+    expect(within(importTable).getByText("Not imported")).toBeVisible();
+    const runImport = within(importTable).getByRole("button", {
+      name: "Run import",
+    });
     act(() => {
       runImport.click();
       runImport.click();
@@ -271,7 +282,7 @@ describe("administrator mapping cursor collections", () => {
         mapping_id: publishedImport.mapping_id,
       },
     });
-    expect(screen.getByText("Not imported")).toBeVisible();
+    expect(within(importTable).getByText("Not imported")).toBeVisible();
 
     await act(async () => {
       resolveRefetch(
@@ -279,7 +290,10 @@ describe("administrator mapping cursor collections", () => {
           items: [
             {
               ...publishedImport,
+              action: "import_in_progress",
+              execution_number: 1,
               id: "00000000-0000-4000-8000-000000000097",
+              latest_execution_at: "2026-09-03T12:00:00Z",
               state: "queued",
             },
           ],
@@ -287,7 +301,7 @@ describe("administrator mapping cursor collections", () => {
         }),
       );
     });
-    expect(await screen.findByText("Queued")).toBeVisible();
+    expect(await within(importTable).findByText("Queued")).toBeVisible();
     expect(listAdminPublishedMappingImportsMock).toHaveBeenCalledTimes(2);
   });
 

@@ -249,7 +249,7 @@ describe("published mapping import collection", () => {
         repositories={repositories}
       />,
     );
-    expect(await screen.findByText("branch/new-mapping")).toBeVisible();
+    expect((await screen.findAllByText("branch/new-mapping"))[0]).toBeVisible();
     expect(oldSignal?.aborted).toBe(true);
     await act(async () => {
       resolveOldSecond?.(
@@ -283,7 +283,7 @@ describe("published mapping import collection", () => {
         name: "Retry loading published imports",
       }),
     );
-    expect(await screen.findByText("branch/mapping-3")).toBeVisible();
+    expect((await screen.findAllByText("branch/mapping-3"))[0]).toBeVisible();
     expect(listImportsMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ query: { cursor: null, limit: 50, status: "all" } }),
     );
@@ -405,7 +405,7 @@ describe("published mapping import collection", () => {
     );
     renderImports();
 
-    const alert = await screen.findByRole("alert");
+    const alert = (await screen.findAllByRole("alert"))[0];
     expect(alert).toHaveTextContent("Bitbucket connection required");
     expect(alert).toHaveTextContent(
       "The organizational Bitbucket connection is not ready for imports.",
