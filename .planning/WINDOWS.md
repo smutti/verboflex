@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 0
 waived_count: 0
-fixed_count: 37
-total_count: 37
-last_updated: 2026-08-31T11:12:09.549Z
+fixed_count: 39
+total_count: 39
+last_updated: 2026-09-03T10:31:32.223Z
 ---
 
 # Broken Windows Ledger
@@ -52,6 +52,8 @@ last_updated: 2026-08-31T11:12:09.549Z
 | 35 | 02 | deviation | frontend/e2e/admin-configuration.spec.ts |  | Verified current-source browser journeys after detecting a stale default nginx asset | fixed |  | 2026-08-29T20:13:15.939Z | 2026-08-29T20:13:36.042Z |
 | 36 | 02 | deviation | tools/phase2_smoke.sh |  | Generated owner-only deployment secrets were required for real staging/production smoke and are fully scanned and cleaned | fixed |  | 2026-08-31T11:11:45.316Z | 2026-08-31T11:12:09.484Z |
 | 37 | 02 | deviation | tools/phase2_gauntlet.sh |  | Mechanical Ruff formatting shifted three exact reviewed secret-fixture line numbers; policy entries were realigned | fixed |  | 2026-08-31T11:11:45.381Z | 2026-08-31T11:12:09.549Z |
+| 38 | 03 | deviation | backend/tests/api/test_openapi_contract.py |  | Exact generated export assertions required identifier-boundary matching | fixed |  | 2026-09-03T10:30:58.460Z | 2026-09-03T10:31:32.155Z |
+| 39 | 03 | deviation | frontend/src/features/admin/products/ProductConfiguration.test.tsx |  | Typed product fixtures required canonical affected_mapping_count alignment | fixed |  | 2026-09-03T10:30:58.526Z | 2026-09-03T10:31:32.223Z |
 
 ````json
 [
@@ -498,6 +500,30 @@ last_updated: 2026-08-31T11:12:09.549Z
     "reason": "",
     "recorded_at": "2026-08-31T11:11:45.381Z",
     "resolved_at": "2026-08-31T11:12:09.549Z"
+  },
+  {
+    "id": 38,
+    "kind": "deviation",
+    "phase": "03",
+    "file": "backend/tests/api/test_openapi_contract.py",
+    "line": null,
+    "description": "Exact generated export assertions required identifier-boundary matching",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-03T10:30:58.460Z",
+    "resolved_at": "2026-09-03T10:31:32.155Z"
+  },
+  {
+    "id": 39,
+    "kind": "deviation",
+    "phase": "03",
+    "file": "frontend/src/features/admin/products/ProductConfiguration.test.tsx",
+    "line": null,
+    "description": "Typed product fixtures required canonical affected_mapping_count alignment",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-03T10:30:58.526Z",
+    "resolved_at": "2026-09-03T10:31:32.223Z"
   }
 ]
 ````

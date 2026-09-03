@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 03
 current_phase_name: Bitbucket Import Integration
 status: executing
-stopped_at: Completed 03-10-PLAN.md
-last_updated: "2026-09-03T10:19:19.493Z"
+stopped_at: Completed 03-11-PLAN.md
+last_updated: "2026-09-03T10:31:44.455Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 03 execution started
-state_head: 90a902d1db66be600eb32d9d9cce256fd99eecad
+state_head: 64c3e39c6ac00d914cfc637d9eca3e6a3cfed7a2
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 77
-  completed_plans: 71
+  completed_plans: 72
   percent: 22
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-01)
 ## Current Position
 
 Phase: 03 (Bitbucket Import Integration) — EXECUTING
-Plan: 11 of 16
+Plan: 12 of 16
 Status: Ready to execute
 Last activity: 2026-09-02 — Phase 03 execution started
 
@@ -130,6 +130,7 @@ Progress: [████████████████████] 61/61 p
 | Phase 03 P08 | 20min | 2 tasks | 8 files |
 | Phase 03 P09 | 46min | 2 tasks | 8 files |
 | Phase 03 P10 | 1h 22m | 2 tasks | 11 files |
+| Phase 03 P11 | 9min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -361,6 +362,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Count an affected mapping only for the product active revision when an active baseline exists and the current logical import state is import_failed.
 - [Phase 03]: Compute affected_mapping_count in the product root projection with one correlated database aggregate so page size does not cause N+1 queries.
 - [Phase 03]: Keep canonical OpenAPI current in Plan 03-10 and defer generated TypeScript client regeneration to Plan 03-11.
+- [Phase 03]: Keep exactly five Phase 3 import operations generated from canonical FastAPI OpenAPI; every provider mutation remains structurally absent.
+- [Phase 03]: Prove browser import authority with exact VerboFlex-origin runtime requests and in-memory bearer credentials.
+- [Phase 03]: Treat affected_mapping_count as a required server-owned product field throughout generated TypeScript consumers.
 
 ### Pending Todos
 
@@ -400,6 +404,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-03T10:19:19.370Z
-Stopped at: Completed 03-10-PLAN.md
+Last session: 2026-09-03T10:31:44.299Z
+Stopped at: Completed 03-11-PLAN.md
 Resume file: None
