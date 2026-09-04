@@ -23,6 +23,8 @@ from verboflex.localization.importing.core import (
     IssueCode,
     RepositorySide,
     StructureKind,
+    canonical_issue_order,
+    canonical_selector_digest,
     canonical_value_order,
 )
 from verboflex.localization.preview.core import (
@@ -31,9 +33,12 @@ from verboflex.localization.preview.core import (
 )
 
 MAX_CANONICAL_FILE_BYTES = 1_048_576
+MAX_QT_AGGREGATE_BYTES = 20_971_520
+MAX_QT_FILES = 500
+MAX_QT_ISSUES = 5
 MAX_QT_MESSAGES = 5_000
 MAX_QT_VALUES = 5_000
-MAX_QT_XML_DEPTH = 12
+MAX_QT_XML_DEPTH = 6
 MAX_QT_LOCATIONS_PER_MESSAGE = 256
 MAX_QT_VARIANTS_PER_MESSAGE = 256
 
@@ -137,6 +142,7 @@ def parse_qt_ts(parser_input: CanonicalParserInput) -> CanonicalParseResult:
             language=language,
             source_language=source_language,
         )
+        _require_unique_values(values)
         return CanonicalParseResult(values=tuple(sorted(values, key=canonical_value_order)))
     except _MalformedQtTs as error:
         return _failure(
@@ -153,6 +159,46 @@ def parse_qt_ts(parser_input: CanonicalParserInput) -> CanonicalParseResult:
         return _failure(parser_input, code="base_language_required")
     except _UnsupportedQtTs, ValueError:
         return _failure(parser_input, code="unsupported_structure")
+
+
+def parse_qt_ts_files(
+    parser_inputs: tuple[CanonicalParserInput, ...],
+) -> CanonicalParseResult:
+    """Combine bounded Qt peer files atomically in deterministic order."""
+    if type(parser_inputs) is not tuple or not parser_inputs:
+        return _invalid_batch_failure()
+    if any(type(item) is not CanonicalParserInput for item in parser_inputs):
+        return _invalid_batch_failure()
+    if any(not isinstance(item.content, bytes) for item in parser_inputs):
+        return _invalid_batch_failure()
+    if len(parser_inputs) > MAX_QT_FILES:
+        return _failure(parser_inputs[0], code="unsupported_structure")
+    if sum(len(item.content) for item in parser_inputs) > MAX_QT_AGGREGATE_BYTES:
+        return _failure(parser_inputs[0], code="unsupported_structure")
+
+    values: list[CanonicalValue] = []
+    issues: list[CanonicalIssue] = []
+    ordered_inputs = sorted(
+        parser_inputs,
+        key=lambda item: (item.repository_side, item.path),
+    )
+    for parser_input in ordered_inputs:
+        result = parse_qt_ts(parser_input)
+        if result.issues:
+            issues.extend(result.issues)
+        else:
+            values.extend(result.values)
+        if len(values) > MAX_QT_VALUES:
+            return _failure(parser_input, code="unsupported_structure")
+    if issues:
+        return CanonicalParseResult(
+            issues=tuple(sorted(set(issues), key=canonical_issue_order)[:MAX_QT_ISSUES])
+        )
+    try:
+        _require_unique_values(tuple(values))
+    except _DuplicateQtIdentity:
+        return _failure(ordered_inputs[0], code="duplicate_key")
+    return CanonicalParseResult(values=tuple(sorted(values, key=canonical_value_order)))
 
 
 def _require_input_authority(parser_input: CanonicalParserInput) -> None:
@@ -226,13 +272,14 @@ def _document_languages(
     if (
         root.tag != "TS"
         or "version" not in names
-        or "language" not in names
         or not names.issubset(_ROOT_ATTRIBUTES)
         or root.attrib["version"] not in {"2.0", "2.1"}
         or (root.text or "").strip()
         or (root.tail or "").strip()
     ):
         raise _UnsupportedQtTs
+    if "language" not in names:
+        raise _AmbiguousQtTs
     language = normalize_preview_locale(root.attrib["language"])
     if language is None:
         raise _AmbiguousQtTs
@@ -313,6 +360,20 @@ def _document_values(
         values.extend(context_values)
         context_index += 1
     return tuple(values)
+
+
+def _require_unique_values(values: tuple[CanonicalValue, ...]) -> None:
+    identities: set[tuple[str, str, str, str]] = set()
+    for value in values:
+        identity = (
+            value.locator.repository_side,
+            value.language,
+            value.logical_key,
+            canonical_selector_digest(value.selector),
+        )
+        if identity in identities:
+            raise _DuplicateQtIdentity
+        identities.add(identity)
 
 
 def _dependency_nodes(element: Element) -> tuple[CanonicalStructureNode, ...]:
@@ -886,6 +947,19 @@ def _invalid_input_failure() -> CanonicalParseResult:
                 repository_side="direct",
                 path="<input>",
                 message="Malformed Qt TS parser input.",
+            ),
+        )
+    )
+
+
+def _invalid_batch_failure() -> CanonicalParseResult:
+    return CanonicalParseResult(
+        issues=(
+            CanonicalIssue(
+                code="malformed_file",
+                repository_side="direct",
+                path="<input>",
+                message="Malformed Qt TS parser input batch.",
             ),
         )
     )
