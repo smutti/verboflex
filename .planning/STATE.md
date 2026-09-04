@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 04
 current_phase_name: Localization Import, Search, and Constraints
 status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-09-04T21:39:14.065Z"
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-09-04T21:51:27.521Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 04 execution started
-state_head: 213af0624c88abd68c9ee3abd7f22b5b9442ea1f
+state_head: 3910c4cfcc08c91f66a96ba944295ce2704fbd7f
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 104
-  completed_plans: 80
+  completed_plans: 81
   percent: 38
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 ## Current Position
 
 Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
-Plan: 4 of 27
+Plan: 5 of 27
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 04 execution started
 
@@ -140,6 +140,7 @@ Progress: [████████░░░░░░░░░░░░] 3/8 pha
 | Phase 04 P01 | 39min | 2 tasks | 8 files |
 | Phase 04 P02 | 20min | 2 tasks | 6 files |
 | Phase 04 P03 | 19min | 2 tasks | 6 files |
+| Phase 04 P04 | 9min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -401,6 +402,9 @@ Recent decisions affecting current work:
 - [Phase 04]: Qt ID/source identity keeps context, disambiguation, form index, and priority in typed selectors rather than raw keys.
 - [Phase 04]: Qt lifecycle state remains Draft-only provenance; obsolete and vanished records retain content as deleted without approval authority.
 - [Phase 04]: Qt peer parsing is deterministic and failure-atomic under exact file, aggregate, depth, value, and issue bounds.
+- [Phase 04]: Keep each decoded leaf member as the raw logical key and store only ordered parent members in the version-1 json_path selector. — Preserves punctuation and keeps sibling leaves independently addressable without synthesized keys.
+- [Phase 04]: Use confirmed layout identity to distinguish recursively nested flat-per-locale data from locale-rooted data; reject mixed locale roots atomically. — Keeps configuration authority explicit and prevents ambiguous JSON roots from publishing partial values.
+- [Phase 04]: Enforce exact JSON file, aggregate, peer-file, member, value, and depth ceilings before publishing canonical values. — Bounds repository-controlled work and makes batch parsing failure-atomic.
 
 ### Pending Todos
 
@@ -441,6 +445,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-04T21:39:13.975Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-09-04T21:51:27.438Z
+Stopped at: Completed 04-04-PLAN.md
 Resume file: None
