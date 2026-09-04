@@ -261,9 +261,7 @@ def _invalid_case_content(case: dict[str, object]) -> bytes:
 
 
 def _assignments(count: int, *, start: int = 0) -> bytes:
-    return b"".join(
-        f'"key-{index}"="value";'.encode() for index in range(start, start + count)
-    )
+    return b"".join(f'"key-{index}"="value";'.encode() for index in range(start, start + count))
 
 
 def _peer_input(content: bytes, *, index: int) -> object:
@@ -384,9 +382,7 @@ def test_ios_peer_files_fail_atomically_and_obey_file_and_aggregate_limits() -> 
         exact_aggregate[-1],
         content=exact_aggregate[-1].content + b" ",
     )
-    over_aggregate_result = adapter.parse_ios_strings_files(
-        exact_aggregate[:-1] + (one_byte_over,)
-    )
+    over_aggregate_result = adapter.parse_ios_strings_files(exact_aggregate[:-1] + (one_byte_over,))
     malformed = cast(Any, _peer_input(b'"bad"="unterminated', index=700))
     atomic = adapter.parse_ios_strings_files((exact_files[0], malformed))
 
@@ -395,9 +391,7 @@ def test_ios_peer_files_fail_atomically_and_obey_file_and_aggregate_limits() -> 
     assert len(exact_aggregate_result.values) == file_count
     assert over_aggregate_result.values == () and over_aggregate_result.issues
     assert atomic.values == ()
-    assert tuple(issue.path for issue in atomic.issues) == (
-        "catalogs/en.lproj/file-700.strings",
-    )
+    assert tuple(issue.path for issue in atomic.issues) == ("catalogs/en.lproj/file-700.strings",)
 
 
 def test_ios_concurrent_calls_are_byte_equal_and_failure_isolated() -> None:

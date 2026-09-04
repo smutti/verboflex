@@ -16,6 +16,7 @@ from verboflex.localization.importing.core import (
     CanonicalValue,
     IssueCode,
     RepositorySide,
+    canonical_issue_order,
     canonical_value_order,
 )
 from verboflex.localization.preview import ios_strings as preview_ios
@@ -36,6 +37,15 @@ _UTF8_BOM = b"\xef\xbb\xbf"
 _UTF16_LE_BOM = b"\xff\xfe"
 _UTF16_BE_BOM = b"\xfe\xff"
 _LEXER_WHITESPACE = " \t\r\n"
+
+MAX_CANONICAL_FILE_BYTES = 1_048_576
+MAX_IOS_AGGREGATE_BYTES = 20_971_520
+MAX_IOS_FILES = 500
+MAX_IOS_ASSIGNMENTS = 5_000
+MAX_IOS_COMMENTS = 4_096
+MAX_IOS_TOKENS = 20_000
+MAX_IOS_ESCAPES_PER_TOKEN = 4_096
+MAX_IOS_ISSUES = 5
 
 
 class _MalformedIosStrings(ValueError):
@@ -94,13 +104,22 @@ class _LexicalEntry:
 class _CanonicalStringsLexer(preview_ios._StringsLexer):
     """Metadata-retaining extension of the proven preview lexer state machine."""
 
-    __slots__ = ()
+    __slots__ = ("_assignment_count", "_comment_count", "_token_count")
+
+    def __init__(self, source: str) -> None:
+        super().__init__(source)
+        self._assignment_count = 0
+        self._comment_count = 0
+        self._token_count = 0
 
     def parse_entries(self) -> tuple[_LexicalEntry, ...]:
         entries: list[_LexicalEntry] = []
         leading = self._trivia(placement="before_entry")
         while self._position < self._length:
             if self._source[self._position] != '"':
+                raise _UnsupportedIosStrings(position=self._position)
+            self._assignment_count += 1
+            if self._assignment_count > MAX_IOS_ASSIGNMENTS:
                 raise _UnsupportedIosStrings(position=self._position)
             entry_start = self._position
             key, key_span = self._quoted()
@@ -133,14 +152,17 @@ class _CanonicalStringsLexer(preview_ios._StringsLexer):
         if leading:
             trailing = tuple(replace(item, placement="after_document") for item in leading)
             entries[-1] = replace(entries[-1], trivia=(*entries[-1].trivia, *trailing))
+        self._require_safe_decoded_values(entries)
         self._require_unique_keys(entries)
         return tuple(entries)
 
     def _quoted(self) -> tuple[str, preview_ios.SourceSpan]:
         try:
-            return self._quoted_string()
+            value = self._quoted_string()
         except ValueError as error:
             raise _MalformedIosStrings(position=self._position) from error
+        self._note_token()
+        return value
 
     def _punctuation(self, expected: str) -> preview_ios.SourceSpan:
         start = self._position
@@ -148,6 +170,7 @@ class _CanonicalStringsLexer(preview_ios._StringsLexer):
             self._expect(expected)
         except ValueError as error:
             raise _MalformedIosStrings(position=start) from error
+        self._note_token()
         return preview_ios.SourceSpan(start, self._position)
 
     def _trivia(self, *, placement: _TriviaPlacement) -> tuple[_Trivia, ...]:
@@ -177,6 +200,11 @@ class _CanonicalStringsLexer(preview_ios._StringsLexer):
                 kind = "block_comment"
             else:
                 break
+            self._note_token()
+            if kind != "whitespace":
+                self._comment_count += 1
+                if self._comment_count > MAX_IOS_COMMENTS:
+                    raise _UnsupportedIosStrings(position=start)
             span = preview_ios.SourceSpan(start, self._position)
             trivia.append(
                 _Trivia(
@@ -187,6 +215,19 @@ class _CanonicalStringsLexer(preview_ios._StringsLexer):
                 )
             )
         return tuple(trivia)
+
+    def _note_token(self) -> None:
+        self._token_count += 1
+        if self._token_count > MAX_IOS_TOKENS:
+            raise _UnsupportedIosStrings(position=self._position)
+
+    @staticmethod
+    def _require_safe_decoded_values(entries: list[_LexicalEntry]) -> None:
+        for entry in entries:
+            if _contains_unsafe_control(entry.key):
+                raise _MalformedIosStrings(position=entry.key_span.start)
+            if _contains_unsafe_control(entry.value):
+                raise _MalformedIosStrings(position=entry.value_span.start)
 
     @staticmethod
     def _require_unique_keys(entries: list[_LexicalEntry]) -> None:
@@ -243,8 +284,54 @@ def parse_ios_strings(parser_input: CanonicalParserInput) -> CanonicalParseResul
         return _failure(parser_input, code="ambiguous_structure")
     except _BaseLanguageRequired:
         return _failure(parser_input, code="base_language_required")
-    except _UnsupportedIosStrings, ValueError:
+    except _UnsupportedIosStrings as error:
+        line, column = (
+            _safe_coordinates(decoded.source, error.position) if decoded else (None, None)
+        )
+        return _failure(
+            parser_input,
+            code="unsupported_structure",
+            line=line,
+            column=column,
+        )
+    except ValueError:
         return _failure(parser_input, code="unsupported_structure")
+
+
+def parse_ios_strings_files(
+    parser_inputs: tuple[CanonicalParserInput, ...],
+) -> CanonicalParseResult:
+    """Combine bounded peer ``.strings`` files only after every file succeeds."""
+    if type(parser_inputs) is not tuple or not parser_inputs:
+        return _invalid_batch_failure()
+    if any(type(item) is not CanonicalParserInput for item in parser_inputs):
+        return _invalid_batch_failure()
+    if any(not isinstance(item.content, bytes) for item in parser_inputs):
+        return _invalid_batch_failure()
+    if len(parser_inputs) > MAX_IOS_FILES:
+        return _failure(parser_inputs[0], code="unsupported_structure")
+    if sum(len(item.content) for item in parser_inputs) > MAX_IOS_AGGREGATE_BYTES:
+        return _failure(parser_inputs[0], code="unsupported_structure")
+
+    values: list[CanonicalValue] = []
+    issues: list[CanonicalIssue] = []
+    ordered_inputs = sorted(parser_inputs, key=lambda item: (item.repository_side, item.path))
+    for parser_input in ordered_inputs:
+        result = parse_ios_strings(parser_input)
+        if result.issues:
+            issues.extend(result.issues)
+        else:
+            values.extend(result.values)
+        if len(values) > MAX_IOS_ASSIGNMENTS:
+            return _failure(parser_input, code="unsupported_structure")
+    if issues:
+        return CanonicalParseResult(
+            issues=tuple(sorted(set(issues), key=canonical_issue_order)[:MAX_IOS_ISSUES])
+        )
+    try:
+        return CanonicalParseResult(values=tuple(sorted(values, key=canonical_value_order)))
+    except ValueError:
+        return _failure(ordered_inputs[0], code="duplicate_key")
 
 
 def _require_input_authority(parser_input: CanonicalParserInput) -> tuple[str, str]:
@@ -254,7 +341,11 @@ def _require_input_authority(parser_input: CanonicalParserInput) -> tuple[str, s
         or not isinstance(parser_input.content, bytes)
     ):
         raise _UnsupportedIosStrings
-    if parser_input.layout_version != 1:
+    if (
+        parser_input.layout_version != 1
+        or not _is_safe_relative_path(parser_input.path)
+        or not _is_safe_relative_path(parser_input.layout_identity)
+    ):
         raise _AmbiguousIosLayout
     path_layout = preview_ios._ios_layout_path(parser_input.path)
     if path_layout is None or parser_input.layout_identity != path_layout[1]:
@@ -266,6 +357,10 @@ def _require_input_authority(parser_input: CanonicalParserInput) -> tuple[str, s
 
 
 def _decode_document(content: bytes) -> _DecodedDocument:
+    if not content or len(content) > MAX_CANONICAL_FILE_BYTES:
+        if not content:
+            raise _MalformedIosStrings
+        raise _UnsupportedIosStrings
     if content.startswith(_UTF16_LE_BOM):
         encoding: _EncodingName = "utf-16-le"
         bom: _BomName = "utf-16-le"
@@ -409,8 +504,16 @@ def _escape_sequences(raw: str) -> tuple[str, ...]:
             continue
         length = 6 if raw.startswith("\\U", position) else 2
         escapes.append(raw[position : position + length])
+        if len(escapes) > MAX_IOS_ESCAPES_PER_TOKEN:
+            raise _UnsupportedIosStrings(position=position)
         position += length
     return tuple(escapes)
+
+
+def _contains_unsafe_control(value: str) -> bool:
+    return any(
+        category(character) == "Cc" and character not in {"\t", "\n", "\r"} for character in value
+    )
 
 
 def _trivia_nodes(items: tuple[_Trivia, ...]) -> tuple[CanonicalStructureNode, ...]:
@@ -514,6 +617,19 @@ def _invalid_input_failure() -> CanonicalParseResult:
                 repository_side="direct",
                 path="<input>",
                 message="Malformed iOS strings parser input.",
+            ),
+        )
+    )
+
+
+def _invalid_batch_failure() -> CanonicalParseResult:
+    return CanonicalParseResult(
+        issues=(
+            CanonicalIssue(
+                code="malformed_file",
+                repository_side="direct",
+                path="<input>",
+                message="Malformed iOS strings parser input batch.",
             ),
         )
     )
