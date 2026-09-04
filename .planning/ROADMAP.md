@@ -343,7 +343,7 @@ Plans:
   7. Authorized user can create, edit, and remove maximum-length constraints, and the system recalculates violations after imports and later edits.
   8. The parser checkpoint and final phase quality gate pass with targeted tests, code review, and deploy/build smoke verification.
 
-**Plans**: 1/27 plans executed
+**Plans**: 2/27 plans executed
 
 Plans:
 **Wave 1**
@@ -352,7 +352,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 04-02-PLAN.md — Full Android scalar, plural, and array parsing
+- [x] 04-02-PLAN.md — Full Android scalar, plural, and array parsing
 - [ ] 04-03-PLAN.md — Full Qt `.ts` scalar, numerus, and length-variant parsing
 - [ ] 04-04-PLAN.md — Full canonical JSON leaf parsing
 - [ ] 04-05-PLAN.md — Full iOS `.strings` lexer and serializer-safe parsing
@@ -536,7 +536,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 1. Platform Foundation | 15/15 | Complete    | 2026-08-26 |
 | 2. Admin Configuration | 46/46 | Complete    | 2026-09-01 |
 | 3. Bitbucket Import Integration | 16/16 | Complete    | 2026-09-03 |
-| 4. Localization Import, Search, and Constraints | 1/27 | In Progress|  |
+| 4. Localization Import, Search, and Constraints | 2/27 | In Progress|  |
 | 5. Review Workspace and Comments | 0/6 | Not started | - |
 | 6. Format-Safe Write-Back | 0/5 | Not started | - |
 | 7. Change Sets and Pull Requests | 0/6 | Not started | - |

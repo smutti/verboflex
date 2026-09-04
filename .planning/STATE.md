@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 04
 current_phase_name: Localization Import, Search, and Constraints
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-09-04T20:52:56.857Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-09-04T21:16:06.112Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 04 execution started
-state_head: b745428a748b1e62083349b16ae0ca5f78eacddb
+state_head: 7270dc53e1478b30f4650f0b5a787629e8f6abfa
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 104
-  completed_plans: 78
+  completed_plans: 79
   percent: 38
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 ## Current Position
 
 Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
-Plan: 2 of 27
+Plan: 3 of 27
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 04 execution started
 
@@ -138,6 +138,7 @@ Progress: [████████░░░░░░░░░░░░] 3/8 pha
 | Phase 03 P15 | 1h30min | 2 tasks | 20 files |
 | Phase 03 P16 | 1h35min | 3 tasks | 9 files |
 | Phase 04 P01 | 39min | 2 tasks | 8 files |
+| Phase 04 P02 | 20min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -392,6 +393,10 @@ Recent decisions affecting current work:
 - [Phase 04]: Keep ordered lossless structure fields explicit in serialized output and reject every structure kind outside the shared format-qualified version-1 allowlist. — Supported syntax remains reconstructible while unknown syntax fails closed.
 - [Phase 04]: Exclude path and position from canonical value identity while rejecting duplicate identities and noncanonical result order atomically. — File moves preserve identity and malformed adapter output cannot reach persistence.
 - [Phase 04]: Expose only five closed issue codes with bounded safe coordinates and messages; source fragments and exception payload fields are structurally absent. — Repository-controlled content cannot leak through parser diagnostics.
+- [Phase 04]: Android plural quantities and array indexes use typed canonical selectors instead of logical-key encoding.
+- [Phase 04]: Android semantic XML structure is retained as a flat ordered event stream without storing raw source XML.
+- [Phase 04]: Android inline markup accepts only exact b, i, u, and XLIFF 1.2 g contracts and otherwise fails closed.
+- [Phase 04]: Android batch parsing preflights exact limits and returns no values when any peer file fails.
 
 ### Pending Todos
 
@@ -432,6 +437,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-04T20:52:56.767Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-09-04T21:16:06.004Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None
