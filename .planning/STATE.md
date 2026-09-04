@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 04
 current_phase_name: Localization Import, Search, and Constraints
 status: executing
-stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-09-04T21:51:27.521Z"
+stopped_at: Completed 04-05-PLAN.md
+last_updated: "2026-09-04T22:07:53.003Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 04 execution started
-state_head: 3910c4cfcc08c91f66a96ba944295ce2704fbd7f
+state_head: 57f476acaf3d4b23dd45a5eb6cc32abdc0936b0f
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 104
-  completed_plans: 81
+  completed_plans: 82
   percent: 38
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 ## Current Position
 
 Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
-Plan: 5 of 27
+Plan: 6 of 27
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 04 execution started
 
@@ -141,6 +141,7 @@ Progress: [████████░░░░░░░░░░░░] 3/8 pha
 | Phase 04 P02 | 20min | 2 tasks | 6 files |
 | Phase 04 P03 | 19min | 2 tasks | 6 files |
 | Phase 04 P04 | 9min | 2 tasks | 6 files |
+| Phase 04 P05 | 12min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -405,6 +406,10 @@ Recent decisions affecting current work:
 - [Phase 04]: Keep each decoded leaf member as the raw logical key and store only ordered parent members in the version-1 json_path selector. — Preserves punctuation and keeps sibling leaves independently addressable without synthesized keys.
 - [Phase 04]: Use confirmed layout identity to distinguish recursively nested flat-per-locale data from locale-rooted data; reject mixed locale roots atomically. — Keeps configuration authority explicit and prevents ambiguous JSON roots from publishing partial values.
 - [Phase 04]: Enforce exact JSON file, aggregate, peer-file, member, value, and depth ceilings before publishing canonical values. — Bounds repository-controlled work and makes batch parsing failure-atomic.
+- [Phase 04]: Extend the proven iOS preview decoder and single-pass lexer with lossless canonical token metadata. — Keeps escape and surrogate semantics shared while preserving write-back-grade encoding, comments, spans, and style.
+- [Phase 04]: Keep decoded iOS keys and scalar selectors semantic while retaining encoding, path, spans, comments, and order outside stable identity. — File rewrites and moves must not detach canonical review identity.
+- [Phase 04]: Enforce exact iOS file, aggregate, peer, assignment, comment, token, and escape ceilings before returning canonical authority. — Repository-controlled inputs remain deterministic and bounded.
+- [Phase 04]: Aggregate iOS peer files in deterministic side and path order and discard all values on any peer or identity failure. — Canonical import results remain atomic across configured files.
 
 ### Pending Todos
 
@@ -445,6 +450,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-04T21:51:27.438Z
-Stopped at: Completed 04-04-PLAN.md
+Last session: 2026-09-04T22:07:52.917Z
+Stopped at: Completed 04-05-PLAN.md
 Resume file: None

@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 3
 waived_count: 0
-fixed_count: 39
-total_count: 42
-last_updated: 2026-09-04T20:50:56.071Z
+fixed_count: 40
+total_count: 43
+last_updated: 2026-09-04T22:07:24.801Z
 ---
 
 # Broken Windows Ledger
@@ -57,6 +57,7 @@ last_updated: 2026-09-04T20:50:56.071Z
 | 40 | 04 | stub | backend/src/verboflex/localization/importing/registry.py | 36 | Qt canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-03 supplies the adapter | open |  | 2026-09-04T20:50:55.925Z |  |
 | 41 | 04 | stub | backend/src/verboflex/localization/importing/registry.py | 37 | JSON canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-04 supplies the adapter | open |  | 2026-09-04T20:50:55.994Z |  |
 | 42 | 04 | stub | backend/src/verboflex/localization/importing/registry.py | 38 | iOS strings canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-05 supplies the adapter | open |  | 2026-09-04T20:50:56.071Z |  |
+| 43 | 04 | deviation | backend/tests/unit/localization/importing/test_ios_strings.py | 196 | Corrected the Task 1 span-adjacency test to compare intentionally unequal adjacent-pair iterables with strict=False. | fixed |  | 2026-09-04T22:07:04.874Z | 2026-09-04T22:07:24.801Z |
 
 ````json
 [
@@ -563,6 +564,18 @@ last_updated: 2026-09-04T20:50:56.071Z
     "reason": "",
     "recorded_at": "2026-09-04T20:50:56.071Z",
     "resolved_at": null
+  },
+  {
+    "id": 43,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/tests/unit/localization/importing/test_ios_strings.py",
+    "line": 196,
+    "description": "Corrected the Task 1 span-adjacency test to compare intentionally unequal adjacent-pair iterables with strict=False.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-04T22:07:04.874Z",
+    "resolved_at": "2026-09-04T22:07:24.801Z"
   }
 ]
 ````
