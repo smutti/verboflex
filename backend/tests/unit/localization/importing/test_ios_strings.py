@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import importlib
 import json
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 _FIXTURES = Path(__file__).parents[3] / "fixtures" / "localization" / "ios"
 
@@ -245,3 +249,241 @@ def test_ios_comment_and_assignment_grammar_rejects_non_strings_constructs(
         "unsupported_structure",
     }
     assert "plural" not in result.issues[0].message
+
+
+def _invalid_case_content(case: dict[str, object]) -> bytes:
+    content = case.get("content")
+    if isinstance(content, str):
+        return content.encode()
+    content_hex = case.get("content_hex")
+    assert isinstance(content_hex, str)
+    return bytes.fromhex(content_hex)
+
+
+def _assignments(count: int, *, start: int = 0) -> bytes:
+    return b"".join(
+        f'"key-{index}"="value";'.encode() for index in range(start, start + count)
+    )
+
+
+def _peer_input(content: bytes, *, index: int) -> object:
+    return _input(
+        content,
+        path=f"catalogs/en.lproj/file-{index}.strings",
+        layout_identity=f"ios-strings:catalogs/{{locale}}.lproj/file-{index}.strings",
+        repository_side="direct",
+    )
+
+
+def _padded_assignment(size: int, *, index: int) -> bytes:
+    document = f'"key-{index}"="value";'.encode()
+    assert len(document) <= size
+    return document + (b" " * (size - len(document)))
+
+
+def test_ios_hostile_fixture_inventory_fails_atomically_and_source_free() -> None:
+    _, adapter = _modules()
+    cases = json.loads((_FIXTURES / "invalid_cases.json").read_text())
+
+    for case in cases:
+        content = _invalid_case_content(case)
+        result = adapter.parse_ios_strings(_input(content))
+
+        assert result.values == (), case["id"]
+        assert tuple(issue.code for issue in result.issues) == (case["expected_code"],), case["id"]
+        assert len(result.issues) <= adapter.MAX_IOS_ISSUES
+        assert all(len(issue.message) <= 256 for issue in result.issues)
+        assert all("secret" not in issue.message.lower() for issue in result.issues)
+        assert all("<" not in issue.message for issue in result.issues)
+        assert set(result.issues[0].to_mapping()) == {
+            "code",
+            "column",
+            "line",
+            "message",
+            "path",
+            "repository_side",
+        }
+
+
+def test_ios_file_assignment_comment_token_and_escape_limits_are_exact() -> None:
+    _, adapter = _modules()
+
+    exact_file = adapter.parse_ios_strings(
+        _input(_padded_assignment(adapter.MAX_CANONICAL_FILE_BYTES, index=0))
+    )
+    over_file = adapter.parse_ios_strings(
+        _input(_padded_assignment(adapter.MAX_CANONICAL_FILE_BYTES + 1, index=0))
+    )
+    exact_assignments = adapter.parse_ios_strings(_input(_assignments(adapter.MAX_IOS_ASSIGNMENTS)))
+    over_assignments = adapter.parse_ios_strings(
+        _input(_assignments(adapter.MAX_IOS_ASSIGNMENTS + 1))
+    )
+    exact_comments = adapter.parse_ios_strings(
+        _input((b"/**/" * adapter.MAX_IOS_COMMENTS) + b'"key"="value";')
+    )
+    over_comments = adapter.parse_ios_strings(
+        _input((b"/**/" * (adapter.MAX_IOS_COMMENTS + 1)) + b'"key"="value";')
+    )
+    token_assignments = (adapter.MAX_IOS_TOKENS - 4_000) // 4
+    exact_tokens_content = (b"/**/" * 4_000) + _assignments(token_assignments)
+    exact_tokens = adapter.parse_ios_strings(_input(exact_tokens_content))
+    over_tokens = adapter.parse_ios_strings(_input(b" " + exact_tokens_content))
+    exact_escapes = adapter.parse_ios_strings(
+        _input(b'"key"="' + (b"\\n" * adapter.MAX_IOS_ESCAPES_PER_TOKEN) + b'";')
+    )
+    over_escapes = adapter.parse_ios_strings(
+        _input(b'"key"="' + (b"\\n" * (adapter.MAX_IOS_ESCAPES_PER_TOKEN + 1)) + b'";')
+    )
+
+    assert len(exact_file.values) == 1
+    assert over_file.values == () and over_file.issues
+    assert len(exact_assignments.values) == adapter.MAX_IOS_ASSIGNMENTS
+    assert over_assignments.values == () and over_assignments.issues
+    assert len(exact_comments.values) == 1
+    assert over_comments.values == () and over_comments.issues
+    assert len(exact_tokens.values) == token_assignments
+    assert over_tokens.values == () and over_tokens.issues
+    assert len(exact_escapes.values) == 1
+    assert over_escapes.values == () and over_escapes.issues
+
+
+def test_ios_peer_files_fail_atomically_and_obey_file_and_aggregate_limits() -> None:
+    _, adapter = _modules()
+    exact_files = tuple(
+        cast(Any, _peer_input(f'"key-{index}"="value";'.encode(), index=index))
+        for index in range(adapter.MAX_IOS_FILES)
+    )
+    exact_file_result = adapter.parse_ios_strings_files(exact_files)
+    over_file_result = adapter.parse_ios_strings_files(
+        exact_files
+        + (
+            cast(
+                Any,
+                _peer_input(
+                    f'"key-{adapter.MAX_IOS_FILES}"="value";'.encode(),
+                    index=adapter.MAX_IOS_FILES,
+                ),
+            ),
+        )
+    )
+
+    file_count = 21
+    per_file, remainder = divmod(adapter.MAX_IOS_AGGREGATE_BYTES, file_count)
+    exact_aggregate = tuple(
+        cast(
+            Any,
+            _peer_input(
+                _padded_assignment(per_file + (1 if index < remainder else 0), index=index),
+                index=index,
+            ),
+        )
+        for index in range(file_count)
+    )
+    exact_aggregate_result = adapter.parse_ios_strings_files(exact_aggregate)
+    one_byte_over = replace(
+        exact_aggregate[-1],
+        content=exact_aggregate[-1].content + b" ",
+    )
+    over_aggregate_result = adapter.parse_ios_strings_files(
+        exact_aggregate[:-1] + (one_byte_over,)
+    )
+    malformed = cast(Any, _peer_input(b'"bad"="unterminated', index=700))
+    atomic = adapter.parse_ios_strings_files((exact_files[0], malformed))
+
+    assert len(exact_file_result.values) == adapter.MAX_IOS_FILES
+    assert over_file_result.values == () and over_file_result.issues
+    assert len(exact_aggregate_result.values) == file_count
+    assert over_aggregate_result.values == () and over_aggregate_result.issues
+    assert atomic.values == ()
+    assert tuple(issue.path for issue in atomic.issues) == (
+        "catalogs/en.lproj/file-700.strings",
+    )
+
+
+def test_ios_concurrent_calls_are_byte_equal_and_failure_isolated() -> None:
+    _, adapter = _modules()
+    valid_input = _input()
+    invalid_input = _input(b'"safe"="discarded";"bad"="unterminated')
+
+    def parse(index: int) -> bytes:
+        parser_input = valid_input if index % 2 == 0 else invalid_input
+        result = adapter.parse_ios_strings(parser_input)
+        return json.dumps(result.to_mapping(), sort_keys=True, separators=(",", ":")).encode()
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        outputs = tuple(executor.map(parse, range(64)))
+
+    assert len(set(outputs[::2])) == 1
+    assert len(set(outputs[1::2])) == 1
+    assert json.loads(outputs[0])["values"]
+    assert json.loads(outputs[1])["values"] == []
+    after_failure = adapter.parse_ios_strings(invalid_input)
+    assert after_failure.values == ()
+    assert tuple(issue.code for issue in after_failure.issues) == ("malformed_file",)
+
+
+def test_ios_input_authority_and_safe_coordinates_are_closed() -> None:
+    _, adapter = _modules()
+
+    missing_base = adapter.parse_ios_strings(_input(base_language=""))
+    wrong_layout = adapter.parse_ios_strings(_input(layout_identity="ios-strings:wrong"))
+    malformed = adapter.parse_ios_strings(_input(b'// line\n"safe"="discarded"'))
+
+    assert tuple(issue.code for issue in missing_base.issues) == ("base_language_required",)
+    assert tuple(issue.code for issue in wrong_layout.issues) == ("ambiguous_structure",)
+    assert malformed.values == ()
+    assert [(issue.line, issue.column) for issue in malformed.issues] == [(2, 19)]
+    assert all(
+        coordinate is None or 1 <= coordinate <= 2_147_483_647
+        for issue in malformed.issues
+        for coordinate in (issue.line, issue.column)
+    )
+
+
+def test_ios_manifest_covers_required_categories_and_exact_limits() -> None:
+    manifest = json.loads((_FIXTURES / "manifest.json").read_text())
+
+    assert set(manifest["categories"]) == {
+        "valid",
+        "empty",
+        "malformed",
+        "escaped",
+        "unicode",
+        "comments",
+        "duplicate",
+        "encoding",
+        "boundary",
+        "unsupported",
+        "concurrency",
+    }
+    assert manifest["limits"] == {
+        "file_bytes": 1_048_576,
+        "aggregate_bytes": 20_971_520,
+        "files": 500,
+        "assignments": 5_000,
+        "comments": 4_096,
+        "tokens": 20_000,
+        "escapes_per_token": 4_096,
+        "issues": 5,
+        "issue_message": 256,
+        "path": 4_096,
+        "coordinate": 2_147_483_647,
+    }
+    invalid_ids = [
+        case["id"] for case in json.loads((_FIXTURES / "invalid_cases.json").read_text())
+    ]
+    assert len(invalid_ids) == len(set(invalid_ids))
+
+
+@settings(max_examples=100, deadline=None)
+@given(st.binary(max_size=4_096))
+def test_arbitrary_ios_bytes_never_escape_or_return_partial_values(payload: bytes) -> None:
+    _, adapter = _modules()
+
+    result = adapter.parse_ios_strings(_input(payload))
+
+    assert not (result.values and result.issues)
+    assert len(result.issues) <= 5
+    assert all(len(issue.message) <= 256 for issue in result.issues)
+    if payload:
+        assert all(payload.hex() not in issue.message for issue in result.issues)
