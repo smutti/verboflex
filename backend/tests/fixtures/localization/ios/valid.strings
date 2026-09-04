@@ -1,0 +1,7 @@
+/* Catalog heading */
+"welcome\U002Etitle" = "Benvenuto";
+// Escape coverage
+"escaped" = "Say \"ciao\" \\ path\nnext\tend";
+"accent" = "caf\U00E9";
+"emoji" = "\UD83D\UDE00";
+"empty" = "";
