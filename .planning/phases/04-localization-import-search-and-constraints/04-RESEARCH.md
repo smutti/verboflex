@@ -2,7 +2,7 @@
 
 **Researched:** 2026-09-04
 **Domain:** Lossless localization parsing, atomic canonical refresh, indexed search, Unicode length constraints, and virtualized review navigation
-**Confidence:** HIGH for repository architecture and locked product behavior; MEDIUM for external documentation; LOW only where explicitly marked `[ASSUMED]`
+**Confidence:** HIGH for repository architecture and locked product behavior; MEDIUM for external documentation and plan-resolved implementation contracts
 
 <user_constraints>
 ## User Constraints (from CONTEXT.md)
@@ -43,7 +43,7 @@
 ### the agent's Discretion
 - Choose the exact SQLAlchemy tables, parser adapter interfaces, typed selector schema, UUID strategy, indexes, cursor encoding, virtual-list library, overscan/page size, and deterministic search tie-breakers, provided all decisions above remain observable and testable.
 - Choose whether the last product/language selection is stored as a non-sensitive browser preference or a server-side user preference; authorization and current availability must always be revalidated server-side.
-- Choose the precise configuration/storage point for the base language. Residual assumption: each mapping must resolve exactly one explicit or deterministic base language; missing or ambiguous base-language authority fails closed rather than silently choosing a locale.
+- Store the selected base language on each mapping confirmation, copy it through candidate/publication cloning, and include it in confirmation currentness. Missing or ambiguous authority fails closed rather than choosing a locale. [RESOLVED FOR PHASE 4]
 - Choose concise bounded parser and search error copy consistent with the existing generated-client and shadcn patterns.
 
 ### Deferred Ideas (OUT OF SCOPE)
@@ -268,7 +268,7 @@ Recommended result shape:
 - `source_text` and `translated_text`: remain separate and nullable where a topology cannot supply source text.
 - Issues: closed category, repository side, path, safe line/column when available; no raw fragments or exception text.
 
-Proposed selector discriminators are exactly `"scalar"`, `"android_quantity"`, `"android_array_item"`, `"qt_numerus"`, `"qt_length_variant"`, and `"json_path"`. [ASSUMED] The planner should lock these in one schema/version test before any adapter is implemented; do not let each adapter invent its own JSON.
+Selector discriminators are exactly `"scalar"`, `"android_quantity"`, `"android_array_item"`, `"qt_numerus"`, `"qt_length_variant"`, and `"json_path"`. [RESOLVED FOR PHASE 4] Plan 04-01 locks them in one schema/version test before any adapter is implemented; adapters may not invent additional discriminator JSON.
 
 ### Pattern 2: Stable Scope → Key → Value Identity
 
@@ -293,7 +293,7 @@ The current mapping row is revision-owned and its exact topology values are `"di
 
 For Qt, use `<message id>` as the raw key when present. When it is absent, use the original `<source>` text as the raw key and keep context/disambiguation in selectors; therefore a changed id-less Qt source is observably a delete-plus-add under D-08, while D-12 applies where source text is separate from a stable logical key. Qt documents both context/source messages and optional IDs; ID-based messages require unique IDs. [CITED: https://doc.qt.io/qt-6/linguist-ts-file-format.html] [CITED: https://doc.qt.io/qt-6/linguist-id-based-i18n.html]
 
-For nested JSON, use the leaf member name byte-for-byte as `logical_key` and preserve ordered parent path segments as the typed selector; a flat key containing `.` remains one unsplit raw key. [ASSUMED] This keeps sibling leaves independently addressable without manufacturing a dotted identity.
+For nested JSON, use the leaf member name byte-for-byte as `logical_key` and preserve ordered parent path segments as the typed selector; a flat key containing `.` remains one unsplit raw key. [RESOLVED FOR PHASE 4] This keeps sibling leaves independently addressable without manufacturing a dotted identity.
 
 ### Pattern 3: Stage, Reconcile, Then Atomically Activate
 
@@ -329,13 +329,13 @@ Refresh transition truth table:
 | Equal text without correlation evidence | Reuse | Treat origin as unproven | Never infer Approved |
 | Any malformed/ambiguous/unsupported input | No active-row mutation | Store bounded failure only | Prior dataset remains active |
 
-Initial storage values for the internal review state should be exactly `"draft"`, `"approved"`, and `"rejected"`. [ASSUMED] They implement the locked three-state workflow, but the planner should confirm casing once in a shared backend/frontend schema before migration code is written.
+Initial storage values for the internal review state are exactly `"draft"`, `"approved"`, and `"rejected"`. [RESOLVED FOR PHASE 4] Plan 04-01 freezes the shared vocabulary before migration code and Plan 04-10 enforces it in PostgreSQL.
 
 The future PR-correlation seam does not need a guessed “synchronized” flag in Phase 4. A stable value UUID, immutable value-revision digest, and exact import execution/commit provenance give later pending-change records durable values to reference; only later verified submission evidence may select the D-11 branch.
 
 ### Pattern 4: Deterministic Grouped Search With Cursor Binding
 
-**What:** Build candidate matches across key, source, and translated text, assign rank `0` exact / `1` prefix / `2` partial / `3` no-query, reduce to one key-language group, and order by `(rank, stable_casefolded_key, language, group_uuid)`. [ASSUMED] The cursor carries a version, a digest of the normalized query/filters/authorized scope, and the last complete order tuple.
+**What:** Build candidate matches across key, source, and translated text, assign rank `0` exact / `1` prefix / `2` partial / `3` no-query, reduce to one key-language group, and order by `(rank, stable_casefolded_key, language, group_uuid)`. [RESOLVED FOR PHASE 4] The cursor carries a version, a digest of the normalized query/filters/authorized scope, and the last complete order tuple.
 
 **When to use:** Every translation collection request, including empty search.
 
@@ -350,7 +350,7 @@ Indexes should cover:
 
 Search returns 50 groups plus one lookahead row and emits a cursor only when another group exists. The server validates cursor version, filter digest, authorized scope, tuple types/lengths, and exact canonical decoding; malformed/stale/mismatched cursors return bounded client errors. The UI-SPEC fixes 50 groups per page, an explicit Load more fallback, request-generation invalidation, and repeated/empty cursor guards. [VERIFIED: `.planning/phases/04-localization-import-search-and-constraints/04-UI-SPEC.md:118-150`]
 
-Define group-state filtering explicitly: a grouped row matches a requested review state when any canonical value in that group has that state, while detail returns all individual value states and labels mixed groups. [ASSUMED] This is the least surprising behavior for individually authoritative structured values, but must be frozen in API tests.
+Group-state filtering is resolved as follows: a grouped row matches a requested review state when any canonical value in that group has that state, while detail returns all individual value states and labels mixed groups. [RESOLVED FOR PHASE 4] Plans 04-13 and 04-15 freeze this in API/OpenAPI tests.
 
 ### Pattern 5: Materialized Constraint Projection With Central Recalculation
 
@@ -364,7 +364,7 @@ Store base language on the mapping confirmation and copy it during candidate/act
 
 Use an integer `version` on each constraint. PUT/DELETE require `expected_version`; lock the row/key and return a conflict projection when it changed. Do not optimistically mutate browser authority. Exact mutation roles already exist as the verbatim role names `"admin"` and `"product_manager_reviewer"`; read-only roles are `"translator"` and `"viewer"`. [VERIFIED: `backend/src/verboflex/models/role.py:18-23`] Reuse `require_roles()` for mutations and `CurrentPrincipal` for reads. [VERIFIED: `backend/src/verboflex/auth/principal.py:106-144`]
 
-Allow maximum values from `0` through `1_048_576` inclusive. [ASSUMED] Zero usefully expresses “must be empty”; the upper bound matches the existing per-file byte ceiling and prevents unreasonable numeric work, but it is not a locked user decision.
+Allow maximum values from `0` through `1_048_576` inclusive. [RESOLVED FOR PHASE 4] Zero expresses “must be empty”; Plan 04-10 freezes the database bound and Plans 04-21/04-15 freeze the API/generated-client bound.
 
 ### Pattern 6: Complete Server Projection, Thin Generated Client
 
@@ -407,23 +407,24 @@ Android officially defines string, string-array, and plurals resources, with res
 
 - Require a hardened `<resources>` document and continue forbidding DTDs, entities, and external references.
 - Accept direct `<string name>`, `<plurals name>/<item quantity>`, and `<string-array name>/<item>` structures only; reject duplicate names and duplicate quantities.
+- The exact Android attribute allowlist is: `<string>` requires `name` and permits only optional `translatable="true|false"` and `formatted="true|false"`; `<plurals>` and `<string-array>` require `name` and permit only optional `translatable="true|false"`; plural `<item>` requires only one Android-defined `quantity` value (`zero|one|two|few|many|other`); array `<item>` permits no attributes. Duplicate attributes, namespace substitutions, and every other resource/item attribute are unsupported.
 - Keep array index and plural quantity as typed selectors; order is semantic for arrays.
-- Parse mixed text/inline elements/tails into an ordered semantic structure plus visible display text. Preserve supported element names and ordered attributes; reject unknown semantics rather than flattening.
+- Parse mixed text/inline elements/tails into an ordered semantic structure plus visible display text. The exact inline allowlist is unnamespaced `<b>`, `<i>`, and `<u>` with no attributes, plus `{urn:oasis:names:tc:xliff:document:1.2}g` with required nonempty `id` and optional `example` only. Nested allowlisted nodes, their text/tails, XML comments, and CDATA lexical spans are preserved in ordered structure/locator metadata; CDATA contributes its content, not its wrapper, to display text. Unknown inline elements, attributes, namespaces, processing instructions, or other node kinds fail the complete mapping.
 - Preserve Android escape meaning and raw locator spans/structural addresses separately; do not count tags as visible characters.
 - Derive locale from the confirmed layout/path using the existing locale normalization; do not broaden Phase 2 locale grammar incidentally.
 
-Golden cases must include scalar/empty/escaped text, apostrophe/quote/backslash, `%` formatting, CDATA, styled inline markup and tails, XLIFF placeholders, plural quantities, array ordering, duplicate resources, malformed XML, DTD/entity attempts, unknown elements/attributes, invalid encoding, and exact boundary sizes. Support for CDATA/XLIFF beyond visible-text preservation is [ASSUMED] and must be locked by the parser checkpoint.
+Golden cases must include scalar/empty/escaped text, apostrophe/quote/backslash, `%` formatting, CDATA, styled inline markup and tails, XLIFF placeholders, plural quantities, array ordering, duplicate resources, malformed XML, DTD/entity attempts, unknown elements/attributes/namespaces/node kinds, invalid encoding, and exact boundary sizes. Plans 04-01, 04-02, and 04-06 lock the allowlist above before the parser checkpoint; the checkpoint does not choose semantics.
 
 ### Qt `.ts`
 
 Qt's TS format defines TS-level source/target language, contexts, optional message IDs, source/comment disambiguation, numerus forms, length variants, locations, and translation lifecycle/status metadata. [CITED: https://doc.qt.io/qt-6/linguist-ts-file-format.html] Implement:
 
-- Require supported TS version/current structure and normalized explicit language.
+- Require root `<TS>` version exactly `2.0` or `2.1`, required normalized `language`, optional normalized `sourcelanguage`, and no other root attributes. Root children are limited to at most one text-only attribute-free `defaultcodec`, at most one attribute-free `dependencies`, and ordered `context` elements; metadata is preserved but never enters stable identity. `dependencies` contains only one-or-more empty `dependency` children, each permitting only optional nonempty `catalog`.
 - Use message ID when present; otherwise source text is the raw key. Preserve context, disambiguation comment, numerus quantity/form position, and length-variant priority as typed metadata/selectors.
-- Preserve multiple `<location>` values as locators, not identity.
+- A `context` has no attributes and contains exactly one text-only `name`, zero-or-more text-only `comment`, then ordered `message` elements. Message attributes are limited to optional nonempty `id` and optional `numerus="yes|no"`; message children are limited to ordered empty `location`, required text-only `source`, optional text-only `oldsource`, optional text-only `comment`, optional text-only `oldcomment`, optional text-only `extracomment`, optional text-only `translatorcomment`, optional text-only `userdata`, and exactly one `translation`. Multiple `<location>` nodes are preserved as locators, not identity; each permits only optional nonempty `filename` and optional `line`, with omitted filename reusing the previous resolved filename and `line` retained as its validated absolute/relative integer token.
 - Preserve translation type/status metadata but never map it directly to VerboFlex approval. Initial/current internal review state follows the import reconciliation rules.
-- Treat `unfinished` content as current Draft; model `obsolete` and `vanished` messages as source-deleted/tombstoned rather than active values. [ASSUMED]
-- Reject duplicate canonical identities, unknown status/variant combinations, unsupported byte nodes, ambiguous language, malformed XML, or any inline structure that cannot be represented losslessly.
+- Translation attributes are limited to optional `type="unfinished|obsolete|vanished"` and optional `variants="yes"`. Plain translation text, one-or-more `<numerusform>` children, and one-or-more `<lengthvariant priority="N">` children are mutually exclusive shapes. A numerus message requires `numerus="yes"` and one-or-more `numerusform`; a non-numerus message rejects them. A plain `numerusform` has no attributes and text only; a nested-variant `numerusform` permits exactly `variants="yes"` and contains only one-or-more `lengthvariant`. Each `lengthvariant` permits exactly one unique positive-integer `priority` and text only. Top-level length variants require translation `variants="yes"`; nested numerus variants use `qt_length_variant` with both numerus index and priority fields. `unfinished` or absent type imports as current Draft; `obsolete` and `vanished` import as deleted/tombstoned. [RESOLVED FOR PHASE 4]
+- Text-bearing Qt fields accept text plus escaped markup as literal content. Actual child markup, `<byte>` nodes, processing instructions, unknown children/attributes, mixed direct text with variant children, duplicate canonical identities, unknown status/variant combinations, ambiguous language, or malformed XML are unsupported and fail the complete mapping; no construct is flattened or discarded.
 
 Golden cases must include ID-based and source-based messages, same source in distinct contexts/comments, numerus forms, length variants/priorities, unfinished/obsolete/vanished, empty translation, old/new locations, markup/byte nodes, duplicates, malformed/DTD input, and locale normalization.
 
@@ -435,7 +436,7 @@ RFC 8259 says object names should be unique because duplicate handling varies, r
 - Accept the already confirmed flat-per-locale or locale-rooted layout, then recursively walk object members in source order.
 - Import only string leaves; reject arrays, numbers, booleans, null, and ambiguous mixed locale/content structures rather than stringifying.
 - Keep a leaf's member name raw; preserve parent member segments as ordered typed selector data; never split a flat member containing dots/brackets.
-- An empty object is a valid zero-entry file, but the complete mapping must still resolve the configured base language. [ASSUMED]
+- An empty object is a valid zero-entry file, but the complete mapping must still resolve the configured base language. [RESOLVED FOR PHASE 4]
 
 Golden cases must include flat/nested/locale-rooted content, repeated leaf names under different parents, escaped keys/text, Unicode and surrogate pairs, empty strings/objects, duplicates at all levels, non-string leaves/arrays, BOM, invalid UTF-8, unpaired surrogates, deep nesting, and maximum size/count boundaries.
 
@@ -452,7 +453,7 @@ Golden cases must include UTF-8 with/without BOM, UTF-16 LE/BE BOM, comments, wh
 
 ### Separate Mapping Join
 
-Parse both sides completely before joining. Join by normalized language authority plus raw logical key and canonical selector; reject duplicate or structurally incompatible join candidates atomically. Translation-side entries without a matching key-side source may remain canonical with `source_text = null` because the requirement says source text “when available”; key-side entries without a target value do not manufacture an empty translation. [ASSUMED] Freeze these residual join semantics in cross-side golden fixtures before Phase 4 import activation.
+Parse both sides completely before joining. Join by normalized language authority plus raw logical key and canonical selector; reject duplicate or structurally incompatible join candidates atomically. Translation-side entries without a matching key-side source remain canonical with `source_text = null` because the requirement says source text “when available”; key-side entries without a target value do not manufacture an empty translation. [RESOLVED FOR PHASE 4] Plan 04-06 freezes these semantics in cross-side golden fixtures before import activation.
 
 ## Don't Hand-Roll
 
@@ -567,7 +568,7 @@ Parse both sides completely before joining. Join by normalized language authorit
 
 **Why it happens:** Current durable users expose global roles only, and products have no user/grant relation. [VERIFIED: `backend/src/verboflex/models/user.py:21-61`; `backend/src/verboflex/models/product.py:29-109`; `backend/src/verboflex/models/__init__.py:1-42`]
 
-**How to avoid:** For Phase 4, define the authorized option query as all active products for any authenticated current principal unless the user explicitly adds a per-product grant model. [ASSUMED] Centralize this as a service predicate so future authorization can narrow it without changing every endpoint.
+**How to avoid:** For Phase 4, the authorized option query is all active products for any authenticated current principal because the current model has global roles and no product-grant entity. [RESOLVED FOR PHASE 4] Centralize this as a service predicate so future authorization can narrow it without changing every endpoint; Phase 4 does not invent an ACL.
 
 **Warning signs:** API returns inactive products, a client-supplied product ID bypasses the option query, or implementation introduces a new ACL without a requirement/migration/UI.
 
@@ -579,7 +580,7 @@ These are planning skeletons, not copy-ready implementations; exact class/file n
 
 ```python
 # Sources: locked D-01..D-07; existing immutable preview records
-# Proposed selector strings are [ASSUMED] and must be frozen by Plan 04-01.
+# Selector strings are resolved for Phase 4 and frozen by Plan 04-01.
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -690,51 +691,33 @@ Each rendered virtual row uses `role="listitem"`, one-based `aria-posinset`, and
 - Calling `len()` a “character count” for this product requirement.
 - Allowing the browser to infer approval, synchronization, or violation state.
 
-## Assumptions Log
+## Assumptions Log (RESOLVED)
 
-| # | Claim | Section | Risk if Wrong |
-|---|-------|---------|---------------|
-| A1 | Selector discriminators are `scalar`, `android_quantity`, `android_array_item`, `qt_numerus`, `qt_length_variant`, and `json_path`. | Pattern 1 / Code Examples | Migration/API identity changes if adapters ship different values. |
-| A2 | Nested JSON uses leaf member as logical key and ordered parent segments as selector. | Pattern 2 / JSON | Changes grouping and stable identity for nested documents. |
-| A3 | Stored review-state values use lowercase `draft`, `approved`, `rejected`. | Pattern 3 | Schema/generated client mismatch if casing differs. |
-| A4 | Search order is rank, case-folded key, language, UUID; a state filter matches a group when any member has that state. | Pattern 4 | Cursor compatibility and grouped-filter UX change. |
-| A5 | Maximum character bounds are inclusive `0..1_048_576`. | Pattern 5 | Migration/Pydantic/HTML bounds require coordinated revision. |
-| A6 | Android CDATA/XLIFF is supported when meaning is preserved; Qt unfinished is active Draft while obsolete/vanished is tombstoned. | Parser Contracts | Unsupported corpus may fail or lifecycle semantics may differ. |
-| A7 | Empty JSON objects are valid zero-entry files if mapping base-language authority is still valid. | JSON | Could turn a bad input into widespread tombstones. |
-| A8 | Separate-side translations without keys may persist with null source; key-only entries do not fabricate target values. | Separate Mapping Join | Affects canonical completeness and mismatch diagnostics. |
-| A9 | Any authenticated user is authorized for all active products in Phase 4 because no per-product grant model exists. | Pitfall 10 | Potential access-control scope mismatch if product grants were intended. |
+| # | Resolved claim | Owning plan/tests | Resolution |
+|---|----------------|-------------------|------------|
+| A1 | Selector discriminators are `scalar`, `android_quantity`, `android_array_item`, `qt_numerus`, `qt_length_variant`, and `json_path`, schema version 1. | 04-01, 04-06 | Locked before adapter expansion. |
+| A2 | Nested JSON uses leaf member as logical key and ordered parent segments as selector. | 04-04, 04-06 | Locked under agent discretion. |
+| A3 | Stored review-state values use lowercase `draft`, `approved`, `rejected`. | 04-01, 04-10 | Shared schema and database checks use one vocabulary. |
+| A4 | Search order is rank, case-folded key, language, UUID; a state filter matches a group when any member has that state. | 04-13, 04-15 | Cursor and grouped-filter contract is fixed. |
+| A5 | Maximum character bounds are inclusive `0..1_048_576`. | 04-10, 04-21, 04-25, 04-15 | Database/service/API/client bounds are identical. |
+| A6 | Android and Qt use the exact supported/rejected matrices in Canonical Parser Contracts; Qt unfinished is Draft and obsolete/vanished is tombstoned. | 04-01..04-03, 04-06 | No parser-checkpoint choice remains. |
+| A7 | Empty JSON objects are valid zero-entry files only with valid mapping/base-language authority. | 04-04, 04-06 | Complete mapping validation prevents accidental tombstones. |
+| A8 | Separate-side translations without keys persist with null source; key-only entries fabricate no target values. | 04-06 | Cross-side golden fixtures lock the join. |
+| A9 | Every authenticated current principal can read all active products; Phase 4 adds no product-grant ACL. | 04-13, 04-15 | Central predicate preserves a future narrowing seam. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **What is the final selector schema/version?**
-   - What we know: selectors must remain typed, separate from raw keys, and stable across refresh.
-   - What's unclear: exact field names and treatment of Qt context/comment, JSON parent segments, and markup tokens.
-   - Recommendation: Plan 04-01 locks canonical JSON, canonical serialization, digest, and cross-language fixtures before adapter work.
+1. **Final selector schema/version:** resolved to the six A1 discriminators at schema version 1. Qt context/comment and JSON parent segments are typed selector fields; markup tokens are ordered structure, never raw-key or selector decoration. Plan 04-01 freezes canonical serialization/digest and Plan 04-06 proves conformance.
 
-2. **Which borderline format constructs are supported versus fail-closed?**
-   - What we know: structure cannot be discarded and unsupported content fails the mapping.
-   - What's unclear: Android XLIFF/CDATA/unknown tags and Qt obsolete/vanished/byte/variant combinations.
-   - Recommendation: resolve A6 in the parser contract and put every choice into valid/unsupported golden fixtures before Plan 04-07.
+2. **Borderline format constructs:** resolved by the exact Android and Qt allowlists in `## Canonical Parser Contracts`. Android CDATA/comments and the four named inline elements are represented losslessly; every other structure fails closed. Qt's named message/status/numerus/length-variant shapes are represented; actual child markup, byte nodes, unknown structure, and invalid combinations fail closed. Plans 04-01 through 04-06 encode both allowed and rejected fixtures before Plan 04-07.
 
-3. **How should incomplete separate-side joins behave?**
-   - What we know: both sides are one atomic mapping and source text is optional “when available.”
-   - What's unclear: whether unmatched translation records are valid and whether key-only records appear in any language projection.
-   - Recommendation: accept translations with null source, never synthesize targets, and fail only duplicates/structural ambiguity; confirm at Plan 04-01 checkpoint.
+3. **Incomplete separate-side joins:** resolved to accept translation-only values with explicit null source, omit key-only values from target-language projections, and fail duplicates, structural incompatibility, or either invalid side atomically. Plan 04-06 freezes this; Plan 04-07 verifies rather than chooses it.
 
-4. **What exact maximum-character bounds should the API expose?**
-   - What we know: generated bounds drive browser validation and zero is a potentially meaningful rule.
-   - What's unclear: product policy did not lock minimum/maximum.
-   - Recommendation: use inclusive `0..1_048_576`, document it, and freeze it in schema/UI tests.
+4. **Maximum-character bounds:** resolved to inclusive integers `0..1_048_576`; zero means display text must be empty. Plans 04-10, 04-21, 04-25, 04-15, and 04-18 freeze identical database/service/API/client/UI boundaries.
 
-5. **Does “authorized products” mean all active products for every authenticated user?**
-   - What we know: current users have global roles only; there is no durable product-grant entity in opened model sources.
-   - What's unclear: no requirement authorizes adding product-level ACL administration in this phase.
-   - Recommendation: use all active products for reads in v1, keep server predicate centralized, and do not invent an ACL without a new decision.
+5. **Authorized product scope:** resolved to all active products for every authenticated current principal because the live model has global roles only. Plan 04-13 centralizes and tests the predicate; inactive products never enter options or widen reads.
 
-6. **Will the two flagged packages be accepted?**
-   - What we know: both are official established projects and current registry packages, but the mandatory legitimacy seam returned `SUS` because the selected releases are recent; PyPI download evidence was unavailable to the seam.
-   - What's unclear: human acceptance of those releases.
-   - Recommendation: planner inserts `checkpoint:human-verify` before each installation; do not substitute or install first.
+6. **Flagged package acceptance:** this is not unresolved technical research. Plan 04-07 records a blocking human execution decision for the exact `regex==2026.9.3` and `@tanstack/react-virtual==3.14.10` releases. Plans 04-14 and 04-17 carry explicit preconditions and halt before installation when either approval is absent or differs; no substitute is authorized silently.
 
 ## Environment Availability
 
@@ -841,7 +824,7 @@ All proposed files below are Wave 0 gaps.
 - **Per task commit:** affected targeted command from the map; parser tasks run their adapter plus conformance test.
 - **Parser checkpoint (04-07):** all import parser/golden/property tests, backend lint/type/coverage, security cases, and backend smoke must pass before persistence plans.
 - **Per wave merge:** `uv run --project backend pytest` plus `npm --prefix frontend test -- --run` for touched full application(s).
-- **Phase gate (04-13):** backend full tests/coverage, frontend coverage, generated-client drift check, lint/typecheck/build, Playwright Phase 4 flow, Docker Compose build/start/health smoke, live Bitbucket read/import smoke when credentials are available, code review, and security gate.
+- **Phase gate (04-20):** backend full tests/coverage, frontend coverage, generated-client drift check, lint/typecheck/build, Playwright Phase 4 flow, Docker Compose build/start/health smoke, live Bitbucket read/import smoke when credentials are available, code review, and security gate.
 
 ### Wave 0 Gaps
 
@@ -935,17 +918,17 @@ OWASP ASVS 5.0 is the current official verification baseline used for this mappi
 
 ### Tertiary (LOW confidence)
 
-- None. All LOW-confidence points are explicit implementation assumptions derived from locked product behavior and are listed in the Assumptions Log.
+- None. Former implementation assumptions are resolved in `## Assumptions Log (RESOLVED)` and bound to named plans/tests; package acceptance remains a blocking execution precondition rather than a research question.
 
 ## Metadata
 
 **Confidence breakdown:**
 
 - Standard stack: HIGH for repository pins; MEDIUM for two new package releases because the legitimacy gate returned `SUS`.
-- Architecture: HIGH for existing integration seams and locked lifecycle; MEDIUM for proposed table/selector shapes until Plan 04-01 freezes them.
-- Parser behavior: MEDIUM overall; official format documents are authoritative, while the explicitly listed borderline structures need fixture decisions.
+- Architecture: HIGH for existing integration seams and locked lifecycle; MEDIUM for proposed table shapes until Plan 04-10 freezes them; selector shape is resolved by Plan 04-01.
+- Parser behavior: MEDIUM overall; official format documents are authoritative and the exact Android/Qt allowlists above are resolved planning contracts that require golden verification.
 - Search: MEDIUM; PostgreSQL capabilities are documented, but query plans and cursor/group semantics require production-shaped integration tests.
-- Constraints: MEDIUM; Unicode counting is documented, while numeric bounds and stored projection choices remain assumptions.
+- Constraints: MEDIUM; Unicode counting is documented, and the exact numeric bounds/stored projection choices are resolved Phase 4 contracts that require boundary and transaction tests.
 - Security: HIGH for required enforcement and current auth seams; MEDIUM for ASVS applicability mapping until implementation review.
 
 **Research date:** 2026-09-04

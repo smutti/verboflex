@@ -343,7 +343,7 @@ Plans:
   7. Authorized user can create, edit, and remove maximum-length constraints, and the system recalculates violations after imports and later edits.
   8. The parser checkpoint and final phase quality gate pass with targeted tests, code review, and deploy/build smoke verification.
 
-**Plans**: 20 plans
+**Plans**: 25 plans
 
 Plans:
 
@@ -354,19 +354,24 @@ Plans:
 - [ ] 04-05-PLAN.md — Full iOS `.strings` lexer and serializer-safe parsing
 - [ ] 04-06-PLAN.md — Cross-format conformance, direct/separate mapping join, and golden fixtures
 - [ ] 04-07-PLAN.md — Intermediate parser checkpoint and blocking package-legitimacy approvals
-- [ ] 04-08-PLAN.md — Persisted base-language authority and confirmation API
+- [ ] 04-08-PLAN.md — Persisted base-language authority through confirmation, cloning, and publication
 - [ ] 04-09-PLAN.md — Generated base-language client and Preview publication gating
 - [ ] 04-10-PLAN.md — Canonical translation, history, staging, and constraint schema
 - [ ] 04-11-PLAN.md — Atomic import staging, reconciliation, refresh, and activation
-- [ ] 04-12-PLAN.md — Admin parser outcomes and retained-dataset recovery UI
+- [ ] 04-12-PLAN.md — Bounded admin parser-outcome API contract
 - [ ] 04-13-PLAN.md — Authorization-scoped indexed search, stable cursors, and complete detail API
-- [ ] 04-14-PLAN.md — Grapheme authority, constraint recomputation, and role-gated mutations
-- [ ] 04-15-PLAN.md — Complete generated translation/search/constraint browser client
+- [ ] 04-14-PLAN.md — Approved exact-pinned Unicode grapheme authority
+- [ ] 04-15-PLAN.md — Final OpenAPI inventory and generated translation browser client
 - [ ] 04-16-PLAN.md — Principal-scoped preferences and race-safe infinite-search state machine
-- [ ] 04-17-PLAN.md — Accessible virtual grouped search workspace, routes, and navigation
-- [ ] 04-18-PLAN.md — Complete grouped detail, constraint dialogs, and browser journeys
-- [ ] 04-19-PLAN.md — Exact source manifest, adversarial gauntlet, and deploy-like smoke
-- [ ] 04-20-PLAN.md — Fresh code/security review and independent goal verification
+- [ ] 04-17-PLAN.md — Exact window-virtualized grouped result list and six-part row anatomy
+- [ ] 04-18-PLAN.md — Wired grouped-detail route, constraint dialogs, and browser journeys
+- [ ] 04-19-PLAN.md — Exact source/scope manifest, fail-closed closeout gate, adversarial gauntlet, and smoke
+- [ ] 04-20-PLAN.md — Fresh code/security review and fail-closed independent goal verification
+- [ ] 04-21-PLAN.md — Transaction-safe constraint inheritance, mutations, and recomputation service
+- [ ] 04-22-PLAN.md — Published-mapping parser failure, retained-baseline, and retry UI
+- [ ] 04-23-PLAN.md — Exact five-filter translation search page composition
+- [ ] 04-24-PLAN.md — Protected translation search route and primary navigation
+- [ ] 04-25-PLAN.md — Strict role-gated maximum-length mutation API
 
 ### Phase 5: Review Workspace and Comments
 

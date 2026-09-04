@@ -246,7 +246,7 @@ Use useCursorCollection.ts:79-231 as the hook skeleton:
 
 The tests are especially reusable. useCursorCollection.test.ts:63-100 verifies 50-row first-page append and stable-ID deduplication. Lines 102-140 prove that changing the full query identity aborts and ignores stale pages. Lines 142-205 cover initial recovery, load-more retry, duplicate actions, append, and upsert. Lines 207-233 prove obsolete failures cannot replace successor state.
 
-Phase 4 adds a 200 ms query debounce, fixed 50-group pages, explicit Load more, and stricter cursor-chain validation already demonstrated in PublishedMappingImports.tsx:482-568 (reject empty/repeated cursors and impossible page shapes). Clear the visible list immediately when any filter/query identity changes. Never re-sort a completed server page in the browser.
+Phase 4 adds the UI-SPEC's exact 300 ms query debounce, fixed 50-group pages, explicit Load more, and stricter cursor-chain validation already demonstrated in PublishedMappingImports.tsx:482-568 (reject empty/repeated cursors and impossible page shapes). Clear the visible list immediately when any filter/query identity changes. Never re-sort a completed server page in the browser.
 
 There is no production persistence analog. translationPreferences.ts must be a small, isolated, fail-closed module with tests for corrupt/unavailable storage. Key preferences by the authenticated principal ID and persist only selected product ID and selected language IDs. Do not persist query text, translation/source content, constraint values, tokens, or user role data.
 
