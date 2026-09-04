@@ -365,6 +365,22 @@ def test_json_concurrent_calls_are_byte_equal_and_failure_isolated() -> None:
     assert tuple(issue.code for issue in after_failure.issues) == ("unsupported_structure",)
 
 
+def test_json_valid_unicode_escapes_and_astral_pairs_decode_canonically() -> None:
+    _, adapter = _modules()
+    result = adapter.parse_json_localization(
+        _flat_input(
+            b'{"caf\\u00e9":"d\\u00e9j\\u00e0",'
+            b'"emoji":"\\ud83d\\udc69\\ud83c\\udffd\\u200d\\ud83d\\udcbb"}'
+        )
+    )
+
+    assert result.issues == ()
+    assert {(value.logical_key, value.display_text) for value in result.values} == {
+        ("caf\u00e9", "d\u00e9j\u00e0"),
+        ("emoji", "\U0001f469\U0001f3fd\u200d\U0001f4bb"),
+    }
+
+
 def test_json_manifest_covers_required_categories_and_exact_limits() -> None:
     manifest = json.loads((_FIXTURES / "manifest.json").read_text())
 

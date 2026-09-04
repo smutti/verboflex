@@ -17,12 +17,21 @@ from verboflex.localization.importing.core import (
     CanonicalValue,
     IssueCode,
     RepositorySide,
+    canonical_issue_order,
     canonical_value_order,
 )
 from verboflex.localization.preview.core import (
     extract_preview_locale_path,
     normalize_preview_locale,
 )
+
+MAX_CANONICAL_FILE_BYTES = 1_048_576
+MAX_JSON_AGGREGATE_BYTES = 20_971_520
+MAX_JSON_FILES = 500
+MAX_JSON_MEMBERS = 5_000
+MAX_JSON_VALUES = 5_000
+MAX_JSON_DEPTH = 12
+MAX_JSON_ISSUES = 5
 
 
 class _MalformedJson(ValueError):
@@ -75,6 +84,42 @@ def parse_json_localization(parser_input: CanonicalParserInput) -> CanonicalPars
         return _failure(parser_input, code="unsupported_structure")
 
 
+def parse_json_localization_files(
+    parser_inputs: tuple[CanonicalParserInput, ...],
+) -> CanonicalParseResult:
+    """Combine bounded JSON peer files only when every file parses successfully."""
+    if type(parser_inputs) is not tuple or not parser_inputs:
+        return _invalid_batch_failure()
+    if any(type(item) is not CanonicalParserInput for item in parser_inputs):
+        return _invalid_batch_failure()
+    if any(not isinstance(item.content, bytes) for item in parser_inputs):
+        return _invalid_batch_failure()
+    if len(parser_inputs) > MAX_JSON_FILES:
+        return _failure(parser_inputs[0], code="unsupported_structure")
+    if sum(len(item.content) for item in parser_inputs) > MAX_JSON_AGGREGATE_BYTES:
+        return _failure(parser_inputs[0], code="unsupported_structure")
+
+    values: list[CanonicalValue] = []
+    issues: list[CanonicalIssue] = []
+    ordered_inputs = sorted(parser_inputs, key=lambda item: (item.repository_side, item.path))
+    for parser_input in ordered_inputs:
+        result = parse_json_localization(parser_input)
+        if result.issues:
+            issues.extend(result.issues)
+        else:
+            values.extend(result.values)
+        if len(values) > MAX_JSON_VALUES:
+            return _failure(parser_input, code="unsupported_structure")
+    if issues:
+        return CanonicalParseResult(
+            issues=tuple(sorted(set(issues), key=canonical_issue_order)[:MAX_JSON_ISSUES])
+        )
+    try:
+        return CanonicalParseResult(values=tuple(sorted(values, key=canonical_value_order)))
+    except ValueError:
+        return _failure(ordered_inputs[0], code="duplicate_key")
+
+
 def _require_input_authority(parser_input: CanonicalParserInput) -> str:
     if (
         parser_input.format != "json"
@@ -98,7 +143,12 @@ def _require_input_authority(parser_input: CanonicalParserInput) -> str:
 
 
 def _load_document(content: bytes) -> _JsonObject:
-    if not content or content.startswith(b"\xef\xbb\xbf") or b"\x00" in content:
+    if (
+        not content
+        or len(content) > MAX_CANONICAL_FILE_BYTES
+        or content.startswith(b"\xef\xbb\xbf")
+        or b"\x00" in content
+    ):
         raise _MalformedJson
     try:
         decoded = content.decode("utf-8", errors="strict")
@@ -107,10 +157,13 @@ def _load_document(content: bytes) -> _JsonObject:
             object_pairs_hook=_unique_object,
             parse_constant=_reject_constant,
         )
+    except RecursionError as error:
+        raise _UnsupportedJson from error
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise _MalformedJson from error
     if type(value) is not _JsonObject:
         raise _UnsupportedJson
+    _require_tree_bounds(value)
     return value
 
 
@@ -128,6 +181,26 @@ def _unique_object(pairs: list[tuple[str, object]]) -> _JsonObject:
 def _reject_constant(token: str) -> object:
     del token
     raise _UnsupportedJson
+
+
+def _require_tree_bounds(root: _JsonObject) -> None:
+    member_count = 0
+    value_count = 0
+    stack: list[tuple[_JsonObject, int]] = [(root, 1)]
+    while stack:
+        value, depth = stack.pop()
+        if depth > MAX_JSON_DEPTH:
+            raise _UnsupportedJson
+        member_count += len(value.pairs)
+        if member_count > MAX_JSON_MEMBERS:
+            raise _UnsupportedJson
+        for _, member_value in value.pairs:
+            if type(member_value) is _JsonObject:
+                stack.append((member_value, depth + 1))
+            elif isinstance(member_value, str):
+                value_count += 1
+                if value_count > MAX_JSON_VALUES:
+                    raise _UnsupportedJson
 
 
 def _document_values(
@@ -287,15 +360,12 @@ def _side_texts(
 
 
 def _require_safe_string(value: str, *, allow_empty: bool) -> None:
-    if (
-        (not allow_empty and not value)
-        or any(0xD800 <= ord(character) <= 0xDFFF for character in value)
-        or any(
-            category(character) == "Cc" and character not in {"\t", "\n", "\r"}
-            for character in value
-        )
-    ):
+    if not allow_empty and not value:
         raise _UnsupportedJson
+    if any(0xD800 <= ord(character) <= 0xDFFF for character in value) or any(
+        category(character) == "Cc" and character not in {"\t", "\n", "\r"} for character in value
+    ):
+        raise _MalformedJson
 
 
 def _is_safe_relative_path(value: object) -> bool:
@@ -345,6 +415,19 @@ def _invalid_input_failure() -> CanonicalParseResult:
                 repository_side="direct",
                 path="<input>",
                 message="Malformed JSON parser input.",
+            ),
+        )
+    )
+
+
+def _invalid_batch_failure() -> CanonicalParseResult:
+    return CanonicalParseResult(
+        issues=(
+            CanonicalIssue(
+                code="malformed_file",
+                repository_side="direct",
+                path="<input>",
+                message="Malformed JSON parser input batch.",
             ),
         )
     )
