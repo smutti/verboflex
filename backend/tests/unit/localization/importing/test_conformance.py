@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, cast, get_args
@@ -133,6 +133,43 @@ def _canonical_bytes(result: core.CanonicalParseResult) -> bytes:
     return json.dumps(
         result.to_mapping(), ensure_ascii=False, separators=(",", ":"), sort_keys=True
     ).encode("utf-8")
+
+
+def _fixture_inputs(document: dict[str, object]) -> tuple[core.CanonicalParserInput, ...]:
+    format_name = cast(str, document["format"])
+    return tuple(
+        core.CanonicalParserInput(
+            format=cast(Any, format_name),
+            repository_side=cast(Any, item["repository_side"]),
+            path=cast(str, item["path"]),
+            content=cast(str, item["content"]).encode(),
+            layout_identity=cast(str, item["layout_identity"]),
+            layout_version=cast(int, item["layout_version"]),
+            base_language=cast(str, item["base_language"]),
+        )
+        for item in cast(list[dict[str, object]], document["inputs"])
+    )
+
+
+def _mapping_projection(result: core.CanonicalParseResult) -> list[dict[str, object]]:
+    projected = [
+        {
+            "repository_side": value.locator.repository_side,
+            "logical_key": value.logical_key,
+            "language": value.language,
+            "source_text": value.source_text,
+            "translated_text": value.translated_text,
+        }
+        for value in result.values
+    ]
+    return sorted(
+        projected,
+        key=lambda value: (
+            str(value["repository_side"]),
+            str(value["logical_key"]),
+            str(value["language"]),
+        ),
+    )
 
 
 def _manifest_categories(format_name: str) -> set[str]:
@@ -364,3 +401,223 @@ def test_arbitrary_cross_format_inputs_return_only_validated_bounded_results(
     serialized = _canonical_bytes(result).decode("utf-8")
     assert "Traceback" not in serialized
     assert "Exception" not in serialized
+
+
+def test_direct_mapping_matches_hand_authored_fixture_and_is_order_stable() -> None:
+    fixture = json.loads((_FIXTURES / "conformance" / "direct.json").read_text())
+    inputs = _fixture_inputs(fixture)
+
+    result = registry.parse_canonical_mapping(inputs)
+
+    assert result.issues == ()
+    assert _mapping_projection(result) == sorted(
+        fixture["expected"],
+        key=lambda value: (
+            value["repository_side"],
+            value["logical_key"],
+            value["language"],
+        ),
+    )
+    assert _canonical_bytes(result) == _canonical_bytes(registry.parse_canonical_mapping(inputs))
+
+
+@pytest.mark.parametrize("case_id", ("exact-join", "translation-only", "key-only"))
+def test_separate_mapping_joins_without_manufacturing_data(case_id: str) -> None:
+    fixture = json.loads((_FIXTURES / "conformance" / "separate.json").read_text())
+    case = next(item for item in fixture["cases"] if item["id"] == case_id)
+    inputs = _fixture_inputs({"format": fixture["format"], "inputs": case["inputs"]})
+
+    result = registry.parse_canonical_mapping(tuple(reversed(inputs)))
+
+    assert result.issues == ()
+    assert _mapping_projection(result) == sorted(
+        case["expected"],
+        key=lambda value: (
+            value["repository_side"],
+            value["logical_key"],
+            value["language"],
+        ),
+    )
+    assert _canonical_bytes(result) == _canonical_bytes(registry.parse_canonical_mapping(inputs))
+
+
+@pytest.mark.parametrize(
+    "case_id",
+    (
+        "duplicate-path",
+        "incompatible-selector",
+        "one-side-failure",
+        "ambiguous-language",
+    ),
+)
+def test_separate_mapping_failures_are_atomic(case_id: str) -> None:
+    fixture = json.loads((_FIXTURES / "conformance" / "separate.json").read_text())
+    case = next(item for item in fixture["cases"] if item["id"] == case_id)
+    inputs = _fixture_inputs({"format": fixture["format"], "inputs": case["inputs"]})
+
+    result = registry.parse_canonical_mapping(inputs)
+
+    assert result.values == ()
+    assert result.issues
+    assert result.issues[0].code == case["expected_issue"]
+
+
+def test_mapping_rejects_zero_files_incomplete_sides_and_mixed_topologies() -> None:
+    assert registry.parse_canonical_mapping(()).issues[0].code == "malformed_file"
+    keys_only = _input(
+        "json",
+        repository_side="keys",
+        path="keys/en/messages.json",
+        content=b"{}",
+        layout_identity="json:flat-per-locale:keys/{locale}/messages.json",
+    )
+    direct = _input("json", content=b"{}")
+
+    incomplete = registry.parse_canonical_mapping((keys_only,))
+    mixed = registry.parse_canonical_mapping((direct, keys_only))
+
+    assert incomplete.values == ()
+    assert incomplete.issues[0].code == "ambiguous_structure"
+    assert mixed.values == ()
+    assert mixed.issues[0].code == "ambiguous_structure"
+
+
+def test_separate_issue_order_is_keys_then_translations_and_provider_path() -> None:
+    inputs = (
+        _input(
+            "json",
+            repository_side="translations",
+            path="translations/it/z.json",
+            content=b"{",
+            layout_identity="json:flat-per-locale:translations/{locale}/z.json",
+        ),
+        _input(
+            "json",
+            repository_side="keys",
+            path="keys/en/z.json",
+            content=b"{",
+            layout_identity="json:flat-per-locale:keys/{locale}/z.json",
+        ),
+        _input(
+            "json",
+            repository_side="translations",
+            path="translations/it/a.json",
+            content=b"{",
+            layout_identity="json:flat-per-locale:translations/{locale}/a.json",
+        ),
+        _input(
+            "json",
+            repository_side="keys",
+            path="keys/en/a.json",
+            content=b"{",
+            layout_identity="json:flat-per-locale:keys/{locale}/a.json",
+        ),
+    )
+
+    result = registry.parse_canonical_mapping(inputs)
+
+    assert result.values == ()
+    assert [(issue.repository_side, issue.path) for issue in result.issues] == [
+        ("keys", "keys/en/a.json"),
+        ("keys", "keys/en/z.json"),
+        ("translations", "translations/it/a.json"),
+        ("translations", "translations/it/z.json"),
+    ]
+
+
+def test_mapping_rejects_duplicate_identity_and_overlapping_provider_paths() -> None:
+    first = _input(
+        "json",
+        repository_side="direct",
+        path="assets/en/first.json",
+        content=b'{"same":"one"}',
+        layout_identity="json:flat-per-locale:assets/{locale}/first.json",
+    )
+    duplicate_identity = _input(
+        "json",
+        repository_side="direct",
+        path="assets/en/second.json",
+        content=b'{"same":"two"}',
+        layout_identity="json:flat-per-locale:assets/{locale}/second.json",
+    )
+    overlapping_path = replace(first, content=b'{"other":"two"}')
+
+    for inputs in ((first, duplicate_identity), (first, overlapping_path)):
+        result = registry.parse_canonical_mapping(inputs)
+        assert result.values == ()
+        assert result.issues[0].code == "duplicate_key"
+
+
+def test_mapping_file_and_aggregate_limits_are_exact() -> None:
+    file_inputs = tuple(
+        _input(
+            "json",
+            repository_side="direct",
+            path=f"assets/en/messages-{index}.json",
+            content=b"{}",
+            layout_identity=f"json:flat-per-locale:assets/{{locale}}/messages-{index}.json",
+        )
+        for index in range(core.MAX_CANONICAL_FILES)
+    )
+    assert registry.parse_canonical_mapping(file_inputs).issues == ()
+    assert (
+        registry.parse_canonical_mapping(
+            (*file_inputs, replace(file_inputs[-1], path="assets/en/overflow.json"))
+        )
+        .issues[0]
+        .code
+        == "unsupported_structure"
+    )
+
+    exact_content = b"{}" + b" " * (core.MAX_CANONICAL_FILE_BYTES - 2)
+    aggregate_inputs = tuple(
+        _input(
+            "json",
+            repository_side="direct",
+            path=f"assets/en/aggregate-{index}.json",
+            content=exact_content,
+            layout_identity=f"json:flat-per-locale:assets/{{locale}}/aggregate-{index}.json",
+        )
+        for index in range(core.MAX_CANONICAL_AGGREGATE_BYTES // core.MAX_CANONICAL_FILE_BYTES)
+    )
+    assert registry.parse_canonical_mapping(aggregate_inputs).issues == ()
+    one_over = _input(
+        "json",
+        repository_side="direct",
+        path="assets/en/one-over.json",
+        content=b" ",
+        layout_identity="json:flat-per-locale:assets/{locale}/one-over.json",
+    )
+    assert (
+        registry.parse_canonical_mapping((*aggregate_inputs, one_over)).issues[0].code
+        == "unsupported_structure"
+    )
+
+
+def test_mapping_value_order_uses_side_path_position_key_language_and_selector_bytes() -> None:
+    first = _input(
+        "json",
+        repository_side="direct",
+        path="assets/en/a.json",
+        content=b'{"z":"last","a":"first"}',
+        layout_identity="json:flat-per-locale:assets/{locale}/a.json",
+    )
+    second = _input(
+        "json",
+        repository_side="direct",
+        path="assets/it/b.json",
+        content=b'{"a":"second"}',
+        layout_identity="json:flat-per-locale:assets/{locale}/b.json",
+    )
+
+    result = registry.parse_canonical_mapping((second, first))
+
+    assert result.issues == ()
+    assert [
+        (value.locator.path, value.locator.position, value.logical_key, value.language)
+        for value in result.values
+    ] == [
+        ("assets/en/a.json", 0, "z", "en"),
+        ("assets/en/a.json", 1, "a", "en"),
+        ("assets/it/b.json", 0, "a", "it"),
+    ]

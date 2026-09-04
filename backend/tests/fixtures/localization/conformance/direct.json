@@ -1,0 +1,36 @@
+{
+  "format": "json",
+  "inputs": [
+    {
+      "repository_side": "direct",
+      "path": "locales.json",
+      "content": "{\"en\":{\"empty\":\"\",\"welcome\":\"Hello\"},\"it\":{\"welcome\":\"Ciao\"}}",
+      "layout_identity": "json:locale-rooted:locales.json",
+      "layout_version": 1,
+      "base_language": "en"
+    }
+  ],
+  "expected": [
+    {
+      "repository_side": "direct",
+      "logical_key": "empty",
+      "language": "en",
+      "source_text": "",
+      "translated_text": null
+    },
+    {
+      "repository_side": "direct",
+      "logical_key": "welcome",
+      "language": "en",
+      "source_text": "Hello",
+      "translated_text": null
+    },
+    {
+      "repository_side": "direct",
+      "logical_key": "welcome",
+      "language": "it",
+      "source_text": null,
+      "translated_text": "Ciao"
+    }
+  ]
+}
