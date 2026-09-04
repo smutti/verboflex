@@ -1,18 +1,18 @@
 ---
 gsd_state_version: 1.0
-current_phase: 4
+current_phase: 04
 current_phase_name: Localization Import, Search, and Constraints
-status: ready_to_execute
-stopped_at: Phase 4 plans verified and ready to execute
-last_updated: "2026-09-04T19:52:13.315Z"
+status: executing
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-09-04T20:52:56.857Z"
 last_activity: 2026-09-04
-last_activity_desc: Phase 4 planning complete — 27 verified plans across 17 waves
-state_head: 0a40e8ffaf743eb69a3dff1d6d1adbc7074d0b5b
+last_activity_desc: Phase 04 execution started
+state_head: b745428a748b1e62083349b16ae0ca5f78eacddb
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 104
-  completed_plans: 77
+  completed_plans: 78
   percent: 38
 ---
 
@@ -27,12 +27,12 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 
 ## Current Position
 
-Phase: 4 (Localization Import, Search, and Constraints) — READY TO EXECUTE
-Plan: Not started
+Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
+Plan: 2 of 27
 Status: Ready to execute
-Last activity: 2026-09-04 — Phase 4 planning complete; 27 plans verified
+Last activity: 2026-09-04 — Phase 04 execution started
 
-Progress: [████████░░░░░░░░░░░░] 3/8 phases (38%)
+Progress: [████████░░░░░░░░░░░░] 3/8 phases ([████░░░░░░] 38%)
 
 ## Performance Metrics
 
@@ -137,6 +137,7 @@ Progress: [████████░░░░░░░░░░░░] 3/8 pha
 | Phase 03 P14 | 1h25min | 2 tasks | 7 files |
 | Phase 03 P15 | 1h30min | 2 tasks | 20 files |
 | Phase 03 P16 | 1h35min | 3 tasks | 9 files |
+| Phase 04 P01 | 39min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -387,6 +388,10 @@ Recent decisions affecting current work:
 - [Phase 03]: Close Phase 3 only when the fresh ASVS L1 review and independent verifier reproduce the exact post-gauntlet source digest.
 - [Phase 03]: Make import source-reference execution identity immutable and require inserts while the owning execution is locked in running state.
 - [Phase 03]: Collect changed-file deltas for every non-equal repository side so mixed descendant and diverged movements remain complete.
+- [Phase 04]: Use exactly six version-1 selector discriminators and compact sorted JSON so semantic selector identity is stable across field order. — This freezes adapter interoperability and prevents identity drift before format expansion.
+- [Phase 04]: Keep ordered lossless structure fields explicit in serialized output and reject every structure kind outside the shared format-qualified version-1 allowlist. — Supported syntax remains reconstructible while unknown syntax fails closed.
+- [Phase 04]: Exclude path and position from canonical value identity while rejecting duplicate identities and noncanonical result order atomically. — File moves preserve identity and malformed adapter output cannot reach persistence.
+- [Phase 04]: Expose only five closed issue codes with bounded safe coordinates and messages; source fragments and exception payload fields are structurally absent. — Repository-controlled content cannot leak through parser diagnostics.
 
 ### Pending Todos
 
@@ -427,6 +432,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-04T19:52:13.315Z
-Stopped at: Phase 4 plans verified and ready to execute
-Resume file: .planning/phases/04-localization-import-search-and-constraints/04-01-PLAN.md
+Last session: 2026-09-04T20:52:56.767Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: None

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 0
+open_count: 3
 waived_count: 0
 fixed_count: 39
-total_count: 39
-last_updated: 2026-09-03T10:31:32.223Z
+total_count: 42
+last_updated: 2026-09-04T20:50:56.071Z
 ---
 
 # Broken Windows Ledger
@@ -54,6 +54,9 @@ last_updated: 2026-09-03T10:31:32.223Z
 | 37 | 02 | deviation | tools/phase2_gauntlet.sh |  | Mechanical Ruff formatting shifted three exact reviewed secret-fixture line numbers; policy entries were realigned | fixed |  | 2026-08-31T11:11:45.381Z | 2026-08-31T11:12:09.549Z |
 | 38 | 03 | deviation | backend/tests/api/test_openapi_contract.py |  | Exact generated export assertions required identifier-boundary matching | fixed |  | 2026-09-03T10:30:58.460Z | 2026-09-03T10:31:32.155Z |
 | 39 | 03 | deviation | frontend/src/features/admin/products/ProductConfiguration.test.tsx |  | Typed product fixtures required canonical affected_mapping_count alignment | fixed |  | 2026-09-03T10:30:58.526Z | 2026-09-03T10:31:32.223Z |
+| 40 | 04 | stub | backend/src/verboflex/localization/importing/registry.py | 36 | Qt canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-03 supplies the adapter | open |  | 2026-09-04T20:50:55.925Z |  |
+| 41 | 04 | stub | backend/src/verboflex/localization/importing/registry.py | 37 | JSON canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-04 supplies the adapter | open |  | 2026-09-04T20:50:55.994Z |  |
+| 42 | 04 | stub | backend/src/verboflex/localization/importing/registry.py | 38 | iOS strings canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-05 supplies the adapter | open |  | 2026-09-04T20:50:56.071Z |  |
 
 ````json
 [
@@ -524,6 +527,42 @@ last_updated: 2026-09-03T10:31:32.223Z
     "reason": "",
     "recorded_at": "2026-09-03T10:30:58.526Z",
     "resolved_at": "2026-09-03T10:31:32.223Z"
+  },
+  {
+    "id": 40,
+    "kind": "stub",
+    "phase": "04",
+    "file": "backend/src/verboflex/localization/importing/registry.py",
+    "line": 36,
+    "description": "Qt canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-03 supplies the adapter",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-04T20:50:55.925Z",
+    "resolved_at": null
+  },
+  {
+    "id": 41,
+    "kind": "stub",
+    "phase": "04",
+    "file": "backend/src/verboflex/localization/importing/registry.py",
+    "line": 37,
+    "description": "JSON canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-04 supplies the adapter",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-04T20:50:55.994Z",
+    "resolved_at": null
+  },
+  {
+    "id": 42,
+    "kind": "stub",
+    "phase": "04",
+    "file": "backend/src/verboflex/localization/importing/registry.py",
+    "line": 38,
+    "description": "iOS strings canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-05 supplies the adapter",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-04T20:50:56.071Z",
+    "resolved_at": null
   }
 ]
 ````
