@@ -61,8 +61,8 @@ Implementation reference: the [official TanStack React Virtual documentation](ht
 | Translation Detail | `/translations/:translationGroupId` | Inspect one server-owned key-and-language group without flattening structured selectors. | Back link, identity/status summary, source and translated values, constraint section, repository provenance, read-only review context. |
 | Mapping Import Result | Existing `/admin/products/:productId/mappings` | Extend one published mapping row with bounded canonical parser failure and last-dataset state. | Existing import status/action plus bounded parser issues. |
 | Base-language Selection | Existing `/admin/products/:productId/preview` | Bind one detected language as the mapping base-language authority before preview confirmation/publication. | Detected-language Select, inheritance explanation, existing confirm/publish controls. |
-| Constraint Form | Dialog from Translation Detail | Create or edit one key-and-language maximum-character rule. | Visible label, numeric input, inheritance explanation, cancel/save actions. |
-| Constraint Removal | Alert Dialog from Translation Detail | Remove one override or base-language default with explicit consequence. | Named title/body, cancel, destructive confirm. |
+| Constraint Form | Dialog from Translation Detail | Create or edit one key-and-language maximum-character rule. | Visible label, numeric input, inheritance explanation, `Discard max length changes`, and `Save max length`. |
+| Constraint Removal | Alert Dialog from Translation Detail | Remove one override or base-language default with explicit consequence. | Named title/body, `Keep base limit` or `Keep language override`, and the matching destructive removal action. |
 
 ### Navigation and authority
 
@@ -286,7 +286,7 @@ No new shadcn block is required. Do not add Scroll Area, Popover, Combobox, Comm
 - Body copy: `Maximum length counts visible characters. A combined emoji or composed character counts as one.`
 - The visible numeric field label is `Maximum characters`. Use the generated API's integer bounds for HTML attributes and validation; client validation mirrors but never widens server authority.
 - For a base language, show `Languages without their own override inherit this value and will be recalculated.` For a target language, show either `This value overrides the {base language} default.` or `No base-language default is currently available.`
-- Form actions are `Cancel` and `Save max length`. Submission disables both actions, sets `aria-busy="true"` on Save, prevents outside-click/Escape closure, and uses one state-plus-ref duplicate-submit guard.
+- Form actions are `Discard max length changes` and `Save max length`. Submission disables both actions, sets `aria-busy="true"` on Save, prevents outside-click/Escape closure, and uses one state-plus-ref duplicate-submit guard.
 - On backend success, update only from the returned/fresh generated projection, close the Dialog, announce `Maximum length saved`, and invalidate the affected search-group cache so the restored row shows current status.
 - Validation failure stays below `Maximum characters`, sets `aria-invalid`, preserves the entered value, and focuses the field. General failure focuses an Alert containing `Maximum length was not saved` and `Review the value and try again.`
 - A version/currentness conflict keeps the Dialog open, focuses `Maximum length changed`, and says `This constraint changed in another session. Reload the current value before saving again.` The action is `Reload current value`; replacing the entered value requires explicit confirmation.
@@ -297,10 +297,12 @@ No new shadcn block is required. Do not add Scroll Area, Popover, Combobox, Comm
 - Removal is non-optimistic and always uses Alert Dialog. While pending, disable both actions, set `aria-busy` on the confirm action, and prevent outside-click/Escape closure.
 - Base default title: `Remove the base-language limit?`
 - Base default body: `Languages without their own override will have no maximum length. Existing language overrides will remain.`
+- Base secondary label: `Keep base limit`.
 - Base confirm label: `Remove base limit`.
 - Override title: `Remove the {language} override?`
 - Override body when a base default exists: `This language will inherit the current {base language} maximum of {count} characters.`
 - Override body without a base default: `This language will have no maximum length.`
+- Override secondary label: `Keep language override`.
 - Override confirm label: `Remove language override`.
 - On success, use the fresh projection, announce `Maximum length removed`, and refresh the corresponding search row. Failure keeps the dialog open with `Maximum length was not removed. Try again.`
 
@@ -349,7 +351,7 @@ No new shadcn block is required. Do not add Scroll Area, Popover, Combobox, Comm
 | Constraint success | `Maximum length saved` / `Maximum length removed` |
 | Parser failure | `Localization files could not be imported` |
 | Base-language blocker | `Base language required` — `Configure base language` |
-| Destructive confirmation | `Remove the base-language limit?` — `Remove base limit`; `Remove the {language} override?` — `Remove language override` |
+| Destructive confirmation | `Remove the base-language limit?` — `Keep base limit` / `Remove base limit`; `Remove the {language} override?` — `Keep language override` / `Remove language override` |
 
 Exact filter values, status labels, dialog bodies, and error recovery copy in the preceding contracts are normative. Do not substitute `Submit`, generic `Try again`, `Delete constraint`, `Characters/bytes`, or `Fix automatically`.
 
@@ -392,7 +394,7 @@ Applicable state considerations: all eight categories resolved explicitly; 0 bac
 - When Back restores search, focus returns to the invoking `Open details` link without forcing scroll if it is already visible. Direct detail navigation focuses `Translation details` after load.
 - Search and detail state, deleted status, review state, inheritance, and violation status always include readable text. Color and icon shape remain supplementary.
 - On user-triggered load/mutation error, focus the owning Alert. Background or superseded failures do not steal focus.
-- Constraint Dialogs trap focus; successful/cancel closure restores focus to the invoking action. Pending save/removal cannot be dismissed into uncertain state.
+- Constraint Dialogs trap focus; successful or explicit abandonment closure restores focus to the invoking action. Pending save/removal cannot be dismissed into uncertain state.
 - Translation text uses its language tag and automatic direction without altering the direction of controls. Combined characters must not be split for visual count highlighting.
 - Local copy controls have visible focus, Tooltip, and explicit accessible names. Full hashes are announced only after user-invoked copy.
 - Touch targets are at least `44px × 44px` on coarse pointer/mobile. Search, filter, result, back, retry, and constraint actions do not depend on hover.
