@@ -41,6 +41,21 @@ const listImportsMock = vi.mocked(listAdminPublishedMappingImports);
 const startImportMock = vi.mocked(startAdminPublishedMappingImport);
 const useImportPollingMock = vi.mocked(useImportPolling);
 const toastSuccessMock = vi.mocked(toast.success);
+const publishedFinalizationDecisionMock = vi.hoisted(() => vi.fn());
+
+vi.mock("./mutationAuthority", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./mutationAuthority")>();
+  return {
+    ...original,
+    hasLivePublishedAuthority: (
+      ...args: Parameters<typeof original.hasLivePublishedAuthority>
+    ) => {
+      const decision = original.hasLivePublishedAuthority(...args);
+      publishedFinalizationDecisionMock(decision);
+      return decision;
+    },
+  };
+});
 
 const repositories: AdminRepositoryResponse[] = [
   {
@@ -135,6 +150,7 @@ describe("published mapping import collection", () => {
     listImportsMock.mockReset();
     startImportMock.mockReset();
     toastSuccessMock.mockReset();
+    publishedFinalizationDecisionMock.mockClear();
     listImportsMock.mockResolvedValue(ok({ items: [], next_cursor: null }));
     useImportPollingMock.mockImplementation((options) => ({
       automaticUpdatesPaused: false,
@@ -616,6 +632,7 @@ describe("published mapping import collection", () => {
     });
     expect(await within(desktopTable).findByText("Queued")).toBeVisible();
     expect(listImportsMock).toHaveBeenCalledTimes(2);
+    expect(publishedFinalizationDecisionMock).toHaveBeenLastCalledWith(true);
   });
 
   it("ignores a deferred start response after product authority changes", async () => {
@@ -735,6 +752,7 @@ describe("published mapping import collection", () => {
     expect(toastSuccessMock).not.toHaveBeenCalled();
     expect(listImportsMock).toHaveBeenCalledTimes(collectionCallsBeforeUnmount);
     expect(outsideFocus).toHaveFocus();
+    expect(publishedFinalizationDecisionMock).toHaveBeenLastCalledWith(false);
     outsideFocus.remove();
   });
 

@@ -59,6 +59,10 @@ EXPECTED_FRONTEND_MUTATION_MARKERS = {
     ),
     (
         "src/features/admin/imports/mutationAuthority.ts",
+        "live-mutation-controller-ownership",
+    ),
+    (
+        "src/features/admin/imports/mutationAuthority.ts",
         "rewrite-live-authority-request-token",
     ),
     (

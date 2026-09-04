@@ -43,6 +43,21 @@ vi.mock("../../../api/client", async (importOriginal) => {
 const comparisonMock = vi.mocked(getAdminImportRewriteComparison);
 const confirmationMock = vi.mocked(confirmAdminImportRewriteBaseline);
 const toastSuccessMock = vi.mocked(toast.success);
+const rewriteFinalizationDecisionMock = vi.hoisted(() => vi.fn());
+
+vi.mock("./mutationAuthority", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./mutationAuthority")>();
+  return {
+    ...original,
+    shouldClearUncommittedConfirmation: (
+      ...args: Parameters<typeof original.shouldClearUncommittedConfirmation>
+    ) => {
+      const decision = original.shouldClearUncommittedConfirmation(...args);
+      rewriteFinalizationDecisionMock(decision);
+      return decision;
+    },
+  };
+});
 
 const repositories: AdminRepositoryResponse[] = [
   {
@@ -155,6 +170,7 @@ describe("rewritten baseline reconciliation", () => {
     comparisonMock.mockReset();
     confirmationMock.mockReset();
     toastSuccessMock.mockReset();
+    rewriteFinalizationDecisionMock.mockClear();
     Object.assign(navigator, {
       clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
     });
@@ -329,6 +345,7 @@ describe("rewritten baseline reconciliation", () => {
       },
       signal: expect.any(AbortSignal),
     });
+    expect(rewriteFinalizationDecisionMock).toHaveBeenLastCalledWith(true);
   });
 
   it("confirms separate sides once, locks dismissal while pending, and restores the exact trigger after fresh refetch", async () => {
@@ -641,6 +658,7 @@ describe("rewritten baseline reconciliation", () => {
     expect(toastSuccessMock).not.toHaveBeenCalled();
     expect(oldTrigger).not.toHaveFocus();
     expect(outsideFocus).toHaveFocus();
+    expect(rewriteFinalizationDecisionMock).toHaveBeenLastCalledWith(false);
     oldTrigger.remove();
     outsideFocus.remove();
   });
