@@ -60,10 +60,17 @@ def _golden_projection(result: object) -> dict[str, object]:
                 "translated_text": value.translated_text,
             }
         )
-    entries.sort(
-        key=lambda entry: json.dumps(entry["selector"], sort_keys=True) + str(entry["logical_key"])
-    )
-    entries.sort(key=lambda entry: str(entry["logical_key"]))
+
+    def entry_order(entry: dict[str, object]) -> tuple[str, bool, str, str]:
+        selector: Any = entry["selector"]
+        return (
+            str(entry["logical_key"]),
+            selector["fields"]["identity_kind"] != "id",
+            selector["kind"],
+            json.dumps(selector["fields"], sort_keys=True),
+        )
+
+    entries.sort(key=entry_order)
     return {
         "entries": entries,
         "format": "qt_ts",
