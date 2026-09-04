@@ -1,0 +1,110 @@
+{
+  "entries": [
+    {
+      "deleted": true,
+      "display_text": "%n elemento",
+      "locations": [],
+      "logical_key": "cart.items",
+      "review_state": "draft",
+      "selector": {"fields": {"form_index": 0, "identity_kind": "id"}, "kind": "qt_numerus", "version": 1},
+      "source_text": "%n item(s)",
+      "status": "vanished",
+      "translated_text": "%n elemento"
+    },
+    {
+      "deleted": true,
+      "display_text": "%n elementi",
+      "locations": [],
+      "logical_key": "cart.items",
+      "review_state": "draft",
+      "selector": {"fields": {"form_index": 1, "identity_kind": "id"}, "kind": "qt_numerus", "version": 1},
+      "source_text": "%n item(s)",
+      "status": "vanished",
+      "translated_text": "%n elementi"
+    },
+    {
+      "deleted": false,
+      "display_text": "Paga <ora>",
+      "locations": [
+        {"filename": "../src/main.cpp", "filename_explicit": true, "line": "12"},
+        {"filename": "../src/main.cpp", "filename_explicit": false, "line": "+3"}
+      ],
+      "logical_key": "checkout.pay",
+      "review_state": "draft",
+      "selector": {"fields": {"identity_kind": "id"}, "kind": "scalar", "version": 1},
+      "source_text": "Pay <now>",
+      "status": "unfinished",
+      "translated_text": "Paga <ora>"
+    },
+    {
+      "deleted": true,
+      "display_text": "Vecchio",
+      "locations": [],
+      "logical_key": "checkout.pay",
+      "review_state": "draft",
+      "selector": {"fields": {"context": "MainWindow", "identity_kind": "source"}, "kind": "scalar", "version": 1},
+      "source_text": "checkout.pay",
+      "status": "obsolete",
+      "translated_text": "Vecchio"
+    },
+    {
+      "deleted": false,
+      "display_text": "Nuovo",
+      "locations": [],
+      "logical_key": "checkout.pay",
+      "review_state": "draft",
+      "selector": {"fields": {"context": "Secondary", "disambiguation": "secondary", "identity_kind": "source"}, "kind": "scalar", "version": 1},
+      "source_text": "checkout.pay",
+      "status": "active",
+      "translated_text": "Nuovo"
+    },
+    {
+      "deleted": false,
+      "display_text": "Dispositivo",
+      "locations": [],
+      "logical_key": "device.short",
+      "review_state": "draft",
+      "selector": {"fields": {"identity_kind": "id", "priority": 1}, "kind": "qt_length_variant", "version": 1},
+      "source_text": "Device",
+      "status": "active",
+      "translated_text": "Dispositivo"
+    },
+    {
+      "deleted": false,
+      "display_text": "Disp.",
+      "locations": [],
+      "logical_key": "device.short",
+      "review_state": "draft",
+      "selector": {"fields": {"identity_kind": "id", "priority": 2}, "kind": "qt_length_variant", "version": 1},
+      "source_text": "Device",
+      "status": "active",
+      "translated_text": "Disp."
+    },
+    {
+      "deleted": false,
+      "display_text": "%n selezionato",
+      "locations": [],
+      "logical_key": "nested.items",
+      "review_state": "draft",
+      "selector": {"fields": {"form_index": 0, "identity_kind": "id", "priority": 1}, "kind": "qt_length_variant", "version": 1},
+      "source_text": "%n selected",
+      "status": "active",
+      "translated_text": "%n selezionato"
+    },
+    {
+      "deleted": false,
+      "display_text": "%n sel.",
+      "locations": [],
+      "logical_key": "nested.items",
+      "review_state": "draft",
+      "selector": {"fields": {"form_index": 0, "identity_kind": "id", "priority": 2}, "kind": "qt_length_variant", "version": 1},
+      "source_text": "%n selected",
+      "status": "active",
+      "translated_text": "%n sel."
+    }
+  ],
+  "format": "qt_ts",
+  "language": "it-IT",
+  "source_language": "en-US",
+  "version": "2.1"
+}
