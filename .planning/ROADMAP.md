@@ -343,7 +343,7 @@ Plans:
   7. Authorized user can create, edit, and remove maximum-length constraints, and the system recalculates violations after imports and later edits.
   8. The parser checkpoint and final phase quality gate pass with targeted tests, code review, and deploy/build smoke verification.
 
-**Plans**: 25 plans
+**Plans**: 27 plans
 
 Plans:
 
@@ -354,7 +354,9 @@ Plans:
 - [ ] 04-05-PLAN.md — Full iOS `.strings` lexer and serializer-safe parsing
 - [ ] 04-06-PLAN.md — Cross-format conformance, direct/separate mapping join, and golden fixtures
 - [ ] 04-07-PLAN.md — Intermediate parser checkpoint and blocking package-legitimacy approvals
-- [ ] 04-08-PLAN.md — Persisted base-language authority through confirmation, cloning, and publication
+- [ ] 04-08-PLAN.md — Migration-safe persisted mapping base-language authority
+- [ ] 04-26-PLAN.md — Base-language confirmation, currentness, active revalidation, and administrator API
+- [ ] 04-27-PLAN.md — Exact base-language candidate cloning and publication propagation
 - [ ] 04-09-PLAN.md — Generated base-language client and Preview publication gating
 - [ ] 04-10-PLAN.md — Canonical translation, history, staging, and constraint schema
 - [ ] 04-11-PLAN.md — Atomic import staging, reconciliation, refresh, and activation
@@ -485,7 +487,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 1. Platform Foundation | 15/15 | Complete    | 2026-08-26 |
 | 2. Admin Configuration | 46/46 | Complete    | 2026-09-01 |
 | 3. Bitbucket Import Integration | 16/16 | Complete    | 2026-09-03 |
-| 4. Localization Import, Search, and Constraints | 0/13 | Not started | - |
+| 4. Localization Import, Search, and Constraints | 0/27 | Not started | - |
 | 5. Review Workspace and Comments | 0/6 | Not started | - |
 | 6. Format-Safe Write-Back | 0/5 | Not started | - |
 | 7. Change Sets and Pull Requests | 0/6 | Not started | - |

@@ -728,7 +728,7 @@ Each rendered virtual row uses `role="listitem"`, one-based `aria-posinset`, and
 | Docker engine | PostgreSQL/Redis/backend/worker/frontend smoke | ✓ | Client/server `29.7.2` | — |
 | PostgreSQL | Schema, import activation, search | Configured, not host-installed | Compose image `postgres:18-alpine` | Start the Compose service after required environment values are supplied. [VERIFIED: `docker-compose.yml:34-48`] |
 | Redis | Celery import execution | Configured, not host-installed | Compose image `redis:7-alpine` | Start the Compose service after required environment values are supplied. [VERIFIED: `docker-compose.yml:50-60`] |
-| `pg_trgm` extension | Indexed partial matching | Not yet verified in a running DB | PostgreSQL 18 bundled extension | Alembic executes `CREATE EXTENSION IF NOT EXISTS pg_trgm`; deployment role must have extension privilege. [CITED: https://www.postgresql.org/docs/current/pgtrgm.html] |
+| `pg_trgm` extension | Indexed partial matching | Not yet verified in a running DB; no project-ownership evidence exists | PostgreSQL 18 bundled extension | Infrastructure must pre-enable the externally managed extension; Alembic 0017 asserts catalog/operator-class usability and owns only Phase 4 indexes. [CITED: https://www.postgresql.org/docs/current/pgtrgm.html] |
 | Bitbucket Cloud credentials | Live import/smoke only | Not available to this research session | — | Use the existing bounded fake HTTP adapters for automated tests; live smoke remains an environment-gated phase check. |
 | Existing preview parser suite | Parser starting point | ✓ | 181 tests passed in 0.70s [VERIFIED: local test run 2026-09-04] | — |
 | Existing frontend Vitest suite | UI starting point | ✓ | 25 files / 368 tests passed in 8.84s [VERIFIED: local test run 2026-09-04] | — |
@@ -738,7 +738,7 @@ Compose configuration is intentionally blocked without the three required Bitbuc
 **Missing dependencies with no fallback:**
 
 - Human approval for both `SUS` package releases before installation.
-- A deployment role allowed to create/enable `pg_trgm`, or infrastructure must pre-enable it before the search migration.
+- Infrastructure must pre-enable `pg_trgm` before the search migration; the project migration does not create, alter, or drop the extension.
 
 **Missing dependencies with fallback:**
 
@@ -831,7 +831,7 @@ All proposed files below are Wave 0 gaps.
 - [ ] Cross-format canonical result/selector/issue test builders.
 - [ ] Byte fixtures and explicit expected-canonical manifests under a dedicated localization fixture tree.
 - [ ] Four adapter unit/golden suites plus conformance/property suite.
-- [ ] PostgreSQL fixture capable of enabling `pg_trgm` and testing activation/search transactions.
+- [ ] PostgreSQL fixture with infrastructure-pre-enabled `pg_trgm`, plus absent/unusable capability fixtures and activation/search transaction coverage.
 - [ ] Import activation, rewrite-confirmation, concurrency, refresh, search, and constraints integration suites.
 - [ ] Authenticated search/detail/constraint API suites and OpenAPI assertions.
 - [ ] Translation route/list/detail/constraint component tests and `translations.spec.ts` E2E flow.
