@@ -34,6 +34,7 @@ import {
 } from "../../../components/ui/table";
 import {
   hasLivePublishedAuthority,
+  ownsLiveMutationController,
   ownsPublishedRequestToken,
 } from "./mutationAuthority";
 import { importPollingIdentity, useImportPolling } from "./useImportPolling";
@@ -716,14 +717,17 @@ export function PublishedMappingImports({
       });
       let accepted = false;
       const isCurrentRequest = () =>
-        !controller.signal.aborted &&
         hasLivePublishedAuthority(
           authorityIdentityRef.current,
           authorityIdentity,
-        ) &&
-        ownsPublishedRequestToken(
-          pendingRef.current.get(item.mapping_id)?.requestToken,
-          requestToken,
+          ownsPublishedRequestToken(
+            pendingRef.current.get(item.mapping_id)?.requestToken,
+            requestToken,
+          ) &&
+            ownsLiveMutationController(
+              pendingRef.current.get(item.mapping_id)?.controller ?? null,
+              controller,
+            ),
         );
       try {
         const result = await startAdminPublishedMappingImport({
@@ -757,6 +761,7 @@ export function PublishedMappingImports({
           return next;
         });
       } finally {
+        const shouldFinalizePendingState = isCurrentRequest();
         if (
           ownsPublishedRequestToken(
             pendingRef.current.get(item.mapping_id)?.requestToken,
@@ -765,12 +770,7 @@ export function PublishedMappingImports({
         ) {
           pendingRef.current.delete(item.mapping_id);
         }
-        if (
-          hasLivePublishedAuthority(
-            authorityIdentityRef.current,
-            authorityIdentity,
-          )
-        ) {
+        if (shouldFinalizePendingState) {
           setPendingMappings(
             new Set(
               [...pendingRef.current]

@@ -21,6 +21,7 @@ readonly PYTHON_LICENSES="/tmp/verboflex-phase03-python-licenses.txt"
 
 readonly FRONTEND_MUTATION_MARKERS="src/features/admin/imports/mutationAuthority.ts|published-live-authority
 src/features/admin/imports/mutationAuthority.ts|published-request-token-ownership
+src/features/admin/imports/mutationAuthority.ts|live-mutation-controller-ownership
 src/features/admin/imports/mutationAuthority.ts|rewrite-live-authority-request-token
 src/features/admin/imports/mutationAuthority.ts|rewrite-uncommitted-finalization"
 
@@ -344,8 +345,8 @@ mutants = [item for file in data.get("files", {}).values() for item in file.get(
 if not mutants:
     raise SystemExit("Stryker executed zero mutants")
 expected_locations = {
-    "src/features/admin/imports/PublishedMappingImports.tsx": {81, 82, 83, 84, 85, 530},
-    "src/features/admin/imports/RewrittenBaselineDialog.tsx": {435},
+    "src/features/admin/imports/PublishedMappingImports.tsx": {82, 83, 84, 85, 86, 531},
+    "src/features/admin/imports/RewrittenBaselineDialog.tsx": {439},
     "src/features/admin/imports/useImportPolling.ts": {34, 35, 37, 38},
 }
 expected_marker_locations = {}
@@ -387,7 +388,7 @@ targeted_mutation_proof() {
   (
     cd "$FRONTEND_ROOT"
     npm run test:mutation -- \
-      --mutate "src/features/admin/imports/useImportPolling.ts:33-40,src/features/admin/imports/PublishedMappingImports.tsx:81-85,src/features/admin/imports/PublishedMappingImports.tsx:530-530,src/features/admin/imports/RewrittenBaselineDialog.tsx:435-435,$marker_targets" \
+      --mutate "src/features/admin/imports/useImportPolling.ts:33-40,src/features/admin/imports/PublishedMappingImports.tsx:82-86,src/features/admin/imports/PublishedMappingImports.tsx:531-531,src/features/admin/imports/RewrittenBaselineDialog.tsx:439-439,$marker_targets" \
       --reporters clear-text,json \
       --tempDirName '/tmp/verboflex-phase03-stryker-tmp' \
       --cleanTempDir always

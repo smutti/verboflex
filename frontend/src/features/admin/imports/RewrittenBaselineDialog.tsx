@@ -50,6 +50,7 @@ import {
 } from "../../../components/ui/tooltip";
 import {
   isLiveRewriteConfirmationRequest,
+  ownsLiveMutationController,
   shouldClearUncommittedConfirmation,
 } from "./mutationAuthority";
 
@@ -407,7 +408,10 @@ export function RewrittenBaselineDialog({
     setConfirmationError(null);
     let committed = false;
     const isCurrentRequest = () =>
-      !controller.signal.aborted &&
+      ownsLiveMutationController(
+        confirmationControllerRef.current,
+        controller,
+      ) &&
       isLiveRewriteConfirmationRequest(
         importIdentityRef.current,
         expectedIdentity,
@@ -463,6 +467,7 @@ export function RewrittenBaselineDialog({
         setConfirmationError("generic");
       }
     } finally {
+      const ownsCurrentRequest = isCurrentRequest();
       if (
         confirmationRequestRef.current?.token === requestToken &&
         confirmationControllerRef.current === controller
@@ -474,6 +479,7 @@ export function RewrittenBaselineDialog({
         shouldClearUncommittedConfirmation(
           importIdentityRef.current,
           expectedIdentity,
+          ownsCurrentRequest,
           committed,
         )
       ) {

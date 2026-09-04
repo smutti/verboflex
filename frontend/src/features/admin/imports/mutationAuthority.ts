@@ -1,6 +1,10 @@
-export function hasLivePublishedAuthority(current: string, expected: string) {
+export function hasLivePublishedAuthority(
+  current: string,
+  expected: string,
+  ownsCurrentRequest: boolean,
+) {
   // phase3-mutation:published-live-authority
-  return current === expected;
+  return current === expected && ownsCurrentRequest;
 }
 
 export function ownsPublishedRequestToken(
@@ -9,6 +13,14 @@ export function ownsPublishedRequestToken(
 ) {
   // phase3-mutation:published-request-token-ownership
   return current === expected;
+}
+
+export function ownsLiveMutationController(
+  current: AbortController | null,
+  expected: AbortController,
+) {
+  // phase3-mutation:live-mutation-controller-ownership
+  return current === expected && !expected.signal.aborted;
 }
 
 export function isLiveRewriteConfirmationRequest(
@@ -24,8 +36,9 @@ export function isLiveRewriteConfirmationRequest(
 export function shouldClearUncommittedConfirmation(
   liveIdentity: string,
   expectedIdentity: string,
+  ownsCurrentRequest: boolean,
   committed: boolean,
 ) {
   // phase3-mutation:rewrite-uncommitted-finalization
-  return liveIdentity === expectedIdentity && !committed;
+  return liveIdentity === expectedIdentity && ownsCurrentRequest && !committed;
 }
