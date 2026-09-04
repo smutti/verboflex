@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import importlib
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 _FIXTURES = Path(__file__).parents[3] / "fixtures" / "localization" / "android"
 
@@ -20,6 +23,10 @@ def _canonical_modules() -> tuple[Any, Any]:
     except ModuleNotFoundError:
         pytest.fail("canonical Android adapter is not implemented")
     return core, registry
+
+
+def _android_module() -> Any:
+    return importlib.import_module("verboflex.localization.importing.android_xml")
 
 
 def _input(**overrides: object) -> object:
@@ -290,3 +297,270 @@ def test_android_escape_structure_retains_raw_text_while_display_is_decoded() ->
     value = result.values[0]
     assert value.display_text == "a\nb\t☺\\c"
     assert value.structure[-1].fields == (("value", r"a\nb\t\u263A\\c"),)
+
+
+def _invalid_case_content(case: dict[str, object]) -> bytes:
+    content = case.get("content")
+    if isinstance(content, str):
+        return content.encode()
+    content_hex = case.get("content_hex")
+    assert isinstance(content_hex, str)
+    return bytes.fromhex(content_hex)
+
+
+def _padded_xml(size: int, *, key: str = "boundary") -> bytes:
+    document = f"<resources><string name='{key}'>x</string></resources>".encode()
+    assert len(document) <= size
+    return document + (b" " * (size - len(document)))
+
+
+def _array_xml(count: int) -> bytes:
+    return (
+        b"<resources><string-array name='values'>"
+        + (b"<item>x</item>" * count)
+        + b"</string-array></resources>"
+    )
+
+
+def _nested_xml(inline_depth: int) -> bytes:
+    return (
+        b"<resources><string name='depth'>"
+        + (b"<b>" * inline_depth)
+        + b"x"
+        + (b"</b>" * inline_depth)
+        + b"</string></resources>"
+    )
+
+
+def _structure_xml(extra_comments: int) -> bytes:
+    inline_count = 1_364
+    return (
+        b"<resources><string name='structure'>"
+        + (b"<b/>" * inline_count)
+        + (b"<!--x-->" * extra_comments)
+        + b"<![CDATA[x]]></string></resources>"
+    )
+
+
+def test_android_hostile_fixture_inventory_fails_closed_without_network(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, registry = _canonical_modules()
+    cases = json.loads((_FIXTURES / "invalid_cases.json").read_text())
+    attempted_network: list[object] = []
+
+    def fail_external_request(*args: object, **kwargs: object) -> None:
+        attempted_network.append((args, kwargs))
+        raise AssertionError("XML parsing attempted an external request")
+
+    monkeypatch.setattr("urllib.request.urlopen", fail_external_request)
+    for case in cases:
+        result = registry.parse_canonical_snapshot(_input(content=_invalid_case_content(case)))
+        assert result.values == (), case["id"]
+        assert tuple(issue.code for issue in result.issues) == (case["expected_code"],), case["id"]
+        assert len(result.issues) <= 5
+        assert all(len(issue.message) <= 256 for issue in result.issues)
+        assert all("secret" not in issue.message for issue in result.issues)
+    assert attempted_network == []
+
+
+def test_android_empty_resources_and_empty_value_remain_distinct() -> None:
+    _, registry = _canonical_modules()
+
+    empty_file = registry.parse_canonical_snapshot(_input(content=b"<resources/>"))
+    empty_value = registry.parse_canonical_snapshot(
+        _input(content=b"<resources><string name='empty'></string></resources>")
+    )
+
+    assert empty_file.values == ()
+    assert empty_file.issues == ()
+    assert len(empty_value.values) == 1
+    assert empty_value.values[0].display_text == ""
+    assert empty_value.issues == ()
+
+
+def test_android_decoded_key_and_selector_equality_is_exact() -> None:
+    _, registry = _canonical_modules()
+    content = (
+        "<resources><string name='café'>one</string>"
+        "<string name='cafe\u0301'>two</string></resources>"
+    ).encode()
+
+    result = registry.parse_canonical_snapshot(_input(content=content))
+
+    assert result.issues == ()
+    assert {value.logical_key for value in result.values} == {"café", "cafe\u0301"}
+
+
+def test_android_file_byte_limit_accepts_exact_and_rejects_one_over() -> None:
+    android = _android_module()
+    _, registry = _canonical_modules()
+
+    exact = registry.parse_canonical_snapshot(
+        _input(content=_padded_xml(android.MAX_CANONICAL_FILE_BYTES))
+    )
+    over = registry.parse_canonical_snapshot(
+        _input(content=_padded_xml(android.MAX_CANONICAL_FILE_BYTES + 1))
+    )
+
+    assert len(exact.values) == 1
+    assert exact.issues == ()
+    assert over.values == ()
+    assert tuple(issue.code for issue in over.issues) == ("malformed_file",)
+
+
+def test_android_value_limit_accepts_exact_and_rejects_one_over() -> None:
+    android = _android_module()
+    _, registry = _canonical_modules()
+
+    exact = registry.parse_canonical_snapshot(
+        _input(content=_array_xml(android.MAX_ANDROID_VALUES))
+    )
+    over = registry.parse_canonical_snapshot(
+        _input(content=_array_xml(android.MAX_ANDROID_VALUES + 1))
+    )
+
+    assert len(exact.values) == android.MAX_ANDROID_VALUES
+    assert exact.issues == ()
+    assert over.values == ()
+    assert tuple(issue.code for issue in over.issues) == ("unsupported_structure",)
+
+
+def test_android_depth_limit_accepts_exact_and_rejects_one_over() -> None:
+    android = _android_module()
+    _, registry = _canonical_modules()
+    inline_at_limit = android.MAX_ANDROID_XML_DEPTH - 2
+
+    exact = registry.parse_canonical_snapshot(_input(content=_nested_xml(inline_at_limit)))
+    over = registry.parse_canonical_snapshot(_input(content=_nested_xml(inline_at_limit + 1)))
+
+    assert len(exact.values) == 1
+    assert exact.issues == ()
+    assert over.values == ()
+    assert tuple(issue.code for issue in over.issues) == ("unsupported_structure",)
+
+
+def test_android_structure_limit_accepts_exact_and_rejects_one_over() -> None:
+    android = _android_module()
+    _, registry = _canonical_modules()
+
+    exact = registry.parse_canonical_snapshot(_input(content=_structure_xml(extra_comments=1)))
+    over = registry.parse_canonical_snapshot(_input(content=_structure_xml(extra_comments=2)))
+
+    assert len(exact.values[0].structure) == android.MAX_ANDROID_STRUCTURE_NODES
+    assert exact.issues == ()
+    assert over.values == ()
+    assert tuple(issue.code for issue in over.issues) == ("unsupported_structure",)
+
+
+def test_android_peer_files_fail_atomically_and_obey_aggregate_limits() -> None:
+    android = _android_module()
+    core, _ = _canonical_modules()
+    good = cast(Any, _input(path="app/src/main/res/values/one.xml"))
+    bad = cast(
+        Any,
+        _input(
+            path="app/src/main/res/values/two.xml",
+            content=b"<resources><string name='bad'>broken</resources>",
+        ),
+    )
+
+    failed = android.parse_android_xml_files((good, bad))
+
+    assert failed.values == ()
+    assert tuple(issue.code for issue in failed.issues) == ("malformed_file",)
+    assert failed.issues[0].path == "app/src/main/res/values/two.xml"
+
+    invalid_peers = tuple(
+        cast(
+            Any,
+            _input(
+                path=f"app/src/main/res/values/invalid-{index}.xml",
+                content=b"<resources>",
+            ),
+        )
+        for index in range(6)
+    )
+    capped = android.parse_android_xml_files(invalid_peers)
+    assert capped.values == ()
+    assert len(capped.issues) == android.MAX_ANDROID_ISSUES
+    assert tuple(issue.path for issue in capped.issues) == tuple(
+        sorted(issue.path for issue in capped.issues)
+    )
+
+    exact_files = tuple(
+        core.CanonicalParserInput(
+            format="android_xml",
+            repository_side="direct",
+            path=f"app/src/main/res/values/file-{index}.xml",
+            content=_padded_xml(41_943, key=f"key-{index}"),
+            layout_identity="app/src/main/res",
+            layout_version=1,
+            base_language="en",
+        )
+        for index in range(android.MAX_ANDROID_FILES)
+    )
+    assert sum(len(item.content) for item in exact_files) <= android.MAX_ANDROID_AGGREGATE_BYTES
+    assert len(android.parse_android_xml_files(exact_files).values) == android.MAX_ANDROID_FILES
+    assert android.parse_android_xml_files(exact_files + (good,)).values == ()
+
+    exact_aggregate = tuple(
+        core.CanonicalParserInput(
+            format="android_xml",
+            repository_side="direct",
+            path=f"app/src/main/res/values/aggregate-{index}.xml",
+            content=_padded_xml(android.MAX_CANONICAL_FILE_BYTES, key=f"aggregate-{index}"),
+            layout_identity="app/src/main/res",
+            layout_version=1,
+            base_language="en",
+        )
+        for index in range(android.MAX_ANDROID_AGGREGATE_BYTES // android.MAX_CANONICAL_FILE_BYTES)
+    )
+    assert sum(len(item.content) for item in exact_aggregate) == android.MAX_ANDROID_AGGREGATE_BYTES
+    assert len(android.parse_android_xml_files(exact_aggregate).values) == len(exact_aggregate)
+    one_byte_over = replace(exact_aggregate[-1], content=exact_aggregate[-1].content + b" ")
+    assert android.parse_android_xml_files(exact_aggregate[:-1] + (one_byte_over,)).values == ()
+
+
+def test_android_manifest_covers_required_categories_and_exact_limits() -> None:
+    manifest = json.loads((_FIXTURES / "manifest.json").read_text())
+
+    assert set(manifest["categories"]) == {
+        "valid",
+        "empty",
+        "malformed",
+        "escaped",
+        "unicode",
+        "markup",
+        "plural",
+        "array",
+        "boundary",
+    }
+    assert manifest["limits"] == {
+        "file_bytes": 1_048_576,
+        "aggregate_bytes": 20_971_520,
+        "files": 500,
+        "values": 5_000,
+        "depth": 12,
+        "structure_nodes_per_value": 4_096,
+        "issues": 5,
+        "issue_message": 256,
+        "path": 4_096,
+        "coordinate": 2_147_483_647,
+    }
+    invalid_ids = [
+        case["id"] for case in json.loads((_FIXTURES / "invalid_cases.json").read_text())
+    ]
+    assert len(invalid_ids) == len(set(invalid_ids))
+
+
+@settings(max_examples=100, deadline=None)
+@given(st.binary(max_size=4_096))
+def test_arbitrary_android_bytes_never_escape_or_return_partial_values(payload: bytes) -> None:
+    _, registry = _canonical_modules()
+
+    result = registry.parse_canonical_snapshot(_input(content=payload))
+
+    assert not (result.values and result.issues)
+    assert len(result.issues) <= 5
+    assert all(len(issue.message) <= 256 for issue in result.issues)

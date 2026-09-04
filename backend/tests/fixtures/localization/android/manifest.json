@@ -1,0 +1,33 @@
+{
+  "format": "android_xml",
+  "categories": {
+    "valid": ["scalar", "structured"],
+    "empty": ["empty-resources", "empty-string"],
+    "malformed": ["malformed", "dtd", "entity", "external-reference"],
+    "escaped": ["android-backslash", "xml-entity"],
+    "unicode": ["canonical-distinct-keys", "astral-escape"],
+    "markup": ["b", "i", "u", "xliff-g", "comment", "cdata", "tail"],
+    "plural": ["zero", "one", "two", "few", "many", "other"],
+    "array": ["zero-based-order"],
+    "boundary": ["file-bytes", "aggregate-bytes", "files", "values", "depth", "structure"]
+  },
+  "limits": {
+    "file_bytes": 1048576,
+    "aggregate_bytes": 20971520,
+    "files": 500,
+    "values": 5000,
+    "depth": 12,
+    "structure_nodes_per_value": 4096,
+    "issues": 5,
+    "issue_message": 256,
+    "path": 4096,
+    "coordinate": 2147483647
+  },
+  "fixtures": {
+    "scalar": "scalar.xml",
+    "scalar_expected": "scalar.expected.json",
+    "structured": "valid_structured.xml",
+    "structured_expected": "valid_structured.expected.json",
+    "invalid": "invalid_cases.json"
+  }
+}
