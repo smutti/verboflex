@@ -51,9 +51,7 @@ def _projection(result: object) -> dict[str, object]:
         key = _fields(_node(value, "ios_strings:key"))
         translated_value = _fields(_node(value, "ios_strings:value"))
         comments = [
-            _fields(node)["raw"]
-            for node in value.structure
-            if node.kind == "ios_strings:comment"
+            _fields(node)["raw"] for node in value.structure if node.kind == "ios_strings:comment"
         ]
         entries.append(
             {
@@ -82,7 +80,10 @@ def test_ios_valid_golden_manifest_emits_complete_scalar_values() -> None:
     assert result.issues == ()
     assert _projection(result) == expected
     assert result.values == tuple(sorted(result.values, key=core.canonical_value_order))
-    assert all(value.selector == core.CanonicalSelector(kind="scalar", fields=()) for value in result.values)
+    assert all(
+        value.selector == core.CanonicalSelector(kind="scalar", fields=())
+        for value in result.values
+    )
 
 
 @pytest.mark.parametrize(
@@ -158,11 +159,7 @@ def test_ios_comments_whitespace_and_source_spans_preserve_the_document() -> Non
 
     assert result.issues == ()
     value = result.values[0]
-    comments = [
-        _fields(node)
-        for node in value.structure
-        if node.kind == "ios_strings:comment"
-    ]
+    comments = [_fields(node) for node in value.structure if node.kind == "ios_strings:comment"]
     assert [(item["style"], item["raw"], item["placement"]) for item in comments] == [
         ("block", "/* before */", "before_entry"),
         ("block", "/* key gap */", "after_key"),
@@ -175,7 +172,12 @@ def test_ios_comments_whitespace_and_source_spans_preserve_the_document() -> Non
     pieces: list[tuple[int, int, str]] = []
     for node in value.structure:
         fields = _fields(node)
-        if node.kind in {"ios_strings:comment", "ios_strings:whitespace", "ios_strings:key", "ios_strings:value"}:
+        if node.kind in {
+            "ios_strings:comment",
+            "ios_strings:whitespace",
+            "ios_strings:key",
+            "ios_strings:value",
+        }:
             pieces.append((int(fields["span_start"]), int(fields["span_end"]), str(fields["raw"])))
     entry = _fields(_node(value, "ios_strings:entry"))
     pieces.extend(
@@ -187,7 +189,7 @@ def test_ios_comments_whitespace_and_source_spans_preserve_the_document() -> Non
     pieces.sort()
     assert "".join(raw for _, _, raw in pieces) == source
     assert all(source[start:end] == raw for start, end, raw in pieces)
-    assert all(left[1] == right[0] for left, right in zip(pieces, pieces[1:], strict=True))
+    assert all(left[1] == right[0] for left, right in zip(pieces, pieces[1:], strict=False))
 
 
 def test_ios_valid_empty_value_remains_explicit_and_side_projection_is_exact() -> None:
@@ -237,5 +239,9 @@ def test_ios_comment_and_assignment_grammar_rejects_non_strings_constructs(
 
     assert result.values == ()
     assert len(result.issues) == 1
-    assert result.issues[0].code in {"malformed_file", "ambiguous_structure", "unsupported_structure"}
+    assert result.issues[0].code in {
+        "malformed_file",
+        "ambiguous_structure",
+        "unsupported_structure",
+    }
     assert "plural" not in result.issues[0].message
