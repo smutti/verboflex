@@ -346,34 +346,83 @@ Plans:
 **Plans**: 27 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 04-01-PLAN.md — Canonical parser contract and Android scalar end-to-end tracer
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 04-02-PLAN.md — Full Android scalar, plural, and array parsing
 - [ ] 04-03-PLAN.md — Full Qt `.ts` scalar, numerus, and length-variant parsing
 - [ ] 04-04-PLAN.md — Full canonical JSON leaf parsing
 - [ ] 04-05-PLAN.md — Full iOS `.strings` lexer and serializer-safe parsing
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 04-06-PLAN.md — Cross-format conformance, direct/separate mapping join, and golden fixtures
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 04-07-PLAN.md — Intermediate parser checkpoint and blocking package-legitimacy approvals
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 04-08-PLAN.md — Migration-safe persisted mapping base-language authority
+- [ ] 04-14-PLAN.md — Approved exact-pinned Unicode grapheme authority
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 04-26-PLAN.md — Base-language confirmation, currentness, active revalidation, and administrator API
+- [ ] 04-10-PLAN.md — Canonical translation, history, staging, and constraint schema
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
 - [ ] 04-27-PLAN.md — Exact base-language candidate cloning and publication propagation
 - [ ] 04-09-PLAN.md — Generated base-language client and Preview publication gating
-- [ ] 04-10-PLAN.md — Canonical translation, history, staging, and constraint schema
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
 - [ ] 04-11-PLAN.md — Atomic import staging, reconciliation, refresh, and activation
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
 - [ ] 04-12-PLAN.md — Bounded admin parser-outcome API contract
 - [ ] 04-13-PLAN.md — Authorization-scoped indexed search, stable cursors, and complete detail API
-- [ ] 04-14-PLAN.md — Approved exact-pinned Unicode grapheme authority
+- [ ] 04-21-PLAN.md — Transaction-safe constraint inheritance, mutations, and recomputation service
+
+**Wave 10** *(blocked on Wave 9 completion)*
+
+- [ ] 04-25-PLAN.md — Strict role-gated maximum-length mutation API
+
+**Wave 11** *(blocked on Wave 10 completion)*
+
 - [ ] 04-15-PLAN.md — Final OpenAPI inventory and generated translation browser client
+
+**Wave 12** *(blocked on Wave 11 completion)*
+
 - [ ] 04-16-PLAN.md — Principal-scoped preferences and race-safe infinite-search state machine
 - [ ] 04-17-PLAN.md — Exact window-virtualized grouped result list and six-part row anatomy
-- [ ] 04-18-PLAN.md — Wired grouped-detail route, constraint dialogs, and browser journeys
-- [ ] 04-19-PLAN.md — Exact source/scope manifest, fail-closed closeout gate, adversarial gauntlet, and smoke
-- [ ] 04-20-PLAN.md — Fresh code/security review and fail-closed independent goal verification
-- [ ] 04-21-PLAN.md — Transaction-safe constraint inheritance, mutations, and recomputation service
 - [ ] 04-22-PLAN.md — Published-mapping parser failure, retained-baseline, and retry UI
+
+**Wave 13** *(blocked on Wave 12 completion)*
+
 - [ ] 04-23-PLAN.md — Exact five-filter translation search page composition
+
+**Wave 14** *(blocked on Wave 13 completion)*
+
 - [ ] 04-24-PLAN.md — Protected translation search route and primary navigation
-- [ ] 04-25-PLAN.md — Strict role-gated maximum-length mutation API
+
+**Wave 15** *(blocked on Wave 14 completion)*
+
+- [ ] 04-18-PLAN.md — Wired grouped-detail route, constraint dialogs, and browser journeys
+
+**Wave 16** *(blocked on Wave 15 completion)*
+
+- [ ] 04-19-PLAN.md — Exact source/scope manifest, fail-closed closeout gate, adversarial gauntlet, and smoke
+
+**Wave 17** *(blocked on Wave 16 completion)*
+
+- [ ] 04-20-PLAN.md — Fresh code/security review and fail-closed independent goal verification
 
 ### Phase 5: Review Workspace and Comments
 
