@@ -4,6 +4,9 @@ milestone_name: VerboFlex v1
 milestone_version_source: inferred_from_roadmap
 audited: 2026-09-04T11:44:55Z
 status: gaps_found
+historical_snapshot: true
+roadmap_superseded_at: 2026-09-04
+roadmap_superseded_by: "Phases 4 and 5 merged into combined Phase 4; old Phases 6-9 renumbered to 5-8."
 scores:
   requirements: "27/77"
   phases: "3/9"
@@ -112,6 +115,12 @@ nyquist:
 ---
 
 # Milestone v1 Audit — VerboFlex
+
+> **Historical scope note (2026-09-04):** this audit remains the immutable
+> snapshot of the nine-phase roadmap it evaluated. After the audit, planned
+> Phases 4 and 5 were merged into a combined Phase 4 and old Phases 6–9 were
+> renumbered to 5–8. Requirement completion and the `gaps_found` verdict are
+> unchanged; phase counts and future phase numbers below use the pre-merge map.
 
 ## Verdict
 

@@ -14,12 +14,11 @@ VerboFlex v1 builds the repository-backed localization workflow from the foundat
 - [x] **Phase 1: Platform Foundation** - Establish separated frontend/backend apps, OAuth2 base, Postgres/Alembic schema, Redis/Celery, and shadcn/ui. (completed 2026-08-26)
 - [x] **Phase 2: Admin Configuration** - Build the admin control plane, organizational Bitbucket OAuth connection, live repository discovery, and read-only localization preview. (completed 2026-09-01)
 - [x] **Phase 3: Bitbucket Import Integration** - Harden Bitbucket access for imports with capability validation, durable source references, resilience, and actionable errors. (completed 2026-09-03)
-- [ ] **Phase 4: Localization Parser Foundation** - Parse Android XML, Qt `.ts`, JSON, and iOS `.strings` into canonical translation records verified by complete golden fixtures.
-- [ ] **Phase 5: Import, Search, and Constraints** - Import translations, preserve review context, expose search/filter APIs, and calculate max-length violations.
-- [ ] **Phase 6: Review Workspace and Comments** - Deliver the task-focused translation review UI with editing, state changes, comments, and pending-change visibility.
-- [ ] **Phase 7: Format-Safe Write-Back** - Prove file-location metadata, stale-source detection, and format-preserving writer behavior before PR automation.
-- [ ] **Phase 8: Change Sets and Pull Requests** - Submit grouped changes through Celery jobs that create Bitbucket branches, commits, and pull requests.
-- [ ] **Phase 9: Verification and Hardening** - Audit role enforcement, mutation audit metadata, UI permissions, error handling, and end-to-end readiness.
+- [ ] **Phase 4: Localization Import, Search, and Constraints** - Parse supported files into canonical records, import and refresh them safely, expose search/detail workflows, and calculate max-length violations.
+- [ ] **Phase 5: Review Workspace and Comments** - Deliver the task-focused translation review UI with editing, state changes, comments, and pending-change visibility.
+- [ ] **Phase 6: Format-Safe Write-Back** - Prove file-location metadata, stale-source detection, and format-preserving writer behavior before PR automation.
+- [ ] **Phase 7: Change Sets and Pull Requests** - Submit grouped changes through Celery jobs that create Bitbucket branches, commits, and pull requests.
+- [ ] **Phase 8: Verification and Hardening** - Audit role enforcement, mutation audit metadata, UI permissions, error handling, and end-to-end readiness.
 
 ## Per-Phase Quality Gate
 
@@ -327,23 +326,24 @@ Plans:
 
 - [x] 03-16-PLAN.md — Digest-bound ASVS L1 review and independent exact-passed verifier closeout
 
-### Phase 4: Localization Parser Foundation
+### Phase 4: Localization Import, Search, and Constraints
 
-**Goal**: Convert supported localization files into stable canonical translation records and prove all four parser contracts with complete golden fixtures.
+**Goal**: Convert supported localization files into stable canonical translation records, import and refresh them without losing review context, and expose searchable translations with maximum-length constraints.
 **Depends on**: Phase 3
-**Requirements**: [FMT-01, FMT-02, FMT-03, FMT-04, FMT-06, FMT-07]
-**UI hint**: no
+**Requirements**: [FMT-01, FMT-02, FMT-03, FMT-04, FMT-06, FMT-07, FMT-08, SRCH-01, SRCH-02, SRCH-03, SRCH-04, SRCH-05, SRCH-06, SRCH-07, SRCH-08, CONS-01, CONS-02, CONS-03, CONS-04, CONS-05]
+**UI hint**: yes
 **Success Criteria** (what must be TRUE):
 
-  1. System parses Android XML strings into canonical records.
-  2. System parses Qt `.ts` translations into canonical records.
-  3. System parses JSON localization files into canonical records.
-  4. System parses iOS `.strings` files into canonical records.
-  5. Canonical records include product, repository, branch, file path, format, stable key identity, language, text, state, and locator metadata.
-  6. Complete golden fixtures cover valid, empty, malformed, escaped, Unicode, and format-specific boundary cases for every supported parser.
-  7. Phase quality gate passes with parser tests, code review, and backend deploy/build smoke verification.
+  1. System parses Android XML, Qt `.ts`, JSON, and iOS `.strings` files into one canonical translation contract.
+  2. Canonical records include product, repository, branch, file path, format, stable key identity, language, text, state, and locator metadata.
+  3. Complete golden fixtures cover valid, empty, malformed, escaped, Unicode, and format-specific boundary cases for every supported parser.
+  4. Celery import jobs upsert and refresh canonical translations from the published Bitbucket mapping without losing stable review context.
+  5. Product managers can search and filter translations by product, language, key/text, approval state, and violation status.
+  6. User can open a translation detail view with repository, file, branch, and source context.
+  7. Authorized user can create, edit, and remove maximum-length constraints, and the system recalculates violations after imports and later edits.
+  8. The parser checkpoint and final phase quality gate pass with targeted tests, code review, and deploy/build smoke verification.
 
-**Plans**: 7 plans
+**Plans**: 13 plans
 
 Plans:
 
@@ -353,38 +353,18 @@ Plans:
 - [ ] 04-04: JSON parser
 - [ ] 04-05: iOS `.strings` parser
 - [ ] 04-06: Cross-format golden fixtures and canonical conformance
-- [ ] 04-07: Phase quality gate - parser tests, code review, and deploy/build verification
+- [ ] 04-07: Intermediate parser checkpoint - tests, review, and backend smoke
+- [ ] 04-08: Import job orchestration, canonical upserts, and stable refresh
+- [ ] 04-09: Search/filter API and indexed queries
+- [ ] 04-10: Translation detail API and frontend navigation
+- [ ] 04-11: Max-length constraint model and violation calculation
+- [ ] 04-12: Search/review list UX with pagination or virtualization
+- [ ] 04-13: Final phase quality gate - tests, code review, and deploy/build verification
 
-### Phase 5: Import, Search, and Constraints
-
-**Goal**: Import translations into searchable records while preserving review context and calculating max-length violations.
-**Depends on**: Phase 4
-**Requirements**: [FMT-08, SRCH-01, SRCH-02, SRCH-03, SRCH-04, SRCH-05, SRCH-06, SRCH-07, SRCH-08, CONS-01, CONS-02, CONS-03, CONS-04, CONS-05]
-**UI hint**: yes
-**Success Criteria** (what must be TRUE):
-
-  1. Celery import jobs can refresh Bitbucket translations without losing stable review context.
-  2. Product managers can search/filter by product, language, key/text, approval state, and violation status.
-  3. User can open a translation detail view with repository/file/branch context.
-  4. Authorized user can create, edit, and remove max-length constraints.
-  5. System recalculates and displays length violations after imports and edits.
-  6. Phase quality gate passes with tests, code review, and deploy/build smoke verification.
-
-**Plans**: 6 plans
-
-Plans:
-
-- [ ] 05-01: Import job orchestration and canonical upserts
-- [ ] 05-02: Search/filter API and indexed queries
-- [ ] 05-03: Translation detail API and frontend navigation
-- [ ] 05-04: Max-length constraint model and violation calculation
-- [ ] 05-05: Search/review list UX with pagination or virtualization
-- [ ] 05-06: Phase quality gate - tests, code review, and deploy/build verification
-
-### Phase 6: Review Workspace and Comments
+### Phase 5: Review Workspace and Comments
 
 **Goal**: Provide the core review workspace where authorized users edit, comment, and move translations through simple states.
-**Depends on**: Phase 5
+**Depends on**: Phase 4
 **Requirements**: [REVW-01, REVW-02, REVW-03, REVW-04, REVW-05, REVW-06, REVW-07, REVW-08, COMM-01, COMM-02, COMM-03, COMM-04, COMM-05, UI-02]
 **UI hint**: yes
 **Success Criteria** (what must be TRUE):
@@ -400,17 +380,17 @@ Plans:
 
 Plans:
 
-- [ ] 06-01: Pending translation changes and edit workflow
-- [ ] 06-02: Draft/approved/rejected state transitions and audit history
-- [ ] 06-03: Translation comments model, API, and persistence
-- [ ] 06-04: Permission-aware review workspace actions
-- [ ] 06-05: Dense shadcn/ui review workspace polish
-- [ ] 06-06: Phase quality gate - tests, code review, and deploy/build verification
+- [ ] 05-01: Pending translation changes and edit workflow
+- [ ] 05-02: Draft/approved/rejected state transitions and audit history
+- [ ] 05-03: Translation comments model, API, and persistence
+- [ ] 05-04: Permission-aware review workspace actions
+- [ ] 05-05: Dense shadcn/ui review workspace polish
+- [ ] 05-06: Phase quality gate - tests, code review, and deploy/build verification
 
-### Phase 7: Format-Safe Write-Back
+### Phase 6: Format-Safe Write-Back
 
 **Goal**: Make file write-back safe enough to trust before creating Bitbucket pull requests.
-**Depends on**: Phase 6
+**Depends on**: Phase 5
 **Requirements**: [FMT-05, PR-04]
 **UI hint**: no
 **Success Criteria** (what must be TRUE):
@@ -426,16 +406,16 @@ Plans:
 
 Plans:
 
-- [ ] 07-01: File locator metadata and raw snapshot strategy
-- [ ] 07-02: Writer adapters and golden fixtures
-- [ ] 07-03: Stale branch/file detection
-- [ ] 07-04: Diff review and write-back safety tests
-- [ ] 07-05: Phase quality gate - writer tests, code review, and deploy/build verification
+- [ ] 06-01: File locator metadata and raw snapshot strategy
+- [ ] 06-02: Writer adapters and golden fixtures
+- [ ] 06-03: Stale branch/file detection
+- [ ] 06-04: Diff review and write-back safety tests
+- [ ] 06-05: Phase quality gate - writer tests, code review, and deploy/build verification
 
-### Phase 8: Change Sets and Pull Requests
+### Phase 7: Change Sets and Pull Requests
 
 **Goal**: Submit reviewed translation changes through Bitbucket Cloud branches, commits, and pull requests.
-**Depends on**: Phase 7
+**Depends on**: Phase 6
 **Requirements**: [PR-01, PR-02, PR-03, PR-05, PR-06, PR-07, PR-08, PR-09, PR-10, PR-11, UI-04]
 **UI hint**: yes
 **Success Criteria** (what must be TRUE):
@@ -451,17 +431,17 @@ Plans:
 
 Plans:
 
-- [ ] 08-01: Change-set selection and grouping
-- [ ] 08-02: Target branch selection and submission validation
-- [ ] 08-03: Bitbucket branch and commit job
-- [ ] 08-04: Pull request creation and audit records
-- [ ] 08-05: Job status UI, errors, and idempotent retry
-- [ ] 08-06: Phase quality gate - tests, code review, and deploy/build verification
+- [ ] 07-01: Change-set selection and grouping
+- [ ] 07-02: Target branch selection and submission validation
+- [ ] 07-03: Bitbucket branch and commit job
+- [ ] 07-04: Pull request creation and audit records
+- [ ] 07-05: Job status UI, errors, and idempotent retry
+- [ ] 07-06: Phase quality gate - tests, code review, and deploy/build verification
 
-### Phase 9: Verification and Hardening
+### Phase 8: Verification and Hardening
 
 **Goal**: Verify the whole v1 workflow and close security, audit, authorization, and operational gaps.
-**Depends on**: Phase 8
+**Depends on**: Phase 7
 **Requirements**: [PLAT-07, AUTH-05, AUTH-06]
 **UI hint**: yes
 **Success Criteria** (what must be TRUE):
@@ -477,25 +457,24 @@ Plans:
 
 Plans:
 
-- [ ] 09-01: Audit metadata completion
-- [ ] 09-02: Backend authorization audit and security tests
-- [ ] 09-03: Frontend permission and UX hardening
-- [ ] 09-04: End-to-end verification and release readiness
-- [ ] 09-05: Final quality gate - code review, tests, and deploy verification
+- [ ] 08-01: Audit metadata completion
+- [ ] 08-02: Backend authorization audit and security tests
+- [ ] 08-03: Frontend permission and UX hardening
+- [ ] 08-04: End-to-end verification and release readiness
+- [ ] 08-05: Final quality gate - code review, tests, and deploy verification
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Platform Foundation | 15/15 | Complete    | 2026-08-26 |
 | 2. Admin Configuration | 46/46 | Complete    | 2026-09-01 |
 | 3. Bitbucket Import Integration | 16/16 | Complete    | 2026-09-03 |
-| 4. Localization Parser Foundation | 0/7 | Not started | - |
-| 5. Import, Search, and Constraints | 0/6 | Not started | - |
-| 6. Review Workspace and Comments | 0/6 | Not started | - |
-| 7. Format-Safe Write-Back | 0/5 | Not started | - |
-| 8. Change Sets and Pull Requests | 0/6 | Not started | - |
-| 9. Verification and Hardening | 0/5 | Not started | - |
+| 4. Localization Import, Search, and Constraints | 0/13 | Not started | - |
+| 5. Review Workspace and Comments | 0/6 | Not started | - |
+| 6. Format-Safe Write-Back | 0/5 | Not started | - |
+| 7. Change Sets and Pull Requests | 0/6 | Not started | - |
+| 8. Verification and Hardening | 0/5 | Not started | - |

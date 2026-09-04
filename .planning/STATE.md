@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
 current_phase: 4
-current_phase_name: Localization Parser Foundation
+current_phase_name: Localization Import, Search, and Constraints
 status: planning
-stopped_at: Phase 03 complete, ready to plan Phase 4
-last_updated: "2026-09-04T11:55:00Z"
+stopped_at: Phases 4 and 5 merged; Phase 4 ready for discussion
+last_updated: "2026-09-04T13:19:09.329Z"
 last_activity: 2026-09-04
-last_activity_desc: Phase 03 shipped in PR #3; Phase 4 remains ready to plan
-state_head: 83f7e2e181d8ec40886503fb5efbc9d7e59b7a3a
+last_activity_desc: "Merged roadmap Phases 4 and 5; combined Phase 4 ready for discussion"
+state_head: d2cb3a6dee710e170233521f6672c52e5c9d969a
 progress:
-  total_phases: 9
+  total_phases: 8
   completed_phases: 3
   total_plans: 77
   completed_plans: 77
-  percent: 33
+  percent: 38
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-03)
 
 **Core value:** Product teams can quickly find, review, constrain, modify, comment on, and approve translations, then send approved changes back through the standard Bitbucket Cloud pull request workflow.
-**Current focus:** Phase 04 — Localization Parser Foundation
+**Current focus:** Phase 04 — Localization Import, Search, and Constraints
 
 ## Current Position
 
-Phase: 4 — Localization Parser Foundation
+Phase: 4 — Localization Import, Search, and Constraints
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-09-04 — Phase 03 shipped in PR #3; Phase 4 remains ready to plan
+Status: Ready to discuss
+Last activity: 2026-09-04 — Merged roadmap Phases 4 and 5; combined Phase 4 ready for discussion
 
-Progress: [████████████████████] 77/77 plans (100%)
+Progress: [████████░░░░░░░░░░░░] 3/8 phases (38%)
 
 ## Performance Metrics
 
@@ -348,7 +348,7 @@ Recent decisions affecting current work:
 - [Phase 03]: Render readiness through an exhaustive closed-literal label map; never derive capability from OAuth scopes, timestamps, or prior success.
 - [Phase 03]: Show Repository and pull-request access only when both generated profile fields exactly identify the expanded server contract.
 - [Phase 03]: Keep future source-write and pull-request readiness descriptive only, with no provider-write control in the browser.
-- [Phase 03]: Use one ten-value application vocabulary: seven Phase 3 read operations and exactly three non-executable Phase 8 write declarations.
+- [Phase 03]: Use one ten-value application vocabulary: seven Phase 3 read operations and exactly three non-executable Phase 7 write declarations.
 - [Phase 03]: Reject non-read operations and operation/URL mismatches before credential acquisition while retaining a GET-only Phase 3 adapter.
 - [Phase 03]: Pin branch-list continuations to the originating repository and accept only pullrequest:write implication-closure scope evidence.
 - [Phase 03]: Emit Bitbucket provider-failure diagnostics only after the exact current import execution durably transitions to failed.
@@ -397,7 +397,7 @@ None yet.
 - Phase 2 implementation must preserve the resolved A-01 product-name contract, A-02 preview encoding/shape matrix, A-03 operational bounds, and the explicit dependency-legitimacy checkpoints.
 - Six non-blocking Phase 2 review warnings remain open: provider expiry upper bound, development dependency advisory, mutable container tags, missing Phase 2 `.env.example` settings, omitted executable edge-matrix data from the source manifest, and the deprecated default no-flag Compose flow.
 - Ten non-blocking Phase 3 review warnings remain open: OAuth lifetime bounds, two stale-closure UI races, executable-test manifest coverage, frontend development advisories, obsolete Phase 2 Compose verification, incomplete environment documentation, mutable container tags, post-confirmation refresh messaging, and mobile error focus.
-- Phase 7 must define the exact Qt `.ts` and other format-preserving edit contract while extending, not duplicating, the Phase 4 golden parser corpus.
+- Phase 6 must define the exact Qt `.ts` and other format-preserving edit contract while extending, not duplicating, the Phase 4 golden parser corpus.
 
 ### Quick Tasks Completed
 
@@ -407,10 +407,11 @@ None yet.
 
 ### Roadmap Evolution
 
-- Phase 7 edited: moved parser fixtures to Phase 4 and retained write-back fixtures
+- Pre-merge Phase 7 (now Phase 6) edited: moved parser fixtures to Phase 4 and retained write-back fixtures
 - Phase 4 edited: added complete golden parser fixtures and stable canonical identity
 - Phase 3 edited: narrowed to import-grade capability validation, durable source references, and errors
 - Phase 2 edited: expanded admin scope with organizational OAuth, read-only discovery, and preview
+- Phases 4 and 5 merged: combined parsing, canonical import, search, detail, and maximum-length constraints; old Phases 6–9 renumbered to 5–8
 
 ## Deferred Items
 
@@ -426,6 +427,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-03T18:25:46Z
-Stopped at: Phase 03 complete, ready to plan Phase 4
+Last session: 2026-09-04T13:19:09Z
+Stopped at: Phases 4 and 5 merged; Phase 4 ready for discussion
 Resume file: None
