@@ -343,23 +343,30 @@ Plans:
   7. Authorized user can create, edit, and remove maximum-length constraints, and the system recalculates violations after imports and later edits.
   8. The parser checkpoint and final phase quality gate pass with targeted tests, code review, and deploy/build smoke verification.
 
-**Plans**: 13 plans
+**Plans**: 20 plans
 
 Plans:
 
-- [ ] 04-01: Canonical translation model and adapter interfaces
-- [ ] 04-02: Android XML parser
-- [ ] 04-03: Qt `.ts` parser
-- [ ] 04-04: JSON parser
-- [ ] 04-05: iOS `.strings` parser
-- [ ] 04-06: Cross-format golden fixtures and canonical conformance
-- [ ] 04-07: Intermediate parser checkpoint - tests, review, and backend smoke
-- [ ] 04-08: Import job orchestration, canonical upserts, and stable refresh
-- [ ] 04-09: Search/filter API and indexed queries
-- [ ] 04-10: Translation detail API and frontend navigation
-- [ ] 04-11: Max-length constraint model and violation calculation
-- [ ] 04-12: Search/review list UX with pagination or virtualization
-- [ ] 04-13: Final phase quality gate - tests, code review, and deploy/build verification
+- [ ] 04-01-PLAN.md — Canonical parser contract and Android scalar end-to-end tracer
+- [ ] 04-02-PLAN.md — Full Android scalar, plural, and array parsing
+- [ ] 04-03-PLAN.md — Full Qt `.ts` scalar, numerus, and length-variant parsing
+- [ ] 04-04-PLAN.md — Full canonical JSON leaf parsing
+- [ ] 04-05-PLAN.md — Full iOS `.strings` lexer and serializer-safe parsing
+- [ ] 04-06-PLAN.md — Cross-format conformance, direct/separate mapping join, and golden fixtures
+- [ ] 04-07-PLAN.md — Intermediate parser checkpoint and blocking package-legitimacy approvals
+- [ ] 04-08-PLAN.md — Persisted base-language authority and confirmation API
+- [ ] 04-09-PLAN.md — Generated base-language client and Preview publication gating
+- [ ] 04-10-PLAN.md — Canonical translation, history, staging, and constraint schema
+- [ ] 04-11-PLAN.md — Atomic import staging, reconciliation, refresh, and activation
+- [ ] 04-12-PLAN.md — Admin parser outcomes and retained-dataset recovery UI
+- [ ] 04-13-PLAN.md — Authorization-scoped indexed search, stable cursors, and complete detail API
+- [ ] 04-14-PLAN.md — Grapheme authority, constraint recomputation, and role-gated mutations
+- [ ] 04-15-PLAN.md — Complete generated translation/search/constraint browser client
+- [ ] 04-16-PLAN.md — Principal-scoped preferences and race-safe infinite-search state machine
+- [ ] 04-17-PLAN.md — Accessible virtual grouped search workspace, routes, and navigation
+- [ ] 04-18-PLAN.md — Complete grouped detail, constraint dialogs, and browser journeys
+- [ ] 04-19-PLAN.md — Exact source manifest, adversarial gauntlet, and deploy-like smoke
+- [ ] 04-20-PLAN.md — Fresh code/security review and independent goal verification
 
 ### Phase 5: Review Workspace and Comments
 
