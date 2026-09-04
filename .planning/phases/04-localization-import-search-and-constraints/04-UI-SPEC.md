@@ -1,7 +1,7 @@
 ---
 phase: 4
 slug: localization-import-search-and-constraints
-status: draft
+status: approved
 shadcn_initialized: true
 preset: official-new-york-v4-radix
 created: 2026-09-04
@@ -361,9 +361,17 @@ Exact filter values, status labels, dialog bodies, and error recovery copy in th
 
 > Shape-rooted state coverage authored for search/filter controls, the virtualized collection, translation detail, parser outcomes, and constraint dialogs. The ui-phase probe may replace this section after checker verification; Copywriting rows remain canonical for empty/error prose.
 
-Confirmed element kinds: search/filter surface and constraint Dialog are `form` and `interactive-control`; translation results and structured detail values are `list-collection` and `static-content`; navigation is `nav`; parser outcome is `list-collection` and `static-content`.
+User-confirmed element kinds:
 
-Applicable state considerations: all eight categories resolved explicitly; 0 backstop, 0 unresolved.
+- Search/filter and base-language selection: `form`, `interactive-control`, `static-content`.
+- Translation results: `list-collection`, `interactive-control`, `static-content`.
+- Translation detail: `list-collection`, `nav`, `interactive-control`, `static-content`.
+- Primary navigation: `nav`, `interactive-control`.
+- Constraint create/edit: `form`, `interactive-control`, `static-content`.
+- Constraint removal: `interactive-control`, `static-content`.
+- Parser outcome: `list-collection`, `interactive-control`, `static-content`.
+
+Probe result: 50 applicable considerations across eight surfaces; all eight categories and all 50 instances resolved explicitly, with 0 backstop and 0 unresolved.
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
@@ -430,11 +438,11 @@ No registry install is authorized by this contract. `@tanstack/react-virtual` is
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** verified by `gsd-ui-checker` on 2026-09-04 after the action-specific constraint CTA revision; no recommendations remain.
