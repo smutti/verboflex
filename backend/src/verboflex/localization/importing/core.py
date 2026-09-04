@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Literal, Protocol, TypeGuard
+from typing import Literal, Protocol, TypeGuard, get_args
 
 from verboflex.localization.preview.core import normalize_preview_locale
 
@@ -82,69 +82,11 @@ MAX_CANONICAL_ADDRESS_LENGTH = 128
 MAX_CANONICAL_COORDINATE = 2_147_483_647
 MAX_CANONICAL_ISSUE_MESSAGE_LENGTH = 256
 
-_CANONICAL_FORMATS = frozenset({"android_xml", "qt_ts", "json", "ios_strings"})
-_REPOSITORY_SIDES = frozenset({"direct", "keys", "translations"})
-_SELECTOR_KINDS = frozenset(
-    {
-        "scalar",
-        "android_quantity",
-        "android_array_item",
-        "qt_numerus",
-        "qt_length_variant",
-        "json_path",
-    }
-)
-_ISSUE_CODES = frozenset(
-    {
-        "malformed_file",
-        "ambiguous_structure",
-        "unsupported_structure",
-        "duplicate_key",
-        "base_language_required",
-    }
-)
-_STRUCTURE_KINDS = frozenset(
-    {
-        "android_xml:string",
-        "android_xml:plurals",
-        "android_xml:string_array",
-        "android_xml:item",
-        "android_xml:text",
-        "android_xml:inline",
-        "android_xml:tail",
-        "android_xml:comment",
-        "android_xml:cdata",
-        "qt_ts:document",
-        "qt_ts:defaultcodec",
-        "qt_ts:dependencies",
-        "qt_ts:dependency",
-        "qt_ts:context",
-        "qt_ts:message",
-        "qt_ts:location",
-        "qt_ts:source",
-        "qt_ts:oldsource",
-        "qt_ts:comment",
-        "qt_ts:oldcomment",
-        "qt_ts:extracomment",
-        "qt_ts:translatorcomment",
-        "qt_ts:userdata",
-        "qt_ts:translation",
-        "qt_ts:numerusform",
-        "qt_ts:lengthvariant",
-        "qt_ts:text",
-        "json:document",
-        "json:object",
-        "json:member",
-        "json:string",
-        "ios_strings:document",
-        "ios_strings:encoding",
-        "ios_strings:comment",
-        "ios_strings:entry",
-        "ios_strings:key",
-        "ios_strings:value",
-        "ios_strings:whitespace",
-    }
-)
+_CANONICAL_FORMATS = frozenset(get_args(CanonicalFormat))
+_REPOSITORY_SIDES = frozenset(get_args(RepositorySide))
+_SELECTOR_KINDS = frozenset(get_args(SelectorKind))
+_ISSUE_CODES = frozenset(get_args(IssueCode))
+_STRUCTURE_KINDS = frozenset(get_args(StructureKind))
 _REPOSITORY_SIDE_ORDER = {"direct": 0, "keys": 1, "translations": 2}
 
 
