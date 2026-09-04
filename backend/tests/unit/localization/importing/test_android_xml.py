@@ -88,7 +88,7 @@ def test_android_scalar_snapshot_is_canonical_and_immutable() -> None:
         ),
         (b"<resources><plurals name='count'/></resources>", "unsupported_structure"),
         (
-            b"<resources><string name='key'><b>value</b></string></resources>",
+            b"<resources><string name='key'><font>value</font></string></resources>",
             "unsupported_structure",
         ),
         (
@@ -194,16 +194,19 @@ def test_android_structured_markup_and_escape_golden_manifest() -> None:
     assert markup.display_text == "Hello <literal>bold and italic tail %1$d!"
     assert tuple(node.kind for node in markup.structure).count("android_xml:cdata") == 1
     assert tuple(node.kind for node in markup.structure).count("android_xml:comment") == 1
-    assert core.CanonicalStructureNode(
-        kind="android_xml:inline",
-        fields=(
-            ("event", "start"),
-            ("name", "g"),
-            ("namespace", "urn:oasis:names:tc:xliff:document:1.2"),
-            ("id", "count"),
-            ("example", "2"),
-        ),
-    ) in markup.structure
+    assert (
+        core.CanonicalStructureNode(
+            kind="android_xml:inline",
+            fields=(
+                ("event", "start"),
+                ("name", "g"),
+                ("namespace", "urn:oasis:names:tc:xliff:document:1.2"),
+                ("id", "count"),
+                ("example", "2"),
+            ),
+        )
+        in markup.structure
+    )
 
 
 @pytest.mark.parametrize(
@@ -216,8 +219,7 @@ def test_android_structured_markup_and_escape_golden_manifest() -> None:
             "unsupported_structure",
         ),
         (
-            b"<resources><plurals name='x'><item quantity='invalid'>x</item></plurals>"
-            b"</resources>",
+            b"<resources><plurals name='x'><item quantity='invalid'>x</item></plurals></resources>",
             "unsupported_structure",
         ),
         (
@@ -231,7 +233,10 @@ def test_android_structured_markup_and_escape_golden_manifest() -> None:
             "unsupported_structure",
         ),
         (b"<resources><string name='x'><em>x</em></string></resources>", "unsupported_structure"),
-        (b"<resources><string name='x'><b class='x'>x</b></string></resources>", "unsupported_structure"),
+        (
+            b"<resources><string name='x'><b class='x'>x</b></string></resources>",
+            "unsupported_structure",
+        ),
         (
             b"<resources xmlns:x='urn:oasis:names:tc:xliff:document:1.2'>"
             b"<string name='x'><x:g>x</x:g></string></resources>",
@@ -252,7 +257,10 @@ def test_android_structured_markup_and_escape_golden_manifest() -> None:
             b"</string></resources>",
             "unsupported_structure",
         ),
-        (b"<resources><?unsafe value?><string name='x'>x</string></resources>", "unsupported_structure"),
+        (
+            b"<resources><?unsafe value?><string name='x'>x</string></resources>",
+            "unsupported_structure",
+        ),
         (
             b"<resources><plurals name='x'><item quantity='one'>a</item>"
             b"<item quantity='one'>b</item></plurals></resources>",
@@ -275,9 +283,8 @@ def test_android_structured_markup_allowlist_is_exact(
 def test_android_escape_structure_retains_raw_text_while_display_is_decoded() -> None:
     _, registry = _canonical_modules()
 
-    result = registry.parse_canonical_snapshot(
-        _input(content=b"<resources><string name='escaped'>a\\nb\\t\\u263A\\\\c</string></resources>")
-    )
+    content = b"<resources><string name='escaped'>a\\nb\\t\\u263A\\\\c</string></resources>"
+    result = registry.parse_canonical_snapshot(_input(content=content))
 
     assert result.issues == ()
     value = result.values[0]
