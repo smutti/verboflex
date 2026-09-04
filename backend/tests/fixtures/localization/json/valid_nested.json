@@ -1,0 +1,22 @@
+{
+  "it_IT": {
+    "checkout": {
+      "title": "Pagamento"
+    },
+    "profile": {
+      "title": "Profilo"
+    },
+    "literal.dot[0]": "Punteggiatura",
+    "empty": ""
+  },
+  "en": {
+    "checkout": {
+      "title": "Checkout"
+    },
+    "profile": {
+      "title": "Profile"
+    },
+    "literal.dot[0]": "Punctuation",
+    "empty": ""
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "entries": [
+    {
+      "display_text": "",
+      "language": "en",
+      "logical_key": "empty",
+      "selector": {"fields": {"parents": []}, "kind": "json_path", "version": 1},
+      "source_text": "",
+      "translated_text": null
+    },
+    {
+      "display_text": "Punctuation",
+      "language": "en",
+      "logical_key": "literal.dot[0]",
+      "selector": {"fields": {"parents": []}, "kind": "json_path", "version": 1},
+      "source_text": "Punctuation",
+      "translated_text": null
+    },
+    {
+      "display_text": "Checkout",
+      "language": "en",
+      "logical_key": "title",
+      "selector": {"fields": {"parents": ["checkout"]}, "kind": "json_path", "version": 1},
+      "source_text": "Checkout",
+      "translated_text": null
+    },
+    {
+      "display_text": "Profile",
+      "language": "en",
+      "logical_key": "title",
+      "selector": {"fields": {"parents": ["profile"]}, "kind": "json_path", "version": 1},
+      "source_text": "Profile",
+      "translated_text": null
+    },
+    {
+      "display_text": "",
+      "language": "it-IT",
+      "logical_key": "empty",
+      "selector": {"fields": {"parents": []}, "kind": "json_path", "version": 1},
+      "source_text": null,
+      "translated_text": ""
+    },
+    {
+      "display_text": "Punteggiatura",
+      "language": "it-IT",
+      "logical_key": "literal.dot[0]",
+      "selector": {"fields": {"parents": []}, "kind": "json_path", "version": 1},
+      "source_text": null,
+      "translated_text": "Punteggiatura"
+    },
+    {
+      "display_text": "Pagamento",
+      "language": "it-IT",
+      "logical_key": "title",
+      "selector": {"fields": {"parents": ["checkout"]}, "kind": "json_path", "version": 1},
+      "source_text": null,
+      "translated_text": "Pagamento"
+    },
+    {
+      "display_text": "Profilo",
+      "language": "it-IT",
+      "logical_key": "title",
+      "selector": {"fields": {"parents": ["profile"]}, "kind": "json_path", "version": 1},
+      "source_text": null,
+      "translated_text": "Profilo"
+    }
+  ],
+  "format": "json"
+}
