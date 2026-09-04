@@ -1,21 +1,67 @@
 ---
 phase: 03-bitbucket-import-integration
-reviewed: 2026-09-03T17:25:05Z
-depth: deep
+reviewed: 2026-09-04T10:44:54Z
+depth: standard
 asvs_level: OWASP ASVS 5.0 Level 1
 blocking_threshold: High
-source_digest: e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c
-reviewed_source_digest: e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c
-diff_base: 4c557f5147038c4b09dc6dcf26d7b26675884bb5
-diff_head: a6e17381b3d7001722259a3cd5ece582fc30f4f4
-manifest_files_reviewed: 331
-diff_files_reviewed: 84
-additional_diff_files_reviewed: 21
-files_reviewed: 352
-final_reviewed: 2026-09-03T18:10:41Z
-final_review_depth: standard
-final_review_files_reviewed: 65
-final_review_files_reviewed_list:
+source_digest: 64bdc9a3e5c4085036c78732b4285609dd3a00c6c307b7c33f40149b5fb0684b
+reviewed_source_digest: 64bdc9a3e5c4085036c78732b4285609dd3a00c6c307b7c33f40149b5fb0684b
+diff_base: ecf2880
+diff_head: 65e7316cd2dda7132cc2f805f2dd3a7fa6b47ff7
+files_reviewed: 8
+files_reviewed_list:
+  - backend/tests/architecture/test_phase3_gauntlet.py
+  - frontend/src/features/admin/imports/PublishedMappingImports.test.tsx
+  - frontend/src/features/admin/imports/PublishedMappingImports.tsx
+  - frontend/src/features/admin/imports/RewrittenBaselineDialog.test.tsx
+  - frontend/src/features/admin/imports/RewrittenBaselineDialog.tsx
+  - frontend/src/features/admin/imports/mutationAuthority.test.ts
+  - frontend/src/features/admin/imports/mutationAuthority.ts
+  - tools/phase3_gauntlet.sh
+historical_post_remediation_reviewed: 2026-09-04T07:57:33Z
+historical_post_remediation_review_depth: standard
+historical_post_remediation_diff_base: fdcc48b
+historical_post_remediation_diff_head: 0ebd82c2f025a5a219fcf8b86db8c7944ef7a0be
+historical_post_remediation_source_digest: 0227a4fbd295caf78a676cb798e5cabf378710884d1418a5262df7bf33512534
+historical_post_remediation_files_reviewed: 10
+historical_post_remediation_files_reviewed_list:
+  - backend/tests/architecture/test_phase3_gauntlet.py
+  - frontend/e2e/admin-configuration.spec.ts
+  - frontend/src/features/admin/imports/PublishedMappingImports.test.tsx
+  - frontend/src/features/admin/imports/PublishedMappingImports.tsx
+  - frontend/src/features/admin/imports/RewrittenBaselineDialog.test.tsx
+  - frontend/src/features/admin/imports/RewrittenBaselineDialog.tsx
+  - frontend/src/features/admin/imports/mutationAuthority.test.ts
+  - frontend/src/features/admin/imports/mutationAuthority.ts
+  - frontend/src/features/admin/mappings/ProductMappingsPage.test.tsx
+  - tools/phase3_gauntlet.sh
+historical_nyquist_reviewed: 2026-09-03T21:04:31Z
+historical_nyquist_review_depth: standard
+historical_nyquist_diff_base: 90ed776
+historical_nyquist_diff_head: fdcc48b0beb0fa9bf6dc4bd8e5fa178924536ac7
+historical_nyquist_source_digest: 2b1b22590d42d8333b41547dddb90d8a484b5fe08dbaed5032c86877b8831b9c
+historical_nyquist_files_reviewed: 10
+historical_nyquist_files_reviewed_list:
+  - backend/src/verboflex/services/bitbucket_oauth.py
+  - backend/tests/integration/test_bitbucket_oauth.py
+  - backend/tests/architecture/test_phase3_gauntlet.py
+  - frontend/src/features/admin/imports/PublishedMappingImports.tsx
+  - frontend/src/features/admin/imports/PublishedMappingImports.test.tsx
+  - frontend/src/features/admin/imports/RewrittenBaselineDialog.tsx
+  - frontend/src/features/admin/imports/RewrittenBaselineDialog.test.tsx
+  - frontend/e2e/admin-configuration.spec.ts
+  - tools/phase3_source_manifest.txt
+  - tools/phase3_gauntlet.sh
+historical_deep_reviewed: 2026-09-03T17:25:05Z
+historical_deep_review_depth: deep
+historical_manifest_files_reviewed: 331
+historical_diff_files_reviewed: 84
+historical_additional_diff_files_reviewed: 21
+historical_files_reviewed: 352
+historical_final_reviewed: 2026-09-03T18:10:41Z
+historical_final_review_depth: standard
+historical_final_review_files_reviewed: 65
+historical_final_review_files_reviewed_list:
   - backend/alembic/versions/0012_import_jobs.py
   - backend/alembic/versions/0013_import_rewrite_proposals.py
   - backend/alembic/versions/0014_import_source_reference_insert_guard.py
@@ -81,7 +127,7 @@ final_review_files_reviewed_list:
   - tools/phase3_smoke.sh
   - tools/phase3_source_manifest.txt
   - tools/verify_import_job_mutants.py
-files_reviewed_list:
+historical_deep_files_reviewed_list:
   - .env.example
   - .planning/REQUIREMENTS.md
   - .planning/ROADMAP.md
@@ -436,24 +482,72 @@ files_reviewed_list:
   - tools/verify_repository_api_mutants.py
 findings:
   critical: 0
-  warning: 10
+  warning: 4
   info: 0
-  total: 10
+  total: 4
 status: issues_found
 closeout_blocked: false
+nyquist_closeout_ready: true
+resolved_warning_ids:
+  - WR-01
+  - WR-02
+  - WR-03
+  - WR-04
+  - WR-09
+  - WR-10
+  - WR-11
+  - WR-12
+  - WR-13
+  - WR-14
+open_warning_ids:
+  - WR-05
+  - WR-06
+  - WR-07
+  - WR-08
 ---
 
 # Phase 3: Code Review Report
 
-**Reviewed:** 2026-09-03T17:25:05Z
-**Depth:** deep
+**Reviewed:** 2026-09-04T10:44:54Z
+**Depth:** standard final lifecycle-remediation review
 **ASVS level:** OWASP ASVS 5.0 Level 1
-**Files reviewed:** 352 (331 canonical manifest paths plus 21 additional Phase 3 diff paths; the diff itself contains 84 paths)
-**Status:** issues_found — no blocker at the configured High threshold
+**Files reviewed:** 8 explicitly scoped implementation, test, and gauntlet files
+**Status:** issues_found — zero Critical/High findings; WR-11 through WR-14 are resolved and only the carried WR-05 through WR-08 warnings remain open
 
 ## Narrative Findings (AI reviewer)
 
-### Summary
+### Final lifecycle-remediation review summary
+
+This standard review is bound to source digest `64bdc9a3e5c4085036c78732b4285609dd3a00c6c307b7c33f40149b5fb0684b` and the exact delta from `ecf2880` through `65e7316cd2dda7132cc2f805f2dd3a7fa6b47ff7`. All eight workflow-supplied implementation, test, architecture-contract, and gauntlet files were read in full and compared with the base. Independent checks passed: the Phase 3 gauntlet contract 7/7, the three focused frontend suites 35/35, and a fresh Stryker run that instrumented exactly 52 mutants at only the declared locations and killed 52/52. The Phase 3 source-state command independently reproduced the requested digest. The persistent full-gauntlet records agree: 14/14 ordered layers in 781 seconds on the same digest, with backend 958/958, frontend 368/368, backend mutation 6/6, frontend mutation 52/52, Playwright 3/3, and architecture/provider 119/119. Those records were used as supporting evidence, not as a substitute for inspection.
+
+WR-13 is resolved. Rewrite confirmation now requires exact live identity, exact request-token ownership, the exact current controller, and a non-aborted signal before its `finally` may clear progress. The decision is evaluated before owned cleanup removes the token/controller. The deferred unmount component test observes the finalization decision itself as `false`, while the live uncommitted 409 path observes `true`; the helper truth table also retains committed, mismatched, revoked, null-controller, and aborted neighbors.
+
+WR-14 is resolved. Start-import finalization now folds exact token/controller ownership and the non-aborted signal into live authority. Cleanup aborts and clears every pending request, so an unmounted completion makes the finalization decision `false` and cannot invoke `setPendingMappings`; the live request path retains a `true` decision and clears pending state after deleting its owned entry. Replacement requests with the same mapping ID remain protected by unique symbols and exact controller identity.
+
+The test changes strengthen the lifecycle oracle rather than weakening visible-effect assertions: abort, callback, toast, close, refresh, and focus checks remain, and the new observers expose the formerly masked `finally` decisions directly. The gauntlet owns exactly five semantic markers, resolves them dynamically, and rejects marker/location drift. No new Critical, Warning, or Info defect was proven in the scoped delta. Four earlier nonblocking warnings (WR-05 through WR-08) remain carried forward on unchanged inputs.
+
+- Review-status: CLOSED at the configured High threshold
+- Open-critical-high: 0
+- Full-gauntlet-status: PASS (14/14)
+- Reviewed-source-digest: `64bdc9a3e5c4085036c78732b4285609dd3a00c6c307b7c33f40149b5fb0684b`
+- Nyquist-closeout-ready: YES
+
+### Remediation disposition
+
+| Historical finding | Disposition on current digest | Evidence |
+| --- | --- | --- |
+| WR-01 | **RESOLVED** | Expiry is computed before row mutation and both timedelta/datetime overflow paths map to `OAuthConnectionUnavailable`; boundary regressions are in the full backend suite. |
+| WR-02 | **RESOLVED for the reported product-authority race** | Live `{accessToken, productId, statusFilter}` identity and request-token ownership suppress obsolete product completions; the deferred product-switch regression passes. See WR-14 for unmount lifecycle scope. |
+| WR-03 | **RESOLVED for the reported product/import replacement race** | Live import identity plus request token suppress callbacks, toast, close, focus, and finalization after product/import replacement; both deferred completion regressions pass. See WR-13 for access-token-only/unmount lifecycle scope. |
+| WR-04 | **RESOLVED** | The executable JSON edge matrix is explicitly included, and the negative control proves its mutation changes the digest. |
+| WR-09 | **RESOLVED** | Confirmation reaches committed state before refresh; false/throwing refresh cannot relabel the mutation as failed or enable resubmission. |
+| WR-10 | **RESOLVED** | Desktop/mobile refs are separate, rendered geometry selects the visible target, focus runs after error-state commit, and the mobile regression is now part of the canonical browser gate. |
+| WR-11 | **RESOLVED** | Stable `PW3-C27` ownership is present in the spec, exact canonical grep, architecture contract, and independent 3/3 browser run. |
+| WR-12 | **RESOLVED** | Five marker-owned predicates, exact marker/location validation, truth-table neighbors, and an independent 52/52 Stryker run preserve the remediation surface. |
+| WR-13 | **RESOLVED** | Rewrite `finally` requires live identity, exact token/controller ownership, and a non-aborted signal; unmount observes `false`, while live uncommitted failure observes `true`. |
+| WR-14 | **RESOLVED** | Start-import `finally` uses the same live identity and exact token/controller authority as response handling; cleanup revokes it before an obsolete completion can update pending state. |
+
+### Historical deep-review summary (digest `e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c`)
 
 This is a fresh adversarial review bound to source digest `e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c`, independently reproduced with `tools/source_state.sh` and `tools/phase3_source_manifest.txt`. The scope is the union of all 331 manifest-selected paths and all 84 paths changed from exact base `4c557f5147038c4b09dc6dcf26d7b26675884bb5` through exact head `a6e17381b3d7001722259a3cd5ece582fc30f4f4`: 352 unique paths. The 21 diff-only additions were retained, and lockfiles, configuration, deployment files, every migration, verifier scripts, tests, generated API artifacts, evidence, and planning contracts were not silently filtered.
 
@@ -482,7 +576,7 @@ No BLOCKER/Critical issue was proven. The final pass found two additional WARNIN
 
 ## Warnings
 
-### WR-01: OAuth token lifetime is not upper-bounded before datetime arithmetic
+### WR-01 [RESOLVED on `2b1b2259`]: OAuth token lifetime is not upper-bounded before datetime arithmetic
 
 **Classification:** WARNING  
 **File:** `backend/src/verboflex/services/bitbucket_oauth.py:600-623`  
@@ -494,7 +588,7 @@ No BLOCKER/Critical issue was proven. The final pass found two additional WARNIN
 
 **Fix:** Enforce an explicit maximum provider lifetime before persistence and translate arithmetic overflow to `OAuthConnectionUnavailable`. Add boundary tests for the maximum, maximum-plus-one, and integers beyond Python datetime/timedelta limits.
 
-### WR-02: A stale start-import response can overwrite a newly selected product
+### WR-02 [RESOLVED on `2b1b2259`]: A stale start-import response can overwrite a newly selected product
 
 **Classification:** WARNING  
 **File:** `frontend/src/features/admin/imports/PublishedMappingImports.tsx:596-648`  
@@ -506,7 +600,7 @@ No BLOCKER/Critical issue was proven. The final pass found two additional WARNIN
 
 **Fix:** Bind each mutation to a product/access-token identity and generation, pass an `AbortSignal` to the generated request, abort on dependency change/unmount, and check current identity before toast, refresh, failure, focus, or pending-state updates. Add a deferred-response test that rerenders from product A to B during the POST and proves A cannot cancel or overwrite B.
 
-### WR-03: Rewrite confirmation's identity guard compares two values from the same stale closure
+### WR-03 [RESOLVED on `2b1b2259`]: Rewrite confirmation's identity guard compares two values from the same stale closure
 
 **Classification:** WARNING  
 **File:** `frontend/src/features/admin/imports/RewrittenBaselineDialog.tsx:340-399`
@@ -517,7 +611,7 @@ No BLOCKER/Critical issue was proven. The final pass found two additional WARNIN
 
 **Fix:** Store the latest identity in a ref, allocate a dedicated confirmation generation and `AbortController`, and compare the captured identity/generation with the live refs before every side effect, including `finally`. Add a test that changes product/import identity while confirmation is pending and proves the old result performs no callback, close, toast, focus, or state update.
 
-### WR-04: The canonical digest excludes an executable test registry
+### WR-04 [RESOLVED on `2b1b2259`]: The canonical digest excludes an executable test registry
 
 **Classification:** WARNING  
 **File:** `tools/phase3_source_manifest.txt:9-12`  
@@ -577,7 +671,7 @@ No BLOCKER/Critical issue was proven. The final pass found two additional WARNIN
 
 **Fix:** Pin external images by immutable digest (while retaining human-readable tags if desired), deploy application images by content digest or immutable release identifier, and automate reviewed digest updates with rebuild/smoke/security gates.
 
-### WR-09: A successful baseline confirmation is reported as a failed update when collection refresh fails
+### WR-09 [RESOLVED on `2b1b2259`]: A successful baseline confirmation is reported as a failed update when collection refresh fails
 
 **Classification:** WARNING
 **File:** `frontend/src/features/admin/imports/RewrittenBaselineDialog.tsx:350-395`
@@ -589,7 +683,7 @@ No BLOCKER/Critical issue was proven. The final pass found two additional WARNIN
 
 **Fix:** Model mutation success and collection-refresh failure as distinct states. Once a valid confirmation response is received, mark the confirmation successful and prevent resubmission; if refresh fails, show a bounded message such as “Baseline updated; current status could not be refreshed” with a status-refresh/close path. Add a regression test where confirmation succeeds and `onConfirmed()` resolves `false`, asserting that the UI never claims the baseline update failed and cannot submit the same proposal again.
 
-### WR-10: Mobile import failures attempt to focus the hidden desktop error
+### WR-10 [RESOLVED on `2b1b2259`]: Mobile import failures attempt to focus the hidden desktop error
 
 **Classification:** WARNING
 **File:** `frontend/src/features/admin/imports/PublishedMappingImports.tsx:585-642`
@@ -601,10 +695,60 @@ No BLOCKER/Critical issue was proven. The final pass found two additional WARNIN
 
 **Fix:** Keep a ref to the active responsive error (or render one shared row error instead of two mounted duplicates) and focus only an element whose layout is visible. Add a mobile-viewport browser regression that rejects the mutation and verifies `document.activeElement` is the visible mobile alert.
 
+## Post-remediation disposition for WR-11 through WR-14
+
+### WR-11 [RESOLVED on `0227a4fb`]: The canonical browser layer omitted the mobile focus regression
+
+**Classification:** WARNING — resolved
+**File:** `tools/phase3_gauntlet.sh:404-429`
+**Supporting paths:** `backend/tests/architecture/test_phase3_gauntlet.py:49-101`, `frontend/e2e/admin-configuration.spec.ts:1823-1859`
+
+**Resolution evidence:** The browser regression has the stable browser-only ID `PW3-C27`; the canonical selector is exactly `UI3-C23|UI3-C26|PW3-C27`; and the architecture contract requires that exact ordered set and a matching test title for every ID. Independent discovery listed exactly those three tests, and independent isolated Vite execution passed 3/3.
+
+**Historical issue:** On digest `2b1b2259`, the test had no stable owned ID and the canonical grep selected only UI3-C23/UI3-C26, so the 14-layer gate could pass while the mobile-focus regression was omitted.
+
+**Outcome:** Resolved without expanding the locked UI3 consideration namespace or weakening the focus assertion.
+
+### WR-12 [RESOLVED on `0227a4fb`, retained on `64bdc9a3`]: Canonical mutation ownership omitted the authority and committed-state fix sites
+
+**Classification:** WARNING — resolved
+**File:** `tools/phase3_gauntlet.sh:311-397`
+**Supporting paths:** `backend/tests/architecture/test_phase3_gauntlet.py:51-122`, `frontend/src/features/admin/imports/mutationAuthority.ts:1-44`, `frontend/src/features/admin/imports/mutationAuthority.test.ts:11-142`
+
+**Resolution evidence:** The current gauntlet owns exactly five semantic marker pairs, including the shared exact live-controller predicate, resolves each marker to its adjacent predicate statement, merges those locations with the legacy targets, and rejects extra or missing mutated locations. The helper tests cover live/mismatched identity, owned/obsolete/undefined token, exact/mismatched/null/aborted controller, and committed/uncommitted finalization neighbors. A fresh independent Stryker run instrumented exactly 52 mutants at only Published lines 82-86/531, Rewritten line 439, polling lines 34/35/37/38, and marker lines 7/15/23/33/43; it killed 52/52 with zero survivors, timeouts, no-coverage mutants, or errors. The architecture contract independently passed 7/7.
+
+**Historical issue:** On digest `2b1b2259`, the canonical 25-mutant selector retained only polling, action-label, cursor, and missing-data locations; live-authority, request-token, and committed-state predicates were protected only by a one-off mutation run.
+
+**Outcome:** Resolved and retained. The lifecycle predicate added for WR-13/WR-14 is marker-owned rather than coupled to an absolute line; no mutation-test assertion was weakened.
+
+### WR-13 [RESOLVED on `64bdc9a3`]: Rewrite confirmation finalized state after unmount
+
+**Classification:** WARNING — resolved
+**File:** `frontend/src/features/admin/imports/RewrittenBaselineDialog.tsx:410-420`
+**Supporting paths:** `frontend/src/features/admin/imports/RewrittenBaselineDialog.tsx:280-286`, `frontend/src/features/admin/imports/RewrittenBaselineDialog.tsx:469-487`, `frontend/src/features/admin/imports/RewrittenBaselineDialog.test.tsx:315-349`, `frontend/src/features/admin/imports/RewrittenBaselineDialog.test.tsx:618-664`
+
+**Resolution evidence:** `isCurrentRequest()` now requires the exact current controller with a non-aborted signal before checking live identity and exact request token. The `finally` evaluates that ownership at line 470 before conditionally clearing its exact token/controller at lines 471-477, then supplies the captured decision to `shouldClearUncommittedConfirmation()` at lines 478-486. Cleanup aborts and nulls both authorities at lines 280-286, so the deferred unmount completion cannot reach the setter. The unmount component test directly observes the finalization predicate as `false` after the signal is aborted and retains every callback, close, toast, and focus assertion. The live uncommitted 409 test observes `true`, proving failure recovery still clears progress. The helper truth table covers live/uncommitted, committed, changed-identity, and revoked-ownership neighbors.
+
+**Historical issue:** On digest `0227a4fb`, cleanup revoked the token/controller but the `finally` predicate considered only unchanged identity and uncommitted state. React could ignore the resulting post-unmount setter, and the component test did not observe that decision.
+
+**Outcome:** Resolved. Exact live controller/token/identity authority gates the setter, live failure recovery remains intact, and direct component plus marker-owned mutation oracles protect the boundary.
+
+### WR-14 [RESOLVED on `64bdc9a3`]: Start-import finalized pending state after unmount
+
+**Classification:** WARNING — resolved
+**File:** `frontend/src/features/admin/imports/PublishedMappingImports.tsx:719-731`
+**Supporting paths:** `frontend/src/features/admin/imports/PublishedMappingImports.tsx:455-480`, `frontend/src/features/admin/imports/PublishedMappingImports.tsx:750-784`, `frontend/src/features/admin/imports/PublishedMappingImports.test.tsx:592-636`, `frontend/src/features/admin/imports/PublishedMappingImports.test.tsx:708-757`
+
+**Resolution evidence:** `isCurrentRequest()` now passes `hasLivePublishedAuthority()` the conjunction of exact request-token ownership and exact live non-aborted controller ownership at lines 719-731. The `finally` captures that decision before removing only its exact owned token and invokes `setPendingMappings()` only when the decision is true at lines 763-784. Unmount cleanup aborts every controller and clears the map at lines 455-480; therefore either revoked token ownership or the aborted/missing controller makes finalization false. The deferred-unmount component test directly observes `false` while retaining abort, toast, refresh, and focus assertions. The live component path observes `true`, deletes the owned pending entry, and synchronizes pending state; the shared helper tests independently exercise exact, mismatched, null, and aborted controller boundaries.
+
+**Historical issue:** On digest `0227a4fb`, start-import response handling used token/controller authority, but the `finally` state synchronization checked only unchanged authority identity. Cleanup left that identity unchanged, permitting a post-unmount setter call.
+
+**Outcome:** Resolved. Cleanup revokes the same exact token/controller authority required by the final state transition, and unique request symbols prevent an obsolete completion from deleting or finalizing a replacement request for the same mapping.
+
 ---
 
-_Reviewed: 2026-09-03T17:25:05Z_  
-_Reviewer: independent typed agent (gsd-code-reviewer)_  
-_Depth: deep_  
-_ASVS: OWASP ASVS 5.0 Level 1_  
-_Final standard pass: 2026-09-03T18:10:41Z over 65 workflow-supplied files_
+_Reviewed: 2026-09-04T10:44:54Z_
+_Reviewer: independent typed agent (gsd-code-reviewer)_
+_Depth: standard final lifecycle-remediation review_
+_ASVS: OWASP ASVS 5.0 Level 1_
+_Historical deep review: 2026-09-03T17:25:05Z over 352 paths; historical final pass: 2026-09-03T18:10:41Z over 65 workflow-supplied files; historical Nyquist-delta review: 2026-09-03T21:04:31Z over 10 files; historical post-remediation review: 2026-09-04T07:57:33Z over 10 files_

@@ -1820,6 +1820,44 @@ for (const viewport of [
   });
 }
 
+test("PW3-C27 mobile import failure focuses the visible mobile alert", async ({
+  page,
+}) => {
+  const state = defaultState();
+  state.mappings = [directMapping];
+  state.publishedImports = [publishedImport()];
+  await installAdminApi(page, state);
+  await page.route(
+    "**/api/v1/admin/products/*/published/mappings/*/imports",
+    async (route) => {
+      if (route.request().method() === "POST") {
+        await json(route, { detail: "bounded import failure" }, 503);
+        return;
+      }
+      await route.fallback();
+    },
+  );
+  await page.setViewportSize({ height: 720, width: 320 });
+  await page.goto("/admin/products/product-1/mappings");
+
+  await page
+    .getByRole("button", { name: "Run import", exact: true })
+    .filter({ visible: true })
+    .click();
+
+  const visibleAlert = page.getByRole("alert").filter({
+    hasText: "Import did not start",
+    visible: true,
+  });
+  await expect(visibleAlert).toBeVisible();
+  await expect(visibleAlert).toBeFocused();
+  expect(
+    await visibleAlert.evaluate((element) =>
+      element.closest('[aria-label="Published mapping imports mobile list"]'),
+    ),
+  ).not.toBeNull();
+});
+
 test("UI3-C23 keeps mapping pages and the 80vh reconciliation dialog contained across reflow boundaries", async ({
   page,
 }) => {

@@ -9,6 +9,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -39,6 +40,22 @@ vi.mock("./useImportPolling", async (importOriginal) => {
 const listImportsMock = vi.mocked(listAdminPublishedMappingImports);
 const startImportMock = vi.mocked(startAdminPublishedMappingImport);
 const useImportPollingMock = vi.mocked(useImportPolling);
+const toastSuccessMock = vi.mocked(toast.success);
+const publishedFinalizationDecisionMock = vi.hoisted(() => vi.fn());
+
+vi.mock("./mutationAuthority", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./mutationAuthority")>();
+  return {
+    ...original,
+    hasLivePublishedAuthority: (
+      ...args: Parameters<typeof original.hasLivePublishedAuthority>
+    ) => {
+      const decision = original.hasLivePublishedAuthority(...args);
+      publishedFinalizationDecisionMock(decision);
+      return decision;
+    },
+  };
+});
 
 const repositories: AdminRepositoryResponse[] = [
   {
@@ -132,6 +149,8 @@ describe("published mapping import collection", () => {
   beforeEach(() => {
     listImportsMock.mockReset();
     startImportMock.mockReset();
+    toastSuccessMock.mockReset();
+    publishedFinalizationDecisionMock.mockClear();
     listImportsMock.mockResolvedValue(ok({ items: [], next_cursor: null }));
     useImportPollingMock.mockImplementation((options) => ({
       automaticUpdatesPaused: false,
@@ -606,12 +625,135 @@ describe("published mapping import collection", () => {
     expect(startImportMock).toHaveBeenCalledWith({
       auth: "memory-only-admin-bearer",
       path: { mapping_id: "mapping-1", product_id: "product-1" },
+      signal: expect.any(AbortSignal),
     });
     await act(async () => {
       resolveStart?.(ok(queued));
     });
     expect(await within(desktopTable).findByText("Queued")).toBeVisible();
     expect(listImportsMock).toHaveBeenCalledTimes(2);
+    expect(publishedFinalizationDecisionMock).toHaveBeenLastCalledWith(true);
+  });
+
+  it("ignores a deferred start response after product authority changes", async () => {
+    let resolveOldStart:
+      ((value: ReturnType<typeof ok<unknown>>) => void) | undefined;
+    const oldItem = publishedImport("old-mapping");
+    const newItem = publishedImport("new-mapping");
+    listImportsMock.mockImplementation(
+      (options) =>
+        Promise.resolve(
+          ok({
+            items: [
+              options.path.product_id === "old-product" ? oldItem : newItem,
+            ],
+            next_cursor: null,
+          }),
+        ) as never,
+    );
+    startImportMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOldStart = resolve;
+      }) as never,
+    );
+
+    const view = renderImports({ productId: "old-product" });
+    const oldTable = await screen.findByRole("table", {
+      name: "Published mapping imports",
+    });
+    await userEvent.click(
+      within(oldTable).getByRole("button", { name: "Run import" }),
+    );
+    await waitFor(() => expect(startImportMock).toHaveBeenCalledOnce());
+
+    view.rerender(
+      <PublishedMappingImports
+        accessToken="replacement-authority"
+        productId="new-product"
+        repositories={repositories}
+      />,
+    );
+    const newTable = await screen.findByRole("table", {
+      name: "Published mapping imports",
+    });
+    const newAction = within(newTable).getByRole("button", {
+      name: "Run import",
+    });
+    newAction.focus();
+    expect(newAction).toHaveFocus();
+    const callsBeforeOldCompletion = listImportsMock.mock.calls.length;
+
+    await act(async () => {
+      resolveOldStart?.(
+        ok(
+          publishedImport("old-mapping", {
+            action: "import_in_progress",
+            execution_number: 1,
+            id: "old-import",
+            state: "queued",
+          }),
+        ),
+      );
+    });
+
+    await waitFor(() => expect(newAction).toHaveFocus());
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(listImportsMock).toHaveBeenCalledTimes(callsBeforeOldCompletion);
+    expect(screen.queryByText("branch/old-mapping")).not.toBeInTheDocument();
+    expect(screen.getAllByText("branch/new-mapping")[0]).toBeVisible();
+    expect(newAction).toBeEnabled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("invalidates a deferred start response when the component unmounts", async () => {
+    let resolveStart:
+      ((value: ReturnType<typeof ok<unknown>>) => void) | undefined;
+    listImportsMock.mockResolvedValueOnce(
+      ok({ items: [publishedImport("mapping-1")], next_cursor: null }),
+    );
+    startImportMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveStart = resolve;
+      }) as never,
+    );
+    const outsideFocus = document.createElement("button");
+    outsideFocus.textContent = "Outside import screen";
+    document.body.append(outsideFocus);
+    const view = renderImports();
+
+    const table = await screen.findByRole("table", {
+      name: "Published mapping imports",
+    });
+    await userEvent.click(
+      within(table).getByRole("button", { name: "Run import" }),
+    );
+    await waitFor(() => expect(startImportMock).toHaveBeenCalledOnce());
+    const requestSignal = startImportMock.mock.calls[0]?.[0].signal;
+    const collectionCallsBeforeUnmount = listImportsMock.mock.calls.length;
+
+    view.unmount();
+    outsideFocus.focus();
+    expect(outsideFocus).toHaveFocus();
+    await act(async () => {
+      resolveStart?.(
+        ok(
+          publishedImport("mapping-1", {
+            action: "import_in_progress",
+            execution_number: 1,
+            id: "import-1",
+            state: "queued",
+          }),
+        ),
+      );
+    });
+
+    expect(requestSignal).toBeInstanceOf(AbortSignal);
+    expect(requestSignal?.aborted).toBe(true);
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(listImportsMock).toHaveBeenCalledTimes(collectionCallsBeforeUnmount);
+    expect(outsideFocus).toHaveFocus();
+    expect(publishedFinalizationDecisionMock).toHaveBeenLastCalledWith(false);
+    outsideFocus.remove();
   });
 
   it("shows bounded manual observation recovery after polling pauses", async () => {

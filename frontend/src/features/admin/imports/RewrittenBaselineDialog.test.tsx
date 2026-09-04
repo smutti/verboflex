@@ -9,6 +9,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -41,6 +42,22 @@ vi.mock("../../../api/client", async (importOriginal) => {
 
 const comparisonMock = vi.mocked(getAdminImportRewriteComparison);
 const confirmationMock = vi.mocked(confirmAdminImportRewriteBaseline);
+const toastSuccessMock = vi.mocked(toast.success);
+const rewriteFinalizationDecisionMock = vi.hoisted(() => vi.fn());
+
+vi.mock("./mutationAuthority", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./mutationAuthority")>();
+  return {
+    ...original,
+    shouldClearUncommittedConfirmation: (
+      ...args: Parameters<typeof original.shouldClearUncommittedConfirmation>
+    ) => {
+      const decision = original.shouldClearUncommittedConfirmation(...args);
+      rewriteFinalizationDecisionMock(decision);
+      return decision;
+    },
+  };
+});
 
 const repositories: AdminRepositoryResponse[] = [
   {
@@ -152,6 +169,8 @@ describe("rewritten baseline reconciliation", () => {
   beforeEach(() => {
     comparisonMock.mockReset();
     confirmationMock.mockReset();
+    toastSuccessMock.mockReset();
+    rewriteFinalizationDecisionMock.mockClear();
     Object.assign(navigator, {
       clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
     });
@@ -324,7 +343,9 @@ describe("rewritten baseline reconciliation", () => {
         mapping_id: "mapping-1",
         product_id: "product-1",
       },
+      signal: expect.any(AbortSignal),
     });
+    expect(rewriteFinalizationDecisionMock).toHaveBeenLastCalledWith(true);
   });
 
   it("confirms separate sides once, locks dismissal while pending, and restores the exact trigger after fresh refetch", async () => {
@@ -431,5 +452,318 @@ describe("rewritten baseline reconciliation", () => {
     expect(onClose).toHaveBeenCalledOnce();
     await waitFor(() => expect(trigger).toHaveFocus());
     trigger.remove();
+  });
+
+  it("ignores an old confirmation completion after product and import identity change", async () => {
+    let resolveOldConfirmation:
+      | ((
+          value: ReturnType<typeof ok<AdminPublishedMappingImportResponse>>,
+        ) => void)
+      | undefined;
+    const replacementImport = importRecord({
+      id: "import-2",
+      mapping_id: "mapping-2",
+      repository_sides: [
+        {
+          repository_id: "repository-1",
+          role: "direct",
+          source_branch: "replacement/main",
+        },
+      ],
+    });
+    const replacementComparison = comparison({
+      import_id: "import-2",
+      mapping_id: "mapping-2",
+      proposal_digest: "e".repeat(64),
+      proposal_id: "proposal-2",
+      proposed_execution_id: "execution-3",
+      sides: [{ ...comparison().sides[0] }],
+    });
+    comparisonMock
+      .mockResolvedValueOnce(ok(comparison()))
+      .mockResolvedValueOnce(ok(replacementComparison));
+    confirmationMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOldConfirmation = resolve;
+      }) as never,
+    );
+    const onClose = vi.fn();
+    const onConfirmed = vi.fn().mockResolvedValue(true);
+    const firstTrigger = document.createElement("button");
+    const replacementTrigger = document.createElement("button");
+    document.body.append(firstTrigger, replacementTrigger);
+    const view = renderDialog({
+      onClose,
+      onConfirmed,
+      triggerElement: firstTrigger,
+    });
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Confirm new baseline" }),
+    );
+    await waitFor(() => expect(confirmationMock).toHaveBeenCalledOnce());
+    view.rerender(
+      <RewrittenBaselineDialog
+        accessToken="replacement-authority"
+        importRecord={replacementImport}
+        onClose={onClose}
+        onConfirmed={onConfirmed}
+        open
+        productId="product-2"
+        repositories={repositories}
+        triggerElement={replacementTrigger}
+      />,
+    );
+    const replacementSide = await screen.findByRole("region", {
+      name: "Source baseline comparison",
+    });
+    expect(replacementSide).toHaveTextContent("replacement/main");
+    const replacementRegion = screen.getByRole("region", {
+      name: "Rewritten baseline comparison content",
+    });
+    replacementRegion.focus();
+    expect(replacementRegion).toHaveFocus();
+
+    await act(async () => {
+      resolveOldConfirmation?.(ok(importRecord()));
+    });
+
+    await waitFor(() => expect(replacementRegion).toHaveFocus());
+    expect(onConfirmed).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(firstTrigger).not.toHaveFocus();
+    expect(
+      screen.getByRole("alertdialog", {
+        name: "Review rewritten source history",
+      }),
+    ).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    firstTrigger.remove();
+    replacementTrigger.remove();
+  });
+
+  it("invalidates deferred confirmation when only access-token authority changes", async () => {
+    let resolveOldConfirmation:
+      | ((
+          value: ReturnType<typeof ok<AdminPublishedMappingImportResponse>>,
+        ) => void)
+      | undefined;
+    comparisonMock
+      .mockResolvedValueOnce(ok(comparison()))
+      .mockResolvedValueOnce(ok(comparison()));
+    confirmationMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOldConfirmation = resolve;
+      }) as never,
+    );
+    const onClose = vi.fn();
+    const onConfirmed = vi.fn().mockResolvedValue(true);
+    const oldTrigger = document.createElement("button");
+    const replacementTrigger = document.createElement("button");
+    document.body.append(oldTrigger, replacementTrigger);
+    const currentImport = importRecord();
+    const view = renderDialog({
+      importRecord: currentImport,
+      onClose,
+      onConfirmed,
+      triggerElement: oldTrigger,
+    });
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Confirm new baseline" }),
+    );
+    await waitFor(() => expect(confirmationMock).toHaveBeenCalledOnce());
+    const requestSignal = confirmationMock.mock.calls[0]?.[0].signal;
+
+    view.rerender(
+      <RewrittenBaselineDialog
+        accessToken="replacement-authority"
+        importRecord={currentImport}
+        onClose={onClose}
+        onConfirmed={onConfirmed}
+        open
+        productId="product-1"
+        repositories={repositories}
+        triggerElement={replacementTrigger}
+      />,
+    );
+    await waitFor(() => expect(comparisonMock).toHaveBeenCalledTimes(2));
+    const replacementConfirm = screen.getByRole("button", {
+      name: "Confirm new baseline",
+    });
+    expect(replacementConfirm).toBeEnabled();
+    const replacementRegion = screen.getByRole("region", {
+      name: "Rewritten baseline comparison content",
+    });
+    replacementRegion.focus();
+
+    await act(async () => {
+      resolveOldConfirmation?.(ok(currentImport));
+    });
+
+    expect(requestSignal).toBeInstanceOf(AbortSignal);
+    expect(requestSignal?.aborted).toBe(true);
+    expect(onConfirmed).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(oldTrigger).not.toHaveFocus();
+    expect(replacementRegion).toHaveFocus();
+    expect(replacementConfirm).toBeEnabled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    oldTrigger.remove();
+    replacementTrigger.remove();
+  });
+
+  it("invalidates deferred confirmation when the dialog unmounts", async () => {
+    let resolveConfirmation:
+      | ((
+          value: ReturnType<typeof ok<AdminPublishedMappingImportResponse>>,
+        ) => void)
+      | undefined;
+    comparisonMock.mockResolvedValueOnce(ok(comparison()));
+    confirmationMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveConfirmation = resolve;
+      }) as never,
+    );
+    const onClose = vi.fn();
+    const onConfirmed = vi.fn().mockResolvedValue(true);
+    const oldTrigger = document.createElement("button");
+    const outsideFocus = document.createElement("button");
+    document.body.append(oldTrigger, outsideFocus);
+    const view = renderDialog({
+      onClose,
+      onConfirmed,
+      triggerElement: oldTrigger,
+    });
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Confirm new baseline" }),
+    );
+    await waitFor(() => expect(confirmationMock).toHaveBeenCalledOnce());
+    const requestSignal = confirmationMock.mock.calls[0]?.[0].signal;
+
+    view.unmount();
+    outsideFocus.focus();
+    expect(outsideFocus).toHaveFocus();
+    await act(async () => {
+      resolveConfirmation?.(ok(importRecord()));
+    });
+
+    expect(requestSignal).toBeInstanceOf(AbortSignal);
+    expect(requestSignal?.aborted).toBe(true);
+    expect(onConfirmed).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(oldTrigger).not.toHaveFocus();
+    expect(outsideFocus).toHaveFocus();
+    expect(rewriteFinalizationDecisionMock).toHaveBeenLastCalledWith(false);
+    oldTrigger.remove();
+    outsideFocus.remove();
+  });
+
+  it("ignores confirmation finalization when identity changes during collection refresh", async () => {
+    let resolveRefresh: ((value: boolean) => void) | undefined;
+    const replacementImport = importRecord({
+      id: "import-2",
+      mapping_id: "mapping-2",
+      repository_sides: [
+        {
+          repository_id: "repository-1",
+          role: "direct",
+          source_branch: "replacement/main",
+        },
+      ],
+    });
+    comparisonMock
+      .mockResolvedValueOnce(ok(comparison()))
+      .mockResolvedValueOnce(
+        ok(
+          comparison({
+            import_id: "import-2",
+            mapping_id: "mapping-2",
+            proposal_digest: "e".repeat(64),
+            proposal_id: "proposal-2",
+            proposed_execution_id: "execution-3",
+          }),
+        ),
+      );
+    confirmationMock.mockResolvedValueOnce(ok(importRecord()));
+    const onClose = vi.fn();
+    const onConfirmed = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+    const firstTrigger = document.createElement("button");
+    const replacementTrigger = document.createElement("button");
+    document.body.append(firstTrigger, replacementTrigger);
+    const view = renderDialog({
+      onClose,
+      onConfirmed,
+      triggerElement: firstTrigger,
+    });
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Confirm new baseline" }),
+    );
+    await waitFor(() => expect(onConfirmed).toHaveBeenCalledOnce());
+    view.rerender(
+      <RewrittenBaselineDialog
+        accessToken="replacement-authority"
+        importRecord={replacementImport}
+        onClose={onClose}
+        onConfirmed={onConfirmed}
+        open
+        productId="product-2"
+        repositories={repositories}
+        triggerElement={replacementTrigger}
+      />,
+    );
+    await screen.findByText("replacement/main");
+    const replacementRegion = screen.getByRole("region", {
+      name: "Rewritten baseline comparison content",
+    });
+    replacementRegion.focus();
+
+    await act(async () => resolveRefresh?.(true));
+
+    await waitFor(() => expect(replacementRegion).toHaveFocus());
+    expect(onClose).not.toHaveBeenCalled();
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(firstTrigger).not.toHaveFocus();
+    expect(
+      screen.getByRole("alertdialog", {
+        name: "Review rewritten source history",
+      }),
+    ).toBeVisible();
+    firstTrigger.remove();
+    replacementTrigger.remove();
+  });
+
+  it("does not report a committed confirmation as failed or allow proposal resubmission when refresh fails", async () => {
+    comparisonMock.mockResolvedValueOnce(ok(comparison()));
+    confirmationMock.mockResolvedValueOnce(ok(importRecord()));
+    const onConfirmed = vi.fn().mockResolvedValue(false);
+    renderDialog({ onConfirmed });
+
+    const confirm = await screen.findByRole("button", {
+      name: "Confirm new baseline",
+    });
+    await userEvent.click(confirm);
+    await waitFor(() => expect(onConfirmed).toHaveBeenCalledOnce());
+
+    expect(
+      screen.queryByText("Baseline update unavailable"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/The baseline could not be updated safely/),
+    ).not.toBeInTheDocument();
+    expect(toastSuccessMock).toHaveBeenCalledWith("Baseline updated");
+    expect(confirm).toBeDisabled();
+    await userEvent.click(confirm);
+    expect(confirmationMock).toHaveBeenCalledOnce();
   });
 });
