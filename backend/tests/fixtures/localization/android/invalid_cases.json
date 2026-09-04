@@ -55,6 +55,11 @@
     "expected_code": "malformed_file"
   },
   {
+    "id": "control-entity",
+    "content": "<resources><string name='x'>before&#x85;after</string></resources>",
+    "expected_code": "unsupported_structure"
+  },
+  {
     "id": "malformed",
     "content": "<resources><string name='x'>x</resources>",
     "expected_code": "malformed_file"

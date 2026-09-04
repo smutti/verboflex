@@ -361,6 +361,14 @@ def test_android_hostile_fixture_inventory_fails_closed_without_network(
         assert len(result.issues) <= 5
         assert all(len(issue.message) <= 256 for issue in result.issues)
         assert all("secret" not in issue.message for issue in result.issues)
+        assert set(result.issues[0].to_mapping()) == {
+            "code",
+            "column",
+            "line",
+            "message",
+            "path",
+            "repository_side",
+        }
     assert attempted_network == []
 
 
@@ -377,6 +385,30 @@ def test_android_empty_resources_and_empty_value_remain_distinct() -> None:
     assert len(empty_value.values) == 1
     assert empty_value.values[0].display_text == ""
     assert empty_value.issues == ()
+
+
+@pytest.mark.parametrize("raw", (None, {}, (), b"<resources/>"))
+def test_android_missing_or_untyped_parser_input_is_rejected(raw: object) -> None:
+    _, registry = _canonical_modules()
+
+    result = registry.parse_canonical_snapshot(cast(Any, raw))
+
+    assert result.values == ()
+    assert tuple(issue.code for issue in result.issues) == ("malformed_file",)
+
+
+def test_android_accepts_only_strict_utf8_with_optional_single_bom() -> None:
+    _, registry = _canonical_modules()
+    document = (
+        b"<?xml version='1.0' encoding='uTf-8'?>"
+        b"<resources><string name='unicode'>\xe2\x98\xba</string></resources>"
+    )
+
+    plain = registry.parse_canonical_snapshot(_input(content=document))
+    with_bom = registry.parse_canonical_snapshot(_input(content=b"\xef\xbb\xbf" + document))
+
+    assert plain.to_mapping() == with_bom.to_mapping()
+    assert plain.values[0].display_text == "☺"
 
 
 def test_android_decoded_key_and_selector_equality_is_exact() -> None:

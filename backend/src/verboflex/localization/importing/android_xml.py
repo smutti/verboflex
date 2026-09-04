@@ -6,6 +6,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import replace
 from typing import cast
+from unicodedata import category
 from xml.etree import ElementTree as StandardElementTree
 from xml.etree.ElementTree import Element
 
@@ -23,11 +24,18 @@ from verboflex.localization.importing.core import (
     IssueCode,
     RepositorySide,
     StructureKind,
+    canonical_issue_order,
     canonical_value_order,
 )
 from verboflex.localization.preview.core import normalize_preview_locale
 
 MAX_CANONICAL_FILE_BYTES = 1_048_576
+MAX_ANDROID_AGGREGATE_BYTES = 20_971_520
+MAX_ANDROID_FILES = 500
+MAX_ANDROID_VALUES = 5_000
+MAX_ANDROID_XML_DEPTH = 12
+MAX_ANDROID_STRUCTURE_NODES = 4_096
+MAX_ANDROID_ISSUES = 5
 
 _UTF8_BOM = b"\xef\xbb\xbf"
 _XLIFF_NAMESPACE = "urn:oasis:names:tc:xliff:document:1.2"
@@ -141,6 +149,46 @@ def parse_android_xml(parser_input: CanonicalParserInput) -> CanonicalParseResul
     return CanonicalParseResult(values=tuple(sorted(values, key=canonical_value_order)))
 
 
+def parse_android_xml_files(
+    parser_inputs: tuple[CanonicalParserInput, ...],
+) -> CanonicalParseResult:
+    """Combine bounded Android peer files only when every file parses successfully."""
+    if type(parser_inputs) is not tuple or not parser_inputs:
+        return _invalid_batch_failure()
+    if any(type(item) is not CanonicalParserInput for item in parser_inputs):
+        return _invalid_batch_failure()
+    if any(not isinstance(item.content, bytes) for item in parser_inputs):
+        return _invalid_batch_failure()
+    if len(parser_inputs) > MAX_ANDROID_FILES:
+        return _failure(parser_inputs[0], code="unsupported_structure")
+    if sum(len(item.content) for item in parser_inputs) > MAX_ANDROID_AGGREGATE_BYTES:
+        return _failure(parser_inputs[0], code="unsupported_structure")
+
+    values: list[CanonicalValue] = []
+    issues: list[CanonicalIssue] = []
+    ordered_inputs = sorted(
+        parser_inputs,
+        key=lambda item: (item.repository_side, item.path),
+    )
+    for parser_input in ordered_inputs:
+        result = parse_android_xml(parser_input)
+        if result.issues:
+            issues.extend(result.issues)
+        else:
+            values.extend(result.values)
+        if len(values) > MAX_ANDROID_VALUES:
+            return _failure(parser_input, code="unsupported_structure")
+    if issues:
+        unique_issues = set(issues)
+        return CanonicalParseResult(
+            issues=tuple(sorted(unique_issues, key=canonical_issue_order)[:MAX_ANDROID_ISSUES])
+        )
+    try:
+        return CanonicalParseResult(values=tuple(sorted(values, key=canonical_value_order)))
+    except ValueError:
+        return _failure(ordered_inputs[0], code="duplicate_key")
+
+
 def _confirmed_language(parser_input: CanonicalParserInput) -> str:
     match = _ANDROID_PATH.fullmatch(parser_input.path)
     if match is None:
@@ -178,6 +226,10 @@ def _decode_xml(content: bytes) -> str:
         encoding = declaration.group("encoding")
         if encoding is not None and encoding.casefold() != "utf-8":
             raise _MalformedAndroidXml
+    if "\ufeff" in text or any(
+        category(character) == "Cc" and character not in {"\t", "\n", "\r"} for character in text
+    ):
+        raise _MalformedAndroidXml
     return text
 
 
@@ -201,6 +253,7 @@ def _parse_root(content: bytes) -> tuple[Element, frozenset[str]]:
         raise _MalformedAndroidXml(line=line, column=column) from error
     except DefusedXmlException as error:
         raise _MalformedAndroidXml from error
+    _require_bounded_depth(root)
     return root, frozenset(target.namespace_uris)
 
 
@@ -241,15 +294,18 @@ def _resource_values(
         if key in seen_keys:
             raise _DuplicateAndroidKey
         seen_keys.add(key)
+        if len(values) + len(resource_values) > MAX_ANDROID_VALUES:
+            raise _UnsupportedAndroidXml
         values.extend(resource_values)
         resource_position += 1
     if pending_comments:
         if not values:
             raise _UnsupportedAndroidXml
         last = values[-1]
-        values[-1] = replace(last, structure=last.structure + tuple(pending_comments))
-    if not values:
-        raise _UnsupportedAndroidXml
+        structure = last.structure + tuple(pending_comments)
+        if len(structure) > MAX_ANDROID_STRUCTURE_NODES:
+            raise _UnsupportedAndroidXml
+        values[-1] = replace(last, structure=structure)
     return tuple(values)
 
 
@@ -302,7 +358,10 @@ def _string_values(
     key = child.attrib["name"]
     _require_nonempty_text(key)
     attribute_fields = _canonical_attributes(child.attrib)
-    display_text, content_nodes = _mixed_content(child)
+    display_text, content_nodes = _mixed_content(
+        child,
+        structure_prefix_size=len(prefix) + 1,
+    )
     structure = (
         prefix
         + (CanonicalStructureNode(kind="android_xml:string", fields=attribute_fields),)
@@ -359,7 +418,10 @@ def _plural_values(
         if quantity in quantities:
             raise _DuplicateAndroidKey
         quantities.add(quantity)
-        display_text, content_nodes = _mixed_content(item)
+        display_text, content_nodes = _mixed_content(
+            item,
+            structure_prefix_size=len(header) + len(pending_comments) + 1,
+        )
         structure = (
             header
             + tuple(pending_comments)
@@ -428,7 +490,12 @@ def _array_values(
             continue
         if item.tag != "item" or item.attrib:
             raise _UnsupportedAndroidXml
-        display_text, content_nodes = _mixed_content(item)
+        if item_position >= MAX_ANDROID_VALUES:
+            raise _UnsupportedAndroidXml
+        display_text, content_nodes = _mixed_content(
+            item,
+            structure_prefix_size=len(header) + len(pending_comments) + 1,
+        )
         structure = (
             header
             + tuple(pending_comments)
@@ -502,7 +569,11 @@ def _canonical_value(
     )
 
 
-def _mixed_content(element: Element) -> tuple[str, tuple[CanonicalStructureNode, ...]]:
+def _mixed_content(
+    element: Element,
+    *,
+    structure_prefix_size: int,
+) -> tuple[str, tuple[CanonicalStructureNode, ...]]:
     nodes: list[CanonicalStructureNode] = []
     visible: list[str] = []
     cdata_ordinal = [0]
@@ -511,9 +582,16 @@ def _mixed_content(element: Element) -> tuple[str, tuple[CanonicalStructureNode,
         visible,
         kind="android_xml:text",
         raw=element.text or "",
+        structure_prefix_size=structure_prefix_size,
     )
     for child in element:
-        _append_mixed_child(child, nodes=nodes, visible=visible, cdata_ordinal=cdata_ordinal)
+        _append_mixed_child(
+            child,
+            nodes=nodes,
+            visible=visible,
+            cdata_ordinal=cdata_ordinal,
+            structure_prefix_size=structure_prefix_size,
+        )
     return "".join(visible), tuple(nodes)
 
 
@@ -523,30 +601,42 @@ def _append_mixed_child(
     nodes: list[CanonicalStructureNode],
     visible: list[str],
     cdata_ordinal: list[int],
+    structure_prefix_size: int,
 ) -> None:
     if child.tag is _CDATA_TAG:
         raw = child.text or ""
         decoded = _decode_android_escapes(raw)
-        nodes.append(
+        _append_structure_node(
+            nodes,
             CanonicalStructureNode(
                 kind="android_xml:cdata",
                 fields=(("value", raw), ("ordinal", cdata_ordinal[0])),
-            )
+            ),
+            structure_prefix_size=structure_prefix_size,
         )
         cdata_ordinal[0] += 1
         visible.append(decoded)
     elif child.tag is StandardElementTree.Comment:
-        nodes.append(_comment_node(child))
+        _append_structure_node(
+            nodes,
+            _comment_node(child),
+            structure_prefix_size=structure_prefix_size,
+        )
     elif child.tag is StandardElementTree.ProcessingInstruction:
         raise _UnsupportedAndroidXml
     elif isinstance(child.tag, str):
         start_fields, end_fields = _inline_fields(child)
-        nodes.append(CanonicalStructureNode(kind="android_xml:inline", fields=start_fields))
+        _append_structure_node(
+            nodes,
+            CanonicalStructureNode(kind="android_xml:inline", fields=start_fields),
+            structure_prefix_size=structure_prefix_size,
+        )
         _append_text_node(
             nodes,
             visible,
             kind="android_xml:text",
             raw=child.text or "",
+            structure_prefix_size=structure_prefix_size,
         )
         for nested in child:
             _append_mixed_child(
@@ -554,8 +644,13 @@ def _append_mixed_child(
                 nodes=nodes,
                 visible=visible,
                 cdata_ordinal=cdata_ordinal,
+                structure_prefix_size=structure_prefix_size,
             )
-        nodes.append(CanonicalStructureNode(kind="android_xml:inline", fields=end_fields))
+        _append_structure_node(
+            nodes,
+            CanonicalStructureNode(kind="android_xml:inline", fields=end_fields),
+            structure_prefix_size=structure_prefix_size,
+        )
     else:
         raise _UnsupportedAndroidXml
     if child.tail:
@@ -564,6 +659,7 @@ def _append_mixed_child(
             visible,
             kind="android_xml:tail",
             raw=child.tail,
+            structure_prefix_size=structure_prefix_size,
         )
 
 
@@ -573,15 +669,29 @@ def _append_text_node(
     *,
     kind: str,
     raw: str,
+    structure_prefix_size: int,
 ) -> None:
     decoded = _decode_android_escapes(raw)
-    nodes.append(
+    _append_structure_node(
+        nodes,
         CanonicalStructureNode(
             kind=cast(StructureKind, kind),
             fields=(("value", raw),),
-        )
+        ),
+        structure_prefix_size=structure_prefix_size,
     )
     visible.append(decoded)
+
+
+def _append_structure_node(
+    nodes: list[CanonicalStructureNode],
+    node: CanonicalStructureNode,
+    *,
+    structure_prefix_size: int,
+) -> None:
+    if structure_prefix_size + len(nodes) >= MAX_ANDROID_STRUCTURE_NODES:
+        raise _UnsupportedAndroidXml
+    nodes.append(node)
 
 
 def _inline_fields(
@@ -607,6 +717,8 @@ def _inline_fields(
     ]
     example = child.attrib.get("example")
     if example is not None:
+        if _contains_forbidden_control(example):
+            raise _UnsupportedAndroidXml
         start_fields.append(("example", example))
     return (
         tuple(start_fields),
@@ -615,6 +727,8 @@ def _inline_fields(
 
 
 def _decode_android_escapes(raw: str) -> str:
+    if _contains_forbidden_control(raw):
+        raise _UnsupportedAndroidXml
     decoded: list[str] = []
     index = 0
     while index < len(raw):
@@ -667,7 +781,7 @@ def _require_attributes(
 
 
 def _require_nonempty_text(value: str) -> None:
-    if not value or "\x00" in value:
+    if not value or _contains_forbidden_control(value):
         raise _UnsupportedAndroidXml
 
 
@@ -680,10 +794,28 @@ def _require_nonempty_collection(
 
 
 def _comment_node(element: Element) -> CanonicalStructureNode:
+    value = element.text or ""
+    if _contains_forbidden_control(value):
+        raise _UnsupportedAndroidXml
     return CanonicalStructureNode(
         kind="android_xml:comment",
-        fields=(("value", element.text or ""),),
+        fields=(("value", value),),
     )
+
+
+def _contains_forbidden_control(value: str) -> bool:
+    return any(
+        category(character) == "Cc" and character not in {"\t", "\n", "\r"} for character in value
+    )
+
+
+def _require_bounded_depth(root: Element) -> None:
+    stack: list[tuple[Element, int]] = [(root, 1)]
+    while stack:
+        element, depth = stack.pop()
+        if depth > MAX_ANDROID_XML_DEPTH:
+            raise _UnsupportedAndroidXml
+        stack.extend((child, depth + 1) for child in element)
 
 
 def _canonical_attributes(attributes: Mapping[str, str]) -> tuple[tuple[str, bool], ...]:
@@ -735,6 +867,19 @@ def _failure(
                 message=messages[code],
                 line=line,
                 column=column,
+            ),
+        )
+    )
+
+
+def _invalid_batch_failure() -> CanonicalParseResult:
+    return CanonicalParseResult(
+        issues=(
+            CanonicalIssue(
+                code="malformed_file",
+                repository_side="direct",
+                path="<input>",
+                message="Malformed Android XML input batch.",
             ),
         )
     )
