@@ -97,10 +97,7 @@ def test_json_nested_repeated_leaf_names_use_raw_key_and_parent_selector() -> No
 
 def test_json_flat_per_locale_recurses_and_retains_source_order_in_locators() -> None:
     _, adapter = _modules()
-    content = (
-        b'{"second":{"leaf":"two"},"first":{"leaf":"one"},'
-        b'"escaped\\u002ekey":"line\\nvalue"}'
-    )
+    content = b'{"second":{"leaf":"two"},"first":{"leaf":"one"},"escaped\\u002ekey":"line\\nvalue"}'
 
     result = adapter.parse_json_localization(
         _input(
