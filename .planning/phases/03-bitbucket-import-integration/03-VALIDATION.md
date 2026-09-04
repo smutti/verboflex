@@ -2,17 +2,17 @@
 phase: 03
 slug: bitbucket-import-integration
 status: validated
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: true
 gaps_found: 6
-gaps_resolved: 0
-manual_only: 6
+gaps_resolved: 6
+manual_only: 0
 created: 2026-09-03
 ---
 
 # Phase 03 — Validation Strategy
 
-> Reconstructed Nyquist contract for the completed Phase 3 implementation. The audit added six strict regression tests; all six currently expose implementation or configuration defects and remain RED.
+> Reconstructed Nyquist contract for the completed Phase 3 implementation. The audit added six strict regressions; all are green, and four review-discovered follow-up gaps are also closed by durable lifecycle, browser-selection, and mutation-ownership tests.
 
 ---
 
@@ -24,7 +24,7 @@ created: 2026-09-03
 | **Config files** | `backend/pyproject.toml`, `frontend/vite.config.ts`, `frontend/playwright.config.ts` |
 | **Quick run command** | `cd backend && uv run pytest tests/integration/test_bitbucket_oauth.py tests/architecture/test_phase3_gauntlet.py -x`; `cd frontend && npm test -- --run src/features/admin/imports/PublishedMappingImports.test.tsx src/features/admin/imports/RewrittenBaselineDialog.test.tsx` |
 | **Full suite command** | `bash tools/phase3_gauntlet.sh` |
-| **Estimated runtime** | Focused unit/integration feedback under 30 seconds; full 14-layer gauntlet 417 seconds on the audit host |
+| **Estimated runtime** | Focused unit/integration feedback under 30 seconds; final full 14-layer gauntlet 781 seconds on the audit host |
 
 ---
 
@@ -41,9 +41,9 @@ created: 2026-09-03
 
 | Requirement | Coverage before audit | Audit result |
 |-------------|-----------------------|--------------|
-| BITB-02 | OAuth capability, five-operation API, generated client, UI, provider boundary, smoke and exact capability matrix | PARTIAL — WR-01, WR-02, WR-04 and WR-10 regressions are RED |
-| BITB-05 | Commit/file provenance, ancestry, reconciliation, concurrency and retained-baseline behavior | PARTIAL — WR-02, WR-03, WR-04 and WR-09 regressions are RED |
-| BITB-06 | Closed provider failures, diagnostics, retry, responsive UI and operational recovery | PARTIAL — WR-01, WR-02, WR-03, WR-04, WR-09 and WR-10 regressions are RED |
+| BITB-02 | OAuth capability, five-operation API, generated client, UI, provider boundary, smoke and exact capability matrix | COVERED — WR-01, WR-02, WR-04 and WR-10 plus canonical browser/mutation follow-ups are green |
+| BITB-05 | Commit/file provenance, ancestry, reconciliation, concurrency and retained-baseline behavior | COVERED — WR-02, WR-03, WR-04 and WR-09 plus lifecycle-finalization follow-ups are green |
+| BITB-06 | Closed provider failures, diagnostics, retry, responsive UI and operational recovery | COVERED — all original and review-discovered Nyquist regressions are green |
 
 ## Per-Task Verification Map
 
@@ -52,7 +52,7 @@ created: 2026-09-03
 | 03-01-01 | 01 | 1 | BITB-02/05/06 | T-03-01–04, SC | Admin-only UUID import, immutable metadata, GET-only provider flow | integration + component | `cd backend && uv run pytest tests/integration/test_import_jobs.py -x -k "direct_import_tracer or concurrent_start" && cd ../frontend && npm run api:check && npm test -- --run src/features/admin/mappings/ProductMappingsPage.test.tsx` | ✅ | ✅ green |
 | 03-02-01 | 02 | 2 | BITB-02/05/06 | T-03-05–07, SC | Reversible schema and immutable execution provenance | migration + integration | `cd backend && uv run pytest tests/integration/test_migrations.py tests/integration/test_import_jobs.py -x -k "import_schema or immutable_source_reference"` | ✅ | ✅ green |
 | 03-02-02 | 02 | 2 | BITB-02/05/06 | T-03-05–07, SC | Authorization, ownership, empty and dispatch failures close safely | integration + contract | `cd backend && uv run pytest tests/integration/test_import_jobs.py tests/api/test_openapi_contract.py -x -k "import and (authorization or ownership or empty or enqueue or public_contract)"` | ✅ | ✅ green |
-| 03-03-01 | 03 | 2 | BITB-02/06 | T-03-08–10, SC | Exact OAuth capability and bounded access-token lifetime | integration | `cd backend && uv run pytest tests/integration/test_bitbucket_oauth.py -x` | ✅ | ❌ red — WR-01 |
+| 03-03-01 | 03 | 2 | BITB-02/06 | T-03-08–10, SC | Exact OAuth capability and bounded access-token lifetime | integration | `cd backend && uv run pytest tests/integration/test_bitbucket_oauth.py -x` | ✅ | ✅ green |
 | 03-03-02 | 03 | 2 | BITB-02/06 | T-03-08–10, SC | Closed capability readiness without secret/provider leakage | API | `cd backend && uv run pytest tests/api/test_admin_bitbucket.py -x -k "capability or reauthorization or forbidden"` | ✅ | ✅ green |
 | 03-04-01 | 04 | 3 | BITB-02/06 | T-03-11–13, SC | Generated capability transport remains exact and closed | contract | `cd frontend && npm run api:generate && npm test -- --run src/api/admin-client-contract.test.ts && npm run api:check` | ✅ | ✅ green |
 | 03-04-02 | 04 | 3 | BITB-02/06 | T-03-11–13, SC | Accessible reauthorization UI follows server authority | component | `cd frontend && npm test -- --run src/features/admin/bitbucket/BitbucketConnectionPage.test.tsx` | ✅ | ✅ green |
@@ -71,18 +71,18 @@ created: 2026-09-03
 | 03-11-01 | 11 | 9 | BITB-02/05/06 | T-03-36–38, SC | OpenAPI operation and schema equality is frozen | contract | `cd backend && uv run pytest tests/api/test_openapi_contract.py -x -k "import or bitbucket_capability or affected_mapping"` | ✅ | ✅ green |
 | 03-11-02 | 11 | 9 | BITB-02/05/06 | T-03-36–38, SC | Generated client uses exact bearer routes without drift | contract | `cd frontend && npm run api:generate && npm test -- --run src/api/admin-client-contract.test.ts && npm run api:check` | ✅ | ✅ green |
 | 03-12-01 | 12 | 10 | BITB-02/05/06 | T-03-39–42, SC | Polling is bounded, identity-fenced and terminal-aware | component | `cd frontend && npm test -- --run src/features/admin/imports/useImportPolling.test.ts` | ✅ | ✅ green |
-| 03-12-02 | 12 | 10 | BITB-02/05/06 | T-03-39–42, SC | Cursor/state UI rejects obsolete loads and mutations | component | `cd frontend && npm test -- --run src/features/admin/imports/PublishedMappingImports.test.tsx src/features/admin/mappings/ProductMappingsPage.test.tsx` | ✅ | ❌ red — WR-02 |
-| 03-13-01 | 13 | 11 | BITB-02/05/06 | T-03-43–46, SC | Rewrite confirmation is live-identity fenced and separates commit success from refresh | component | `cd frontend && npm test -- --run src/features/admin/imports/RewrittenBaselineDialog.test.tsx src/features/admin/imports/PublishedMappingImports.test.tsx` | ✅ | ❌ red — WR-03 and WR-09 |
-| 03-13-02 | 13 | 11 | BITB-02/05/06 | T-03-43–46, SC | Product freshness and responsive error focus work in a real viewport | component + browser | `cd frontend && npm test -- --run src/features/admin/products/ProductConfiguration.test.tsx src/features/admin/imports/RewrittenBaselineDialog.test.tsx && npx playwright test e2e/admin-configuration.spec.ts --grep "UI3-C23|UI3-C24|UI3-C26|initial import|fast-forward|manual retry|rewritten baseline|mobile import failure"` | ✅ | ❌ red — WR-10 |
+| 03-12-02 | 12 | 10 | BITB-02/05/06 | T-03-39–42, SC | Cursor/state UI rejects obsolete loads, mutations and post-unmount finalization | component | `cd frontend && npm test -- --run src/features/admin/imports/PublishedMappingImports.test.tsx src/features/admin/mappings/ProductMappingsPage.test.tsx` | ✅ | ✅ green |
+| 03-13-01 | 13 | 11 | BITB-02/05/06 | T-03-43–46, SC | Rewrite confirmation is live-identity fenced, lifecycle-owned and separates commit success from refresh | component | `cd frontend && npm test -- --run src/features/admin/imports/RewrittenBaselineDialog.test.tsx src/features/admin/imports/PublishedMappingImports.test.tsx src/features/admin/imports/mutationAuthority.test.ts` | ✅ | ✅ green |
+| 03-13-02 | 13 | 11 | BITB-02/05/06 | T-03-43–46, SC | Product freshness and responsive error focus work in a real viewport | component + browser | `cd frontend && npm test -- --run src/features/admin/products/ProductConfiguration.test.tsx src/features/admin/imports/RewrittenBaselineDialog.test.tsx && npx playwright test e2e/admin-configuration.spec.ts --grep "UI3-C23|UI3-C26|PW3-C27"` | ✅ | ✅ green |
 | 03-14-01 | 14 | 12 | BITB-02/05/06 | T-03-47–49, SC | Disposable deployment proves import/recovery with zero provider writes | deployment smoke | `bash tools/phase3_smoke.sh --mock-provider` | ✅ | ✅ green |
 | 03-14-02 | 14 | 12 | BITB-02/05/06 | T-03-47–49, SC | Supplemental live mode is bounded, optional and read-only | architecture + smoke | `bash tools/phase3_smoke.sh --self-test-live-mode && env -u VERBOFLEX_BITBUCKET_OAUTH_CLIENT_ID -u VERBOFLEX_BITBUCKET_OAUTH_CLIENT_SECRET -u VERBOFLEX_BITBUCKET_LIVE_WORKSPACE -u VERBOFLEX_BITBUCKET_LIVE_REPOSITORY bash tools/phase3_smoke.sh --live-provider-read-only --skip-if-unconfigured` | ✅ | ✅ green |
 | 03-15-01 | 15 | 13 | BITB-02/05/06 | T-03-50–53, SC | Semantic, UI, API and provider boundaries reconcile exactly | architecture | `cd backend && uv run pytest tests/architecture/test_phase3_scope.py tests/architecture/test_provider_boundaries.py tests/architecture/test_background_boundaries.py -x` | ✅ | ✅ green |
-| 03-15-02 | 15 | 13 | BITB-02/05/06 | T-03-50–53, SC | Mutation proof and source digest include every executable test input | gauntlet + architecture | `cd backend && uv run pytest tests/architecture/test_phase3_gauntlet.py -x && cd .. && bash tools/phase3_gauntlet.sh` | ✅ | ❌ red — WR-04 |
-| 03-16-01 | 16 | 14 | BITB-02/05/06 | T-03-54–57, SC | Final gauntlet and source digest close without drift | full gauntlet | `bash tools/phase3_gauntlet.sh` | ✅ | ⚠️ blocked by RED regressions |
-| 03-16-02 | 16 | 14 | BITB-02/05/06 | T-03-54–57, SC | Fresh ASVS review binds to the exact tested digest | review integrity | `VERBOFLEX_SOURCE_MANIFEST=tools/phase3_source_manifest.txt VERBOFLEX_REVIEW_PATH=docs/reviews/phase-03-code-security.md tools/source_state.sh --verify-review-source` | ✅ | ⚠️ invalidated until fixes and fresh review |
-| 03-16-03 | 16 | 14 | BITB-02/05/06 | T-03-54–57, SC | Independent verifier, evidence and review share one digest | closeout integrity | `rg -q '^status: passed$' .planning/phases/03-bitbucket-import-integration/03-VERIFICATION.md && VERBOFLEX_SOURCE_MANIFEST=tools/phase3_source_manifest.txt VERBOFLEX_REVIEW_PATH=docs/reviews/phase-03-code-security.md tools/source_state.sh --verify-review-source` | ✅ | ⚠️ invalidated until fixes and fresh verification |
+| 03-15-02 | 15 | 13 | BITB-02/05/06 | T-03-50–53, SC | Mutation proof and source digest include every executable test input and five semantic authority targets | gauntlet + architecture | `cd backend && uv run pytest tests/architecture/test_phase3_gauntlet.py -x && cd .. && bash tools/phase3_gauntlet.sh` | ✅ | ✅ green |
+| 03-16-01 | 16 | 14 | BITB-02/05/06 | T-03-54–57, SC | Final gauntlet and source digest close without drift | full gauntlet | `bash tools/phase3_gauntlet.sh` | ✅ | ✅ green |
+| 03-16-02 | 16 | 14 | BITB-02/05/06 | T-03-54–57, SC | Fresh ASVS review binds to the exact tested digest | review integrity | `VERBOFLEX_SOURCE_MANIFEST=tools/phase3_source_manifest.txt VERBOFLEX_REVIEW_PATH=docs/reviews/phase-03-code-security.md tools/source_state.sh --verify-review-source` | ✅ | ✅ green |
+| 03-16-03 | 16 | 14 | BITB-02/05/06 | T-03-54–57, SC | Independent verifier, evidence and review share one digest | closeout integrity | `rg -q '^status: passed$' .planning/phases/03-bitbucket-import-integration/03-VERIFICATION.md && VERBOFLEX_SOURCE_MANIFEST=tools/phase3_source_manifest.txt VERBOFLEX_REVIEW_PATH=docs/reviews/phase-03-code-security.md tools/source_state.sh --verify-review-source` | ✅ | ✅ green |
 
-*Status: ✅ green · ❌ red · ⚠️ blocked by an upstream RED regression*
+*Status: ✅ green — all 32 planned task checks have automated passing evidence.*
 
 ---
 
@@ -95,22 +95,19 @@ created: 2026-09-03
 - [x] `frontend/e2e/admin-configuration.spec.ts` — WR-10 real mobile viewport focus regression.
 - [x] Existing pytest, Vitest and Playwright infrastructure runs the new tests without fixture, import, syntax, lint, format or type errors.
 
-No test infrastructure is missing. The six tests fail only at the intended production/configuration assertions.
+Additional durable ownership added during remediation:
+
+- [x] `frontend/src/features/admin/imports/mutationAuthority.test.ts` — exact live identity/token/controller/finalization truth tables.
+- [x] `backend/tests/architecture/test_phase3_gauntlet.py` — exact browser IDs and five semantic mutation markers.
+- [x] Canonical Playwright selects `UI3-C23`, `UI3-C26`, and browser-only `PW3-C27` exactly.
+
+No test infrastructure is missing. All regression and follow-up tests are green.
 
 ---
 
 ## Manual-Only Verifications
 
-The workflow classifies implementation escalations as manual-only until production fixes make their automated regressions green. These are not subjective checks: each row already has a deterministic RED test.
-
-| Behavior | Requirement | Why Manual | Test Instructions |
-|----------|-------------|------------|-------------------|
-| Oversized OAuth lifetimes fail through `OAuthConnectionUnavailable` | BITB-02/06 | Production leaks `OverflowError` | Run the WR-01 pytest cases in `test_bitbucket_oauth.py` |
-| Product A's deferred start response cannot affect product B | BITB-02/05/06 | Mutation lacks live product/generation fencing | Run the WR-02 `PublishedMappingImports` test |
-| Obsolete rewrite confirmation has no callbacks or UI side effects | BITB-05/06 | Confirmation compares stale closure values | Run the WR-03 dialog test |
-| Committed confirmation stays successful when collection refresh fails | BITB-05/06 | UI conflates mutation success with refresh failure | Run the WR-09 dialog test |
-| Executable JSON registry participates in the canonical digest | BITB-02/05/06 | Manifest omits the registry path | Run the WR-04 architecture tests |
-| Mobile import failure focuses the visible mobile alert | BITB-02/06 | Ref targets the hidden desktop duplicate | Run the WR-10 Playwright test at 320×720 |
+None. Every discovered behavior has deterministic automated coverage, and the user accepted the automated UAT evidence at each remediation checkpoint.
 
 ---
 
@@ -141,6 +138,21 @@ The unmodified merged source completed `bash tools/phase3_gauntlet.sh` on 2026-0
 
 The six failures reproduce WR-01, WR-02, WR-03, WR-04, WR-09 and WR-10. The auditor performed no implementation, manifest, configuration or planning mutation.
 
+### Final post-remediation canonical run
+
+The final committed source completed `bash tools/phase3_gauntlet.sh` on 2026-09-04 with one unchanged digest:
+
+- 14/14 ordered layers passed in 781 seconds.
+- Backend: 958/958 tests; 95% aggregate coverage.
+- Frontend: 368/368 tests.
+- Mutation proof: 6/6 backend and 52/52 exact-owned frontend mutants killed.
+- Browser: 3/3, including `PW3-C27` mobile visible-alert focus.
+- Architecture/provider audit: 119/119 tests.
+- Deployment smoke: 0 provider resource writes.
+- Source digest: `64bdc9a3e5c4085036c78732b4285609dd3a00c6c307b7c33f40149b5fb0684b`.
+- Independent review: 0 Critical/High, `nyquist_closeout_ready: true`.
+- Independent verifier: 60/60 must-haves, 10/10 Nyquist/review regressions closed, 0 gaps, 0 human-verification items.
+
 ## Validation Audit 2026-09-03
 
 | Metric | Count |
@@ -154,6 +166,17 @@ The six failures reproduce WR-01, WR-02, WR-03, WR-04, WR-09 and WR-10. The audi
 | Gaps resolved | 0 |
 | Implementation/configuration escalations | 6 |
 
+## Validation Audit 2026-09-04 (post-remediation)
+
+| Metric | Count |
+|--------|-------|
+| Phase requirements covered | 3/3 |
+| Planned tasks green | 32/32 |
+| Original regression gaps resolved | 6/6 |
+| Review follow-up gaps resolved | 4/4 |
+| Manual-only checks | 0 |
+| Canonical gauntlet layers | 14/14 |
+
 ---
 
 ## Validation Sign-Off
@@ -163,7 +186,7 @@ The six failures reproduce WR-01, WR-02, WR-03, WR-04, WR-09 and WR-10. The audi
 - [x] Wave 0 contains a deterministic test for every discovered gap.
 - [x] No watch-mode flag is used.
 - [x] Targeted feedback latency is under 30 seconds outside explicit browser/deployment gates.
-- [ ] All regression tests are green.
-- [ ] `nyquist_compliant: true` is set in frontmatter.
+- [x] All regression tests are green.
+- [x] `nyquist_compliant: true` is set in frontmatter.
 
-**Approval:** validated partial on 2026-09-03; production/configuration remediation and fresh digest-bound closeout are required.
+**Approval:** validated and Nyquist-compliant on 2026-09-04; remediation, independent review, verifier, and digest-bound closeout are complete.
