@@ -74,6 +74,12 @@ type CanonicalFields = tuple[tuple[str, CanonicalFieldValue], ...]
 
 SELECTOR_SCHEMA_VERSION = 1
 STRUCTURE_SCHEMA_VERSION = 1
+MAX_CANONICAL_FILE_BYTES = 1_048_576
+MAX_CANONICAL_AGGREGATE_BYTES = 20_971_520
+MAX_CANONICAL_FILES = 500
+MAX_CANONICAL_VALUES = 5_000
+MAX_CANONICAL_DEPTH = 12
+MAX_CANONICAL_ISSUES = 5
 MAX_CANONICAL_PATH_LENGTH = 4096
 MAX_CANONICAL_TEXT_LENGTH = 1_048_576
 MAX_CANONICAL_FIELD_NAME_LENGTH = 128
@@ -372,6 +378,77 @@ def canonical_issue_order(issue: CanonicalIssue) -> tuple[int, str, int, int, st
         issue.column or 0,
         issue.code,
         issue.message,
+    )
+
+
+def canonical_result_is_valid(result: object) -> TypeGuard[CanonicalParseResult]:
+    """Validate an adapter result again at the shared trust boundary.
+
+    The canonical dataclasses validate at construction time.  Adapters are still
+    treated as untrusted producers here: rebuilding the complete graph catches
+    bypassed constructors, mutated frozen instances, and future adapters that
+    accidentally return a look-alike payload.
+    """
+    if type(result) is not CanonicalParseResult:
+        return False
+    if len(result.values) > MAX_CANONICAL_VALUES or len(result.issues) > MAX_CANONICAL_ISSUES:
+        return False
+    try:
+        rebuilt_values = tuple(_rebuild_value(value) for value in result.values)
+        rebuilt_issues = tuple(_rebuild_issue(issue) for issue in result.issues)
+        rebuilt = CanonicalParseResult(values=rebuilt_values, issues=rebuilt_issues)
+    except AttributeError, TypeError, ValueError:
+        return False
+    return rebuilt == result
+
+
+def _rebuild_value(value: object) -> CanonicalValue:
+    if type(value) is not CanonicalValue:
+        raise ValueError("canonical result rejected")
+    selector = CanonicalSelector(
+        kind=value.selector.kind,
+        fields=value.selector.fields,
+        schema_version=value.selector.schema_version,
+    )
+    structure = tuple(
+        CanonicalStructureNode(
+            kind=node.kind,
+            fields=node.fields,
+            schema_version=node.schema_version,
+        )
+        for node in value.structure
+    )
+    locator = CanonicalLocator(
+        format=value.locator.format,
+        repository_side=value.locator.repository_side,
+        path=value.locator.path,
+        position=value.locator.position,
+        structural_address=value.locator.structural_address,
+        line=value.locator.line,
+        column=value.locator.column,
+    )
+    return CanonicalValue(
+        logical_key=value.logical_key,
+        language=value.language,
+        selector=selector,
+        source_text=value.source_text,
+        translated_text=value.translated_text,
+        display_text=value.display_text,
+        structure=structure,
+        locator=locator,
+    )
+
+
+def _rebuild_issue(issue: object) -> CanonicalIssue:
+    if type(issue) is not CanonicalIssue:
+        raise ValueError("canonical result rejected")
+    return CanonicalIssue(
+        code=issue.code,
+        repository_side=issue.repository_side,
+        path=issue.path,
+        message=issue.message,
+        line=issue.line,
+        column=issue.column,
     )
 
 

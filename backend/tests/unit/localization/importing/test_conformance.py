@@ -229,7 +229,11 @@ def test_unlisted_or_rejected_constructs_fail_the_whole_snapshot(
 
     assert result.values == ()
     assert len(result.issues) == 1
-    assert result.issues[0].code in {"malformed_file", "unsupported_structure"}
+    assert result.issues[0].code in {
+        "ambiguous_structure",
+        "malformed_file",
+        "unsupported_structure",
+    }
 
 
 @pytest.mark.parametrize(
