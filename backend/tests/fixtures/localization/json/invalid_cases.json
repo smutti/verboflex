@@ -1,0 +1,110 @@
+[
+  {
+    "id": "duplicate-root-member",
+    "layout": "flat",
+    "content": "{\"key\":\"one\",\"key\":\"two\"}",
+    "expected_code": "duplicate_key"
+  },
+  {
+    "id": "duplicate-nested-member",
+    "layout": "flat",
+    "content": "{\"parent\":{\"key\":\"one\",\"key\":\"two\"}}",
+    "expected_code": "duplicate_key"
+  },
+  {
+    "id": "array-leaf",
+    "layout": "flat",
+    "content": "{\"key\":[\"one\"]}",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "number-leaf",
+    "layout": "flat",
+    "content": "{\"key\":1}",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "boolean-leaf",
+    "layout": "flat",
+    "content": "{\"key\":true}",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "null-leaf",
+    "layout": "flat",
+    "content": "{\"key\":null}",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "non-finite-nan",
+    "layout": "flat",
+    "content": "{\"key\":NaN}",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "non-finite-infinity",
+    "layout": "flat",
+    "content": "{\"key\":Infinity}",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "mixed-locale-root",
+    "layout": "rooted",
+    "content": "{\"en\":{\"key\":\"value\"},\"metadata\":\"mixed\"}",
+    "expected_code": "ambiguous_structure"
+  },
+  {
+    "id": "duplicate-normalized-locale",
+    "layout": "rooted",
+    "content": "{\"en_US\":{},\"en-US\":{}}",
+    "expected_code": "ambiguous_structure"
+  },
+  {
+    "id": "utf8-bom",
+    "layout": "flat",
+    "content_hex": "efbbbf7b226b6579223a2276616c7565227d",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "invalid-utf8",
+    "layout": "flat",
+    "content_hex": "7b226b6579223a22ff227d",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "unpaired-surrogate",
+    "layout": "flat",
+    "content": "{\"key\":\"\\ud800\"}",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "trailing-data",
+    "layout": "flat",
+    "content": "{\"key\":\"value\"} trailing",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "nul-control",
+    "layout": "flat",
+    "content": "{\"key\":\"\\u0000\"}",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "other-control",
+    "layout": "flat",
+    "content": "{\"key\":\"\\u0001\"}",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "empty-member-name",
+    "layout": "flat",
+    "content": "{\"\":\"value\"}",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "malformed-syntax",
+    "layout": "flat",
+    "content": "{\"key\":\"value\"",
+    "expected_code": "malformed_file"
+  }
+]
