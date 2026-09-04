@@ -3,9 +3,9 @@
 ## Outcome
 
 - Gauntlet-status: PASS
-- Source-digest: `e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c`
+- Source-digest: `64bdc9a3e5c4085036c78732b4285609dd3a00c6c307b7c33f40149b5fb0684b`
 
-The canonical Phase 3 gauntlet completed on 2026-09-03. Its 14 ordered,
+The final canonical Phase 3 gauntlet completed on 2026-09-04. Its 14 ordered,
 fail-closed layers passed against one unchanged manifest digest. This record contains
 only bounded counts, durations, digests, commit identities, and pass/fail outcomes.
 
@@ -104,6 +104,35 @@ finalization. The complete gauntlet passed again from committed source on
 | Cleanup | Passed; no disposable Phase 3 container, network, volume, image, or worker remained |
 | Final source-state | Passed; digest unchanged at `e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c` |
 
+## Final Nyquist-remediation gauntlet
+
+The retrospective Nyquist audit added strict boundary regressions for OAuth
+expiry, digest completeness, asynchronous UI authority, committed confirmation
+state, and responsive focus. Independent follow-up review then required durable
+browser selection, semantic mutation ownership, and exact cleanup authority for
+both response handling and asynchronous `finally` blocks. Each issue was first
+reproduced by a failing test and then closed without weakening the original
+Phase 3 behavior.
+
+The final complete gauntlet passed from committed source on 2026-09-04 and
+established the digest recorded in Outcome.
+
+| Measurement | Result |
+| --- | --- |
+| Source commit containing final production fix | `6e8e858` |
+| Ordered layers | 14/14 passed in 781 seconds |
+| Backend suite | 958/958 passed; 95% aggregate coverage |
+| Frontend suite | 368/368 passed |
+| Backend targeted mutation | 6/6 mutants killed |
+| Frontend exact-owned mutation | 52/52 mutants killed at only the declared locations |
+| Responsive and accessibility browser checks | 3/3 passed, including browser-only `PW3-C27` |
+| Architecture and provider audit | 119/119 passed |
+| API capability matrix | 56 total; 17 integrated and 39 explicitly opted out |
+| Provider resource mutations | 0 |
+| Independent review | 0 Critical/High; four historical nonblocking warnings; Nyquist closeout ready |
+| Independent verifier | 60/60 must-haves; 10/10 Nyquist/review regressions closed; 0 gaps; 0 human items |
+| Final source-state | Passed; digest unchanged at `64bdc9a3e5c4085036c78732b4285609dd3a00c6c307b7c33f40149b5fb0684b` |
+
 ## Prior deployment evidence
 
 This record contains only bounded, non-secret verification results. It does not
@@ -156,25 +185,25 @@ runtime and credentials are removed on every exit.
 ## Final independent review authority
 
 The final fresh typed `gsd-code-reviewer` independently reproduced source digest
-`e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c`
-and reconciled 331 manifest paths plus 21 diff-only paths, 352 unique paths in
-total. The review applied OWASP ASVS 5.0 Level 1 at the configured High blocking
-threshold and closed with zero unresolved Critical/High-equivalent findings.
-Eight nonblocking Warning findings remain explicit in the structured and
-canonical review artifacts. The review confirmed all three provenance and
-rewrite remediations, and the review-mode digest remained unchanged before and
-after artifact creation.
+`64bdc9a3e5c4085036c78732b4285609dd3a00c6c307b7c33f40149b5fb0684b`.
+The historical deep scope remains 352 unique paths, and every subsequent
+Nyquist remediation delta received an independent standard review. The final
+review applied OWASP ASVS 5.0 Level 1 at the configured High blocking threshold
+and closed with zero unresolved Critical/High-equivalent findings. Four
+historical nonblocking Warning findings remain explicit; WR-01 through WR-04
+and WR-09 through WR-14 are resolved with executable evidence.
 
 | Measurement | Result |
 | --- | --- |
-| Reviewer | Fresh typed `gsd-code-reviewer` (`phase3_plan16_review_final2`) |
+| Reviewer | Fresh typed `gsd-code-reviewer` (`phase3_nyquist_fix_review`) |
 | Structured status | `issues_found` because Warning findings remain; `closeout_blocked: false` |
 | OWASP standard | ASVS 5.0 Level 1 |
-| Reviewed paths | 352 unique: 331 manifest-selected plus 21 diff-only |
+| Reviewed paths | Historical 352-path deep review plus independently reviewed Nyquist deltas |
 | Critical/High-equivalent findings | 0 open |
-| Warning findings | 8 open and visible |
+| Warning findings | 4 open and visible: WR-05 through WR-08 |
 | Canonical review | `Review-status: CLOSED`; `Open-critical-high: 0` |
-| Reviewed source digest | `e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c` |
+| Nyquist closeout | `nyquist_closeout_ready: true`; WR-01..04 and WR-09..14 resolved |
+| Reviewed source digest | `64bdc9a3e5c4085036c78732b4285609dd3a00c6c307b7c33f40149b5fb0684b` |
 | Provider resource mutations | 0 |
 | Review source-state | Passed; digest unchanged |
 
@@ -182,9 +211,10 @@ after artifact creation.
 
 The fresh typed `gsd-verifier` independently verified the Phase 3 roadmap goal,
 BITB-02/05/06, D-01 through D-18, the six cross-artifact edges, the two
-prohibitions, and UI3-C01 through UI3-C26 against implementation, tests, and
-digest-bound runtime evidence. It recorded exactly `status: passed` with 60/60
-must-haves verified, zero gaps, and zero human-verification items.
+prohibitions, UI3-C01 through UI3-C26, and browser-only `PW3-C27` against
+implementation, tests, and digest-bound runtime evidence. It recorded exactly
+`status: passed` with 60/60 original must-haves verified, all ten
+Nyquist/review regressions closed, zero gaps, and zero human-verification items.
 
 The verifier independently reproduced the reviewed source digest and confirmed
 the exact API capability split, the five generated import operations, D-15
@@ -195,13 +225,14 @@ gauntlet, and provider resource writes remained zero.
 
 | Measurement | Result |
 | --- | --- |
-| Verifier | Fresh typed `gsd-verifier` (`phase3_plan16_verifier`) |
+| Verifier | Fresh typed `gsd-verifier` (`phase3_post_nyquist_final_verifier`) |
 | Verifier status | `passed` |
 | Goal-backward score | 60/60 must-haves verified |
 | Requirements | BITB-02, BITB-05, and BITB-06 verified |
-| Decisions and UI | D-01..D-18 and UI3-C01..UI3-C26 verified |
+| Decisions and UI | D-01..D-18, UI3-C01..UI3-C26, and `PW3-C27` verified |
+| Nyquist regression closure | 10/10: WR-01..04 and WR-09..14 |
 | API capability matrix | 56 total; 17 integrated and 39 explicitly opted out |
 | Gaps / human verification | 0 / 0 |
-| Verified source digest | `e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c` |
+| Verified source digest | `64bdc9a3e5c4085036c78732b4285609dd3a00c6c307b7c33f40149b5fb0684b` |
 | Provider resource mutations | 0 |
 | Final source-state | Passed; review, verifier, evidence, and manifest digest are identical |

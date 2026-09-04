@@ -1,18 +1,20 @@
 ---
 phase: 03-bitbucket-import-integration
-verified: 2026-09-03T18:22:13Z
+verified: 2026-09-04T10:54:30Z
 status: passed
-source_digest: e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c
+source_digest: 64bdc9a3e5c4085036c78732b4285609dd3a00c6c307b7c33f40149b5fb0684b
 score: 60/60 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
-verification_mode: final_refresh
-verifier_identity: phase3_final_verifier
+verification_mode: post_nyquist_final_refresh
+verifier_identity: phase3_post_nyquist_final_verifier
 verifier_role: gsd-verifier
-review_identity: phase3_plan16_review_final2-plus-standard-addendum
+review_identity: phase3_final_lifecycle_remediation_review
 review_open_critical: 0
 review_open_high: 0
-review_open_warnings: 10
+review_open_warnings: 4
+nyquist_regressions_closed: 10
+browser_only_regressions_verified: 1
 api_capability_rows: 56
 api_capabilities_integrated: 17
 api_capabilities_opted_out: 39
@@ -25,10 +27,10 @@ human_verification_count: 0
 
 **Phase Goal:** Turn the Phase 2 read-only Bitbucket boundary into an import-grade integration with capability validation, durable source references, resilient reads, and actionable operational errors.
 
-**Verified:** 2026-09-03T18:22:13Z
-**Result:** PASS — final independent refresh against the current source digest
-**Re-verification:** Final refresh of the earlier passed report; no prior gap required closure and no regression was found.
-**Fresh typed verifier:** `phase3_final_verifier` (`gsd-verifier`)
+**Verified:** 2026-09-04T10:54:30Z
+**Result:** PASS — fresh post-Nyquist verification against the final source digest
+**Re-verification:** Yes; refreshed after Nyquist, post-remediation, and lifecycle closure. No original Phase 3 must-have regressed.
+**Fresh typed verifier:** `phase3_post_nyquist_final_verifier` (`gsd-verifier`)
 
 The starting hypothesis was that task completion had not proved goal achievement. The current code, migrations, generated contracts, behavioral tests, exact-digest review, and deployment evidence falsify that hypothesis. No SUMMARY claim was accepted without tracing it to implementation and executable evidence.
 
@@ -36,13 +38,13 @@ The starting hypothesis was that task completion had not proved goal achievement
 
 | Check | Fresh result | Verdict |
 |---|---|---|
-| Review-mode digest | `VERBOFLEX_SOURCE_MANIFEST=tools/phase3_source_manifest.txt VERBOFLEX_REVIEW_PATH=docs/reviews/phase-03-code-security.md tools/source_state.sh --review-digest` → `e5d23977e946a9ec98ad57d1fd9893c2cec7a1d364f73c54862ef68ba668c51c` | VERIFIED |
+| Review-mode digest | `VERBOFLEX_SOURCE_MANIFEST=tools/phase3_source_manifest.txt VERBOFLEX_REVIEW_PATH=docs/reviews/phase-03-code-security.md tools/source_state.sh --review-digest` → `64bdc9a3e5c4085036c78732b4285609dd3a00c6c307b7c33f40149b5fb0684b` | VERIFIED |
 | Review/source binding | `tools/source_state.sh --verify-review-source` accepted the same digest | VERIFIED |
-| Typed security review | `03-REVIEW.md` final state, ASVS 5.0 L1, 0 Critical, 0 High, 10 Warning, `closeout_blocked=false` | VERIFIED |
-| Review scope | 331 manifest-selected paths + 21 additional Phase 3 diff paths = 352 unique paths; final standard addendum inspected 65 changed runtime/support files | VERIFIED |
+| Typed security review | `03-REVIEW.md` final state committed at `0229d47`, ASVS 5.0 L1, 0 Critical, 0 High, 4 Warning, `closeout_blocked=false`, `nyquist_closeout_ready=true` | VERIFIED |
+| Review scope | Historical deep review covered 352 unique paths; each subsequent Nyquist delta received an independent standard review, ending with the 8-file lifecycle pass | VERIFIED |
 | Drift after focused checks | Digest recomputed unchanged | VERIFIED |
 
-The exact source digest matches the accepted review digest. The ten remaining review findings are Warning severity and are preserved below; none defeats a roadmap success criterion or meets the configured High blocking threshold. The canonical prose review and evidence file still enumerate the original eight warnings, while the structured final `03-REVIEW.md` adds WR-09 and WR-10. Because review artifacts are outside the source manifest, this is not source drift; this report uses the latest structured total of ten and does not hide the addendum findings.
+The exact source digest matches both review artifacts. Ten Nyquist/review findings (WR-01..04 and WR-09..14) are now closed by durable tests and canonical gate ownership. Four historical warnings (WR-05..08) remain open below; none defeats a roadmap success criterion or meets the configured High blocking threshold. `docs/evidence/phase-03.md` truthfully retains the earlier pre-Nyquist gauntlet history; the final 781-second run is recorded in the resolved lifecycle ledger and independently reconciled by both current review artifacts, so this report does not relabel the historical evidence file as current.
 
 ## Goal Achievement
 
@@ -54,7 +56,7 @@ The exact source digest matches the accepted review digest. The ten remaining re
 | SC-2 | Repository reads handle pagination, rate limits, transient provider failures, and invalid provider responses through bounded retry/error behavior. | `BitbucketHttpAdapter`, source discovery, continuation validation, byte/page/depth budgets, one-attempt policy, closed error taxonomy; provider and import integration tests pass. | VERIFIED |
 | SC-3 | Every import attempt records the exact source commit and file reference used. | `ImportJob`/`ImportExecution`/`ImportSourceReference`, migration `0014`, worker flush-before-success, immutable terminal provenance; API→worker→provider behavioral and migration tests pass. | VERIFIED |
 | SC-4 | Connection, permission, rate-limit, missing-source, and import failures are actionable and sanitized, with safe retry guidance. | Closed schemas/messages, row-local UI, explicit manual retry, D-15 structured diagnostic contract, positive and negative safe-log tests. | VERIFIED |
-| SC-5 | Integration tests, review, backend/worker/deployment smoke, and quality gates prove the slice works end to end. | Exact-digest canonical 14-layer gauntlet: 14/14 in 367s; backend 952/952, frontend 356/356, browser 2/2, mock provider 59 resource GETs and 0 resource writes, clean teardown. | VERIFIED |
+| SC-5 | Integration tests, review, backend/worker/deployment smoke, and quality gates prove the slice works end to end. | Exact-digest canonical 14-layer gauntlet: 14/14 in 781s; backend 958/958 at 95%, frontend 368/368, backend mutation 6/6, exact-owned frontend mutation 52/52, browser 3/3, architecture/provider 119/119, and 0 provider resource writes. | VERIFIED |
 
 **Roadmap score:** 5/5.
 
@@ -215,33 +217,36 @@ The architecture guard extracts markers only from executable test names/paramete
 | UI3-C25 | Long names, prose, and actions stay complete | `PublishedMappingImports.test.tsx` | VERIFIED |
 | UI3-C26 | Opaque values are monospace and full commit copies explicitly | `admin-configuration.spec.ts` | VERIFIED |
 
-The focused component run executed 32 matching assertions. The two browser-only considerations were exercised by the exact-digest canonical Playwright run (2/2), so no visual/manual item remains.
+The original 26 UI considerations remain owned exactly by executable tests. The final canonical Playwright selector additionally owns browser-only regression `PW3-C27` without expanding the locked `UI3-C01..C26` namespace; discovery finds exactly `UI3-C23`, `UI3-C26`, and `PW3-C27`, and the digest-bound run passed 3/3. The user accepted the automated UAT at the remediation checkpoints, so no visual/manual item remains.
 
 ## Behavioral Spot-Checks
 
 | Behavior set | Read-only verifier execution/result | Verdict |
 |---|---|---|
 | Scope, provider/background boundaries and D-15 diagnostics | `test_phase3_scope.py`, `test_provider_boundaries.py`, `test_background_boundaries.py`, `test_bitbucket_diagnostics.py` → 33 passed in 1.95s | PASS |
-| Provenance, concurrency, retry/watchdog, rewrite classification and atomic confirmation | Nine named import/migration tests → 16 parameterized cases passed in 7.81s | PASS |
-| Provider one-attempt behavior and exact OAuth closure/profile/generation | Four named OAuth/HTTP-adapter tests → 11 parameterized cases passed in 0.71s | PASS |
-| UI3-C executable component/hook assertions | Six owner files filtered by `UI3-C` → 32 passed; 83 non-matching tests skipped by the filter, no disabled Phase 3 case | PASS |
+| Provenance, concurrency, retry/watchdog, rewrite classification and atomic confirmation | Nine named import/migration tests → 16 parameterized cases passed in 7.73s | PASS |
+| Provider one-attempt behavior and exact OAuth closure/profile/generation | Four named OAuth/HTTP-adapter tests → 11 parameterized cases passed in 1.23s | PASS |
+| OAuth expiry representability and manifest/gate ownership | Maximum-safe/unsafe lifetime tests → 3 passed; complete Phase 3 gauntlet architecture contract → 7/7 passed | PASS |
+| Nyquist UI authority, lifecycle, committed-state, focus-adjacent behavior | Published imports, rewrite dialog, mutation authority, and Product Mappings suites → 52/52 passed | PASS |
+| Browser-only ownership | Playwright discovery lists exactly `PW3-C27`, `UI3-C23`, `UI3-C26`; canonical digest-bound execution passed 3/3 | PASS |
 | API preseal | `check api-coverage.verify-pre` → `block=false`, `passed=true`, `56/17/39` | PASS |
 
-A supplementary attempt against the pre-existing `localhost:8080` container was rejected as evidence because that runtime was not source-digest-bound and did not contain the current Phase 3 UI. The verifier did not start or mutate services. The authoritative browser result is the canonical exact-digest run that started its own current-source frontend and passed 2/2.
+The fresh verifier did not start or mutate services. Browser behavior is backed by the canonical exact-digest isolated Vite run and the user's explicit acceptance of the automated UAT, not by an unrelated long-lived local container.
 
 ## Probe and Canonical Quality-Gate Evidence
 
-No `probe-*.sh` is declared by the Phase 3 plans. `tools/phase3_gauntlet.sh` is the canonical fail-closed runner and was not rerun because this assignment explicitly prohibited the expensive full gauntlet and service startup. Its outputs are independently bound to the exact current source digest by `source_state.sh`, the typed review, and `docs/evidence/phase-03.md`.
+No `probe-*.sh` is declared by the Phase 3 plans. `tools/phase3_gauntlet.sh` is the canonical fail-closed runner and was not rerun during this bounded verifier pass. Its final result is bound to the same digest by `source_state.sh`, the resolved lifecycle ledger, and two independent current review artifacts; the focused verifier reran the contracts most directly affected by the remediation.
 
 | Layer | Exact-digest canonical result | Verdict |
 |---|---|---|
-| Backend tests/coverage | 952/952; 95% | PASS |
-| Frontend tests/coverage | 356/356; 83.5% | PASS |
+| Ordered gauntlet | 14/14 in 781 seconds; final digest unchanged | PASS |
+| Backend tests/coverage | 958/958; 95% | PASS |
+| Frontend tests/coverage | 368/368 | PASS |
 | Backend mutation | 6/6 operators | PASS |
-| Frontend mutation | 25/25 operators | PASS |
-| Browser E2E | 2/2 | PASS |
+| Frontend mutation | 52/52 exact-owned mutants across the declared legacy and five semantic marker locations | PASS |
+| Browser E2E | 3/3, including `PW3-C27` visible mobile error focus | PASS |
 | Migration cycle/OpenAPI | 14/14; generated client unchanged | PASS |
-| Architecture/provider contracts | 116/116 | PASS |
+| Architecture/provider contracts | 119/119 | PASS |
 | API capability contract | 56 total = 17 integrated + 39 explicit opt-outs | PASS |
 | Supply chain/license/secret/schema/static/type/lint/format/build | All declared gates passed | PASS |
 | Mock deployment smoke | One OAuth token POST; 59 provider-resource GETs; 0 provider-resource writes | PASS |
@@ -269,20 +274,31 @@ No `probe-*.sh` is declared by the Phase 3 plans. `tools/phase3_gauntlet.sh` is 
 | Test self-fulfillment | Architecture guards include semantic/mutation controls; production authorization, ordering, and state transitions are enforced outside fixtures. | None |
 | Fixture generation | No requirement test writes its own expected result. The E2E `writeFileSync` calls change mock-provider heads/faults; assertions independently observe API/provider-audit state. | None |
 
+## Nyquist Regression Closure
+
+These ten regression closures are explicit supporting acceptance surfaces and do not alter the original 60-must-have denominator.
+
+| Finding | Current code and durable test/gate evidence | Verdict |
+|---|---|---|
+| WR-01 | `bitbucket_oauth.py:475-478` computes expiry before row mutation and translates arithmetic overflow to the closed OAuth error; maximum-safe and two unsafe boundary cases pass. | CLOSED |
+| WR-02 | `PublishedMappingImports.tsx:719-784` requires live product/access authority plus exact request-token/controller ownership before response or finalization effects; deferred product-switch coverage passes. | CLOSED |
+| WR-03 | `RewrittenBaselineDialog.tsx:410-487` uses live identity, token, controller, and abort state rather than self-comparing a captured render; obsolete completion coverage passes. | CLOSED |
+| WR-04 | `phase3_source_manifest.txt:10` includes the executable JSON edge matrix; the manifest mutation negative control passes inside the 7/7 architecture contract. | CLOSED |
+| WR-09 | `RewrittenBaselineDialog.tsx:452-464` records server commit before refresh and never relabels a committed confirmation as retryable failure; refresh-false/throw regressions pass. | CLOSED |
+| WR-10 | `PublishedMappingImports.tsx:637-681` registers desktop/mobile alerts separately, selects the rendered target, and focuses after error-state commit; `PW3-C27` passed in the 3/3 canonical browser run. | CLOSED |
+| WR-11 | `test_phase3_gauntlet.py:49` and `phase3_gauntlet.sh:430` require the exact browser IDs `UI3-C23|UI3-C26|PW3-C27`; independent discovery lists exactly three tests. | CLOSED |
+| WR-12 | `mutationAuthority.ts:6-43` exposes five semantic marker-owned predicates; architecture rejects marker/location drift and exact-owned Stryker killed 52/52. | CLOSED |
+| WR-13 | Rewrite `finally` decides ownership before cleanup and requires exact live controller/token/identity plus uncommitted state; unmount observes false and live failure observes true. | CLOSED |
+| WR-14 | Start-import `finally` requires the same current request/controller authority as response handling; cleanup aborts and clears ownership, preventing post-unmount pending-state synchronization. | CLOSED |
+
 ## Open Review Warnings
 
 | ID | Warning retained from the typed review | Why it is not a hidden blocker |
 |---|---|---|
-| WR-01 | OAuth `expires_in` has no explicit maximum before datetime arithmetic. | Positive and malformed-value handling is present; no Critical/High exploit or must-have failure was demonstrated. |
-| WR-02 | A delayed start-import response may target a newly selected product without live mutation-identity validation. | Server ownership/currentness still fences the operation; this is a UI stale-response hardening warning. |
-| WR-03 | Rewrite confirmation compares same-render closure values instead of live identity/generation. | Server rejects stale identity/generation atomically; warning concerns client-side early rejection. |
-| WR-04 | Manifest excludes a Phase 2 JSON edge registry consumed by a selected test. | Review explicitly accounted for the 21 diff-only paths; current digest/review union remains auditable. |
 | WR-05 | Two moderate frontend development/mutation-tool advisories. | Development tooling only; supply-chain gate passed at configured policy. |
 | WR-06 | Retained Phase 2 Compose verifier targets the removed OAuth callback contract. | Not the canonical Phase 3 smoke runner and does not affect current application behavior. |
 | WR-07 | `.env.example` omits Bitbucket and Phase 3 timing/watchdog variables. | Deployment smoke supplies validated settings; documentation completeness warning remains visible. |
 | WR-08 | Container inputs use mutable tags rather than content digests. | Reproducibility hardening warning; exact source/review digest and current smoke are still proven. |
-| WR-09 | After rewrite confirmation succeeds, a collection-refresh failure reports a generic baseline-update error and suggests importing again. | The server-side confirmation has already committed atomically and remains correct; this is recovery-copy/state-refresh hardening after success, not a failed import-grade source transition. It should be fixed before treating that recovery path as polished UX. |
-| WR-10 | A mobile import mutation failure can focus the hidden desktop alert because only the desktop row error registers the focus ref. | The error remains rendered, sanitized, row-local, and actionable on mobile; the defect is focus/accessibility hardening and does not disconnect or corrupt the import operation. |
 
 ## Final Scoring
 
@@ -296,17 +312,17 @@ No `probe-*.sh` is declared by the Phase 3 plans. `tools/phase3_gauntlet.sh` is 
 | UI considerations UI3-C01–UI3-C26 | 26 | 26 |
 | **Total must-haves** | **60** | **60** |
 
-The exact 56-row API matrix, five API operations, D-15 positive/negative log contract, provenance/remediation invariants, quality layers, and deferred fences are supporting acceptance surfaces verified in addition to—not double-counted within—the 60 must-haves.
+The exact 56-row API matrix, five API operations, D-15 positive/negative log contract, browser-only `PW3-C27`, ten Nyquist regression closures, provenance/remediation invariants, quality layers, and deferred fences are supporting acceptance surfaces verified in addition to—not double-counted within—the 60 must-haves.
 
 ## Human Verification Required
 
-None. Runtime state transitions have named passing behavioral tests, and the visual/accessibility/responsive considerations have direct component or exact-digest Playwright evidence.
+None. Runtime state transitions have named passing behavioral tests; responsive behavior has exact-digest Playwright evidence; and the user explicitly accepted the automated UAT during the Nyquist, post-remediation, and final lifecycle checkpoints recorded in the resolved debug ledgers.
 
 ## Gaps Summary
 
-No gap, missing artifact, broken key link, behavior-unverified truth, unresolved prohibition, or human-verification item remains. Phase 3 achieves its roadmap goal on the exact typed-review source digest while keeping provider resource writes at zero.
+No gap, missing artifact, broken key link, behavior-unverified truth, unresolved prohibition, or human-verification item remains. WR-01..04 and WR-09..14 are closed; WR-05..08 remain visible nonblocking warnings. Phase 3 achieves its roadmap goal on the exact typed-review source digest while keeping provider resource writes at zero.
 
 ---
 
-_Verified: 2026-09-03T18:22:13Z_
-_Verifier: `phase3_final_verifier` (fresh typed `gsd-verifier`)_
+_Verified: 2026-09-04T10:54:30Z_
+_Verifier: `phase3_post_nyquist_final_verifier` (fresh typed `gsd-verifier`)_
