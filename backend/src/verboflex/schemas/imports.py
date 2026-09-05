@@ -1,10 +1,44 @@
 """Closed administrator contracts for published-mapping imports."""
 
 from datetime import datetime
+from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class ImportDatasetStatus(StrEnum):
+    """Closed relationship between the current import and canonical dataset."""
+
+    NOT_CREATED = "not_created"
+    ACTIVE = "active"
+    RETAINED = "retained"
+
+
+class ImportParserIssue(BaseModel):
+    """One bounded parser diagnostic with no repository-controlled prose."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    issue_code: Literal[
+        "malformed_file",
+        "ambiguous_structure",
+        "unsupported_structure",
+        "duplicate_key",
+        "base_language_required",
+    ]
+    repository_side: Literal["direct", "keys", "translations"]
+    path: Annotated[str, Field(min_length=1, max_length=4096)]
+    line: Annotated[int, Field(ge=1, le=2_147_483_647)] | None
+    column: Annotated[int, Field(ge=1, le=2_147_483_647)] | None
+    message_key: Literal[
+        "import.parser.malformed_file",
+        "import.parser.ambiguous_structure",
+        "import.parser.unsupported_structure",
+        "import.parser.duplicate_key",
+        "import.parser.base_language_required",
+    ]
 
 
 class AdminImportRepositorySideResponse(BaseModel):
@@ -66,6 +100,9 @@ class AdminPublishedMappingImportResponse(BaseModel):
         "review_required",
         "import_failed",
     ]
+    dataset_status: ImportDatasetStatus
+    parser_issues: Annotated[list[ImportParserIssue], Field(max_length=5)]
+    parser_issue_remaining_count: Annotated[int, Field(ge=0, le=495)]
     active_baseline: AdminImportBaselineResponse | None
     execution_number: Annotated[int, Field(ge=1)] | None
     latest_execution_at: datetime | None

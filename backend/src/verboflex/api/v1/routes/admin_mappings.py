@@ -29,6 +29,8 @@ from verboflex.schemas.imports import (
     AdminImportSourceReferenceResponse,
     AdminPublishedMappingImportListResponse,
     AdminPublishedMappingImportResponse,
+    ImportDatasetStatus,
+    ImportParserIssue,
 )
 from verboflex.schemas.system import ErrorResponse
 from verboflex.schemas.users import RoleName
@@ -152,6 +154,19 @@ def _import_response(record: ImportJobRecord) -> AdminPublishedMappingImportResp
             for side in record.repository_sides
         ],
         state=record.state,
+        dataset_status=ImportDatasetStatus(record.dataset_status),
+        parser_issues=[
+            ImportParserIssue(
+                issue_code=issue.issue_code,
+                repository_side=issue.repository_side,
+                path=issue.path,
+                line=issue.line,
+                column=issue.column,
+                message_key=issue.message_key,
+            )
+            for issue in record.parser_issues
+        ],
+        parser_issue_remaining_count=record.parser_issue_remaining_count,
         active_baseline=(
             AdminImportBaselineResponse(
                 imported_at=record.active_baseline.imported_at,

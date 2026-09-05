@@ -683,7 +683,9 @@ def test_import_public_contract_is_closed_and_provider_source_history_free() -> 
     import_schemas = {
         name: components[name]
         for name in import_schema_names
-        if name.startswith("AdminImport") or name.startswith("AdminPublishedMappingImport")
+        if name.startswith("AdminImport")
+        or name.startswith("AdminPublishedMappingImport")
+        or name in {"ImportDatasetStatus", "ImportParserIssue"}
     }
     assert set(import_schemas) == {
         "AdminImportBaselineResponse",

@@ -55,7 +55,7 @@ from verboflex.models.preview_job import PreviewJob
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import ProductRepositoryMapping
 from verboflex.models.repository import Repository
-from verboflex.models.translation import LocalizationScope
+from verboflex.models.translation import LocalizationScope, TranslationParseIssue
 from verboflex.services.bitbucket_oauth import PULLREQUEST_WRITE_SCOPE
 from verboflex.services.preview_jobs import is_current_preview_confirmation
 from verboflex.services.repositories import RepositoryRecord
@@ -110,6 +110,37 @@ RepositoryRole = Literal["direct", "keys", "translations"]
 SourceMovementRelation = Literal["equal", "descendant", "diverged"]
 SourceMovementKind = Literal["equal", "fast-forward", "review-required"]
 RewriteDeltaChange = Literal["added", "modified", "removed"]
+ImportDatasetStatusRecord = Literal["not_created", "active", "retained"]
+ImportParserIssueCode = Literal[
+    "malformed_file",
+    "ambiguous_structure",
+    "unsupported_structure",
+    "duplicate_key",
+    "base_language_required",
+]
+ImportParserIssueMessageKey = Literal[
+    "import.parser.malformed_file",
+    "import.parser.ambiguous_structure",
+    "import.parser.unsupported_structure",
+    "import.parser.duplicate_key",
+    "import.parser.base_language_required",
+]
+
+MAX_PUBLIC_PARSER_ISSUES = 5
+MAX_PUBLIC_PARSER_ISSUE_TOTAL = 500
+
+_PARSER_ISSUE_MESSAGE_KEYS: dict[ImportParserIssueCode, ImportParserIssueMessageKey] = {
+    "malformed_file": "import.parser.malformed_file",
+    "ambiguous_structure": "import.parser.ambiguous_structure",
+    "unsupported_structure": "import.parser.unsupported_structure",
+    "duplicate_key": "import.parser.duplicate_key",
+    "base_language_required": "import.parser.base_language_required",
+}
+_PARSER_ISSUE_SIDE_ORDER: dict[RepositoryRole, int] = {
+    "direct": 0,
+    "keys": 1,
+    "translations": 2,
+}
 
 
 class ImportNotFound(LookupError):
@@ -172,6 +203,18 @@ class ImportBaselineRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class ImportParserIssueRecord:
+    """One public-safe parser diagnostic projected from immutable staging."""
+
+    issue_code: ImportParserIssueCode
+    repository_side: RepositoryRole
+    path: str
+    line: int | None
+    column: int | None
+    message_key: ImportParserIssueMessageKey
+
+
+@dataclass(frozen=True, slots=True)
 class ImportJobRecord:
     """Closed public projection of one published mapping and its logical import."""
 
@@ -181,6 +224,9 @@ class ImportJobRecord:
     topology: Literal["direct", "separate"]
     repository_sides: tuple[ImportRepositorySideRecord, ...]
     state: ImportState
+    dataset_status: ImportDatasetStatusRecord
+    parser_issues: tuple[ImportParserIssueRecord, ...]
+    parser_issue_remaining_count: int
     active_baseline: ImportBaselineRecord | None
     execution_number: int | None
     latest_execution_at: datetime | None
@@ -755,13 +801,27 @@ def _pending_rewrite_mapping_ids(
 def _record(
     session: Session,
     *,
+    product_id: UUID,
     mapping: ProductRepositoryMapping,
     job: ImportJob | None,
     capability: ImportCapability,
     review_required: bool = False,
 ) -> ImportJobRecord:
     sides = _mapping_sides(mapping)
+    scope = session.execute(
+        select(LocalizationScope)
+        .where(
+            LocalizationScope.product_id == product_id,
+            LocalizationScope.mapping_identity_key == mapping.identity_key,
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
     if job is None:
+        dataset_status: ImportDatasetStatusRecord = (
+            "retained"
+            if scope is not None and scope.active_execution_id is not None
+            else "not_created"
+        )
         return ImportJobRecord(
             id=None,
             mapping_id=mapping.id,
@@ -769,6 +829,9 @@ def _record(
             topology=cast(Literal["direct", "separate"], mapping.topology),
             repository_sides=sides,
             state="not_imported",
+            dataset_status=dataset_status,
+            parser_issues=(),
+            parser_issue_remaining_count=0,
             active_baseline=None,
             execution_number=None,
             latest_execution_at=None,
@@ -808,6 +871,17 @@ def _record(
     ).scalar_one_or_none()
     if current_execution is None:
         raise ImportConflict("persisted import execution rejected")
+    dataset_status = _dataset_status(
+        scope=scope,
+        job=job,
+        current_execution=current_execution,
+    )
+    parser_issues, parser_issue_remaining_count = _parser_issue_projection(
+        session,
+        job=job,
+        current_execution=current_execution,
+        expected_sides=sides,
+    )
     public_state: ImportState
     action: ImportAction
     if review_required:
@@ -842,6 +916,9 @@ def _record(
         topology=cast(Literal["direct", "separate"], job.topology),
         repository_sides=sides,
         state=public_state,
+        dataset_status=dataset_status,
+        parser_issues=parser_issues,
+        parser_issue_remaining_count=parser_issue_remaining_count,
         active_baseline=baseline,
         execution_number=current_execution.sequence,
         latest_execution_at=job.latest_execution_at,
@@ -853,6 +930,95 @@ def _record(
         ),
         error_message=job.error_message,
         action=action,
+    )
+
+
+def _dataset_status(
+    *,
+    scope: LocalizationScope | None,
+    job: ImportJob,
+    current_execution: ImportExecution,
+) -> ImportDatasetStatusRecord:
+    """Project only durable canonical dataset authority, never request state."""
+    if scope is None or scope.active_execution_id is None:
+        return "not_created"
+    if scope.active_execution_id != current_execution.id:
+        return "retained"
+    if (
+        job.state != "current"
+        or current_execution.state != "succeeded"
+        or scope.active_import_job_id != job.id
+    ):
+        raise ImportConflict("persisted active dataset rejected")
+    return "active"
+
+
+def _parser_issue_projection(
+    session: Session,
+    *,
+    job: ImportJob,
+    current_execution: ImportExecution,
+    expected_sides: tuple[ImportRepositorySideRecord, ...],
+) -> tuple[tuple[ImportParserIssueRecord, ...], int]:
+    """Return current failed-execution issues without stored diagnostic prose."""
+    if job.state != "import_failed" or current_execution.state != "failed":
+        return (), 0
+    rows = tuple(
+        session.scalars(
+            select(TranslationParseIssue).where(
+                TranslationParseIssue.import_execution_id == current_execution.id,
+                TranslationParseIssue.import_job_id == job.id,
+            )
+        )
+    )
+    if len(rows) > MAX_PUBLIC_PARSER_ISSUE_TOTAL:
+        raise ImportConflict("persisted parser issues rejected")
+    allowed_sides = {side.role for side in expected_sides}
+    records: list[tuple[int, int, ImportParserIssueRecord]] = []
+    for row in rows:
+        code = cast(ImportParserIssueCode, row.issue_code)
+        side = cast(RepositoryRole, row.repository_side)
+        try:
+            path = validate_repository_relative_path(row.path)
+            message_key = _PARSER_ISSUE_MESSAGE_KEYS[code]
+            side_order = _PARSER_ISSUE_SIDE_ORDER[side]
+        except (KeyError, ValueError) as error:
+            raise ImportConflict("persisted parser issues rejected") from error
+        if (
+            side not in allowed_sides
+            or path != row.path
+            or not 1 <= len(path) <= 4096
+            or row.position < 0
+            or row.line is not None
+            and not 1 <= row.line <= 2_147_483_647
+            or row.column is not None
+            and not 1 <= row.column <= 2_147_483_647
+        ):
+            raise ImportConflict("persisted parser issues rejected")
+        records.append(
+            (
+                side_order,
+                row.position,
+                ImportParserIssueRecord(
+                    issue_code=code,
+                    repository_side=side,
+                    path=path,
+                    line=row.line,
+                    column=row.column,
+                    message_key=message_key,
+                ),
+            )
+        )
+    ordered = tuple(
+        record
+        for _side, _position, record in sorted(
+            records,
+            key=lambda item: (item[0], item[1]),
+        )
+    )
+    return (
+        ordered[:MAX_PUBLIC_PARSER_ISSUES],
+        len(ordered) - min(len(ordered), MAX_PUBLIC_PARSER_ISSUES),
     )
 
 
@@ -937,6 +1103,7 @@ def list_published_mapping_imports(
         items = tuple(
             _record(
                 session,
+                product_id=product_id,
                 mapping=mapping,
                 job=jobs.get(mapping.id),
                 capability=capability,
@@ -1076,6 +1243,7 @@ def start_or_refresh_import(
             raise ImportConflict("persisted import state rejected")
         record = _record(
             session,
+            product_id=product_id,
             mapping=mapping,
             job=job,
             capability="ready",
@@ -1118,6 +1286,7 @@ def start_or_refresh_import(
             ).scalar_one()
             record = _record(
                 session,
+                product_id=product_id,
                 mapping=mapping,
                 job=job,
                 capability=_current_import_capability(session),
@@ -1170,6 +1339,7 @@ def get_import_job(
         )
         return _record(
             session,
+            product_id=product_id,
             mapping=mapping,
             job=job,
             capability=_current_import_capability(session),
@@ -2294,6 +2464,7 @@ def confirm_rewrite_baseline(
         session.flush()
         return _record(
             session,
+            product_id=product_id,
             mapping=mapping,
             job=job,
             capability=_current_import_capability(session),

@@ -1529,9 +1529,7 @@ def _seed_parser_failure_outcomes(
                             source_branch="main",
                         ),
                     ],
-                    allowed_targets=[
-                        ProductMappingAllowedTarget(branch="main", is_default=True)
-                    ],
+                    allowed_targets=[ProductMappingAllowedTarget(branch="main", is_default=True)],
                 ),
                 ProductRepositoryMapping(
                     id=first_mapping_id,
@@ -1546,9 +1544,7 @@ def _seed_parser_failure_outcomes(
                             source_branch="main",
                         )
                     ],
-                    allowed_targets=[
-                        ProductMappingAllowedTarget(branch="main", is_default=True)
-                    ],
+                    allowed_targets=[ProductMappingAllowedTarget(branch="main", is_default=True)],
                 ),
             ]
         )
@@ -1726,16 +1722,13 @@ def test_parser_failure_api_projects_retained_dataset_and_safe_ordered_issues(
     )
 
     retained_path = f"/api/v1/admin/products/{product_id}/imports/{retained_import_id}"
-    assert asyncio.run(
-        _request("GET", path=retained_path, access_token=None)
-    ).status_code == 401
-    assert asyncio.run(
-        _request("GET", path=retained_path, access_token=ordinary_token)
-    ).status_code == 403
-
-    retained = asyncio.run(
-        _request("GET", path=retained_path, access_token=admin_token)
+    assert asyncio.run(_request("GET", path=retained_path, access_token=None)).status_code == 401
+    assert (
+        asyncio.run(_request("GET", path=retained_path, access_token=ordinary_token)).status_code
+        == 403
     )
+
+    retained = asyncio.run(_request("GET", path=retained_path, access_token=admin_token))
     assert retained.status_code == 200
     retained_body = retained.json()
     assert retained_body["state"] == "may_be_stale"
