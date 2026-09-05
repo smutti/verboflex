@@ -103,7 +103,7 @@ def stage_translation_parse(
         _reject_existing_staging(session, execution_id=execution.id)
 
         scope: LocalizationScope | None = None
-        if result.values:
+        if not result.issues:
             scope = _get_or_create_scope(
                 session,
                 identity=identity,

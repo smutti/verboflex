@@ -1141,6 +1141,36 @@ def test_activation_parser_failure_keeps_every_active_pointer_empty(
     assert active_value_count == 0
 
 
+def test_activation_complete_empty_file_exposes_an_empty_current_dataset(
+    activation_session_factory: sessionmaker[Session],
+) -> None:
+    identity, repository_id = _seed_running_direct_import(activation_session_factory)
+    manifest, references = _stage_direct_manifest(
+        activation_session_factory,
+        identity=identity,
+        repository_id=repository_id,
+        result=CanonicalParseResult(),
+    )
+    assert manifest.complete and manifest.value_count == 0
+
+    assert import_jobs.finish_import_execution(
+        activation_session_factory,
+        identity=identity,
+        references=references,
+        canonical_manifest_digest=manifest.digest,
+    )
+    with activation_session_factory() as session:
+        job = session.get_one(ImportJob, identity.import_id)
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        value_count = session.scalar(select(text("count(*)")).select_from(TranslationValue))
+    assert job.active_baseline_execution_id == identity.execution_id
+    assert scope is not None and scope.active_execution_id == identity.execution_id
+    assert scope.dataset_version == 1
+    assert value_count == 0
+
+
 def test_activation_reuses_semantic_scope_across_mapping_revision_clone(
     activation_session_factory: sessionmaker[Session],
 ) -> None:
