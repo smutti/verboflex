@@ -1016,6 +1016,7 @@ def test_schema_is_reversible_revision_owned_and_has_no_manual_or_lifecycle_cont
         "revision_id",
         "topology",
         "identity_key",
+        "base_language",
         "selected_layout_candidate_id",
         "selected_layout_version",
         "confirmed_preview_job_id",
@@ -1051,9 +1052,13 @@ def test_schema_is_reversible_revision_owned_and_has_no_manual_or_lifecycle_cont
         "confirmed_preview_job_id": ("preview_jobs", "RESTRICT"),
         "preview_confirmed_by": ("users", "RESTRICT"),
     }
-    assert "ck_product_repository_mappings_preview_confirmation_state" in {
+    assert {
         constraint["name"]
         for constraint in inspector.get_check_constraints("product_repository_mappings")
+    } >= {
+        "ck_product_repository_mappings_base_language_length",
+        "ck_product_repository_mappings_base_language_normalized",
+        "ck_product_repository_mappings_preview_confirmation_state",
     }
     assert "uq_product_repository_mappings_confirmed_preview_job" in {
         constraint["name"]
