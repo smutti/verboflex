@@ -1,10 +1,12 @@
 """Fail-closed architecture checks for the HTTP/worker process boundary."""
 
 import ast
+import inspect
 from collections.abc import Mapping
 from pathlib import Path
 
 from verboflex.worker.celery_app import app
+from verboflex.worker.import_tasks import run_import_job
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY_ROOT = BACKEND_ROOT.parent
@@ -83,3 +85,22 @@ def test_import_background_boundary_registers_run_and_watchdog_without_route_dis
         "verboflex.import.reconcile_stale_jobs"
     )
     _assert_no_worker_boundary_violations({str(path): tree for path, tree in _api_trees()})
+
+
+def test_import_worker_keeps_uuid_only_transport_and_parses_before_finalization() -> None:
+    """Canonical values and source bytes stay in-process and never enter Redis."""
+    from verboflex.services import import_jobs
+
+    assert tuple(inspect.signature(run_import_job).parameters) == ("import_id",)
+    task_source = inspect.getsource(run_import_job)
+    assert "source" not in tuple(inspect.signature(run_import_job).parameters)
+    assert "canonical" not in task_source
+
+    process_tree = ast.parse(inspect.getsource(import_jobs._process_import))
+    called_names = {
+        node.func.id
+        for node in ast.walk(process_tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert "parse_canonical_mapping" in called_names
+    assert "stage_translation_parse" in called_names
