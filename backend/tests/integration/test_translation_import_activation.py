@@ -439,10 +439,12 @@ def _start_refresh_execution(
     with factory.begin() as session:
         execution = session.get_one(ImportExecution, identity.execution_id)
         job = session.get_one(ImportJob, identity.import_id)
-        execution.state = "succeeded"
-        execution.finished_at = datetime.now(UTC)
-        job.state = "current"
-        job.active_baseline_execution_id = execution.id
+        if execution.state == "running":
+            execution.state = "succeeded"
+            execution.finished_at = datetime.now(UTC)
+        if job.state == "running":
+            job.state = "current"
+            job.active_baseline_execution_id = execution.id
     with factory() as session:
         refreshed = import_jobs.start_or_refresh_import(
             session,
@@ -1093,6 +1095,50 @@ def test_activation_advances_dataset_and_baseline_to_the_same_execution(
     assert scope.active_import_job_id == identity.import_id
     assert scope.dataset_version == 1
     assert {value.language for value in values} == {"en", "it"}
+
+
+def test_activation_parser_failure_keeps_every_active_pointer_empty(
+    activation_session_factory: sessionmaker[Session],
+) -> None:
+    identity, repository_id = _seed_running_direct_import(activation_session_factory)
+    references = (_reference(repository_id),)
+    translation_imports = _translation_imports()
+    manifest = translation_imports.stage_translation_parse(
+        activation_session_factory,
+        identity=identity,
+        references=references,
+        result=CanonicalParseResult(
+            issues=(
+                CanonicalIssue(
+                    code="malformed_file",
+                    repository_side="direct",
+                    path="locales.json",
+                    message="Malformed JSON localization file.",
+                ),
+            )
+        ),
+    )
+    assert manifest is not None and not manifest.complete
+
+    assert import_jobs.finish_import_execution(
+        activation_session_factory,
+        identity=identity,
+        references=references,
+        canonical_manifest_digest=manifest.digest,
+    )
+
+    with activation_session_factory() as session:
+        job = session.get_one(ImportJob, identity.import_id)
+        execution = session.get_one(ImportExecution, identity.execution_id)
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        active_value_count = session.scalar(select(text("count(*)")).select_from(TranslationValue))
+    assert execution.state == "failed"
+    assert job.state == "import_failed"
+    assert job.active_baseline_execution_id is None
+    assert scope is None or scope.active_execution_id is None
+    assert active_value_count == 0
 
 
 def test_activation_commits_separate_keys_and_translations_as_one_dataset(

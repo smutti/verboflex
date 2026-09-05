@@ -55,6 +55,7 @@ from verboflex.models.preview_job import PreviewJob
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import ProductRepositoryMapping
 from verboflex.models.repository import Repository
+from verboflex.models.translation import LocalizationScope
 from verboflex.services.bitbucket_oauth import PULLREQUEST_WRITE_SCOPE
 from verboflex.services.preview_jobs import is_current_preview_confirmation
 from verboflex.services.repositories import RepositoryRecord
@@ -62,7 +63,13 @@ from verboflex.services.repository_discovery import (
     SourceDiscoveryAdapter,
     discover_repository_sources_for_record,
 )
-from verboflex.services.translation_imports import stage_translation_parse
+from verboflex.services.translation_imports import (
+    TranslationImportRejected,
+    activate_translation_dataset,
+    require_complete_staged_manifest,
+    stage_translation_parse,
+    staged_manifest_digest,
+)
 
 IMPORT_TASK_NAME = "verboflex.import.run"
 IMPORT_WATCHDOG_BATCH_SIZE = 100
@@ -1587,6 +1594,77 @@ def finish_import_execution(
     identity: ImportExecutionIdentity,
     references: tuple[ImportSourceReferenceRecord, ...] | None,
     movement: SourceMovementClassification | None = None,
+    canonical_manifest_digest: str | None = None,
+    failure_category: ImportErrorCategory = "bounded_failure",
+) -> bool:
+    """Terminalize one execution, rolling canonical activation failures back first."""
+    try:
+        return _finish_import_execution_transaction(
+            factory,
+            identity=identity,
+            references=references,
+            movement=movement,
+            canonical_manifest_digest=canonical_manifest_digest,
+            failure_category=failure_category,
+        )
+    except Exception:
+        if canonical_manifest_digest is None:
+            raise
+        return _terminalize_failed_canonical_activation(
+            factory,
+            identity=identity,
+            failure_category=failure_category,
+        )
+
+
+def _terminalize_failed_canonical_activation(
+    factory: sessionmaker[Session],
+    *,
+    identity: ImportExecutionIdentity,
+    failure_category: ImportErrorCategory,
+) -> bool:
+    with factory.begin() as session:
+        job = session.execute(
+            select(ImportJob).where(ImportJob.id == identity.import_id).with_for_update()
+        ).scalar_one_or_none()
+        execution = session.execute(
+            select(ImportExecution)
+            .where(
+                ImportExecution.id == identity.execution_id,
+                ImportExecution.import_job_id == identity.import_id,
+                ImportExecution.sequence == identity.sequence,
+                ImportExecution.connection_generation == identity.connection_generation,
+            )
+            .with_for_update()
+        ).scalar_one_or_none()
+        if (
+            job is None
+            or execution is None
+            or job.current_execution_id != identity.execution_id
+            or job.state != "running"
+            or execution.state != "running"
+        ):
+            return False
+        failed_at = datetime.now(UTC)
+        execution.state = "failed"
+        execution.finished_at = failed_at
+        job.state = "import_failed"
+        job.error_category = failure_category
+        job.error_message = _public_failure_message(
+            failure_category,
+            has_baseline=job.active_baseline_execution_id is not None,
+        )
+        job.updated_at = failed_at
+    return True
+
+
+def _finish_import_execution_transaction(
+    factory: sessionmaker[Session],
+    *,
+    identity: ImportExecutionIdentity,
+    references: tuple[ImportSourceReferenceRecord, ...] | None,
+    movement: SourceMovementClassification | None = None,
+    canonical_manifest_digest: str | None = None,
     failure_category: ImportErrorCategory = "bounded_failure",
 ) -> bool:
     """Conditionally terminalize only the exact current execution and authority."""
@@ -1664,9 +1742,40 @@ def finish_import_execution(
         )
         validated_references: tuple[ImportSourceReferenceRecord, ...] | None = None
         rewrite_authority: tuple[SourceRewriteCandidate, str] | None = None
+        canonical_scope = None
+        canonical_required = mapping is not None and mapping.base_language is not None
         if references is not None and authority_is_current:
             try:
                 validated_references = _validated_references(identity, references)
+                if canonical_required:
+                    if canonical_manifest_digest is None:
+                        raise ValueError("canonical manifest digest required")
+                    if (
+                        _source_references(
+                            session,
+                            execution_id=identity.execution_id,
+                        )
+                        != validated_references
+                    ):
+                        raise ValueError("canonical source references rejected")
+                    assert mapping is not None
+                    canonical_scope = session.execute(
+                        select(LocalizationScope)
+                        .where(
+                            LocalizationScope.product_id == identity.product_id,
+                            LocalizationScope.mapping_identity_key == mapping.identity_key,
+                            LocalizationScope.current_revision_id == identity.revision_id,
+                            LocalizationScope.current_mapping_id == identity.mapping_id,
+                        )
+                        .with_for_update()
+                    ).scalar_one_or_none()
+                    if canonical_scope is None:
+                        raise ValueError("canonical scope rejected")
+                    require_complete_staged_manifest(
+                        session,
+                        identity=identity,
+                        manifest_digest=canonical_manifest_digest,
+                    )
                 if movement is not None:
                     baseline_references = (
                         _source_references(
@@ -1714,32 +1823,44 @@ def finish_import_execution(
                 )
                 == validated_references
             )
-            for reference in validated_references:
-                session.add(
-                    ImportSourceReference(
-                        execution_id=identity.execution_id,
-                        position=reference.position,
-                        repository_side=reference.repository_side,
-                        repository_id=reference.repository_id,
-                        source_branch=reference.source_branch,
-                        commit_hash=reference.commit_hash,
-                        path=reference.path,
-                        size_bytes=reference.size_bytes,
-                        sha256=reference.sha256,
+            if not canonical_required:
+                for reference in validated_references:
+                    session.add(
+                        ImportSourceReference(
+                            execution_id=identity.execution_id,
+                            position=reference.position,
+                            repository_side=reference.repository_side,
+                            repository_id=reference.repository_id,
+                            source_branch=reference.source_branch,
+                            commit_hash=reference.commit_hash,
+                            path=reference.path,
+                            size_bytes=reference.size_bytes,
+                            sha256=reference.sha256,
+                        )
                     )
+                # Legacy Phase 3 imports persist provenance in this final lock.
+                session.flush()
+            if canonical_required and rewrite_authority is None:
+                assert canonical_scope is not None
+                assert canonical_manifest_digest is not None
+                activate_translation_dataset(
+                    session,
+                    identity=identity,
+                    scope=canonical_scope,
+                    job=job,
+                    execution=execution,
+                    manifest_digest=canonical_manifest_digest,
+                    now=now,
                 )
-            # Persist provenance while the execution is still running.  The
-            # database guard locks that row so finalization cannot race a late
-            # source-reference insert.
-            session.flush()
-            execution.state = "succeeded"
-            execution.finished_at = now
-            job.state = "current"
-            if rewrite_authority is None and not baseline_matches:
-                job.active_baseline_execution_id = execution.id
-            job.error_category = None
-            job.error_message = None
-            session.flush()
+            else:
+                execution.state = "succeeded"
+                execution.finished_at = now
+                job.state = "current"
+                if rewrite_authority is None and not baseline_matches:
+                    job.active_baseline_execution_id = execution.id
+                job.error_category = None
+                job.error_message = None
+                session.flush()
             if rewrite_authority is not None:
                 assert revision is not None
                 assert mapping is not None
@@ -1874,18 +1995,19 @@ def _current_rewrite_authority(
     if proposal is None:
         raise ImportRewriteStale("import rewrite proposal stale")
 
-    proposed_execution = session.execute(
-        select(ImportExecution).where(
-            ImportExecution.id == proposal.proposed_execution_id,
-            ImportExecution.import_job_id == import_id,
-        )
-    ).scalar_one_or_none()
-    old_execution = session.execute(
-        select(ImportExecution).where(
-            ImportExecution.id == proposal.old_baseline_execution_id,
-            ImportExecution.import_job_id == import_id,
-        )
-    ).scalar_one_or_none()
+    proposed_execution_statement = select(ImportExecution).where(
+        ImportExecution.id == proposal.proposed_execution_id,
+        ImportExecution.import_job_id == import_id,
+    )
+    old_execution_statement = select(ImportExecution).where(
+        ImportExecution.id == proposal.old_baseline_execution_id,
+        ImportExecution.import_job_id == import_id,
+    )
+    if for_update:
+        proposed_execution_statement = proposed_execution_statement.with_for_update()
+        old_execution_statement = old_execution_statement.with_for_update()
+    proposed_execution = session.execute(proposed_execution_statement).scalar_one_or_none()
+    old_execution = session.execute(old_execution_statement).scalar_one_or_none()
     try:
         connection_generation = _connected_generation(session)
         mapping_sides = _mapping_sides(mapping)
@@ -2071,6 +2193,39 @@ def get_rewrite_comparison(
         return _rewrite_comparison_record(proposal, deltas)
 
 
+def _persisted_execution_identity(
+    session: Session,
+    *,
+    mapping: ProductRepositoryMapping,
+    job: ImportJob,
+    execution: ImportExecution,
+) -> ImportExecutionIdentity:
+    execution_sides: list[ImportExecutionSide] = []
+    for side in _mapping_sides(mapping):
+        repository = session.get(Repository, side.repository_id)
+        if repository is None:
+            raise ImportRewriteStale("import rewrite proposal stale")
+        execution_sides.append(
+            ImportExecutionSide(
+                role=side.role,
+                repository_id=side.repository_id,
+                workspace=repository.workspace,
+                repository_slug=repository.repository_slug,
+                source_branch=side.source_branch,
+            )
+        )
+    return ImportExecutionIdentity(
+        import_id=job.id,
+        execution_id=execution.id,
+        sequence=execution.sequence,
+        product_id=job.product_id,
+        revision_id=job.revision_id,
+        mapping_id=job.mapping_id,
+        connection_generation=execution.connection_generation,
+        repository_sides=tuple(execution_sides),
+    )
+
+
 def confirm_rewrite_baseline(
     session: Session,
     *,
@@ -2102,8 +2257,41 @@ def confirm_rewrite_baseline(
         ):
             raise ImportRewriteStale("import rewrite proposal stale")
         confirmed_at = datetime.now(UTC)
-        job.active_baseline_execution_id = proposed_execution_id
-        job.updated_at = confirmed_at
+        identity = _persisted_execution_identity(
+            session,
+            mapping=mapping,
+            job=job,
+            execution=proposed_execution,
+        )
+        if mapping.base_language is None:
+            job.active_baseline_execution_id = proposed_execution_id
+            job.updated_at = confirmed_at
+        else:
+            scope = session.execute(
+                select(LocalizationScope)
+                .where(
+                    LocalizationScope.product_id == product_id,
+                    LocalizationScope.mapping_identity_key == mapping.identity_key,
+                    LocalizationScope.current_revision_id == mapping.revision_id,
+                    LocalizationScope.current_mapping_id == mapping.id,
+                )
+                .with_for_update()
+            ).scalar_one_or_none()
+            if scope is None:
+                raise ImportRewriteStale("import rewrite proposal stale")
+            try:
+                manifest_digest = staged_manifest_digest(session, identity=identity)
+                activate_translation_dataset(
+                    session,
+                    identity=identity,
+                    scope=scope,
+                    job=job,
+                    execution=proposed_execution,
+                    manifest_digest=manifest_digest,
+                    now=confirmed_at,
+                )
+            except TranslationImportRejected as error:
+                raise ImportRewriteStale("import rewrite proposal stale") from error
         proposal.status = "confirmed"
         proposal.resolved_at = confirmed_at
         proposal.confirmed_by = actor_id
@@ -2242,9 +2430,11 @@ def execute_import_job(
         if isinstance(processed, ImportProcessingResult):
             references = _validated_references(identity, processed.references)
             movement = processed.movement
+            canonical_manifest_digest = processed.canonical_manifest_digest
         else:
             references = _validated_references(identity, processed)
             movement = None
+            canonical_manifest_digest = None
     except BitbucketProviderReadError as error:
         terminalized = finish_import_execution(
             factory,
@@ -2276,6 +2466,7 @@ def execute_import_job(
             identity=identity,
             references=references,
             movement=movement,
+            canonical_manifest_digest=canonical_manifest_digest,
         )
 
 
@@ -2317,11 +2508,17 @@ async def _process_import(
             )
     durable_references = tuple(references)
     with factory() as session:
+        canonical_import_enabled = _canonical_import_enabled(
+            session,
+            identity=identity,
+        )
         parser_inputs = _confirmed_parser_inputs(
             session,
             identity=identity,
             source_contents=source_contents,
         )
+    if not canonical_import_enabled:
+        return ImportProcessingResult(references=durable_references)
     if parser_inputs:
         parse_result = parse_canonical_mapping(parser_inputs)
     else:
@@ -2346,6 +2543,22 @@ async def _process_import(
     return ImportProcessingResult(
         references=durable_references,
         canonical_manifest_digest=manifest.digest,
+    )
+
+
+def _canonical_import_enabled(
+    session: Session,
+    *,
+    identity: ImportExecutionIdentity,
+) -> bool:
+    return (
+        session.scalar(
+            select(ProductRepositoryMapping.base_language).where(
+                ProductRepositoryMapping.id == identity.mapping_id,
+                ProductRepositoryMapping.revision_id == identity.revision_id,
+            )
+        )
+        is not None
     )
 
 
@@ -2493,8 +2706,8 @@ def process_import(
     *,
     factory: sessionmaker[Session],
     adapter: SourceDiscoveryAdapter,
-) -> ImportProcessingResult:
+) -> tuple[ImportSourceReferenceRecord, ...]:
     """Resolve branches once and retain only exact ordered content metadata."""
     import asyncio
 
-    return asyncio.run(_process_import(identity, factory=factory, adapter=adapter))
+    return asyncio.run(_process_import(identity, factory=factory, adapter=adapter)).references

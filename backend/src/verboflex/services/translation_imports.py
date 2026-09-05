@@ -209,6 +209,67 @@ def stage_translation_parse(
         )
 
 
+def staged_manifest_digest(
+    session: Session,
+    *,
+    identity: ImportExecutionIdentity,
+) -> str:
+    """Rebuild the deterministic digest of durable immutable staging rows."""
+    from verboflex.services.import_jobs import ImportSourceReferenceRecord
+
+    references = tuple(
+        session.scalars(
+            select(ImportSourceReference)
+            .where(ImportSourceReference.execution_id == identity.execution_id)
+            .order_by(ImportSourceReference.position)
+        )
+    )
+    staged_values = tuple(
+        session.scalars(
+            select(StagedTranslationValue)
+            .where(StagedTranslationValue.import_execution_id == identity.execution_id)
+            .order_by(StagedTranslationValue.position)
+        )
+    )
+    issues = tuple(
+        session.scalars(
+            select(TranslationParseIssue)
+            .where(TranslationParseIssue.import_execution_id == identity.execution_id)
+            .order_by(TranslationParseIssue.position)
+        )
+    )
+    reference_records = tuple(
+        ImportSourceReferenceRecord(
+            position=reference.position,
+            repository_side=cast("RepositoryRole", reference.repository_side),
+            repository_id=reference.repository_id,
+            source_branch=reference.source_branch,
+            commit_hash=reference.commit_hash,
+            path=reference.path,
+            size_bytes=reference.size_bytes,
+            sha256=reference.sha256,
+        )
+        for reference in references
+    )
+    return _manifest_digest(
+        identity=identity,
+        references=reference_records,
+        values=[_staged_payload(value) for value in staged_values],
+        issues=[
+            {
+                "column": issue.column,
+                "issue_code": issue.issue_code,
+                "line": issue.line,
+                "message": issue.message,
+                "path": issue.path,
+                "position": issue.position,
+                "repository_side": issue.repository_side,
+            }
+            for issue in issues
+        ],
+    )
+
+
 def require_complete_staged_manifest(
     session: Session,
     *,
@@ -271,12 +332,7 @@ def require_complete_staged_manifest(
         for reference in references
     )
     _validate_references(identity=identity, references=reference_records)
-    digest = _manifest_digest(
-        identity=identity,
-        references=reference_records,
-        values=[_staged_payload(value) for value in staged_values],
-        issues=[],
-    )
+    digest = staged_manifest_digest(session, identity=identity)
     if digest != manifest_digest:
         raise TranslationImportRejected("canonical staged manifest digest mismatch")
     return staged_values
@@ -545,6 +601,54 @@ def reconcile_canonical_translations(
         tombstoned_value_ids=tuple(tombstoned_value_ids),
         affected_value_ids=tuple(sorted(affected_value_ids, key=str)),
     )
+
+
+def activate_translation_dataset(
+    session: Session,
+    *,
+    identity: ImportExecutionIdentity,
+    scope: LocalizationScope,
+    job: ImportJob,
+    execution: ImportExecution,
+    manifest_digest: str,
+    now: datetime | None = None,
+) -> ReconciliationResult:
+    """Reconcile and expose one dataset with its exact source baseline atomically."""
+    if (
+        job.id != identity.import_id
+        or job.current_execution_id != identity.execution_id
+        or job.mapping_id != identity.mapping_id
+        or job.revision_id != identity.revision_id
+        or job.product_id != identity.product_id
+        or job.state not in {"running", "current"}
+        or execution.id != identity.execution_id
+        or execution.import_job_id != identity.import_id
+        or execution.sequence != identity.sequence
+        or execution.connection_generation != identity.connection_generation
+        or execution.state not in {"running", "succeeded"}
+    ):
+        raise TranslationImportRejected("canonical activation authority rejected")
+    activated_at = now or datetime.now(UTC)
+    result = reconcile_canonical_translations(
+        session,
+        identity=identity,
+        scope=scope,
+        manifest_digest=manifest_digest,
+        now=activated_at,
+    )
+    execution.state = "succeeded"
+    execution.finished_at = execution.finished_at or activated_at
+    job.state = "current"
+    job.active_baseline_execution_id = execution.id
+    job.error_category = None
+    job.error_message = None
+    job.updated_at = activated_at
+    session.flush()
+    scope.active_import_job_id = job.id
+    scope.active_execution_id = execution.id
+    scope.dataset_version += 1
+    session.flush()
+    return result
 
 
 def _staged_payload(value: StagedTranslationValue) -> dict[str, object]:
