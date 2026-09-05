@@ -70,6 +70,10 @@ _MODEL_EXPORTS = {
 }
 
 
+def _enum_values(vocabulary: Any) -> tuple[str, ...]:
+    return tuple(member.value for member in vocabulary)
+
+
 def _locator(**overrides: object) -> core.CanonicalLocator:
     values: dict[str, object] = {
         "format": "android_xml",
@@ -144,15 +148,13 @@ def test_canonical_models_export_closed_lowercase_vocabularies() -> None:
     models = importlib.import_module("verboflex.models")
 
     assert set(models.__all__) >= _MODEL_EXPORTS
-    assert tuple(member.value for member in models.SelectorKind) == _SELECTOR_KINDS
-    assert tuple(member.value for member in models.ReviewState) == _REVIEW_STATES
-    assert tuple(member.value for member in models.EffectiveConstraintSource) == (
-        _EFFECTIVE_CONSTRAINT_SOURCES
-    )
-    assert tuple(member.value for member in models.ParseIssueCode) == _ISSUE_CODES
-    assert get_args(core.SelectorKind) == tuple(member.value for member in models.SelectorKind)
-    assert get_args(core.ReviewState) == tuple(member.value for member in models.ReviewState)
-    assert get_args(core.IssueCode) == tuple(member.value for member in models.ParseIssueCode)
+    assert _enum_values(models.SelectorKind) == _SELECTOR_KINDS
+    assert _enum_values(models.ReviewState) == _REVIEW_STATES
+    assert _enum_values(models.EffectiveConstraintSource) == _EFFECTIVE_CONSTRAINT_SOURCES
+    assert _enum_values(models.ParseIssueCode) == _ISSUE_CODES
+    assert get_args(core.SelectorKind) == _enum_values(models.SelectorKind)
+    assert get_args(core.ReviewState) == _enum_values(models.ReviewState)
+    assert get_args(core.IssueCode) == _enum_values(models.ParseIssueCode)
 
     for vocabulary in (
         models.SelectorKind,
