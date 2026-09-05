@@ -9,16 +9,21 @@ import {
   confirmAdminImportRewriteBaseline,
   confirmAdminPreviewJob,
   createAdminActiveRevisionRevalidationJob,
+  deleteTranslationConstraint,
   getAdminBitbucketStatus,
   getAdminActiveRevisionRevalidationJob,
   getAdminImport,
   getAdminImportRewriteComparison,
   getAdminProductReactivationEligibility,
   getAdminRepositoryBranch,
+  getTranslationGroup,
   listAdminPublishedMappingImports,
   listAdminRevisionMappings,
+  listTranslationOptions,
   listAdminUsers,
+  putTranslationConstraint,
   reconnectAdminBitbucketOauth,
+  searchTranslations,
   startAdminPublishedMappingImport,
 } from "./client/sdk.gen";
 import type {
@@ -39,6 +44,9 @@ import type {
   AdminRepositoryListResponse,
   AdminProductReactivationEligibilityResponse,
   AdminUserListResponse,
+  DeleteTranslationConstraintData,
+  DeleteTranslationConstraintRequest,
+  DeleteTranslationConstraintResponse,
   ConfirmAdminActiveRevisionRevalidationData,
   ConfirmAdminActiveRevisionRevalidationResponse,
   ConfirmAdminImportRewriteBaselineData,
@@ -57,13 +65,30 @@ import type {
   GetAdminProductReactivationEligibilityResponse,
   GetAdminRepositoryBranchData,
   GetAdminRepositoryBranchResponse,
+  GetTranslationGroupData,
+  GetTranslationGroupResponse,
+  ImportDatasetStatus,
+  ImportParserIssue,
+  ListTranslationOptionsData,
+  ListTranslationOptionsResponse,
   ListAdminRevisionMappingsData,
   ListAdminRevisionMappingsResponse,
   ListAdminPublishedMappingImportsData,
   ListAdminPublishedMappingImportsResponse,
   ListAdminUsersResponse,
+  PutTranslationConstraintData,
+  PutTranslationConstraintRequest,
+  PutTranslationConstraintResponse,
+  SearchTranslationsData,
+  SearchTranslationsResponse,
   StartAdminPublishedMappingImportData,
   StartAdminPublishedMappingImportResponse,
+  TranslationConstraintMutationResponse,
+  TranslationConstraintProjectionResponse,
+  TranslationGroupDetailResponse,
+  TranslationOptionsResponse,
+  TranslationSearchPageResponse,
+  TranslationValueResponse,
 } from "./client/types.gen";
 
 type OpenApiSchema = {
@@ -99,8 +124,12 @@ const sensitiveAdminProperties = new Set([
   "attempts",
   "authorization_url",
   "client_secret",
+  "correlation_id",
   "credentials",
+  "database_query",
   "encryption_key",
+  "exception",
+  "exception_message",
   "next",
   "next_url",
   "provider_body",
@@ -109,12 +138,15 @@ const sensitiveAdminProperties = new Set([
   "provider_next",
   "provider_next_url",
   "provider_url",
+  "queue_name",
   "raw_authority",
   "raw_body",
   "raw_source",
   "refresh_token",
   "refresh_token_ciphertext",
   "source_bytes",
+  "source_file_content",
+  "sql",
   "stack",
   "stack_trace",
   "state_expires_in",
@@ -123,6 +155,7 @@ const sensitiveAdminProperties = new Set([
   "token_ciphertext",
   "token_type",
   "task_id",
+  "staging_path",
   "effective_authority",
   "generation",
   "scope",
@@ -136,6 +169,7 @@ const handwrittenSources = import.meta.glob("/src/**/*.{ts,tsx}", {
 
 const generatedSdkSource = handwrittenSources["/src/api/client/sdk.gen.ts"];
 const generatedTypesSource = handwrittenSources["/src/api/client/types.gen.ts"];
+const generatedIndexSource = handwrittenSources["/src/api/client/index.ts"];
 
 function createRecordingApiClient(responseBody: unknown) {
   const requests: Request[] = [];
@@ -356,6 +390,20 @@ const phaseThreeAdminOperationIds = new Map([
   ],
 ]);
 
+const phaseFourTranslationOperationIds = new Map([
+  ["GET /api/v1/translations/options", "listTranslationOptions"],
+  ["GET /api/v1/translations", "searchTranslations"],
+  ["GET /api/v1/translations/{translation_group_id}", "getTranslationGroup"],
+  [
+    "PUT /api/v1/translations/{translation_group_id}/constraints/{language}",
+    "putTranslationConstraint",
+  ],
+  [
+    "DELETE /api/v1/translations/{translation_group_id}/constraints/{language}",
+    "deleteTranslationConstraint",
+  ],
+]);
+
 function findHandwrittenAdminUserWireTypes(
   file: string,
   sourceText: string,
@@ -400,6 +448,228 @@ function findHandwrittenAdminUserWireTypes(
 }
 
 describe("canonical generated Phase 3 admin client", () => {
+  it("calls exactly five generated translation operations with encoded inputs and bearer authority", async () => {
+    const groupId = "10000000-0000-4000-8000-000000000001";
+    const productId = "20000000-0000-4000-8000-000000000002";
+    const query = "menu/key?contains=# +% & Unicode à";
+    const cursor = "vf.translation/cursor?opaque=# +% & next";
+    const language = "zh-Hant-TW";
+    const putBody = {
+      max_chars: 0,
+      expected_version: 7,
+    } satisfies PutTranslationConstraintRequest;
+    const deleteBody = {
+      expected_version: 8,
+    } satisfies DeleteTranslationConstraintRequest;
+    const { apiClient, requests } = createRecordingApiClient({});
+    const authority = "phase-four-memory-bearer";
+
+    await listTranslationOptions({ auth: authority, client: apiClient });
+    await searchTranslations({
+      auth: authority,
+      client: apiClient,
+      query: {
+        q: query,
+        product_id: productId,
+        language,
+        state: "approved",
+        violation: "over_limit",
+        deleted: "all",
+        page_size: 50,
+        cursor,
+      },
+    });
+    await getTranslationGroup({
+      auth: authority,
+      client: apiClient,
+      path: { translation_group_id: groupId },
+    });
+    await putTranslationConstraint({
+      auth: authority,
+      body: putBody,
+      client: apiClient,
+      path: { translation_group_id: groupId, language },
+    });
+    await deleteTranslationConstraint({
+      auth: authority,
+      body: deleteBody,
+      client: apiClient,
+      path: { translation_group_id: groupId, language },
+    });
+
+    expect(requests.map((request) => request.method)).toEqual([
+      "GET",
+      "GET",
+      "GET",
+      "PUT",
+      "DELETE",
+    ]);
+    expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+      "/api/v1/translations/options",
+      "/api/v1/translations",
+      `/api/v1/translations/${groupId}`,
+      `/api/v1/translations/${groupId}/constraints/${language}`,
+      `/api/v1/translations/${groupId}/constraints/${language}`,
+    ]);
+    const searchUrl = new URL(requests[1]!.url);
+    expect(searchUrl.searchParams.get("q")).toBe(query);
+    expect(searchUrl.searchParams.get("product_id")).toBe(productId);
+    expect(searchUrl.searchParams.get("language")).toBe(language);
+    expect(searchUrl.searchParams.get("state")).toBe("approved");
+    expect(searchUrl.searchParams.get("violation")).toBe("over_limit");
+    expect(searchUrl.searchParams.get("deleted")).toBe("all");
+    expect(searchUrl.searchParams.get("page_size")).toBe("50");
+    expect(searchUrl.searchParams.get("cursor")).toBe(cursor);
+    expect(searchUrl.hash).toBe("");
+    expect(requests.slice(0, 3).every((request) => request.body === null)).toBe(
+      true,
+    );
+    expect(await requests[3]!.clone().json()).toEqual(putBody);
+    expect(await requests[4]!.clone().json()).toEqual(deleteBody);
+    expect(
+      requests.every(
+        (request) =>
+          request.headers.get("Authorization") === `Bearer ${authority}`,
+      ),
+    ).toBe(true);
+    expect(requests.every((request) => !request.url.includes(authority))).toBe(
+      true,
+    );
+  });
+
+  it("exports exact translation and parser outcome types without handwritten transport", () => {
+    expectTypeOf<
+      ListTranslationOptionsData["url"]
+    >().toEqualTypeOf<"/api/v1/translations/options">();
+    expectTypeOf<ListTranslationOptionsResponse>().toEqualTypeOf<TranslationOptionsResponse>();
+    expectTypeOf<NonNullable<SearchTranslationsData["query"]>>().toEqualTypeOf<{
+      q?: string | null;
+      product_id?: string | null;
+      language?: string | null;
+      state?: "draft" | "approved" | "rejected" | null;
+      violation?: "over_limit" | "within_limit" | "no_max" | null;
+      deleted?: "active" | "deleted" | "all";
+      page_size?: 50;
+      cursor?: string | null;
+    }>();
+    expectTypeOf<SearchTranslationsResponse>().toEqualTypeOf<TranslationSearchPageResponse>();
+    expectTypeOf<GetTranslationGroupData["path"]>().toEqualTypeOf<{
+      translation_group_id: string;
+    }>();
+    expectTypeOf<GetTranslationGroupResponse>().toEqualTypeOf<TranslationGroupDetailResponse>();
+    expectTypeOf<PutTranslationConstraintData["path"]>().toEqualTypeOf<{
+      translation_group_id: string;
+      language: string;
+    }>();
+    expectTypeOf<
+      PutTranslationConstraintData["body"]
+    >().toEqualTypeOf<PutTranslationConstraintRequest>();
+    expectTypeOf<PutTranslationConstraintResponse>().toEqualTypeOf<TranslationConstraintMutationResponse>();
+    expectTypeOf<
+      DeleteTranslationConstraintData["body"]
+    >().toEqualTypeOf<DeleteTranslationConstraintRequest>();
+    expectTypeOf<DeleteTranslationConstraintResponse>().toEqualTypeOf<TranslationConstraintMutationResponse>();
+
+    expectTypeOf<
+      TranslationValueResponse["selector_version"]
+    >().toEqualTypeOf<1>();
+    expectTypeOf<TranslationValueResponse["selector_kind"]>().toEqualTypeOf<
+      | "scalar"
+      | "android_quantity"
+      | "android_array_item"
+      | "qt_numerus"
+      | "qt_length_variant"
+      | "json_path"
+    >();
+    expectTypeOf<TranslationValueResponse["structure"]>().toEqualTypeOf<
+      Array<unknown>
+    >();
+    expectTypeOf<TranslationValueResponse["source_text"]>().toEqualTypeOf<
+      string | null
+    >();
+    expectTypeOf<TranslationValueResponse["translated_text"]>().toEqualTypeOf<
+      string | null
+    >();
+    expectTypeOf<TranslationValueResponse["deleted_at"]>().toEqualTypeOf<
+      string | null
+    >();
+    expectTypeOf<TranslationValueResponse["provenance"]>().toEqualTypeOf<
+      TranslationValueResponse["provenance"]
+    >();
+    expectTypeOf<
+      TranslationConstraintProjectionResponse["maximum"]
+    >().toEqualTypeOf<number | null>();
+    expectTypeOf<
+      TranslationConstraintProjectionResponse["source"]
+    >().toEqualTypeOf<"none" | "base_default" | "language_override">();
+    expectTypeOf<
+      TranslationConstraintProjectionResponse["status"]
+    >().toEqualTypeOf<"no_max" | "within_limit" | "over_limit">();
+    expectTypeOf<
+      TranslationConstraintMutationResponse["version"]
+    >().toEqualTypeOf<number | null>();
+    expectTypeOf<
+      AdminPublishedMappingImportResponse["dataset_status"]
+    >().toEqualTypeOf<ImportDatasetStatus>();
+    expectTypeOf<
+      AdminPublishedMappingImportResponse["parser_issues"]
+    >().toEqualTypeOf<Array<ImportParserIssue>>();
+    expectTypeOf<
+      AdminPublishedMappingImportResponse["parser_issue_remaining_count"]
+    >().toEqualTypeOf<number>();
+
+    const actualOperations = new Map<string, string>();
+    for (const [path, pathItem] of Object.entries(openApi.paths).filter(
+      ([path]) => path.startsWith("/api/v1/translations"),
+    )) {
+      for (const [method, operation] of Object.entries(pathItem)) {
+        actualOperations.set(
+          `${method.toUpperCase()} ${path}`,
+          operation.operationId!,
+        );
+      }
+    }
+    expect(actualOperations).toEqual(phaseFourTranslationOperationIds);
+    expect(new Set(actualOperations.values()).size).toBe(5);
+
+    for (const operation of phaseFourTranslationOperationIds.values()) {
+      expect(
+        generatedSdkSource.match(
+          new RegExp(`export const ${operation}\\b`, "gu"),
+        ),
+      ).toHaveLength(1);
+      expect(
+        generatedIndexSource.match(new RegExp(`\\b${operation}\\b`, "gu")),
+      ).toHaveLength(1);
+    }
+
+    const guardedSchemas = Object.keys(openApi.components.schemas).filter(
+      (name) =>
+        /^(?:Translation|PutTranslationConstraint|DeleteTranslationConstraint|ImportParserIssue$|ImportDatasetStatus$)/u.test(
+          name,
+        ),
+    );
+    for (const schemaName of guardedSchemas) {
+      const schema = openApi.components.schemas[schemaName];
+      expect(schema, `${schemaName} must remain canonical`).toBeDefined();
+      const leaked = [...collectSchemaProperties(schema!)].filter((property) =>
+        sensitiveAdminProperties.has(property),
+      );
+      expect(leaked, `${schemaName} leaked internal material`).toEqual([]);
+    }
+
+    const handwrittenTranslationTransports = Object.entries(handwrittenSources)
+      .filter(
+        ([file]) => !file.includes("/api/client/") && !file.includes(".test."),
+      )
+      .filter(([, source]) => source.includes("/api/v1/translations"))
+      .map(([file]) => file);
+    expect(handwrittenTranslationTransports).toEqual([]);
+    expect(generatedSdkSource).not.toMatch(
+      /(?:localStorage|sessionStorage|indexedDB)/u,
+    );
+  });
+
   it("calls exactly five generated import operations through VerboFlex bearer routes", async () => {
     const productId = "10000000-0000-4000-8000-000000000001";
     const mappingId = "20000000-0000-4000-8000-000000000002";
