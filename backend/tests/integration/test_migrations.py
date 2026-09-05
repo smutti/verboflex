@@ -58,6 +58,10 @@ PHASE3_IMPORT_TABLES = {
     "import_source_references",
 }
 PREVIEW_WATCHDOG_INDEX = "ix_preview_jobs_watchdog_state_started_at"
+MAPPING_BASE_LANGUAGE_CONSTRAINTS = {
+    "ck_product_repository_mappings_base_language_length",
+    "ck_product_repository_mappings_base_language_normalized",
+}
 
 
 @pytest.fixture
@@ -352,6 +356,142 @@ def _seed_import_schema_graph(engine: Engine) -> dict[str, UUID]:
             identities,
         )
     return identities
+
+
+def test_mapping_base_language_migration_is_normalized_nullable_and_reversible(
+    migrated_database: tuple[Config, Engine],
+) -> None:
+    """Revision 0015 persists exact language authority without guessing legacy rows."""
+    from verboflex.models.product_mapping import ProductRepositoryMapping
+
+    config, engine = migrated_database
+    command.upgrade(config, "0014_import_source_reference_insert_guard")
+    identities = _seed_import_schema_graph(engine)
+    assert "base_language" not in {
+        column["name"] for column in inspect(engine).get_columns("product_repository_mappings")
+    }
+
+    command.upgrade(config, "head")
+    inspector = inspect(engine)
+    columns = {
+        column["name"]: column for column in inspector.get_columns("product_repository_mappings")
+    }
+    assert "base_language" in columns
+
+    script = ScriptDirectory.from_config(config)
+    revision = script.get_revision("0015_mapping_base_language")
+    assert revision is not None
+    assert revision.down_revision == "0014_import_source_reference_insert_guard"
+
+    assert columns["base_language"]["nullable"] is True
+    assert columns["base_language"]["type"].length is None
+    assert {
+        constraint["name"]
+        for constraint in inspector.get_check_constraints("product_repository_mappings")
+    } >= MAPPING_BASE_LANGUAGE_CONSTRAINTS
+    assert all(
+        "base_language" not in index["column_names"]
+        for index in inspector.get_indexes("product_repository_mappings")
+    )
+
+    model_column = ProductRepositoryMapping.__table__.columns["base_language"]
+    assert model_column.nullable is True
+    assert model_column.type.length is None
+    assert {
+        constraint.name
+        for constraint in ProductRepositoryMapping.__table__.constraints
+        if constraint.name is not None
+    } >= MAPPING_BASE_LANGUAGE_CONSTRAINTS
+
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                text(
+                    "SELECT base_language FROM product_repository_mappings WHERE id = :mapping_id"
+                ),
+                {"mapping_id": identities["mapping"]},
+            ).scalar_one()
+            is None
+        )
+
+    accepted_languages = ("en", "eng", "en-US", "zh-Hant", "zh-Hant-419")
+    for base_language in accepted_languages:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE product_repository_mappings SET base_language = :base_language "
+                    "WHERE id = :mapping_id"
+                ),
+                {
+                    "base_language": base_language,
+                    "mapping_id": identities["mapping"],
+                },
+            )
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT base_language FROM product_repository_mappings "
+                        "WHERE id = :mapping_id"
+                    ),
+                    {"mapping_id": identities["mapping"]},
+                ).scalar_one()
+                == base_language
+            )
+
+    malformed_languages = (
+        "",
+        "EN",
+        "en_us",
+        "en-us",
+        "english",
+        "en-US-extra",
+        " en",
+        "a" * 65,
+    )
+    for base_language in malformed_languages:
+        with pytest.raises(IntegrityError), engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE product_repository_mappings SET base_language = :base_language "
+                    "WHERE id = :mapping_id"
+                ),
+                {
+                    "base_language": base_language,
+                    "mapping_id": identities["mapping"],
+                },
+            )
+
+    command.downgrade(config, "0014_import_source_reference_insert_guard")
+    assert "base_language" not in {
+        column["name"] for column in inspect(engine).get_columns("product_repository_mappings")
+    }
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                text("SELECT count(*) FROM product_repository_mappings WHERE id = :mapping_id"),
+                {"mapping_id": identities["mapping"]},
+            ).scalar_one()
+            == 1
+        )
+
+    command.upgrade(config, "head")
+    assert (
+        _constraint_names(
+            engine,
+            "product_repository_mappings",
+        )
+        >= MAPPING_BASE_LANGUAGE_CONSTRAINTS
+    )
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                text(
+                    "SELECT base_language FROM product_repository_mappings WHERE id = :mapping_id"
+                ),
+                {"mapping_id": identities["mapping"]},
+            ).scalar_one()
+            is None
+        )
 
 
 def _insert_import_execution(
