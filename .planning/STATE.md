@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 04
 current_phase_name: Localization Import, Search, and Constraints
 status: executing
-stopped_at: Completed 04-11-PLAN.md
-last_updated: "2026-09-05T12:12:21.948Z"
+stopped_at: Completed 04-12-PLAN.md
+last_updated: "2026-09-05T12:35:03.423Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 04 execution started
-state_head: 4caf01d0b09226e2e890c08c9e877022baa9fed9
+state_head: 7bd55a0f2bfbfb5a2de81027b03b78bd773fc78a
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 104
-  completed_plans: 91
+  completed_plans: 92
   percent: 38
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 ## Current Position
 
 Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
-Plan: 14 of 27
+Plan: 15 of 27
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 04 execution started
 
@@ -151,6 +151,7 @@ Progress: [████████░░░░░░░░░░░░] 3/8 pha
 | Phase 04 P09 | 18min | 3 tasks | 5 files |
 | Phase 04 P27 | 6min | 1 tasks | 2 files |
 | Phase 04 P11 | 38min | 3 tasks | 5 files |
+| Phase 04 P12 | 16min | 1 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -444,6 +445,9 @@ Recent decisions affecting current work:
 - [Phase 04]: Canonical imports persist immutable execution-owned source/value or issue manifests before any active pointer changes.
 - [Phase 04]: Refresh identity excludes paths and transient mapping UUIDs; renames remain explicit old tombstone plus unrelated new Draft.
 - [Phase 04]: Approved survives changed imported content only with exact durable correlation and immutable expected-content equality; source changes always reset targets to Draft.
+- [Phase 04]: Canonical dataset status comes from the locked semantic localization scope: current success is active, a different active execution is retained, and absent authority is not_created.
+- [Phase 04]: Public parser diagnostics map five closed issue codes to fixed copy keys and never serialize stored repository-controlled messages.
+- [Phase 04]: Parser outcomes order Direct, or Keys before Translations, then preserve persisted provider-file position within each side.
 
 ### Pending Todos
 
@@ -484,6 +488,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-05T12:12:21.846Z
-Stopped at: Completed 04-11-PLAN.md
+Last session: 2026-09-05T12:35:03.318Z
+Stopped at: Completed 04-12-PLAN.md
 Resume file: None

@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 4
 waived_count: 0
-fixed_count: 56
-total_count: 60
-last_updated: 2026-09-05T12:13:38.938Z
+fixed_count: 57
+total_count: 61
+last_updated: 2026-09-05T12:34:44.443Z
 ---
 
 # Broken Windows Ledger
@@ -75,6 +75,7 @@ last_updated: 2026-09-05T12:13:38.938Z
 | 58 | 04 | deviation | backend/tests/integration/test_translation_import_activation.py |  | Flushed the published test revision before assigning it as active to satisfy immutable-graph trigger ordering. | fixed |  | 2026-09-05T12:12:31.534Z | 2026-09-05T12:13:38.811Z |
 | 59 | 04 | deviation | backend/src/verboflex/services/translation_imports.py |  | Deferred semantic-scope mapping changes from staging to the atomic activation pointer swap. | fixed |  | 2026-09-05T12:12:31.595Z | 2026-09-05T12:13:38.876Z |
 | 60 | 04 | deviation | backend/src/verboflex/services/translation_imports.py |  | Created inactive scope authority for issue-free empty manifests so complete empty files can activate. | fixed |  | 2026-09-05T12:12:31.660Z | 2026-09-05T12:13:38.938Z |
+| 61 | 04 | deviation | backend/tests/integration/test_import_jobs.py |  | Updated established exact import response assertions for additive dataset and parser outcome fields | fixed |  | 2026-09-05T12:34:17.131Z | 2026-09-05T12:34:44.443Z |
 
 ````json
 [
@@ -797,6 +798,18 @@ last_updated: 2026-09-05T12:13:38.938Z
     "reason": "",
     "recorded_at": "2026-09-05T12:12:31.660Z",
     "resolved_at": "2026-09-05T12:13:38.938Z"
+  },
+  {
+    "id": 61,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/tests/integration/test_import_jobs.py",
+    "line": null,
+    "description": "Updated established exact import response assertions for additive dataset and parser outcome fields",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-05T12:34:17.131Z",
+    "resolved_at": "2026-09-05T12:34:44.443Z"
   }
 ]
 ````
