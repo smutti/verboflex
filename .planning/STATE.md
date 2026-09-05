@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 04
 current_phase_name: Localization Import, Search, and Constraints
 status: executing
-stopped_at: Completed 04-21-PLAN.md
-last_updated: "2026-09-05T14:29:17.406Z"
+stopped_at: Completed 04-25-PLAN.md
+last_updated: "2026-09-05T14:50:15.151Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 04 execution started
-state_head: 400af7fecc769bf37508d4798edebc70833cf3d1
+state_head: 1b08ae6fc9586c518f1ea9737092c166064cf0c6
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 104
-  completed_plans: 94
+  completed_plans: 95
   percent: 38
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 ## Current Position
 
 Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
-Plan: 17 of 27
+Plan: 18 of 27
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 04 execution started
 
@@ -154,6 +154,7 @@ Progress: [████████░░░░░░░░░░░░] 3/8 pha
 | Phase 04 P12 | 16min | 1 tasks | 6 files |
 | Phase 04 P13 | 88min | 2 tasks | 8 files |
 | Phase 04 P21 | 17min | 2 tasks | 3 files |
+| Phase 04 P25 | 18min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -457,6 +458,10 @@ Recent decisions affecting current work:
 - [Phase 04]: Constraint precedence is exact-language override, dynamic mapping base-language default, then none; inherited absence is derived rather than stored.
 - [Phase 04]: Every Phase 4 constraint boundary recomputes grapheme counts and eligibility inside the caller transaction through one shared service.
 - [Phase 04]: Constraint PUT and DELETE use exact integer/version semantics and deterministic authority-row locks while leaving commit ownership to the caller.
+- [Phase 04]: Constraint mutation access is limited to admin and product_manager_reviewer while all authenticated in-scope roles retain authoritative detail reads.
+- [Phase 04]: Constraint mutation responses reuse the grouped-detail projection and include fresh exact group counts and the server-owned version.
+- [Phase 04]: Unavailable constraint authority maps to generic 404 and stale optimistic versions map to generic 409 without mutation.
+- [Phase 04]: Credentialed CORS explicitly permits PUT and DELETE for the separate browser SPA constraint workflow.
 
 ### Pending Todos
 
@@ -497,6 +502,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-05T14:29:17.310Z
-Stopped at: Completed 04-21-PLAN.md
+Last session: 2026-09-05T14:50:15.053Z
+Stopped at: Completed 04-25-PLAN.md
 Resume file: None
