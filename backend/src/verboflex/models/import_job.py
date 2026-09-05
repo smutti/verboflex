@@ -53,6 +53,11 @@ class ImportJob(Base):
             "mapping_id",
             name="uq_import_jobs_mapping",
         ),
+        UniqueConstraint(
+            "id",
+            "mapping_id",
+            name="uq_import_jobs_id_mapping",
+        ),
         ForeignKeyConstraint(
             ["product_id", "revision_id"],
             ["product_revisions.product_id", "product_revisions.id"],

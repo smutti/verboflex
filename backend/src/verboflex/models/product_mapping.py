@@ -69,6 +69,12 @@ class ProductRepositoryMapping(Base):
             name="uq_product_mappings_revision_id_id",
         ),
         UniqueConstraint(
+            "revision_id",
+            "id",
+            "identity_key",
+            name="uq_product_mappings_revision_id_identity",
+        ),
+        UniqueConstraint(
             "confirmed_preview_job_id",
             name="uq_product_repository_mappings_confirmed_preview_job",
         ),

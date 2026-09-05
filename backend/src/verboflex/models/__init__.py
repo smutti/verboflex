@@ -18,6 +18,15 @@ from verboflex.models.product_mapping import (
 )
 from verboflex.models.repository import Repository
 from verboflex.models.role import Role, user_roles_table
+from verboflex.models.translation import (
+    LocalizationScope,
+    StagedTranslationValue,
+    TranslationKey,
+    TranslationParseIssue,
+    TranslationValue,
+    TranslationValueLocator,
+    TranslationValueRevision,
+)
 from verboflex.models.user import User
 
 __all__ = [
@@ -29,6 +38,7 @@ __all__ = [
     "ImportRewriteDelta",
     "ImportRewriteProposal",
     "ImportSourceReference",
+    "LocalizationScope",
     "PreviewJob",
     "Product",
     "ProductMappingAllowedTarget",
@@ -37,6 +47,12 @@ __all__ = [
     "ProductRevision",
     "Repository",
     "Role",
+    "StagedTranslationValue",
+    "TranslationKey",
+    "TranslationParseIssue",
+    "TranslationValue",
+    "TranslationValueLocator",
+    "TranslationValueRevision",
     "User",
     "user_roles_table",
 ]
