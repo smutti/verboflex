@@ -278,7 +278,11 @@ def test_declarative_metadata_contains_every_auth_model() -> None:
     assert set(Base.metadata.tables) >= EXPECTED_TABLES
 
 
-def _seed_import_schema_graph(engine: Engine) -> dict[str, UUID]:
+def _seed_import_schema_graph(
+    engine: Engine,
+    *,
+    base_language: str | None = None,
+) -> dict[str, UUID]:
     """Create two independent published mapping owners for forged-identity checks."""
     identities = {
         "product": uuid4(),
@@ -334,17 +338,26 @@ def _seed_import_schema_graph(engine: Engine) -> dict[str, UUID]:
                 "foreign_repository_slug": (f"foreign-{identities['foreign_repository'].hex[:12]}"),
             },
         )
+        mapping_columns = "id, revision_id, topology, identity_key"
+        mapping_values = ":mapping, :revision, 'direct', :mapping_key"
+        foreign_mapping_values = (
+            ":foreign_mapping, :foreign_revision, 'direct', :foreign_mapping_key"
+        )
+        if base_language is not None:
+            mapping_columns += ", base_language"
+            mapping_values += ", :base_language"
+            foreign_mapping_values += ", :base_language"
         connection.execute(
             text(
                 "INSERT INTO product_repository_mappings "
-                "(id, revision_id, topology, identity_key, base_language) VALUES "
-                "(:mapping, :revision, 'direct', :mapping_key, 'en'), "
-                "(:foreign_mapping, :foreign_revision, 'direct', :foreign_mapping_key, 'en')"
+                f"({mapping_columns}) VALUES "
+                f"({mapping_values}), ({foreign_mapping_values})"
             ),
             {
                 **identities,
                 "mapping_key": f"import-{identities['mapping']}",
                 "foreign_mapping_key": f"foreign-{identities['foreign_mapping']}",
+                "base_language": base_language,
             },
         )
         connection.execute(
@@ -682,7 +695,7 @@ def test_canonical_translation_identity_history_and_staging_are_database_authori
     """Natural identity excludes locators while ownership and provenance fail closed."""
     config, engine = migrated_database
     command.upgrade(config, "head")
-    identities = _seed_import_schema_graph(engine)
+    identities = _seed_import_schema_graph(engine, base_language="en")
     import_id, execution_id = _insert_import_execution(engine, identities)
     scope_id = _insert_localization_scope(engine, identities)
     key_id = uuid4()
