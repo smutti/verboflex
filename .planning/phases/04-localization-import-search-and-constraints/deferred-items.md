@@ -23,3 +23,14 @@
 - [ ] The broad backend worker smoke tests require a live Redis/Celery worker at
   `127.0.0.1:56379`; that external service was not running during Plan 04-10. The
   focused migration/model gates are independent of the worker and passed.
+
+## Discovered during Plan 04-13
+
+- [ ] The exact OpenAPI operation-set and checked-in schema-export assertions now
+  detect the three planned translation read operations. Plan 04-15 explicitly owns
+  freezing that final operation inventory and regenerating the frontend client after
+  all dependent Phase 4 backend schema writers finish.
+- [ ] Package-wide `ruff format --check backend` still reports only the pre-existing
+  formatting drift in migrations `0011_active_revision_revalidations.py` and
+  `0012_import_jobs.py`; all Plan 04-13 files pass focused format, lint, and strict
+  typing checks.

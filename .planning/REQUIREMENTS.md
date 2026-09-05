@@ -59,13 +59,13 @@
 
 ### Search and Review Navigation
 
-- [ ] **SRCH-01**: Product manager can search and filter translations by product.
-- [ ] **SRCH-02**: Product manager can search for a specific translation in a selected language.
-- [ ] **SRCH-03**: Product manager can search by translation key or text.
-- [ ] **SRCH-04**: Product manager can filter translations by approval state.
-- [ ] **SRCH-05**: Product manager can filter translations by maximum-length constraint violation status.
-- [ ] **SRCH-06**: User can open a translation detail view from search results.
-- [ ] **SRCH-07**: Translation detail view shows product, language, key, source text when available, translated text, state, file path, repository, branch, constraints, comments, and pending change status.
+- [x] **SRCH-01**: Product manager can search and filter translations by product.
+- [x] **SRCH-02**: Product manager can search for a specific translation in a selected language.
+- [x] **SRCH-03**: Product manager can search by translation key or text.
+- [x] **SRCH-04**: Product manager can filter translations by approval state.
+- [x] **SRCH-05**: Product manager can filter translations by maximum-length constraint violation status.
+- [x] **SRCH-06**: User can open a translation detail view from search results.
+- [x] **SRCH-07**: Translation detail view shows product, language, key, source text when available, translated text, state, file path, repository, branch, constraints, comments, and pending change status.
 - [x] **SRCH-08**: Search results are paginated or virtualized so large translation sets remain usable.
 
 ### Constraints
@@ -209,13 +209,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FMT-06 | Phase 4 | Complete |
 | FMT-07 | Phase 4 | Complete |
 | FMT-08 | Phase 4 | Complete |
-| SRCH-01 | Phase 4 | Pending |
-| SRCH-02 | Phase 4 | Pending |
-| SRCH-03 | Phase 4 | Pending |
-| SRCH-04 | Phase 4 | Pending |
-| SRCH-05 | Phase 4 | Pending |
-| SRCH-06 | Phase 4 | Pending |
-| SRCH-07 | Phase 4 | Pending |
+| SRCH-01 | Phase 4 | Complete |
+| SRCH-02 | Phase 4 | Complete |
+| SRCH-03 | Phase 4 | Complete |
+| SRCH-04 | Phase 4 | Complete |
+| SRCH-05 | Phase 4 | Complete |
+| SRCH-06 | Phase 4 | Complete |
+| SRCH-07 | Phase 4 | Complete |
 | SRCH-08 | Phase 4 | Complete |
 | CONS-01 | Phase 4 | Complete |
 | CONS-02 | Phase 4 | Complete |
