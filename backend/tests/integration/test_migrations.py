@@ -15,6 +15,7 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from psycopg import connect, sql
 from sqlalchemy import Engine, create_engine, inspect, text
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from alembic import command
@@ -635,6 +636,49 @@ def _insert_localization_scope(
     return scope_id
 
 
+def _insert_translation_projection(
+    connection: Connection,
+    *,
+    scope_id: UUID,
+    key_id: UUID,
+    language: str,
+    position: int,
+    count: int,
+    maximum: int | None,
+    source: str,
+    over: bool,
+    deleted: bool = False,
+) -> None:
+    """Insert one projection while keeping selector identity valid and unique."""
+    selector_bytes = f'{{"position":{position}}}'.encode()
+    connection.execute(
+        text(
+            "INSERT INTO translation_values "
+            "(id, scope_id, translation_key_id, language, selector_version, "
+            "selector_kind, selector_bytes, selector_digest, display_text, "
+            "structure, review_state, grapheme_count, effective_max_chars, "
+            "effective_constraint_source, is_over_limit, is_deleted, deleted_at) "
+            "VALUES (:id, :scope_id, :key_id, :language, 1, 'scalar', "
+            ":selector_bytes, :digest, 'visible', CAST('[]' AS jsonb), 'draft', "
+            ":count, :maximum, :source, :over, :deleted, "
+            "CASE WHEN :deleted THEN CURRENT_TIMESTAMP ELSE NULL END)"
+        ),
+        {
+            "id": uuid4(),
+            "scope_id": scope_id,
+            "key_id": key_id,
+            "language": language,
+            "selector_bytes": selector_bytes,
+            "digest": hashlib.sha256(selector_bytes).hexdigest(),
+            "count": count,
+            "maximum": maximum,
+            "source": source,
+            "over": over,
+            "deleted": deleted,
+        },
+    )
+
+
 def test_canonical_translation_migration_is_reversible_and_metadata_complete(
     migrated_database: tuple[Config, Engine],
 ) -> None:
@@ -1120,33 +1164,18 @@ def test_translation_constraint_and_projection_contracts_are_database_authoritat
     for position, (language, count, maximum, source, over, deleted) in enumerate(
         valid_projections
     ):
-        selector_bytes = f'{{"position":{position}}}'.encode()
         with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "INSERT INTO translation_values "
-                    "(id, scope_id, translation_key_id, language, selector_version, "
-                    "selector_kind, selector_bytes, selector_digest, display_text, "
-                    "structure, review_state, grapheme_count, effective_max_chars, "
-                    "effective_constraint_source, is_over_limit, is_deleted, deleted_at) "
-                    "VALUES (:id, :scope_id, :key_id, :language, 1, 'scalar', "
-                    ":selector_bytes, :digest, 'visible', CAST('[]' AS jsonb), 'draft', "
-                    ":count, :maximum, :source, :over, :deleted, "
-                    "CASE WHEN :deleted THEN CURRENT_TIMESTAMP ELSE NULL END)"
-                ),
-                {
-                    "id": uuid4(),
-                    "scope_id": scope_id,
-                    "key_id": key_id,
-                    "language": language,
-                    "selector_bytes": selector_bytes,
-                    "digest": hashlib.sha256(selector_bytes).hexdigest(),
-                    "count": count,
-                    "maximum": maximum,
-                    "source": source,
-                    "over": over,
-                    "deleted": deleted,
-                },
+            _insert_translation_projection(
+                connection,
+                scope_id=scope_id,
+                key_id=key_id,
+                language=language,
+                position=position,
+                count=count,
+                maximum=maximum,
+                source=source,
+                over=over,
+                deleted=deleted,
             )
 
     invalid_projections = (
@@ -1159,30 +1188,17 @@ def test_translation_constraint_and_projection_contracts_are_database_authoritat
         (1, None, "inherited", False),
     )
     for position, (count, maximum, source, over) in enumerate(invalid_projections, start=10):
-        selector_bytes = f'{{"position":{position}}}'.encode()
         with pytest.raises(IntegrityError), engine.begin() as connection:
-            connection.execute(
-                text(
-                    "INSERT INTO translation_values "
-                    "(id, scope_id, translation_key_id, language, selector_version, "
-                    "selector_kind, selector_bytes, selector_digest, display_text, "
-                    "structure, review_state, grapheme_count, effective_max_chars, "
-                    "effective_constraint_source, is_over_limit, is_deleted) VALUES "
-                    "(:id, :scope_id, :key_id, 'es', 1, 'scalar', :selector_bytes, "
-                    ":digest, 'visible', CAST('[]' AS jsonb), 'draft', :count, "
-                    ":maximum, :source, :over, false)"
-                ),
-                {
-                    "id": uuid4(),
-                    "scope_id": scope_id,
-                    "key_id": key_id,
-                    "selector_bytes": selector_bytes,
-                    "digest": hashlib.sha256(selector_bytes).hexdigest(),
-                    "count": count,
-                    "maximum": maximum,
-                    "source": source,
-                    "over": over,
-                },
+            _insert_translation_projection(
+                connection,
+                scope_id=scope_id,
+                key_id=key_id,
+                language="es",
+                position=position,
+                count=count,
+                maximum=maximum,
+                source=source,
+                over=over,
             )
 
     with engine.begin() as connection:
