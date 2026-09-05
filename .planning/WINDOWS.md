@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 4
 waived_count: 0
-fixed_count: 57
-total_count: 61
-last_updated: 2026-09-05T12:34:44.443Z
+fixed_count: 58
+total_count: 62
+last_updated: 2026-09-05T14:27:41.887Z
 ---
 
 # Broken Windows Ledger
@@ -76,6 +76,7 @@ last_updated: 2026-09-05T12:34:44.443Z
 | 59 | 04 | deviation | backend/src/verboflex/services/translation_imports.py |  | Deferred semantic-scope mapping changes from staging to the atomic activation pointer swap. | fixed |  | 2026-09-05T12:12:31.595Z | 2026-09-05T12:13:38.876Z |
 | 60 | 04 | deviation | backend/src/verboflex/services/translation_imports.py |  | Created inactive scope authority for issue-free empty manifests so complete empty files can activate. | fixed |  | 2026-09-05T12:12:31.660Z | 2026-09-05T12:13:38.938Z |
 | 61 | 04 | deviation | backend/tests/integration/test_import_jobs.py |  | Updated established exact import response assertions for additive dataset and parser outcome fields | fixed |  | 2026-09-05T12:34:17.131Z | 2026-09-05T12:34:44.443Z |
+| 62 | 04 | deviation | backend/tests/integration/test_translation_constraints.py |  | Constraint tests seed a dedicated mapping with absent base authority because published active-revision mappings are intentionally immutable. | fixed |  | 2026-09-05T14:27:19.765Z | 2026-09-05T14:27:41.887Z |
 
 ````json
 [
@@ -810,6 +811,18 @@ last_updated: 2026-09-05T12:34:44.443Z
     "reason": "",
     "recorded_at": "2026-09-05T12:34:17.131Z",
     "resolved_at": "2026-09-05T12:34:44.443Z"
+  },
+  {
+    "id": 62,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/tests/integration/test_translation_constraints.py",
+    "line": null,
+    "description": "Constraint tests seed a dedicated mapping with absent base authority because published active-revision mappings are intentionally immutable.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-05T14:27:19.765Z",
+    "resolved_at": "2026-09-05T14:27:41.887Z"
   }
 ]
 ````
