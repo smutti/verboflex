@@ -16,7 +16,6 @@ from verboflex.services.import_jobs import (
     ImportExecutionIdentity,
     ImportProcessingResult,
     ImportProcessor,
-    ImportSourceReferenceRecord,
     _process_import,
     classify_import_movement,
     execute_import_job,
@@ -42,18 +41,22 @@ async def _production_import(
         credential_leases=oauth_service,
     )
     try:
-        references = await _process_import_with_adapter(
+        processed = await _process_import_with_adapter(
             identity,
             factory=SessionFactory,
             adapter=adapter,
         )
         movement = await classify_import_movement(
             identity,
-            references=references,
+            references=processed.references,
             factory=SessionFactory,
             adapter=adapter,
         )
-        return ImportProcessingResult(references=references, movement=movement)
+        return ImportProcessingResult(
+            references=processed.references,
+            movement=movement,
+            canonical_manifest_digest=processed.canonical_manifest_digest,
+        )
     finally:
         await adapter.aclose()
 
@@ -63,7 +66,7 @@ async def _process_import_with_adapter(
     *,
     factory: sessionmaker[Session],
     adapter: SourceDiscoveryAdapter,
-) -> tuple[ImportSourceReferenceRecord, ...]:
+) -> ImportProcessingResult:
     return await _process_import(
         identity,
         factory=factory,

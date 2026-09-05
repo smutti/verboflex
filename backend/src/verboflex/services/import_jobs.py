@@ -33,6 +33,16 @@ from verboflex.integrations.bitbucket.urls import (
     validate_provider_commit_hash,
     validate_repository_relative_path,
 )
+from verboflex.localization.importing.core import (
+    CanonicalIssue,
+    CanonicalParseResult,
+    CanonicalParserInput,
+)
+from verboflex.localization.importing.registry import parse_canonical_mapping
+from verboflex.localization.preview.core import (
+    PreviewLayoutCandidate,
+    layout_candidate_from_mapping,
+)
 from verboflex.models.bitbucket_connection import BitbucketConnection
 from verboflex.models.import_job import (
     ImportExecution,
@@ -41,15 +51,18 @@ from verboflex.models.import_job import (
     ImportRewriteProposal,
     ImportSourceReference,
 )
+from verboflex.models.preview_job import PreviewJob
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import ProductRepositoryMapping
 from verboflex.models.repository import Repository
 from verboflex.services.bitbucket_oauth import PULLREQUEST_WRITE_SCOPE
+from verboflex.services.preview_jobs import is_current_preview_confirmation
 from verboflex.services.repositories import RepositoryRecord
 from verboflex.services.repository_discovery import (
     SourceDiscoveryAdapter,
     discover_repository_sources_for_record,
 )
+from verboflex.services.translation_imports import stage_translation_parse
 
 IMPORT_TASK_NAME = "verboflex.import.run"
 IMPORT_WATCHDOG_BATCH_SIZE = 100
@@ -295,6 +308,7 @@ class ImportProcessingResult:
 
     references: tuple[ImportSourceReferenceRecord, ...]
     movement: SourceMovementClassification | None = None
+    canonical_manifest_digest: str | None = None
 
 
 ImportProcessor = Callable[
@@ -2270,8 +2284,9 @@ async def _process_import(
     *,
     factory: sessionmaker[Session],
     adapter: SourceDiscoveryAdapter,
-) -> tuple[ImportSourceReferenceRecord, ...]:
+) -> ImportProcessingResult:
     references: list[ImportSourceReferenceRecord] = []
+    source_contents: dict[tuple[RepositoryRole, str], bytes] = {}
     for side in identity.repository_sides:
         repository = RepositoryRecord(
             id=side.repository_id,
@@ -2287,6 +2302,7 @@ async def _process_import(
                 adapter=adapter,
             )
         for source_file in snapshot.files:
+            source_contents[(side.role, source_file.path)] = source_file.content
             references.append(
                 ImportSourceReferenceRecord(
                     position=len(references),
@@ -2299,7 +2315,128 @@ async def _process_import(
                     sha256=hashlib.sha256(source_file.content).hexdigest(),
                 )
             )
-    return tuple(references)
+    durable_references = tuple(references)
+    with factory() as session:
+        parser_inputs = _confirmed_parser_inputs(
+            session,
+            identity=identity,
+            source_contents=source_contents,
+        )
+    if parser_inputs:
+        parse_result = parse_canonical_mapping(parser_inputs)
+    else:
+        parse_result = CanonicalParseResult(
+            issues=(
+                CanonicalIssue(
+                    code="malformed_file",
+                    repository_side=identity.repository_sides[0].role,
+                    path="<input>",
+                    message="Canonical parser input is invalid.",
+                ),
+            )
+        )
+    manifest = stage_translation_parse(
+        factory,
+        identity=identity,
+        references=durable_references,
+        result=parse_result,
+    )
+    if manifest is None:
+        raise ValueError("canonical import execution is stale")
+    return ImportProcessingResult(
+        references=durable_references,
+        canonical_manifest_digest=manifest.digest,
+    )
+
+
+def _confirmed_parser_inputs(
+    session: Session,
+    *,
+    identity: ImportExecutionIdentity,
+    source_contents: dict[tuple[RepositoryRole, str], bytes],
+) -> tuple[CanonicalParserInput, ...]:
+    revision = session.get(ProductRevision, identity.revision_id)
+    mapping = session.execute(
+        select(ProductRepositoryMapping)
+        .options(selectinload(ProductRepositoryMapping.sides))
+        .where(
+            ProductRepositoryMapping.id == identity.mapping_id,
+            ProductRepositoryMapping.revision_id == identity.revision_id,
+        )
+    ).scalar_one_or_none()
+    if (
+        revision is None
+        or mapping is None
+        or mapping.base_language is None
+        or mapping.confirmed_preview_job_id is None
+        or mapping.selected_layout_candidate_id is None
+        or mapping.selected_layout_version != 1
+        or not is_current_preview_confirmation(session, revision, mapping)
+    ):
+        return ()
+    preview_job = session.get(PreviewJob, mapping.confirmed_preview_job_id)
+    if preview_job is None or preview_job.result is None:
+        return ()
+    raw_candidates = preview_job.result.get("layout_candidates")
+    if not isinstance(raw_candidates, list):
+        return ()
+    try:
+        candidates = tuple(layout_candidate_from_mapping(candidate) for candidate in raw_candidates)
+    except KeyError, TypeError, ValueError:
+        return ()
+    selected = tuple(
+        candidate
+        for candidate in candidates
+        if candidate.id == mapping.selected_layout_candidate_id
+        and candidate.version == mapping.selected_layout_version
+    )
+    if len(selected) != 1:
+        return ()
+    selected_candidate = selected[0]
+    expected_selected_side = "direct" if mapping.topology == "direct" else "translations"
+    if (
+        selected_candidate.repository_side != expected_selected_side
+        or mapping.base_language not in selected_candidate.languages
+    ):
+        return ()
+
+    candidates_by_side: dict[RepositoryRole, PreviewLayoutCandidate] = {
+        expected_selected_side: selected_candidate
+    }
+    if mapping.topology == "separate":
+        keys_candidates = tuple(
+            candidate
+            for candidate in candidates
+            if candidate.repository_side == "keys"
+            and candidate.format == selected_candidate.format
+            and mapping.base_language in candidate.languages
+            and all(("keys", path) in source_contents for path in candidate.files)
+        )
+        if len(keys_candidates) != 1:
+            return ()
+        candidates_by_side["keys"] = keys_candidates[0]
+
+    parser_inputs: list[CanonicalParserInput] = []
+    for side in identity.repository_sides:
+        candidate = candidates_by_side.get(side.role)
+        if candidate is None:
+            return ()
+        for path in candidate.files:
+            content = source_contents.get((side.role, path))
+            if content is None:
+                return ()
+            parser_inputs.append(
+                CanonicalParserInput(
+                    format=candidate.format,
+                    repository_side=side.role,
+                    path=path,
+                    content=content,
+                    layout_identity=candidate.layout_identity,
+                    layout_version=candidate.version,
+                    base_language=mapping.base_language,
+                )
+            )
+    return tuple(parser_inputs)
 
 
 async def classify_import_movement(
@@ -2356,7 +2493,7 @@ def process_import(
     *,
     factory: sessionmaker[Session],
     adapter: SourceDiscoveryAdapter,
-) -> tuple[ImportSourceReferenceRecord, ...]:
+) -> ImportProcessingResult:
     """Resolve branches once and retain only exact ordered content metadata."""
     import asyncio
 

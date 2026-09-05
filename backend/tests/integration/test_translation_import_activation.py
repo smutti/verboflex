@@ -152,6 +152,7 @@ def _seed_running_direct_import(
         revision = session.get_one(ProductRevision, revision_id)
         revision.is_published = True
         revision.published_at = now
+        session.flush()
         product.active_revision_id = revision_id
 
     record = import_jobs.start_or_refresh_import(
