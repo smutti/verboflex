@@ -32,6 +32,9 @@ _SELECTOR_CHECK = (
 _FORMAT_CHECK = "format IN ('android_xml', 'qt_ts', 'json', 'ios_strings')"
 _SIDE_CHECK = "repository_side IN ('direct', 'keys', 'translations')"
 _REVIEW_STATE_CHECK = "review_state IN ('draft', 'approved', 'rejected')"
+_EFFECTIVE_CONSTRAINT_SOURCE_CHECK = (
+    "effective_constraint_source IN ('none', 'base_default', 'language_override')"
+)
 _ISSUE_CODE_CHECK = (
     "issue_code IN ('malformed_file', 'ambiguous_structure', "
     "'unsupported_structure', 'duplicate_key', 'base_language_required')"
@@ -40,6 +43,14 @@ _LANGUAGE_CHECK = "language ~ '^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3})
 _DIGEST_CHECK = "char_length(selector_digest) = 64 AND selector_digest ~ '^[0-9a-f]{64}$'"
 _DELETION_CHECK = (
     "(NOT is_deleted AND deleted_at IS NULL) OR (is_deleted AND deleted_at IS NOT NULL)"
+)
+_PROJECTION_CHECK = (
+    "(effective_constraint_source = 'none' AND effective_max_chars IS NULL "
+    "AND NOT is_over_limit) OR "
+    "(effective_constraint_source IN ('base_default', 'language_override') "
+    "AND effective_max_chars IS NOT NULL "
+    "AND effective_max_chars BETWEEN 0 AND 1048576 "
+    "AND is_over_limit = (grapheme_count > effective_max_chars))"
 )
 
 
@@ -255,6 +266,18 @@ class TranslationValue(Base):
         ),
         CheckConstraint("jsonb_typeof(structure) = 'array'", name="structure_array"),
         CheckConstraint(_REVIEW_STATE_CHECK, name="review_state_value"),
+        CheckConstraint(
+            "grapheme_count >= 0",
+            name="grapheme_count_non_negative",
+        ),
+        CheckConstraint(
+            _EFFECTIVE_CONSTRAINT_SOURCE_CHECK,
+            name="effective_constraint_source_value",
+        ),
+        CheckConstraint(
+            _PROJECTION_CHECK,
+            name="constraint_projection_consistent",
+        ),
         CheckConstraint(_DELETION_CHECK, name="deletion_state"),
         UniqueConstraint(
             "translation_key_id",
@@ -279,6 +302,14 @@ class TranslationValue(Base):
             "scope_id",
             "language",
             "is_deleted",
+        ),
+        Index(
+            "ix_translation_values_scope_constraint_filters",
+            "scope_id",
+            "language",
+            "review_state",
+            "is_deleted",
+            "is_over_limit",
         ),
     )
 
@@ -306,6 +337,25 @@ class TranslationValue(Base):
         nullable=False,
         default="draft",
         server_default="draft",
+    )
+    grapheme_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    effective_max_chars: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    effective_constraint_source: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default="none",
+        server_default="none",
+    )
+    is_over_limit: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
     )
     is_deleted: Mapped[bool] = mapped_column(
         Boolean,

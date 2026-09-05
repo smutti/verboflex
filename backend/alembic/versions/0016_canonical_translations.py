@@ -24,6 +24,9 @@ SELECTOR_CHECK = (
 FORMAT_CHECK = "format IN ('android_xml', 'qt_ts', 'json', 'ios_strings')"
 SIDE_CHECK = "repository_side IN ('direct', 'keys', 'translations')"
 REVIEW_STATE_CHECK = "review_state IN ('draft', 'approved', 'rejected')"
+EFFECTIVE_CONSTRAINT_SOURCE_CHECK = (
+    "effective_constraint_source IN ('none', 'base_default', 'language_override')"
+)
 ISSUE_CODE_CHECK = (
     "issue_code IN ('malformed_file', 'ambiguous_structure', "
     "'unsupported_structure', 'duplicate_key', 'base_language_required')"
@@ -32,6 +35,14 @@ LANGUAGE_CHECK = "language ~ '^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))
 DIGEST_CHECK = "char_length(selector_digest) = 64 AND selector_digest ~ '^[0-9a-f]{64}$'"
 DELETION_CHECK = (
     "(NOT is_deleted AND deleted_at IS NULL) OR (is_deleted AND deleted_at IS NOT NULL)"
+)
+PROJECTION_CHECK = (
+    "(effective_constraint_source = 'none' AND effective_max_chars IS NULL "
+    "AND NOT is_over_limit) OR "
+    "(effective_constraint_source IN ('base_default', 'language_override') "
+    "AND effective_max_chars IS NOT NULL "
+    "AND effective_max_chars BETWEEN 0 AND 1048576 "
+    "AND is_over_limit = (grapheme_count > effective_max_chars))"
 )
 
 
@@ -376,6 +387,71 @@ def upgrade() -> None:
     )
 
     op.create_table(
+        "translation_constraints",
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("scope_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("translation_key_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("language", sa.String(length=64), nullable=False),
+        sa.Column("max_chars", sa.Integer(), nullable=False),
+        sa.Column("version", sa.Integer(), server_default="1", nullable=False),
+        sa.Column("created_by", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("updated_by", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            LANGUAGE_CHECK,
+            name=op.f("ck_translation_constraints_language_normalized"),
+        ),
+        sa.CheckConstraint(
+            "max_chars BETWEEN 0 AND 1048576",
+            name=op.f("ck_translation_constraints_max_chars_bound"),
+        ),
+        sa.CheckConstraint(
+            "version > 0",
+            name=op.f("ck_translation_constraints_version_positive"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["translation_key_id", "scope_id"],
+            ["translation_keys.id", "translation_keys.scope_id"],
+            name="fk_translation_constraints_owned_key",
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["created_by"],
+            ["users.id"],
+            name=op.f("fk_translation_constraints_created_by_users"),
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["updated_by"],
+            ["users.id"],
+            name=op.f("fk_translation_constraints_updated_by_users"),
+            ondelete="RESTRICT",
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_translation_constraints")),
+        sa.UniqueConstraint(
+            "translation_key_id",
+            "language",
+            name="uq_translation_constraints_key_language",
+        ),
+    )
+    op.create_index(
+        "ix_translation_constraints_scope_language",
+        "translation_constraints",
+        ["scope_id", "language"],
+    )
+
+    op.create_table(
         "translation_values",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("scope_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -390,6 +466,15 @@ def upgrade() -> None:
         sa.Column("display_text", sa.Text(), nullable=False),
         sa.Column("structure", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("review_state", sa.String(length=16), server_default="draft", nullable=False),
+        sa.Column("grapheme_count", sa.Integer(), server_default="0", nullable=False),
+        sa.Column("effective_max_chars", sa.Integer(), nullable=True),
+        sa.Column(
+            "effective_constraint_source",
+            sa.String(length=24),
+            server_default="none",
+            nullable=False,
+        ),
+        sa.Column("is_over_limit", sa.Boolean(), server_default="false", nullable=False),
         sa.Column("is_deleted", sa.Boolean(), server_default="false", nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
@@ -435,6 +520,18 @@ def upgrade() -> None:
             REVIEW_STATE_CHECK,
             name=op.f("ck_translation_values_review_state_value"),
         ),
+        sa.CheckConstraint(
+            "grapheme_count >= 0",
+            name=op.f("ck_translation_values_grapheme_count_non_negative"),
+        ),
+        sa.CheckConstraint(
+            EFFECTIVE_CONSTRAINT_SOURCE_CHECK,
+            name=op.f("ck_translation_values_effective_constraint_source_value"),
+        ),
+        sa.CheckConstraint(
+            PROJECTION_CHECK,
+            name=op.f("ck_translation_values_constraint_projection_consistent"),
+        ),
         sa.CheckConstraint(DELETION_CHECK, name=op.f("ck_translation_values_deletion_state")),
         sa.ForeignKeyConstraint(
             ["translation_key_id", "scope_id"],
@@ -460,6 +557,11 @@ def upgrade() -> None:
         "ix_translation_values_scope_language_deleted",
         "translation_values",
         ["scope_id", "language", "is_deleted"],
+    )
+    op.create_index(
+        "ix_translation_values_scope_constraint_filters",
+        "translation_values",
+        ["scope_id", "language", "review_state", "is_deleted", "is_over_limit"],
     )
 
     op.create_table(
@@ -964,10 +1066,19 @@ def downgrade() -> None:
     )
     op.drop_table("translation_value_revisions")
     op.drop_index(
+        "ix_translation_values_scope_constraint_filters",
+        table_name="translation_values",
+    )
+    op.drop_index(
         "ix_translation_values_scope_language_deleted",
         table_name="translation_values",
     )
     op.drop_table("translation_values")
+    op.drop_index(
+        "ix_translation_constraints_scope_language",
+        table_name="translation_constraints",
+    )
+    op.drop_table("translation_constraints")
     op.drop_index(
         "ix_translation_keys_scope_deleted",
         table_name="translation_keys",

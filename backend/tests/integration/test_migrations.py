@@ -641,6 +641,9 @@ def test_canonical_translation_migration_is_reversible_and_metadata_complete(
     """Revision 0016 owns the complete stable identity and staging schema."""
     from verboflex import models
     from verboflex.db.base import Base
+    from verboflex.models.translation_constraint import TranslationConstraint
+
+    assert TranslationConstraint.__tablename__ == "translation_constraints"
 
     config, engine = migrated_database
     command.upgrade(config, "0015_mapping_base_language")
