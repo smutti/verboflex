@@ -1161,9 +1161,7 @@ def test_translation_constraint_and_projection_contracts_are_database_authoritat
         ("it", 3, 3, "base_default", False, False),
         ("fr", 4, 3, "language_override", True, True),
     )
-    for position, (language, count, maximum, source, over, deleted) in enumerate(
-        valid_projections
-    ):
+    for position, (language, count, maximum, source, over, deleted) in enumerate(valid_projections):
         with engine.begin() as connection:
             _insert_translation_projection(
                 connection,

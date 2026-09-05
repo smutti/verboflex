@@ -175,9 +175,7 @@ def test_canonical_model_relationships_preserve_semantic_ownership() -> None:
         "localization_scopes"
     ]
     assert mapping_scopes.viewonly is True
-    assert {
-        (local.name, remote.name) for local, remote in mapping_scopes.local_remote_pairs
-    } == {
+    assert {(local.name, remote.name) for local, remote in mapping_scopes.local_remote_pairs} == {
         ("revision_id", "current_revision_id"),
         ("id", "current_mapping_id"),
         ("identity_key", "mapping_identity_key"),
