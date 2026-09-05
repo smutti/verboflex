@@ -46,6 +46,7 @@ class AdminPreviewConfirmationRequest(BaseModel):
     preview_digest: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     layout_candidate_id: UUID
     layout_candidate_version: Literal[1]
+    base_language: Annotated[str, Field(min_length=1, max_length=64)] | None
 
 
 class AdminPreviewConfirmationResponse(BaseModel):
@@ -58,6 +59,7 @@ class AdminPreviewConfirmationResponse(BaseModel):
     preview_digest: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     layout_candidate_id: UUID
     layout_candidate_version: Literal[1]
+    base_language: Annotated[str, Field(min_length=1, max_length=64)]
     confirmed_by: UUID
     confirmed_at: datetime
 
@@ -171,6 +173,7 @@ class AdminActiveRevisionRevalidationConfirmationRequest(BaseModel):
     preview_digest: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     layout_candidate_id: UUID
     layout_candidate_version: Literal[1]
+    base_language: Annotated[str, Field(min_length=1, max_length=64)] | None
 
 
 class AdminActiveRevisionRevalidationJobResponse(BaseModel):
@@ -218,5 +221,6 @@ class AdminActiveRevisionRevalidationConfirmationResponse(BaseModel):
     preview_digest: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     layout_candidate_id: UUID
     layout_candidate_version: Literal[1]
+    base_language: Annotated[str, Field(min_length=1, max_length=64)]
     confirmed_by: UUID
     confirmed_at: datetime

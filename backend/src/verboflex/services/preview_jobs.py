@@ -14,7 +14,10 @@ from sqlalchemy import func, null, select, update
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from verboflex.core.config import get_settings
-from verboflex.localization.preview.core import validate_layout_candidate_mappings
+from verboflex.localization.preview.core import (
+    normalize_preview_locale,
+    validate_layout_candidate_mappings,
+)
 from verboflex.models.bitbucket_connection import BitbucketConnection
 from verboflex.models.preview_job import (
     ActiveRevisionRevalidationConfirmation,
@@ -63,6 +66,10 @@ class PreviewJobConflict(ValueError):
     """Raised when submitted identity disagrees with current durable authority."""
 
 
+class PreviewBaseLanguageRequired(PreviewJobConflict):
+    """Raised when a candidate has no one server-proven base-language selection."""
+
+
 class PreviewConnectionUnavailable(RuntimeError):
     """Raised when there is no connected repository-read credential generation."""
 
@@ -80,6 +87,7 @@ class PreviewConfirmationRecord:
     preview_digest: str
     layout_candidate_id: UUID
     layout_candidate_version: Literal[1]
+    base_language: str
     confirmed_by: UUID
     confirmed_at: datetime
 
@@ -97,6 +105,7 @@ class ActiveRevisionRevalidationConfirmationRecord:
     preview_digest: str
     layout_candidate_id: UUID
     layout_candidate_version: Literal[1]
+    base_language: str
     confirmed_by: UUID
     confirmed_at: datetime
 
@@ -298,6 +307,8 @@ def _closed_result(
 def _complete_preview_digest(
     identity: PreviewJobIdentity,
     layout_candidates: list[dict[str, object]],
+    *,
+    base_language: str | None = None,
 ) -> str:
     """Hash the exact attempt, pre-detector authority, and canonical detector output."""
     payload = {
@@ -323,6 +334,8 @@ def _complete_preview_digest(
         ],
         "topology": identity.topology,
     }
+    if base_language is not None:
+        payload["base_language"] = base_language
     if identity.revision_scope == "active_revalidation":
         payload["revision_scope"] = identity.revision_scope
     encoded = json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
@@ -822,6 +835,63 @@ def get_active_revision_revalidation_job(
         )
 
 
+def _require_selected_layout_candidate(
+    candidates: list[dict[str, object]],
+    *,
+    layout_candidate_id: UUID,
+    layout_candidate_version: Literal[1],
+    expected_side: str,
+    unavailable_message: str,
+) -> dict[str, object]:
+    """Resolve exactly one submitted candidate on the mapping's repository side."""
+    matches = [
+        candidate
+        for candidate in candidates
+        if candidate["id"] == str(layout_candidate_id)
+        and candidate["version"] == layout_candidate_version
+    ]
+    if len(matches) != 1 or matches[0]["repository_side"] != expected_side:
+        raise PreviewJobConflict(unavailable_message)
+    return matches[0]
+
+
+def _candidate_languages(candidate: dict[str, object]) -> tuple[str, ...]:
+    """Return canonical detected languages, rejecting sentinel or malformed values."""
+    raw_languages = candidate.get("languages")
+    if not isinstance(raw_languages, list) or not raw_languages:
+        raise PreviewBaseLanguageRequired("base_language_required")
+    languages = tuple(cast(list[object], raw_languages))
+    if any(
+        not isinstance(language, str) or normalize_preview_locale(language) != language
+        for language in languages
+    ):
+        raise PreviewBaseLanguageRequired("base_language_required")
+    return cast(tuple[str, ...], languages)
+
+
+def _resolve_base_language(
+    candidate: dict[str, object],
+    *,
+    submitted: str | None,
+) -> str:
+    """Resolve sole-language defaulting or prove an explicit exact membership choice."""
+    languages = _candidate_languages(candidate)
+    if submitted is None:
+        if len(languages) != 1:
+            raise PreviewBaseLanguageRequired("base_language_required")
+        return languages[0]
+    if normalize_preview_locale(submitted) != submitted or submitted not in languages:
+        raise PreviewJobConflict("preview identity conflict")
+    return submitted
+
+
+def _candidate_has_base_language(candidate: dict[str, object], base_language: str) -> bool:
+    try:
+        return _resolve_base_language(candidate, submitted=base_language) == base_language
+    except PreviewJobConflict:
+        return False
+
+
 def confirm_preview_job(
     session: Session,
     *,
@@ -829,6 +899,7 @@ def confirm_preview_job(
     preview_digest: str,
     layout_candidate_id: UUID,
     layout_candidate_version: Literal[1],
+    base_language: str | None = None,
     actor_id: UUID,
 ) -> PreviewConfirmationRecord:
     """Assign exactly one current succeeded candidate under durable authority locks."""
@@ -848,41 +919,49 @@ def confirm_preview_job(
         if result["digest"] != preview_digest:
             raise PreviewJobConflict("preview identity conflict")
         raw_candidates = cast(list[dict[str, object]], result["layout_candidates"])
-        matches = [
-            candidate
-            for candidate in raw_candidates
-            if candidate["id"] == str(layout_candidate_id)
-            and candidate["version"] == layout_candidate_version
-        ]
-        if len(matches) != 1:
-            raise PreviewJobConflict("preview confirmation unavailable")
         mapping = _current_mapping(session, row, for_update=True)
         assert mapping is not None
         expected_side = "direct" if mapping.topology == "direct" else "translations"
-        if matches[0]["repository_side"] != expected_side:
-            raise PreviewJobConflict("preview confirmation unavailable")
+        candidate = _require_selected_layout_candidate(
+            raw_candidates,
+            layout_candidate_id=layout_candidate_id,
+            layout_candidate_version=layout_candidate_version,
+            expected_side=expected_side,
+            unavailable_message="preview confirmation unavailable",
+        )
+        selected_base_language = _resolve_base_language(candidate, submitted=base_language)
+        confirmation_digest = _complete_preview_digest(
+            _identity(row),
+            raw_candidates,
+            base_language=selected_base_language,
+        )
         if (
             mapping.confirmed_preview_job_id == row.id
-            and mapping.confirmed_preview_digest == preview_digest
+            and mapping.confirmed_preview_digest == confirmation_digest
             and mapping.selected_layout_candidate_id == layout_candidate_id
             and mapping.selected_layout_version == layout_candidate_version
+            and mapping.base_language == selected_base_language
             and mapping.preview_confirmed_by is not None
             and mapping.preview_confirmed_at is not None
         ):
             return PreviewConfirmationRecord(
                 job_id=row.id,
                 mapping_id=mapping.id,
-                preview_digest=preview_digest,
+                preview_digest=confirmation_digest,
                 layout_candidate_id=layout_candidate_id,
                 layout_candidate_version=layout_candidate_version,
+                base_language=selected_base_language,
                 confirmed_by=mapping.preview_confirmed_by,
                 confirmed_at=mapping.preview_confirmed_at,
             )
+        if _mapping_has_any_confirmation(mapping):
+            raise PreviewJobConflict("preview identity conflict")
         confirmed_at = datetime.now(UTC)
+        mapping.base_language = selected_base_language
         mapping.selected_layout_candidate_id = layout_candidate_id
         mapping.selected_layout_version = layout_candidate_version
         mapping.confirmed_preview_job_id = row.id
-        mapping.confirmed_preview_digest = preview_digest
+        mapping.confirmed_preview_digest = confirmation_digest
         mapping.preview_confirmed_by = actor_id
         mapping.preview_confirmed_at = confirmed_at
         mapping.updated_at = confirmed_at
@@ -890,9 +969,10 @@ def confirm_preview_job(
         return PreviewConfirmationRecord(
             job_id=row.id,
             mapping_id=mapping.id,
-            preview_digest=preview_digest,
+            preview_digest=confirmation_digest,
             layout_candidate_id=layout_candidate_id,
             layout_candidate_version=layout_candidate_version,
+            base_language=selected_base_language,
             confirmed_by=actor_id,
             confirmed_at=confirmed_at,
         )
@@ -905,6 +985,7 @@ def confirm_active_revision_revalidation(
     preview_digest: str,
     layout_candidate_id: UUID,
     layout_candidate_version: Literal[1],
+    base_language: str | None = None,
     actor_id: UUID,
 ) -> ActiveRevisionRevalidationConfirmationRecord:
     """Persist immutable explicit evidence without mutating the published graph."""
@@ -924,36 +1005,47 @@ def confirm_active_revision_revalidation(
         if result["digest"] != preview_digest:
             raise PreviewJobConflict("active revalidation identity conflict")
         candidates = cast(list[dict[str, object]], result["layout_candidates"])
-        matches = [
-            candidate
-            for candidate in candidates
-            if candidate["id"] == str(layout_candidate_id)
-            and candidate["version"] == layout_candidate_version
-        ]
-        if len(matches) != 1:
-            raise PreviewJobConflict("active revalidation confirmation unavailable")
         revision = _current_revision(session, row, for_update=True)
         mapping = _current_mapping(session, row, for_update=True)
         assert revision is not None
         assert mapping is not None
         expected_side = "direct" if mapping.topology == "direct" else "translations"
+        candidate = _require_selected_layout_candidate(
+            candidates,
+            layout_candidate_id=layout_candidate_id,
+            layout_candidate_version=layout_candidate_version,
+            expected_side=expected_side,
+            unavailable_message="active revalidation confirmation unavailable",
+        )
+        selected_base_language = _resolve_base_language(candidate, submitted=base_language)
+        if mapping.base_language is None:
+            raise PreviewBaseLanguageRequired("base_language_required")
+        if mapping.base_language != selected_base_language:
+            raise PreviewJobConflict("active revalidation identity conflict")
         if (
-            matches[0]["repository_side"] != expected_side
-            or mapping.selected_layout_candidate_id != layout_candidate_id
+            mapping.selected_layout_candidate_id != layout_candidate_id
             or mapping.selected_layout_version != layout_candidate_version
         ):
             raise PreviewJobConflict("active revalidation confirmation unavailable")
+        confirmation_digest = _complete_preview_digest(
+            _identity(row),
+            candidates,
+            base_language=selected_base_language,
+        )
         existing = session.get(ActiveRevisionRevalidationConfirmation, row.id)
         if existing is not None:
             if not _sidecar_matches_confirmation_request(
                 existing,
                 row=row,
-                preview_digest=preview_digest,
+                confirmation_digest=confirmation_digest,
                 layout_candidate_id=layout_candidate_id,
                 layout_candidate_version=layout_candidate_version,
             ):
                 raise PreviewJobConflict("active revalidation confirmation conflict")
-            return _active_confirmation_record(existing)
+            return _active_confirmation_record(
+                existing,
+                base_language=selected_base_language,
+            )
         confirmed_at = datetime.now(UTC)
         sidecar = ActiveRevisionRevalidationConfirmation(
             job_id=row.id,
@@ -963,7 +1055,7 @@ def confirm_active_revision_revalidation(
             revision_version=row.candidate_revision_version,
             mapping_id=row.mapping_id,
             connection_generation=row.connection_generation,
-            preview_digest=preview_digest,
+            preview_digest=confirmation_digest,
             layout_candidate_id=layout_candidate_id,
             layout_candidate_version=layout_candidate_version,
             confirmed_by=actor_id,
@@ -971,12 +1063,19 @@ def confirm_active_revision_revalidation(
         )
         session.add(sidecar)
         session.flush()
-        return _active_confirmation_record(sidecar)
+        return _active_confirmation_record(
+            sidecar,
+            base_language=selected_base_language,
+        )
 
 
 def _active_confirmation_record(
     row: ActiveRevisionRevalidationConfirmation,
+    *,
+    base_language: str,
 ) -> ActiveRevisionRevalidationConfirmationRecord:
+    if row.preview_digest is None:
+        raise PreviewJobConflict("active revalidation confirmation conflict")
     return ActiveRevisionRevalidationConfirmationRecord(
         job_id=row.job_id,
         product_id=row.product_id,
@@ -987,6 +1086,7 @@ def _active_confirmation_record(
         preview_digest=row.preview_digest,
         layout_candidate_id=row.layout_candidate_id,
         layout_candidate_version=cast(Literal[1], row.layout_candidate_version),
+        base_language=base_language,
         confirmed_by=row.confirmed_by,
         confirmed_at=row.confirmed_at,
     )
@@ -996,7 +1096,7 @@ def _sidecar_matches_confirmation_request(
     sidecar: ActiveRevisionRevalidationConfirmation,
     *,
     row: PreviewJob,
-    preview_digest: str,
+    confirmation_digest: str,
     layout_candidate_id: UUID,
     layout_candidate_version: Literal[1],
 ) -> bool:
@@ -1007,7 +1107,7 @@ def _sidecar_matches_confirmation_request(
         and sidecar.revision_version == row.candidate_revision_version
         and sidecar.mapping_id == row.mapping_id
         and sidecar.connection_generation == row.connection_generation
-        and sidecar.preview_digest == preview_digest
+        and sidecar.preview_digest == confirmation_digest
         and sidecar.layout_candidate_id == layout_candidate_id
         and sidecar.layout_candidate_version == layout_candidate_version
     )
@@ -1105,9 +1205,18 @@ def _active_confirmed_layout_matches(
         result = _closed_result(_identity(row), row.result)
     except PreviewJobConflict, ValueError:
         return False
-    if result["digest"] != sidecar.preview_digest:
+    if mapping.base_language is None:
         return False
     candidates = cast(list[dict[str, object]], result["layout_candidates"])
+    if (
+        _complete_preview_digest(
+            _identity(row),
+            candidates,
+            base_language=mapping.base_language,
+        )
+        != sidecar.preview_digest
+    ):
+        return False
     return (
         mapping.selected_layout_candidate_id == sidecar.layout_candidate_id
         and mapping.selected_layout_version == sidecar.layout_candidate_version
@@ -1213,6 +1322,19 @@ def _mapping_has_complete_confirmation(mapping: ProductRepositoryMapping) -> boo
         or mapping.preview_confirmed_at is None
         or mapping.selected_layout_candidate_id is None
         or mapping.selected_layout_version is None
+        or mapping.base_language is None
+    )
+
+
+def _mapping_has_any_confirmation(mapping: ProductRepositoryMapping) -> bool:
+    return any(
+        value is not None
+        for value in (
+            mapping.confirmed_preview_job_id,
+            mapping.confirmed_preview_digest,
+            mapping.preview_confirmed_by,
+            mapping.preview_confirmed_at,
+        )
     )
 
 
@@ -1265,9 +1387,17 @@ def _confirmed_layout_matches(
         result = _closed_result(_identity(row), row.result)
     except PreviewJobConflict, ValueError:
         return False
-    if result["digest"] != mapping.confirmed_preview_digest:
-        return False
+    assert mapping.base_language is not None
     candidates = cast(list[dict[str, object]], result["layout_candidates"])
+    if (
+        _complete_preview_digest(
+            _identity(row),
+            candidates,
+            base_language=mapping.base_language,
+        )
+        != mapping.confirmed_preview_digest
+    ):
+        return False
     return _selected_layout_matches(candidates, mapping)
 
 
@@ -1277,6 +1407,8 @@ def _selected_layout_matches(
 ) -> bool:
     assert mapping.selected_layout_candidate_id is not None
     assert mapping.selected_layout_version is not None
+    if mapping.base_language is None:
+        return False
     matches = [
         candidate
         for candidate in candidates
@@ -1284,7 +1416,11 @@ def _selected_layout_matches(
         and candidate["version"] == mapping.selected_layout_version
     ]
     expected_side = "direct" if mapping.topology == "direct" else "translations"
-    return len(matches) == 1 and matches[0]["repository_side"] == expected_side
+    return (
+        len(matches) == 1
+        and matches[0]["repository_side"] == expected_side
+        and _candidate_has_base_language(matches[0], mapping.base_language)
+    )
 
 
 def _current_failure_code(

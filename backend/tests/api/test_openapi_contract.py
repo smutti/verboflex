@@ -1225,9 +1225,16 @@ def test_admin_preview_openapi_is_closed_current_and_source_free() -> None:
         "preview_digest",
         "layout_candidate_id",
         "layout_candidate_version",
+        "base_language",
     }
+    assert set(confirmation_request["required"]) == set(confirmation_request["properties"])
     assert confirmation_request["properties"]["preview_digest"]["pattern"] == "^[0-9a-f]{64}$"
     assert confirmation_request["properties"]["layout_candidate_version"]["const"] == 1
+    base_language_request = confirmation_request["properties"]["base_language"]["anyOf"]
+    assert base_language_request == [
+        {"type": "string", "maxLength": 64, "minLength": 1},
+        {"type": "null"},
+    ]
     assert confirmation_response["additionalProperties"] is False
     assert set(confirmation_response["properties"]) == {
         "job_id",
@@ -1235,9 +1242,12 @@ def test_admin_preview_openapi_is_closed_current_and_source_free() -> None:
         "preview_digest",
         "layout_candidate_id",
         "layout_candidate_version",
+        "base_language",
         "confirmed_by",
         "confirmed_at",
     }
+    assert confirmation_response["properties"]["base_language"]["minLength"] == 1
+    assert confirmation_response["properties"]["base_language"]["maxLength"] == 64
 
     preview_contract = json.dumps(
         {
@@ -1316,6 +1326,7 @@ def test_active_revision_revalidation_openapi_is_exact_bounded_and_source_free()
             "preview_digest",
             "layout_candidate_id",
             "layout_candidate_version",
+            "base_language",
         },
         "AdminActiveRevisionRevalidationJobResponse": {
             "id",
@@ -1347,6 +1358,7 @@ def test_active_revision_revalidation_openapi_is_exact_bounded_and_source_free()
             "preview_digest",
             "layout_candidate_id",
             "layout_candidate_version",
+            "base_language",
             "confirmed_by",
             "confirmed_at",
         },
@@ -1375,8 +1387,14 @@ def test_active_revision_revalidation_openapi_is_exact_bounded_and_source_free()
     assert confirmation_request["properties"]["commits"]["maxItems"] == 2
     assert confirmation_request["properties"]["preview_digest"]["pattern"] == ("^[0-9a-f]{64}$")
     assert confirmation_request["properties"]["layout_candidate_version"]["const"] == 1
+    assert confirmation_request["properties"]["base_language"]["anyOf"] == [
+        {"type": "string", "maxLength": 64, "minLength": 1},
+        {"type": "null"},
+    ]
     assert job_response["properties"]["repository_sides"]["maxItems"] == 2
     assert confirmation_response["properties"]["commits"]["maxItems"] == 2
+    assert confirmation_response["properties"]["base_language"]["minLength"] == 1
+    assert confirmation_response["properties"]["base_language"]["maxLength"] == 64
     assert eligibility_response["properties"]["mappings"]["maxItems"] == 500
     assert mapping_response["properties"]["blocker_codes"]["maxItems"] == 6
 

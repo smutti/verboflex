@@ -24,6 +24,7 @@ from verboflex.schemas.system import ErrorResponse
 from verboflex.schemas.users import RoleName
 from verboflex.services.preview_jobs import (
     ActiveRevisionRevalidationConfirmationRecord,
+    PreviewBaseLanguageRequired,
     PreviewConnectionUnavailable,
     PreviewEnqueuer,
     PreviewJobConflict,
@@ -164,6 +165,7 @@ def _active_confirmation_response(
         preview_digest=confirmation.preview_digest,
         layout_candidate_id=confirmation.layout_candidate_id,
         layout_candidate_version=confirmation.layout_candidate_version,
+        base_language=confirmation.base_language,
         confirmed_by=confirmation.confirmed_by,
         confirmed_at=confirmation.confirmed_at,
     )
@@ -174,6 +176,11 @@ def _raise_preview_error(error: Exception) -> NoReturn:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Preview unavailable",
+        ) from error
+    if isinstance(error, PreviewBaseLanguageRequired):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="base_language_required",
         ) from error
     if isinstance(error, PreviewJobConflict):
         raise HTTPException(
@@ -195,6 +202,11 @@ def _raise_active_revalidation_error(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Active revision revalidation unavailable",
+        ) from error
+    if isinstance(error, PreviewBaseLanguageRequired):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="base_language_required",
         ) from error
     if isinstance(error, PreviewJobConflict):
         raise HTTPException(
@@ -298,6 +310,7 @@ async def confirm_admin_preview_job(
             preview_digest=payload.preview_digest,
             layout_candidate_id=payload.layout_candidate_id,
             layout_candidate_version=payload.layout_candidate_version,
+            base_language=payload.base_language,
             actor_id=principal.user_id,
         )
     except (PreviewJobNotFound, PreviewJobConflict) as error:
@@ -308,6 +321,7 @@ async def confirm_admin_preview_job(
         preview_digest=confirmation.preview_digest,
         layout_candidate_id=confirmation.layout_candidate_id,
         layout_candidate_version=confirmation.layout_candidate_version,
+        base_language=confirmation.base_language,
         confirmed_by=confirmation.confirmed_by,
         confirmed_at=confirmation.confirmed_at,
     )
@@ -393,6 +407,7 @@ async def confirm_admin_active_revision_revalidation(
             preview_digest=payload.preview_digest,
             layout_candidate_id=payload.layout_candidate_id,
             layout_candidate_version=payload.layout_candidate_version,
+            base_language=payload.base_language,
             actor_id=principal.user_id,
         )
     except (PreviewJobNotFound, PreviewJobConflict) as error:

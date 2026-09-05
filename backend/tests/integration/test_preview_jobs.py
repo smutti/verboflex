@@ -370,7 +370,7 @@ def _candidate(
         format=format_name,
         layout_identity=layout_identity,
         files=(f"{layout_identity}/values/strings.xml",),
-        values={"default": {"hello": "Hello"}},
+        values={"en": {"hello": "Hello"}},
     ).to_mapping()
 
 
@@ -1859,6 +1859,7 @@ def test_admin_explicitly_confirms_one_exact_current_layout(
         "preview_digest": result["digest"],
         "layout_candidate_id": selected["id"],
         "layout_candidate_version": selected["version"],
+        "base_language": "en",
     }
 
     anonymous = asyncio.run(_request("POST", path, access_token=None, json=payload))
@@ -1881,9 +1882,10 @@ def test_admin_explicitly_confirms_one_exact_current_layout(
     assert body == {
         "job_id": str(completed.id),
         "mapping_id": str(mapping_id),
-        "preview_digest": result["digest"],
+        "preview_digest": body["preview_digest"],
         "layout_candidate_id": selected["id"],
         "layout_candidate_version": 1,
+        "base_language": "en",
         "confirmed_by": body["confirmed_by"],
         "confirmed_at": body["confirmed_at"],
     }
@@ -1893,7 +1895,9 @@ def test_admin_explicitly_confirms_one_exact_current_layout(
         assert mapping.selected_layout_candidate_id == UUID(str(selected["id"]))
         assert mapping.selected_layout_version == 1
         assert mapping.confirmed_preview_job_id == completed.id
-        assert mapping.confirmed_preview_digest == result["digest"]
+        assert mapping.confirmed_preview_digest == body["preview_digest"]
+        assert mapping.confirmed_preview_digest != result["digest"]
+        assert mapping.base_language == "en"
         assert str(mapping.preview_confirmed_by) == body["confirmed_by"]
         assert mapping.preview_confirmed_at is not None
         assert session.scalar(text("SELECT to_regclass('public.translations')")) is None
@@ -1914,6 +1918,17 @@ def test_base_language_single_detection_is_deterministic_digest_bound_and_curren
         )
     )
     actor_id = uuid4()
+    with preview_session_factory.begin() as session:
+        session.add(
+            User(
+                id=actor_id,
+                email=f"base-language-{actor_id}@example.com",
+                display_name="Base Language Admin",
+                hashed_password=hash_password("base language administrator phrase!"),
+                is_active=True,
+                must_change_password=False,
+            )
+        )
 
     with preview_session_factory() as session:
         confirmation = confirm_preview_job(
@@ -2160,6 +2175,7 @@ def test_confirmation_is_invalid_after_every_live_identity_change(
         "preview_digest": result["digest"],
         "layout_candidate_id": selected["id"],
         "layout_candidate_version": selected["version"],
+        "base_language": "en",
     }
     assert (
         asyncio.run(_request("POST", path, access_token=admin_token, json=payload)).status_code
@@ -2289,6 +2305,7 @@ def test_new_commit_makes_an_inflight_completion_stale_and_nonconfirmable(
                 "preview_digest": "f" * 64,
                 "layout_candidate_id": _candidate()["id"],
                 "layout_candidate_version": 1,
+                "base_language": "en",
             },
         )
     )
@@ -2341,6 +2358,7 @@ def test_nonconfirmable_preview_states_expose_no_confirmation_action(
                 "preview_digest": "f" * 64,
                 "layout_candidate_id": _candidate()["id"],
                 "layout_candidate_version": 1,
+                "base_language": "en",
             },
         )
     )
@@ -2509,7 +2527,7 @@ def _seed_active_revalidation_authority(
     factory: sessionmaker[Session],
     *,
     invalid_mapping: bool = False,
-    base_language: str | None = None,
+    base_language: str | None = "en",
     selected_layout_id: UUID | None = None,
 ) -> tuple[UUID, UUID, UUID, UUID, UUID]:
     """Project the standard preview fixture into one inactive published revision."""
@@ -2707,7 +2725,8 @@ def test_inactive_active_revision_can_revalidate_confirm_and_reactivate_without_
     assert confirmation.revision_version == 4
     assert confirmation.mapping_id == mapping_id
     assert confirmation.connection_generation == 8
-    assert confirmation.preview_digest == succeeded.result["digest"]
+    assert confirmation.preview_digest != succeeded.result["digest"]
+    assert confirmation.base_language == "en"
     assert confirmation.layout_candidate_id == UUID(str(current_layout["id"]))
     assert confirmation.confirmed_by == actor_id
     assert (
@@ -3352,6 +3371,7 @@ def test_base_language_active_revalidation_rejects_legacy_null_without_sidecar(
     product_id, revision_id, mapping_id, actor_id, _old_layout_id = (
         _seed_active_revalidation_authority(
             preview_session_factory,
+            base_language=None,
             selected_layout_id=selected_layout_id,
         )
     )
@@ -3584,6 +3604,7 @@ def test_active_revision_revalidation_api_is_admin_only_exact_and_read_only(
                 "preview_digest": "f" * 64,
                 "layout_candidate_id": str(selected_layout_id),
                 "layout_candidate_version": 1,
+                "base_language": "en",
             },
         ),
     )
@@ -3752,6 +3773,7 @@ def test_active_revision_revalidation_api_is_admin_only_exact_and_read_only(
         "preview_digest": succeeded_body["result"]["digest"],
         "layout_candidate_id": selected["id"],
         "layout_candidate_version": selected["version"],
+        "base_language": "en",
     }
     stale_confirmation_values = (
         {"active_revision_id": str(uuid4())},
@@ -3796,9 +3818,10 @@ def test_active_revision_revalidation_api_is_admin_only_exact_and_read_only(
         "mapping_id": str(mapping_id),
         "connection_generation": 7,
         "commits": created_body["repository_sides"],
-        "preview_digest": succeeded_body["result"]["digest"],
+        "preview_digest": confirmed_body["preview_digest"],
         "layout_candidate_id": selected["id"],
         "layout_candidate_version": 1,
+        "base_language": "en",
         "confirmed_by": confirmed_body["confirmed_by"],
         "confirmed_at": confirmed_body["confirmed_at"],
     }
