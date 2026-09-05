@@ -622,8 +622,8 @@ def test_constraint_payload_validation_prevents_service_dispatch(
     def forbidden_dispatch(*_args: object, **_kwargs: object) -> None:
         calls.append("dispatched")
 
-    monkeypatch.setattr(routes, "put_translation_constraint", forbidden_dispatch)
-    monkeypatch.setattr(routes, "delete_translation_constraint", forbidden_dispatch)
+    monkeypatch.setattr(routes, "put_translation_constraint_service", forbidden_dispatch)
+    monkeypatch.setattr(routes, "delete_translation_constraint_service", forbidden_dispatch)
     path = f"{TRANSLATIONS_PATH}/{group_id}/constraints/it"
     invalid_put_payloads: tuple[object, ...] = (
         {},

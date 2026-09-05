@@ -49,7 +49,7 @@ def create_app() -> FastAPI:
             origin.unicode_string().removesuffix("/") for origin in settings.cors_origins
         ],
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PATCH"],
+        allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
     )
     application.include_router(api_router, prefix=settings.api_v1_prefix)

@@ -1,6 +1,6 @@
 """Closed public contracts for maximum-length constraint mutations."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
@@ -64,4 +64,15 @@ class TranslationConstraintMutationResponse(ClosedTranslationConstraintModel):
     values: Annotated[
         list[TranslationConstraintMutationValueResponse],
         Field(min_length=1, max_length=10_000),
+    ]
+
+
+class TranslationConstraintErrorResponse(ClosedTranslationConstraintModel):
+    """One bounded failure projection without authority enumeration."""
+
+    detail: Literal[
+        "Translation unavailable",
+        "Translation constraint conflict",
+        "Invalid translation constraint input",
+        "Translation constraint unavailable",
     ]

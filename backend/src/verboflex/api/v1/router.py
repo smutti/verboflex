@@ -13,6 +13,7 @@ from verboflex.api.v1.routes import (
     auth,
     health,
     system,
+    translation_constraints,
     translations,
     users,
 )
@@ -23,6 +24,7 @@ api_router.include_router(auth.router)
 api_router.include_router(users.router)
 api_router.include_router(system.router)
 api_router.include_router(translations.router)
+api_router.include_router(translation_constraints.router)
 api_router.include_router(admin_bitbucket.router)
 api_router.include_router(admin_discovery.router)
 api_router.include_router(admin_mappings.router)
