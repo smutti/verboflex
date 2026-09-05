@@ -77,6 +77,14 @@ CANONICAL_TRANSLATION_TABLES = {
     "translation_parse_issues",
 }
 PREVIEW_WATCHDOG_INDEX = "ix_preview_jobs_watchdog_state_started_at"
+TRANSLATION_SEARCH_INDEXES = {
+    "ix_translation_keys_search_product_scope_deleted",
+    "ix_translation_keys_search_raw_key_pattern",
+    "ix_translation_keys_search_raw_key_trgm",
+    "ix_translation_values_search_scope_filters",
+    "ix_translation_values_search_source_text_trgm",
+    "ix_translation_values_search_display_text_trgm",
+}
 MAPPING_BASE_LANGUAGE_CONSTRAINTS = {
     "ck_product_repository_mappings_base_language_length",
     "ck_product_repository_mappings_base_language_normalized",
@@ -279,6 +287,87 @@ def test_declarative_metadata_contains_every_auth_model() -> None:
     from verboflex.db.base import Base
 
     assert set(Base.metadata.tables) >= EXPECTED_TABLES
+
+
+def test_translation_search_indexes_require_external_pg_trgm_and_round_trip(
+    migrated_database: tuple[Config, Engine],
+) -> None:
+    """Own only application indexes while retaining infrastructure-owned pg_trgm."""
+    config, engine = migrated_database
+    migration_path = BACKEND_ROOT / "alembic/versions/0017_translation_search_indexes.py"
+    migration_source = migration_path.read_text(encoding="utf-8")
+
+    assert "CREATE EXTENSION" not in migration_source.upper()
+    assert "DROP EXTENSION" not in migration_source.upper()
+    command.upgrade(config, "0016_canonical_translations")
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                text("SELECT extversion FROM pg_extension WHERE extname = 'pg_trgm'")
+            ).scalar_one()
+            == "1.6"
+        )
+
+    command.upgrade(config, "head")
+    inspector = inspect(engine)
+    actual_indexes = {
+        index["name"]
+        for table_name in ("translation_keys", "translation_values")
+        for index in inspector.get_indexes(table_name)
+    }
+    assert actual_indexes >= TRANSLATION_SEARCH_INDEXES
+
+    command.downgrade(config, "0016_canonical_translations")
+    inspector = inspect(engine)
+    downgraded_indexes = {
+        index["name"]
+        for table_name in ("translation_keys", "translation_values")
+        for index in inspector.get_indexes(table_name)
+    }
+    assert TRANSLATION_SEARCH_INDEXES.isdisjoint(downgraded_indexes)
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                text("SELECT extversion FROM pg_extension WHERE extname = 'pg_trgm'")
+            ).scalar_one()
+            == "1.6"
+        )
+
+    command.upgrade(config, "head")
+    rebuilt_indexes = {
+        index["name"]
+        for table_name in ("translation_keys", "translation_values")
+        for index in inspect(engine).get_indexes(table_name)
+    }
+    assert rebuilt_indexes >= TRANSLATION_SEARCH_INDEXES
+
+
+@pytest.mark.parametrize("capability", ["absent", "unusable"])
+def test_translation_search_indexes_fail_before_ddl_when_pg_trgm_is_unavailable(
+    migrated_database: tuple[Config, Engine],
+    capability: str,
+) -> None:
+    """Reject an absent or incomplete external capability without partial indexes."""
+    config, engine = migrated_database
+    command.upgrade(config, "0016_canonical_translations")
+    with engine.begin() as connection:
+        if capability == "absent":
+            connection.execute(text("DROP EXTENSION pg_trgm"))
+        else:
+            connection.execute(
+                text("ALTER EXTENSION pg_trgm DROP OPERATOR CLASS gin_trgm_ops USING gin")
+            )
+            connection.execute(text("DROP OPERATOR CLASS gin_trgm_ops USING gin CASCADE"))
+
+    with pytest.raises(DBAPIError, match="pg_trgm"):
+        command.upgrade(config, "head")
+
+    actual_indexes = {
+        index["name"]
+        for table_name in ("translation_keys", "translation_values")
+        for index in inspect(engine).get_indexes(table_name)
+    }
+    assert TRANSLATION_SEARCH_INDEXES.isdisjoint(actual_indexes)
 
 
 def _seed_import_schema_graph(
