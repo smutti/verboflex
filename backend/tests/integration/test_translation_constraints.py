@@ -858,6 +858,34 @@ def test_identical_put_is_idempotent_and_keeps_server_owned_version(
     assert current.updated_at == original_updated_at
 
 
+def test_changed_put_increments_version_once_and_returns_fresh_projection(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with constraint_session_factory.begin() as session:
+        created = service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=4,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+        changed = service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=3,
+            expected_version=created.version,
+            actor_id=ids["actor"],
+        )
+
+    target = next(item for item in changed.values if item.value_id == ids["target_value"])
+    assert (changed.explicit_maximum, changed.version) == (3, 2)
+    assert (target.actual, target.maximum, target.is_over_limit) == (4, 3, True)
+
+
 def test_delete_target_override_restores_dynamic_base_inheritance(
     constraint_session_factory: sessionmaker[Session],
 ) -> None:
@@ -896,6 +924,67 @@ def test_delete_target_override_restores_dynamic_base_inheritance(
         "base_default",
         "inherited",
     )
+
+
+def test_delete_target_override_without_base_restores_explicit_no_limit(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with constraint_session_factory.begin() as session:
+        override = service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=0,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+        removed = service.delete_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            expected_version=override.version,
+        )
+
+    target = next(item for item in removed.values if item.value_id == ids["target_value"])
+    assert (target.maximum, target.source, target.label, target.is_over_limit) == (
+        None,
+        "none",
+        "none",
+        False,
+    )
+
+
+@pytest.mark.parametrize("expected_version", [-1, None, True, 1.0, "1"])
+def test_delete_rejects_inexact_expected_version_without_mutation(
+    constraint_session_factory: sessionmaker[Session],
+    expected_version: object,
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with constraint_session_factory.begin() as session:
+        service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=3,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+    with (
+        constraint_session_factory.begin() as session,
+        pytest.raises(service.ConstraintInputInvalid),
+    ):
+        service.delete_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            expected_version=expected_version,
+        )
+    with constraint_session_factory() as session:
+        rule = session.scalar(select(TranslationConstraint))
+    assert rule is not None and (rule.max_chars, rule.version) == (3, 1)
 
 
 def test_delete_absent_target_is_bounded_and_never_removes_base_default(
