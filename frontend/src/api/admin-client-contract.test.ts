@@ -87,6 +87,7 @@ import type {
   TranslationConstraintProjectionResponse,
   TranslationGroupDetailResponse,
   TranslationOptionsResponse,
+  TranslationProvenanceResponse,
   TranslationSearchPageResponse,
   TranslationValueResponse,
 } from "./client/types.gen";
@@ -447,7 +448,7 @@ function findHandwrittenAdminUserWireTypes(
   return duplicates;
 }
 
-describe("canonical generated Phase 3 admin client", () => {
+describe("canonical generated API client", () => {
   it("calls exactly five generated translation operations with encoded inputs and bearer authority", async () => {
     const groupId = "10000000-0000-4000-8000-000000000001";
     const productId = "20000000-0000-4000-8000-000000000002";
@@ -593,9 +594,9 @@ describe("canonical generated Phase 3 admin client", () => {
     expectTypeOf<TranslationValueResponse["deleted_at"]>().toEqualTypeOf<
       string | null
     >();
-    expectTypeOf<TranslationValueResponse["provenance"]>().toEqualTypeOf<
+    expectTypeOf<
       TranslationValueResponse["provenance"]
-    >();
+    >().toEqualTypeOf<TranslationProvenanceResponse | null>();
     expectTypeOf<
       TranslationConstraintProjectionResponse["maximum"]
     >().toEqualTypeOf<number | null>();
