@@ -48,12 +48,12 @@
 
 ### Localization Import and Formats
 
-- [ ] **FMT-01**: System can parse Android XML string resources into canonical translation records.
-- [ ] **FMT-02**: System can parse Qt `.ts` files into canonical translation records.
-- [ ] **FMT-03**: System can parse JSON localization files into canonical translation records.
-- [ ] **FMT-04**: System can parse iOS `.strings` files into canonical translation records.
+- [x] **FMT-01**: System can parse Android XML string resources into canonical translation records.
+- [x] **FMT-02**: System can parse Qt `.ts` files into canonical translation records.
+- [x] **FMT-03**: System can parse JSON localization files into canonical translation records.
+- [x] **FMT-04**: System can parse iOS `.strings` files into canonical translation records.
 - [ ] **FMT-05**: System preserves enough file location metadata to write edited translations back to their original files.
-- [ ] **FMT-06**: System validates parser behavior with golden fixtures for all supported v1 formats.
+- [x] **FMT-06**: System validates parser behavior with golden fixtures for all supported v1 formats.
 - [ ] **FMT-07**: System imports translations into a canonical model that includes product, repository, branch, file path, format, key, language, source text when available, translated text, state, and locator metadata.
 - [ ] **FMT-08**: System can refresh imported translations from Bitbucket without losing review states, comments, constraints, or audit history attached to stable translation identities.
 
@@ -66,13 +66,13 @@
 - [ ] **SRCH-05**: Product manager can filter translations by maximum-length constraint violation status.
 - [ ] **SRCH-06**: User can open a translation detail view from search results.
 - [ ] **SRCH-07**: Translation detail view shows product, language, key, source text when available, translated text, state, file path, repository, branch, constraints, comments, and pending change status.
-- [ ] **SRCH-08**: Search results are paginated or virtualized so large translation sets remain usable.
+- [x] **SRCH-08**: Search results are paginated or virtualized so large translation sets remain usable.
 
 ### Constraints
 
 - [ ] **CONS-01**: Authorized user can define a maximum character length constraint for a translation key.
 - [ ] **CONS-02**: Authorized user can edit or remove a maximum character length constraint.
-- [ ] **CONS-03**: System calculates whether each translated value violates its configured maximum character length.
+- [x] **CONS-03**: System calculates whether each translated value violates its configured maximum character length.
 - [ ] **CONS-04**: System recalculates maximum-length violations after import and after translation edits.
 - [ ] **CONS-05**: Translation detail view shows configured max length, actual length, and violation status.
 
@@ -201,12 +201,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BITB-04 | Phase 2 | Complete |
 | BITB-05 | Phase 3 | Complete |
 | BITB-06 | Phase 3 | Complete |
-| FMT-01 | Phase 4 | Pending |
-| FMT-02 | Phase 4 | Pending |
-| FMT-03 | Phase 4 | Pending |
-| FMT-04 | Phase 4 | Pending |
+| FMT-01 | Phase 4 | Complete |
+| FMT-02 | Phase 4 | Complete |
+| FMT-03 | Phase 4 | Complete |
+| FMT-04 | Phase 4 | Complete |
 | FMT-05 | Phase 6 | Pending |
-| FMT-06 | Phase 4 | Pending |
+| FMT-06 | Phase 4 | Complete |
 | FMT-07 | Phase 4 | Pending |
 | FMT-08 | Phase 4 | Pending |
 | SRCH-01 | Phase 4 | Pending |
@@ -216,10 +216,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SRCH-05 | Phase 4 | Pending |
 | SRCH-06 | Phase 4 | Pending |
 | SRCH-07 | Phase 4 | Pending |
-| SRCH-08 | Phase 4 | Pending |
+| SRCH-08 | Phase 4 | Complete |
 | CONS-01 | Phase 4 | Pending |
 | CONS-02 | Phase 4 | Pending |
-| CONS-03 | Phase 4 | Pending |
+| CONS-03 | Phase 4 | Complete |
 | CONS-04 | Phase 4 | Pending |
 | CONS-05 | Phase 4 | Pending |
 | REVW-01 | Phase 5 | Pending |

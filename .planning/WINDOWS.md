@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 0
 waived_count: 0
-fixed_count: 47
-total_count: 47
-last_updated: 2026-09-05T07:29:47.251Z
+fixed_count: 51
+total_count: 51
+last_updated: 2026-09-05T09:11:05.058Z
 ---
 
 # Broken Windows Ledger
@@ -62,6 +62,10 @@ last_updated: 2026-09-05T07:29:47.251Z
 | 45 | 04 | deviation | backend/tests/unit/localization/importing/test_ios_strings.py |  | Replaced a collision-prone iOS redaction oracle. | fixed |  | 2026-09-05T07:29:20.013Z | 2026-09-05T07:29:47.126Z |
 | 46 | 04 | deviation | backend/tests/fixtures/localization/android/valid_structured.expected.json |  | Updated the Android golden for the mandated global order. | fixed |  | 2026-09-05T07:29:20.076Z | 2026-09-05T07:29:47.187Z |
 | 47 | 04 | deviation | backend/tests/unit/localization/importing/test_conformance.py |  | Closed defensive parser branches required by the next blocking checkpoint. | fixed |  | 2026-09-05T07:29:20.142Z | 2026-09-05T07:29:47.251Z |
+| 48 | 04 | deviation | tools/phase4_parser_checkpoint.sh |  | Replaced a transitive-import persistence assertion with fail-closed SQLAlchemy method guards. | fixed |  | 2026-09-05T09:10:53.182Z | 2026-09-05T09:11:04.876Z |
+| 49 | 04 | deviation | tools/phase4_parser_checkpoint.sh |  | Preserved actionable container failures and idempotent cleanup. | fixed |  | 2026-09-05T09:11:04.695Z | 2026-09-05T09:11:04.936Z |
+| 50 | 04 | deviation | docs/evidence/phase-04-parser.md |  | Removed a self-triggering evidence sanitization phrase. | fixed |  | 2026-09-05T09:11:04.756Z | 2026-09-05T09:11:04.995Z |
+| 51 | 04 | deviation | tools/phase4_parser_checkpoint.sh |  | Confined coverage data to the owner-only runtime directory. | fixed |  | 2026-09-05T09:11:04.816Z | 2026-09-05T09:11:05.058Z |
 
 ````json
 [
@@ -628,6 +632,54 @@ last_updated: 2026-09-05T07:29:47.251Z
     "reason": "",
     "recorded_at": "2026-09-05T07:29:20.142Z",
     "resolved_at": "2026-09-05T07:29:47.251Z"
+  },
+  {
+    "id": 48,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "tools/phase4_parser_checkpoint.sh",
+    "line": null,
+    "description": "Replaced a transitive-import persistence assertion with fail-closed SQLAlchemy method guards.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-05T09:10:53.182Z",
+    "resolved_at": "2026-09-05T09:11:04.876Z"
+  },
+  {
+    "id": 49,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "tools/phase4_parser_checkpoint.sh",
+    "line": null,
+    "description": "Preserved actionable container failures and idempotent cleanup.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-05T09:11:04.695Z",
+    "resolved_at": "2026-09-05T09:11:04.936Z"
+  },
+  {
+    "id": 50,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "docs/evidence/phase-04-parser.md",
+    "line": null,
+    "description": "Removed a self-triggering evidence sanitization phrase.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-05T09:11:04.756Z",
+    "resolved_at": "2026-09-05T09:11:04.995Z"
+  },
+  {
+    "id": 51,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "tools/phase4_parser_checkpoint.sh",
+    "line": null,
+    "description": "Confined coverage data to the owner-only runtime directory.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-05T09:11:04.816Z",
+    "resolved_at": "2026-09-05T09:11:05.058Z"
   }
 ]
 ````
