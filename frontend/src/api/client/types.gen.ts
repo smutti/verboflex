@@ -43,6 +43,10 @@ export type AdminActiveRevisionRevalidationConfirmationRequest = {
      */
     active_revision_version: number;
     /**
+     * Base Language
+     */
+    base_language: string | null;
+    /**
      * Commits
      */
     commits: Array<AdminPreviewCommitRequest>;
@@ -82,6 +86,10 @@ export type AdminActiveRevisionRevalidationConfirmationResponse = {
      * Active Revision Version
      */
     active_revision_version: number;
+    /**
+     * Base Language
+     */
+    base_language: string;
     /**
      * Commits
      */
@@ -675,6 +683,10 @@ export type AdminPreviewCommitRequest = {
  */
 export type AdminPreviewConfirmationRequest = {
     /**
+     * Base Language
+     */
+    base_language: string | null;
+    /**
      * Layout Candidate Id
      */
     layout_candidate_id: string;
@@ -694,6 +706,10 @@ export type AdminPreviewConfirmationRequest = {
  * Bounded actor/time evidence for one confirmed preview layout.
  */
 export type AdminPreviewConfirmationResponse = {
+    /**
+     * Base Language
+     */
+    base_language: string;
     /**
      * Confirmed At
      */

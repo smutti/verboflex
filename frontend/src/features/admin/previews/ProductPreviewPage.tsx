@@ -445,6 +445,7 @@ function PreviewJobView({
       const response = await confirmAdminPreviewJob({
         auth: accessToken,
         body: {
+          base_language: null,
           layout_candidate_id: selectedCandidate.id,
           layout_candidate_version: selectedCandidate.version,
           preview_digest: result.digest,
@@ -944,6 +945,7 @@ function PublishedMappingRecovery({
         body: {
           active_revision_id: job.active_revision_id,
           active_revision_version: job.active_revision_version,
+          base_language: null,
           commits: job.repository_sides.map((side) => ({
             commit_hash: side.commit_hash,
             role: side.role,

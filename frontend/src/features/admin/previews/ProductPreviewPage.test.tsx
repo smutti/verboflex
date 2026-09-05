@@ -1212,6 +1212,7 @@ describe("administrator product preview and publication page", () => {
   it("requires explicit current confirmation before named publication and trusts only backend success", async () => {
     confirmMock.mockResolvedValueOnce(
       ok({
+        base_language: "en",
         confirmed_at: "2026-08-28T12:01:00Z",
         confirmed_by: "00000000-0000-4000-8000-000000000001",
         job_id: previewJob().id,
@@ -1278,6 +1279,7 @@ describe("administrator product preview and publication page", () => {
   it("preserves current preview evidence and links blockers after publication conflict", async () => {
     confirmMock.mockResolvedValueOnce(
       ok({
+        base_language: "en",
         confirmed_at: "2026-08-28T12:01:00Z",
         confirmed_by: "admin-id",
         job_id: previewJob().id,
@@ -1396,6 +1398,7 @@ describe("administrator product preview and publication page", () => {
       ok({
         active_revision_id: succeededJob.active_revision_id,
         active_revision_version: succeededJob.active_revision_version,
+        base_language: "en",
         commits: succeededJob.repository_sides,
         confirmed_at: "2026-08-31T17:00:06Z",
         confirmed_by: "00000000-0000-4000-8000-000000000001",

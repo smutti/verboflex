@@ -676,6 +676,7 @@ describe("canonical generated Phase 3 admin client", () => {
       preview_digest: "f".repeat(64),
       layout_candidate_id: "50000000-0000-4000-8000-000000000005",
       layout_candidate_version: 1,
+      base_language: "it-IT",
     } satisfies AdminActiveRevisionRevalidationConfirmationRequest;
     const { apiClient, requests } = createRecordingApiClient(eligibilityBody);
 
