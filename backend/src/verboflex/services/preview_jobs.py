@@ -342,6 +342,24 @@ def _complete_preview_digest(
     return hashlib.sha256(encoded.encode("ascii")).hexdigest()
 
 
+def _confirmation_digest_matches(
+    identity: PreviewJobIdentity,
+    layout_candidates: list[dict[str, object]],
+    *,
+    base_language: str,
+    expected_digest: str,
+) -> bool:
+    """Compare one persisted confirmation with its full language-bound authority."""
+    return (
+        _complete_preview_digest(
+            identity,
+            layout_candidates,
+            base_language=base_language,
+        )
+        == expected_digest
+    )
+
+
 def _matches_started_identity(row: PreviewJob, identity: PreviewJobIdentity) -> bool:
     """Compare every immutable field captured before processor execution."""
     try:
@@ -1208,13 +1226,11 @@ def _active_confirmed_layout_matches(
     if mapping.base_language is None:
         return False
     candidates = cast(list[dict[str, object]], result["layout_candidates"])
-    if (
-        _complete_preview_digest(
-            _identity(row),
-            candidates,
-            base_language=mapping.base_language,
-        )
-        != sidecar.preview_digest
+    if not _confirmation_digest_matches(
+        _identity(row),
+        candidates,
+        base_language=mapping.base_language,
+        expected_digest=sidecar.preview_digest,
     ):
         return False
     return (
@@ -1389,13 +1405,11 @@ def _confirmed_layout_matches(
         return False
     assert mapping.base_language is not None
     candidates = cast(list[dict[str, object]], result["layout_candidates"])
-    if (
-        _complete_preview_digest(
-            _identity(row),
-            candidates,
-            base_language=mapping.base_language,
-        )
-        != mapping.confirmed_preview_digest
+    if not _confirmation_digest_matches(
+        _identity(row),
+        candidates,
+        base_language=mapping.base_language,
+        expected_digest=mapping.confirmed_preview_digest,
     ):
         return False
     return _selected_layout_matches(candidates, mapping)
