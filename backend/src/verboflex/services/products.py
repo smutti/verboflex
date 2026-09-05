@@ -222,6 +222,7 @@ def _clone_active_revision_graph(
                 revision_id=candidate.id,
                 topology=active_mapping.topology,
                 identity_key=active_mapping.identity_key,
+                base_language=active_mapping.base_language,
                 selected_layout_candidate_id=active_mapping.selected_layout_candidate_id,
                 selected_layout_version=active_mapping.selected_layout_version,
                 confirmed_preview_job_id=None,
