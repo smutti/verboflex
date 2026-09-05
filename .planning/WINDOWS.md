@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 3
+open_count: 0
 waived_count: 0
-fixed_count: 40
-total_count: 43
-last_updated: 2026-09-04T22:07:24.801Z
+fixed_count: 47
+total_count: 47
+last_updated: 2026-09-05T07:29:47.251Z
 ---
 
 # Broken Windows Ledger
@@ -54,10 +54,14 @@ last_updated: 2026-09-04T22:07:24.801Z
 | 37 | 02 | deviation | tools/phase2_gauntlet.sh |  | Mechanical Ruff formatting shifted three exact reviewed secret-fixture line numbers; policy entries were realigned | fixed |  | 2026-08-31T11:11:45.381Z | 2026-08-31T11:12:09.549Z |
 | 38 | 03 | deviation | backend/tests/api/test_openapi_contract.py |  | Exact generated export assertions required identifier-boundary matching | fixed |  | 2026-09-03T10:30:58.460Z | 2026-09-03T10:31:32.155Z |
 | 39 | 03 | deviation | frontend/src/features/admin/products/ProductConfiguration.test.tsx |  | Typed product fixtures required canonical affected_mapping_count alignment | fixed |  | 2026-09-03T10:30:58.526Z | 2026-09-03T10:31:32.223Z |
-| 40 | 04 | stub | backend/src/verboflex/localization/importing/registry.py | 36 | Qt canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-03 supplies the adapter | open |  | 2026-09-04T20:50:55.925Z |  |
-| 41 | 04 | stub | backend/src/verboflex/localization/importing/registry.py | 37 | JSON canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-04 supplies the adapter | open |  | 2026-09-04T20:50:55.994Z |  |
-| 42 | 04 | stub | backend/src/verboflex/localization/importing/registry.py | 38 | iOS strings canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-05 supplies the adapter | open |  | 2026-09-04T20:50:56.071Z |  |
+| 40 | 04 | stub | backend/src/verboflex/localization/importing/registry.py | 36 | Qt canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-03 supplies the adapter | fixed |  | 2026-09-04T20:50:55.925Z | 2026-09-05T07:29:46.875Z |
+| 41 | 04 | stub | backend/src/verboflex/localization/importing/registry.py | 37 | JSON canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-04 supplies the adapter | fixed |  | 2026-09-04T20:50:55.994Z | 2026-09-05T07:29:46.939Z |
+| 42 | 04 | stub | backend/src/verboflex/localization/importing/registry.py | 38 | iOS strings canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-05 supplies the adapter | fixed |  | 2026-09-04T20:50:56.071Z | 2026-09-05T07:29:47.002Z |
 | 43 | 04 | deviation | backend/tests/unit/localization/importing/test_ios_strings.py | 196 | Corrected the Task 1 span-adjacency test to compare intentionally unequal adjacent-pair iterables with strict=False. | fixed |  | 2026-09-04T22:07:04.874Z | 2026-09-04T22:07:24.801Z |
+| 44 | 04 | deviation | backend/src/verboflex/localization/importing/android_xml.py |  | Closed Android adapter calls with forged non-byte input. | fixed |  | 2026-09-05T07:29:19.950Z | 2026-09-05T07:29:47.064Z |
+| 45 | 04 | deviation | backend/tests/unit/localization/importing/test_ios_strings.py |  | Replaced a collision-prone iOS redaction oracle. | fixed |  | 2026-09-05T07:29:20.013Z | 2026-09-05T07:29:47.126Z |
+| 46 | 04 | deviation | backend/tests/fixtures/localization/android/valid_structured.expected.json |  | Updated the Android golden for the mandated global order. | fixed |  | 2026-09-05T07:29:20.076Z | 2026-09-05T07:29:47.187Z |
+| 47 | 04 | deviation | backend/tests/unit/localization/importing/test_conformance.py |  | Closed defensive parser branches required by the next blocking checkpoint. | fixed |  | 2026-09-05T07:29:20.142Z | 2026-09-05T07:29:47.251Z |
 
 ````json
 [
@@ -536,10 +540,10 @@ last_updated: 2026-09-04T22:07:24.801Z
     "file": "backend/src/verboflex/localization/importing/registry.py",
     "line": 36,
     "description": "Qt canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-03 supplies the adapter",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-04T20:50:55.925Z",
-    "resolved_at": null
+    "resolved_at": "2026-09-05T07:29:46.875Z"
   },
   {
     "id": 41,
@@ -548,10 +552,10 @@ last_updated: 2026-09-04T22:07:24.801Z
     "file": "backend/src/verboflex/localization/importing/registry.py",
     "line": 37,
     "description": "JSON canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-04 supplies the adapter",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-04T20:50:55.994Z",
-    "resolved_at": null
+    "resolved_at": "2026-09-05T07:29:46.939Z"
   },
   {
     "id": 42,
@@ -560,10 +564,10 @@ last_updated: 2026-09-04T22:07:24.801Z
     "file": "backend/src/verboflex/localization/importing/registry.py",
     "line": 38,
     "description": "iOS strings canonical dispatch intentionally returns a closed unsupported-structure result until Plan 04-05 supplies the adapter",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-04T20:50:56.071Z",
-    "resolved_at": null
+    "resolved_at": "2026-09-05T07:29:47.002Z"
   },
   {
     "id": 43,
@@ -576,6 +580,54 @@ last_updated: 2026-09-04T22:07:24.801Z
     "reason": "",
     "recorded_at": "2026-09-04T22:07:04.874Z",
     "resolved_at": "2026-09-04T22:07:24.801Z"
+  },
+  {
+    "id": 44,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/localization/importing/android_xml.py",
+    "line": null,
+    "description": "Closed Android adapter calls with forged non-byte input.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-05T07:29:19.950Z",
+    "resolved_at": "2026-09-05T07:29:47.064Z"
+  },
+  {
+    "id": 45,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/tests/unit/localization/importing/test_ios_strings.py",
+    "line": null,
+    "description": "Replaced a collision-prone iOS redaction oracle.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-05T07:29:20.013Z",
+    "resolved_at": "2026-09-05T07:29:47.126Z"
+  },
+  {
+    "id": 46,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/tests/fixtures/localization/android/valid_structured.expected.json",
+    "line": null,
+    "description": "Updated the Android golden for the mandated global order.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-05T07:29:20.076Z",
+    "resolved_at": "2026-09-05T07:29:47.187Z"
+  },
+  {
+    "id": 47,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/tests/unit/localization/importing/test_conformance.py",
+    "line": null,
+    "description": "Closed defensive parser branches required by the next blocking checkpoint.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-05T07:29:20.142Z",
+    "resolved_at": "2026-09-05T07:29:47.251Z"
   }
 ]
 ````

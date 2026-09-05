@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 04
 current_phase_name: Localization Import, Search, and Constraints
 status: executing
-stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-09-04T22:07:53.003Z"
+stopped_at: Completed 04-06-PLAN.md
+last_updated: "2026-09-05T07:29:00.247Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 04 execution started
-state_head: 57f476acaf3d4b23dd45a5eb6cc32abdc0936b0f
+state_head: ab5072a934a3f6b9af33f37d4f33c6f289cb4e37
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 104
-  completed_plans: 82
+  completed_plans: 83
   percent: 38
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 ## Current Position
 
 Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
-Plan: 6 of 27
+Plan: 7 of 27
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 04 execution started
 
@@ -142,6 +142,7 @@ Progress: [████████░░░░░░░░░░░░] 3/8 pha
 | Phase 04 P03 | 19min | 2 tasks | 6 files |
 | Phase 04 P04 | 9min | 2 tasks | 6 files |
 | Phase 04 P05 | 12min | 2 tasks | 6 files |
+| Phase 04 P06 | 9h15min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -410,6 +411,9 @@ Recent decisions affecting current work:
 - [Phase 04]: Keep decoded iOS keys and scalar selectors semantic while retaining encoding, path, spans, comments, and order outside stable identity. — File rewrites and moves must not detach canonical review identity.
 - [Phase 04]: Enforce exact iOS file, aggregate, peer, assignment, comment, token, and escape ceilings before returning canonical authority. — Repository-controlled inputs remain deterministic and bounded.
 - [Phase 04]: Aggregate iOS peer files in deterministic side and path order and discard all values on any peer or identity failure. — Canonical import results remain atomic across configured files.
+- [Phase 04]: Separate mappings retain source and target records independently; matching targets receive source text, translation-only targets retain null source, and key-only input never fabricates a target. — Preserves repository provenance and the researched A8 semantics without manufacturing localization data.
+- [Phase 04]: Canonical value order is repository side, provider path, locator position, raw key, language, then canonical selector bytes. — Preserves provider order and makes all four adapter manifests byte-stable.
+- [Phase 04]: Separate joins require both sides to parse completely under one normalized base language and exact selector sets for overlapping keys. — Prevents partial activation, ambiguous language authority, and structural mismatches.
 
 ### Pending Todos
 
@@ -450,6 +454,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-04T22:07:52.917Z
-Stopped at: Completed 04-05-PLAN.md
+Last session: 2026-09-05T07:29:00.160Z
+Stopped at: Completed 04-06-PLAN.md
 Resume file: None
