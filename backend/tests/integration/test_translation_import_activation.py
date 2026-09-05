@@ -18,6 +18,7 @@ from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
+from verboflex.integrations.bitbucket.client import BitbucketFileDelta
 from verboflex.localization.importing.core import (
     CanonicalIssue,
     CanonicalParseResult,
@@ -26,7 +27,12 @@ from verboflex.localization.importing.core import (
 )
 from verboflex.localization.importing.registry import parse_canonical_mapping
 from verboflex.models.bitbucket_connection import BitbucketConnection
-from verboflex.models.import_job import ImportExecution, ImportJob, ImportSourceReference
+from verboflex.models.import_job import (
+    ImportExecution,
+    ImportJob,
+    ImportRewriteProposal,
+    ImportSourceReference,
+)
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
     ProductMappingAllowedTarget,
@@ -174,6 +180,95 @@ def _seed_running_direct_import(
     return identity, repository_id
 
 
+def _seed_running_separate_import(
+    factory: sessionmaker[Session],
+) -> tuple[import_jobs.ImportExecutionIdentity, UUID, UUID]:
+    product_id = uuid4()
+    revision_id = uuid4()
+    keys_repository_id = uuid4()
+    translations_repository_id = uuid4()
+    mapping_id = uuid4()
+    now = datetime.now(UTC)
+    with factory.begin() as session:
+        product = Product(
+            id=product_id,
+            display_name=f"Separate canonical import {product_id}",
+            name_key=f"separate canonical import {product_id}",
+            is_active=True,
+        )
+        session.add(product)
+        session.flush()
+        session.add_all(
+            [
+                ProductRevision(
+                    id=revision_id,
+                    product_id=product_id,
+                    description="published separate canonical import",
+                    version=1,
+                    is_published=False,
+                ),
+                Repository(
+                    id=keys_repository_id,
+                    workspace="canonical-team",
+                    repository_slug=f"keys-{keys_repository_id.hex}",
+                    descriptive_name="Canonical keys",
+                    descriptive_name_key="canonical keys",
+                ),
+                Repository(
+                    id=translations_repository_id,
+                    workspace="canonical-team",
+                    repository_slug=f"translations-{translations_repository_id.hex}",
+                    descriptive_name="Canonical translations",
+                    descriptive_name_key="canonical translations",
+                ),
+            ]
+        )
+        session.flush()
+        session.add(
+            ProductRepositoryMapping(
+                id=mapping_id,
+                revision_id=revision_id,
+                topology="separate",
+                identity_key=(
+                    f'[["keys","{keys_repository_id}","main"],'
+                    f'["translations","{translations_repository_id}","main"]]'
+                ),
+                base_language="en",
+                sides=[
+                    ProductMappingRepositorySide(
+                        role="keys",
+                        repository_id=keys_repository_id,
+                        source_branch="main",
+                    ),
+                    ProductMappingRepositorySide(
+                        role="translations",
+                        repository_id=translations_repository_id,
+                        source_branch="main",
+                    ),
+                ],
+                allowed_targets=[ProductMappingAllowedTarget(branch="main", is_default=True)],
+            )
+        )
+        session.flush()
+        revision = session.get_one(ProductRevision, revision_id)
+        revision.is_published = True
+        revision.published_at = now
+        session.flush()
+        product.active_revision_id = revision_id
+
+    with factory() as session:
+        record = import_jobs.start_or_refresh_import(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            enqueuer=lambda _import_id: None,
+        )
+    assert record.id is not None
+    identity = import_jobs.start_import_execution(factory, import_id=record.id)
+    assert identity is not None
+    return identity, keys_repository_id, translations_repository_id
+
+
 def _reference(
     repository_id: UUID,
     *,
@@ -254,6 +349,53 @@ def _qt_result(*, deleted: bool) -> CanonicalParseResult:
             ),
         )
     )
+
+
+def _separate_result() -> CanonicalParseResult:
+    return parse_canonical_mapping(
+        (
+            CanonicalParserInput(
+                format="json",
+                repository_side="keys",
+                path="locales/en.json",
+                content=b'{"welcome":"Hello"}',
+                layout_identity="json:flat-per-locale:locales/{locale}.json",
+                layout_version=1,
+                base_language="en",
+            ),
+            CanonicalParserInput(
+                format="json",
+                repository_side="translations",
+                path="locales/it.json",
+                content=b'{"welcome":"Ciao"}',
+                layout_identity="json:flat-per-locale:locales/{locale}.json",
+                layout_version=1,
+                base_language="en",
+            ),
+        )
+    )
+
+
+def _stage_direct_manifest(
+    factory: sessionmaker[Session],
+    *,
+    identity: import_jobs.ImportExecutionIdentity,
+    repository_id: UUID,
+    result: CanonicalParseResult,
+    commit_hash: str = "a" * 40,
+) -> tuple[Any, tuple[ImportSourceReferenceRecord, ...]]:
+    translation_imports = _translation_imports()
+    paths = {value.locator.path for value in result.values}
+    path = next(iter(paths), "locales.json")
+    references = (_reference(repository_id, commit_hash=commit_hash, path=path),)
+    manifest = translation_imports.stage_translation_parse(
+        factory,
+        identity=identity,
+        references=references,
+        result=result,
+    )
+    assert manifest is not None
+    return manifest, references
 
 
 def _reconcile_staged_result(
@@ -914,3 +1056,368 @@ def test_refresh_source_change_resets_all_targets_and_preserves_target_text(
     assert target.translated_text == "Ciao"
     assert target.review_state == "draft"
     assert revision_count == initial_revision_count + 1
+
+
+def test_activation_advances_dataset_and_baseline_to_the_same_execution(
+    activation_session_factory: sessionmaker[Session],
+) -> None:
+    identity, repository_id = _seed_running_direct_import(activation_session_factory)
+    manifest, references = _stage_direct_manifest(
+        activation_session_factory,
+        identity=identity,
+        repository_id=repository_id,
+        result=_json_result(),
+    )
+
+    assert import_jobs.finish_import_execution(
+        activation_session_factory,
+        identity=identity,
+        references=references,
+        canonical_manifest_digest=manifest.digest,
+    )
+
+    with activation_session_factory() as session:
+        job = session.get_one(ImportJob, identity.import_id)
+        execution = session.get_one(ImportExecution, identity.execution_id)
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        assert scope is not None
+        values = tuple(
+            session.scalars(select(TranslationValue).where(TranslationValue.scope_id == scope.id))
+        )
+    assert execution.state == "succeeded"
+    assert job.state == "current"
+    assert job.active_baseline_execution_id == identity.execution_id
+    assert scope.active_execution_id == identity.execution_id
+    assert scope.active_import_job_id == identity.import_id
+    assert scope.dataset_version == 1
+    assert {value.language for value in values} == {"en", "it"}
+
+
+def test_activation_commits_separate_keys_and_translations_as_one_dataset(
+    activation_session_factory: sessionmaker[Session],
+) -> None:
+    identity, keys_repository_id, translations_repository_id = _seed_running_separate_import(
+        activation_session_factory
+    )
+    result = _separate_result()
+    references = (
+        ImportSourceReferenceRecord(
+            position=0,
+            repository_side="keys",
+            repository_id=keys_repository_id,
+            source_branch="main",
+            commit_hash="a" * 40,
+            path="locales/en.json",
+            size_bytes=19,
+            sha256="b" * 64,
+        ),
+        ImportSourceReferenceRecord(
+            position=1,
+            repository_side="translations",
+            repository_id=translations_repository_id,
+            source_branch="main",
+            commit_hash="c" * 40,
+            path="locales/it.json",
+            size_bytes=18,
+            sha256="d" * 64,
+        ),
+    )
+    translation_imports = _translation_imports()
+    manifest = translation_imports.stage_translation_parse(
+        activation_session_factory,
+        identity=identity,
+        references=references,
+        result=result,
+    )
+    assert manifest is not None
+
+    assert import_jobs.finish_import_execution(
+        activation_session_factory,
+        identity=identity,
+        references=references,
+        canonical_manifest_digest=manifest.digest,
+    )
+
+    with activation_session_factory() as session:
+        job = session.get_one(ImportJob, identity.import_id)
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        assert scope is not None
+        locators = tuple(
+            session.scalars(
+                select(TranslationValueLocator).where(
+                    TranslationValueLocator.import_execution_id == identity.execution_id
+                )
+            )
+        )
+    assert job.active_baseline_execution_id == identity.execution_id
+    assert scope.active_execution_id == identity.execution_id
+    assert {locator.repository_side for locator in locators} == {
+        "keys",
+        "translations",
+    }
+
+
+def test_activation_rollback_keeps_prior_dataset_and_baseline_byte_stable(
+    activation_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity, repository_id = _seed_running_direct_import(activation_session_factory)
+    first_manifest, first_references = _stage_direct_manifest(
+        activation_session_factory,
+        identity=identity,
+        repository_id=repository_id,
+        result=_json_result(),
+    )
+    assert import_jobs.finish_import_execution(
+        activation_session_factory,
+        identity=identity,
+        references=first_references,
+        canonical_manifest_digest=first_manifest.digest,
+    )
+    with activation_session_factory() as session:
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        assert scope is not None
+        target = _value_for(
+            session,
+            scope_id=scope.id,
+            raw_key="welcome",
+            language="it",
+        )
+        baseline_snapshot = (
+            scope.active_execution_id,
+            scope.dataset_version,
+            target.id,
+            target.translated_text,
+            target.review_state,
+            len(target.revisions),
+        )
+
+    successor = _start_refresh_execution(activation_session_factory, identity)
+    manifest, references = _stage_direct_manifest(
+        activation_session_factory,
+        identity=successor,
+        repository_id=repository_id,
+        result=_json_result(source="Changed", translated="Salve"),
+        commit_hash="c" * 40,
+    )
+
+    def fail_recomputation(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("injected recomputation failure")
+
+    monkeypatch.setattr(
+        import_jobs,
+        "activate_translation_dataset",
+        fail_recomputation,
+        raising=False,
+    )
+    assert import_jobs.finish_import_execution(
+        activation_session_factory,
+        identity=successor,
+        references=references,
+        canonical_manifest_digest=manifest.digest,
+    )
+
+    with activation_session_factory() as session:
+        job = session.get_one(ImportJob, identity.import_id)
+        execution = session.get_one(ImportExecution, successor.execution_id)
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        assert scope is not None
+        target = session.get_one(TranslationValue, baseline_snapshot[2])
+        after = (
+            scope.active_execution_id,
+            scope.dataset_version,
+            target.id,
+            target.translated_text,
+            target.review_state,
+            len(target.revisions),
+        )
+    assert execution.state == "failed"
+    assert job.state == "import_failed"
+    assert job.active_baseline_execution_id == identity.execution_id
+    assert after == baseline_snapshot
+
+
+def test_superseded_activation_cannot_replace_current_dataset(
+    activation_session_factory: sessionmaker[Session],
+) -> None:
+    identity, repository_id = _seed_running_direct_import(activation_session_factory)
+    first_manifest, first_references = _stage_direct_manifest(
+        activation_session_factory,
+        identity=identity,
+        repository_id=repository_id,
+        result=_json_result(),
+    )
+    assert import_jobs.finish_import_execution(
+        activation_session_factory,
+        identity=identity,
+        references=first_references,
+        canonical_manifest_digest=first_manifest.digest,
+    )
+    superseded = _start_refresh_execution(activation_session_factory, identity)
+    manifest, references = _stage_direct_manifest(
+        activation_session_factory,
+        identity=superseded,
+        repository_id=repository_id,
+        result=_json_result(translated="Stale"),
+        commit_hash="c" * 40,
+    )
+    successor_id = uuid4()
+    with activation_session_factory.begin() as session:
+        superseded_row = session.get_one(ImportExecution, superseded.execution_id)
+        superseded_row.state = "failed"
+        superseded_row.finished_at = datetime.now(UTC)
+        session.add(
+            ImportExecution(
+                id=successor_id,
+                import_job_id=identity.import_id,
+                sequence=superseded.sequence + 1,
+                state="running",
+                connection_generation=superseded.connection_generation,
+                started_at=datetime.now(UTC),
+            )
+        )
+        job = session.get_one(ImportJob, identity.import_id)
+        job.current_execution_id = successor_id
+        job.state = "running"
+
+    assert (
+        import_jobs.finish_import_execution(
+            activation_session_factory,
+            identity=superseded,
+            references=references,
+            canonical_manifest_digest=manifest.digest,
+        )
+        is False
+    )
+    with activation_session_factory() as session:
+        job = session.get_one(ImportJob, identity.import_id)
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        assert scope is not None
+    assert job.current_execution_id == successor_id
+    assert job.active_baseline_execution_id == identity.execution_id
+    assert scope.active_execution_id == identity.execution_id
+    assert scope.dataset_version == 1
+
+
+def test_rewrite_confirmation_activates_the_staged_dataset_and_baseline_together(
+    activation_session_factory: sessionmaker[Session],
+) -> None:
+    identity, repository_id = _seed_running_direct_import(activation_session_factory)
+    first_manifest, first_references = _stage_direct_manifest(
+        activation_session_factory,
+        identity=identity,
+        repository_id=repository_id,
+        result=_json_result(),
+        commit_hash="1" * 40,
+    )
+    assert import_jobs.finish_import_execution(
+        activation_session_factory,
+        identity=identity,
+        references=first_references,
+        canonical_manifest_digest=first_manifest.digest,
+    )
+    proposed = _start_refresh_execution(activation_session_factory, identity)
+    proposed_manifest, proposed_references = _stage_direct_manifest(
+        activation_session_factory,
+        identity=proposed,
+        repository_id=repository_id,
+        result=_json_result(translated="Riscritto"),
+        commit_hash="2" * 40,
+    )
+    sides = (
+        import_jobs.SourceMovementSideComparison(
+            repository_side="direct",
+            repository_id=repository_id,
+            active_commit_hash="1" * 40,
+            proposed_commit_hash="2" * 40,
+            relation="diverged",
+        ),
+    )
+    movement = import_jobs.SourceMovementClassification(
+        movement="review-required",
+        sides=sides,
+        rewrite_candidate=import_jobs.SourceRewriteCandidate(
+            sides=sides,
+            files=(
+                BitbucketFileDelta(
+                    repository_side="direct",
+                    ordinal=0,
+                    change="modified",
+                    path="locales.json",
+                ),
+            ),
+            complete=True,
+        ),
+    )
+    assert import_jobs.finish_import_execution(
+        activation_session_factory,
+        identity=proposed,
+        references=proposed_references,
+        movement=movement,
+        canonical_manifest_digest=proposed_manifest.digest,
+    )
+    actor_id = uuid4()
+    with activation_session_factory.begin() as session:
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        proposal = session.scalar(
+            select(ImportRewriteProposal).where(
+                ImportRewriteProposal.proposed_execution_id == proposed.execution_id
+            )
+        )
+        assert scope is not None and proposal is not None
+        assert scope.active_execution_id == identity.execution_id
+        session.add(
+            User(
+                id=actor_id,
+                email=f"rewrite-{actor_id}@example.com",
+                display_name="Rewrite confirmer",
+                hashed_password="not-used-by-import-tests",
+                is_active=True,
+                must_change_password=False,
+            )
+        )
+        proposal_id = proposal.id
+        proposal_digest = proposal.digest
+
+    with activation_session_factory() as session:
+        import_jobs.confirm_rewrite_baseline(
+            session,
+            product_id=identity.product_id,
+            mapping_id=identity.mapping_id,
+            import_id=identity.import_id,
+            proposal_id=proposal_id,
+            proposed_execution_id=proposed.execution_id,
+            proposal_digest=proposal_digest,
+            actor_id=actor_id,
+        )
+
+    with activation_session_factory() as session:
+        job = session.get_one(ImportJob, identity.import_id)
+        proposal = session.get_one(ImportRewriteProposal, proposal_id)
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        assert scope is not None
+        translated = _value_for(
+            session,
+            scope_id=scope.id,
+            raw_key="welcome",
+            language="it",
+        )
+    assert proposal.status == "confirmed"
+    assert job.active_baseline_execution_id == proposed.execution_id
+    assert scope.active_execution_id == proposed.execution_id
+    assert scope.dataset_version == 2
+    assert translated.translated_text == "Riscritto"
