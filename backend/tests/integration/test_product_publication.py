@@ -38,6 +38,7 @@ from verboflex.services.preview_jobs import (
     PREVIEW_LAYOUT_IDENTITY,
     _canonical_identity,
     _closed_result,
+    _complete_preview_digest,
     _complete_sides,
     _identity,
     confirm_active_revision_revalidation,
@@ -46,6 +47,7 @@ from verboflex.services.preview_jobs import (
     execute_preview_job,
     get_active_revision_revalidation_job,
 )
+from verboflex.services.products import save_product_candidate
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 ADMIN_DATABASE_URL = os.environ.get(
@@ -93,6 +95,7 @@ def _add_mapping(
     revision_id: UUID,
     repository_id: UUID,
     state: str,
+    base_language: str | None = "en",
 ) -> UUID:
     mapping_id = uuid4()
     mapping = ProductRepositoryMapping(
@@ -100,6 +103,7 @@ def _add_mapping(
         revision_id=revision_id,
         topology="direct",
         identity_key=f'["direct","{repository_id}","main"]',
+        base_language=base_language,
         selected_layout_candidate_id=(None if state == "layout_missing" else uuid4()),
         selected_layout_version=(None if state == "layout_missing" else 1),
     )
@@ -248,6 +252,7 @@ def _graph_snapshot(
                     ProductRepositoryMapping.identity_key,
                     ProductRepositoryMapping.selected_layout_candidate_id,
                     ProductRepositoryMapping.selected_layout_version,
+                    ProductRepositoryMapping.base_language,
                     ProductRepositoryMapping.confirmed_preview_job_id,
                     ProductRepositoryMapping.confirmed_preview_digest,
                     ProductRepositoryMapping.preview_confirmed_by,
@@ -338,13 +343,18 @@ def test_revision_insert_snapshots_only_each_missing_identity_component(
         )
 
 
-def _preview_candidate(mapping_id: UUID) -> dict[str, object]:
+def _preview_candidate(
+    mapping_id: UUID,
+    *,
+    repository_side: str = "direct",
+    languages: tuple[str, ...] = ("en",),
+) -> dict[str, object]:
     return build_layout_candidate(
-        repository_side="direct",
-        format="android_xml",
-        layout_identity=f"mobile/{mapping_id}/src/main/res",
-        files=(f"mobile/{mapping_id}/src/main/res/values/strings.xml",),
-        values={"default": {"hello": "Hello"}},
+        repository_side=repository_side,
+        format="json",
+        layout_identity=f"locales/{mapping_id}/{{locale}}.json",
+        files=tuple(f"locales/{mapping_id}/{language}.json" for language in languages),
+        values={language: {"hello": f"Hello ({language})"} for language in languages},
     ).to_mapping()
 
 
@@ -390,7 +400,9 @@ def _confirm_revision_mappings(
         for mapping in mappings:
             if mapping_ids is not None and mapping.id not in mapping_ids:
                 continue
-            repository_sides = _complete_sides(mapping, {"direct": "a" * 40})
+            assert mapping.base_language is not None
+            commits = {side.role: "a" * 40 for side in mapping.sides}
+            repository_sides = _complete_sides(mapping, commits)
             _encoded, input_digest = _canonical_identity(
                 product_id=product_id,
                 revision=revision,
@@ -417,7 +429,11 @@ def _confirm_revision_mappings(
                 started_at=now,
                 finished_at=now,
             )
-            candidate = _preview_candidate(mapping.id)
+            candidate = _preview_candidate(
+                mapping.id,
+                repository_side=("direct" if mapping.topology == "direct" else "translations"),
+                languages=(mapping.base_language,),
+            )
             job.result = _closed_result(
                 _identity(job),
                 {
@@ -430,7 +446,11 @@ def _confirm_revision_mappings(
             mapping.selected_layout_candidate_id = UUID(str(candidate["id"]))
             mapping.selected_layout_version = 1
             mapping.confirmed_preview_job_id = job.id
-            mapping.confirmed_preview_digest = str(job.result["digest"])
+            mapping.confirmed_preview_digest = _complete_preview_digest(
+                _identity(job),
+                [candidate],
+                base_language=mapping.base_language,
+            )
             mapping.preview_confirmed_by = actor_id
             mapping.preview_confirmed_at = now
             confirmed_jobs.append(job.id)
@@ -443,6 +463,372 @@ def _always_confirmed(
     _mapping: ProductRepositoryMapping,
 ) -> bool:
     return True
+
+
+def _seed_published_base_language_graph(
+    factory: sessionmaker[Session],
+    *,
+    mappings: tuple[tuple[str, str | None], ...],
+) -> tuple[UUID, UUID]:
+    """Create one published graph with exact direct/separate language authority."""
+    product_id = uuid4()
+    active_id = uuid4()
+    now = datetime.now(UTC)
+    with factory.begin() as session:
+        product = Product(
+            id=product_id,
+            display_name=f"Base Language Product {product_id}",
+            name_key=f"base language product {product_id}",
+            is_active=True,
+        )
+        revision = ProductRevision(
+            id=active_id,
+            product_id=product_id,
+            display_name=product.display_name,
+            name_key=product.name_key,
+            description="published base-language graph",
+            version=6,
+            is_published=False,
+        )
+        session.add(product)
+        session.flush()
+        session.add(revision)
+        session.flush()
+
+        for index, (topology, base_language) in enumerate(mappings):
+            repository_ids = (uuid4(),) if topology == "direct" else (uuid4(), uuid4())
+            for repository_id in repository_ids:
+                session.add(
+                    Repository(
+                        id=repository_id,
+                        workspace="base-language-publication",
+                        repository_slug=f"repo-{repository_id.hex[:12]}",
+                    )
+                )
+            session.flush()
+            mapping_id = uuid4()
+            roles = ("direct",) if topology == "direct" else ("keys", "translations")
+            mapping = ProductRepositoryMapping(
+                id=mapping_id,
+                revision_id=active_id,
+                topology=topology,
+                identity_key=f"base-language-{index}-{topology}",
+                base_language=base_language,
+                selected_layout_candidate_id=uuid4(),
+                selected_layout_version=1,
+                sides=[
+                    ProductMappingRepositorySide(
+                        role=role,
+                        repository_id=repository_ids[side_index],
+                        source_branch="main" if role != "translations" else "translations",
+                    )
+                    for side_index, role in enumerate(roles)
+                ],
+                allowed_targets=[
+                    ProductMappingAllowedTarget(
+                        branch=f"release/{index}",
+                        is_default=True,
+                    )
+                ],
+            )
+            session.add(mapping)
+        session.flush()
+        revision.is_published = True
+        revision.published_at = now
+        session.flush()
+        product.active_revision_id = active_id
+    return product_id, active_id
+
+
+def _revision_graph_snapshot(
+    factory: sessionmaker[Session],
+    *,
+    revision_id: UUID,
+) -> tuple[object, ...]:
+    """Capture one immutable revision and its complete mapping authority."""
+    with factory() as session:
+        revision = session.execute(
+            select(
+                ProductRevision.id,
+                ProductRevision.product_id,
+                ProductRevision.display_name,
+                ProductRevision.name_key,
+                ProductRevision.description,
+                ProductRevision.version,
+                ProductRevision.is_published,
+                ProductRevision.published_at,
+            ).where(ProductRevision.id == revision_id)
+        ).one()
+        mapping_rows = tuple(
+            session.execute(
+                select(
+                    ProductRepositoryMapping.id,
+                    ProductRepositoryMapping.revision_id,
+                    ProductRepositoryMapping.topology,
+                    ProductRepositoryMapping.identity_key,
+                    ProductRepositoryMapping.base_language,
+                    ProductRepositoryMapping.selected_layout_candidate_id,
+                    ProductRepositoryMapping.selected_layout_version,
+                    ProductRepositoryMapping.confirmed_preview_job_id,
+                    ProductRepositoryMapping.confirmed_preview_digest,
+                    ProductRepositoryMapping.preview_confirmed_by,
+                    ProductRepositoryMapping.preview_confirmed_at,
+                )
+                .where(ProductRepositoryMapping.revision_id == revision_id)
+                .order_by(ProductRepositoryMapping.identity_key)
+            ).all()
+        )
+        mapping_ids = tuple(row.id for row in mapping_rows)
+        side_rows = tuple(
+            session.execute(
+                select(
+                    ProductMappingRepositorySide.mapping_id,
+                    ProductMappingRepositorySide.role,
+                    ProductMappingRepositorySide.repository_id,
+                    ProductMappingRepositorySide.source_branch,
+                )
+                .where(ProductMappingRepositorySide.mapping_id.in_(mapping_ids))
+                .order_by(
+                    ProductMappingRepositorySide.mapping_id,
+                    ProductMappingRepositorySide.role,
+                )
+            ).all()
+        )
+        target_rows = tuple(
+            session.execute(
+                select(
+                    ProductMappingAllowedTarget.mapping_id,
+                    ProductMappingAllowedTarget.branch,
+                    ProductMappingAllowedTarget.is_default,
+                )
+                .where(ProductMappingAllowedTarget.mapping_id.in_(mapping_ids))
+                .order_by(
+                    ProductMappingAllowedTarget.mapping_id,
+                    ProductMappingAllowedTarget.branch,
+                )
+            ).all()
+        )
+    return (tuple(revision), mapping_rows, side_rows, target_rows)
+
+
+def test_base_language_clone_publication_and_noop_preserve_exact_direct_and_separate_values(
+    publication_session_factory: sessionmaker[Session],
+) -> None:
+    """Clone and publish exact languages while leaving the prior graph byte-equal."""
+    publication = _publication_module()
+    product_id, old_active_id = _seed_published_base_language_graph(
+        publication_session_factory,
+        mappings=(("direct", "en-US"), ("separate", "zh-Hant")),
+    )
+    old_active_before = _revision_graph_snapshot(
+        publication_session_factory,
+        revision_id=old_active_id,
+    )
+
+    with publication_session_factory() as session:
+        saved = save_product_candidate(
+            session,
+            product_id=product_id,
+            expected_version=6,
+            name="Base Language Candidate",
+            description="candidate graph",
+        )
+        candidate_id = saved.candidate_revision_id
+    assert candidate_id is not None
+
+    with publication_session_factory() as session:
+        candidate_mappings = tuple(
+            session.execute(
+                select(ProductRepositoryMapping)
+                .where(ProductRepositoryMapping.revision_id == candidate_id)
+                .order_by(ProductRepositoryMapping.identity_key)
+            ).scalars()
+        )
+        assert [(mapping.topology, mapping.base_language) for mapping in candidate_mappings] == [
+            ("direct", "en-US"),
+            ("separate", "zh-Hant"),
+        ]
+        assert all(mapping.confirmed_preview_job_id is None for mapping in candidate_mappings)
+
+    _confirm_revision_mappings(
+        publication_session_factory,
+        product_id=product_id,
+        revision_id=candidate_id,
+    )
+    with publication_session_factory() as session:
+        first = publication.publish_product_candidate(
+            session,
+            product_id=product_id,
+            candidate_revision_id=candidate_id,
+            expected_candidate_version=7,
+        )
+    assert first.changed is True
+    assert (
+        _revision_graph_snapshot(
+            publication_session_factory,
+            revision_id=old_active_id,
+        )
+        == old_active_before
+    )
+
+    published_before_retry = _revision_graph_snapshot(
+        publication_session_factory,
+        revision_id=candidate_id,
+    )
+    with publication_session_factory() as session:
+        repeated = publication.publish_product_candidate(
+            session,
+            product_id=product_id,
+            candidate_revision_id=candidate_id,
+            expected_candidate_version=7,
+        )
+    assert repeated.changed is False
+    assert repeated.active_revision_id == candidate_id
+    assert repeated.candidate_revision_id is None
+    assert (
+        _revision_graph_snapshot(
+            publication_session_factory,
+            revision_id=candidate_id,
+        )
+        == published_before_retry
+    )
+
+
+def test_base_language_change_invalidates_confirmation_without_mutating_published_history(
+    publication_session_factory: sessionmaker[Session],
+) -> None:
+    """A candidate language edit makes its prior exact confirmation stale atomically."""
+    publication = _publication_module()
+    product_id, old_active_id = _seed_published_base_language_graph(
+        publication_session_factory,
+        mappings=(("direct", "en-US"), ("separate", "zh-Hant")),
+    )
+    old_active_before = _revision_graph_snapshot(
+        publication_session_factory,
+        revision_id=old_active_id,
+    )
+    with publication_session_factory() as session:
+        saved = save_product_candidate(
+            session,
+            product_id=product_id,
+            expected_version=6,
+            name="Stale Language Candidate",
+            description="candidate graph",
+        )
+        candidate_id = saved.candidate_revision_id
+    assert candidate_id is not None
+    _confirm_revision_mappings(
+        publication_session_factory,
+        product_id=product_id,
+        revision_id=candidate_id,
+    )
+    with publication_session_factory.begin() as session:
+        mapping = session.scalar(
+            select(ProductRepositoryMapping).where(
+                ProductRepositoryMapping.revision_id == candidate_id,
+                ProductRepositoryMapping.topology == "separate",
+            )
+        )
+        assert mapping is not None
+        mapping.base_language = "fr"
+    before_rejected_publish = _graph_snapshot(
+        publication_session_factory,
+        product_id=product_id,
+    )
+
+    with (
+        publication_session_factory() as session,
+        pytest.raises(publication.PublicationBlocked) as blocked,
+    ):
+        publication.publish_product_candidate(
+            session,
+            product_id=product_id,
+            candidate_revision_id=candidate_id,
+            expected_candidate_version=7,
+        )
+
+    assert tuple(blocker.value for blocker in blocked.value.blockers) == (
+        "preview_confirmation_required",
+    )
+    assert (
+        _graph_snapshot(
+            publication_session_factory,
+            product_id=product_id,
+        )
+        == before_rejected_publish
+    )
+    assert (
+        _revision_graph_snapshot(
+            publication_session_factory,
+            revision_id=old_active_id,
+        )
+        == old_active_before
+    )
+
+
+def test_base_language_legacy_null_clone_stays_null_and_cannot_publish_without_confirmation(
+    publication_session_factory: sessionmaker[Session],
+) -> None:
+    """Legacy nullable authority is cloned exactly and never defaults to a locale."""
+    publication = _publication_module()
+    product_id, old_active_id = _seed_published_base_language_graph(
+        publication_session_factory,
+        mappings=(("direct", None),),
+    )
+    old_active_before = _revision_graph_snapshot(
+        publication_session_factory,
+        revision_id=old_active_id,
+    )
+    with publication_session_factory() as session:
+        saved = save_product_candidate(
+            session,
+            product_id=product_id,
+            expected_version=6,
+            name="Legacy Null Candidate",
+            description="candidate graph",
+        )
+        candidate_id = saved.candidate_revision_id
+    assert candidate_id is not None
+    with publication_session_factory() as session:
+        cloned = session.scalar(
+            select(ProductRepositoryMapping).where(
+                ProductRepositoryMapping.revision_id == candidate_id
+            )
+        )
+        assert cloned is not None
+        assert cloned.base_language is None
+
+    before_rejected_publish = _graph_snapshot(
+        publication_session_factory,
+        product_id=product_id,
+    )
+    with (
+        publication_session_factory() as session,
+        pytest.raises(publication.PublicationBlocked) as blocked,
+    ):
+        publication.publish_product_candidate(
+            session,
+            product_id=product_id,
+            candidate_revision_id=candidate_id,
+            expected_candidate_version=7,
+        )
+    assert tuple(blocker.value for blocker in blocked.value.blockers) == (
+        "preview_confirmation_required",
+    )
+    assert (
+        _graph_snapshot(
+            publication_session_factory,
+            product_id=product_id,
+        )
+        == before_rejected_publish
+    )
+    assert (
+        _revision_graph_snapshot(
+            publication_session_factory,
+            revision_id=old_active_id,
+        )
+        == old_active_before
+    )
 
 
 def test_product_lock_linearizes_publish_equal_retry_and_stale_writer(
