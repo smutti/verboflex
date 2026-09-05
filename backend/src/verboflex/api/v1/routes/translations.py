@@ -1,0 +1,254 @@
+"""Ordinary authenticated translation search and grouped-detail routes."""
+
+import logging
+from typing import Annotated, Any, NoReturn
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from verboflex.auth.principal import CurrentPrincipal
+from verboflex.core.config import Settings, get_settings
+from verboflex.db.session import get_db_session
+from verboflex.schemas.system import ErrorResponse
+from verboflex.schemas.translations import (
+    TranslationConstraintProjectionResponse,
+    TranslationErrorResponse,
+    TranslationGroupDetailResponse,
+    TranslationGroupSummaryResponse,
+    TranslationLanguageOptionResponse,
+    TranslationOptionsResponse,
+    TranslationProductOptionResponse,
+    TranslationProvenanceResponse,
+    TranslationSearchPageResponse,
+    TranslationSearchQuery,
+    TranslationValueResponse,
+)
+from verboflex.services.translation_search import (
+    InvalidTranslationCursor,
+    TranslationGroupDetail,
+    TranslationGroupUnavailable,
+    TranslationSearchFilters,
+    TranslationSearchInputError,
+    TranslationValueDetail,
+    get_translation_group,
+    get_translation_options,
+    language_label,
+    search_translations,
+)
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/translations", tags=["translations"])
+TranslationSession = Annotated[Session, Depends(get_db_session, use_cache=False)]
+SettingsDependency = Annotated[Settings, Depends(get_settings)]
+
+AUTH_RESPONSES: dict[int | str, dict[str, Any]] = {
+    status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
+    status.HTTP_403_FORBIDDEN: {"model": ErrorResponse},
+}
+SEARCH_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **AUTH_RESPONSES,
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": TranslationErrorResponse},
+    status.HTTP_503_SERVICE_UNAVAILABLE: {"model": TranslationErrorResponse},
+}
+DETAIL_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **AUTH_RESPONSES,
+    status.HTTP_404_NOT_FOUND: {"model": TranslationErrorResponse},
+    status.HTTP_503_SERVICE_UNAVAILABLE: {"model": TranslationErrorResponse},
+}
+
+
+def _service_unavailable(error: Exception) -> NoReturn:
+    logger.exception("translation read failed", exc_info=error)
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Translation search unavailable",
+    ) from error
+
+
+def _constraint_response(
+    value: TranslationValueDetail,
+) -> TranslationConstraintProjectionResponse:
+    constraint = value.constraint
+    return TranslationConstraintProjectionResponse(
+        actual=constraint.actual,
+        maximum=constraint.maximum,
+        source=constraint.source,
+        status=constraint.status,
+        overage=constraint.overage,
+    )
+
+
+def _value_response(value: TranslationValueDetail) -> TranslationValueResponse:
+    provenance = value.provenance
+    return TranslationValueResponse(
+        id=value.id,
+        selector_version=value.selector_version,
+        selector_kind=value.selector_kind,
+        selector_digest=value.selector_digest,
+        source_text=value.source_text,
+        translated_text=value.translated_text,
+        display_text=value.display_text,
+        structure=list(value.structure),
+        review_state=value.review_state,
+        grapheme_count=value.grapheme_count,
+        constraint=_constraint_response(value),
+        is_deleted=value.is_deleted,
+        deleted_at=value.deleted_at,
+        provenance=(
+            TranslationProvenanceResponse(
+                repository_id=provenance.repository_id,
+                repository_name=provenance.repository_name,
+                repository_side=provenance.repository_side,
+                branch=provenance.branch,
+                path=provenance.path,
+                format=provenance.format,
+                commit_hash=provenance.commit_hash,
+                execution_id=provenance.execution_id,
+                line=provenance.line,
+                column=provenance.column,
+            )
+            if provenance is not None
+            else None
+        ),
+    )
+
+
+def _detail_response(detail: TranslationGroupDetail) -> TranslationGroupDetailResponse:
+    return TranslationGroupDetailResponse(
+        id=detail.id,
+        product_id=detail.product_id,
+        product_name=detail.product_name,
+        raw_key=detail.raw_key,
+        language=detail.language,
+        language_label=language_label(detail.language),
+        states=list(detail.states),
+        state_summary=detail.state_summary,
+        is_deleted=detail.is_deleted,
+        values=[_value_response(value) for value in detail.values],
+        pending_change=None,
+        comments=[],
+    )
+
+
+@router.get(
+    "/options",
+    operation_id="listTranslationOptions",
+    response_model=TranslationOptionsResponse,
+    responses={
+        **AUTH_RESPONSES,
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": TranslationErrorResponse},
+    },
+)
+async def list_translation_options(
+    _principal: CurrentPrincipal,
+    session: TranslationSession,
+) -> TranslationOptionsResponse:
+    """List exact active products and languages available to the principal."""
+    try:
+        options = get_translation_options(session)
+    except Exception as error:
+        _service_unavailable(error)
+    return TranslationOptionsResponse(
+        products=[
+            TranslationProductOptionResponse(id=product.id, name=product.name)
+            for product in options.products
+        ],
+        languages=[
+            TranslationLanguageOptionResponse(code=language.code, label=language.label)
+            for language in options.languages
+        ],
+    )
+
+
+@router.get(
+    "",
+    operation_id="searchTranslations",
+    response_model=TranslationSearchPageResponse,
+    responses=SEARCH_RESPONSES,
+)
+async def search_translation_collection(
+    principal: CurrentPrincipal,
+    session: TranslationSession,
+    settings: SettingsDependency,
+    query: Annotated[TranslationSearchQuery, Query()],
+) -> TranslationSearchPageResponse:
+    """Search current canonical groups through one fixed keyset envelope."""
+    secret = settings.jwt_secret_key
+    if secret is None:
+        _service_unavailable(RuntimeError("cursor signing is unavailable"))
+    try:
+        page = search_translations(
+            session,
+            principal_id=principal.user_id,
+            filters=TranslationSearchFilters(
+                query=query.q,
+                product_id=query.product_id,
+                language=query.language,
+                state=query.state,
+                violation=query.violation,
+                deleted=query.deleted,
+                page_size=query.page_size,
+            ),
+            cursor=query.cursor,
+            cursor_secret=secret.get_secret_value(),
+        )
+    except InvalidTranslationCursor as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid translation cursor",
+        ) from error
+    except TranslationSearchInputError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid translation cursor",
+        ) from error
+    except Exception as error:
+        _service_unavailable(error)
+    return TranslationSearchPageResponse(
+        items=[
+            TranslationGroupSummaryResponse(
+                id=item.id,
+                product_id=item.product_id,
+                product_name=item.product_name,
+                raw_key=item.raw_key,
+                language=item.language,
+                language_label=language_label(item.language),
+                rank=item.rank,
+                source_text=item.source_text,
+                translated_text=item.translated_text,
+                value_count=item.value_count,
+                states=list(item.states),
+                state_summary=item.state_summary,
+                has_over_limit=item.has_over_limit,
+                has_no_max=item.has_no_max,
+                is_deleted=item.is_deleted,
+            )
+            for item in page.items
+        ],
+        next_cursor=page.next_cursor,
+    )
+
+
+@router.get(
+    "/{translation_group_id}",
+    operation_id="getTranslationGroup",
+    response_model=TranslationGroupDetailResponse,
+    responses=DETAIL_RESPONSES,
+)
+async def get_translation_group_detail(
+    translation_group_id: UUID,
+    _principal: CurrentPrincipal,
+    session: TranslationSession,
+) -> TranslationGroupDetailResponse:
+    """Return one complete group or the same bounded unavailable response."""
+    try:
+        detail = get_translation_group(session, group_id=translation_group_id)
+    except TranslationGroupUnavailable as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Translation unavailable",
+        ) from error
+    except Exception as error:
+        _service_unavailable(error)
+    return _detail_response(detail)

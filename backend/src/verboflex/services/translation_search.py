@@ -7,7 +7,8 @@ import hashlib
 import hmac
 import json
 from dataclasses import dataclass
-from typing import Literal
+from datetime import datetime
+from typing import Literal, cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -17,11 +18,27 @@ SEARCH_PAGE_SIZE = 50
 MAX_SEARCH_QUERY_CHARS = 256
 MAX_CURSOR_CHARS = 2048
 CURSOR_VERSION = 1
+MAX_OPTION_COUNT = 500
+MAX_GROUP_VALUE_COUNT = 10_000
 _ZERO_UUID = UUID(int=0)
+_AUTHORIZED_ACTIVE_PRODUCTS_SQL = "SELECT id, display_name, name_key FROM products WHERE is_active"
 
 DeletedMode = Literal["active", "deleted", "all"]
 StateFilter = Literal["draft", "approved", "rejected"]
 ViolationFilter = Literal["over_limit", "within_limit", "no_max"]
+StateSummary = StateFilter | Literal["mixed"]
+ConstraintSource = Literal["none", "base_default", "language_override"]
+ConstraintStatus = Literal["no_max", "within_limit", "over_limit"]
+SelectorKind = Literal[
+    "scalar",
+    "android_quantity",
+    "android_array_item",
+    "qt_numerus",
+    "qt_length_variant",
+    "json_path",
+]
+RepositorySide = Literal["direct", "keys", "translations"]
+LocalizationFormat = Literal["android_xml", "qt_ts", "json", "ios_strings"]
 
 
 class TranslationSearchInputError(ValueError):
@@ -71,8 +88,8 @@ class TranslationGroupSummary:
     source_text: str | None
     translated_text: str | None
     value_count: int
-    states: tuple[str, ...]
-    state_summary: str
+    states: tuple[StateFilter, ...]
+    state_summary: StateSummary
     has_over_limit: bool
     has_no_max: bool
     is_deleted: bool
@@ -84,6 +101,98 @@ class TranslationSearchPage:
 
     items: tuple[TranslationGroupSummary, ...]
     next_cursor: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class TranslationProductOption:
+    """One active product available to every current authenticated principal."""
+
+    id: UUID
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class TranslationLanguageOption:
+    """One exact canonical dataset language with a server-owned label."""
+
+    code: str
+    label: str
+
+
+@dataclass(frozen=True, slots=True)
+class TranslationOptions:
+    """Current server-ordered search filter choices."""
+
+    products: tuple[TranslationProductOption, ...]
+    languages: tuple[TranslationLanguageOption, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class TranslationConstraintProjection:
+    """Materialized current maximum-length result for one exact value."""
+
+    actual: int
+    maximum: int | None
+    source: ConstraintSource
+    status: ConstraintStatus
+    overage: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class TranslationProvenance:
+    """Credential-free current source locator from the active execution."""
+
+    repository_id: UUID
+    repository_name: str
+    repository_side: RepositorySide
+    branch: str
+    path: str
+    format: LocalizationFormat
+    commit_hash: str
+    execution_id: UUID
+    line: int | None
+    column: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class TranslationValueDetail:
+    """One individually addressable selector value without flattening structure."""
+
+    id: UUID
+    selector_version: Literal[1]
+    selector_kind: SelectorKind
+    selector_digest: str
+    source_text: str | None
+    translated_text: str | None
+    display_text: str
+    structure: tuple[object, ...]
+    review_state: StateFilter
+    grapheme_count: int
+    constraint: TranslationConstraintProjection
+    is_deleted: bool
+    deleted_at: datetime | None
+    provenance: TranslationProvenance | None
+
+
+@dataclass(frozen=True, slots=True)
+class TranslationGroupDetail:
+    """Complete active-dataset projection for one opaque group UUID."""
+
+    id: UUID
+    product_id: UUID
+    product_name: str
+    raw_key: str
+    language: str
+    states: tuple[StateFilter, ...]
+    state_summary: StateSummary
+    is_deleted: bool
+    values: tuple[TranslationValueDetail, ...]
+    pending_change: None = None
+    comments: tuple[str, ...] = ()
+
+
+class TranslationGroupUnavailable(LookupError):
+    """Bounded missing-or-inaccessible group result."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,10 +249,9 @@ def _scope_digest(
         text(
             "SELECT product.id AS product_id, scope.id AS scope_id, "
             "scope.active_execution_id, scope.dataset_version "
-            "FROM products AS product "
+            f"FROM ({_AUTHORIZED_ACTIVE_PRODUCTS_SQL}) AS product "
             "JOIN localization_scopes AS scope ON scope.product_id = product.id "
-            "WHERE product.is_active "
-            "AND scope.active_execution_id IS NOT NULL "
+            "WHERE scope.active_execution_id IS NOT NULL "
             "ORDER BY product.id, scope.id "
             "FOR SHARE OF product, scope"
         )
@@ -203,6 +311,8 @@ def _decode_cursor(
         encoded_body, encoded_signature = cursor.split(".", 1)
         body = _b64decode(encoded_body)
         signature = _b64decode(encoded_signature)
+        if _b64encode(body) != encoded_body or _b64encode(signature) != encoded_signature:
+            raise ValueError
         expected_signature = hmac.digest(cursor_secret.encode(), body, "sha256")
         if not hmac.compare_digest(signature, expected_signature):
             raise ValueError
@@ -232,8 +342,10 @@ def _decode_cursor(
 
 
 _SEARCH_SQL = text(
-    r"""
-WITH grouped AS (
+    rf"""
+WITH authorized_products AS (
+    {_AUTHORIZED_ACTIVE_PRODUCTS_SQL}
+), grouped AS (
     SELECT
         (array_agg(value.id ORDER BY value.id))[1] AS group_id,
         key.id AS key_id,
@@ -266,7 +378,7 @@ WITH grouped AS (
         bool_or(value.is_over_limit) AS has_over_limit,
         bool_or(value.effective_max_chars IS NULL) AS has_no_max,
         bool_or(key.is_deleted OR value.is_deleted) AS is_deleted
-    FROM products AS product
+    FROM authorized_products AS product
     JOIN localization_scopes AS scope
       ON scope.product_id = product.id
      AND scope.active_execution_id IS NOT NULL
@@ -276,8 +388,7 @@ WITH grouped AS (
     JOIN translation_values AS value
       ON value.scope_id = scope.id
      AND value.translation_key_id = key.id
-    WHERE product.is_active
-      AND (CAST(:product_id AS uuid) IS NULL OR product.id = CAST(:product_id AS uuid))
+    WHERE (CAST(:product_id AS uuid) IS NULL OR product.id = CAST(:product_id AS uuid))
       AND (CAST(:language AS text) IS NULL OR value.language = CAST(:language AS text))
     GROUP BY key.id, key.product_id, product.display_name, key.raw_key, value.language
     HAVING (
@@ -321,6 +432,252 @@ SELECT * FROM page
 ORDER BY rank, stable_key, language COLLATE "C", group_id
 """
 )
+
+
+_OPTIONS_SQL = text(
+    f"""
+WITH authorized_products AS (
+    {_AUTHORIZED_ACTIVE_PRODUCTS_SQL}
+), product_options AS (
+    SELECT id, display_name, name_key COLLATE "C" AS sort_key
+    FROM authorized_products
+    ORDER BY sort_key, id
+    LIMIT {MAX_OPTION_COUNT + 1}
+), language_options AS (
+    SELECT DISTINCT value.language COLLATE "C" AS language
+    FROM authorized_products AS product
+    JOIN localization_scopes AS scope
+      ON scope.product_id = product.id
+     AND scope.active_execution_id IS NOT NULL
+    JOIN translation_values AS value ON value.scope_id = scope.id
+    ORDER BY language
+    LIMIT {MAX_OPTION_COUNT + 1}
+)
+SELECT 0 AS option_kind, id AS product_id, display_name AS product_name,
+       NULL::text AS language, sort_key
+FROM product_options
+UNION ALL
+SELECT 1 AS option_kind, NULL::uuid AS product_id, NULL::text AS product_name,
+       language, language AS sort_key
+FROM language_options
+ORDER BY option_kind, sort_key, product_id
+"""
+)
+
+
+_DETAIL_SQL = text(
+    f"""
+WITH authorized_products AS (
+    {_AUTHORIZED_ACTIVE_PRODUCTS_SQL}
+), anchor AS (
+    SELECT
+        candidate.id AS group_id,
+        key.id AS key_id,
+        key.product_id,
+        product.display_name AS product_name,
+        key.raw_key,
+        key.is_deleted AS key_deleted,
+        candidate.language
+    FROM authorized_products AS product
+    JOIN localization_scopes AS scope
+      ON scope.product_id = product.id
+     AND scope.active_execution_id IS NOT NULL
+    JOIN translation_keys AS key
+      ON key.scope_id = scope.id
+     AND key.product_id = product.id
+    JOIN translation_values AS candidate
+      ON candidate.scope_id = scope.id
+     AND candidate.translation_key_id = key.id
+    WHERE candidate.id = CAST(:group_id AS uuid)
+      AND candidate.id = (
+          SELECT member.id
+          FROM translation_values AS member
+          WHERE member.translation_key_id = key.id
+            AND member.scope_id = scope.id
+            AND member.language = candidate.language
+          ORDER BY member.id
+          LIMIT 1
+      )
+)
+SELECT
+    anchor.group_id,
+    anchor.product_id,
+    anchor.product_name,
+    anchor.raw_key,
+    anchor.key_deleted,
+    anchor.language,
+    value.id AS value_id,
+    value.selector_version,
+    value.selector_kind,
+    value.selector_digest,
+    value.source_text,
+    value.translated_text,
+    value.display_text,
+    value.structure,
+    value.review_state,
+    value.grapheme_count,
+    value.effective_max_chars,
+    value.effective_constraint_source,
+    value.is_over_limit,
+    value.is_deleted AS value_deleted,
+    value.deleted_at,
+    locator.repository_id,
+    coalesce(repository.descriptive_name, repository.workspace || '/' || repository.repository_slug)
+        AS repository_name,
+    locator.repository_side,
+    locator.configured_branch,
+    locator.path,
+    locator.format,
+    locator.source_commit_hash,
+    locator.import_execution_id,
+    locator.line,
+    locator.column
+FROM anchor
+JOIN translation_values AS value
+  ON value.translation_key_id = anchor.key_id
+ AND value.language = anchor.language
+LEFT JOIN translation_value_locators AS locator ON locator.value_id = value.id
+LEFT JOIN repositories AS repository ON repository.id = locator.repository_id
+ORDER BY locator.position NULLS LAST, value.selector_kind COLLATE "C", value.id
+LIMIT {MAX_GROUP_VALUE_COUNT + 1}
+"""
+)
+
+
+_LANGUAGE_LABELS = {
+    "ar": "Arabic",
+    "de": "German",
+    "de-DE": "German (Germany)",
+    "en": "English",
+    "en-GB": "English (United Kingdom)",
+    "en-US": "English (United States)",
+    "es": "Spanish",
+    "fr": "French",
+    "it": "Italian",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "pt": "Portuguese",
+    "pt-BR": "Portuguese (Brazil)",
+    "zh-CN": "Chinese (China)",
+}
+
+
+def language_label(code: str) -> str:
+    """Return a bounded server-owned label without changing the canonical code."""
+    return _LANGUAGE_LABELS.get(code, code)
+
+
+def get_translation_options(session: Session) -> TranslationOptions:
+    """Return current active product and language choices in server order."""
+    rows = session.execute(_OPTIONS_SQL).mappings().all()
+    products: list[TranslationProductOption] = []
+    seen_products: set[UUID] = set()
+    language_codes: set[str] = set()
+    for row in rows:
+        if row["option_kind"] == 1:
+            language_codes.add(row["language"])
+            continue
+        product_id = row["product_id"]
+        if product_id not in seen_products:
+            products.append(TranslationProductOption(id=product_id, name=row["product_name"]))
+            seen_products.add(product_id)
+    if len(products) > MAX_OPTION_COUNT or len(language_codes) > MAX_OPTION_COUNT:
+        raise TranslationSearchInputError("translation options exceed their allowed bound")
+    languages = tuple(
+        TranslationLanguageOption(code=code, label=language_label(code))
+        for code in sorted(language_codes)
+    )
+    return TranslationOptions(products=tuple(products), languages=languages)
+
+
+def _constraint_projection(row: dict[str, object]) -> TranslationConstraintProjection:
+    actual = cast(int, row["grapheme_count"])
+    maximum_value = row["effective_max_chars"]
+    maximum = cast(int, maximum_value) if maximum_value is not None else None
+    if maximum is None:
+        return TranslationConstraintProjection(
+            actual=actual,
+            maximum=None,
+            source=cast(ConstraintSource, row["effective_constraint_source"]),
+            status="no_max",
+            overage=None,
+        )
+    is_over_limit = bool(row["is_over_limit"])
+    return TranslationConstraintProjection(
+        actual=actual,
+        maximum=maximum,
+        source=cast(ConstraintSource, row["effective_constraint_source"]),
+        status="over_limit" if is_over_limit else "within_limit",
+        overage=actual - maximum if is_over_limit else 0,
+    )
+
+
+def _provenance(row: dict[str, object]) -> TranslationProvenance | None:
+    if row["repository_id"] is None:
+        return None
+    return TranslationProvenance(
+        repository_id=UUID(str(row["repository_id"])),
+        repository_name=str(row["repository_name"]),
+        repository_side=cast(RepositorySide, row["repository_side"]),
+        branch=str(row["configured_branch"]),
+        path=str(row["path"]),
+        format=cast(LocalizationFormat, row["format"]),
+        commit_hash=str(row["source_commit_hash"]),
+        execution_id=UUID(str(row["import_execution_id"])),
+        line=cast(int, row["line"]) if row["line"] is not None else None,
+        column=cast(int, row["column"]) if row["column"] is not None else None,
+    )
+
+
+def get_translation_group(
+    session: Session,
+    *,
+    group_id: UUID,
+) -> TranslationGroupDetail:
+    """Resolve only a server-issued group UUID from one active-dataset statement."""
+    raw_rows = session.execute(_DETAIL_SQL, {"group_id": group_id}).mappings().all()
+    if not raw_rows:
+        raise TranslationGroupUnavailable("translation unavailable")
+    if len(raw_rows) > MAX_GROUP_VALUE_COUNT:
+        raise TranslationSearchInputError("translation group exceeds its allowed bound")
+    rows = [dict(row) for row in raw_rows]
+    states = cast(
+        tuple[StateFilter, ...],
+        tuple(sorted({str(row["review_state"]) for row in rows})),
+    )
+    values = tuple(
+        TranslationValueDetail(
+            id=UUID(str(row["value_id"])),
+            selector_version=cast(Literal[1], row["selector_version"]),
+            selector_kind=cast(SelectorKind, row["selector_kind"]),
+            selector_digest=str(row["selector_digest"]),
+            source_text=(str(row["source_text"]) if row["source_text"] is not None else None),
+            translated_text=(
+                str(row["translated_text"]) if row["translated_text"] is not None else None
+            ),
+            display_text=str(row["display_text"]),
+            structure=tuple(row["structure"]),
+            review_state=cast(StateFilter, row["review_state"]),
+            grapheme_count=cast(int, row["grapheme_count"]),
+            constraint=_constraint_projection(row),
+            is_deleted=bool(row["value_deleted"]),
+            deleted_at=row["deleted_at"],
+            provenance=_provenance(row),
+        )
+        for row in rows
+    )
+    first = rows[0]
+    return TranslationGroupDetail(
+        id=UUID(str(first["group_id"])),
+        product_id=UUID(str(first["product_id"])),
+        product_name=str(first["product_name"]),
+        raw_key=str(first["raw_key"]),
+        language=str(first["language"]),
+        states=states,
+        state_summary=states[0] if len(states) == 1 else "mixed",
+        is_deleted=bool(first["key_deleted"]) or any(value.is_deleted for value in values),
+        values=values,
+    )
 
 
 def search_translations(
@@ -383,7 +740,7 @@ def search_translations(
             source_text=row["source_text"],
             translated_text=row["translated_text"],
             value_count=row["value_count"],
-            states=tuple(row["states"]),
+            states=cast(tuple[StateFilter, ...], tuple(row["states"])),
             state_summary=(row["states"][0] if len(row["states"]) == 1 else "mixed"),
             has_over_limit=row["has_over_limit"],
             has_no_max=row["has_no_max"],

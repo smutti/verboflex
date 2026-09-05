@@ -50,11 +50,12 @@ def upgrade() -> None:
     )
     op.execute(
         "CREATE INDEX ix_translation_keys_search_raw_key_pattern "
-        'ON translation_keys ((lower(raw_key) COLLATE "C") text_pattern_ops, id)'
+        "ON translation_keys "
+        "((replace(lower(raw_key), 'ß', 'ss') COLLATE \"C\") text_pattern_ops, id)"
     )
     op.execute(
         "CREATE INDEX ix_translation_keys_search_raw_key_trgm "
-        "ON translation_keys USING gin (lower(raw_key) gin_trgm_ops)"
+        "ON translation_keys USING gin (replace(lower(raw_key), 'ß', 'ss') gin_trgm_ops)"
     )
     op.execute(
         "CREATE INDEX ix_translation_values_search_scope_filters "
@@ -64,11 +65,13 @@ def upgrade() -> None:
     )
     op.execute(
         "CREATE INDEX ix_translation_values_search_source_text_trgm "
-        "ON translation_values USING gin (lower(source_text) gin_trgm_ops)"
+        "ON translation_values USING gin "
+        "(replace(lower(source_text), 'ß', 'ss') gin_trgm_ops)"
     )
     op.execute(
         "CREATE INDEX ix_translation_values_search_display_text_trgm "
-        "ON translation_values USING gin (lower(display_text) gin_trgm_ops)"
+        "ON translation_values USING gin "
+        "(replace(lower(display_text), 'ß', 'ss') gin_trgm_ops)"
     )
 
 
