@@ -437,14 +437,19 @@ def test_recompute_empty_scope_is_a_valid_noop_and_missing_base_is_rejected(
             )
             == ()
         )
-        mapping = session.get_one(ProductRepositoryMapping, ids["mapping"])
-        mapping.base_language = None
-        session.flush()
-        with pytest.raises(service.ConstraintAuthorityUnavailable):
-            service.recompute_translation_constraints(
-                session,
-                scope_id=ids["scope"],
-            )
+
+    missing_base_ids = _seed_constraint_dataset(
+        constraint_session_factory,
+        base_language=None,
+    )
+    with (
+        constraint_session_factory.begin() as session,
+        pytest.raises(service.ConstraintAuthorityUnavailable),
+    ):
+        service.recompute_translation_constraints(
+            session,
+            scope_id=missing_base_ids["scope"],
+        )
 
 
 def test_recompute_tombstone_retains_exact_authoritative_projection(

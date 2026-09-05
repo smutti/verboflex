@@ -13,7 +13,6 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
-from verboflex.localization.graphemes import grapheme_count
 from verboflex.localization.importing.core import (
     MAX_CANONICAL_ISSUES,
     CanonicalParseResult,
@@ -33,7 +32,7 @@ from verboflex.models.translation import (
     TranslationValueLocator,
     TranslationValueRevision,
 )
-from verboflex.models.translation_constraint import TranslationConstraint
+from verboflex.services.translation_constraints import recompute_translation_constraints
 
 if TYPE_CHECKING:
     from verboflex.services.import_jobs import (
@@ -588,12 +587,11 @@ def reconcile_canonical_translations(
             key.deleted_at = None
 
     session.flush()
-    _recompute_constraint_projections(
+    recompute_translation_constraints(
         session,
-        scope=scope,
+        scope_id=scope.id,
         base_language=mapping.base_language,
     )
-    session.flush()
     return ReconciliationResult(
         created_value_ids=tuple(created_value_ids),
         updated_value_ids=tuple(updated_value_ids),
@@ -893,60 +891,6 @@ def _tombstone_reference(
     if not candidates:
         raise TranslationImportRejected("canonical tombstone provenance rejected")
     return candidates[0]
-
-
-def _recompute_constraint_projections(
-    session: Session,
-    *,
-    scope: LocalizationScope,
-    base_language: str,
-) -> None:
-    keys = tuple(
-        session.scalars(
-            select(TranslationKey)
-            .options(selectinload(TranslationKey.values))
-            .where(TranslationKey.scope_id == scope.id)
-        )
-    )
-    constraints = tuple(
-        session.scalars(
-            select(TranslationConstraint).where(TranslationConstraint.scope_id == scope.id)
-        )
-    )
-    key_by_id = {key.id: key for key in keys}
-    exact_constraints = {
-        (constraint.translation_key_id, constraint.language): constraint
-        for constraint in constraints
-    }
-    base_constraints_by_key = {
-        constraint.translation_key_id: constraint
-        for constraint in constraints
-        if constraint.language == base_language
-    }
-    base_constraints_by_raw_key = {
-        key_by_id[key_id].raw_key: constraint
-        for key_id, constraint in base_constraints_by_key.items()
-        if key_id in key_by_id
-    }
-    for key in keys:
-        for value in key.values:
-            value.grapheme_count = grapheme_count(value.display_text)
-            exact = exact_constraints.get((key.id, value.language))
-            effective_constraint: TranslationConstraint | None
-            if exact is not None:
-                effective_constraint = exact
-                source = "base_default" if value.language == base_language else "language_override"
-            else:
-                effective_constraint = base_constraints_by_raw_key.get(key.raw_key)
-                source = "base_default" if effective_constraint is not None else "none"
-            value.effective_constraint_source = source
-            value.effective_max_chars = (
-                effective_constraint.max_chars if effective_constraint is not None else None
-            )
-            value.is_over_limit = (
-                effective_constraint is not None
-                and value.grapheme_count > effective_constraint.max_chars
-            )
 
 
 def _lock_current_staging_authority(
