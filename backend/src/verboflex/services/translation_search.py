@@ -88,6 +88,9 @@ class TranslationGroupSummary:
     source_text: str | None
     translated_text: str | None
     value_count: int
+    over_limit_count: int
+    within_limit_count: int
+    no_max_count: int
     states: tuple[StateFilter, ...]
     state_summary: StateSummary
     has_over_limit: bool
@@ -374,6 +377,11 @@ WITH authorized_products AS (
         (array_agg(value.translated_text ORDER BY value.id)
             FILTER (WHERE value.translated_text IS NOT NULL))[1] AS translated_text,
         count(*)::integer AS value_count,
+        count(*) FILTER (WHERE value.is_over_limit)::integer AS over_limit_count,
+        count(*) FILTER (
+            WHERE value.effective_max_chars IS NOT NULL AND NOT value.is_over_limit
+        )::integer AS within_limit_count,
+        count(*) FILTER (WHERE value.effective_max_chars IS NULL)::integer AS no_max_count,
         array_agg(DISTINCT value.review_state ORDER BY value.review_state) AS states,
         bool_or(value.is_over_limit) AS has_over_limit,
         bool_or(value.effective_max_chars IS NULL) AS has_no_max,
@@ -740,6 +748,9 @@ def search_translations(
             source_text=row["source_text"],
             translated_text=row["translated_text"],
             value_count=row["value_count"],
+            over_limit_count=row["over_limit_count"],
+            within_limit_count=row["within_limit_count"],
+            no_max_count=row["no_max_count"],
             states=cast(tuple[StateFilter, ...], tuple(row["states"])),
             state_summary=(row["states"][0] if len(row["states"]) == 1 else "mixed"),
             has_over_limit=row["has_over_limit"],

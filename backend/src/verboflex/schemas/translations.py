@@ -62,6 +62,9 @@ class TranslationGroupSummaryResponse(ClosedTranslationModel):
     source_text: BoundedText | None
     translated_text: BoundedText | None
     value_count: Annotated[int, Field(ge=1)]
+    over_limit_count: Annotated[int, Field(ge=0)]
+    within_limit_count: Annotated[int, Field(ge=0)]
+    no_max_count: Annotated[int, Field(ge=0)]
     states: Annotated[
         list[Literal["draft", "approved", "rejected"]],
         Field(min_length=1, max_length=3),

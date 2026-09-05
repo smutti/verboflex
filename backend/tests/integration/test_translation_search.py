@@ -368,6 +368,9 @@ def test_search_groups_values_ranks_matches_and_preserves_mixed_state(
     ]
     mixed = page.items[0]
     assert mixed.value_count == 2
+    assert mixed.over_limit_count == 1
+    assert mixed.within_limit_count == 0
+    assert mixed.no_max_count == 1
     assert mixed.states == ("approved", "draft")
     assert mixed.state_summary == "mixed"
     assert mixed.has_over_limit is True
