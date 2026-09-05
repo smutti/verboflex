@@ -45,6 +45,7 @@ EXPECTED_TABLES = {
     "user_roles",
     "users",
     "staged_translation_values",
+    "translation_constraints",
     "translation_keys",
     "translation_parse_issues",
     "translation_value_locators",
@@ -66,6 +67,7 @@ PHASE3_IMPORT_TABLES = {
 }
 CANONICAL_TRANSLATION_TABLES = {
     "localization_scopes",
+    "translation_constraints",
     "translation_keys",
     "translation_values",
     "translation_value_revisions",
@@ -1037,6 +1039,192 @@ def test_canonical_translation_identity_history_and_staging_are_database_authori
                 "execution_id": execution_id,
             },
         )
+
+
+def test_translation_constraint_and_projection_contracts_are_database_authoritative(
+    migrated_database: tuple[Config, Engine],
+) -> None:
+    """Explicit rules and materialized violations reject ambiguous state."""
+    config, engine = migrated_database
+    command.upgrade(config, "head")
+    identities = _seed_import_schema_graph(engine, base_language="en")
+    scope_id = _insert_localization_scope(engine, identities)
+    key_id = uuid4()
+    actor_id = uuid4()
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, email, display_name, hashed_password) "
+                "VALUES (:id, :email, 'Constraint actor', 'not-a-secret')"
+            ),
+            {"id": actor_id, "email": f"constraint-{actor_id}@example.com"},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO translation_keys "
+                "(id, scope_id, product_id, repository_id, configured_branch, raw_key, "
+                "is_deleted) VALUES "
+                "(:key_id, :scope_id, :product, :repository, 'main', "
+                "'constraint.key', false)"
+            ),
+            {**identities, "key_id": key_id, "scope_id": scope_id},
+        )
+        for language, maximum in (("en", 0), ("it", 1_048_576)):
+            connection.execute(
+                text(
+                    "INSERT INTO translation_constraints "
+                    "(id, scope_id, translation_key_id, language, max_chars, version, "
+                    "created_by, updated_by) VALUES "
+                    "(:id, :scope_id, :key_id, :language, :maximum, 1, "
+                    ":actor_id, :actor_id)"
+                ),
+                {
+                    "id": uuid4(),
+                    "scope_id": scope_id,
+                    "key_id": key_id,
+                    "language": language,
+                    "maximum": maximum,
+                    "actor_id": actor_id,
+                },
+            )
+
+    for language, maximum in (("fr", -1), ("de", 1_048_577), ("it", 12)):
+        with pytest.raises(IntegrityError), engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO translation_constraints "
+                    "(id, scope_id, translation_key_id, language, max_chars, version, "
+                    "created_by, updated_by) VALUES "
+                    "(:id, :scope_id, :key_id, :language, :maximum, 1, "
+                    ":actor_id, :actor_id)"
+                ),
+                {
+                    "id": uuid4(),
+                    "scope_id": scope_id,
+                    "key_id": key_id,
+                    "language": language,
+                    "maximum": maximum,
+                    "actor_id": actor_id,
+                },
+            )
+
+    valid_projections = (
+        ("en", 0, None, "none", False, False),
+        ("it", 3, 3, "base_default", False, False),
+        ("fr", 4, 3, "language_override", True, True),
+    )
+    for position, (language, count, maximum, source, over, deleted) in enumerate(
+        valid_projections
+    ):
+        selector_bytes = f'{{"position":{position}}}'.encode()
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO translation_values "
+                    "(id, scope_id, translation_key_id, language, selector_version, "
+                    "selector_kind, selector_bytes, selector_digest, display_text, "
+                    "structure, review_state, grapheme_count, effective_max_chars, "
+                    "effective_constraint_source, is_over_limit, is_deleted, deleted_at) "
+                    "VALUES (:id, :scope_id, :key_id, :language, 1, 'scalar', "
+                    ":selector_bytes, :digest, 'visible', CAST('[]' AS jsonb), 'draft', "
+                    ":count, :maximum, :source, :over, :deleted, "
+                    "CASE WHEN :deleted THEN CURRENT_TIMESTAMP ELSE NULL END)"
+                ),
+                {
+                    "id": uuid4(),
+                    "scope_id": scope_id,
+                    "key_id": key_id,
+                    "language": language,
+                    "selector_bytes": selector_bytes,
+                    "digest": hashlib.sha256(selector_bytes).hexdigest(),
+                    "count": count,
+                    "maximum": maximum,
+                    "source": source,
+                    "over": over,
+                    "deleted": deleted,
+                },
+            )
+
+    invalid_projections = (
+        (-1, None, "none", False),
+        (1, 1, "none", False),
+        (1, None, "base_default", False),
+        (2, 1, "base_default", False),
+        (1, 1, "language_override", True),
+        (1, 1_048_577, "language_override", False),
+        (1, None, "inherited", False),
+    )
+    for position, (count, maximum, source, over) in enumerate(invalid_projections, start=10):
+        selector_bytes = f'{{"position":{position}}}'.encode()
+        with pytest.raises(IntegrityError), engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO translation_values "
+                    "(id, scope_id, translation_key_id, language, selector_version, "
+                    "selector_kind, selector_bytes, selector_digest, display_text, "
+                    "structure, review_state, grapheme_count, effective_max_chars, "
+                    "effective_constraint_source, is_over_limit, is_deleted) VALUES "
+                    "(:id, :scope_id, :key_id, 'es', 1, 'scalar', :selector_bytes, "
+                    ":digest, 'visible', CAST('[]' AS jsonb), 'draft', :count, "
+                    ":maximum, :source, :over, false)"
+                ),
+                {
+                    "id": uuid4(),
+                    "scope_id": scope_id,
+                    "key_id": key_id,
+                    "selector_bytes": selector_bytes,
+                    "digest": hashlib.sha256(selector_bytes).hexdigest(),
+                    "count": count,
+                    "maximum": maximum,
+                    "source": source,
+                    "over": over,
+                },
+            )
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "DELETE FROM translation_constraints "
+                "WHERE translation_key_id = :key_id AND language = 'it'"
+            ),
+            {"key_id": key_id},
+        )
+        assert connection.execute(
+            text(
+                "SELECT language, max_chars FROM translation_constraints "
+                "WHERE translation_key_id = :key_id ORDER BY language"
+            ),
+            {"key_id": key_id},
+        ).all() == [("en", 0)]
+        connection.execute(
+            text(
+                "INSERT INTO translation_constraints "
+                "(id, scope_id, translation_key_id, language, max_chars, version, "
+                "created_by, updated_by) VALUES "
+                "(:id, :scope_id, :key_id, 'it', 7, 1, :actor_id, :actor_id)"
+            ),
+            {
+                "id": uuid4(),
+                "scope_id": scope_id,
+                "key_id": key_id,
+                "actor_id": actor_id,
+            },
+        )
+        connection.execute(
+            text(
+                "DELETE FROM translation_constraints "
+                "WHERE translation_key_id = :key_id AND language = 'en'"
+            ),
+            {"key_id": key_id},
+        )
+        assert connection.execute(
+            text(
+                "SELECT language, max_chars FROM translation_constraints "
+                "WHERE translation_key_id = :key_id"
+            ),
+            {"key_id": key_id},
+        ).one() == ("it", 7)
 
 
 def test_import_schema_is_reversible_and_database_authoritative(
