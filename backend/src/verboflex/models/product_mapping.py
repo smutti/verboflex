@@ -36,6 +36,15 @@ class ProductRepositoryMapping(Base):
             name="identity_key_length",
         ),
         CheckConstraint(
+            "base_language IS NULL OR char_length(base_language) BETWEEN 1 AND 64",
+            name="base_language_length",
+        ),
+        CheckConstraint(
+            "base_language IS NULL OR base_language ~ "
+            "'^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$'",
+            name="base_language_normalized",
+        ),
+        CheckConstraint(
             "(selected_layout_candidate_id IS NULL AND selected_layout_version IS NULL) OR "
             "(selected_layout_candidate_id IS NOT NULL AND selected_layout_version > 0)",
             name="selected_layout_state",
@@ -78,6 +87,7 @@ class ProductRepositoryMapping(Base):
     )
     topology: Mapped[str] = mapped_column(String(16), nullable=False)
     identity_key: Mapped[str] = mapped_column(String(1200), nullable=False)
+    base_language: Mapped[str | None] = mapped_column(String(), nullable=True)
     selected_layout_candidate_id: Mapped[UUID | None] = mapped_column(
         PostgreSQLUUID(as_uuid=True),
         nullable=True,
