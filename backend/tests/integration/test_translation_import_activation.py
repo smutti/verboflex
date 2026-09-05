@@ -233,6 +233,29 @@ def _json_result(
     )
 
 
+def _qt_result(*, deleted: bool) -> CanonicalParseResult:
+    status = ' type="vanished"' if deleted else ""
+    return parse_canonical_mapping(
+        (
+            CanonicalParserInput(
+                format="qt_ts",
+                repository_side="direct",
+                path="translations/app_it-IT.ts",
+                content=(
+                    '<?xml version="1.0" encoding="utf-8"?>'
+                    '<TS version="2.1" language="it_IT" sourcelanguage="en"><context>'
+                    '<name>Main</name><message id="welcome">'
+                    f"<source>Hello</source><translation{status}>Ciao</translation>"
+                    "</message></context></TS>"
+                ).encode(),
+                layout_identity="qt-ts:translations/app_{locale}.ts",
+                layout_version=1,
+                base_language="en",
+            ),
+        )
+    )
+
+
 def _reconcile_staged_result(
     factory: sessionmaker[Session],
     *,
@@ -671,12 +694,58 @@ def test_refresh_complete_absence_tombstones_without_losing_context(
             .select_from(TranslationValueRevision)
             .where(TranslationValueRevision.value_id == value.id)
         )
+        locator = session.get(TranslationValueLocator, value.id)
     assert value.id == original_value_id
     assert value.review_state == "rejected"
     assert value.is_deleted is True and value.deleted_at is not None
     assert key.is_deleted is True and key.deleted_at is not None
-    assert value.locator is not None and value.locator.value_id == original_locator_id
+    assert locator is not None and locator.value_id == original_locator_id
     assert revision_count == original_revision_count + 1
+
+
+def test_refresh_qt_deleted_row_tombstones_without_erasing_review_state(
+    activation_session_factory: sessionmaker[Session],
+) -> None:
+    identity, repository_id = _seed_running_direct_import(activation_session_factory)
+    _reconcile_staged_result(
+        activation_session_factory,
+        identity=identity,
+        repository_id=repository_id,
+        result=_qt_result(deleted=False),
+        path="translations/app_it-IT.ts",
+    )
+    with activation_session_factory.begin() as session:
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        assert scope is not None
+        value = _value_for(
+            session,
+            scope_id=scope.id,
+            raw_key="welcome",
+            language="it-IT",
+        )
+        value.review_state = "approved"
+        value_id = value.id
+        initial_revision_count = len(value.revisions)
+
+    successor = _start_refresh_execution(activation_session_factory, identity)
+    _reconcile_staged_result(
+        activation_session_factory,
+        identity=successor,
+        repository_id=repository_id,
+        result=_qt_result(deleted=True),
+        path="translations/app_it-IT.ts",
+        commit_hash="c" * 40,
+    )
+    with activation_session_factory() as session:
+        value = session.get_one(TranslationValue, value_id)
+        key = session.get_one(TranslationKey, value.translation_key_id)
+        revision_count = len(value.revisions)
+    assert value.is_deleted is True
+    assert key.is_deleted is True
+    assert value.review_state == "approved"
+    assert revision_count == initial_revision_count + 1
 
 
 def test_refresh_external_change_requires_exact_correlation_to_preserve_approved(
@@ -703,12 +772,15 @@ def test_refresh_external_change_requires_exact_correlation_to_preserve_approved
             select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
         )
         assert scope is not None
-        _value_for(
+        current = _value_for(
             session,
             scope_id=scope.id,
             raw_key="welcome",
             language="it",
-        ).review_state = "approved"
+        )
+        current.translated_text = "Salve"
+        current.display_text = "Salve"
+        current.review_state = "approved"
 
     uncorrelated = _start_refresh_execution(activation_session_factory, identity)
     _reconcile_staged_result(
@@ -732,28 +804,56 @@ def test_refresh_external_change_requires_exact_correlation_to_preserve_approved
         assert value.translated_text == "Salve"
         assert value.review_state == "draft"
 
-    with activation_session_factory.begin() as session:
-        value = session.get_one(TranslationValue, value.id)
-        value.review_state = "approved"
-    correlated = _start_refresh_execution(activation_session_factory, uncorrelated)
+    correlated_identity, correlated_repository_id = _seed_running_direct_import(
+        activation_session_factory
+    )
     correlated_result = _json_result(translated="Buongiorno")
     correlated_target = next(value for value in correlated_result.values if value.language == "it")
     correlated_key = (
-        repository_id,
+        correlated_repository_id,
         correlated_target.logical_key,
         correlated_target.language,
         canonical_selector_bytes(correlated_target.selector),
     )
     _reconcile_staged_result(
         activation_session_factory,
+        identity=correlated_identity,
+        repository_id=correlated_repository_id,
+        result=correlated_result,
+        correlations={correlated_key: "submission:exact-123"},
+    )
+    with activation_session_factory.begin() as session:
+        scope = session.scalar(
+            select(LocalizationScope).where(
+                LocalizationScope.product_id == correlated_identity.product_id
+            )
+        )
+        assert scope is not None
+        correlated_value = _value_for(
+            session,
+            scope_id=scope.id,
+            raw_key="welcome",
+            language="it",
+        )
+        correlated_value.translated_text = "Pending local text"
+        correlated_value.display_text = "Pending local text"
+        correlated_value.review_state = "approved"
+        correlated_value_id = correlated_value.id
+
+    correlated = _start_refresh_execution(
+        activation_session_factory,
+        correlated_identity,
+    )
+    _reconcile_staged_result(
+        activation_session_factory,
         identity=correlated,
-        repository_id=repository_id,
+        repository_id=correlated_repository_id,
         result=correlated_result,
         commit_hash="d" * 40,
         correlations={correlated_key: "submission:exact-123"},
     )
     with activation_session_factory() as session:
-        value = session.get_one(TranslationValue, value.id)
+        value = session.get_one(TranslationValue, correlated_value_id)
         assert value.translated_text == "Buongiorno"
         assert value.review_state == "approved"
         revisions = tuple(
@@ -765,7 +865,6 @@ def test_refresh_external_change_requires_exact_correlation_to_preserve_approved
         )
     assert [revision.correlation_reference for revision in revisions] == [
         "submission:exact-123",
-        None,
         "submission:exact-123",
     ]
 
@@ -811,7 +910,7 @@ def test_refresh_source_change_resets_all_targets_and_preserves_target_text(
             .select_from(TranslationValueRevision)
             .where(TranslationValueRevision.value_id == target.id)
         )
-    assert target.source_text == "Hello again"
+    assert target.source_text is None
     assert target.translated_text == "Ciao"
     assert target.review_state == "draft"
     assert revision_count == initial_revision_count + 1

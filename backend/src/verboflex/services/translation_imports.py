@@ -6,12 +6,14 @@ import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
+from verboflex.localization.graphemes import grapheme_count
 from verboflex.localization.importing.core import (
     MAX_CANONICAL_ISSUES,
     CanonicalParseResult,
@@ -25,13 +27,19 @@ from verboflex.models.product_mapping import ProductRepositoryMapping
 from verboflex.models.translation import (
     LocalizationScope,
     StagedTranslationValue,
+    TranslationKey,
     TranslationParseIssue,
+    TranslationValue,
+    TranslationValueLocator,
+    TranslationValueRevision,
 )
+from verboflex.models.translation_constraint import TranslationConstraint
 
 if TYPE_CHECKING:
     from verboflex.services.import_jobs import (
         ImportExecutionIdentity,
         ImportSourceReferenceRecord,
+        RepositoryRole,
     )
 
 CorrelationIdentity = tuple[UUID, str, str, bytes]
@@ -199,6 +207,641 @@ def stage_translation_parse(
             value_count=len(staged_payloads),
             issue_count=len(issue_payloads),
         )
+
+
+def require_complete_staged_manifest(
+    session: Session,
+    *,
+    identity: ImportExecutionIdentity,
+    manifest_digest: str,
+) -> tuple[StagedTranslationValue, ...]:
+    """Rebuild and verify the complete immutable candidate before reconciliation."""
+    if (
+        not isinstance(manifest_digest, str)
+        or len(manifest_digest) != 64
+        or any(character not in "0123456789abcdef" for character in manifest_digest)
+    ):
+        raise TranslationImportRejected("canonical manifest digest rejected")
+    references = tuple(
+        session.scalars(
+            select(ImportSourceReference)
+            .where(ImportSourceReference.execution_id == identity.execution_id)
+            .order_by(ImportSourceReference.position)
+        )
+    )
+    staged_values = tuple(
+        session.scalars(
+            select(StagedTranslationValue)
+            .where(StagedTranslationValue.import_execution_id == identity.execution_id)
+            .order_by(StagedTranslationValue.position)
+        )
+    )
+    issues = tuple(
+        session.scalars(
+            select(TranslationParseIssue)
+            .where(TranslationParseIssue.import_execution_id == identity.execution_id)
+            .order_by(TranslationParseIssue.position)
+        )
+    )
+    if (
+        not references
+        or issues
+        or tuple(reference.position for reference in references) != tuple(range(len(references)))
+        or tuple(value.position for value in staged_values) != tuple(range(len(staged_values)))
+        or any(
+            value.import_job_id != identity.import_id
+            or value.import_execution_id != identity.execution_id
+            for value in staged_values
+        )
+    ):
+        raise TranslationImportRejected("canonical staged manifest is incomplete")
+    from verboflex.services.import_jobs import ImportSourceReferenceRecord
+
+    reference_records = tuple(
+        ImportSourceReferenceRecord(
+            position=reference.position,
+            repository_side=cast("RepositoryRole", reference.repository_side),
+            repository_id=reference.repository_id,
+            source_branch=reference.source_branch,
+            commit_hash=reference.commit_hash,
+            path=reference.path,
+            size_bytes=reference.size_bytes,
+            sha256=reference.sha256,
+        )
+        for reference in references
+    )
+    _validate_references(identity=identity, references=reference_records)
+    digest = _manifest_digest(
+        identity=identity,
+        references=reference_records,
+        values=[_staged_payload(value) for value in staged_values],
+        issues=[],
+    )
+    if digest != manifest_digest:
+        raise TranslationImportRejected("canonical staged manifest digest mismatch")
+    return staged_values
+
+
+def reconcile_canonical_translations(
+    session: Session,
+    *,
+    identity: ImportExecutionIdentity,
+    scope: LocalizationScope,
+    manifest_digest: str,
+    now: datetime | None = None,
+) -> ReconciliationResult:
+    """Reconcile one complete staged candidate by stable semantic identity."""
+    if (
+        scope.product_id != identity.product_id
+        or scope.current_revision_id != identity.revision_id
+        or scope.current_mapping_id != identity.mapping_id
+    ):
+        raise TranslationImportRejected("canonical scope authority rejected")
+    staged_values = require_complete_staged_manifest(
+        session,
+        identity=identity,
+        manifest_digest=manifest_digest,
+    )
+    reference_by_position = {
+        reference.position: reference
+        for reference in session.scalars(
+            select(ImportSourceReference).where(
+                ImportSourceReference.execution_id == identity.execution_id
+            )
+        )
+    }
+    mapping = session.get(ProductRepositoryMapping, identity.mapping_id)
+    if mapping is None or mapping.base_language is None:
+        raise TranslationImportRejected("canonical base language is unavailable")
+    reconciled_at = now or datetime.now(UTC)
+
+    existing_keys = tuple(
+        session.scalars(
+            select(TranslationKey)
+            .options(
+                selectinload(TranslationKey.values).selectinload(TranslationValue.locator),
+                selectinload(TranslationKey.values).selectinload(TranslationValue.revisions),
+                selectinload(TranslationKey.constraints),
+            )
+            .where(TranslationKey.scope_id == scope.id)
+            .with_for_update()
+        )
+    )
+    key_by_identity = {
+        (key.repository_id, key.configured_branch, key.raw_key): key for key in existing_keys
+    }
+    source_changed_raw_keys: set[str] = set()
+    for staged in staged_values:
+        if staged.language != mapping.base_language:
+            continue
+        key = key_by_identity.get((staged.repository_id, staged.configured_branch, staged.raw_key))
+        if key is None:
+            source_changed_raw_keys.add(staged.raw_key)
+            continue
+        current = next(
+            (
+                value
+                for value in key.values
+                if value.language == staged.language
+                and value.selector_version == staged.selector_version
+                and value.selector_digest == staged.selector_digest
+            ),
+            None,
+        )
+        if current is None or current.source_text != staged.source_text:
+            source_changed_raw_keys.add(staged.raw_key)
+    seen_key_ids: set[UUID] = set()
+    seen_value_ids: set[UUID] = set()
+    created_value_ids: list[UUID] = []
+    updated_value_ids: list[UUID] = []
+    tombstoned_value_ids: list[UUID] = []
+    affected_value_ids: set[UUID] = set()
+
+    for staged in staged_values:
+        reference = reference_by_position.get(staged.source_reference_position)
+        if reference is None:
+            raise TranslationImportRejected("canonical source provenance rejected")
+        key_identity = (staged.repository_id, staged.configured_branch, staged.raw_key)
+        key = key_by_identity.get(key_identity)
+        if key is None:
+            key = TranslationKey(
+                id=uuid4(),
+                scope_id=scope.id,
+                product_id=scope.product_id,
+                repository_id=staged.repository_id,
+                configured_branch=staged.configured_branch,
+                raw_key=staged.raw_key,
+            )
+            session.add(key)
+            session.flush()
+            key_by_identity[key_identity] = key
+        elif key.is_deleted:
+            key.is_deleted = False
+            key.deleted_at = None
+        seen_key_ids.add(key.id)
+
+        value_by_identity = {
+            (value.language, value.selector_version, value.selector_digest): value
+            for value in key.values
+        }
+        value_identity = (
+            staged.language,
+            staged.selector_version,
+            staged.selector_digest,
+        )
+        value = value_by_identity.get(value_identity)
+        parser_deleted = _staged_value_is_deleted(staged)
+        if value is None:
+            value = TranslationValue(
+                id=uuid4(),
+                scope_id=scope.id,
+                translation_key_id=key.id,
+                language=staged.language,
+                selector_version=staged.selector_version,
+                selector_kind=staged.selector_kind,
+                selector_bytes=staged.selector_bytes,
+                selector_digest=staged.selector_digest,
+                source_text=staged.source_text,
+                translated_text=staged.translated_text,
+                display_text=staged.display_text,
+                structure=staged.structure,
+                review_state="draft",
+                is_deleted=parser_deleted,
+                deleted_at=reconciled_at if parser_deleted else None,
+            )
+            session.add(value)
+            session.flush()
+            key.values.append(value)
+            created_value_ids.append(value.id)
+            affected_value_ids.add(value.id)
+            _append_value_revision(
+                session,
+                value=value,
+                identity=identity,
+                staged=staged,
+                reference=reference,
+                revision_number=1,
+                review_state=value.review_state,
+                is_deleted=value.is_deleted,
+                deleted_at=value.deleted_at,
+            )
+        else:
+            source_changed = value.source_text != staged.source_text or (
+                value.language != mapping.base_language
+                and staged.raw_key in source_changed_raw_keys
+            )
+            content_changed = (
+                value.source_text != staged.source_text
+                or value.translated_text != staged.translated_text
+                or value.display_text != staged.display_text
+                or value.structure != staged.structure
+                or source_changed
+            )
+            target_changed = value.translated_text != staged.translated_text
+            deletion_changed = value.is_deleted != parser_deleted
+            next_review_state = value.review_state
+            latest_revision = max(
+                value.revisions,
+                key=lambda revision: revision.revision_number,
+                default=None,
+            )
+            current_target_is_untracked = (
+                latest_revision is not None
+                and latest_revision.translated_text != value.translated_text
+            )
+            if source_changed and value.language != mapping.base_language:
+                next_review_state = "draft"
+            elif (
+                target_changed or current_target_is_untracked
+            ) and value.review_state == "approved":
+                exact_correlation = staged.correlation_reference is not None and any(
+                    revision.correlation_reference == staged.correlation_reference
+                    and revision.source_text == staged.source_text
+                    and revision.translated_text == staged.translated_text
+                    and revision.display_text == staged.display_text
+                    and revision.structure == staged.structure
+                    and not revision.is_deleted
+                    for revision in value.revisions
+                )
+                if not exact_correlation:
+                    next_review_state = "draft"
+            elif value.is_deleted and not parser_deleted:
+                next_review_state = "draft"
+
+            if content_changed or deletion_changed or next_review_state != value.review_state:
+                _append_value_revision(
+                    session,
+                    value=value,
+                    identity=identity,
+                    staged=staged,
+                    reference=reference,
+                    revision_number=_next_revision_number(value),
+                    review_state=next_review_state,
+                    is_deleted=parser_deleted,
+                    deleted_at=reconciled_at if parser_deleted else None,
+                )
+                value.source_text = staged.source_text
+                value.translated_text = staged.translated_text
+                value.display_text = staged.display_text
+                value.structure = staged.structure
+                value.review_state = next_review_state
+                value.is_deleted = parser_deleted
+                value.deleted_at = reconciled_at if parser_deleted else None
+                updated_value_ids.append(value.id)
+                affected_value_ids.add(value.id)
+
+        seen_value_ids.add(value.id)
+        _upsert_locator(
+            session,
+            value=value,
+            identity=identity,
+            staged=staged,
+            reference=reference,
+        )
+
+    for key in existing_keys:
+        for value in key.values:
+            if value.id in seen_value_ids or value.is_deleted:
+                continue
+            reference = _tombstone_reference(
+                reference_by_position,
+                value=value,
+            )
+            _append_tombstone_revision(
+                session,
+                value=value,
+                identity=identity,
+                reference=reference,
+                revision_number=_next_revision_number(value),
+                deleted_at=reconciled_at,
+            )
+            value.is_deleted = True
+            value.deleted_at = reconciled_at
+            tombstoned_value_ids.append(value.id)
+            affected_value_ids.add(value.id)
+        if key.id not in seen_key_ids and not key.is_deleted:
+            key.is_deleted = True
+            key.deleted_at = reconciled_at
+
+    for key in key_by_identity.values():
+        all_values_deleted = bool(key.values) and all(value.is_deleted for value in key.values)
+        if all_values_deleted and not key.is_deleted:
+            key.is_deleted = True
+            key.deleted_at = reconciled_at
+        elif not all_values_deleted and key.is_deleted:
+            key.is_deleted = False
+            key.deleted_at = None
+
+    session.flush()
+    _recompute_constraint_projections(
+        session,
+        scope=scope,
+        base_language=mapping.base_language,
+    )
+    session.flush()
+    return ReconciliationResult(
+        created_value_ids=tuple(created_value_ids),
+        updated_value_ids=tuple(updated_value_ids),
+        tombstoned_value_ids=tuple(tombstoned_value_ids),
+        affected_value_ids=tuple(sorted(affected_value_ids, key=str)),
+    )
+
+
+def _staged_payload(value: StagedTranslationValue) -> dict[str, object]:
+    return {
+        "column": value.column,
+        "configured_branch": value.configured_branch,
+        "correlation_reference": value.correlation_reference,
+        "display_text": value.display_text,
+        "format": value.format,
+        "language": value.language,
+        "line": value.line,
+        "locator_position": value.locator_position,
+        "path": value.path,
+        "position": value.position,
+        "raw_key": value.raw_key,
+        "repository_id": value.repository_id,
+        "repository_side": value.repository_side,
+        "selector_bytes": value.selector_bytes,
+        "selector_digest": value.selector_digest,
+        "selector_kind": value.selector_kind,
+        "selector_version": value.selector_version,
+        "source_reference_position": value.source_reference_position,
+        "source_text": value.source_text,
+        "structural_address": value.structural_address,
+        "structure": value.structure,
+        "translated_text": value.translated_text,
+    }
+
+
+def _staged_value_is_deleted(value: StagedTranslationValue) -> bool:
+    for node in value.structure:
+        if not isinstance(node, dict) or node.get("kind") != "qt_ts:translation":
+            continue
+        fields = node.get("fields")
+        if not isinstance(fields, list):
+            continue
+        for field in fields:
+            if (
+                isinstance(field, dict)
+                and field.get("name") == "deleted"
+                and field.get("value") is True
+            ):
+                return True
+    return False
+
+
+def _next_revision_number(value: TranslationValue) -> int:
+    return max((revision.revision_number for revision in value.revisions), default=0) + 1
+
+
+def _revision_digest(
+    *,
+    value_id: UUID,
+    revision_number: int,
+    identity: ImportExecutionIdentity,
+    source_reference_position: int,
+    source_commit_hash: str,
+    source_text: str | None,
+    translated_text: str | None,
+    display_text: str,
+    structure: list[object],
+    review_state: str,
+    is_deleted: bool,
+    correlation_reference: str | None,
+) -> str:
+    payload = {
+        "correlation_reference": correlation_reference,
+        "display_text": display_text,
+        "execution_id": str(identity.execution_id),
+        "is_deleted": is_deleted,
+        "revision_number": revision_number,
+        "review_state": review_state,
+        "source_commit_hash": source_commit_hash,
+        "source_reference_position": source_reference_position,
+        "source_text": source_text,
+        "structure": structure,
+        "translated_text": translated_text,
+        "value_id": str(value_id),
+        "version": 1,
+    }
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _append_value_revision(
+    session: Session,
+    *,
+    value: TranslationValue,
+    identity: ImportExecutionIdentity,
+    staged: StagedTranslationValue,
+    reference: ImportSourceReference,
+    revision_number: int,
+    review_state: str,
+    is_deleted: bool,
+    deleted_at: datetime | None,
+) -> None:
+    revision = TranslationValueRevision(
+        id=uuid4(),
+        value_id=value.id,
+        translation_key_id=value.translation_key_id,
+        revision_number=revision_number,
+        revision_digest=_revision_digest(
+            value_id=value.id,
+            revision_number=revision_number,
+            identity=identity,
+            source_reference_position=reference.position,
+            source_commit_hash=reference.commit_hash,
+            source_text=staged.source_text,
+            translated_text=staged.translated_text,
+            display_text=staged.display_text,
+            structure=staged.structure,
+            review_state=review_state,
+            is_deleted=is_deleted,
+            correlation_reference=staged.correlation_reference,
+        ),
+        import_job_id=identity.import_id,
+        import_execution_id=identity.execution_id,
+        source_reference_position=reference.position,
+        source_commit_hash=reference.commit_hash,
+        source_text=staged.source_text,
+        translated_text=staged.translated_text,
+        display_text=staged.display_text,
+        structure=staged.structure,
+        review_state=review_state,
+        is_deleted=is_deleted,
+        deleted_at=deleted_at,
+        correlation_reference=staged.correlation_reference,
+    )
+    value.revisions.append(revision)
+    session.add(revision)
+
+
+def _append_tombstone_revision(
+    session: Session,
+    *,
+    value: TranslationValue,
+    identity: ImportExecutionIdentity,
+    reference: ImportSourceReference,
+    revision_number: int,
+    deleted_at: datetime,
+) -> None:
+    revision = TranslationValueRevision(
+        id=uuid4(),
+        value_id=value.id,
+        translation_key_id=value.translation_key_id,
+        revision_number=revision_number,
+        revision_digest=_revision_digest(
+            value_id=value.id,
+            revision_number=revision_number,
+            identity=identity,
+            source_reference_position=reference.position,
+            source_commit_hash=reference.commit_hash,
+            source_text=value.source_text,
+            translated_text=value.translated_text,
+            display_text=value.display_text,
+            structure=value.structure,
+            review_state=value.review_state,
+            is_deleted=True,
+            correlation_reference=None,
+        ),
+        import_job_id=identity.import_id,
+        import_execution_id=identity.execution_id,
+        source_reference_position=reference.position,
+        source_commit_hash=reference.commit_hash,
+        source_text=value.source_text,
+        translated_text=value.translated_text,
+        display_text=value.display_text,
+        structure=value.structure,
+        review_state=value.review_state,
+        is_deleted=True,
+        deleted_at=deleted_at,
+        correlation_reference=None,
+    )
+    value.revisions.append(revision)
+    session.add(revision)
+
+
+def _upsert_locator(
+    session: Session,
+    *,
+    value: TranslationValue,
+    identity: ImportExecutionIdentity,
+    staged: StagedTranslationValue,
+    reference: ImportSourceReference,
+) -> None:
+    locator = value.locator
+    if locator is None:
+        locator = TranslationValueLocator(
+            value_id=value.id,
+            translation_key_id=value.translation_key_id,
+            import_job_id=identity.import_id,
+            import_execution_id=identity.execution_id,
+            source_reference_position=reference.position,
+            repository_side=staged.repository_side,
+            repository_id=staged.repository_id,
+            configured_branch=staged.configured_branch,
+            source_commit_hash=reference.commit_hash,
+            format=staged.format,
+            path=staged.path,
+            position=staged.locator_position,
+            structural_address=staged.structural_address,
+            line=staged.line,
+            column=staged.column,
+        )
+        value.locator = locator
+        session.add(locator)
+        return
+    locator.import_job_id = identity.import_id
+    locator.import_execution_id = identity.execution_id
+    locator.source_reference_position = reference.position
+    locator.repository_side = staged.repository_side
+    locator.repository_id = staged.repository_id
+    locator.configured_branch = staged.configured_branch
+    locator.source_commit_hash = reference.commit_hash
+    locator.format = staged.format
+    locator.path = staged.path
+    locator.position = staged.locator_position
+    locator.structural_address = staged.structural_address
+    locator.line = staged.line
+    locator.column = staged.column
+
+
+def _tombstone_reference(
+    references: Mapping[int, ImportSourceReference],
+    *,
+    value: TranslationValue,
+) -> ImportSourceReference:
+    locator = value.locator
+    candidates = tuple(
+        reference
+        for _, reference in sorted(references.items())
+        if locator is not None
+        and reference.repository_id == locator.repository_id
+        and reference.source_branch == locator.configured_branch
+    )
+    if not candidates:
+        raise TranslationImportRejected("canonical tombstone provenance rejected")
+    return candidates[0]
+
+
+def _recompute_constraint_projections(
+    session: Session,
+    *,
+    scope: LocalizationScope,
+    base_language: str,
+) -> None:
+    keys = tuple(
+        session.scalars(
+            select(TranslationKey)
+            .options(selectinload(TranslationKey.values))
+            .where(TranslationKey.scope_id == scope.id)
+        )
+    )
+    constraints = tuple(
+        session.scalars(
+            select(TranslationConstraint).where(TranslationConstraint.scope_id == scope.id)
+        )
+    )
+    key_by_id = {key.id: key for key in keys}
+    exact_constraints = {
+        (constraint.translation_key_id, constraint.language): constraint
+        for constraint in constraints
+    }
+    base_constraints_by_key = {
+        constraint.translation_key_id: constraint
+        for constraint in constraints
+        if constraint.language == base_language
+    }
+    base_constraints_by_raw_key = {
+        key_by_id[key_id].raw_key: constraint
+        for key_id, constraint in base_constraints_by_key.items()
+        if key_id in key_by_id
+    }
+    for key in keys:
+        for value in key.values:
+            value.grapheme_count = grapheme_count(value.display_text)
+            exact = exact_constraints.get((key.id, value.language))
+            effective_constraint: TranslationConstraint | None
+            if exact is not None:
+                effective_constraint = exact
+                source = "base_default" if value.language == base_language else "language_override"
+            else:
+                effective_constraint = base_constraints_by_raw_key.get(key.raw_key)
+                source = "base_default" if effective_constraint is not None else "none"
+            value.effective_constraint_source = source
+            value.effective_max_chars = (
+                effective_constraint.max_chars if effective_constraint is not None else None
+            )
+            value.is_over_limit = (
+                effective_constraint is not None
+                and value.grapheme_count > effective_constraint.max_chars
+            )
 
 
 def _lock_current_staging_authority(
