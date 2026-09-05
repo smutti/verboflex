@@ -7,6 +7,7 @@ import {
   connectAdminBitbucketOauth,
   confirmAdminActiveRevisionRevalidation,
   confirmAdminImportRewriteBaseline,
+  confirmAdminPreviewJob,
   createAdminActiveRevisionRevalidationJob,
   getAdminBitbucketStatus,
   getAdminActiveRevisionRevalidationJob,
@@ -30,6 +31,8 @@ import type {
   AdminImportRewriteConfirmationRequest,
   AdminImportRewriteComparisonResponse,
   AdminMappingListResponse,
+  AdminPreviewConfirmationRequest,
+  AdminPreviewConfirmationResponse,
   AdminProductResponse,
   AdminPublishedMappingImportListResponse,
   AdminPublishedMappingImportResponse,
@@ -40,6 +43,8 @@ import type {
   ConfirmAdminActiveRevisionRevalidationResponse,
   ConfirmAdminImportRewriteBaselineData,
   ConfirmAdminImportRewriteBaselineResponse,
+  ConfirmAdminPreviewJobData,
+  ConfirmAdminPreviewJobResponse,
   CreateAdminActiveRevisionRevalidationJobData,
   CreateAdminActiveRevisionRevalidationJobResponse,
   GetAdminActiveRevisionRevalidationJobData,
@@ -579,6 +584,62 @@ describe("canonical generated Phase 3 admin client", () => {
     );
     expect(generatedTypesSource).not.toMatch(
       /(?:provider_body|provider_status_text|raw_authority|raw_source|source_bytes|stack_trace|task_id|attempt_history)/u,
+    );
+  });
+
+  it("confirms one exact base language through the generated bearer client", async () => {
+    const jobId = "40000000-0000-4000-8000-000000000004";
+    const body = {
+      preview_digest: "f".repeat(64),
+      layout_candidate_id: "50000000-0000-4000-8000-000000000005",
+      layout_candidate_version: 1,
+      base_language: "it-IT",
+    } satisfies AdminPreviewConfirmationRequest;
+    const responseBody = {
+      job_id: jobId,
+      mapping_id: "30000000-0000-4000-8000-000000000003",
+      preview_digest: body.preview_digest,
+      layout_candidate_id: body.layout_candidate_id,
+      layout_candidate_version: 1,
+      base_language: body.base_language,
+      confirmed_by: "60000000-0000-4000-8000-000000000006",
+      confirmed_at: "2026-09-05T10:00:00Z",
+    } satisfies AdminPreviewConfirmationResponse;
+    const { apiClient, requests } = createRecordingApiClient(responseBody);
+    const authority = "phase-four-memory-bearer";
+
+    const result = await confirmAdminPreviewJob({
+      auth: authority,
+      body,
+      client: apiClient,
+      path: { job_id: jobId },
+    });
+
+    expectTypeOf<
+      ConfirmAdminPreviewJobData["body"]
+    >().toEqualTypeOf<AdminPreviewConfirmationRequest>();
+    expectTypeOf<ConfirmAdminPreviewJobResponse>().toEqualTypeOf<AdminPreviewConfirmationResponse>();
+    expect(result.data).toEqual(responseBody);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.method).toBe("POST");
+    expect(new URL(requests[0]!.url).pathname).toBe(
+      `/api/v1/admin/preview-jobs/${jobId}/confirmation`,
+    );
+    expect(requests[0]!.headers.get("Authorization")).toBe(
+      `Bearer ${authority}`,
+    );
+    const serializedBody = await requests[0]!.clone().text();
+    expect(serializedBody.match(/"base_language"/gu)).toHaveLength(1);
+    expect(JSON.parse(serializedBody)).toEqual(body);
+
+    const generatedPreviewTypes = generatedTypeAliasesWithPrefix(
+      generatedTypesSource,
+      "AdminPreview",
+    );
+    expect(generatedPreviewTypes).toContain("base_language: string | null;");
+    expect(generatedPreviewTypes).toContain("base_language: string;");
+    expect(generatedPreviewTypes).not.toMatch(
+      /(?:access_token|client_secret|credentials|provider_body|provider_diagnostics|raw_body|refresh_token|source_bytes|source_file_content)/u,
     );
   });
 
