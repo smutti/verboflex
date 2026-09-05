@@ -33,6 +33,7 @@ EXPECTED_TABLES = {
     "import_rewrite_deltas",
     "import_rewrite_proposals",
     "import_source_references",
+    "localization_scopes",
     "preview_jobs",
     "product_mapping_allowed_targets",
     "product_mapping_repository_sides",
@@ -43,6 +44,12 @@ EXPECTED_TABLES = {
     "roles",
     "user_roles",
     "users",
+    "staged_translation_values",
+    "translation_keys",
+    "translation_parse_issues",
+    "translation_value_locators",
+    "translation_value_revisions",
+    "translation_values",
 }
 EXPECTED_ROLES = {
     "admin",
@@ -56,6 +63,15 @@ PHASE3_IMPORT_TABLES = {
     "import_rewrite_deltas",
     "import_rewrite_proposals",
     "import_source_references",
+}
+CANONICAL_TRANSLATION_TABLES = {
+    "localization_scopes",
+    "translation_keys",
+    "translation_values",
+    "translation_value_revisions",
+    "translation_value_locators",
+    "staged_translation_values",
+    "translation_parse_issues",
 }
 PREVIEW_WATCHDOG_INDEX = "ix_preview_jobs_watchdog_state_started_at"
 MAPPING_BASE_LANGUAGE_CONSTRAINTS = {
@@ -321,9 +337,9 @@ def _seed_import_schema_graph(engine: Engine) -> dict[str, UUID]:
         connection.execute(
             text(
                 "INSERT INTO product_repository_mappings "
-                "(id, revision_id, topology, identity_key) VALUES "
-                "(:mapping, :revision, 'direct', :mapping_key), "
-                "(:foreign_mapping, :foreign_revision, 'direct', :foreign_mapping_key)"
+                "(id, revision_id, topology, identity_key, base_language) VALUES "
+                "(:mapping, :revision, 'direct', :mapping_key, 'en'), "
+                "(:foreign_mapping, :foreign_revision, 'direct', :foreign_mapping_key, 'en')"
             ),
             {
                 **identities,
@@ -580,6 +596,299 @@ def _insert_import_execution(
             },
         )
     return import_id, execution_id
+
+
+def _insert_localization_scope(
+    engine: Engine,
+    identities: dict[str, UUID],
+    *,
+    import_id: UUID,
+    execution_id: UUID,
+) -> UUID:
+    scope_id = uuid4()
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO localization_scopes "
+                "(id, product_id, mapping_identity_key, current_revision_id, "
+                "current_mapping_id, active_import_job_id, active_execution_id, "
+                "dataset_version) VALUES "
+                "(:scope_id, :product, :mapping_identity_key, :revision, :mapping, "
+                ":import_id, :execution_id, 1)"
+            ),
+            {
+                **identities,
+                "scope_id": scope_id,
+                "mapping_identity_key": f"import-{identities['mapping']}",
+                "import_id": import_id,
+                "execution_id": execution_id,
+            },
+        )
+    return scope_id
+
+
+def test_canonical_translation_migration_is_reversible_and_metadata_complete(
+    migrated_database: tuple[Config, Engine],
+) -> None:
+    """Revision 0016 owns the complete stable identity and staging schema."""
+    from verboflex import models
+    from verboflex.db.base import Base
+
+    config, engine = migrated_database
+    command.upgrade(config, "0015_mapping_base_language")
+    assert CANONICAL_TRANSLATION_TABLES.isdisjoint(inspect(engine).get_table_names())
+
+    command.upgrade(config, "head")
+    inspector = inspect(engine)
+    assert set(inspector.get_table_names()) >= CANONICAL_TRANSLATION_TABLES
+    script = ScriptDirectory.from_config(config)
+    revision = script.get_revision("0016_canonical_translations")
+    assert revision is not None
+    assert revision.down_revision == "0015_mapping_base_language"
+
+    assert {
+        "LocalizationScope",
+        "TranslationKey",
+        "TranslationValue",
+        "TranslationValueRevision",
+        "TranslationValueLocator",
+        "StagedTranslationValue",
+        "TranslationParseIssue",
+    } <= set(models.__all__)
+    assert set(Base.metadata.tables) >= CANONICAL_TRANSLATION_TABLES
+    for table_name in CANONICAL_TRANSLATION_TABLES:
+        migration_columns = {
+            column["name"]: (str(column["type"]), column["nullable"])
+            for column in inspector.get_columns(table_name)
+        }
+        metadata_columns = {
+            column.name: (str(column.type), column.nullable)
+            for column in Base.metadata.tables[table_name].columns
+        }
+        assert migration_columns == metadata_columns
+
+    command.downgrade(config, "0015_mapping_base_language")
+    assert CANONICAL_TRANSLATION_TABLES.isdisjoint(inspect(engine).get_table_names())
+    command.upgrade(config, "head")
+    assert set(inspect(engine).get_table_names()) >= CANONICAL_TRANSLATION_TABLES
+
+
+def test_canonical_translation_identity_history_and_staging_are_database_authoritative(
+    migrated_database: tuple[Config, Engine],
+) -> None:
+    """Natural identity excludes locators while ownership and provenance fail closed."""
+    config, engine = migrated_database
+    command.upgrade(config, "head")
+    identities = _seed_import_schema_graph(engine)
+    import_id, execution_id = _insert_import_execution(engine, identities)
+    scope_id = _insert_localization_scope(
+        engine,
+        identities,
+        import_id=import_id,
+        execution_id=execution_id,
+    )
+    key_id = uuid4()
+    value_id = uuid4()
+    revision_id = uuid4()
+    selector_bytes = b'{"fields":{},"kind":"scalar","version":1}'
+    selector_digest = hashlib.sha256(selector_bytes).hexdigest()
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO import_source_references "
+                "(execution_id, position, repository_side, repository_id, source_branch, "
+                "commit_hash, path, size_bytes, sha256) VALUES "
+                "(:execution_id, 0, 'direct', :repository, 'main', :commit_hash, "
+                "'values/strings.xml', 64, :sha256)"
+            ),
+            {
+                **identities,
+                "execution_id": execution_id,
+                "commit_hash": "a" * 40,
+                "sha256": "b" * 64,
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO translation_keys "
+                "(id, scope_id, product_id, repository_id, configured_branch, raw_key, "
+                "is_deleted) VALUES "
+                "(:key_id, :scope_id, :product, :repository, 'main', :raw_key, false)"
+            ),
+            {
+                **identities,
+                "key_id": key_id,
+                "scope_id": scope_id,
+                "raw_key": "Cafe\u0301.menu_title",
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO translation_values "
+                "(id, scope_id, translation_key_id, language, selector_version, "
+                "selector_kind, selector_bytes, selector_digest, source_text, "
+                "translated_text, display_text, structure, review_state, is_deleted) "
+                "VALUES (:value_id, :scope_id, :key_id, 'it', 1, 'scalar', "
+                ":selector_bytes, :selector_digest, 'Coffee', 'Caff\u00e8', 'Caff\u00e8', "
+                "CAST(:structure AS jsonb), 'draft', false)"
+            ),
+            {
+                "value_id": value_id,
+                "scope_id": scope_id,
+                "key_id": key_id,
+                "selector_bytes": selector_bytes,
+                "selector_digest": selector_digest,
+                "structure": '[{"kind":"android_xml:string","version":1}]',
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO translation_value_revisions "
+                "(id, value_id, translation_key_id, revision_number, revision_digest, "
+                "import_job_id, import_execution_id, source_reference_position, "
+                "source_commit_hash, source_text, translated_text, display_text, "
+                "structure, review_state, is_deleted, correlation_reference) VALUES "
+                "(:revision_id, :value_id, :key_id, 1, :revision_digest, :import_id, "
+                ":execution_id, 0, :commit_hash, 'Coffee', 'Caff\u00e8', 'Caff\u00e8', "
+                "CAST(:structure AS jsonb), 'draft', false, 'future-change:42')"
+            ),
+            {
+                "revision_id": revision_id,
+                "value_id": value_id,
+                "key_id": key_id,
+                "revision_digest": "c" * 64,
+                "import_id": import_id,
+                "execution_id": execution_id,
+                "commit_hash": "a" * 40,
+                "structure": '[{"kind":"android_xml:string","version":1}]',
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO translation_value_locators "
+                "(value_id, translation_key_id, import_job_id, import_execution_id, "
+                "source_reference_position, repository_side, repository_id, "
+                "configured_branch, source_commit_hash, format, path, position, "
+                "structural_address, line, column) VALUES "
+                "(:value_id, :key_id, :import_id, :execution_id, 0, 'direct', "
+                ":repository, 'main', :commit_hash, 'android_xml', "
+                "'values/strings.xml', 4, CAST(:address AS jsonb), 2, 3)"
+            ),
+            {
+                **identities,
+                "value_id": value_id,
+                "key_id": key_id,
+                "import_id": import_id,
+                "execution_id": execution_id,
+                "commit_hash": "a" * 40,
+                "address": '["resources",0]',
+            },
+        )
+        connection.execute(
+            text(
+                "UPDATE translation_value_locators SET path = 'moved/strings.xml', "
+                "position = 99 WHERE value_id = :value_id"
+            ),
+            {"value_id": value_id},
+        )
+        row = connection.execute(
+            text(
+                "SELECT value.id, key.raw_key, locator.path, locator.position "
+                "FROM translation_values AS value "
+                "JOIN translation_keys AS key ON key.id = value.translation_key_id "
+                "JOIN translation_value_locators AS locator ON locator.value_id = value.id "
+                "WHERE value.id = :value_id"
+            ),
+            {"value_id": value_id},
+        ).one()
+    assert row == (value_id, "Cafe\u0301.menu_title", "moved/strings.xml", 99)
+
+    for language, digest in (("it", selector_digest), ("fr", selector_digest)):
+        with pytest.raises(IntegrityError), engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO translation_values "
+                    "(id, scope_id, translation_key_id, language, selector_version, "
+                    "selector_kind, selector_bytes, selector_digest, source_text, "
+                    "translated_text, display_text, structure, review_state, is_deleted) "
+                    "VALUES (:id, :scope_id, :key_id, :language, 1, 'scalar', "
+                    ":selector_bytes, :digest, NULL, 'duplicate', 'duplicate', "
+                    "CAST('[]' AS jsonb), 'draft', false)"
+                ),
+                {
+                    "id": uuid4(),
+                    "scope_id": scope_id,
+                    "key_id": key_id,
+                    "language": language,
+                    "selector_bytes": selector_bytes,
+                    "digest": digest if language == "it" else "not-a-digest",
+                },
+            )
+
+    with (
+        pytest.raises(DBAPIError, match="translation value revision is immutable"),
+        engine.begin() as connection,
+    ):
+        connection.execute(
+            text(
+                "UPDATE translation_value_revisions SET translated_text = 'Mutated' "
+                "WHERE id = :revision_id"
+            ),
+            {"revision_id": revision_id},
+        )
+
+    with (
+        pytest.raises(DBAPIError, match="staged translation ownership violation"),
+        engine.begin() as connection,
+    ):
+        connection.execute(
+            text(
+                "INSERT INTO staged_translation_values "
+                "(import_execution_id, position, import_job_id, scope_id, "
+                "repository_id, configured_branch, raw_key, language, "
+                "selector_version, selector_kind, selector_bytes, selector_digest, "
+                "translated_text, display_text, structure, repository_side, "
+                "source_reference_position, format, path, locator_position, "
+                "structural_address) VALUES "
+                "(:execution_id, 0, :import_id, :scope_id, :foreign_repository, "
+                "'foreign-main', 'forged', 'it', 1, 'scalar', :selector_bytes, "
+                ":selector_digest, 'forged', 'forged', CAST('[]' AS jsonb), "
+                "'direct', 0, 'android_xml', 'values/forged.xml', 0, "
+                "CAST('[0]' AS jsonb))"
+            ),
+            {
+                **identities,
+                "execution_id": execution_id,
+                "import_id": import_id,
+                "scope_id": scope_id,
+                "selector_bytes": selector_bytes,
+                "selector_digest": selector_digest,
+            },
+        )
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE import_executions SET state = 'succeeded', "
+                "finished_at = CURRENT_TIMESTAMP WHERE id = :execution_id"
+            ),
+            {"execution_id": execution_id},
+        )
+    with (
+        pytest.raises(DBAPIError, match="staging requires running import execution"),
+        engine.begin() as connection,
+    ):
+        connection.execute(
+            text(
+                "INSERT INTO translation_parse_issues "
+                "(import_execution_id, position, import_job_id, repository_side, "
+                "path, issue_code, message) VALUES "
+                "(:execution_id, 0, :import_id, 'direct', 'values/bad.xml', "
+                "'malformed_file', 'safe bounded message')"
+            ),
+            {"execution_id": execution_id, "import_id": import_id},
+        )
 
 
 def test_import_schema_is_reversible_and_database_authoritative(
