@@ -253,15 +253,12 @@ def put_translation_constraint(
         translation_group_id=translation_group_id,
         language=language,
     )
-    rule = session.execute(
-        select(TranslationConstraint)
-        .where(
-            TranslationConstraint.scope_id == scope.id,
-            TranslationConstraint.translation_key_id == key.id,
-            TranslationConstraint.language == language,
-        )
-        .with_for_update()
-    ).scalar_one_or_none()
+    rule = _lock_explicit_rule(
+        session,
+        scope_id=scope.id,
+        translation_key_id=key.id,
+        language=language,
+    )
     if rule is None:
         if expected != 0:
             raise ConstraintVersionConflict("constraint version conflict")
@@ -317,15 +314,12 @@ def delete_translation_constraint(
         translation_group_id=translation_group_id,
         language=language,
     )
-    rule = session.execute(
-        select(TranslationConstraint)
-        .where(
-            TranslationConstraint.scope_id == scope.id,
-            TranslationConstraint.translation_key_id == key.id,
-            TranslationConstraint.language == language,
-        )
-        .with_for_update()
-    ).scalar_one_or_none()
+    rule = _lock_explicit_rule(
+        session,
+        scope_id=scope.id,
+        translation_key_id=key.id,
+        language=language,
+    )
     if rule is None:
         raise ConstraintNotFound("constraint rule is unavailable")
     if rule.version != expected:
@@ -390,6 +384,24 @@ def _lock_mutation_group(
     if leading_value_id != translation_group_id:
         raise ConstraintAuthorityUnavailable("constraint group is unavailable")
     return scope, key, base_language
+
+
+def _lock_explicit_rule(
+    session: Session,
+    *,
+    scope_id: UUID,
+    translation_key_id: UUID,
+    language: str,
+) -> TranslationConstraint | None:
+    return session.execute(
+        select(TranslationConstraint)
+        .where(
+            TranslationConstraint.scope_id == scope_id,
+            TranslationConstraint.translation_key_id == translation_key_id,
+            TranslationConstraint.language == language,
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
 
 
 def _require_exact_integer(

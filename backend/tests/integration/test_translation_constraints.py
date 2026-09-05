@@ -1063,6 +1063,56 @@ def test_delete_base_default_preserves_independent_target_override(
     )
 
 
+def test_put_and_delete_preserve_text_normalization_and_selector_identity(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    display_text = "e\u0301"
+    ids = _seed_constraint_dataset(
+        constraint_session_factory,
+        target_text=display_text,
+    )
+    with constraint_session_factory.begin() as session:
+        target = session.get_one(TranslationValue, ids["target_value"])
+        before = (
+            target.selector_version,
+            target.selector_kind,
+            target.selector_bytes,
+            target.selector_digest,
+            target.source_text,
+            target.translated_text,
+            target.display_text,
+            target.structure,
+        )
+        created = service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=0,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+        service.delete_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            expected_version=created.version,
+        )
+        after = (
+            target.selector_version,
+            target.selector_kind,
+            target.selector_bytes,
+            target.selector_digest,
+            target.source_text,
+            target.translated_text,
+            target.display_text,
+            target.structure,
+        )
+
+    assert after == before
+    assert target.display_text == display_text
+
+
 def test_stale_put_and_delete_leave_rule_and_projection_unchanged(
     constraint_session_factory: sessionmaker[Session],
 ) -> None:
