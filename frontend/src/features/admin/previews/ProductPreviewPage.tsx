@@ -21,8 +21,10 @@ import {
   publishAdminProductCandidate,
   reactivateAdminProduct,
   type AdminActiveRevisionRevalidationJobResponse,
+  type AdminActiveRevisionRevalidationConfirmationResponse,
   type AdminMappingResponse,
   type AdminPreviewCommitRequest,
+  type AdminPreviewConfirmationResponse,
   type AdminPreviewJobResponse,
   type AdminPreviewLayoutCandidateResponse,
   type AdminProductReactivationEligibilityResponse,
@@ -44,7 +46,15 @@ import {
 } from "../../../components/ui/alert-dialog";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
+import { Label } from "../../../components/ui/label";
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../components/ui/select";
 import { Skeleton } from "../../../components/ui/skeleton";
 import {
   Table,
@@ -128,6 +138,70 @@ function isExactCandidate(candidate: AdminPreviewLayoutCandidateResponse) {
     candidate.languages.length > 0 &&
     candidate.keys.length > 0 &&
     candidate.samples.length > 0
+  );
+}
+
+function isExactCandidateWithoutLanguage(
+  candidate: AdminPreviewLayoutCandidateResponse,
+) {
+  return (
+    candidate.confidence === 1 &&
+    candidate.files.length > 0 &&
+    candidate.keys.length > 0 &&
+    candidate.samples.length > 0
+  );
+}
+
+function soleDetectedLanguage(
+  candidate: AdminPreviewLayoutCandidateResponse | undefined,
+) {
+  return candidate?.languages.length === 1 ? candidate.languages[0]! : "";
+}
+
+function isBaseLanguageRequired(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "detail" in error &&
+    error.detail === "base_language_required"
+  );
+}
+
+function previewConfirmationMatches(
+  confirmation: AdminPreviewConfirmationResponse,
+  job: AdminPreviewJobResponse,
+  candidate: AdminPreviewLayoutCandidateResponse,
+  previewDigest: string,
+  baseLanguage: string,
+) {
+  return (
+    confirmation.job_id === job.id &&
+    confirmation.mapping_id === job.mapping_id &&
+    confirmation.preview_digest === previewDigest &&
+    confirmation.layout_candidate_id === candidate.id &&
+    confirmation.layout_candidate_version === candidate.version &&
+    confirmation.base_language === baseLanguage
+  );
+}
+
+function activeConfirmationMatches(
+  confirmation: AdminActiveRevisionRevalidationConfirmationResponse,
+  job: AdminActiveRevisionRevalidationJobResponse,
+  candidate: AdminPreviewLayoutCandidateResponse,
+  previewDigest: string,
+  baseLanguage: string,
+) {
+  return (
+    confirmation.job_id === job.id &&
+    confirmation.product_id === job.product_id &&
+    confirmation.active_revision_id === job.active_revision_id &&
+    confirmation.active_revision_version === job.active_revision_version &&
+    confirmation.mapping_id === job.mapping_id &&
+    confirmation.connection_generation === job.connection_generation &&
+    confirmation.preview_digest === previewDigest &&
+    confirmation.layout_candidate_id === candidate.id &&
+    confirmation.layout_candidate_version === candidate.version &&
+    confirmation.base_language === baseLanguage
   );
 }
 
@@ -376,6 +450,54 @@ function CandidateDetails({
   );
 }
 
+function BaseLanguageSelect({
+  candidate,
+  controlId,
+  onValueChange,
+  value,
+}: {
+  candidate: AdminPreviewLayoutCandidateResponse;
+  controlId: string;
+  onValueChange: (value: string) => void;
+  value: string;
+}) {
+  const guidanceId = `${controlId}-guidance`;
+  const errorId = `${controlId}-error`;
+  const required = value === "";
+
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={controlId}>Base language</Label>
+      <Select value={value} onValueChange={onValueChange}>
+        <SelectTrigger
+          id={controlId}
+          className="min-h-[44px] w-full min-w-0 motion-reduce:transition-none"
+          aria-describedby={`${guidanceId}${required ? ` ${errorId}` : ""}`}
+          aria-invalid={required}
+        >
+          <SelectValue placeholder="Select base language" />
+        </SelectTrigger>
+        <SelectContent className="motion-reduce:animate-none motion-reduce:transition-none">
+          {candidate.languages.map((language) => (
+            <SelectItem key={language} value={language}>
+              {language}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p id={guidanceId} className="text-muted-foreground">
+        Translations without their own maximum-length override inherit the
+        base-language limit.
+      </p>
+      {required ? (
+        <p id={errorId} className="font-medium text-warning">
+          Base language required
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function PreviewJobView({
   accessToken,
   initialJob,
@@ -389,9 +511,14 @@ function PreviewJobView({
 }) {
   const [announcement, setAnnouncement] = useState("");
   const [selectedCandidateId, setSelectedCandidateId] = useState("");
+  const [selectedBaseLanguage, setSelectedBaseLanguage] = useState("");
   const [confirmPending, setConfirmPending] = useState(false);
   const confirmPendingRef = useRef(false);
-  const [confirmError, setConfirmError] = useState(false);
+  const confirmGenerationRef = useRef(0);
+  const confirmationErrorRef = useRef<HTMLDivElement>(null);
+  const [confirmError, setConfirmError] = useState<
+    "base_language_required" | "confirmation_failed" | null
+  >(null);
   const [confirmedIdentity, setConfirmedIdentity] = useState<string | null>(
     null,
   );
@@ -406,6 +533,11 @@ function PreviewJobView({
   const candidates = result?.layout_candidates ?? [];
   const candidatesAreExact =
     candidates.length > 0 && candidates.every(isExactCandidate);
+  const hasMissingBaseLanguage = candidates.some(
+    (candidate) =>
+      isExactCandidateWithoutLanguage(candidate) &&
+      candidate.languages.length === 0,
+  );
   const confirmable =
     job.state === "succeeded" &&
     job.is_current &&
@@ -415,9 +547,11 @@ function PreviewJobView({
     (candidate) => candidate.id === selectedCandidateId,
   );
   const currentConfirmationIdentity =
-    result === null || selectedCandidate === undefined
+    result === null ||
+    selectedCandidate === undefined ||
+    selectedBaseLanguage === ""
       ? null
-      : `${previewJobIdentity(job)}:${result.digest}:${selectedCandidate.id}`;
+      : `${previewJobIdentity(job)}:${result.digest}:${selectedCandidate.id}:${selectedBaseLanguage}`;
   const confirmed =
     currentConfirmationIdentity !== null &&
     confirmedIdentity === currentConfirmationIdentity;
@@ -428,41 +562,90 @@ function PreviewJobView({
     }
   }, [confirmed, onConfirmed]);
 
+  useEffect(
+    () => () => {
+      confirmGenerationRef.current += 1;
+      confirmPendingRef.current = false;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (confirmError !== null) {
+      queueMicrotask(() => confirmationErrorRef.current?.focus());
+    }
+  }, [confirmError]);
+
+  function invalidateConfirmation() {
+    confirmGenerationRef.current += 1;
+    confirmPendingRef.current = false;
+    setConfirmPending(false);
+    setConfirmError(null);
+    setConfirmedIdentity(null);
+    onConfirmed(false);
+  }
+
   async function submitConfirmation() {
     if (
       confirmPendingRef.current ||
       !confirmable ||
       selectedCandidate === undefined ||
+      selectedBaseLanguage === "" ||
+      !selectedCandidate.languages.includes(selectedBaseLanguage) ||
       result === null ||
       currentConfirmationIdentity === null
     ) {
       return;
     }
+    const generation = ++confirmGenerationRef.current;
     confirmPendingRef.current = true;
     setConfirmPending(true);
-    setConfirmError(false);
+    setConfirmError(null);
     try {
       const response = await confirmAdminPreviewJob({
         auth: accessToken,
         body: {
-          base_language: null,
+          base_language: selectedBaseLanguage,
           layout_candidate_id: selectedCandidate.id,
           layout_candidate_version: selectedCandidate.version,
           preview_digest: result.digest,
         },
         path: { job_id: job.id },
       });
+      if (generation !== confirmGenerationRef.current) {
+        return;
+      }
       if (response.data === undefined) {
-        setConfirmError(true);
+        setConfirmError(
+          isBaseLanguageRequired(response.error)
+            ? "base_language_required"
+            : "confirmation_failed",
+        );
+        return;
+      }
+      if (
+        !previewConfirmationMatches(
+          response.data,
+          job,
+          selectedCandidate,
+          result.digest,
+          selectedBaseLanguage,
+        )
+      ) {
+        setConfirmError("confirmation_failed");
         return;
       }
       setConfirmedIdentity(currentConfirmationIdentity);
       onConfirmed(true);
     } catch {
-      setConfirmError(true);
+      if (generation === confirmGenerationRef.current) {
+        setConfirmError("confirmation_failed");
+      }
     } finally {
-      confirmPendingRef.current = false;
-      setConfirmPending(false);
+      if (generation === confirmGenerationRef.current) {
+        confirmPendingRef.current = false;
+        setConfirmPending(false);
+      }
     }
   }
 
@@ -537,10 +720,18 @@ function PreviewJobView({
       {job.state === "succeeded" &&
       job.is_current &&
       candidates.length > 0 &&
-      !candidatesAreExact ? (
+      !candidatesAreExact &&
+      !hasMissingBaseLanguage ? (
         <PreviewAlert title="Preview cannot be confirmed">
           This preview cannot be confirmed. Review the selected repository and
           branch, then run validation again.
+        </PreviewAlert>
+      ) : null}
+
+      {job.state === "succeeded" && job.is_current && hasMissingBaseLanguage ? (
+        <PreviewAlert title="Base language required">
+          No detected language is available for this preview candidate. Run
+          validation again.
         </PreviewAlert>
       ) : null}
 
@@ -553,9 +744,12 @@ function PreviewJobView({
             <RadioGroup
               value={selectedCandidateId}
               onValueChange={(value) => {
+                const candidate = candidates.find(
+                  (candidate) => candidate.id === value,
+                );
                 setSelectedCandidateId(value);
-                setConfirmedIdentity(null);
-                onConfirmed(false);
+                setSelectedBaseLanguage(soleDetectedLanguage(candidate));
+                invalidateConfirmation();
               }}
               className="grid gap-3"
             >
@@ -577,13 +771,28 @@ function PreviewJobView({
           </fieldset>
 
           {selectedCandidate === undefined ? null : (
-            <CandidateDetails candidate={selectedCandidate} job={job} />
+            <>
+              <CandidateDetails candidate={selectedCandidate} job={job} />
+              <BaseLanguageSelect
+                candidate={selectedCandidate}
+                controlId={`base-language-${job.id}`}
+                value={selectedBaseLanguage}
+                onValueChange={(value) => {
+                  setSelectedBaseLanguage(value);
+                  invalidateConfirmation();
+                }}
+              />
+            </>
           )}
 
           <div className="flex flex-wrap items-center gap-3">
             <Button
               type="button"
-              disabled={selectedCandidate === undefined || confirmPending}
+              disabled={
+                selectedCandidate === undefined ||
+                selectedBaseLanguage === "" ||
+                confirmPending
+              }
               aria-busy={confirmPending}
               onClick={() => void submitConfirmation()}
             >
@@ -595,11 +804,28 @@ function PreviewJobView({
               </Badge>
             ) : null}
           </div>
-          {confirmError ? (
-            <PreviewAlert title="Preview not confirmed">
-              This preview no longer matches the current draft. Run validation
-              again.
-            </PreviewAlert>
+          {confirmError !== null ? (
+            <Alert
+              ref={confirmationErrorRef}
+              tabIndex={-1}
+              aria-label={
+                confirmError === "base_language_required"
+                  ? "Base language required"
+                  : "Preview not confirmed"
+              }
+              variant="destructive"
+            >
+              <AlertTitle>
+                {confirmError === "base_language_required"
+                  ? "Base language required"
+                  : "Preview not confirmed"}
+              </AlertTitle>
+              <AlertDescription>
+                {confirmError === "base_language_required"
+                  ? "The selected base language is no longer available. Choose a detected language and confirm the preview again."
+                  : "This preview no longer matches the current draft. Run validation again."}
+              </AlertDescription>
+            </Alert>
           ) : null}
         </>
       ) : null}
@@ -754,7 +980,11 @@ function PublishedMappingRecovery({
   const runGenerationRef = useRef(0);
   const runPendingRef = useRef(false);
   const [announcement, setAnnouncement] = useState("");
-  const [confirmError, setConfirmError] = useState(false);
+  const confirmationErrorRef = useRef<HTMLDivElement>(null);
+  const confirmGenerationRef = useRef(0);
+  const [confirmError, setConfirmError] = useState<
+    "base_language_required" | "confirmation_failed" | null
+  >(null);
   const [confirmPending, setConfirmPending] = useState(false);
   const confirmPendingRef = useRef(false);
   const [confirmedIdentity, setConfirmedIdentity] = useState<string | null>(
@@ -766,10 +996,13 @@ function PublishedMappingRecovery({
   const [runError, setRunError] = useState(false);
   const [runPending, setRunPending] = useState(false);
   const [selectedCandidateId, setSelectedCandidateId] = useState("");
+  const [selectedBaseLanguage, setSelectedBaseLanguage] = useState("");
 
   useEffect(
     () => () => {
       runGenerationRef.current += 1;
+      confirmGenerationRef.current += 1;
+      confirmPendingRef.current = false;
     },
     [],
   );
@@ -778,6 +1011,11 @@ function PublishedMappingRecovery({
   const candidates = result?.layout_candidates ?? [];
   const candidatesAreExact =
     candidates.length > 0 && candidates.every(isExactCandidate);
+  const hasMissingBaseLanguage = candidates.some(
+    (candidate) =>
+      isExactCandidateWithoutLanguage(candidate) &&
+      candidate.languages.length === 0,
+  );
   const confirmable =
     job?.state === "succeeded" &&
     job.is_current &&
@@ -787,9 +1025,12 @@ function PublishedMappingRecovery({
     (candidate) => candidate.id === selectedCandidateId,
   );
   const currentConfirmationIdentity =
-    job === null || result === null || selectedCandidate === undefined
+    job === null ||
+    result === null ||
+    selectedCandidate === undefined ||
+    selectedBaseLanguage === ""
       ? null
-      : `${activeRevalidationJobIdentity(job)}:${result.digest}:${selectedCandidate.id}`;
+      : `${activeRevalidationJobIdentity(job)}:${result.digest}:${selectedCandidate.id}:${selectedBaseLanguage}`;
   const confirmed =
     currentConfirmationIdentity !== null &&
     confirmedIdentity === currentConfirmationIdentity;
@@ -797,6 +1038,20 @@ function PublishedMappingRecovery({
   const focusRecoveryControl = useCallback(() => {
     queueMicrotask(() => runButtonRef.current?.focus());
   }, []);
+
+  useEffect(() => {
+    if (confirmError !== null) {
+      queueMicrotask(() => confirmationErrorRef.current?.focus());
+    }
+  }, [confirmError]);
+
+  function invalidateConfirmation() {
+    confirmGenerationRef.current += 1;
+    confirmPendingRef.current = false;
+    setConfirmPending(false);
+    setConfirmError(null);
+    setConfirmedIdentity(null);
+  }
 
   useEffect(() => {
     if (
@@ -872,9 +1127,9 @@ function PublishedMappingRecovery({
     setRunPending(true);
     setRunError(false);
     setPollingError(false);
-    setConfirmError(false);
-    setConfirmedIdentity(null);
+    invalidateConfirmation();
     setSelectedCandidateId("");
+    setSelectedBaseLanguage("");
     try {
       const commits = await resolveCommits(accessToken, mapping);
       const response = await createAdminActiveRevisionRevalidationJob({
@@ -932,20 +1187,23 @@ function PublishedMappingRecovery({
       job === null ||
       result === null ||
       selectedCandidate === undefined ||
+      selectedBaseLanguage === "" ||
+      !selectedCandidate.languages.includes(selectedBaseLanguage) ||
       currentConfirmationIdentity === null
     ) {
       return;
     }
+    const generation = ++confirmGenerationRef.current;
     confirmPendingRef.current = true;
     setConfirmPending(true);
-    setConfirmError(false);
+    setConfirmError(null);
     try {
       const response = await confirmAdminActiveRevisionRevalidation({
         auth: accessToken,
         body: {
           active_revision_id: job.active_revision_id,
           active_revision_version: job.active_revision_version,
-          base_language: null,
+          base_language: selectedBaseLanguage,
           commits: job.repository_sides.map((side) => ({
             commit_hash: side.commit_hash,
             role: side.role,
@@ -958,22 +1216,44 @@ function PublishedMappingRecovery({
         },
         path: { job_id: job.id },
       });
+      if (generation !== confirmGenerationRef.current) {
+        return;
+      }
       if (response.data === undefined) {
         setAnnouncement("Preview was not confirmed. Run validation again.");
-        setConfirmError(true);
-        focusRecoveryControl();
+        setConfirmError(
+          isBaseLanguageRequired(response.error)
+            ? "base_language_required"
+            : "confirmation_failed",
+        );
+        return;
+      }
+      if (
+        !activeConfirmationMatches(
+          response.data,
+          job,
+          selectedCandidate,
+          result.digest,
+          selectedBaseLanguage,
+        )
+      ) {
+        setAnnouncement("Preview was not confirmed. Run validation again.");
+        setConfirmError("confirmation_failed");
         return;
       }
       setConfirmedIdentity(currentConfirmationIdentity);
       setAnnouncement("Confirmed");
       await onConfirmed();
     } catch {
-      setAnnouncement("Preview was not confirmed. Run validation again.");
-      setConfirmError(true);
-      focusRecoveryControl();
+      if (generation === confirmGenerationRef.current) {
+        setAnnouncement("Preview was not confirmed. Run validation again.");
+        setConfirmError("confirmation_failed");
+      }
     } finally {
-      confirmPendingRef.current = false;
-      setConfirmPending(false);
+      if (generation === confirmGenerationRef.current) {
+        confirmPendingRef.current = false;
+        setConfirmPending(false);
+      }
     }
   }
 
@@ -1057,6 +1337,13 @@ function PublishedMappingRecovery({
             </PreviewAlert>
           ) : null}
 
+          {job.state === "succeeded" && hasMissingBaseLanguage ? (
+            <PreviewAlert title="Base language required">
+              No detected language is available for this preview candidate. Run
+              validation again.
+            </PreviewAlert>
+          ) : null}
+
           {confirmable ? (
             <>
               <fieldset className="grid gap-3">
@@ -1066,8 +1353,12 @@ function PublishedMappingRecovery({
                 <RadioGroup
                   value={selectedCandidateId}
                   onValueChange={(value) => {
+                    const candidate = candidates.find(
+                      (candidate) => candidate.id === value,
+                    );
                     setSelectedCandidateId(value);
-                    setConfirmedIdentity(null);
+                    setSelectedBaseLanguage(soleDetectedLanguage(candidate));
+                    invalidateConfirmation();
                   }}
                   className="grid gap-3"
                 >
@@ -1092,13 +1383,28 @@ function PublishedMappingRecovery({
               </fieldset>
 
               {selectedCandidate === undefined ? null : (
-                <CandidateDetails candidate={selectedCandidate} job={job} />
+                <>
+                  <CandidateDetails candidate={selectedCandidate} job={job} />
+                  <BaseLanguageSelect
+                    candidate={selectedCandidate}
+                    controlId={`active-base-language-${job.id}`}
+                    value={selectedBaseLanguage}
+                    onValueChange={(value) => {
+                      setSelectedBaseLanguage(value);
+                      invalidateConfirmation();
+                    }}
+                  />
+                </>
               )}
 
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   type="button"
-                  disabled={selectedCandidate === undefined || confirmPending}
+                  disabled={
+                    selectedCandidate === undefined ||
+                    selectedBaseLanguage === "" ||
+                    confirmPending
+                  }
                   aria-busy={confirmPending}
                   onClick={() => void submitConfirmation()}
                 >
@@ -1113,10 +1419,28 @@ function PublishedMappingRecovery({
             </>
           ) : null}
 
-          {confirmError ? (
-            <PreviewAlert title="Preview not confirmed">
-              Preview was not confirmed. Run validation again.
-            </PreviewAlert>
+          {confirmError !== null ? (
+            <Alert
+              ref={confirmationErrorRef}
+              tabIndex={-1}
+              aria-label={
+                confirmError === "base_language_required"
+                  ? "Base language required"
+                  : "Preview not confirmed"
+              }
+              variant="destructive"
+            >
+              <AlertTitle>
+                {confirmError === "base_language_required"
+                  ? "Base language required"
+                  : "Preview not confirmed"}
+              </AlertTitle>
+              <AlertDescription>
+                {confirmError === "base_language_required"
+                  ? "The selected base language is no longer available. Choose a detected language and confirm the preview again."
+                  : "Preview was not confirmed. Run validation again."}
+              </AlertDescription>
+            </Alert>
           ) : null}
         </div>
       )}

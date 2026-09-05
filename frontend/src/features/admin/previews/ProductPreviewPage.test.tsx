@@ -89,6 +89,32 @@ const reactivateMock = vi.mocked(reactivateAdminProduct);
 const updateProductMock = vi.mocked(updateAdminProductCandidate);
 const toastSuccessMock = vi.mocked(toast.success);
 
+class TestResizeObserver implements ResizeObserver {
+  disconnect() {}
+  observe() {}
+  unobserve() {}
+}
+
+vi.stubGlobal("ResizeObserver", TestResizeObserver);
+Object.defineProperties(HTMLElement.prototype, {
+  hasPointerCapture: {
+    configurable: true,
+    value: () => false,
+  },
+  releasePointerCapture: {
+    configurable: true,
+    value: () => undefined,
+  },
+  scrollIntoView: {
+    configurable: true,
+    value: () => undefined,
+  },
+  setPointerCapture: {
+    configurable: true,
+    value: () => undefined,
+  },
+});
+
 const product: AdminProductResponse = {
   active_revision: null,
   affected_mapping_count: 0,
@@ -324,6 +350,13 @@ async function runValidation() {
     await screen.findByRole("button", { name: "Run validation" }),
   );
   return screen.findByText("Succeeded");
+}
+
+async function selectBaseLanguage(language = "en") {
+  await userEvent.click(
+    screen.getByRole("combobox", { name: "Base language" }),
+  );
+  await userEvent.click(screen.getByRole("option", { name: language }));
 }
 
 describe("administrator product preview and publication page", () => {
@@ -1264,6 +1297,18 @@ describe("administrator product preview and publication page", () => {
       name: "Base language",
     });
     expect(baseLanguage).toHaveTextContent("fr-FR");
+    expect(baseLanguage).toHaveClass(
+      "min-h-[44px]",
+      "w-full",
+      "min-w-0",
+      "motion-reduce:transition-none",
+    );
+    expect(baseLanguage).toHaveAttribute("aria-invalid", "false");
+    expect(
+      screen.getByText(
+        "Translations without their own maximum-length override inherit the base-language limit.",
+      ),
+    ).toBeVisible();
     expect(
       screen.queryByRole("textbox", { name: "Base language" }),
     ).not.toBeInTheDocument();
@@ -1320,6 +1365,8 @@ describe("administrator product preview and publication page", () => {
       name: "Base language",
     });
     expect(baseLanguage).toHaveTextContent("Select base language");
+    expect(baseLanguage).toHaveAttribute("aria-invalid", "true");
+    expect(baseLanguage).toHaveAccessibleName("Base language");
     expect(screen.getByText("Base language required")).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Confirm preview" }),
@@ -1542,12 +1589,14 @@ describe("administrator product preview and publication page", () => {
         name: "JSON — locales/{locale}.json",
       }),
     );
+    await selectBaseLanguage();
     await userEvent.click(
       screen.getByRole("button", { name: "Confirm preview" }),
     );
     expect(confirmMock).toHaveBeenCalledWith({
       auth: "memory-only-admin-bearer",
       body: {
+        base_language: "en",
         layout_candidate_id: candidates[2].id,
         layout_candidate_version: 1,
         preview_digest: "c".repeat(64),
@@ -1607,6 +1656,7 @@ describe("administrator product preview and publication page", () => {
     renderPage();
     await runValidation();
     await userEvent.click(screen.getAllByRole("radio")[0]);
+    await selectBaseLanguage();
     await userEvent.click(
       screen.getByRole("button", { name: "Confirm preview" }),
     );
@@ -1772,6 +1822,7 @@ describe("administrator product preview and publication page", () => {
         name: "Android XML — app/src/main/res",
       }),
     );
+    await selectBaseLanguage();
     await userEvent.click(
       screen.getByRole("button", { name: "Confirm preview" }),
     );
@@ -1780,6 +1831,7 @@ describe("administrator product preview and publication page", () => {
       body: {
         active_revision_id: succeededJob.active_revision_id,
         active_revision_version: succeededJob.active_revision_version,
+        base_language: "en",
         commits: [{ commit_hash: "b".repeat(40), role: "direct" }],
         connection_generation: succeededJob.connection_generation,
         layout_candidate_id: candidates[0].id,
@@ -2127,6 +2179,7 @@ describe("administrator product preview and publication page", () => {
         name: "Android XML — app/src/main/res",
       }),
     );
+    await selectBaseLanguage();
     const confirm = screen.getByRole("button", { name: "Confirm preview" });
     act(() => {
       confirm.click();
@@ -2136,12 +2189,11 @@ describe("administrator product preview and publication page", () => {
       expect(confirmActiveRevalidationMock).toHaveBeenCalledOnce(),
     );
     resolveConfirmation(failure({ detail: "provider_token=must-not-render" }));
-    expect(
-      (await screen.findByText("Preview not confirmed")).closest(
-        "[role='alert']",
-      ),
-    ).not.toHaveTextContent("provider_token");
-    expect(runAgain).toHaveFocus();
+    const rejected = (await screen.findByText("Preview not confirmed")).closest(
+      "[role='alert']",
+    );
+    expect(rejected).not.toHaveTextContent("provider_token");
+    expect(rejected).toHaveFocus();
 
     await userEvent.click(runAgain);
     await userEvent.click(
@@ -2149,11 +2201,15 @@ describe("administrator product preview and publication page", () => {
         name: "Android XML — app/src/main/res",
       }),
     );
+    await selectBaseLanguage();
     await userEvent.click(
       screen.getByRole("button", { name: "Confirm preview" }),
     );
-    expect(await screen.findByText("Preview not confirmed")).toBeVisible();
-    expect(runAgain).toHaveFocus();
+    const rejectedAgain = (
+      await screen.findByText("Preview not confirmed")
+    ).closest("[role='alert']");
+    expect(rejectedAgain).toBeVisible();
+    expect(rejectedAgain).toHaveFocus();
     expect(confirmActiveRevalidationMock).toHaveBeenCalledTimes(2);
   });
 
