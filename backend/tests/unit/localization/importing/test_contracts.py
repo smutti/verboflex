@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, cast, get_args
 
 import pytest
+from sqlalchemy import inspect as sqlalchemy_inspect
 
 from verboflex.localization.importing import core
 from verboflex.localization.importing.registry import parse_canonical_snapshot
@@ -24,6 +25,14 @@ _SELECTOR_KINDS = (
     "json_path",
 )
 _REVIEW_STATES = ("draft", "approved", "rejected")
+_EFFECTIVE_CONSTRAINT_SOURCES = ("none", "base_default", "language_override")
+_ISSUE_CODES = (
+    "malformed_file",
+    "ambiguous_structure",
+    "unsupported_structure",
+    "duplicate_key",
+    "base_language_required",
+)
 _PUBLIC_EXPORTS = {
     "CanonicalFormat",
     "CanonicalIssue",
@@ -44,6 +53,20 @@ _PUBLIC_EXPORTS = {
     "canonical_selector_digest",
     "canonical_value_order",
     "parse_canonical_snapshot",
+}
+_MODEL_EXPORTS = {
+    "EffectiveConstraintSource",
+    "LocalizationScope",
+    "ParseIssueCode",
+    "ReviewState",
+    "SelectorKind",
+    "StagedTranslationValue",
+    "TranslationConstraint",
+    "TranslationKey",
+    "TranslationParseIssue",
+    "TranslationValue",
+    "TranslationValueLocator",
+    "TranslationValueRevision",
 }
 
 
@@ -115,6 +138,67 @@ def test_selector_and_review_vocabularies_are_frozen_and_public() -> None:
         core.CanonicalSelector(kind=cast(Any, "plural"), fields=())
     with pytest.raises(ValueError, match="selector rejected"):
         core.CanonicalSelector(kind="scalar", fields=(), schema_version=2)
+
+
+def test_canonical_models_export_closed_lowercase_vocabularies() -> None:
+    models = importlib.import_module("verboflex.models")
+
+    assert _MODEL_EXPORTS <= set(models.__all__)
+    assert tuple(member.value for member in models.SelectorKind) == _SELECTOR_KINDS
+    assert tuple(member.value for member in models.ReviewState) == _REVIEW_STATES
+    assert tuple(member.value for member in models.EffectiveConstraintSource) == (
+        _EFFECTIVE_CONSTRAINT_SOURCES
+    )
+    assert tuple(member.value for member in models.ParseIssueCode) == _ISSUE_CODES
+    assert get_args(core.SelectorKind) == tuple(member.value for member in models.SelectorKind)
+    assert get_args(core.ReviewState) == tuple(member.value for member in models.ReviewState)
+    assert get_args(core.IssueCode) == tuple(member.value for member in models.ParseIssueCode)
+
+    for vocabulary in (
+        models.SelectorKind,
+        models.ReviewState,
+        models.EffectiveConstraintSource,
+        models.ParseIssueCode,
+    ):
+        for member in vocabulary:
+            assert str(member) == member.value
+        with pytest.raises(ValueError):
+            vocabulary("unknown")
+
+
+def test_canonical_model_relationships_preserve_semantic_ownership() -> None:
+    models = importlib.import_module("verboflex.models")
+
+    mapping_scopes = sqlalchemy_inspect(models.ProductRepositoryMapping).relationships[
+        "localization_scopes"
+    ]
+    assert mapping_scopes.viewonly is True
+    assert {
+        (local.name, remote.name) for local, remote in mapping_scopes.local_remote_pairs
+    } == {
+        ("revision_id", "current_revision_id"),
+        ("id", "current_mapping_id"),
+        ("identity_key", "mapping_identity_key"),
+    }
+
+    scope_relationships = sqlalchemy_inspect(models.LocalizationScope).relationships
+    assert {"current_mapping", "translation_keys"} <= set(scope_relationships)
+    assert scope_relationships["current_mapping"].viewonly is True
+    assert scope_relationships["translation_keys"].passive_deletes is True
+
+    key_relationships = sqlalchemy_inspect(models.TranslationKey).relationships
+    assert {"scope", "values", "constraints"} <= set(key_relationships)
+    assert key_relationships["values"].passive_deletes is True
+    assert key_relationships["constraints"].passive_deletes is True
+
+    value_relationships = sqlalchemy_inspect(models.TranslationValue).relationships
+    assert {"key", "revisions", "locator"} <= set(value_relationships)
+    assert value_relationships["revisions"].passive_deletes is True
+    assert value_relationships["locator"].uselist is False
+    assert value_relationships["locator"].passive_deletes is True
+
+    constraint_relationships = sqlalchemy_inspect(models.TranslationConstraint).relationships
+    assert set(constraint_relationships) >= {"key", "created_by_user", "updated_by_user"}
 
 
 def test_selector_bytes_are_sorted_compact_typed_and_sequence_ordered() -> None:
