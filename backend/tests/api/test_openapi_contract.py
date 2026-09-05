@@ -18,6 +18,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CHECKED_IN_SCHEMA = REPOSITORY_ROOT / "frontend" / "openapi.json"
 FRONTEND_SOURCE = REPOSITORY_ROOT / "frontend" / "src"
 GENERATED_CLIENT = FRONTEND_SOURCE / "api" / "client"
+PREVIEW_CONFIRMATION_PATH = "/api/v1/admin/preview-jobs/{job_id}/confirmation"
 
 IMPORT_OPERATIONS = {
     ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get"): (
@@ -363,6 +364,76 @@ def _schema_property_names(value: Any) -> set[str]:
 def _schema_variant(schema: dict[str, Any], *, type_name: str) -> dict[str, Any]:
     """Return one named nullable-schema variant without depending on its order."""
     return next(item for item in schema["anyOf"] if item.get("type") == type_name)
+
+
+def _assert_admin_preview_base_language_contract(schema: dict[str, Any]) -> None:
+    """Freeze the generated browser boundary for exact base-language confirmation."""
+    schemas = schema["components"]["schemas"]
+    operation = schema["paths"][PREVIEW_CONFIRMATION_PATH]["post"]
+    request = schemas["AdminPreviewConfirmationRequest"]
+    response = schemas["AdminPreviewConfirmationResponse"]
+
+    assert operation["operationId"] == "confirm_admin_preview_job"
+    assert operation["security"] == [{"OAuth2PasswordBearer": []}]
+    assert operation["requestBody"] == {
+        "required": True,
+        "content": {
+            "application/json": {
+                "schema": {"$ref": "#/components/schemas/AdminPreviewConfirmationRequest"}
+            }
+        },
+    }
+    assert _response_schema(operation, "200") == (
+        "#/components/schemas/AdminPreviewConfirmationResponse"
+    )
+    assert _response_schema(operation, "409") == "#/components/schemas/ErrorResponse"
+
+    assert request["additionalProperties"] is False
+    assert set(request["properties"]) == {
+        "preview_digest",
+        "layout_candidate_id",
+        "layout_candidate_version",
+        "base_language",
+    }
+    assert set(request["required"]) == set(request["properties"])
+    assert request["properties"]["base_language"]["anyOf"] == [
+        {"type": "string", "maxLength": 64, "minLength": 1},
+        {"type": "null"},
+    ]
+
+    assert response["additionalProperties"] is False
+    assert set(response["required"]) == set(response["properties"])
+    assert response["properties"]["base_language"] == {
+        "type": "string",
+        "maxLength": 64,
+        "minLength": 1,
+        "title": "Base Language",
+    }
+
+    public_preview_contract = {
+        "paths": {path: value for path, value in schema["paths"].items() if "preview-jobs" in path},
+        "schemas": {
+            name: value for name, value in schemas.items() if name.startswith("AdminPreview")
+        },
+    }
+    assert _schema_property_names(public_preview_contract).isdisjoint(
+        {
+            "access_token",
+            "client_secret",
+            "credentials",
+            "provider_body",
+            "provider_diagnostics",
+            "raw_body",
+            "refresh_token",
+            "source_bytes",
+            "source_file_content",
+        }
+    )
+
+
+def test_admin_preview_base_language_openapi_is_exact_bounded_and_authorized() -> None:
+    """Expose one closed generated contract without moving authority into the browser."""
+    _assert_admin_preview_base_language_contract(app.openapi())
 
 
 def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
