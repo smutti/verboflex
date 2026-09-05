@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 4
 waived_count: 0
-fixed_count: 53
-total_count: 57
-last_updated: 2026-09-05T11:01:43.673Z
+fixed_count: 56
+total_count: 60
+last_updated: 2026-09-05T12:13:38.938Z
 ---
 
 # Broken Windows Ledger
@@ -72,6 +72,9 @@ last_updated: 2026-09-05T11:01:43.673Z
 | 55 | 04 | unrun-verify | backend/tests/worker/test_smoke_task.py |  | Broad worker smoke requires Redis and a Celery worker at 127.0.0.1:56379 | open |  | 2026-09-05T10:14:35.637Z |  |
 | 56 | 04 | deviation | backend/tests/api/test_openapi_contract.py |  | Used the historical pre-Plan-04-26 schema to prove the intended contract RED because the dependency had already supplied the live implementation. | fixed |  | 2026-09-05T11:01:37.424Z | 2026-09-05T11:01:43.610Z |
 | 57 | 04 | deviation | frontend/src/features/admin/previews/ProductPreviewPage.tsx |  | Updated existing generated-client consumers for the newly required base-language field before wiring exact selection. | fixed |  | 2026-09-05T11:01:37.483Z | 2026-09-05T11:01:43.673Z |
+| 58 | 04 | deviation | backend/tests/integration/test_translation_import_activation.py |  | Flushed the published test revision before assigning it as active to satisfy immutable-graph trigger ordering. | fixed |  | 2026-09-05T12:12:31.534Z | 2026-09-05T12:13:38.811Z |
+| 59 | 04 | deviation | backend/src/verboflex/services/translation_imports.py |  | Deferred semantic-scope mapping changes from staging to the atomic activation pointer swap. | fixed |  | 2026-09-05T12:12:31.595Z | 2026-09-05T12:13:38.876Z |
+| 60 | 04 | deviation | backend/src/verboflex/services/translation_imports.py |  | Created inactive scope authority for issue-free empty manifests so complete empty files can activate. | fixed |  | 2026-09-05T12:12:31.660Z | 2026-09-05T12:13:38.938Z |
 
 ````json
 [
@@ -758,6 +761,42 @@ last_updated: 2026-09-05T11:01:43.673Z
     "reason": "",
     "recorded_at": "2026-09-05T11:01:37.483Z",
     "resolved_at": "2026-09-05T11:01:43.673Z"
+  },
+  {
+    "id": 58,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/tests/integration/test_translation_import_activation.py",
+    "line": null,
+    "description": "Flushed the published test revision before assigning it as active to satisfy immutable-graph trigger ordering.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-05T12:12:31.534Z",
+    "resolved_at": "2026-09-05T12:13:38.811Z"
+  },
+  {
+    "id": 59,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/services/translation_imports.py",
+    "line": null,
+    "description": "Deferred semantic-scope mapping changes from staging to the atomic activation pointer swap.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-05T12:12:31.595Z",
+    "resolved_at": "2026-09-05T12:13:38.876Z"
+  },
+  {
+    "id": 60,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/services/translation_imports.py",
+    "line": null,
+    "description": "Created inactive scope authority for issue-free empty manifests so complete empty files can activate.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-05T12:12:31.660Z",
+    "resolved_at": "2026-09-05T12:13:38.938Z"
   }
 ]
 ````
