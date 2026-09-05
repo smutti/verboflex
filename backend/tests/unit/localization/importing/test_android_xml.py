@@ -180,9 +180,9 @@ def test_android_structured_markup_and_escape_golden_manifest() -> None:
     assert result.to_mapping() == expected
     assert tuple(value.logical_key for value in result.values) == (
         "escaped",
-        "files",
-        "files",
         "markup",
+        "files",
+        "files",
         "steps",
         "steps",
     )

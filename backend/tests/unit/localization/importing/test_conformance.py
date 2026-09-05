@@ -135,6 +135,13 @@ def _canonical_bytes(result: core.CanonicalParseResult) -> bytes:
     ).encode("utf-8")
 
 
+def _forged_input(format_name: str, **overrides: object) -> core.CanonicalParserInput:
+    parser_input = cast(core.CanonicalParserInput, _input(format_name))
+    for name, value in overrides.items():
+        object.__setattr__(parser_input, name, value)
+    return parser_input
+
+
 def _fixture_inputs(document: dict[str, object]) -> tuple[core.CanonicalParserInput, ...]:
     format_name = cast(str, document["format"])
     return tuple(
@@ -401,6 +408,532 @@ def test_arbitrary_cross_format_inputs_return_only_validated_bounded_results(
     serialized = _canonical_bytes(result).decode("utf-8")
     assert "Traceback" not in serialized
     assert "Exception" not in serialized
+
+
+def test_every_adapter_closes_noncanonical_single_and_batch_inputs() -> None:
+    from verboflex.localization.importing import android_xml, ios_strings, qt_ts
+    from verboflex.localization.importing import json as json_adapter
+
+    adapters = (
+        (android_xml.parse_android_xml, android_xml.parse_android_xml_files),
+        (qt_ts.parse_qt_ts, qt_ts.parse_qt_ts_files),
+        (json_adapter.parse_json_localization, json_adapter.parse_json_localization_files),
+        (ios_strings.parse_ios_strings, ios_strings.parse_ios_strings_files),
+    )
+    for parse_one, parse_many in adapters:
+        assert parse_one(cast(Any, object())).issues[0].code == "malformed_file"
+        for invalid_batch in (cast(Any, []), (), cast(Any, (object(),))):
+            result = parse_many(invalid_batch)
+            assert result.values == ()
+            assert result.issues[0].code == "malformed_file"
+
+
+def test_every_adapter_closes_forged_authority_and_batch_boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from verboflex.localization.importing import android_xml, ios_strings, qt_ts
+    from verboflex.localization.importing import json as json_adapter
+
+    adapters = (
+        (android_xml, android_xml.parse_android_xml, android_xml.parse_android_xml_files),
+        (qt_ts, qt_ts.parse_qt_ts, qt_ts.parse_qt_ts_files),
+        (
+            json_adapter,
+            json_adapter.parse_json_localization,
+            json_adapter.parse_json_localization_files,
+        ),
+        (ios_strings, ios_strings.parse_ios_strings, ios_strings.parse_ios_strings_files),
+    )
+    value_limits = (
+        "MAX_ANDROID_VALUES",
+        "MAX_QT_VALUES",
+        "MAX_JSON_VALUES",
+        "MAX_IOS_ASSIGNMENTS",
+    )
+    for (adapter, parse_one, parse_many), limit_name in zip(adapters, value_limits, strict=True):
+        invalid_content = _forged_input(adapter.__name__.rsplit(".", 1)[-1], content="not-bytes")
+        assert parse_one(invalid_content).issues
+        assert parse_many((invalid_content,)).issues[0].code == "malformed_file"
+
+        for forged in (
+            _forged_input(adapter.__name__.rsplit(".", 1)[-1], format="unknown"),
+            _forged_input(adapter.__name__.rsplit(".", 1)[-1], repository_side="unknown"),
+            _forged_input(adapter.__name__.rsplit(".", 1)[-1], path="/absolute"),
+            _forged_input(adapter.__name__.rsplit(".", 1)[-1], layout_version=2),
+            _forged_input(adapter.__name__.rsplit(".", 1)[-1], layout_identity="/absolute"),
+            _forged_input(adapter.__name__.rsplit(".", 1)[-1], base_language=""),
+        ):
+            result = parse_one(forged)
+            assert result.values == ()
+            assert result.issues
+
+        with monkeypatch.context() as scoped:
+            scoped.setattr(adapter, limit_name, 0)
+            assert parse_many((_input(adapter.__name__.rsplit(".", 1)[-1]),)).issues
+
+
+def test_every_batch_adapter_rejects_duplicate_cross_file_identities() -> None:
+    from verboflex.localization.importing import android_xml, ios_strings, qt_ts
+    from verboflex.localization.importing import json as json_adapter
+
+    duplicate_batches = (
+        (
+            android_xml.parse_android_xml_files,
+            (
+                _input("android_xml"),
+                _input(
+                    "android_xml",
+                    path="lib/src/main/res/values/strings.xml",
+                    layout_identity="lib/src/main/res",
+                ),
+            ),
+        ),
+        (
+            qt_ts.parse_qt_ts_files,
+            (
+                _input("qt_ts"),
+                _input(
+                    "qt_ts",
+                    path="translations/other_it-IT.ts",
+                    layout_identity="qt-ts:translations/other_{locale}.ts",
+                ),
+            ),
+        ),
+        (
+            json_adapter.parse_json_localization_files,
+            (
+                _input(
+                    "json",
+                    path="assets/en/a.json",
+                    content=b'{"same":"one"}',
+                    layout_identity="json:flat-per-locale:assets/{locale}/a.json",
+                ),
+                _input(
+                    "json",
+                    path="assets/en/b.json",
+                    content=b'{"same":"two"}',
+                    layout_identity="json:flat-per-locale:assets/{locale}/b.json",
+                ),
+            ),
+        ),
+        (
+            ios_strings.parse_ios_strings_files,
+            (
+                _input("ios_strings"),
+                _input(
+                    "ios_strings",
+                    path="other/it_IT.lproj/Localizable.strings",
+                    layout_identity="ios-strings:other/{locale}.lproj/Localizable.strings",
+                ),
+            ),
+        ),
+    )
+    for parse_many, parser_inputs in duplicate_batches:
+        result = parse_many(cast(Any, parser_inputs))
+        assert result.values == ()
+        assert result.issues[0].code == "duplicate_key"
+
+
+def test_core_rejects_forged_nested_results_and_all_contract_shapes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    valid = registry.parse_canonical_snapshot(
+        _input(
+            "json",
+            path="assets/en/messages.json",
+            content=b'{"key":"value"}',
+            layout_identity="json:flat-per-locale:assets/{locale}/messages.json",
+        )
+    )
+    value = valid.values[0]
+    issue = registry.parse_canonical_snapshot(_input("json", content=b"{")).issues[0]
+
+    invalid_values = (
+        {"selector": object()},
+        {"source_text": cast(Any, object())},
+        {"display_text": "\x00"},
+        {"locator": object()},
+    )
+    for changes in invalid_values:
+        with pytest.raises(ValueError, match="canonical value rejected"):
+            replace(value, **cast(Any, changes))
+
+    invalid_results = (
+        {"values": cast(Any, [])},
+        {"values": cast(Any, (object(),))},
+        {"issues": cast(Any, (object(),))},
+        {"values": (value,), "issues": (issue,)},
+        {"issues": (issue, issue)},
+    )
+    for arguments in invalid_results:
+        with pytest.raises(ValueError, match="canonical result rejected"):
+            core.CanonicalParseResult(**cast(Any, arguments))
+
+    with pytest.raises(ValueError, match="canonical selector rejected"):
+        core.CanonicalSelector(kind="scalar", fields=cast(Any, (("broken",),)))
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(core, "MAX_CANONICAL_VALUES", 0)
+        assert not core.canonical_result_is_valid(valid)
+
+    forged_value_result = object.__new__(core.CanonicalParseResult)
+    object.__setattr__(forged_value_result, "values", (object(),))
+    object.__setattr__(forged_value_result, "issues", ())
+    assert not core.canonical_result_is_valid(forged_value_result)
+
+    forged_issue_result = object.__new__(core.CanonicalParseResult)
+    object.__setattr__(forged_issue_result, "values", ())
+    object.__setattr__(forged_issue_result, "issues", (object(),))
+    assert not core.canonical_result_is_valid(forged_issue_result)
+
+    broken_nested = object.__new__(core.CanonicalParseResult)
+    object.__setattr__(broken_nested, "values", (replace(value),))
+    object.__setattr__(broken_nested, "issues", ())
+    object.__setattr__(broken_nested.values[0], "selector", object())
+    assert not core.canonical_result_is_valid(broken_nested)
+
+
+def test_registry_closes_all_mapping_preflight_and_join_defenses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    valid_input = _input(
+        "json",
+        repository_side="keys",
+        path="keys/en/messages.json",
+        content=b'{"key":"source"}',
+        layout_identity="json:flat-per-locale:keys/{locale}/messages.json",
+    )
+    translation_input = _input(
+        "json",
+        repository_side="translations",
+        path="translations/it/messages.json",
+        content=b'{"key":"target"}',
+        layout_identity="json:flat-per-locale:translations/{locale}/messages.json",
+    )
+    assert registry.parse_canonical_snapshot(_forged_input("json", repository_side="bad")).issues
+    assert registry.parse_canonical_mapping(cast(Any, (object(),))).issues
+    assert registry.parse_canonical_mapping((_forged_input("json", content="bad"),)).issues
+    assert registry.parse_canonical_mapping((_input("json"), _input("android_xml"))).issues
+    assert registry.parse_canonical_mapping((_forged_input("json", base_language=""),)).issues
+    assert not registry._is_safe_relative_path(object())
+    assert not registry._is_safe_relative_path("/absolute")
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(registry, "MAX_CANONICAL_FILE_BYTES", 0)
+        assert registry.parse_canonical_mapping((_input("json"),)).issues
+    with monkeypatch.context() as scoped:
+        scoped.setattr(registry, "MAX_CANONICAL_VALUES", 0)
+        assert registry.parse_canonical_mapping((_input("json"),)).issues
+
+    keys_result = registry.parse_canonical_snapshot(valid_input)
+    translations_result = registry.parse_canonical_snapshot(translation_input)
+    with monkeypatch.context() as scoped:
+        scoped.setattr(registry, "MAX_CANONICAL_VALUES", 0)
+        assert registry._join_separate_results(
+            keys_result=keys_result,
+            translations_result=translations_result,
+            failure_input=valid_input,
+        ).issues
+    malformed_key = replace(keys_result.values[0], translated_text="not-null")
+    malformed_translation = replace(translations_result.values[0], translated_text=None)
+    assert registry._join_separate_results(
+        keys_result=core.CanonicalParseResult(values=(malformed_key,)),
+        translations_result=translations_result,
+        failure_input=valid_input,
+    ).issues
+    assert registry._join_separate_results(
+        keys_result=keys_result,
+        translations_result=core.CanonicalParseResult(values=(malformed_translation,)),
+        failure_input=valid_input,
+    ).issues
+
+    duplicate_language_source = replace(keys_result.values[0], language="fr")
+    assert (
+        registry._join_separate_results(
+            keys_result=core.CanonicalParseResult(
+                values=tuple(
+                    sorted(
+                        (*keys_result.values, duplicate_language_source),
+                        key=core.canonical_value_order,
+                    )
+                )
+            ),
+            translations_result=translations_result,
+            failure_input=valid_input,
+        )
+        .issues[0]
+        .code
+        == "duplicate_key"
+    )
+
+    def fail_order(_: core.CanonicalValue) -> tuple[object, ...]:
+        raise ValueError("closed test failure")
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(registry, "canonical_value_order", fail_order)
+        assert registry._parse_complete_inputs((valid_input,)).issues[0].code == "duplicate_key"
+        assert (
+            registry._join_separate_results(
+                keys_result=keys_result,
+                translations_result=translations_result,
+                failure_input=valid_input,
+            )
+            .issues[0]
+            .code
+            == "duplicate_key"
+        )
+
+
+def test_adapter_batch_value_caps_apply_to_combined_valid_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from verboflex.localization.importing import android_xml, ios_strings, qt_ts
+    from verboflex.localization.importing import json as json_adapter
+
+    adapters = (
+        (
+            android_xml,
+            "parse_android_xml",
+            android_xml.parse_android_xml_files,
+            "MAX_ANDROID_VALUES",
+            _input("android_xml"),
+        ),
+        (qt_ts, "parse_qt_ts", qt_ts.parse_qt_ts_files, "MAX_QT_VALUES", _input("qt_ts")),
+        (
+            json_adapter,
+            "parse_json_localization",
+            json_adapter.parse_json_localization_files,
+            "MAX_JSON_VALUES",
+            _input("json"),
+        ),
+        (
+            ios_strings,
+            "parse_ios_strings",
+            ios_strings.parse_ios_strings_files,
+            "MAX_IOS_ASSIGNMENTS",
+            _input("ios_strings"),
+        ),
+    )
+    for adapter, parse_name, parse_many, limit_name, parser_input in adapters:
+        parsed = getattr(adapter, parse_name)(parser_input)
+        assert parsed.values
+        with monkeypatch.context() as scoped:
+            scoped.setattr(adapter, limit_name, 0)
+            scoped.setattr(adapter, parse_name, lambda _, parsed_result=parsed: parsed_result)
+            assert parse_many((parser_input,)).issues[0].code == "unsupported_structure"
+
+
+def test_ios_adapter_closes_unsafe_keys_internal_failures_and_coordinates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from verboflex.localization.importing import ios_strings
+
+    unsafe_key = _input("ios_strings", content=b'"\\u0001" = "value";')
+    assert ios_strings.parse_ios_strings(unsafe_key).issues[0].code == "malformed_file"
+    assert ios_strings._safe_coordinates("safe", -1) == (None, None)
+    span = ios_strings.preview_ios.SourceSpan(0, 1)
+    unsafe_entry = ios_strings._LexicalEntry(
+        key="\x01",
+        value="safe",
+        key_span=span,
+        value_span=span,
+        entry_span=span,
+        equals_span=span,
+        semicolon_span=span,
+        trivia=(),
+    )
+    with pytest.raises(ios_strings._MalformedIosStrings):
+        ios_strings._CanonicalStringsLexer._require_safe_decoded_values([unsafe_entry])
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(
+            ios_strings,
+            "_canonical_value",
+            lambda **_: (_ for _ in ()).throw(ValueError("closed test failure")),
+        )
+        assert (
+            ios_strings.parse_ios_strings(_input("ios_strings")).issues[0].code
+            == "unsupported_structure"
+        )
+
+
+def test_json_adapter_closes_recursion_and_unmatched_flat_layout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from verboflex.localization.importing import json as json_adapter
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(
+            json_adapter.json,
+            "loads",
+            lambda *_, **__: (_ for _ in ()).throw(RecursionError),
+        )
+        assert (
+            json_adapter.parse_json_localization(_input("json")).issues[0].code
+            == "unsupported_structure"
+        )
+    assert (
+        json_adapter.parse_json_localization(_input("json", content=b"[]")).issues[0].code
+        == "unsupported_structure"
+    )
+
+    unmatched = _input(
+        "json",
+        path="messages.json",
+        layout_identity="json:flat-per-locale:messages.json",
+        content=b'{"key":"value"}',
+    )
+    assert json_adapter.parse_json_localization(unmatched).issues[0].code == "ambiguous_structure"
+    forged_layout = _forged_input("json", layout_identity=None)
+    with pytest.raises(json_adapter._AmbiguousJsonLayout):
+        json_adapter._document_values(
+            root=json_adapter._JsonObject(pairs=()),
+            parser_input=forged_layout,
+            base_language="en",
+        )
+
+
+def test_qt_adapter_rejects_each_unsupported_structural_boundary() -> None:
+    from xml.etree.ElementTree import Element
+
+    from verboflex.localization.importing import qt_ts
+
+    target = qt_ts._QtTreeTarget()
+    target.start_namespace(None, "urn:unexpected")
+    assert target.namespace_uris == {"urn:unexpected"}
+
+    unsupported_documents = (
+        b'<?xml nope?><TS version="2.1" language="it_IT"/>',
+        b'<TS version="2.1" language="it_IT"><extra/></TS>',
+        b'<TS version="2.1" language="it_IT"><dependencies/></TS>',
+        b'<TS version="2.1" language="it_IT"><dependencies><extra/></dependencies></TS>',
+        b'<TS version="2.1" language="it_IT"><context><name>x</name>'
+        b'<message id="same"><source>a</source><translation>A</translation></message>'
+        b'<message id="same"><source>b</source><translation>B</translation></message>'
+        b"</context></TS>",
+        b'<TS version="2.1" language="it_IT"><context><name>x</name>'
+        b'<message><source>a</source><translation variants="no">A</translation></message>'
+        b"</context></TS>",
+        b'<TS version="2.1" language="it_IT"><context><name>x</name>'
+        b'<message numerus="yes"><source>a</source><translation>'
+        b'<numerusform extra="x">A</numerusform></translation></message></context></TS>',
+        b'<TS version="2.1" language="it_IT"><context><name>x</name>'
+        b'<message numerus="yes"><source>a</source><translation>'
+        b'<numerusform extra="x"><lengthvariant priority="1">A</lengthvariant>'
+        b"</numerusform></translation></message></context></TS>",
+        b'<TS version="2.1" language="it_IT"><context><name>x</name>'
+        b'<message numerus="yes"><source>a</source><translation>'
+        b'<numerusform variants="yes">bad<lengthvariant priority="1">A</lengthvariant>'
+        b"</numerusform></translation></message></context></TS>",
+        b'<TS version="2.1" language="it_IT"><context><name>x</name>'
+        b'<message numerus="yes"><source>a</source><translation>'
+        b'<numerusform variants="yes"><extra/></numerusform>'
+        b"</translation></message></context></TS>",
+        b'<TS version="2.1" language="it_IT"><context><name>x</name>'
+        b'<message><source>a</source><translation variants="yes">'
+        b'<lengthvariant priority="1"><extra/></lengthvariant>'
+        b"</translation></message></context></TS>",
+        b'<TS version="2.1" language="it_IT"><context><name>x</name>'
+        b'<message><source>a</source><translation variants="yes">'
+        b'<lengthvariant priority="2147483648">A</lengthvariant>'
+        b"</translation></message></context></TS>",
+        b'<TS version="2.1" language="it_IT"><context><name>x</name></context>tail</TS>',
+    )
+    for content in unsupported_documents:
+        result = qt_ts.parse_qt_ts(_input("qt_ts", content=content))
+        assert result.values == ()
+        assert result.issues
+
+    nested_text = Element("text")
+    nested_text.append(Element("unsupported"))
+    with pytest.raises(qt_ts._UnsupportedQtTs):
+        qt_ts._element_text(nested_text)
+
+    location_only = (
+        b'<TS version="2.1" language="it_IT"><context><name>x</name><message>'
+        b'<location filename="source.cpp"/><source>a</source><translation>A</translation>'
+        b"</message></context></TS>"
+    )
+    assert qt_ts.parse_qt_ts(_input("qt_ts", content=location_only)).values
+
+
+def test_android_adapter_rejects_each_unsupported_structural_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from xml.etree import ElementTree as standard_xml
+    from xml.etree.ElementTree import Element
+
+    from verboflex.localization.importing import android_xml
+
+    unsupported_documents = (
+        b'<?xml version="1.0" encoding="UTF-16"?><resources/>',
+        b'<resources><!--comment-->tail<string name="x">x</string></resources>',
+        b'<resources><?pi value?><string name="x">x</string></resources>',
+        b"<resources><!--comment--></resources>",
+        b'<resources><string name="x">x</string>tail</resources>',
+        b'<resources><plurals name="x">tail<item quantity="one">one</item></plurals></resources>',
+        b'<resources><plurals name="x"><!--comment-->tail'
+        b'<item quantity="one">one</item></plurals></resources>',
+        b'<resources><plurals name="x"><extra/></plurals></resources>',
+        b'<resources><string-array name="x">tail<item>one</item></string-array></resources>',
+        b'<resources><string-array name="x"><!--comment-->tail'
+        b"<item>one</item></string-array></resources>",
+        b'<resources><string name="x"><?pi value?></string></resources>',
+    )
+    for content in unsupported_documents:
+        result = android_xml.parse_android_xml(_input("android_xml", content=content))
+        assert result.values == ()
+        assert result.issues
+
+    valid_comments = (
+        b'<resources><!--prefix--><string name="x">x</string><!--suffix--></resources>',
+        b'<resources><plurals name="x"><!--comment-->'
+        b'<item quantity="one">one</item></plurals></resources>',
+        b'<resources><string-array name="x"><!--comment--><item>one</item>'
+        b"</string-array></resources>",
+    )
+    for content in valid_comments:
+        assert android_xml.parse_android_xml(_input("android_xml", content=content)).values
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(android_xml, "MAX_CANONICAL_FILE_BYTES", 0)
+        with pytest.raises(android_xml._MalformedAndroidXml):
+            android_xml._decode_xml(b"x")
+    with monkeypatch.context() as scoped:
+        scoped.setattr(android_xml, "MAX_ANDROID_STRUCTURE_NODES", 2)
+        capped = b'<resources><string name="x"/><!--suffix--></resources>'
+        assert android_xml.parse_android_xml(_input("android_xml", content=capped)).issues
+
+    nodes: list[core.CanonicalStructureNode] = []
+    with pytest.raises(android_xml._UnsupportedAndroidXml):
+        android_xml._append_mixed_child(
+            Element(cast(Any, object())),
+            nodes=nodes,
+            visible=[],
+            cdata_ordinal=[0],
+            structure_prefix_size=0,
+        )
+    unsafe_xliff = Element(
+        f"{{{android_xml._XLIFF_NAMESPACE}}}g",
+        {"id": "x", "example": "\x01"},
+    )
+    with pytest.raises(android_xml._UnsupportedAndroidXml):
+        android_xml._inline_fields(unsafe_xliff)
+    safe_xliff = Element(f"{{{android_xml._XLIFF_NAMESPACE}}}g", {"id": "x"})
+    assert android_xml._inline_fields(safe_xliff)[0][-1] == ("id", "x")
+
+    for raw in ("\\", "\\uZZZZ", "\\uD800", "\\uD800\\uZZZZ", "\\uD800\\u0041", "\\uDC00"):
+        with pytest.raises(android_xml._UnsupportedAndroidXml):
+            android_xml._decode_android_escapes(raw)
+    assert android_xml._decode_android_escapes("\\uD83D\\uDE00") == "😀"
+
+    with pytest.raises(android_xml._UnsupportedAndroidXml):
+        android_xml._require_nonempty_collection([], [])
+    bad_comment = standard_xml.Comment("\x01")
+    with pytest.raises(android_xml._UnsupportedAndroidXml):
+        android_xml._comment_node(bad_comment)
+    with pytest.raises(android_xml._UnsupportedAndroidXml):
+        android_xml._canonical_attributes({"formatted": "invalid"})
 
 
 def test_direct_mapping_matches_hand_authored_fixture_and_is_order_stable() -> None:

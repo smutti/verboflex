@@ -357,15 +357,15 @@ def canonical_selector_digest(selector: CanonicalSelector) -> str:
     return hashlib.sha256(canonical_selector_bytes(selector)).hexdigest()
 
 
-def canonical_value_order(value: CanonicalValue) -> tuple[str, str, str, str, str, int]:
+def canonical_value_order(value: CanonicalValue) -> tuple[int, str, int, str, str, bytes]:
     """Return the single adapter-independent canonical value order."""
     return (
-        value.locator.repository_side,
-        value.language,
-        value.logical_key,
-        canonical_selector_digest(value.selector),
+        _REPOSITORY_SIDE_ORDER[value.locator.repository_side],
         value.locator.path,
         value.locator.position,
+        value.logical_key,
+        value.language,
+        canonical_selector_bytes(value.selector),
     )
 
 

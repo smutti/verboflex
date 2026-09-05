@@ -124,7 +124,15 @@ class _AndroidTreeTarget:
 
 def parse_android_xml(parser_input: CanonicalParserInput) -> CanonicalParseResult:
     """Parse the complete bounded Android resource grammar without partial output."""
+    if type(parser_input) is not CanonicalParserInput:
+        return _invalid_input_failure()
     try:
+        if (
+            parser_input.format != "android_xml"
+            or parser_input.repository_side not in {"direct", "keys", "translations"}
+            or type(parser_input.content) is not bytes
+        ):
+            raise _UnsupportedAndroidXml
         language = _confirmed_language(parser_input)
         root, namespace_uris = _parse_root(parser_input.content)
         values = _resource_values(
@@ -858,18 +866,37 @@ def _failure(
         "duplicate_key": "Duplicate Android resource key.",
         "base_language_required": "Base language is required.",
     }
+    repository_side = (
+        cast(RepositorySide, parser_input.repository_side)
+        if parser_input.repository_side in {"direct", "keys", "translations"}
+        else "direct"
+    )
+    path = parser_input.path if _is_safe_relative_path(parser_input.path) else "<input>"
     return CanonicalParseResult(
         issues=(
             CanonicalIssue(
                 code=code,
-                repository_side=cast(RepositorySide, parser_input.repository_side),
-                path=parser_input.path,
+                repository_side=repository_side,
+                path=path,
                 message=messages[code],
                 line=line,
                 column=column,
             ),
         )
     )
+
+
+def _is_safe_relative_path(value: object) -> bool:
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > 4_096
+        or value.startswith("/")
+        or "//" in value
+        or "\x00" in value
+    ):
+        return False
+    return all(component not in {"", ".", ".."} for component in value.split("/"))
 
 
 def _invalid_batch_failure() -> CanonicalParseResult:
@@ -880,6 +907,19 @@ def _invalid_batch_failure() -> CanonicalParseResult:
                 repository_side="direct",
                 path="<input>",
                 message="Malformed Android XML input batch.",
+            ),
+        )
+    )
+
+
+def _invalid_input_failure() -> CanonicalParseResult:
+    return CanonicalParseResult(
+        issues=(
+            CanonicalIssue(
+                code="malformed_file",
+                repository_side="direct",
+                path="<input>",
+                message="Malformed Android XML parser input.",
             ),
         )
     )

@@ -479,5 +479,14 @@ def test_arbitrary_ios_bytes_never_escape_or_return_partial_values(payload: byte
     assert not (result.values and result.issues)
     assert len(result.issues) <= 5
     assert all(len(issue.message) <= 256 for issue in result.issues)
-    if payload:
-        assert all(payload.hex() not in issue.message for issue in result.issues)
+    assert all(
+        issue.message
+        in {
+            "Malformed iOS strings file.",
+            "Ambiguous iOS strings layout.",
+            "Unsupported iOS strings structure.",
+            "Duplicate iOS strings key.",
+            "Base language is required.",
+        }
+        for issue in result.issues
+    )
