@@ -575,6 +575,11 @@ def language_label(code: str) -> str:
     return _LANGUAGE_LABELS.get(code, code)
 
 
+def _state_summary(states: tuple[StateFilter, ...]) -> StateSummary:
+    """Describe a complete group's state without implying all members matched."""
+    return states[0] if len(states) == 1 else "mixed"
+
+
 def get_translation_options(session: Session) -> TranslationOptions:
     """Return current active product and language choices in server order."""
     rows = session.execute(_OPTIONS_SQL).mappings().all()
@@ -682,7 +687,7 @@ def get_translation_group(
         raw_key=str(first["raw_key"]),
         language=str(first["language"]),
         states=states,
-        state_summary=states[0] if len(states) == 1 else "mixed",
+        state_summary=_state_summary(states),
         is_deleted=bool(first["key_deleted"]) or any(value.is_deleted for value in values),
         values=values,
     )
@@ -752,7 +757,7 @@ def search_translations(
             within_limit_count=row["within_limit_count"],
             no_max_count=row["no_max_count"],
             states=cast(tuple[StateFilter, ...], tuple(row["states"])),
-            state_summary=(row["states"][0] if len(row["states"]) == 1 else "mixed"),
+            state_summary=_state_summary(cast(tuple[StateFilter, ...], tuple(row["states"]))),
             has_over_limit=row["has_over_limit"],
             has_no_max=row["has_no_max"],
             is_deleted=row["is_deleted"],
