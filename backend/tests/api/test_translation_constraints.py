@@ -797,7 +797,7 @@ def test_constraint_mutations_return_authoritative_unicode_boundary_and_empty_pr
                 .order_by(TranslationValue.id)
             )
         )
-        assert tuple(value.display_text for value in values) == ("", "e\u0301👩🏽‍💻")
+        assert {value.display_text for value in values} == {"", "e\u0301👩🏽‍💻"}
         assert {value.review_state for value in values} == {"draft"}
         assert session.scalar(select(func.count()).select_from(TranslationConstraint)) == 0
 
@@ -899,10 +899,15 @@ def test_constraint_stale_inaccessible_tombstoned_and_incomplete_errors_do_not_m
                 .order_by(TranslationValue.id)
             )
         )
-        assert tuple(
-            (value.grapheme_count, value.effective_max_chars, value.is_over_limit)
+        assert {
+            (
+                value.display_text,
+                value.grapheme_count,
+                value.effective_max_chars,
+                value.is_over_limit,
+            )
             for value in values
-        ) == ((0, 1, False), (2, 1, True))
+        } == {("", 0, 1, False), ("e\u0301👩🏽‍💻", 2, 1, True)}
 
 
 def test_constraint_openapi_contract_has_stable_operations_and_closed_errors() -> None:

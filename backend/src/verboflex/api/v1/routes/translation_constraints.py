@@ -1,6 +1,7 @@
 """Role-gated maximum-length constraint mutation routes."""
 
 import logging
+from collections.abc import Callable
 from typing import Annotated, Any, NoReturn
 from uuid import UUID
 
@@ -152,6 +153,23 @@ def _require_active_group(session: Session, *, translation_group_id: UUID) -> No
     get_translation_group(session, group_id=translation_group_id)
 
 
+def _execute_mutation(
+    session: Session,
+    *,
+    translation_group_id: UUID,
+    operation: Callable[[], ConstraintMutationProjection],
+) -> TranslationConstraintMutationResponse:
+    """Share currentness, rollback, commit, and bounded error handling."""
+    try:
+        _require_active_group(session, translation_group_id=translation_group_id)
+        response = _mutation_response(operation())
+        session.commit()
+    except Exception as error:
+        session.rollback()
+        _raise_constraint_error(error)
+    return response
+
+
 @router.put(
     "/{translation_group_id}/constraints/{language}",
     operation_id="putTranslationConstraint",
@@ -166,22 +184,18 @@ async def put_translation_constraint(
     session: ConstraintSession,
 ) -> TranslationConstraintMutationResponse:
     """Create or replace one exact maximum under current server authority."""
-    try:
-        _require_active_group(session, translation_group_id=translation_group_id)
-        projection = put_translation_constraint_service(
+    return _execute_mutation(
+        session,
+        translation_group_id=translation_group_id,
+        operation=lambda: put_translation_constraint_service(
             session,
             translation_group_id=translation_group_id,
             language=language,
             max_chars=payload.max_chars,
             expected_version=payload.expected_version,
             actor_id=principal.user_id,
-        )
-        response = _mutation_response(projection)
-        session.commit()
-    except Exception as error:
-        session.rollback()
-        _raise_constraint_error(error)
-    return response
+        ),
+    )
 
 
 @router.delete(
@@ -198,17 +212,13 @@ async def delete_translation_constraint(
     session: ConstraintSession,
 ) -> TranslationConstraintMutationResponse:
     """Remove one explicit maximum and return its authoritative fallback."""
-    try:
-        _require_active_group(session, translation_group_id=translation_group_id)
-        projection = delete_translation_constraint_service(
+    return _execute_mutation(
+        session,
+        translation_group_id=translation_group_id,
+        operation=lambda: delete_translation_constraint_service(
             session,
             translation_group_id=translation_group_id,
             language=language,
             expected_version=payload.expected_version,
-        )
-        response = _mutation_response(projection)
-        session.commit()
-    except Exception as error:
-        session.rollback()
-        _raise_constraint_error(error)
-    return response
+        ),
+    )
