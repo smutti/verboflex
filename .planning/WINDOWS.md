@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 0
+open_count: 2
 waived_count: 0
 fixed_count: 51
-total_count: 51
-last_updated: 2026-09-05T09:11:05.058Z
+total_count: 53
+last_updated: 2026-09-05T09:29:11.095Z
 ---
 
 # Broken Windows Ledger
@@ -66,6 +66,8 @@ last_updated: 2026-09-05T09:11:05.058Z
 | 49 | 04 | deviation | tools/phase4_parser_checkpoint.sh |  | Preserved actionable container failures and idempotent cleanup. | fixed |  | 2026-09-05T09:11:04.695Z | 2026-09-05T09:11:04.936Z |
 | 50 | 04 | deviation | docs/evidence/phase-04-parser.md |  | Removed a self-triggering evidence sanitization phrase. | fixed |  | 2026-09-05T09:11:04.756Z | 2026-09-05T09:11:04.995Z |
 | 51 | 04 | deviation | tools/phase4_parser_checkpoint.sh |  | Confined coverage data to the owner-only runtime directory. | fixed |  | 2026-09-05T09:11:04.816Z | 2026-09-05T09:11:05.058Z |
+| 52 | 04 | lint-warning | backend/src/verboflex/localization/importing |  | Full backend mypy reports 12 pre-existing parser-module errors; Plan 04-08 focused model mypy passes. | open |  | 2026-09-05T09:29:10.936Z |  |
+| 53 | 04 | deviation | backend/tests/unit/localization |  | Default backend pytest collection collides on duplicate importing/preview test basenames; Plan 04-08 verified the complete corpus in split runs. | open |  | 2026-09-05T09:29:11.095Z |  |
 
 ````json
 [
@@ -680,6 +682,30 @@ last_updated: 2026-09-05T09:11:05.058Z
     "reason": "",
     "recorded_at": "2026-09-05T09:11:04.816Z",
     "resolved_at": "2026-09-05T09:11:05.058Z"
+  },
+  {
+    "id": 52,
+    "kind": "lint-warning",
+    "phase": "04",
+    "file": "backend/src/verboflex/localization/importing",
+    "line": null,
+    "description": "Full backend mypy reports 12 pre-existing parser-module errors; Plan 04-08 focused model mypy passes.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-05T09:29:10.936Z",
+    "resolved_at": null
+  },
+  {
+    "id": 53,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/tests/unit/localization",
+    "line": null,
+    "description": "Default backend pytest collection collides on duplicate importing/preview test basenames; Plan 04-08 verified the complete corpus in split runs.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-05T09:29:11.095Z",
+    "resolved_at": null
   }
 ]
 ````
