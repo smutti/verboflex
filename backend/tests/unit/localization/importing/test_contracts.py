@@ -143,7 +143,7 @@ def test_selector_and_review_vocabularies_are_frozen_and_public() -> None:
 def test_canonical_models_export_closed_lowercase_vocabularies() -> None:
     models = importlib.import_module("verboflex.models")
 
-    assert _MODEL_EXPORTS <= set(models.__all__)
+    assert set(models.__all__) >= _MODEL_EXPORTS
     assert tuple(member.value for member in models.SelectorKind) == _SELECTOR_KINDS
     assert tuple(member.value for member in models.ReviewState) == _REVIEW_STATES
     assert tuple(member.value for member in models.EffectiveConstraintSource) == (
@@ -182,23 +182,27 @@ def test_canonical_model_relationships_preserve_semantic_ownership() -> None:
     }
 
     scope_relationships = sqlalchemy_inspect(models.LocalizationScope).relationships
-    assert {"current_mapping", "translation_keys"} <= set(scope_relationships)
+    assert {"current_mapping", "translation_keys"} <= set(scope_relationships.keys())
     assert scope_relationships["current_mapping"].viewonly is True
     assert scope_relationships["translation_keys"].passive_deletes is True
 
     key_relationships = sqlalchemy_inspect(models.TranslationKey).relationships
-    assert {"scope", "values", "constraints"} <= set(key_relationships)
+    assert {"scope", "values", "constraints"} <= set(key_relationships.keys())
     assert key_relationships["values"].passive_deletes is True
     assert key_relationships["constraints"].passive_deletes is True
 
     value_relationships = sqlalchemy_inspect(models.TranslationValue).relationships
-    assert {"key", "revisions", "locator"} <= set(value_relationships)
+    assert {"key", "revisions", "locator"} <= set(value_relationships.keys())
     assert value_relationships["revisions"].passive_deletes is True
     assert value_relationships["locator"].uselist is False
     assert value_relationships["locator"].passive_deletes is True
 
     constraint_relationships = sqlalchemy_inspect(models.TranslationConstraint).relationships
-    assert set(constraint_relationships) >= {"key", "created_by_user", "updated_by_user"}
+    assert set(constraint_relationships.keys()) >= {
+        "key",
+        "created_by_user",
+        "updated_by_user",
+    }
 
 
 def test_selector_bytes_are_sorted_compact_typed_and_sequence_ordered() -> None:

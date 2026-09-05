@@ -19,7 +19,11 @@ from verboflex.models.product_mapping import (
 from verboflex.models.repository import Repository
 from verboflex.models.role import Role, user_roles_table
 from verboflex.models.translation import (
+    EffectiveConstraintSource,
     LocalizationScope,
+    ParseIssueCode,
+    ReviewState,
+    SelectorKind,
     StagedTranslationValue,
     TranslationKey,
     TranslationParseIssue,
@@ -27,18 +31,21 @@ from verboflex.models.translation import (
     TranslationValueLocator,
     TranslationValueRevision,
 )
+from verboflex.models.translation_constraint import TranslationConstraint
 from verboflex.models.user import User
 
 __all__ = [
     "AuthSession",
     "ActiveRevisionRevalidationConfirmation",
     "BitbucketConnection",
+    "EffectiveConstraintSource",
     "ImportExecution",
     "ImportJob",
     "ImportRewriteDelta",
     "ImportRewriteProposal",
     "ImportSourceReference",
     "LocalizationScope",
+    "ParseIssueCode",
     "PreviewJob",
     "Product",
     "ProductMappingAllowedTarget",
@@ -46,9 +53,12 @@ __all__ = [
     "ProductRepositoryMapping",
     "ProductRevision",
     "Repository",
+    "ReviewState",
     "Role",
+    "SelectorKind",
     "StagedTranslationValue",
     "TranslationKey",
+    "TranslationConstraint",
     "TranslationParseIssue",
     "TranslationValue",
     "TranslationValueLocator",

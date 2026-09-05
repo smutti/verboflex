@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -21,24 +23,65 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from verboflex.db.base import Base
 
-_SELECTOR_CHECK = (
-    "selector_kind IN ('scalar', 'android_quantity', 'android_array_item', "
-    "'qt_numerus', 'qt_length_variant', 'json_path')"
-)
+if TYPE_CHECKING:
+    from verboflex.models.product_mapping import ProductRepositoryMapping
+    from verboflex.models.translation_constraint import TranslationConstraint
+
+
+class SelectorKind(StrEnum):
+    """Version-one canonical selector discriminators persisted by imports."""
+
+    SCALAR = "scalar"
+    ANDROID_QUANTITY = "android_quantity"
+    ANDROID_ARRAY_ITEM = "android_array_item"
+    QT_NUMERUS = "qt_numerus"
+    QT_LENGTH_VARIANT = "qt_length_variant"
+    JSON_PATH = "json_path"
+
+
+class ReviewState(StrEnum):
+    """Closed v1 review workflow states."""
+
+    DRAFT = "draft"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class EffectiveConstraintSource(StrEnum):
+    """Authority used to materialize a value's effective maximum."""
+
+    NONE = "none"
+    BASE_DEFAULT = "base_default"
+    LANGUAGE_OVERRIDE = "language_override"
+
+
+class ParseIssueCode(StrEnum):
+    """Bounded safe parser issue categories persisted for an execution."""
+
+    MALFORMED_FILE = "malformed_file"
+    AMBIGUOUS_STRUCTURE = "ambiguous_structure"
+    UNSUPPORTED_STRUCTURE = "unsupported_structure"
+    DUPLICATE_KEY = "duplicate_key"
+    BASE_LANGUAGE_REQUIRED = "base_language_required"
+
+
+def _enum_check(column: str, vocabulary: type[StrEnum]) -> str:
+    values = ", ".join(f"'{member.value}'" for member in vocabulary)
+    return f"{column} IN ({values})"
+
+
+_SELECTOR_CHECK = _enum_check("selector_kind", SelectorKind)
 _FORMAT_CHECK = "format IN ('android_xml', 'qt_ts', 'json', 'ios_strings')"
 _SIDE_CHECK = "repository_side IN ('direct', 'keys', 'translations')"
-_REVIEW_STATE_CHECK = "review_state IN ('draft', 'approved', 'rejected')"
-_EFFECTIVE_CONSTRAINT_SOURCE_CHECK = (
-    "effective_constraint_source IN ('none', 'base_default', 'language_override')"
+_REVIEW_STATE_CHECK = _enum_check("review_state", ReviewState)
+_EFFECTIVE_CONSTRAINT_SOURCE_CHECK = _enum_check(
+    "effective_constraint_source", EffectiveConstraintSource
 )
-_ISSUE_CODE_CHECK = (
-    "issue_code IN ('malformed_file', 'ambiguous_structure', "
-    "'unsupported_structure', 'duplicate_key', 'base_language_required')"
-)
+_ISSUE_CODE_CHECK = _enum_check("issue_code", ParseIssueCode)
 _LANGUAGE_CHECK = "language ~ '^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$'"
 _DIGEST_CHECK = "char_length(selector_digest) = 64 AND selector_digest ~ '^[0-9a-f]{64}$'"
 _DELETION_CHECK = (
@@ -162,6 +205,18 @@ class LocalizationScope(Base):
         onupdate=func.now(),
     )
 
+    current_mapping: Mapped[ProductRepositoryMapping] = relationship(
+        back_populates="localization_scopes",
+        viewonly=True,
+        lazy="selectin",
+    )
+    translation_keys: Mapped[list[TranslationKey]] = relationship(
+        back_populates="scope",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="TranslationKey.raw_key",
+    )
+
 
 class TranslationKey(Base):
     """Stable raw logical key independent of its current file locator."""
@@ -236,6 +291,20 @@ class TranslationKey(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+    scope: Mapped[LocalizationScope] = relationship(back_populates="translation_keys")
+    values: Mapped[list[TranslationValue]] = relationship(
+        back_populates="key",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="TranslationValue.id",
+    )
+    constraints: Mapped[list[TranslationConstraint]] = relationship(
+        back_populates="key",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="TranslationConstraint.language",
     )
 
 
@@ -379,6 +448,21 @@ class TranslationValue(Base):
         onupdate=func.now(),
     )
 
+    key: Mapped[TranslationKey] = relationship(back_populates="values")
+    revisions: Mapped[list[TranslationValueRevision]] = relationship(
+        back_populates="value",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="TranslationValueRevision.revision_number",
+    )
+    locator: Mapped[TranslationValueLocator | None] = relationship(
+        back_populates="value",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        single_parent=True,
+        uselist=False,
+    )
+
 
 class TranslationValueRevision(Base):
     """Immutable versioned content and exact import provenance for one value."""
@@ -487,6 +571,8 @@ class TranslationValueRevision(Base):
         server_default=func.now(),
     )
 
+    value: Mapped[TranslationValue] = relationship(back_populates="revisions")
+
 
 class TranslationValueLocator(Base):
     """Mutable current locator tied to immutable execution source provenance."""
@@ -578,6 +664,8 @@ class TranslationValueLocator(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+    value: Mapped[TranslationValue] = relationship(back_populates="locator")
 
 
 class StagedTranslationValue(Base):

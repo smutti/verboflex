@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -17,9 +18,13 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from verboflex.db.base import Base
+
+if TYPE_CHECKING:
+    from verboflex.models.translation import TranslationKey
+    from verboflex.models.user import User
 
 _LANGUAGE_CHECK = "language ~ '^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$'"
 
@@ -92,3 +97,7 @@ class TranslationConstraint(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+    key: Mapped[TranslationKey] = relationship(back_populates="constraints")
+    created_by_user: Mapped[User] = relationship(foreign_keys=[created_by])
+    updated_by_user: Mapped[User] = relationship(foreign_keys=[updated_by])

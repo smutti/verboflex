@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -20,6 +21,9 @@ from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from verboflex.db.base import Base
+
+if TYPE_CHECKING:
+    from verboflex.models.translation import LocalizationScope
 
 
 class ProductRepositoryMapping(Base):
@@ -139,6 +143,12 @@ class ProductRepositoryMapping(Base):
         single_parent=True,
         passive_deletes=True,
         order_by="ProductMappingAllowedTarget.branch",
+    )
+    localization_scopes: Mapped[list[LocalizationScope]] = relationship(
+        back_populates="current_mapping",
+        viewonly=True,
+        lazy="selectin",
+        order_by="LocalizationScope.id",
     )
 
 
