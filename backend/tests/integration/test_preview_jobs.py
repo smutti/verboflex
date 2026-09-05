@@ -70,6 +70,7 @@ from verboflex.services.preview_jobs import (
     create_or_reuse_preview_job,
     execute_preview_job,
     get_preview_job,
+    is_current_preview_confirmation,
     skeleton_preview_processor,
 )
 from verboflex.services.publication import (
@@ -371,6 +372,71 @@ def _candidate(
         files=(f"{layout_identity}/values/strings.xml",),
         values={"default": {"hello": "Hello"}},
     ).to_mapping()
+
+
+def _base_language_candidate(*languages: str) -> dict[str, object]:
+    """Build one exact candidate whose detected languages are test-controlled."""
+    return build_layout_candidate(
+        repository_side="direct",
+        format="json",
+        layout_identity="locales/{locale}.json",
+        files=tuple(f"locales/{language}.json" for language in languages),
+        values={language: {"hello": f"Hello ({language})"} for language in languages},
+    ).to_mapping()
+
+
+def _complete_base_language_preview(
+    factory: sessionmaker[Session],
+    *,
+    languages: tuple[str, ...],
+) -> tuple[UUID, UUID, UUID, PreviewJobRecord, dict[str, object], dict[str, object]]:
+    product_id, _active_id, candidate_id, mapping_id = _seed_preview_graph(factory)
+    candidate = _base_language_candidate(*languages)
+    with factory() as session:
+        created = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    execute_preview_job(
+        factory,
+        job_id=created.id,
+        processor=lambda identity: {
+            "detector_version": identity.detector_version,
+            "digest": identity.input_digest,
+            "layout_candidates": [candidate],
+        },
+    )
+    with factory() as session:
+        completed = get_preview_job(session, job_id=created.id)
+    assert completed.result is not None
+    return product_id, candidate_id, mapping_id, completed, completed.result, candidate
+
+
+def _base_language_authority_snapshot(
+    factory: sessionmaker[Session],
+    *,
+    mapping_id: UUID,
+) -> tuple[object, ...]:
+    """Capture every candidate authority field a rejected selection must preserve."""
+    with factory() as session:
+        mapping = session.get_one(ProductRepositoryMapping, mapping_id)
+        return (
+            mapping.base_language,
+            mapping.selected_layout_candidate_id,
+            mapping.selected_layout_version,
+            mapping.confirmed_preview_job_id,
+            mapping.confirmed_preview_digest,
+            mapping.preview_confirmed_by,
+            mapping.preview_confirmed_at,
+            mapping.updated_at,
+            session.scalar(
+                select(func.count()).select_from(ActiveRevisionRevalidationConfirmation)
+            ),
+        )
 
 
 def _confirmable_processor(identity: object) -> dict[str, object]:
@@ -1837,6 +1903,234 @@ def test_admin_explicitly_confirms_one_exact_current_layout(
     assert repeated.json() == body
 
 
+def test_base_language_single_detection_is_deterministic_digest_bound_and_current(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """The service selects the sole canonical language and binds every confirmation seam."""
+    _product_id, candidate_id, mapping_id, completed, result, candidate = (
+        _complete_base_language_preview(
+            preview_session_factory,
+            languages=("en",),
+        )
+    )
+    actor_id = uuid4()
+
+    with preview_session_factory() as session:
+        confirmation = confirm_preview_job(
+            session,
+            job_id=completed.id,
+            preview_digest=str(result["digest"]),
+            layout_candidate_id=UUID(str(candidate["id"])),
+            layout_candidate_version=1,
+            base_language=None,
+            actor_id=actor_id,
+        )
+
+    assert confirmation.base_language == "en"
+    assert confirmation.preview_digest != result["digest"]
+    assert len(confirmation.preview_digest) == 64
+    with preview_session_factory() as session:
+        revision = session.get_one(ProductRevision, candidate_id)
+        mapping = session.get_one(ProductRepositoryMapping, mapping_id)
+        assert mapping.base_language == "en"
+        assert mapping.confirmed_preview_digest == confirmation.preview_digest
+        assert is_current_preview_confirmation(session, revision, mapping) is True
+
+    with preview_session_factory() as session:
+        repeated = confirm_preview_job(
+            session,
+            job_id=completed.id,
+            preview_digest=str(result["digest"]),
+            layout_candidate_id=UUID(str(candidate["id"])),
+            layout_candidate_version=1,
+            base_language="en",
+            actor_id=uuid4(),
+        )
+    assert repeated == confirmation
+
+
+def test_base_language_api_requires_exact_multi_language_selection_and_is_failure_atomic(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Missing, foreign, and post-confirmation changes are bounded and mutation-free."""
+    _configure_dependencies(preview_session_factory)
+    admin_token = _create_authority(preview_session_factory, role_name="admin")
+    _product_id, candidate_id, mapping_id, completed, result, candidate = (
+        _complete_base_language_preview(
+            preview_session_factory,
+            languages=("en", "it"),
+        )
+    )
+    path = f"/api/v1/admin/preview-jobs/{completed.id}/confirmation"
+    payload = {
+        "preview_digest": result["digest"],
+        "layout_candidate_id": candidate["id"],
+        "layout_candidate_version": 1,
+    }
+    empty = _base_language_authority_snapshot(
+        preview_session_factory,
+        mapping_id=mapping_id,
+    )
+
+    required = asyncio.run(
+        _request(
+            "POST",
+            path,
+            access_token=admin_token,
+            json={**payload, "base_language": None},
+        )
+    )
+    foreign = asyncio.run(
+        _request(
+            "POST",
+            path,
+            access_token=admin_token,
+            json={**payload, "base_language": "fr"},
+        )
+    )
+    assert required.status_code == 409
+    assert required.json() == {"detail": "base_language_required"}
+    assert foreign.status_code == 409
+    assert foreign.json() == {"detail": "Preview identity conflict"}
+    assert (
+        _base_language_authority_snapshot(
+            preview_session_factory,
+            mapping_id=mapping_id,
+        )
+        == empty
+    )
+
+    confirmed = asyncio.run(
+        _request(
+            "POST",
+            path,
+            access_token=admin_token,
+            json={**payload, "base_language": "it"},
+        )
+    )
+    assert confirmed.status_code == 200
+    body = confirmed.json()
+    assert body["base_language"] == "it"
+    assert body["preview_digest"] != result["digest"]
+    stable = _base_language_authority_snapshot(
+        preview_session_factory,
+        mapping_id=mapping_id,
+    )
+
+    duplicate = asyncio.run(
+        _request(
+            "POST",
+            path,
+            access_token=admin_token,
+            json={**payload, "base_language": "it"},
+        )
+    )
+    changed = asyncio.run(
+        _request(
+            "POST",
+            path,
+            access_token=admin_token,
+            json={**payload, "base_language": "en"},
+        )
+    )
+    assert duplicate.status_code == 200
+    assert duplicate.json() == body
+    assert changed.status_code == 409
+    assert changed.json() == {"detail": "Preview identity conflict"}
+    assert (
+        _base_language_authority_snapshot(
+            preview_session_factory,
+            mapping_id=mapping_id,
+        )
+        == stable
+    )
+
+    with preview_session_factory() as session:
+        revision = session.get_one(ProductRevision, candidate_id)
+        mapping = session.get_one(ProductRepositoryMapping, mapping_id)
+        with session.no_autoflush:
+            mapping.base_language = "en"
+            assert is_current_preview_confirmation(session, revision, mapping) is False
+        session.rollback()
+
+
+def test_base_language_unavailable_and_stale_selection_leave_no_authority(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Sentinel-only detection and superseded jobs cannot establish language authority."""
+    _product_id, _candidate_id, mapping_id, completed, result, candidate = (
+        _complete_base_language_preview(
+            preview_session_factory,
+            languages=("default",),
+        )
+    )
+    empty = _base_language_authority_snapshot(
+        preview_session_factory,
+        mapping_id=mapping_id,
+    )
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="base_language_required"),
+    ):
+        confirm_preview_job(
+            session,
+            job_id=completed.id,
+            preview_digest=str(result["digest"]),
+            layout_candidate_id=UUID(str(candidate["id"])),
+            layout_candidate_version=1,
+            base_language=None,
+            actor_id=uuid4(),
+        )
+    assert (
+        _base_language_authority_snapshot(
+            preview_session_factory,
+            mapping_id=mapping_id,
+        )
+        == empty
+    )
+
+    product_id, _candidate_id, mapping_id, completed, result, candidate = (
+        _complete_base_language_preview(
+            preview_session_factory,
+            languages=("en", "it"),
+        )
+    )
+    with preview_session_factory() as session:
+        replacement = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": "b" * 40},
+            enqueuer=lambda _job_id: None,
+        )
+    assert replacement.id != completed.id
+    empty = _base_language_authority_snapshot(
+        preview_session_factory,
+        mapping_id=mapping_id,
+    )
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="identity conflict"),
+    ):
+        confirm_preview_job(
+            session,
+            job_id=completed.id,
+            preview_digest=str(result["digest"]),
+            layout_candidate_id=UUID(str(candidate["id"])),
+            layout_candidate_version=1,
+            base_language="en",
+            actor_id=uuid4(),
+        )
+    assert (
+        _base_language_authority_snapshot(
+            preview_session_factory,
+            mapping_id=mapping_id,
+        )
+        == empty
+    )
+
+
 @pytest.mark.parametrize(
     "mutation",
     [
@@ -2166,6 +2460,7 @@ def _published_configuration_snapshot(
                     ProductRepositoryMapping.revision_id,
                     ProductRepositoryMapping.topology,
                     ProductRepositoryMapping.identity_key,
+                    ProductRepositoryMapping.base_language,
                     ProductRepositoryMapping.selected_layout_candidate_id,
                     ProductRepositoryMapping.selected_layout_version,
                     ProductRepositoryMapping.confirmed_preview_job_id,
@@ -2214,11 +2509,13 @@ def _seed_active_revalidation_authority(
     factory: sessionmaker[Session],
     *,
     invalid_mapping: bool = False,
+    base_language: str | None = None,
+    selected_layout_id: UUID | None = None,
 ) -> tuple[UUID, UUID, UUID, UUID, UUID]:
     """Project the standard preview fixture into one inactive published revision."""
     product_id, _old_active_id, revision_id, mapping_id = _seed_preview_graph(factory)
     actor_id = uuid4()
-    selected_layout_id = UUID(str(_candidate()["id"]))
+    durable_selected_layout_id = selected_layout_id or UUID(str(_candidate()["id"]))
     with factory.begin() as session:
         mapping = session.get_one(ProductRepositoryMapping, mapping_id)
         if invalid_mapping:
@@ -2226,7 +2523,8 @@ def _seed_active_revalidation_authority(
             mapping.selected_layout_candidate_id = None
             mapping.selected_layout_version = None
         else:
-            mapping.selected_layout_candidate_id = selected_layout_id
+            mapping.base_language = base_language
+            mapping.selected_layout_candidate_id = durable_selected_layout_id
             mapping.selected_layout_version = 1
         session.flush()
         revision = session.get_one(ProductRevision, revision_id)
@@ -2247,7 +2545,7 @@ def _seed_active_revalidation_authority(
                 must_change_password=False,
             )
         )
-    return product_id, revision_id, mapping_id, actor_id, selected_layout_id
+    return product_id, revision_id, mapping_id, actor_id, durable_selected_layout_id
 
 
 def _complete_active_revalidation(
@@ -2926,6 +3224,180 @@ def test_active_revalidation_confirmation_and_currentness_reject_every_mismatch(
             layout_candidate_version=1,
             actor_id=actor_id,
         )
+
+
+def test_base_language_active_revalidation_binds_existing_mapping_authority_only(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Published revalidation binds the exact stored language without graph mutation."""
+    preview_jobs = importlib.import_module("verboflex.services.preview_jobs")
+    candidate = _base_language_candidate("en", "it")
+    selected_layout_id = UUID(str(candidate["id"]))
+    product_id, revision_id, mapping_id, actor_id, _old_layout_id = (
+        _seed_active_revalidation_authority(
+            preview_session_factory,
+            base_language="en",
+            selected_layout_id=selected_layout_id,
+        )
+    )
+    before = _published_configuration_snapshot(
+        preview_session_factory,
+        product_id=product_id,
+    )
+    with preview_session_factory() as session:
+        job = preview_jobs.create_or_reuse_active_revision_revalidation_job(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            mapping_id=mapping_id,
+            expected_active_revision_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    execute_preview_job(
+        preview_session_factory,
+        job_id=job.id,
+        processor=lambda identity: {
+            "detector_version": identity.detector_version,
+            "digest": identity.input_digest,
+            "layout_candidates": [candidate],
+        },
+    )
+    with preview_session_factory() as session:
+        completed = preview_jobs.get_active_revision_revalidation_job(
+            session,
+            job_id=job.id,
+        )
+    assert completed.result is not None
+    result_digest = str(completed.result["digest"])
+
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="identity conflict"),
+    ):
+        preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=job.id,
+            preview_digest=result_digest,
+            layout_candidate_id=selected_layout_id,
+            layout_candidate_version=1,
+            base_language="it",
+            actor_id=actor_id,
+        )
+    assert (
+        _published_configuration_snapshot(
+            preview_session_factory,
+            product_id=product_id,
+        )
+        == before
+    )
+    with preview_session_factory() as session:
+        assert session.get(ActiveRevisionRevalidationConfirmation, job.id) is None
+
+    with preview_session_factory() as session:
+        confirmed = preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=job.id,
+            preview_digest=result_digest,
+            layout_candidate_id=selected_layout_id,
+            layout_candidate_version=1,
+            base_language="en",
+            actor_id=actor_id,
+        )
+    assert confirmed.base_language == "en"
+    assert confirmed.preview_digest != result_digest
+    assert (
+        _published_configuration_snapshot(
+            preview_session_factory,
+            product_id=product_id,
+        )
+        == before
+    )
+
+    with preview_session_factory() as session:
+        repeated = preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=job.id,
+            preview_digest=result_digest,
+            layout_candidate_id=selected_layout_id,
+            layout_candidate_version=1,
+            base_language="en",
+            actor_id=uuid4(),
+        )
+        revision = session.get_one(ProductRevision, revision_id)
+        mapping = session.get_one(ProductRepositoryMapping, mapping_id)
+        assert repeated == confirmed
+        assert preview_jobs.active_revision_revalidation_is_current(
+            session,
+            revision,
+            mapping,
+        )
+        with session.no_autoflush:
+            mapping.base_language = "it"
+            assert not preview_jobs.active_revision_revalidation_is_current(
+                session,
+                revision,
+                mapping,
+            )
+        session.rollback()
+
+
+def test_base_language_active_revalidation_rejects_legacy_null_without_sidecar(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """A published legacy null remains blocked instead of receiving an inferred language."""
+    preview_jobs = importlib.import_module("verboflex.services.preview_jobs")
+    candidate = _base_language_candidate("en")
+    selected_layout_id = UUID(str(candidate["id"]))
+    product_id, revision_id, mapping_id, actor_id, _old_layout_id = (
+        _seed_active_revalidation_authority(
+            preview_session_factory,
+            selected_layout_id=selected_layout_id,
+        )
+    )
+    with preview_session_factory() as session:
+        job = preview_jobs.create_or_reuse_active_revision_revalidation_job(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            mapping_id=mapping_id,
+            expected_active_revision_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    execute_preview_job(
+        preview_session_factory,
+        job_id=job.id,
+        processor=lambda identity: {
+            "detector_version": identity.detector_version,
+            "digest": identity.input_digest,
+            "layout_candidates": [candidate],
+        },
+    )
+    with preview_session_factory() as session:
+        completed = preview_jobs.get_active_revision_revalidation_job(
+            session,
+            job_id=job.id,
+        )
+    assert completed.result is not None
+
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobConflict, match="base_language_required"),
+    ):
+        preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=job.id,
+            preview_digest=str(completed.result["digest"]),
+            layout_candidate_id=selected_layout_id,
+            layout_candidate_version=1,
+            base_language="en",
+            actor_id=actor_id,
+        )
+    with preview_session_factory() as session:
+        mapping = session.get_one(ProductRepositoryMapping, mapping_id)
+        assert mapping.base_language is None
+        assert session.get(ActiveRevisionRevalidationConfirmation, job.id) is None
 
 
 def test_active_revalidation_eligibility_and_revision_scope_guards_are_bounded(
