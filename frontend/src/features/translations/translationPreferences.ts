@@ -15,6 +15,27 @@ const ALL_TRANSLATIONS: TranslationSearchPreferences = {
   language: null,
 };
 
+function serializePreferences(
+  preferences: TranslationSearchPreferences,
+): string {
+  return JSON.stringify({
+    version: TRANSLATION_PREFERENCE_VERSION,
+    productId: preferences.productId,
+    language: preferences.language,
+  });
+}
+
+function persistPreferences(
+  storage: TranslationPreferenceStorage,
+  principalId: string,
+  preferences: TranslationSearchPreferences,
+): void {
+  storage.setItem(
+    translationPreferenceKey(principalId),
+    serializePreferences(preferences),
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -76,14 +97,7 @@ export function loadTranslationPreferences(
   }
 
   const preferences = sanitizeTranslationPreferences(candidate, options);
-  storage.setItem(
-    translationPreferenceKey(principalId),
-    JSON.stringify({
-      version: TRANSLATION_PREFERENCE_VERSION,
-      productId: preferences.productId,
-      language: preferences.language,
-    }),
-  );
+  persistPreferences(storage, principalId, preferences);
   return preferences;
 }
 
@@ -94,13 +108,6 @@ export function saveTranslationPreferences(
   candidate: unknown,
 ): TranslationSearchPreferences {
   const preferences = sanitizeTranslationPreferences(candidate, options);
-  storage.setItem(
-    translationPreferenceKey(principalId),
-    JSON.stringify({
-      version: TRANSLATION_PREFERENCE_VERSION,
-      productId: preferences.productId,
-      language: preferences.language,
-    }),
-  );
+  persistPreferences(storage, principalId, preferences);
   return preferences;
 }
