@@ -74,7 +74,7 @@
 - [x] **CONS-02**: Authorized user can edit or remove a maximum character length constraint.
 - [x] **CONS-03**: System calculates whether each translated value violates its configured maximum character length.
 - [x] **CONS-04**: System recalculates maximum-length violations after import and after translation edits.
-- [ ] **CONS-05**: Translation detail view shows configured max length, actual length, and violation status.
+- [x] **CONS-05**: Translation detail view shows configured max length, actual length, and violation status.
 
 ### Translation Review Workflow
 
@@ -221,7 +221,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONS-02 | Phase 4 | Complete |
 | CONS-03 | Phase 4 | Complete |
 | CONS-04 | Phase 4 | Complete |
-| CONS-05 | Phase 4 | Pending |
+| CONS-05 | Phase 4 | Complete |
 | REVW-01 | Phase 5 | Pending |
 | REVW-02 | Phase 5 | Pending |
 | REVW-03 | Phase 5 | Pending |

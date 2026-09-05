@@ -26,11 +26,12 @@
 
 ## Discovered during Plan 04-13
 
-- [ ] The exact OpenAPI operation-set and checked-in schema-export assertions now
+- [x] The exact OpenAPI operation-set and checked-in schema-export assertions now
   detect the three planned translation read operations plus the two constraint
   mutation operations. Plan 04-15 explicitly owns freezing that final operation
   inventory and regenerating the frontend client after all dependent Phase 4 backend
-  schema writers finish.
+  schema writers finish. Resolved in Plan 04-15: the full 20-test OpenAPI contract and
+  deterministic `api:check` export/generation gate now pass.
 - [ ] Package-wide `ruff format --check backend` still reports only the pre-existing
   formatting drift in migrations `0011_active_revision_revalidations.py` and
   `0012_import_jobs.py`; all Plan 04-13 files pass focused format, lint, and strict
