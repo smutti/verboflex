@@ -366,7 +366,47 @@ def test_mapping_base_language_migration_is_normalized_nullable_and_reversible(
 
     config, engine = migrated_database
     command.upgrade(config, "0014_import_source_reference_insert_guard")
-    identities = _seed_import_schema_graph(engine)
+    identities = {
+        "product": uuid4(),
+        "revision": uuid4(),
+        "mapping": uuid4(),
+    }
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO products (id, display_name, name_key, is_active) "
+                "VALUES (:product, 'Base language', :name_key, true)"
+            ),
+            {
+                **identities,
+                "name_key": f"base-language-{identities['product']}",
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO product_revisions "
+                "(id, product_id, display_name, name_key, description, version, "
+                "is_published, published_at) VALUES "
+                "(:revision, :product, 'Base language', :name_key, 'candidate', 1, "
+                "false, NULL)"
+            ),
+            {
+                **identities,
+                "name_key": f"base-language-{identities['product']}",
+            },
+        )
+        connection.execute(
+            text("UPDATE products SET candidate_revision_id = :revision WHERE id = :product"),
+            identities,
+        )
+        connection.execute(
+            text(
+                "INSERT INTO product_repository_mappings "
+                "(id, revision_id, topology, identity_key) "
+                "VALUES (:mapping, :revision, 'direct', 'base-language')"
+            ),
+            identities,
+        )
     assert "base_language" not in {
         column["name"] for column in inspect(engine).get_columns("product_repository_mappings")
     }
