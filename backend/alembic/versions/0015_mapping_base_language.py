@@ -20,7 +20,7 @@ def upgrade() -> None:
     """Add nullable legacy-safe base-language authority with exact checks."""
     op.add_column(
         "product_repository_mappings",
-        sa.Column("base_language", sa.String(), nullable=True),
+        sa.Column("base_language", sa.String(length=64), nullable=True),
     )
     op.create_check_constraint(
         op.f("ck_product_repository_mappings_base_language_length"),

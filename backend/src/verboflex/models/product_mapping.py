@@ -87,7 +87,7 @@ class ProductRepositoryMapping(Base):
     )
     topology: Mapped[str] = mapped_column(String(16), nullable=False)
     identity_key: Mapped[str] = mapped_column(String(1200), nullable=False)
-    base_language: Mapped[str | None] = mapped_column(String(), nullable=True)
+    base_language: Mapped[str | None] = mapped_column(String(64), nullable=True)
     selected_layout_candidate_id: Mapped[UUID | None] = mapped_column(
         PostgreSQLUUID(as_uuid=True),
         nullable=True,

@@ -424,7 +424,7 @@ def test_mapping_base_language_migration_is_normalized_nullable_and_reversible(
     assert revision.down_revision == "0014_import_source_reference_insert_guard"
 
     assert columns["base_language"]["nullable"] is True
-    assert columns["base_language"]["type"].length is None
+    assert columns["base_language"]["type"].length == 64
     assert {
         constraint["name"]
         for constraint in inspector.get_check_constraints("product_repository_mappings")
@@ -436,7 +436,7 @@ def test_mapping_base_language_migration_is_normalized_nullable_and_reversible(
 
     model_column = ProductRepositoryMapping.__table__.columns["base_language"]
     assert model_column.nullable is True
-    assert model_column.type.length is None
+    assert model_column.type.length == 64
     assert {
         constraint.name
         for constraint in ProductRepositoryMapping.__table__.constraints
@@ -486,7 +486,6 @@ def test_mapping_base_language_migration_is_normalized_nullable_and_reversible(
         "english",
         "en-US-extra",
         " en",
-        "a" * 65,
     )
     for base_language in malformed_languages:
         with pytest.raises(IntegrityError), engine.begin() as connection:
@@ -500,6 +499,18 @@ def test_mapping_base_language_migration_is_normalized_nullable_and_reversible(
                     "mapping_id": identities["mapping"],
                 },
             )
+
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE product_repository_mappings SET base_language = :base_language "
+                "WHERE id = :mapping_id"
+            ),
+            {
+                "base_language": "a" * 65,
+                "mapping_id": identities["mapping"],
+            },
+        )
 
     command.downgrade(config, "0014_import_source_reference_insert_guard")
     assert "base_language" not in {
