@@ -1202,6 +1202,7 @@ export type AdminPublishedMappingImportResponse = {
      * Capability
      */
     capability: 'ready' | 'reauthorization_required' | 'unavailable';
+    dataset_status: ImportDatasetStatus;
     /**
      * Error Category
      */
@@ -1226,6 +1227,14 @@ export type AdminPublishedMappingImportResponse = {
      * Mapping Id
      */
     mapping_id: string;
+    /**
+     * Parser Issue Remaining Count
+     */
+    parser_issue_remaining_count: number;
+    /**
+     * Parser Issues
+     */
+    parser_issues: Array<ImportParserIssue>;
     /**
      * Repository Sides
      */
@@ -1582,6 +1591,18 @@ export type CurrentUserResponse = {
 };
 
 /**
+ * DeleteTranslationConstraintRequest
+ *
+ * Remove one explicit rule under exact optimistic authority.
+ */
+export type DeleteTranslationConstraintRequest = {
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+};
+
+/**
  * ErrorResponse
  *
  * Stable JSON error envelope.
@@ -1613,6 +1634,63 @@ export type HealthResponse = {
      * Status
      */
     status: 'ok';
+};
+
+/**
+ * ImportDatasetStatus
+ *
+ * Closed relationship between the current import and canonical dataset.
+ */
+export type ImportDatasetStatus = 'not_created' | 'active' | 'retained';
+
+/**
+ * ImportParserIssue
+ *
+ * One bounded parser diagnostic with no repository-controlled prose.
+ */
+export type ImportParserIssue = {
+    /**
+     * Column
+     */
+    column: number | null;
+    /**
+     * Issue Code
+     */
+    issue_code: 'malformed_file' | 'ambiguous_structure' | 'unsupported_structure' | 'duplicate_key' | 'base_language_required';
+    /**
+     * Line
+     */
+    line: number | null;
+    /**
+     * Message Key
+     */
+    message_key: 'import.parser.malformed_file' | 'import.parser.ambiguous_structure' | 'import.parser.unsupported_structure' | 'import.parser.duplicate_key' | 'import.parser.base_language_required';
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Repository Side
+     */
+    repository_side: 'direct' | 'keys' | 'translations';
+};
+
+/**
+ * PutTranslationConstraintRequest
+ *
+ * Create or replace one exact language-bound maximum.
+ */
+export type PutTranslationConstraintRequest = {
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Max Chars
+     *
+     * Maximum number of visible characters allowed.
+     */
+    max_chars: number;
 };
 
 /**
@@ -1648,6 +1726,409 @@ export type SystemStatusResponse = {
      * Worker
      */
     worker: 'online' | 'unavailable' | 'pending';
+};
+
+/**
+ * TranslationConstraintErrorResponse
+ *
+ * One bounded failure projection without authority enumeration.
+ */
+export type TranslationConstraintErrorResponse = {
+    /**
+     * Detail
+     */
+    detail: 'Translation unavailable' | 'Translation constraint conflict' | 'Invalid translation constraint input' | 'Translation constraint unavailable';
+};
+
+/**
+ * TranslationConstraintMutationResponse
+ *
+ * Fresh explicit rule and complete affected-value projection.
+ */
+export type TranslationConstraintMutationResponse = {
+    /**
+     * Base Language
+     */
+    base_language: string;
+    /**
+     * Explicit Maximum
+     */
+    explicit_maximum: number | null;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Total Count
+     */
+    total_count: number;
+    /**
+     * Translation Group Id
+     */
+    translation_group_id: string;
+    /**
+     * Values
+     */
+    values: Array<TranslationConstraintMutationValueResponse>;
+    /**
+     * Version
+     */
+    version: number | null;
+    /**
+     * Violating Count
+     */
+    violating_count: number;
+};
+
+/**
+ * TranslationConstraintMutationValueResponse
+ *
+ * Fresh constraint and workflow eligibility for one canonical value.
+ */
+export type TranslationConstraintMutationValueResponse = {
+    /**
+     * Approval Eligible
+     */
+    approval_eligible: boolean;
+    constraint: TranslationConstraintProjectionResponse;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Submission Eligible
+     */
+    submission_eligible: boolean;
+};
+
+/**
+ * TranslationConstraintProjectionResponse
+ */
+export type TranslationConstraintProjectionResponse = {
+    /**
+     * Actual
+     */
+    actual: number;
+    /**
+     * Maximum
+     */
+    maximum: number | null;
+    /**
+     * Overage
+     */
+    overage: number | null;
+    /**
+     * Source
+     */
+    source: 'none' | 'base_default' | 'language_override';
+    /**
+     * Status
+     */
+    status: 'no_max' | 'within_limit' | 'over_limit';
+};
+
+/**
+ * TranslationErrorResponse
+ */
+export type TranslationErrorResponse = {
+    /**
+     * Detail
+     */
+    detail: 'Invalid translation cursor' | 'Translation unavailable' | 'Translation search unavailable';
+};
+
+/**
+ * TranslationGroupDetailResponse
+ */
+export type TranslationGroupDetailResponse = {
+    /**
+     * Comments
+     */
+    comments: Array<string>;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Is Deleted
+     */
+    is_deleted: boolean;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Language Label
+     */
+    language_label: string;
+    /**
+     * Pending Change
+     */
+    pending_change?: null;
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Product Name
+     */
+    product_name: string;
+    /**
+     * Raw Key
+     */
+    raw_key: string;
+    /**
+     * State Summary
+     */
+    state_summary: 'draft' | 'approved' | 'rejected' | 'mixed';
+    /**
+     * States
+     */
+    states: Array<'draft' | 'approved' | 'rejected'>;
+    /**
+     * Values
+     */
+    values: Array<TranslationValueResponse>;
+};
+
+/**
+ * TranslationGroupSummaryResponse
+ */
+export type TranslationGroupSummaryResponse = {
+    /**
+     * Has No Max
+     */
+    has_no_max: boolean;
+    /**
+     * Has Over Limit
+     */
+    has_over_limit: boolean;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Is Deleted
+     */
+    is_deleted: boolean;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Language Label
+     */
+    language_label: string;
+    /**
+     * No Max Count
+     */
+    no_max_count: number;
+    /**
+     * Over Limit Count
+     */
+    over_limit_count: number;
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Product Name
+     */
+    product_name: string;
+    /**
+     * Rank
+     */
+    rank: number;
+    /**
+     * Raw Key
+     */
+    raw_key: string;
+    /**
+     * Source Text
+     */
+    source_text: string | null;
+    /**
+     * State Summary
+     */
+    state_summary: 'draft' | 'approved' | 'rejected' | 'mixed';
+    /**
+     * States
+     */
+    states: Array<'draft' | 'approved' | 'rejected'>;
+    /**
+     * Translated Text
+     */
+    translated_text: string | null;
+    /**
+     * Value Count
+     */
+    value_count: number;
+    /**
+     * Within Limit Count
+     */
+    within_limit_count: number;
+};
+
+/**
+ * TranslationLanguageOptionResponse
+ */
+export type TranslationLanguageOptionResponse = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Label
+     */
+    label: string;
+};
+
+/**
+ * TranslationOptionsResponse
+ */
+export type TranslationOptionsResponse = {
+    /**
+     * Languages
+     */
+    languages: Array<TranslationLanguageOptionResponse>;
+    /**
+     * Products
+     */
+    products: Array<TranslationProductOptionResponse>;
+};
+
+/**
+ * TranslationProductOptionResponse
+ */
+export type TranslationProductOptionResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * TranslationProvenanceResponse
+ */
+export type TranslationProvenanceResponse = {
+    /**
+     * Branch
+     */
+    branch: string;
+    /**
+     * Column
+     */
+    column: number | null;
+    /**
+     * Commit Hash
+     */
+    commit_hash: string;
+    /**
+     * Execution Id
+     */
+    execution_id: string;
+    /**
+     * Format
+     */
+    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings';
+    /**
+     * Line
+     */
+    line: number | null;
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Repository Name
+     */
+    repository_name: string;
+    /**
+     * Repository Side
+     */
+    repository_side: 'direct' | 'keys' | 'translations';
+};
+
+/**
+ * TranslationSearchPageResponse
+ */
+export type TranslationSearchPageResponse = {
+    /**
+     * Items
+     */
+    items: Array<TranslationGroupSummaryResponse>;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
+};
+
+/**
+ * TranslationValueResponse
+ */
+export type TranslationValueResponse = {
+    constraint: TranslationConstraintProjectionResponse;
+    /**
+     * Deleted At
+     */
+    deleted_at: string | null;
+    /**
+     * Display Text
+     */
+    display_text: string;
+    /**
+     * Grapheme Count
+     */
+    grapheme_count: number;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Is Deleted
+     */
+    is_deleted: boolean;
+    provenance: TranslationProvenanceResponse | null;
+    /**
+     * Review State
+     */
+    review_state: 'draft' | 'approved' | 'rejected';
+    /**
+     * Selector Digest
+     */
+    selector_digest: string;
+    /**
+     * Selector Kind
+     */
+    selector_kind: 'scalar' | 'android_quantity' | 'android_array_item' | 'qt_numerus' | 'qt_length_variant' | 'json_path';
+    /**
+     * Selector Version
+     */
+    selector_version: 1;
+    /**
+     * Source Text
+     */
+    source_text: string | null;
+    /**
+     * Structure
+     */
+    structure: Array<unknown>;
+    /**
+     * Translated Text
+     */
+    translated_text: string | null;
 };
 
 /**
@@ -3793,6 +4274,263 @@ export type ReadSystemStatusResponses = {
 };
 
 export type ReadSystemStatusResponse = ReadSystemStatusResponses[keyof ReadSystemStatusResponses];
+
+export type SearchTranslationsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Q
+         */
+        q?: string | null;
+        /**
+         * Product Id
+         */
+        product_id?: string | null;
+        /**
+         * Language
+         */
+        language?: string | null;
+        /**
+         * State
+         */
+        state?: 'draft' | 'approved' | 'rejected' | null;
+        /**
+         * Violation
+         */
+        violation?: 'over_limit' | 'within_limit' | 'no_max' | null;
+        /**
+         * Deleted
+         */
+        deleted?: 'active' | 'deleted' | 'all';
+        /**
+         * Page Size
+         */
+        page_size?: 50;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/translations';
+};
+
+export type SearchTranslationsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: TranslationErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: TranslationErrorResponse;
+};
+
+export type SearchTranslationsError = SearchTranslationsErrors[keyof SearchTranslationsErrors];
+
+export type SearchTranslationsResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranslationSearchPageResponse;
+};
+
+export type SearchTranslationsResponse = SearchTranslationsResponses[keyof SearchTranslationsResponses];
+
+export type ListTranslationOptionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/translations/options';
+};
+
+export type ListTranslationOptionsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: TranslationErrorResponse;
+};
+
+export type ListTranslationOptionsError = ListTranslationOptionsErrors[keyof ListTranslationOptionsErrors];
+
+export type ListTranslationOptionsResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranslationOptionsResponse;
+};
+
+export type ListTranslationOptionsResponse = ListTranslationOptionsResponses[keyof ListTranslationOptionsResponses];
+
+export type GetTranslationGroupData = {
+    body?: never;
+    path: {
+        /**
+         * Translation Group Id
+         */
+        translation_group_id: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{translation_group_id}';
+};
+
+export type GetTranslationGroupErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: TranslationErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Service Unavailable
+     */
+    503: TranslationErrorResponse;
+};
+
+export type GetTranslationGroupError = GetTranslationGroupErrors[keyof GetTranslationGroupErrors];
+
+export type GetTranslationGroupResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranslationGroupDetailResponse;
+};
+
+export type GetTranslationGroupResponse = GetTranslationGroupResponses[keyof GetTranslationGroupResponses];
+
+export type DeleteTranslationConstraintData = {
+    body: DeleteTranslationConstraintRequest;
+    path: {
+        /**
+         * Translation Group Id
+         */
+        translation_group_id: string;
+        /**
+         * Language
+         */
+        language: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{translation_group_id}/constraints/{language}';
+};
+
+export type DeleteTranslationConstraintErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: TranslationConstraintErrorResponse;
+    /**
+     * Conflict
+     */
+    409: TranslationConstraintErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: TranslationConstraintErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: TranslationConstraintErrorResponse;
+};
+
+export type DeleteTranslationConstraintError = DeleteTranslationConstraintErrors[keyof DeleteTranslationConstraintErrors];
+
+export type DeleteTranslationConstraintResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranslationConstraintMutationResponse;
+};
+
+export type DeleteTranslationConstraintResponse = DeleteTranslationConstraintResponses[keyof DeleteTranslationConstraintResponses];
+
+export type PutTranslationConstraintData = {
+    body: PutTranslationConstraintRequest;
+    path: {
+        /**
+         * Translation Group Id
+         */
+        translation_group_id: string;
+        /**
+         * Language
+         */
+        language: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{translation_group_id}/constraints/{language}';
+};
+
+export type PutTranslationConstraintErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: TranslationConstraintErrorResponse;
+    /**
+     * Conflict
+     */
+    409: TranslationConstraintErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: TranslationConstraintErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: TranslationConstraintErrorResponse;
+};
+
+export type PutTranslationConstraintError = PutTranslationConstraintErrors[keyof PutTranslationConstraintErrors];
+
+export type PutTranslationConstraintResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranslationConstraintMutationResponse;
+};
+
+export type PutTranslationConstraintResponse = PutTranslationConstraintResponses[keyof PutTranslationConstraintResponses];
 
 export type ReadCurrentUserData = {
     body?: never;

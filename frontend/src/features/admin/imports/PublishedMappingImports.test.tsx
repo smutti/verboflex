@@ -90,12 +90,15 @@ function publishedImport(
     active_baseline: null,
     active_revision_id: "revision-1",
     capability: "ready",
+    dataset_status: "not_created",
     error_category: null,
     error_message: null,
     execution_number: null,
     id: null,
     latest_execution_at: null,
     mapping_id: mappingId,
+    parser_issue_remaining_count: 0,
+    parser_issues: [],
     repository_sides: [
       {
         repository_id: "repository-1",

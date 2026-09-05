@@ -37,12 +37,15 @@ function publishedImport(
     active_baseline: null,
     active_revision_id: "revision-1",
     capability: "ready",
+    dataset_status: "not_created",
     error_category: null,
     error_message: null,
     execution_number: 1,
     id: "import-1",
     latest_execution_at: "2026-09-03T12:00:00Z",
     mapping_id: "mapping-1",
+    parser_issue_remaining_count: 0,
+    parser_issues: [],
     repository_sides: [
       {
         repository_id: "repository-1",

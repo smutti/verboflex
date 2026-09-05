@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, type Options as Options2, type RequestResult, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ConfirmAdminActiveRevisionRevalidationData, ConfirmAdminActiveRevisionRevalidationErrors, ConfirmAdminActiveRevisionRevalidationResponses, ConfirmAdminImportRewriteBaselineData, ConfirmAdminImportRewriteBaselineErrors, ConfirmAdminImportRewriteBaselineResponses, ConfirmAdminPreviewJobData, ConfirmAdminPreviewJobErrors, ConfirmAdminPreviewJobResponses, ConnectAdminBitbucketOauthData, ConnectAdminBitbucketOauthErrors, ConnectAdminBitbucketOauthResponses, CreateAdminActiveRevisionRevalidationJobData, CreateAdminActiveRevisionRevalidationJobErrors, CreateAdminActiveRevisionRevalidationJobResponses, CreateAdminCandidateMappingData, CreateAdminCandidateMappingErrors, CreateAdminCandidateMappingResponses, CreateAdminPreviewJobData, CreateAdminPreviewJobErrors, CreateAdminPreviewJobResponses, CreateAdminProductData, CreateAdminProductErrors, CreateAdminProductResponses, CreateAdminRepositoryData, CreateAdminRepositoryErrors, CreateAdminRepositoryResponses, CreateAdminUserData, CreateAdminUserErrors, CreateAdminUserResponses, DeactivateAdminProductData, DeactivateAdminProductErrors, DeactivateAdminProductResponses, DeactivateAdminUserData, DeactivateAdminUserErrors, DeactivateAdminUserResponses, DiscoverAdminRepositorySourcesData, DiscoverAdminRepositorySourcesErrors, DiscoverAdminRepositorySourcesResponses, GetAdminActiveRevisionRevalidationJobData, GetAdminActiveRevisionRevalidationJobErrors, GetAdminActiveRevisionRevalidationJobResponses, GetAdminBitbucketStatusData, GetAdminBitbucketStatusErrors, GetAdminBitbucketStatusResponses, GetAdminImportData, GetAdminImportErrors, GetAdminImportResponses, GetAdminImportRewriteComparisonData, GetAdminImportRewriteComparisonErrors, GetAdminImportRewriteComparisonResponses, GetAdminPreviewJobData, GetAdminPreviewJobErrors, GetAdminPreviewJobResponses, GetAdminProductData, GetAdminProductErrors, GetAdminProductReactivationEligibilityData, GetAdminProductReactivationEligibilityErrors, GetAdminProductReactivationEligibilityResponses, GetAdminProductResponses, GetAdminRepositoryBranchData, GetAdminRepositoryBranchErrors, GetAdminRepositoryBranchResponses, GetAdminRepositoryData, GetAdminRepositoryErrors, GetAdminRepositoryResponses, IssueTokenData, IssueTokenErrors, IssueTokenResponses, ListAdminCandidateMappingsData, ListAdminCandidateMappingsErrors, ListAdminCandidateMappingsResponses, ListAdminProductsData, ListAdminProductsErrors, ListAdminProductsResponses, ListAdminPublishedMappingImportsData, ListAdminPublishedMappingImportsErrors, ListAdminPublishedMappingImportsResponses, ListAdminRepositoriesData, ListAdminRepositoriesErrors, ListAdminRepositoriesResponses, ListAdminRepositoryBranchesData, ListAdminRepositoryBranchesErrors, ListAdminRepositoryBranchesResponses, ListAdminRevisionMappingsData, ListAdminRevisionMappingsErrors, ListAdminRevisionMappingsResponses, ListAdminUsersData, ListAdminUsersErrors, ListAdminUsersResponses, LogoutData, LogoutErrors, LogoutResponses, PublishAdminProductCandidateData, PublishAdminProductCandidateErrors, PublishAdminProductCandidateResponses, ReactivateAdminProductData, ReactivateAdminProductErrors, ReactivateAdminProductResponses, ReactivateAdminUserData, ReactivateAdminUserErrors, ReactivateAdminUserResponses, ReadCurrentUserData, ReadCurrentUserErrors, ReadCurrentUserResponses, ReadHealthData, ReadHealthErrors, ReadHealthResponses, ReadSystemStatusData, ReadSystemStatusErrors, ReadSystemStatusResponses, ReconnectAdminBitbucketOauthData, ReconnectAdminBitbucketOauthErrors, ReconnectAdminBitbucketOauthResponses, RefreshAccessTokenData, RefreshAccessTokenErrors, RefreshAccessTokenResponses, ResetAdminUserPasswordData, ResetAdminUserPasswordErrors, ResetAdminUserPasswordResponses, RevokeAdminBitbucketConnectionLocallyData, RevokeAdminBitbucketConnectionLocallyErrors, RevokeAdminBitbucketConnectionLocallyResponses, StartAdminPublishedMappingImportData, StartAdminPublishedMappingImportErrors, StartAdminPublishedMappingImportResponses, UpdateAdminCandidateMappingData, UpdateAdminCandidateMappingErrors, UpdateAdminCandidateMappingResponses, UpdateAdminProductCandidateData, UpdateAdminProductCandidateErrors, UpdateAdminProductCandidateResponses, UpdateAdminUserData, UpdateAdminUserErrors, UpdateAdminUserResponses } from './types.gen';
+import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ConfirmAdminActiveRevisionRevalidationData, ConfirmAdminActiveRevisionRevalidationErrors, ConfirmAdminActiveRevisionRevalidationResponses, ConfirmAdminImportRewriteBaselineData, ConfirmAdminImportRewriteBaselineErrors, ConfirmAdminImportRewriteBaselineResponses, ConfirmAdminPreviewJobData, ConfirmAdminPreviewJobErrors, ConfirmAdminPreviewJobResponses, ConnectAdminBitbucketOauthData, ConnectAdminBitbucketOauthErrors, ConnectAdminBitbucketOauthResponses, CreateAdminActiveRevisionRevalidationJobData, CreateAdminActiveRevisionRevalidationJobErrors, CreateAdminActiveRevisionRevalidationJobResponses, CreateAdminCandidateMappingData, CreateAdminCandidateMappingErrors, CreateAdminCandidateMappingResponses, CreateAdminPreviewJobData, CreateAdminPreviewJobErrors, CreateAdminPreviewJobResponses, CreateAdminProductData, CreateAdminProductErrors, CreateAdminProductResponses, CreateAdminRepositoryData, CreateAdminRepositoryErrors, CreateAdminRepositoryResponses, CreateAdminUserData, CreateAdminUserErrors, CreateAdminUserResponses, DeactivateAdminProductData, DeactivateAdminProductErrors, DeactivateAdminProductResponses, DeactivateAdminUserData, DeactivateAdminUserErrors, DeactivateAdminUserResponses, DeleteTranslationConstraintData, DeleteTranslationConstraintErrors, DeleteTranslationConstraintResponses, DiscoverAdminRepositorySourcesData, DiscoverAdminRepositorySourcesErrors, DiscoverAdminRepositorySourcesResponses, GetAdminActiveRevisionRevalidationJobData, GetAdminActiveRevisionRevalidationJobErrors, GetAdminActiveRevisionRevalidationJobResponses, GetAdminBitbucketStatusData, GetAdminBitbucketStatusErrors, GetAdminBitbucketStatusResponses, GetAdminImportData, GetAdminImportErrors, GetAdminImportResponses, GetAdminImportRewriteComparisonData, GetAdminImportRewriteComparisonErrors, GetAdminImportRewriteComparisonResponses, GetAdminPreviewJobData, GetAdminPreviewJobErrors, GetAdminPreviewJobResponses, GetAdminProductData, GetAdminProductErrors, GetAdminProductReactivationEligibilityData, GetAdminProductReactivationEligibilityErrors, GetAdminProductReactivationEligibilityResponses, GetAdminProductResponses, GetAdminRepositoryBranchData, GetAdminRepositoryBranchErrors, GetAdminRepositoryBranchResponses, GetAdminRepositoryData, GetAdminRepositoryErrors, GetAdminRepositoryResponses, GetTranslationGroupData, GetTranslationGroupErrors, GetTranslationGroupResponses, IssueTokenData, IssueTokenErrors, IssueTokenResponses, ListAdminCandidateMappingsData, ListAdminCandidateMappingsErrors, ListAdminCandidateMappingsResponses, ListAdminProductsData, ListAdminProductsErrors, ListAdminProductsResponses, ListAdminPublishedMappingImportsData, ListAdminPublishedMappingImportsErrors, ListAdminPublishedMappingImportsResponses, ListAdminRepositoriesData, ListAdminRepositoriesErrors, ListAdminRepositoriesResponses, ListAdminRepositoryBranchesData, ListAdminRepositoryBranchesErrors, ListAdminRepositoryBranchesResponses, ListAdminRevisionMappingsData, ListAdminRevisionMappingsErrors, ListAdminRevisionMappingsResponses, ListAdminUsersData, ListAdminUsersErrors, ListAdminUsersResponses, ListTranslationOptionsData, ListTranslationOptionsErrors, ListTranslationOptionsResponses, LogoutData, LogoutErrors, LogoutResponses, PublishAdminProductCandidateData, PublishAdminProductCandidateErrors, PublishAdminProductCandidateResponses, PutTranslationConstraintData, PutTranslationConstraintErrors, PutTranslationConstraintResponses, ReactivateAdminProductData, ReactivateAdminProductErrors, ReactivateAdminProductResponses, ReactivateAdminUserData, ReactivateAdminUserErrors, ReactivateAdminUserResponses, ReadCurrentUserData, ReadCurrentUserErrors, ReadCurrentUserResponses, ReadHealthData, ReadHealthErrors, ReadHealthResponses, ReadSystemStatusData, ReadSystemStatusErrors, ReadSystemStatusResponses, ReconnectAdminBitbucketOauthData, ReconnectAdminBitbucketOauthErrors, ReconnectAdminBitbucketOauthResponses, RefreshAccessTokenData, RefreshAccessTokenErrors, RefreshAccessTokenResponses, ResetAdminUserPasswordData, ResetAdminUserPasswordErrors, ResetAdminUserPasswordResponses, RevokeAdminBitbucketConnectionLocallyData, RevokeAdminBitbucketConnectionLocallyErrors, RevokeAdminBitbucketConnectionLocallyResponses, SearchTranslationsData, SearchTranslationsErrors, SearchTranslationsResponses, StartAdminPublishedMappingImportData, StartAdminPublishedMappingImportErrors, StartAdminPublishedMappingImportResponses, UpdateAdminCandidateMappingData, UpdateAdminCandidateMappingErrors, UpdateAdminCandidateMappingResponses, UpdateAdminProductCandidateData, UpdateAdminProductCandidateErrors, UpdateAdminProductCandidateResponses, UpdateAdminUserData, UpdateAdminUserErrors, UpdateAdminUserResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -563,6 +563,69 @@ export const readSystemStatus = <ThrowOnError extends boolean = false>(options?:
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/system/status',
     ...options
+});
+
+/**
+ * Search Translation Collection
+ *
+ * Search current canonical groups through one fixed keyset envelope.
+ */
+export const searchTranslations = <ThrowOnError extends boolean = false>(options?: Options<SearchTranslationsData, ThrowOnError>): RequestResult<SearchTranslationsResponses, SearchTranslationsErrors, ThrowOnError> => (options?.client ?? client).get<SearchTranslationsResponses, SearchTranslationsErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/translations',
+    ...options
+});
+
+/**
+ * List Translation Options
+ *
+ * List exact active products and languages available to the principal.
+ */
+export const listTranslationOptions = <ThrowOnError extends boolean = false>(options?: Options<ListTranslationOptionsData, ThrowOnError>): RequestResult<ListTranslationOptionsResponses, ListTranslationOptionsErrors, ThrowOnError> => (options?.client ?? client).get<ListTranslationOptionsResponses, ListTranslationOptionsErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/translations/options',
+    ...options
+});
+
+/**
+ * Get Translation Group Detail
+ *
+ * Return one complete group or the same bounded unavailable response.
+ */
+export const getTranslationGroup = <ThrowOnError extends boolean = false>(options: Options<GetTranslationGroupData, ThrowOnError>): RequestResult<GetTranslationGroupResponses, GetTranslationGroupErrors, ThrowOnError> => (options.client ?? client).get<GetTranslationGroupResponses, GetTranslationGroupErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/translations/{translation_group_id}',
+    ...options
+});
+
+/**
+ * Delete Translation Constraint
+ *
+ * Remove one explicit maximum and return its authoritative fallback.
+ */
+export const deleteTranslationConstraint = <ThrowOnError extends boolean = false>(options: Options<DeleteTranslationConstraintData, ThrowOnError>): RequestResult<DeleteTranslationConstraintResponses, DeleteTranslationConstraintErrors, ThrowOnError> => (options.client ?? client).delete<DeleteTranslationConstraintResponses, DeleteTranslationConstraintErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/translations/{translation_group_id}/constraints/{language}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Put Translation Constraint
+ *
+ * Create or replace one exact maximum under current server authority.
+ */
+export const putTranslationConstraint = <ThrowOnError extends boolean = false>(options: Options<PutTranslationConstraintData, ThrowOnError>): RequestResult<PutTranslationConstraintResponses, PutTranslationConstraintErrors, ThrowOnError> => (options.client ?? client).put<PutTranslationConstraintResponses, PutTranslationConstraintErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/translations/{translation_group_id}/constraints/{language}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
 });
 
 /**
