@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 04
 current_phase_name: Localization Import, Search, and Constraints
 status: executing
-stopped_at: Completed 04-08-PLAN.md
-last_updated: "2026-09-05T09:30:43.689Z"
+stopped_at: Completed 04-14-PLAN.md
+last_updated: "2026-09-05T09:40:41.411Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 04 execution started
-state_head: 329e777c104aafd3462f29cc1c0215b2ec46b4bc
+state_head: dd424b110ee00d7a4727a6ab26ba810ec79c19c4
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 104
-  completed_plans: 85
+  completed_plans: 86
   percent: 38
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 ## Current Position
 
 Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
-Plan: 9 of 27
+Plan: 10 of 27
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 04 execution started
 
@@ -145,6 +145,7 @@ Progress: [████████░░░░░░░░░░░░] 3/8 pha
 | Phase 04 P06 | 9h15min | 2 tasks | 10 files |
 | Phase 04 P07 | 1h38min | 2 tasks | 2 files |
 | Phase 04-localization-import-search-and-constraints P08 | 15min | 1 tasks | 5 files |
+| Phase 04-localization-import-search-and-constraints P14 | 5min | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -420,6 +421,8 @@ Recent decisions affecting current work:
 - [Phase 04]: Canonical persistence, search, and constraints may proceed only from the verified parser ledger whose ten command records and five fixture-manifest hashes pass.
 - [Phase 04]: Persist base_language as nullable VARCHAR(64) with separate named length and normalized-locale checks; legacy rows remain null with no guessed default.
 - [Phase 04]: Add no base-language index until a proven query consumer exists.
+- [Phase 04]: Version grapheme count authority with the exact regex release plus the UAX 29 extended-grapheme contract. — Prevents persisted counts from silently outliving their segmentation algorithm identity.
+- [Phase 04]: Count only explicit string display_text through one compiled grapheme matcher without normalization or markup parsing. — Keeps parsers responsible for visible-text projection and gives every recomputation path one pure authority.
 
 ### Pending Todos
 
@@ -460,6 +463,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-05T09:30:43.591Z
-Stopped at: Completed 04-08-PLAN.md
+Last session: 2026-09-05T09:40:41.316Z
+Stopped at: Completed 04-14-PLAN.md
 Resume file: None
