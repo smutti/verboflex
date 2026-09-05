@@ -31,6 +31,7 @@ import {
   updateAdminProductCandidate,
   type AdminActiveRevisionRevalidationJobResponse,
   type AdminMappingResponse,
+  type AdminPreviewConfirmationResponse,
   type AdminPreviewJobResponse,
   type AdminPreviewLayoutCandidateResponse,
   type AdminProductLifecycleConflictResponse,
@@ -259,6 +260,22 @@ function previewJob(
     started_at: "2026-08-28T12:00:01Z",
     state: "succeeded",
     ...overrides,
+  };
+}
+
+function previewConfirmation(
+  selectedCandidate: AdminPreviewLayoutCandidateResponse,
+  baseLanguage: string,
+): AdminPreviewConfirmationResponse {
+  return {
+    base_language: baseLanguage,
+    confirmed_at: "2026-09-05T10:00:00Z",
+    confirmed_by: "00000000-0000-4000-8000-000000000001",
+    job_id: previewJob().id,
+    layout_candidate_id: selectedCandidate.id,
+    layout_candidate_version: selectedCandidate.version,
+    mapping_id: mapping.id,
+    preview_digest: "c".repeat(64),
   };
 }
 
@@ -1207,6 +1224,292 @@ describe("administrator product preview and publication page", () => {
     expect(
       screen.queryByRole("button", { name: "Confirm preview" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("visibly selects the sole detected base language and waits for backend confirmation", async () => {
+    const soleLanguageCandidate = {
+      ...candidates[0],
+      languages: ["fr-FR"],
+    };
+    createJobMock.mockResolvedValueOnce(
+      ok(
+        previewJob({
+          result: {
+            detector_version: "detector-v1",
+            digest: "c".repeat(64),
+            layout_candidates: [soleLanguageCandidate],
+          },
+        }),
+        202,
+      ),
+    );
+    let resolveConfirmation!: (
+      value: ReturnType<typeof ok<AdminPreviewConfirmationResponse>>,
+    ) => void;
+    confirmMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveConfirmation = resolve;
+      }) as never,
+    );
+
+    renderPage();
+    await runValidation();
+    await userEvent.click(
+      screen.getByRole("radio", {
+        name: "Android XML — app/src/main/res",
+      }),
+    );
+
+    const baseLanguage = screen.getByRole("combobox", {
+      name: "Base language",
+    });
+    expect(baseLanguage).toHaveTextContent("fr-FR");
+    expect(
+      screen.queryByRole("textbox", { name: "Base language" }),
+    ).not.toBeInTheDocument();
+    const publish = screen.getByRole("button", { name: "Publish product" });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Confirm preview" }),
+    );
+    expect(publish).toBeDisabled();
+    expect(confirmMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      body: {
+        base_language: "fr-FR",
+        layout_candidate_id: soleLanguageCandidate.id,
+        layout_candidate_version: 1,
+        preview_digest: "c".repeat(64),
+      },
+      path: { job_id: previewJob().id },
+    });
+
+    resolveConfirmation(
+      ok(previewConfirmation(soleLanguageCandidate, "fr-FR")),
+    );
+    expect(await screen.findByText("Confirmed")).toBeVisible();
+    expect(publish).toBeEnabled();
+  });
+
+  it("starts multiple detected languages unselected and exposes only exact candidate options", async () => {
+    const multipleLanguageCandidate = {
+      ...candidates[0],
+      languages: ["en", "it"],
+    };
+    createJobMock.mockResolvedValueOnce(
+      ok(
+        previewJob({
+          result: {
+            detector_version: "detector-v1",
+            digest: "c".repeat(64),
+            layout_candidates: [multipleLanguageCandidate],
+          },
+        }),
+        202,
+      ),
+    );
+
+    renderPage();
+    await runValidation();
+    await userEvent.click(
+      screen.getByRole("radio", {
+        name: "Android XML — app/src/main/res",
+      }),
+    );
+
+    const baseLanguage = screen.getByRole("combobox", {
+      name: "Base language",
+    });
+    expect(baseLanguage).toHaveTextContent("Select base language");
+    expect(screen.getByText("Base language required")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Confirm preview" }),
+    ).toBeDisabled();
+    await userEvent.click(baseLanguage);
+    expect(
+      screen.getAllByRole("option").map((option) => option.textContent),
+    ).toEqual(["en", "it"]);
+    await userEvent.click(screen.getByRole("option", { name: "it" }));
+    expect(baseLanguage).toHaveTextContent("it");
+    expect(
+      screen.queryByText("Base language required"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Confirm preview" }),
+    ).toBeEnabled();
+  });
+
+  it("renders a bounded base-language blocker when detection has no language", async () => {
+    createJobMock.mockResolvedValueOnce(
+      ok(
+        previewJob({
+          result: {
+            detector_version: "detector-v1",
+            digest: "c".repeat(64),
+            layout_candidates: [{ ...candidates[0], languages: [] }],
+          },
+        }),
+        202,
+      ),
+    );
+
+    renderPage();
+    await runValidation();
+
+    expect(screen.getByText("Base language required")).toBeVisible();
+    expect(
+      screen.queryByRole("combobox", { name: "Base language" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Confirm preview" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("preserves the selected language and focuses bounded backend rejection", async () => {
+    confirmMock.mockResolvedValueOnce(
+      failure({ detail: "base_language_required" }, 409) as never,
+    );
+    renderPage();
+    await runValidation();
+    await userEvent.click(
+      screen.getByRole("radio", {
+        name: "Android XML — app/src/main/res",
+      }),
+    );
+    const baseLanguage = screen.getByRole("combobox", {
+      name: "Base language",
+    });
+    await userEvent.click(baseLanguage);
+    await userEvent.click(screen.getByRole("option", { name: "it" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Confirm preview" }),
+    );
+
+    const error = await screen.findByRole("alert", {
+      name: "Base language required",
+    });
+    expect(error).toHaveFocus();
+    expect(baseLanguage).toHaveTextContent("it");
+    expect(
+      screen.getByRole("radio", {
+        name: "Android XML — app/src/main/res",
+      }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("button", { name: "Publish product" }),
+    ).toBeDisabled();
+  });
+
+  it("rejects a foreign backend language projection without enabling publication", async () => {
+    confirmMock.mockResolvedValueOnce(
+      ok(previewConfirmation(candidates[0], "fr")),
+    );
+    renderPage();
+    await runValidation();
+    await userEvent.click(
+      screen.getByRole("radio", {
+        name: "Android XML — app/src/main/res",
+      }),
+    );
+    const baseLanguage = screen.getByRole("combobox", {
+      name: "Base language",
+    });
+    await userEvent.click(baseLanguage);
+    await userEvent.click(screen.getByRole("option", { name: "it" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Confirm preview" }),
+    );
+
+    const error = await screen.findByRole("alert", {
+      name: "Preview not confirmed",
+    });
+    expect(error).toHaveFocus();
+    expect(baseLanguage).toHaveTextContent("it");
+    expect(screen.queryByText("Confirmed")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Publish product" }),
+    ).toBeDisabled();
+  });
+
+  it("invalidates stale confirmation on language or candidate change and deduplicates submission", async () => {
+    let resolveConfirmation!: (
+      value: ReturnType<typeof ok<AdminPreviewConfirmationResponse>>,
+    ) => void;
+    confirmMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveConfirmation = resolve;
+      }) as never,
+    );
+    renderPage();
+    await runValidation();
+    const firstCandidate = screen.getByRole("radio", {
+      name: "Android XML — app/src/main/res",
+    });
+    await userEvent.click(firstCandidate);
+    const firstLanguage = screen.getByRole("combobox", {
+      name: "Base language",
+    });
+    await userEvent.click(firstLanguage);
+    await userEvent.click(screen.getByRole("option", { name: "en" }));
+    const confirm = screen.getByRole("button", { name: "Confirm preview" });
+    act(() => {
+      confirm.click();
+      confirm.click();
+    });
+    await waitFor(() => expect(confirmMock).toHaveBeenCalledOnce());
+
+    const secondCandidate = screen.getByRole("radio", {
+      name: "Qt TS — translations/{locale}.ts",
+    });
+    await userEvent.click(secondCandidate);
+    const secondLanguage = screen.getByRole("combobox", {
+      name: "Base language",
+    });
+    await userEvent.click(secondLanguage);
+    await userEvent.click(screen.getByRole("option", { name: "it" }));
+    resolveConfirmation(ok(previewConfirmation(candidates[0], "en")));
+    await act(async () => Promise.resolve());
+
+    expect(confirmMock).toHaveBeenCalledOnce();
+    expect(secondCandidate).toBeChecked();
+    expect(secondLanguage).toHaveTextContent("it");
+    expect(screen.queryByText("Confirmed")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Publish product" }),
+    ).toBeDisabled();
+  });
+
+  it("invalidates a confirmed language without changing the selected candidate", async () => {
+    confirmMock.mockResolvedValueOnce(
+      ok(previewConfirmation(candidates[0], "en")),
+    );
+    renderPage();
+    await runValidation();
+    const selectedCandidate = screen.getByRole("radio", {
+      name: "Android XML — app/src/main/res",
+    });
+    await userEvent.click(selectedCandidate);
+    const baseLanguage = screen.getByRole("combobox", {
+      name: "Base language",
+    });
+    await userEvent.click(baseLanguage);
+    await userEvent.click(screen.getByRole("option", { name: "en" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Confirm preview" }),
+    );
+    expect(await screen.findByText("Confirmed")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Publish product" }),
+    ).toBeEnabled();
+
+    await userEvent.click(baseLanguage);
+    await userEvent.click(screen.getByRole("option", { name: "it" }));
+
+    expect(selectedCandidate).toBeChecked();
+    expect(baseLanguage).toHaveTextContent("it");
+    expect(screen.queryByText("Confirmed")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Publish product" }),
+    ).toBeDisabled();
   });
 
   it("requires explicit current confirmation before named publication and trusts only backend success", async () => {
