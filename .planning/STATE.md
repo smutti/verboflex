@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 04
 current_phase_name: Localization Import, Search, and Constraints
 status: executing
-stopped_at: Completed 04-26-PLAN.md
-last_updated: "2026-09-05T10:39:09.447Z"
+stopped_at: Completed 04-09-PLAN.md
+last_updated: "2026-09-05T11:02:25.549Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 04 execution started
-state_head: 05ae0d08b7da5e839d34f6c71fba6f9aa505f4ff
+state_head: ad3a4ac949d27140084546128d88cb2b9b53cacb
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 104
-  completed_plans: 88
+  completed_plans: 89
   percent: 38
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 ## Current Position
 
 Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
-Plan: 11 of 27
+Plan: 12 of 27
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 04 execution started
 
@@ -148,6 +148,7 @@ Progress: [████████░░░░░░░░░░░░] 3/8 pha
 | Phase 04-localization-import-search-and-constraints P14 | 5min | 1 tasks | 4 files |
 | Phase 04 P10 | 32min | 3 tasks | 8 files |
 | Phase 04 P26 | 19min | 1 tasks | 7 files |
+| Phase 04 P09 | 18min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -432,6 +433,9 @@ Recent decisions affecting current work:
 - [Phase 04]: Require a present nullable base_language field so sole-language confirmation is server-deterministic and multi-language confirmation requires an exact explicit member.
 - [Phase 04]: Persist and return a language-bound confirmation digest while retaining the raw preview result digest as the optimistic compare token.
 - [Phase 04]: Active revalidation binds the mapping's existing base language cryptographically without duplicating durable language authority in its sidecar.
+- [Phase 04]: Auto-select a base language only for one sole exact detected option; multiple languages require explicit candidate-scoped selection.
+- [Phase 04]: Accept browser confirmation only when the generated backend projection exactly matches job, mapping, digest, candidate, version, and base language.
+- [Phase 04]: Candidate or language changes increment confirmation generation, clear local authority, and silently discard superseded responses.
 
 ### Pending Todos
 
@@ -472,6 +476,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-05T10:39:09.362Z
-Stopped at: Completed 04-26-PLAN.md
+Last session: 2026-09-05T11:02:25.461Z
+Stopped at: Completed 04-09-PLAN.md
 Resume file: None

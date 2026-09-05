@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 4
 waived_count: 0
-fixed_count: 51
-total_count: 55
-last_updated: 2026-09-05T10:14:35.637Z
+fixed_count: 53
+total_count: 57
+last_updated: 2026-09-05T11:01:43.673Z
 ---
 
 # Broken Windows Ledger
@@ -70,6 +70,8 @@ last_updated: 2026-09-05T10:14:35.637Z
 | 53 | 04 | deviation | backend/tests/unit/localization |  | Default backend pytest collection collides on duplicate importing/preview test basenames; Plan 04-08 verified the complete corpus in split runs. | open |  | 2026-09-05T09:29:11.095Z |  |
 | 54 | 04 | deviation | backend/tests/architecture/test_phase2_scope.py |  | Phase 2 architecture guards still reject the Phase 4 canonical translation model modules | open |  | 2026-09-05T10:14:35.482Z |  |
 | 55 | 04 | unrun-verify | backend/tests/worker/test_smoke_task.py |  | Broad worker smoke requires Redis and a Celery worker at 127.0.0.1:56379 | open |  | 2026-09-05T10:14:35.637Z |  |
+| 56 | 04 | deviation | backend/tests/api/test_openapi_contract.py |  | Used the historical pre-Plan-04-26 schema to prove the intended contract RED because the dependency had already supplied the live implementation. | fixed |  | 2026-09-05T11:01:37.424Z | 2026-09-05T11:01:43.610Z |
+| 57 | 04 | deviation | frontend/src/features/admin/previews/ProductPreviewPage.tsx |  | Updated existing generated-client consumers for the newly required base-language field before wiring exact selection. | fixed |  | 2026-09-05T11:01:37.483Z | 2026-09-05T11:01:43.673Z |
 
 ````json
 [
@@ -732,6 +734,30 @@ last_updated: 2026-09-05T10:14:35.637Z
     "reason": "",
     "recorded_at": "2026-09-05T10:14:35.637Z",
     "resolved_at": null
+  },
+  {
+    "id": 56,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/tests/api/test_openapi_contract.py",
+    "line": null,
+    "description": "Used the historical pre-Plan-04-26 schema to prove the intended contract RED because the dependency had already supplied the live implementation.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-05T11:01:37.424Z",
+    "resolved_at": "2026-09-05T11:01:43.610Z"
+  },
+  {
+    "id": 57,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "frontend/src/features/admin/previews/ProductPreviewPage.tsx",
+    "line": null,
+    "description": "Updated existing generated-client consumers for the newly required base-language field before wiring exact selection.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-05T11:01:37.483Z",
+    "resolved_at": "2026-09-05T11:01:43.673Z"
   }
 ]
 ````

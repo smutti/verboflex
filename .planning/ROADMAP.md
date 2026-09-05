@@ -343,7 +343,7 @@ Plans:
   7. Authorized user can create, edit, and remove maximum-length constraints, and the system recalculates violations after imports and later edits.
   8. The parser checkpoint and final phase quality gate pass with targeted tests, code review, and deploy/build smoke verification.
 
-**Plans**: 11/27 plans executed
+**Plans**: 12/27 plans executed
 
 Plans:
 **Wave 1**
@@ -378,7 +378,7 @@ Plans:
 **Wave 7** *(blocked on Wave 6 completion)*
 
 - [ ] 04-27-PLAN.md — Exact base-language candidate cloning and publication propagation
-- [ ] 04-09-PLAN.md — Generated base-language client and Preview publication gating
+- [x] 04-09-PLAN.md — Generated base-language client and Preview publication gating
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
@@ -536,7 +536,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 1. Platform Foundation | 15/15 | Complete    | 2026-08-26 |
 | 2. Admin Configuration | 46/46 | Complete    | 2026-09-01 |
 | 3. Bitbucket Import Integration | 16/16 | Complete    | 2026-09-03 |
-| 4. Localization Import, Search, and Constraints | 11/27 | In Progress|  |
+| 4. Localization Import, Search, and Constraints | 12/27 | In Progress|  |
 | 5. Review Workspace and Comments | 0/6 | Not started | - |
 | 6. Format-Safe Write-Back | 0/5 | Not started | - |
 | 7. Change Sets and Pull Requests | 0/6 | Not started | - |
