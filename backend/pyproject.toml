@@ -23,6 +23,7 @@ dependencies = [
   "sqlalchemy==2.0.52",
   "uvicorn[standard]==0.52.4",
   "defusedxml==0.7.1",
+  "regex==2026.9.3",
 ]
 
 [dependency-groups]
