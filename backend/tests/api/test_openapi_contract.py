@@ -54,6 +54,29 @@ IMPORT_OPERATIONS = {
     ),
 }
 
+TRANSLATION_OPERATIONS = {
+    ("/api/v1/translations/options", "get"): (
+        "listTranslationOptions",
+        {"200", "401", "403", "503"},
+    ),
+    ("/api/v1/translations", "get"): (
+        "searchTranslations",
+        {"200", "401", "403", "422", "503"},
+    ),
+    ("/api/v1/translations/{translation_group_id}", "get"): (
+        "getTranslationGroup",
+        {"200", "401", "403", "404", "422", "503"},
+    ),
+    ("/api/v1/translations/{translation_group_id}/constraints/{language}", "put"): (
+        "putTranslationConstraint",
+        {"200", "401", "403", "404", "409", "422", "503"},
+    ),
+    ("/api/v1/translations/{translation_group_id}/constraints/{language}", "delete"): (
+        "deleteTranslationConstraint",
+        {"200", "401", "403", "404", "409", "422", "503"},
+    ),
+}
+
 EXPECTED_OPERATIONS = {
     ("/api/v1/admin/bitbucket", "get"): (
         "get_admin_bitbucket_status",
@@ -304,6 +327,31 @@ EXPECTED_OPERATIONS = {
     ("/api/v1/system/status", "get"): (
         "read_system_status",
         {"200", "401", "403", "429"},
+        True,
+    ),
+    ("/api/v1/translations/options", "get"): (
+        "listTranslationOptions",
+        {"200", "401", "403", "503"},
+        True,
+    ),
+    ("/api/v1/translations", "get"): (
+        "searchTranslations",
+        {"200", "401", "403", "422", "503"},
+        True,
+    ),
+    ("/api/v1/translations/{translation_group_id}", "get"): (
+        "getTranslationGroup",
+        {"200", "401", "403", "404", "422", "503"},
+        True,
+    ),
+    ("/api/v1/translations/{translation_group_id}/constraints/{language}", "put"): (
+        "putTranslationConstraint",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    ("/api/v1/translations/{translation_group_id}/constraints/{language}", "delete"): (
+        "deleteTranslationConstraint",
+        {"200", "401", "403", "404", "409", "422", "503"},
         True,
     ),
     ("/api/v1/users/me", "get"): (
@@ -984,6 +1032,406 @@ def test_import_schema_literals_requirements_and_bounds_are_frozen() -> None:
         "title": "Affected Mapping Count",
         "type": "integer",
     }
+
+
+def test_translation_operation_surface_is_exact_unique_and_bearer_protected() -> None:
+    """Freeze three reads and two constraint mutations as the sole translation surface."""
+    schema = app.openapi()
+    operations = _operation_entries(schema)
+    translation_operations = {
+        key: operation
+        for key, operation in operations.items()
+        if key[0].startswith("/api/v1/translations")
+    }
+
+    assert set(translation_operations) == set(TRANSLATION_OPERATIONS)
+    operation_ids: list[str] = []
+    for key, (operation_id, response_codes) in TRANSLATION_OPERATIONS.items():
+        operation = translation_operations[key]
+        operation_ids.append(operation["operationId"])
+        assert operation["operationId"] == operation_id
+        assert set(operation["responses"]) == response_codes
+        assert operation["security"] == [{"OAuth2PasswordBearer": []}]
+
+    assert len(operation_ids) == 5
+    assert len(set(operation_ids)) == 5
+
+    options = translation_operations[("/api/v1/translations/options", "get")]
+    search = translation_operations[("/api/v1/translations", "get")]
+    detail = translation_operations[("/api/v1/translations/{translation_group_id}", "get")]
+    constraint_path = "/api/v1/translations/{translation_group_id}/constraints/{language}"
+    put_constraint = translation_operations[(constraint_path, "put")]
+    delete_constraint = translation_operations[(constraint_path, "delete")]
+
+    assert _response_schema(options, "200") == ("#/components/schemas/TranslationOptionsResponse")
+    assert _response_schema(search, "200") == ("#/components/schemas/TranslationSearchPageResponse")
+    assert _response_schema(detail, "200") == (
+        "#/components/schemas/TranslationGroupDetailResponse"
+    )
+    for operation in (put_constraint, delete_constraint):
+        assert _response_schema(operation, "200") == (
+            "#/components/schemas/TranslationConstraintMutationResponse"
+        )
+    for operation in (options, search, detail, put_constraint, delete_constraint):
+        for status_code in ("401", "403"):
+            assert _response_schema(operation, status_code) == (
+                "#/components/schemas/ErrorResponse"
+            )
+    for operation, status_codes in (
+        (options, ("503",)),
+        (search, ("422", "503")),
+        (detail, ("404", "503")),
+    ):
+        for status_code in status_codes:
+            assert _response_schema(operation, status_code) == (
+                "#/components/schemas/TranslationErrorResponse"
+            )
+    assert _response_schema(detail, "422") == ("#/components/schemas/HTTPValidationError")
+    for operation in (put_constraint, delete_constraint):
+        for status_code in ("404", "409", "422", "503"):
+            assert _response_schema(operation, status_code) == (
+                "#/components/schemas/TranslationConstraintErrorResponse"
+            )
+
+    assert "parameters" not in options
+    search_parameters = _parameters_by_name(search)
+    assert set(search_parameters) == {
+        "q",
+        "product_id",
+        "language",
+        "state",
+        "violation",
+        "deleted",
+        "page_size",
+        "cursor",
+    }
+    assert all(parameter["in"] == "query" for parameter in search_parameters.values())
+    assert all(parameter["required"] is False for parameter in search_parameters.values())
+    assert _schema_variant(search_parameters["q"]["schema"], type_name="string") == {
+        "type": "string",
+        "maxLength": 256,
+    }
+    assert _schema_variant(search_parameters["product_id"]["schema"], type_name="string") == {
+        "type": "string",
+        "format": "uuid",
+    }
+    language = _schema_variant(search_parameters["language"]["schema"], type_name="string")
+    assert language["minLength"] == 2
+    assert language["maxLength"] == 64
+    assert language["pattern"] == ("^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$")
+    assert _schema_variant(search_parameters["state"]["schema"], type_name="string")["enum"] == [
+        "draft",
+        "approved",
+        "rejected",
+    ]
+    assert _schema_variant(search_parameters["violation"]["schema"], type_name="string")[
+        "enum"
+    ] == ["over_limit", "within_limit", "no_max"]
+    assert search_parameters["deleted"]["schema"] == {
+        "type": "string",
+        "enum": ["active", "deleted", "all"],
+        "default": "active",
+        "title": "Deleted",
+    }
+    assert search_parameters["page_size"]["schema"] == {
+        "type": "integer",
+        "const": 50,
+        "default": 50,
+        "title": "Page Size",
+    }
+    cursor = _schema_variant(search_parameters["cursor"]["schema"], type_name="string")
+    assert cursor["minLength"] == 1
+    assert cursor["maxLength"] == 2048
+
+    for operation in (detail, put_constraint, delete_constraint):
+        parameters = _parameters_by_name(operation)
+        group_id = parameters["translation_group_id"]
+        assert group_id["in"] == "path"
+        assert group_id["required"] is True
+        assert group_id["schema"] == {
+            "type": "string",
+            "format": "uuid",
+            "title": "Translation Group Id",
+        }
+    for operation in (put_constraint, delete_constraint):
+        language_parameter = _parameters_by_name(operation)["language"]
+        assert language_parameter["in"] == "path"
+        assert language_parameter["required"] is True
+        assert language_parameter["schema"]["type"] == "string"
+        assert language_parameter["schema"]["minLength"] == 2
+        assert language_parameter["schema"]["maxLength"] == 64
+
+    for operation in (options, search, detail):
+        assert "requestBody" not in operation
+    assert put_constraint["requestBody"] == {
+        "content": {
+            "application/json": {
+                "schema": {"$ref": "#/components/schemas/PutTranslationConstraintRequest"}
+            }
+        },
+        "required": True,
+    }
+    assert delete_constraint["requestBody"] == {
+        "content": {
+            "application/json": {
+                "schema": {"$ref": "#/components/schemas/DeleteTranslationConstraintRequest"}
+            }
+        },
+        "required": True,
+    }
+
+
+def test_translation_schemas_are_closed_bounded_and_non_leaking() -> None:
+    """Freeze every generated search/detail/constraint distinction recursively."""
+    schema = app.openapi()
+    schemas = schema["components"]["schemas"]
+    schema_names = {
+        "DeleteTranslationConstraintRequest",
+        "PutTranslationConstraintRequest",
+        "TranslationConstraintErrorResponse",
+        "TranslationConstraintMutationResponse",
+        "TranslationConstraintMutationValueResponse",
+        "TranslationConstraintProjectionResponse",
+        "TranslationErrorResponse",
+        "TranslationGroupDetailResponse",
+        "TranslationGroupSummaryResponse",
+        "TranslationLanguageOptionResponse",
+        "TranslationOptionsResponse",
+        "TranslationProductOptionResponse",
+        "TranslationProvenanceResponse",
+        "TranslationSearchPageResponse",
+        "TranslationValueResponse",
+    }
+    public_schemas = {name: schemas[name] for name in schema_names}
+    for contract in public_schemas.values():
+        assert contract["additionalProperties"] is False
+
+    options = schemas["TranslationOptionsResponse"]
+    assert set(options["required"]) == {"products", "languages"}
+    assert options["properties"]["products"]["maxItems"] == 500
+    assert options["properties"]["languages"]["maxItems"] == 500
+    assert schemas["TranslationProductOptionResponse"]["properties"]["id"]["format"] == "uuid"
+    assert schemas["TranslationProductOptionResponse"]["properties"]["name"] == {
+        "type": "string",
+        "maxLength": 120,
+        "minLength": 1,
+        "title": "Name",
+    }
+    language_option = schemas["TranslationLanguageOptionResponse"]
+    assert language_option["properties"]["code"]["minLength"] == 2
+    assert language_option["properties"]["code"]["maxLength"] == 64
+    assert language_option["properties"]["label"]["maxLength"] == 128
+
+    page = schemas["TranslationSearchPageResponse"]
+    assert page["required"] == ["items"]
+    assert page["properties"]["items"]["maxItems"] == 50
+    next_cursor = _schema_variant(page["properties"]["next_cursor"], type_name="string")
+    assert next_cursor["minLength"] == 1
+    assert next_cursor["maxLength"] == 2048
+
+    summary = schemas["TranslationGroupSummaryResponse"]
+    assert set(summary["required"]) == set(summary["properties"])
+    assert summary["properties"]["id"]["format"] == "uuid"
+    assert summary["properties"]["product_id"]["format"] == "uuid"
+    assert summary["properties"]["raw_key"]["minLength"] == 1
+    assert summary["properties"]["raw_key"]["maxLength"] == 1_048_576
+    for text_field in ("source_text", "translated_text"):
+        assert (
+            _schema_variant(summary["properties"][text_field], type_name="string")["maxLength"]
+            == 1_048_576
+        )
+        assert {item.get("type") for item in summary["properties"][text_field]["anyOf"]} == {
+            "string",
+            "null",
+        }
+    assert summary["properties"]["rank"]["minimum"] == 0
+    assert summary["properties"]["rank"]["maximum"] == 3
+    assert summary["properties"]["value_count"]["minimum"] == 1
+    for count in ("over_limit_count", "within_limit_count", "no_max_count"):
+        assert summary["properties"][count]["minimum"] == 0
+    assert summary["properties"]["states"]["minItems"] == 1
+    assert summary["properties"]["states"]["maxItems"] == 3
+    assert summary["properties"]["states"]["items"]["enum"] == [
+        "draft",
+        "approved",
+        "rejected",
+    ]
+    assert summary["properties"]["state_summary"]["enum"] == [
+        "draft",
+        "approved",
+        "rejected",
+        "mixed",
+    ]
+
+    detail = schemas["TranslationGroupDetailResponse"]
+    assert set(detail["properties"]) == {
+        "id",
+        "product_id",
+        "product_name",
+        "raw_key",
+        "language",
+        "language_label",
+        "states",
+        "state_summary",
+        "is_deleted",
+        "values",
+        "pending_change",
+        "comments",
+    }
+    assert set(detail["required"]) == set(detail["properties"]) - {"pending_change"}
+    assert detail["properties"]["values"]["minItems"] == 1
+    assert detail["properties"]["values"]["maxItems"] == 10_000
+    assert detail["properties"]["pending_change"]["type"] == "null"
+    assert detail["properties"]["comments"]["maxItems"] == 0
+
+    value = schemas["TranslationValueResponse"]
+    assert set(value["required"]) == set(value["properties"])
+    assert value["properties"]["id"]["format"] == "uuid"
+    assert value["properties"]["selector_version"]["const"] == 1
+    assert value["properties"]["selector_kind"]["enum"] == [
+        "scalar",
+        "android_quantity",
+        "android_array_item",
+        "qt_numerus",
+        "qt_length_variant",
+        "json_path",
+    ]
+    assert value["properties"]["selector_digest"]["pattern"] == "^[0-9a-f]{64}$"
+    assert value["properties"]["structure"]["maxItems"] == 128
+    assert value["properties"]["review_state"]["enum"] == [
+        "draft",
+        "approved",
+        "rejected",
+    ]
+    assert value["properties"]["grapheme_count"]["minimum"] == 0
+    assert {item.get("type") for item in value["properties"]["deleted_at"]["anyOf"]} == {
+        "string",
+        "null",
+    }
+    assert value["properties"]["deleted_at"]["anyOf"][0]["format"] == "date-time"
+    assert _schema_references(value["properties"]["provenance"]) == {
+        "TranslationProvenanceResponse"
+    }
+
+    projection = schemas["TranslationConstraintProjectionResponse"]
+    assert set(projection["required"]) == set(projection["properties"])
+    assert projection["properties"]["actual"]["minimum"] == 0
+    maximum = _schema_variant(projection["properties"]["maximum"], type_name="integer")
+    assert maximum["minimum"] == 0
+    assert maximum["maximum"] == 1_048_576
+    assert projection["properties"]["source"]["enum"] == [
+        "none",
+        "base_default",
+        "language_override",
+    ]
+    assert projection["properties"]["status"]["enum"] == [
+        "no_max",
+        "within_limit",
+        "over_limit",
+    ]
+    assert _schema_variant(projection["properties"]["overage"], type_name="integer")["minimum"] == 0
+
+    put_request = schemas["PutTranslationConstraintRequest"]
+    delete_request = schemas["DeleteTranslationConstraintRequest"]
+    assert set(put_request["required"]) == {"max_chars", "expected_version"}
+    assert set(put_request["properties"]) == {"max_chars", "expected_version"}
+    assert put_request["properties"]["max_chars"]["minimum"] == 0
+    assert put_request["properties"]["max_chars"]["maximum"] == 1_048_576
+    assert put_request["properties"]["expected_version"]["minimum"] == 0
+    assert delete_request["required"] == ["expected_version"]
+    assert set(delete_request["properties"]) == {"expected_version"}
+    assert delete_request["properties"]["expected_version"]["minimum"] == 0
+
+    mutation = schemas["TranslationConstraintMutationResponse"]
+    assert set(mutation["required"]) == set(mutation["properties"])
+    assert mutation["properties"]["translation_group_id"]["format"] == "uuid"
+    explicit_maximum = _schema_variant(
+        mutation["properties"]["explicit_maximum"], type_name="integer"
+    )
+    assert explicit_maximum["minimum"] == 0
+    assert explicit_maximum["maximum"] == 1_048_576
+    assert _schema_variant(mutation["properties"]["version"], type_name="integer")["minimum"] == 1
+    assert mutation["properties"]["violating_count"]["minimum"] == 0
+    assert mutation["properties"]["total_count"]["minimum"] == 0
+    assert mutation["properties"]["values"]["minItems"] == 1
+    assert mutation["properties"]["values"]["maxItems"] == 10_000
+
+    provenance = schemas["TranslationProvenanceResponse"]
+    assert set(provenance["required"]) == set(provenance["properties"])
+    for identifier in ("repository_id", "execution_id"):
+        assert provenance["properties"][identifier]["format"] == "uuid"
+    assert provenance["properties"]["repository_side"]["enum"] == [
+        "direct",
+        "keys",
+        "translations",
+    ]
+    assert provenance["properties"]["format"]["enum"] == [
+        "android_xml",
+        "qt_ts",
+        "json",
+        "ios_strings",
+    ]
+    assert provenance["properties"]["branch"]["maxLength"] == 255
+    assert provenance["properties"]["path"]["maxLength"] == 4096
+    assert provenance["properties"]["commit_hash"]["pattern"] == "^[0-9a-f]{40}$"
+    for coordinate in ("line", "column"):
+        bounded = _schema_variant(provenance["properties"][coordinate], type_name="integer")
+        assert bounded["minimum"] == 1
+        assert bounded["maximum"] == 2_147_483_647
+
+    assert schemas["TranslationErrorResponse"]["properties"]["detail"]["enum"] == [
+        "Invalid translation cursor",
+        "Translation unavailable",
+        "Translation search unavailable",
+    ]
+    assert schemas["TranslationConstraintErrorResponse"]["properties"]["detail"]["enum"] == [
+        "Translation unavailable",
+        "Translation constraint conflict",
+        "Invalid translation constraint input",
+        "Translation constraint unavailable",
+    ]
+
+    public_contract = {
+        "paths": {
+            path: value
+            for path, value in schema["paths"].items()
+            if path.startswith("/api/v1/translations")
+        },
+        "schemas": {
+            **public_schemas,
+            "ImportDatasetStatus": schemas["ImportDatasetStatus"],
+            "ImportParserIssue": schemas["ImportParserIssue"],
+            "AdminPublishedMappingImportResponse": schemas["AdminPublishedMappingImportResponse"],
+        },
+    }
+    forbidden = {
+        "access_token",
+        "authorization",
+        "celery_result",
+        "ciphertext",
+        "client_secret",
+        "correlation_id",
+        "credential",
+        "credentials",
+        "database_query",
+        "exception",
+        "exception_message",
+        "parser_exception",
+        "provider_body",
+        "provider_response",
+        "queue_name",
+        "raw_body",
+        "raw_source",
+        "refresh_token",
+        "source_bytes",
+        "source_file_content",
+        "sql",
+        "stack",
+        "stack_trace",
+        "staging_path",
+        "task_id",
+    }
+    assert forbidden.isdisjoint(_schema_property_names(public_contract))
 
 
 def test_import_generated_client_matches_the_canonical_operation_and_type_set() -> None:
