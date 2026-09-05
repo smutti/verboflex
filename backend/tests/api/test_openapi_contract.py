@@ -688,6 +688,8 @@ def test_import_public_contract_is_closed_and_provider_source_history_free() -> 
     assert set(import_schemas) == {
         "AdminImportBaselineResponse",
         "AdminImportOperationErrorResponse",
+        "ImportDatasetStatus",
+        "ImportParserIssue",
         "AdminImportRepositorySideResponse",
         "AdminImportRewriteComparisonResponse",
         "AdminImportRewriteConfirmationRequest",
@@ -801,6 +803,8 @@ def test_import_schema_literals_requirements_and_bounds_are_frozen() -> None:
     delta = schemas["AdminImportRewriteDeltaResponse"]
     confirmation = schemas["AdminImportRewriteConfirmationRequest"]
     operation_error = schemas["AdminImportOperationErrorResponse"]
+    dataset_status = schemas["ImportDatasetStatus"]
+    parser_issue = schemas["ImportParserIssue"]
     product = schemas["AdminProductResponse"]
 
     for contract in (
@@ -814,6 +818,7 @@ def test_import_schema_literals_requirements_and_bounds_are_frozen() -> None:
         delta,
         confirmation,
         operation_error,
+        parser_issue,
         product,
     ):
         assert contract["additionalProperties"] is False
@@ -852,6 +857,57 @@ def test_import_schema_literals_requirements_and_bounds_are_frozen() -> None:
     ]
     assert published["properties"]["repository_sides"]["minItems"] == 1
     assert published["properties"]["repository_sides"]["maxItems"] == 2
+    assert published["properties"]["dataset_status"]["$ref"] == (
+        "#/components/schemas/ImportDatasetStatus"
+    )
+    assert dataset_status["enum"] == ["not_created", "active", "retained"]
+    assert published["properties"]["parser_issues"]["maxItems"] == 5
+    assert published["properties"]["parser_issues"]["items"]["$ref"] == (
+        "#/components/schemas/ImportParserIssue"
+    )
+    assert published["properties"]["parser_issue_remaining_count"] == {
+        "maximum": 495,
+        "minimum": 0,
+        "title": "Parser Issue Remaining Count",
+        "type": "integer",
+    }
+    assert parser_issue["additionalProperties"] is False
+    assert set(parser_issue["required"]) == set(parser_issue["properties"])
+    assert set(parser_issue["properties"]) == {
+        "issue_code",
+        "repository_side",
+        "path",
+        "line",
+        "column",
+        "message_key",
+    }
+    assert parser_issue["properties"]["issue_code"]["enum"] == [
+        "malformed_file",
+        "ambiguous_structure",
+        "unsupported_structure",
+        "duplicate_key",
+        "base_language_required",
+    ]
+    assert parser_issue["properties"]["repository_side"]["enum"] == [
+        "direct",
+        "keys",
+        "translations",
+    ]
+    assert parser_issue["properties"]["path"]["minLength"] == 1
+    assert parser_issue["properties"]["path"]["maxLength"] == 4096
+    for coordinate in ("line", "column"):
+        bounded_coordinate = _schema_variant(
+            parser_issue["properties"][coordinate], type_name="integer"
+        )
+        assert bounded_coordinate["minimum"] == 1
+        assert bounded_coordinate["maximum"] == 2_147_483_647
+    assert parser_issue["properties"]["message_key"]["enum"] == [
+        "import.parser.malformed_file",
+        "import.parser.ambiguous_structure",
+        "import.parser.unsupported_structure",
+        "import.parser.duplicate_key",
+        "import.parser.base_language_required",
+    ]
     assert published["properties"]["retry_count"]["minimum"] == 0
     assert (
         _schema_variant(published["properties"]["execution_number"], type_name="integer")["minimum"]

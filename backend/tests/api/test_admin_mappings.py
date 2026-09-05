@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from collections.abc import Generator, Iterator, Sequence
 from datetime import UTC, datetime, timedelta
@@ -28,6 +29,7 @@ from verboflex.db.session import get_db_session
 from verboflex.integrations.bitbucket.client import BitbucketBranch
 from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
+from verboflex.models.import_job import ImportExecution, ImportJob
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
     ProductMappingAllowedTarget,
@@ -36,6 +38,7 @@ from verboflex.models.product_mapping import (
 )
 from verboflex.models.repository import Repository
 from verboflex.models.role import Role
+from verboflex.models.translation import LocalizationScope, TranslationParseIssue
 from verboflex.models.user import User
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -1449,3 +1452,359 @@ def test_mapping_error_projection_is_closed_and_reraises_unknown_failures() -> N
     with pytest.raises(RuntimeError) as raised:
         admin_mappings._raise_mapping_error(unexpected)
     assert raised.value is unexpected
+
+
+def _seed_parser_failure_outcomes(
+    factory: sessionmaker[Session],
+) -> tuple[UUID, UUID, UUID]:
+    """Persist one retained-dataset failure and one first-import failure."""
+    now = datetime.now(UTC)
+    product_id = uuid4()
+    revision_id = uuid4()
+    keys_repository_id = uuid4()
+    translations_repository_id = uuid4()
+    direct_repository_id = uuid4()
+    retained_mapping_id = uuid4()
+    first_mapping_id = uuid4()
+    retained_import_id = uuid4()
+    first_import_id = uuid4()
+    baseline_execution_id = uuid4()
+    retained_failure_execution_id = uuid4()
+    first_failure_execution_id = uuid4()
+
+    with factory.begin() as session:
+        product = Product(
+            id=product_id,
+            display_name=f"Parser outcomes {product_id}",
+            name_key=f"parser outcomes {product_id}",
+            is_active=True,
+        )
+        revision = ProductRevision(
+            id=revision_id,
+            product_id=product_id,
+            description="published parser outcomes",
+            version=1,
+            is_published=False,
+        )
+        session.add(product)
+        session.flush()
+        session.add(revision)
+        session.add_all(
+            [
+                Repository(
+                    id=keys_repository_id,
+                    workspace="parser-team",
+                    repository_slug=f"keys-{keys_repository_id.hex}",
+                ),
+                Repository(
+                    id=translations_repository_id,
+                    workspace="parser-team",
+                    repository_slug=f"translations-{translations_repository_id.hex}",
+                ),
+                Repository(
+                    id=direct_repository_id,
+                    workspace="parser-team",
+                    repository_slug=f"direct-{direct_repository_id.hex}",
+                ),
+            ]
+        )
+        session.flush()
+        session.add_all(
+            [
+                ProductRepositoryMapping(
+                    id=retained_mapping_id,
+                    revision_id=revision_id,
+                    topology="separate",
+                    identity_key="a-retained-parser-dataset",
+                    base_language="en",
+                    sides=[
+                        ProductMappingRepositorySide(
+                            role="keys",
+                            repository_id=keys_repository_id,
+                            source_branch="main",
+                        ),
+                        ProductMappingRepositorySide(
+                            role="translations",
+                            repository_id=translations_repository_id,
+                            source_branch="main",
+                        ),
+                    ],
+                    allowed_targets=[
+                        ProductMappingAllowedTarget(branch="main", is_default=True)
+                    ],
+                ),
+                ProductRepositoryMapping(
+                    id=first_mapping_id,
+                    revision_id=revision_id,
+                    topology="direct",
+                    identity_key="b-first-parser-failure",
+                    base_language="en",
+                    sides=[
+                        ProductMappingRepositorySide(
+                            role="direct",
+                            repository_id=direct_repository_id,
+                            source_branch="main",
+                        )
+                    ],
+                    allowed_targets=[
+                        ProductMappingAllowedTarget(branch="main", is_default=True)
+                    ],
+                ),
+            ]
+        )
+        session.flush()
+        revision.is_published = True
+        revision.published_at = now
+        session.flush()
+        product.active_revision_id = revision_id
+
+    with factory.begin() as session:
+        session.add_all(
+            [
+                ImportJob(
+                    id=retained_import_id,
+                    product_id=product_id,
+                    revision_id=revision_id,
+                    mapping_id=retained_mapping_id,
+                    topology="separate",
+                    state="current",
+                    current_execution_id=baseline_execution_id,
+                    active_baseline_execution_id=baseline_execution_id,
+                    retry_count=0,
+                    error_category=None,
+                    error_message=None,
+                    latest_execution_at=now,
+                ),
+                ImportJob(
+                    id=first_import_id,
+                    product_id=product_id,
+                    revision_id=revision_id,
+                    mapping_id=first_mapping_id,
+                    topology="direct",
+                    state="running",
+                    current_execution_id=first_failure_execution_id,
+                    active_baseline_execution_id=None,
+                    retry_count=0,
+                    error_category=None,
+                    error_message=None,
+                    latest_execution_at=now,
+                ),
+            ]
+        )
+        session.flush()
+        session.add_all(
+            [
+                ImportExecution(
+                    id=baseline_execution_id,
+                    import_job_id=retained_import_id,
+                    sequence=1,
+                    state="succeeded",
+                    connection_generation=0,
+                    started_at=now - timedelta(minutes=2),
+                    finished_at=now - timedelta(minutes=1),
+                ),
+                ImportExecution(
+                    id=first_failure_execution_id,
+                    import_job_id=first_import_id,
+                    sequence=1,
+                    state="running",
+                    connection_generation=0,
+                    started_at=now,
+                    finished_at=None,
+                ),
+            ]
+        )
+        session.flush()
+        session.add(
+            LocalizationScope(
+                id=uuid4(),
+                product_id=product_id,
+                mapping_identity_key="a-retained-parser-dataset",
+                current_revision_id=revision_id,
+                current_mapping_id=retained_mapping_id,
+                active_import_job_id=retained_import_id,
+                active_execution_id=baseline_execution_id,
+                dataset_version=1,
+            )
+        )
+        session.flush()
+        retained_job = session.get_one(ImportJob, retained_import_id)
+        retained_job.state = "running"
+        retained_job.current_execution_id = retained_failure_execution_id
+        retained_job.retry_count = 1
+        retained_job.error_category = None
+        retained_job.error_message = None
+        session.add(
+            ImportExecution(
+                id=retained_failure_execution_id,
+                import_job_id=retained_import_id,
+                sequence=2,
+                state="running",
+                connection_generation=0,
+                started_at=now,
+                finished_at=None,
+            )
+        )
+        session.flush()
+        issue_rows = (
+            (0, "translations", "translations/z.json", "malformed_file", 7, 3),
+            (1, "keys", "keys/provider-second.json", "duplicate_key", 2, None),
+            (2, "translations", "translations/a.json", "unsupported_structure", None, None),
+            (3, "keys", "keys/provider-fourth.json", "ambiguous_structure", 4, 8),
+            (4, "translations", "translations/b.json", "base_language_required", 1, 1),
+        )
+        for position, repository_side, path, issue_code, line, column in issue_rows:
+            session.add(
+                TranslationParseIssue(
+                    import_execution_id=retained_failure_execution_id,
+                    position=position,
+                    import_job_id=retained_import_id,
+                    repository_side=repository_side,
+                    path=path,
+                    issue_code=issue_code,
+                    message=(
+                        "<script>provider body and parser exception must remain private</script>"
+                    ),
+                    line=line,
+                    column=column,
+                )
+            )
+        session.add(
+            TranslationParseIssue(
+                import_execution_id=first_failure_execution_id,
+                position=0,
+                import_job_id=first_import_id,
+                repository_side="direct",
+                path="locales/messages.json",
+                issue_code="malformed_file",
+                message="raw source excerpt: secret-canary",
+                line=None,
+                column=None,
+            )
+        )
+        session.flush()
+        for import_id, execution_id, message in (
+            (
+                retained_import_id,
+                retained_failure_execution_id,
+                "The last successful baseline is unchanged.",
+            ),
+            (
+                first_import_id,
+                first_failure_execution_id,
+                "No import baseline was created.",
+            ),
+        ):
+            job = session.get_one(ImportJob, import_id)
+            execution = session.get_one(ImportExecution, execution_id)
+            job.state = "import_failed"
+            job.error_category = "bounded_failure"
+            job.error_message = message
+            execution.state = "failed"
+            execution.finished_at = now
+
+    return product_id, retained_import_id, first_import_id
+
+
+def test_parser_failure_api_projects_retained_dataset_and_safe_ordered_issues(
+    mapping_session_factory: sessionmaker[Session],
+) -> None:
+    """Current scope authority distinguishes retained data from a first failure."""
+    product_id, retained_import_id, first_import_id = _seed_parser_failure_outcomes(
+        mapping_session_factory
+    )
+    _configure_dependencies(mapping_session_factory, BranchAdapter(()))
+    admin_token = _create_authority(
+        mapping_session_factory,
+        email="parser-outcome-admin@example.com",
+        roles=("admin",),
+    )
+    ordinary_token = _create_authority(
+        mapping_session_factory,
+        email="parser-outcome-viewer@example.com",
+        roles=("viewer",),
+    )
+
+    retained_path = f"/api/v1/admin/products/{product_id}/imports/{retained_import_id}"
+    assert asyncio.run(
+        _request("GET", path=retained_path, access_token=None)
+    ).status_code == 401
+    assert asyncio.run(
+        _request("GET", path=retained_path, access_token=ordinary_token)
+    ).status_code == 403
+
+    retained = asyncio.run(
+        _request("GET", path=retained_path, access_token=admin_token)
+    )
+    assert retained.status_code == 200
+    retained_body = retained.json()
+    assert retained_body["state"] == "may_be_stale"
+    assert retained_body["dataset_status"] == "retained"
+    assert retained_body["parser_issue_remaining_count"] == 0
+    assert retained_body["parser_issues"] == [
+        {
+            "issue_code": "duplicate_key",
+            "repository_side": "keys",
+            "path": "keys/provider-second.json",
+            "line": 2,
+            "column": None,
+            "message_key": "import.parser.duplicate_key",
+        },
+        {
+            "issue_code": "ambiguous_structure",
+            "repository_side": "keys",
+            "path": "keys/provider-fourth.json",
+            "line": 4,
+            "column": 8,
+            "message_key": "import.parser.ambiguous_structure",
+        },
+        {
+            "issue_code": "malformed_file",
+            "repository_side": "translations",
+            "path": "translations/z.json",
+            "line": 7,
+            "column": 3,
+            "message_key": "import.parser.malformed_file",
+        },
+        {
+            "issue_code": "unsupported_structure",
+            "repository_side": "translations",
+            "path": "translations/a.json",
+            "line": None,
+            "column": None,
+            "message_key": "import.parser.unsupported_structure",
+        },
+        {
+            "issue_code": "base_language_required",
+            "repository_side": "translations",
+            "path": "translations/b.json",
+            "line": 1,
+            "column": 1,
+            "message_key": "import.parser.base_language_required",
+        },
+    ]
+    serialized = json.dumps(retained_body).casefold()
+    for forbidden in (
+        "secret-canary",
+        "<script>",
+        "provider body",
+        "parser exception",
+        "raw source",
+        "source_excerpt",
+        "exception",
+    ):
+        assert forbidden not in serialized
+
+    first = asyncio.run(
+        _request(
+            "GET",
+            path=f"/api/v1/admin/products/{product_id}/imports/{first_import_id}",
+            access_token=admin_token,
+        )
+    )
+    assert first.status_code == 200
+    first_body = first.json()
+    assert first_body["state"] == "import_failed"
+    assert first_body["dataset_status"] == "not_created"
+    assert first_body["parser_issue_remaining_count"] == 0
+    assert [issue["repository_side"] for issue in first_body["parser_issues"]] == ["direct"]
