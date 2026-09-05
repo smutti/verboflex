@@ -54,8 +54,8 @@
 - [x] **FMT-04**: System can parse iOS `.strings` files into canonical translation records.
 - [ ] **FMT-05**: System preserves enough file location metadata to write edited translations back to their original files.
 - [x] **FMT-06**: System validates parser behavior with golden fixtures for all supported v1 formats.
-- [ ] **FMT-07**: System imports translations into a canonical model that includes product, repository, branch, file path, format, key, language, source text when available, translated text, state, and locator metadata.
-- [ ] **FMT-08**: System can refresh imported translations from Bitbucket without losing review states, comments, constraints, or audit history attached to stable translation identities.
+- [x] **FMT-07**: System imports translations into a canonical model that includes product, repository, branch, file path, format, key, language, source text when available, translated text, state, and locator metadata.
+- [x] **FMT-08**: System can refresh imported translations from Bitbucket without losing review states, comments, constraints, or audit history attached to stable translation identities.
 
 ### Search and Review Navigation
 
@@ -70,10 +70,10 @@
 
 ### Constraints
 
-- [ ] **CONS-01**: Authorized user can define a maximum character length constraint for a translation key.
-- [ ] **CONS-02**: Authorized user can edit or remove a maximum character length constraint.
+- [x] **CONS-01**: Authorized user can define a maximum character length constraint for a translation key.
+- [x] **CONS-02**: Authorized user can edit or remove a maximum character length constraint.
 - [x] **CONS-03**: System calculates whether each translated value violates its configured maximum character length.
-- [ ] **CONS-04**: System recalculates maximum-length violations after import and after translation edits.
+- [x] **CONS-04**: System recalculates maximum-length violations after import and after translation edits.
 - [ ] **CONS-05**: Translation detail view shows configured max length, actual length, and violation status.
 
 ### Translation Review Workflow
@@ -207,8 +207,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FMT-04 | Phase 4 | Complete |
 | FMT-05 | Phase 6 | Pending |
 | FMT-06 | Phase 4 | Complete |
-| FMT-07 | Phase 4 | Pending |
-| FMT-08 | Phase 4 | Pending |
+| FMT-07 | Phase 4 | Complete |
+| FMT-08 | Phase 4 | Complete |
 | SRCH-01 | Phase 4 | Pending |
 | SRCH-02 | Phase 4 | Pending |
 | SRCH-03 | Phase 4 | Pending |
@@ -217,10 +217,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SRCH-06 | Phase 4 | Pending |
 | SRCH-07 | Phase 4 | Pending |
 | SRCH-08 | Phase 4 | Complete |
-| CONS-01 | Phase 4 | Pending |
-| CONS-02 | Phase 4 | Pending |
+| CONS-01 | Phase 4 | Complete |
+| CONS-02 | Phase 4 | Complete |
 | CONS-03 | Phase 4 | Complete |
-| CONS-04 | Phase 4 | Pending |
+| CONS-04 | Phase 4 | Complete |
 | CONS-05 | Phase 4 | Pending |
 | REVW-01 | Phase 5 | Pending |
 | REVW-02 | Phase 5 | Pending |

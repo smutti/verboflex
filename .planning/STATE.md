@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 04
 current_phase_name: Localization Import, Search, and Constraints
 status: executing
-stopped_at: Completed 04-14-PLAN.md
-last_updated: "2026-09-05T09:40:41.411Z"
+stopped_at: Completed 04-10-PLAN.md
+last_updated: "2026-09-05T10:16:41.881Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 04 execution started
-state_head: dd424b110ee00d7a4727a6ab26ba810ec79c19c4
+state_head: 426614122fc8c00909afa32839457a1ef713719b
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 104
-  completed_plans: 86
+  completed_plans: 87
   percent: 38
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 ## Current Position
 
 Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
-Plan: 10 of 27
+Plan: 11 of 27
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 04 execution started
 
@@ -146,6 +146,7 @@ Progress: [████████░░░░░░░░░░░░] 3/8 pha
 | Phase 04 P07 | 1h38min | 2 tasks | 2 files |
 | Phase 04-localization-import-search-and-constraints P08 | 15min | 1 tasks | 5 files |
 | Phase 04-localization-import-search-and-constraints P14 | 5min | 1 tasks | 4 files |
+| Phase 04 P10 | 32min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -423,6 +424,10 @@ Recent decisions affecting current work:
 - [Phase 04]: Add no base-language index until a proven query consumer exists.
 - [Phase 04]: Version grapheme count authority with the exact regex release plus the UAX 29 extended-grapheme contract. — Prevents persisted counts from silently outliving their segmentation algorithm identity.
 - [Phase 04]: Count only explicit string display_text through one compiled grapheme matcher without normalization or markup parsing. — Keeps parsers responsible for visible-text projection and gives every recomputation path one pure authority.
+- [Phase 04]: Canonical group identity is product plus semantic mapping scope, repository, configured branch, and raw key; paths and positions remain mutable locators.
+- [Phase 04]: Value identity adds exact language and the SHA-256 digest of versioned canonical selector bytes; raw decoded key and text are never normalized.
+- [Phase 04]: Constraints store only explicit key-language rules; effective authority is materialized as none, base_default, or language_override with exact consistency checks.
+- [Phase 04]: Product mappings expose localization scopes through a read-only composite relationship so revision UUIDs cannot become semantic identity.
 
 ### Pending Todos
 
@@ -463,6 +468,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-05T09:40:41.316Z
-Stopped at: Completed 04-14-PLAN.md
+Last session: 2026-09-05T10:16:41.794Z
+Stopped at: Completed 04-10-PLAN.md
 Resume file: None
