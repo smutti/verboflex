@@ -13,14 +13,6 @@ from alembic.config import Config
 from psycopg import connect, sql
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
-from verboflex.services.translation_search import (
-    InvalidTranslationCursor,
-    TranslationSearchFilters,
-    TranslationSearchInputError,
-    escape_like_literal,
-    normalize_search_query,
-    search_translations,
-)
 
 from alembic import command
 from verboflex.models.import_job import ImportExecution, ImportJob, ImportSourceReference
@@ -36,6 +28,14 @@ from verboflex.models.translation import (
     TranslationKey,
     TranslationValue,
     TranslationValueLocator,
+)
+from verboflex.services.translation_search import (
+    InvalidTranslationCursor,
+    TranslationSearchFilters,
+    TranslationSearchInputError,
+    escape_like_literal,
+    normalize_search_query,
+    search_translations,
 )
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -109,8 +109,8 @@ def _seed_dataset(
             name_key=name.casefold(),
             description="search dataset",
             version=1,
-            is_published=True,
-            published_at=now,
+            is_published=False,
+            published_at=None,
         )
         repository = Repository(
             id=repository_id,
@@ -138,6 +138,9 @@ def _seed_dataset(
         )
         session.add(mapping)
         session.flush()
+        revision.is_published = True
+        revision.published_at = now
+        session.flush()
         product.active_revision_id = revision_id
         session.add(
             ImportJob(
@@ -146,9 +149,9 @@ def _seed_dataset(
                 revision_id=revision_id,
                 mapping_id=mapping_id,
                 topology="direct",
-                state="current",
+                state="running",
                 current_execution_id=execution_id,
-                active_baseline_execution_id=execution_id,
+                active_baseline_execution_id=None,
                 retry_count=0,
                 latest_execution_at=now,
             )
@@ -159,10 +162,10 @@ def _seed_dataset(
                 id=execution_id,
                 import_job_id=import_id,
                 sequence=1,
-                state="succeeded",
+                state="running",
                 connection_generation=1,
                 started_at=now,
-                finished_at=now,
+                finished_at=None,
             )
         )
         session.flush()
@@ -179,6 +182,13 @@ def _seed_dataset(
                 sha256="b" * 64,
             )
         )
+        session.flush()
+        execution = session.get_one(ImportExecution, execution_id)
+        execution.state = "succeeded"
+        execution.finished_at = now
+        import_job = session.get_one(ImportJob, import_id)
+        import_job.state = "current"
+        import_job.active_baseline_execution_id = execution_id
         session.flush()
         session.add(
             LocalizationScope(
@@ -398,7 +408,7 @@ def test_literal_wildcards_unicode_exact_filters_and_deleted_modes(
     literal = _search(
         search_session_factory,
         principal_id=principal_id,
-        filters=TranslationSearchFilters(query=r"%_\\quote'"),
+        filters=TranslationSearchFilters(query=r"%_\quote'"),
     )
     assert [item.raw_key for item in literal.items] == ["literal.%_\\quote'"]
     assert literal.items[0].source_text is None
@@ -558,7 +568,7 @@ def test_partial_search_plan_can_reach_project_owned_trigram_index(
             session.execute(
                 text(
                     "EXPLAIN (COSTS OFF) SELECT id FROM translation_keys "
-                    "WHERE lower(raw_key) LIKE :query ESCAPE '\\\\'"
+                    "WHERE lower(raw_key) LIKE :query ESCAPE '\\'"
                 ),
                 {"query": "%index%"},
             ).scalars()
