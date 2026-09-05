@@ -1764,8 +1764,6 @@ def _finish_import_execution_transaction(
                         .where(
                             LocalizationScope.product_id == identity.product_id,
                             LocalizationScope.mapping_identity_key == mapping.identity_key,
-                            LocalizationScope.current_revision_id == identity.revision_id,
-                            LocalizationScope.current_mapping_id == identity.mapping_id,
                         )
                         .with_for_update()
                     ).scalar_one_or_none()
@@ -2272,8 +2270,6 @@ def confirm_rewrite_baseline(
                 .where(
                     LocalizationScope.product_id == product_id,
                     LocalizationScope.mapping_identity_key == mapping.identity_key,
-                    LocalizationScope.current_revision_id == mapping.revision_id,
-                    LocalizationScope.current_mapping_id == mapping.id,
                 )
                 .with_for_update()
             ).scalar_one_or_none()

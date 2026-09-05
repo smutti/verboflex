@@ -347,10 +347,12 @@ def reconcile_canonical_translations(
     now: datetime | None = None,
 ) -> ReconciliationResult:
     """Reconcile one complete staged candidate by stable semantic identity."""
+    mapping = session.get(ProductRepositoryMapping, identity.mapping_id)
+    if mapping is None or mapping.base_language is None:
+        raise TranslationImportRejected("canonical base language is unavailable")
     if (
         scope.product_id != identity.product_id
-        or scope.current_revision_id != identity.revision_id
-        or scope.current_mapping_id != identity.mapping_id
+        or scope.mapping_identity_key != mapping.identity_key
     ):
         raise TranslationImportRejected("canonical scope authority rejected")
     staged_values = require_complete_staged_manifest(
@@ -366,9 +368,6 @@ def reconcile_canonical_translations(
             )
         )
     }
-    mapping = session.get(ProductRepositoryMapping, identity.mapping_id)
-    if mapping is None or mapping.base_language is None:
-        raise TranslationImportRejected("canonical base language is unavailable")
     reconciled_at = now or datetime.now(UTC)
 
     existing_keys = tuple(
@@ -644,6 +643,8 @@ def activate_translation_dataset(
     job.error_message = None
     job.updated_at = activated_at
     session.flush()
+    scope.current_revision_id = identity.revision_id
+    scope.current_mapping_id = identity.mapping_id
     scope.active_import_job_id = job.id
     scope.active_execution_id = execution.id
     scope.dataset_version += 1
@@ -1091,13 +1092,6 @@ def _get_or_create_scope(
             current_mapping_id=identity.mapping_id,
         )
         session.add(scope)
-        session.flush()
-    elif (
-        scope.current_revision_id != identity.revision_id
-        or scope.current_mapping_id != identity.mapping_id
-    ):
-        scope.current_revision_id = identity.revision_id
-        scope.current_mapping_id = identity.mapping_id
         session.flush()
     return scope
 

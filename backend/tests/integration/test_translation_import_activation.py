@@ -1141,6 +1141,110 @@ def test_activation_parser_failure_keeps_every_active_pointer_empty(
     assert active_value_count == 0
 
 
+def test_activation_reuses_semantic_scope_across_mapping_revision_clone(
+    activation_session_factory: sessionmaker[Session],
+) -> None:
+    identity, repository_id = _seed_running_direct_import(activation_session_factory)
+    first_manifest, first_references = _stage_direct_manifest(
+        activation_session_factory,
+        identity=identity,
+        repository_id=repository_id,
+        result=_json_result(),
+    )
+    assert import_jobs.finish_import_execution(
+        activation_session_factory,
+        identity=identity,
+        references=first_references,
+        canonical_manifest_digest=first_manifest.digest,
+    )
+    new_revision_id = uuid4()
+    new_mapping_id = uuid4()
+    with activation_session_factory.begin() as session:
+        old_mapping = session.get_one(ProductRepositoryMapping, identity.mapping_id)
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        assert scope is not None
+        stable_scope_id = scope.id
+        stable_value_id = _value_for(
+            session,
+            scope_id=scope.id,
+            raw_key="welcome",
+            language="it",
+        ).id
+        session.add(
+            ProductRevision(
+                id=new_revision_id,
+                product_id=identity.product_id,
+                description="published semantic clone",
+                version=2,
+                is_published=False,
+            )
+        )
+        session.flush()
+        session.add(
+            ProductRepositoryMapping(
+                id=new_mapping_id,
+                revision_id=new_revision_id,
+                topology="direct",
+                identity_key=old_mapping.identity_key,
+                base_language="en",
+                sides=[
+                    ProductMappingRepositorySide(
+                        role="direct",
+                        repository_id=repository_id,
+                        source_branch="main",
+                    )
+                ],
+                allowed_targets=[ProductMappingAllowedTarget(branch="main", is_default=True)],
+            )
+        )
+        session.flush()
+        new_revision = session.get_one(ProductRevision, new_revision_id)
+        new_revision.is_published = True
+        new_revision.published_at = datetime.now(UTC)
+        session.flush()
+        product = session.get_one(Product, identity.product_id)
+        product.active_revision_id = new_revision_id
+
+    with activation_session_factory() as session:
+        record = import_jobs.start_or_refresh_import(
+            session,
+            product_id=identity.product_id,
+            mapping_id=new_mapping_id,
+            enqueuer=lambda _import_id: None,
+        )
+    assert record.id is not None and record.id != identity.import_id
+    clone_identity = import_jobs.start_import_execution(
+        activation_session_factory,
+        import_id=record.id,
+    )
+    assert clone_identity is not None
+    clone_manifest, clone_references = _stage_direct_manifest(
+        activation_session_factory,
+        identity=clone_identity,
+        repository_id=repository_id,
+        result=_json_result(),
+        commit_hash="c" * 40,
+    )
+
+    assert import_jobs.finish_import_execution(
+        activation_session_factory,
+        identity=clone_identity,
+        references=clone_references,
+        canonical_manifest_digest=clone_manifest.digest,
+    )
+    with activation_session_factory() as session:
+        scope = session.get_one(LocalizationScope, stable_scope_id)
+        value = session.get_one(TranslationValue, stable_value_id)
+    assert scope.current_revision_id == new_revision_id
+    assert scope.current_mapping_id == new_mapping_id
+    assert scope.active_import_job_id == clone_identity.import_id
+    assert scope.active_execution_id == clone_identity.execution_id
+    assert scope.dataset_version == 2
+    assert value.id == stable_value_id
+
+
 def test_activation_commits_separate_keys_and_translations_as_one_dataset(
     activation_session_factory: sessionmaker[Session],
 ) -> None:
