@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 4
 waived_count: 0
-fixed_count: 61
-total_count: 65
-last_updated: 2026-09-06T08:04:58.136Z
+fixed_count: 64
+total_count: 68
+last_updated: 2026-09-06T09:22:51.007Z
 ---
 
 # Broken Windows Ledger
@@ -80,6 +80,9 @@ last_updated: 2026-09-06T08:04:58.136Z
 | 63 | 04 | deviation | backend/src/verboflex/main.py | 52 | Expanded CORS allow-methods for the planned constraint PUT and DELETE browser mutations. | fixed |  | 2026-09-05T14:46:43.596Z | 2026-09-05T14:47:04.436Z |
 | 64 | 04 | deviation | frontend/src/features/admin/imports/PublishedMappingImports.test.tsx |  | Three legacy import-response test fixtures required the now-canonical dataset status and parser outcome fields after client regeneration. | fixed |  | 2026-09-05T15:06:06.881Z | 2026-09-05T15:06:31.947Z |
 | 65 | 04 | deviation | backend/src/verboflex/schemas/translations.py |  | Plan 04-17 added bounded canonical row metadata to the generated search summary; prerequisite repair complete and verified. | fixed |  | 2026-09-06T08:03:47.080Z | 2026-09-06T08:04:58.136Z |
+| 66 | 04 | deviation | frontend/src/features/translations/TranslationSearchPage.tsx |  | Plan 04-18 fixed virtualized Back scroll drift with in-memory measured-row snapshots; 13 desktop/mobile browser journeys pass. | fixed |  | 2026-09-06T09:21:05.284Z | 2026-09-06T09:22:34.346Z |
+| 67 | 04 | deviation | backend/src/verboflex/schemas/translations.py |  | Plan 04-18 added bounded existing-detail rule authority, structured selectors and latest-50 revision metadata; generated client and 35 backend tests verified. | fixed |  | 2026-09-06T09:22:34.496Z | 2026-09-06T09:22:34.645Z |
+| 68 | 04 | deviation | frontend/src/features/translations/MaximumLengthDialog.tsx |  | Plan 04-18 locks completed writes while recovering failed authoritative detail refreshes, preventing duplicate mutation and misleading failure copy. | fixed |  | 2026-09-06T09:22:50.855Z | 2026-09-06T09:22:51.007Z |
 
 ````json
 [
@@ -862,6 +865,42 @@ last_updated: 2026-09-06T08:04:58.136Z
     "reason": "",
     "recorded_at": "2026-09-06T08:03:47.080Z",
     "resolved_at": "2026-09-06T08:04:58.136Z"
+  },
+  {
+    "id": 66,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "frontend/src/features/translations/TranslationSearchPage.tsx",
+    "line": null,
+    "description": "Plan 04-18 fixed virtualized Back scroll drift with in-memory measured-row snapshots; 13 desktop/mobile browser journeys pass.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T09:21:05.284Z",
+    "resolved_at": "2026-09-06T09:22:34.346Z"
+  },
+  {
+    "id": 67,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/schemas/translations.py",
+    "line": null,
+    "description": "Plan 04-18 added bounded existing-detail rule authority, structured selectors and latest-50 revision metadata; generated client and 35 backend tests verified.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T09:22:34.496Z",
+    "resolved_at": "2026-09-06T09:22:34.645Z"
+  },
+  {
+    "id": 68,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "frontend/src/features/translations/MaximumLengthDialog.tsx",
+    "line": null,
+    "description": "Plan 04-18 locks completed writes while recovering failed authoritative detail refreshes, preventing duplicate mutation and misleading failure copy.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T09:22:50.855Z",
+    "resolved_at": "2026-09-06T09:22:51.007Z"
   }
 ]
 ````
