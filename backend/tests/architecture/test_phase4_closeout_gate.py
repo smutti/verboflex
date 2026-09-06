@@ -29,7 +29,32 @@ def document(kind="review", **changes):
         fields.update(gauntlet_exit=0, smoke_exit=0)
     fields.update(changes)
     table = "\n| ID | Severity | Resolution |\n|---|---|---|\n| R1 | High | resolved |\n"
+    if kind == "security":
+        table = (
+            "\n| ID | Severity | Disposition | Evidence | Resolution |\n"
+            "|---|---|---|---|---|\n"
+            "| T1 | High | mitigate | tests/unit/test_auth.py::test_denied | resolved |\n"
+        )
     return "---\n" + yaml.safe_dump(fields) + "---\n" + table
+
+
+@pytest.mark.parametrize(
+    "disposition", ["accept", "accepted", "transfer", "transferred", "avoid", ""]
+)
+def test_severe_security_threat_cannot_be_waived(disposition):
+    with pytest.raises(ValueError):
+        verifier().validate_document(
+            document("security").replace("| mitigate |", f"| {disposition} |"), "security"
+        )
+
+
+@pytest.mark.parametrize("evidence", ["", "none", "pending", "n/a"])
+def test_severe_security_threat_requires_actual_evidence(evidence):
+    with pytest.raises(ValueError):
+        verifier().validate_document(
+            document("security").replace("tests/unit/test_auth.py::test_denied", evidence),
+            "security",
+        )
 
 
 @pytest.mark.parametrize("kind", ["review", "security", "verification", "evidence"])
