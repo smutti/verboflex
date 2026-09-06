@@ -6,7 +6,7 @@ import hmac
 import json
 from types import SimpleNamespace
 from unittest.mock import Mock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -99,6 +99,31 @@ def test_signed_cursor_still_requires_exact_closed_authority(change):
         cursor = "x" * 2049
     with pytest.raises(search.InvalidTranslationCursor, match="invalid translation cursor"):
         search._decode_cursor(cursor, scope_digest="scope", filters=filters, cursor_secret="secret")
+
+
+@pytest.mark.parametrize("rank", [0, 1, 2, 3])
+def test_maximum_valid_cursor_fields_remain_well_below_wire_limit(rank):
+    filters = search.TranslationSearchFilters(
+        query="\U0010ffff" * 256,
+        language='"' * 64,
+        product_id=UUID(int=2**128 - 1),
+        state="rejected",
+        violation="within_limit",
+        deleted="all",
+    )
+    # Persisted language grammar is ASCII-only and at most 12 characters:
+    # aaa-Ssss-999. Untrusted filter Unicode/escaping contributes only its hash.
+    position = search._CursorPosition(rank, "abc-Abcd-123", UUID(int=2**128 - 1))
+    cursor = search._encode_cursor(
+        scope_digest="f" * 64, filters=filters, position=position, cursor_secret="test-secret"
+    )
+    assert len(cursor) < 512 < search.MAX_CURSOR_CHARS
+    assert (
+        search._decode_cursor(
+            cursor, scope_digest="f" * 64, filters=filters, cursor_secret="test-secret"
+        )
+        == position
+    )
 
 
 def test_cursor_emission_and_unsigned_search_are_bounded():
