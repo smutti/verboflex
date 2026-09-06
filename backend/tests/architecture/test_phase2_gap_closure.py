@@ -13,13 +13,14 @@ from typing import Any
 
 import pytest
 import yaml
-from test_phase2_spec_edge_traceability import (
+from yaml.resolver import BaseResolver
+
+from tests.architecture.test_phase2_spec_edge_traceability import (
     _assert_nodes_collect,
     _assert_source_matrix_equal,
     _load_matrix,
     _normalize,
 )
-from yaml.resolver import BaseResolver
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PHASE_DIR = REPOSITORY_ROOT / ".planning" / "phases" / "02-admin-configuration"
@@ -1381,7 +1382,7 @@ def test_phase2_gap_authorities_are_wired() -> None:
 
 
 def test_phase2_forbidden_bypasses_are_absent() -> None:
-    """Deferred authentication, provider-write, and canonical surfaces stay absent."""
+    """Deferred authentication and provider-write surfaces stay absent after Phase 4."""
     operations = _openapi_operations()
     bitbucket_operations = {
         operation_id for operation_id in operations if "bitbucket" in operation_id.casefold()
@@ -1434,8 +1435,12 @@ def test_phase2_forbidden_bypasses_are_absent() -> None:
     assert not any(
         token in model_name
         for model_name in model_names
-        for token in ("canonical", "translation", "pull_request", "comment")
+        for token in ("pull_request", "comment")
     )
+    assert {name for name in model_names if "translation" in name or "canonical" in name} == {
+        "translation",
+        "translation_constraint",
+    }
 
     admin_routes = _admin_route_functions()
     assert len(admin_routes) == 34 + 5  # Phase 2 routes plus five sealed Phase 3 import operations.
