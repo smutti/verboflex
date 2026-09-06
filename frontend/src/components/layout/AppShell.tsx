@@ -129,7 +129,7 @@ function RoutedDestination({
     <Button
       type="button"
       variant="ghost"
-      className="h-auto min-h-9 w-full min-w-0 max-w-full justify-start whitespace-normal"
+      className="h-auto min-h-[44px] w-full min-w-0 max-w-full justify-start whitespace-normal"
       asChild
     >
       <Link
@@ -162,7 +162,7 @@ function DestinationLink({
     <Button
       type="button"
       variant="ghost"
-      className="h-auto min-h-9 w-full min-w-0 max-w-full justify-start whitespace-normal"
+      className="h-auto min-h-[44px] w-full min-w-0 max-w-full justify-start whitespace-normal"
       asChild
     >
       <a href={destination.to} onClick={() => onNavigate?.(destination)}>
