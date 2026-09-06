@@ -1,0 +1,97 @@
+"""Independent-review regressions over real PostgreSQL search authority."""
+
+from datetime import UTC, datetime
+from uuid import uuid4
+
+from tests.integration.test_translation_constraints import (
+    _seed_constraint_dataset,
+)
+from tests.integration.test_translation_search import (
+    _add_group,
+    _search,
+    _seed_dataset,
+    clean_search_database,
+    search_session_factory,
+)
+from verboflex.models.import_job import ImportExecution, ImportJob
+from verboflex.models.translation import LocalizationScope
+from verboflex.services.translation_constraints import (
+    delete_translation_constraint,
+    put_translation_constraint,
+)
+from verboflex.services.translation_search import get_translation_group
+
+__all__ = ["clean_search_database", "search_session_factory"]
+
+
+def test_separate_repository_detail_projects_base_default_before_and_after_override_removal(
+    search_session_factory,
+):
+    ids = _seed_constraint_dataset(search_session_factory)
+    import_id, execution_id = uuid4(), uuid4()
+    now = datetime.now(UTC)
+    with search_session_factory.begin() as session:
+        session.add(ImportJob(
+            id=import_id, product_id=ids["product"], revision_id=ids["revision"],
+            mapping_id=ids["mapping"], topology="separate", state="running",
+            current_execution_id=execution_id, retry_count=0, latest_execution_at=now,
+        ))
+        session.flush()
+        session.add(ImportExecution(
+            id=execution_id, import_job_id=import_id, sequence=1, state="succeeded",
+            connection_generation=1, started_at=now, finished_at=now,
+        ))
+        session.flush()
+        job = session.get_one(ImportJob, import_id)
+        job.state = "current"
+        job.active_baseline_execution_id = execution_id
+        session.flush()
+        scope = session.get_one(LocalizationScope, ids["scope"])
+        scope.active_import_job_id = import_id
+        scope.active_execution_id = execution_id
+        scope.dataset_version = 1
+        put_translation_constraint(
+            session, translation_group_id=ids["base_value"], language="en",
+            max_chars=3, expected_version=0, actor_id=ids["actor"],
+        )
+    with search_session_factory() as session:
+        inherited = get_translation_group(session, group_id=ids["target_value"])
+    assert inherited.base_maximum == 3
+    assert inherited.explicit_maximum is None
+    assert inherited.values[0].constraint.maximum == 3
+    assert inherited.values[0].constraint.source == "base_default"
+    with search_session_factory.begin() as session:
+        override = put_translation_constraint(
+            session, translation_group_id=ids["target_value"], language="it",
+            max_chars=8, expected_version=0, actor_id=ids["actor"],
+        )
+    with search_session_factory.begin() as session:
+        removed = delete_translation_constraint(
+            session, translation_group_id=ids["target_value"], language="it",
+            expected_version=override.version,
+        )
+    with search_session_factory() as session:
+        restored = get_translation_group(session, group_id=ids["target_value"])
+    assert removed.explicit_maximum is None
+    assert restored.base_maximum == 3
+    assert restored.explicit_maximum is None
+    assert restored.values[0].constraint.maximum == 3
+    assert restored.values[0].constraint.status == "over_limit"
+
+
+def test_long_key_boundary_cursor_is_bounded_and_preserves_exact_order(search_session_factory):
+    product_id, scope_id = _seed_dataset(search_session_factory)
+    ids = []
+    for index in range(51):
+        ids.append(_add_group(
+            search_session_factory, product_id=product_id, scope_id=scope_id,
+            raw_key=f"{index:03d}" + "k" * 1600, language="en", values=({},),
+        ))
+    principal = uuid4()
+    first = _search(search_session_factory, principal_id=principal)
+    assert [item.id for item in first.items] == ids[:50]
+    assert first.next_cursor is not None
+    assert len(first.next_cursor) <= 2048
+    second = _search(search_session_factory, principal_id=principal, cursor=first.next_cursor)
+    assert [item.id for item in second.items] == ids[50:]
+    assert second.next_cursor is None
