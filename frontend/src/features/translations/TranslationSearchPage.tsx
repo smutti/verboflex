@@ -10,6 +10,7 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Skeleton } from "../../components/ui/skeleton";
 import { TranslationFilters } from "./TranslationFilters";
+import { translationFilterLabels } from "./translationFilterLabels";
 import { TranslationResultList } from "./TranslationResultList";
 import {
   loadTranslationPreferences,
@@ -77,7 +78,12 @@ function SearchError({
           Your filters are still available. Retry the search without leaving
           this page.
         </p>
-        <Button type="button" variant="outline" onClick={onRetry}>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-[44px] min-w-[44px]"
+          onClick={onRetry}
+        >
           Retry search
         </Button>
       </AlertDescription>
@@ -161,6 +167,12 @@ function ResolvedSearch({
 
   useEffect(() => {
     if (seed.focusControl) {
+      if (seed.focusControl === "query") {
+        document
+          .getElementById("translation-query")
+          ?.focus({ preventScroll: true });
+        return;
+      }
       if (seed.focusControl === "clear") {
         document
           .querySelector<HTMLButtonElement>("[data-clear-translation-filters]")
@@ -231,17 +243,19 @@ function ResolvedSearch({
     search.filters.productId &&
       `Product: ${options.products.find((item) => item.id === search.filters.productId)?.name}`,
     search.filters.language && `Language: ${search.filters.language}`,
-    search.filters.state && `Approval state: ${search.filters.state}`,
-    search.filters.violation && `Length status: ${search.filters.violation}`,
+    search.filters.state &&
+      `Approval state: ${translationFilterLabels.state[search.filters.state]}`,
+    search.filters.violation &&
+      `Length status: ${translationFilterLabels.violation[search.filters.violation]}`,
     search.filters.deleted !== "active" &&
-      `Deleted status: ${search.filters.deleted}`,
+      `Deleted status: ${translationFilterLabels.deleted[search.filters.deleted]}`,
   ]
     .filter(Boolean)
     .join("; ");
 
   return (
     <>
-      <div className="space-y-(--space-sm)">
+      <div className="space-y-(--space-sm) rounded-lg bg-secondary p-(--space-md)">
         <Label htmlFor="translation-query">Search keys and translations</Label>
         <Input
           id="translation-query"
@@ -356,6 +370,12 @@ function ResolvedSearch({
 }
 
 function SearchOptions({ context }: { context: TranslationsWorkspaceContext }) {
+  const [pendingQuery, setPendingQuery] = useState(
+    context.snapshot?.query ?? "",
+  );
+  const queryRef = useRef(pendingQuery);
+  const retryAction = useRef(false);
+  const optionsAlert = useRef<HTMLDivElement>(null);
   const [seed, setSeed] = useState<Seed | null>(() =>
     context.snapshot
       ? {
@@ -373,6 +393,16 @@ function SearchOptions({ context }: { context: TranslationsWorkspaceContext }) {
   }>({ request: 0 });
   const ready = load.request === request ? load.ready : undefined;
   const failed = load.request === request && load.failed;
+  useEffect(() => {
+    if (!failed || !retryAction.current) return;
+    let active = true;
+    queueMicrotask(() => {
+      if (active) optionsAlert.current?.focus();
+    });
+    return () => {
+      active = false;
+    };
+  }, [failed]);
   const principalId = context.principal.id;
   const accessToken = context.accessToken;
   useEffect(() => {
@@ -426,10 +456,10 @@ function SearchOptions({ context }: { context: TranslationsWorkspaceContext }) {
           ready: {
             options: choices,
             seed: {
-              query: typeof seed?.query === "string" ? seed.query : "",
+              query: queryRef.current,
               filters,
               snapshot: validScope ? snapshot : null,
-              focusControl: seed?.focusControl,
+              focusControl: retryAction.current ? "query" : seed?.focusControl,
             },
           },
         });
@@ -440,6 +470,9 @@ function SearchOptions({ context }: { context: TranslationsWorkspaceContext }) {
     return () => controller.abort();
   }, [accessToken, principalId, request, seed]);
   const restart = useCallback((next: Seed) => {
+    retryAction.current = false;
+    queryRef.current = next.query;
+    setPendingQuery(next.query);
     setSeed(next);
     setRequest((value) => value + 1);
   }, []);
@@ -461,6 +494,31 @@ function SearchOptions({ context }: { context: TranslationsWorkspaceContext }) {
         />
       ) : (
         <>
+          <div
+            className="space-y-(--space-sm) rounded-lg bg-secondary p-(--space-md)"
+            aria-busy={!failed}
+          >
+            <Label htmlFor="translation-query">
+              Search keys and translations
+            </Label>
+            <Input
+              id="translation-query"
+              className="min-h-[44px]"
+              placeholder="Enter a key or text"
+              aria-describedby="translation-query-help"
+              value={pendingQuery}
+              onChange={(event) => {
+                queryRef.current = event.target.value;
+                setPendingQuery(event.target.value);
+              }}
+            />
+            <p
+              id="translation-query-help"
+              className="text-body text-muted-foreground"
+            >
+              Searches original keys, source text, and translated text.
+            </p>
+          </div>
           <TranslationFilters
             filters={seed?.filters ?? DEFAULT_FILTERS}
             options={load.ready?.options ?? EMPTY_OPTIONS}
@@ -469,7 +527,13 @@ function SearchOptions({ context }: { context: TranslationsWorkspaceContext }) {
             onClear={() => restart({ query: "", filters: DEFAULT_FILTERS })}
           />
           {failed ? (
-            <SearchError onRetry={() => setRequest((value) => value + 1)} />
+            <SearchError
+              alertRef={optionsAlert}
+              onRetry={() => {
+                retryAction.current = true;
+                setRequest((value) => value + 1);
+              }}
+            />
           ) : (
             <LoadingResults />
           )}

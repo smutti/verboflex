@@ -479,7 +479,11 @@ function BaseLanguageSelect({
         </SelectTrigger>
         <SelectContent className="motion-reduce:animate-none motion-reduce:transition-none">
           {candidate.languages.map((language) => (
-            <SelectItem key={language} value={language}>
+            <SelectItem
+              key={language}
+              value={language}
+              className="min-h-[44px] min-w-[44px]"
+            >
               {language}
             </SelectItem>
           ))}

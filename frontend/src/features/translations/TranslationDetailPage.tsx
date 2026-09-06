@@ -285,10 +285,6 @@ function LoadedDetail({
       : detail.language !== detail.base_language && detail.base_maximum !== null
         ? "Add language override"
         : "Set max length";
-  const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => {
-    heading.current?.focus({ preventScroll: true });
-  }, []);
   const over = detail.values.filter(
     (v) => v.constraint.status === "over_limit",
   ).length;
@@ -303,9 +299,6 @@ function LoadedDetail({
   return (
     <>
       <header className="space-y-(--space-sm)">
-        <h1 ref={heading} tabIndex={-1} className="text-display font-semibold">
-          Translation details
-        </h1>
         <p className="font-mono wrap-anywhere">{detail.raw_key}</p>
         <p>
           {detail.language_label} ({detail.language})
@@ -325,7 +318,7 @@ function LoadedDetail({
         </Alert>
       )}
       {over > 0 && (
-        <Alert className="border-amber-600 bg-amber-50 text-amber-950">
+        <Alert className="border-warning bg-warning/10 text-warning">
           <AlertTitle>
             {over} of {detail.values.length} over limit
           </AlertTitle>
@@ -449,6 +442,23 @@ function DetailRequest({
     error?: "missing" | "general";
   }>({ attempt: 0 });
   const current = load.attempt === attempt ? load : null;
+  const heading = useRef<HTMLHeadingElement>(null);
+  const errorAlert = useRef<HTMLDivElement>(null);
+  const hasData = Boolean(current?.data);
+  const currentError = current?.error;
+  useEffect(() => {
+    if (hasData) heading.current?.focus({ preventScroll: true });
+  }, [hasData]);
+  useEffect(() => {
+    if (attempt === 0 || !currentError) return;
+    let active = true;
+    queueMicrotask(() => {
+      if (active) errorAlert.current?.focus();
+    });
+    return () => {
+      active = false;
+    };
+  }, [attempt, currentError]);
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
@@ -485,13 +495,16 @@ function DetailRequest({
       >
         Back to translations
       </Link>
+      <h1 ref={heading} tabIndex={-1} className="text-display font-semibold">
+        Translation details
+      </h1>
       {current?.data ? (
         <LoadedDetail
           detail={current.data}
           onChanged={(data) => setLoad({ attempt, data })}
         />
       ) : current?.error ? (
-        <Alert>
+        <Alert ref={errorAlert} tabIndex={-1}>
           <AlertTitle>
             {current.error === "missing"
               ? "Translation not available"

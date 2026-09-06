@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import type { TranslationSearchFilters } from "./useTranslationSearch";
+import { translationFilterLabels } from "./translationFilterLabels";
 
 interface TranslationFiltersProps {
   filters: TranslationSearchFilters;
@@ -54,9 +55,7 @@ export function TranslationFilters({
       label: "Approval state",
       choices: [
         ["all", "All states"],
-        ["draft", "Draft"],
-        ["approved", "Approved"],
-        ["rejected", "Rejected"],
+        ...Object.entries(translationFilterLabels.state),
       ],
     },
     {
@@ -64,23 +63,17 @@ export function TranslationFilters({
       label: "Length status",
       choices: [
         ["all", "All length statuses"],
-        ["over_limit", "Over limit"],
-        ["within_limit", "Within limit"],
-        ["no_max", "No max length"],
+        ...Object.entries(translationFilterLabels.violation),
       ],
     },
     {
       key: "deleted",
       label: "Deleted status",
-      choices: [
-        ["active", "Active only"],
-        ["deleted", "Deleted only"],
-        ["all", "Active and deleted"],
-      ],
+      choices: [...Object.entries(translationFilterLabels.deleted)],
     },
   ] as const;
   return (
-    <div className="space-y-(--space-md)">
+    <div className="space-y-(--space-md) rounded-lg bg-secondary p-(--space-md)">
       <div className="grid min-w-0 grid-cols-1 gap-(--space-md) md:grid-cols-2 xl:grid-cols-5">
         {controls.map(({ key, label, choices }) => (
           <div key={key} className="min-w-0 space-y-(--space-sm)">

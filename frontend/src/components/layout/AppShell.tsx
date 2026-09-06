@@ -129,7 +129,7 @@ function RoutedDestination({
     <Button
       type="button"
       variant="ghost"
-      className="h-auto min-h-[44px] w-full min-w-0 max-w-full justify-start whitespace-normal"
+      className={`h-auto min-h-[44px] w-full min-w-0 max-w-full justify-start whitespace-normal ${isCurrent ? "bg-muted font-semibold text-foreground border-l-4 border-l-primary" : "text-foreground"}`}
       asChild
     >
       <Link
@@ -334,7 +334,7 @@ export function AppShell({
         </aside>
         <main
           data-testid="app-shell-content"
-          className="grid min-w-0 max-w-full content-start gap-8 px-6 py-8 md:px-8"
+          className="grid min-w-0 max-w-full content-start gap-(--space-xl) px-(--space-lg) py-(--space-xl) md:px-(--space-xl)"
         >
           {children === undefined ? (
             <WorkspaceOverviewPage

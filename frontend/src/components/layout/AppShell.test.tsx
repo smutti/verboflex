@@ -752,8 +752,8 @@ describe("authenticated application shell", () => {
     expect(screen.getByTestId("app-shell-content")).toHaveClass(
       "min-w-0",
       "max-w-full",
-      "px-6",
-      "md:px-8",
+      "px-(--space-lg)",
+      "md:px-(--space-xl)",
     );
     expect(screen.getByTestId("desktop-navigation")).toHaveClass(
       "hidden",

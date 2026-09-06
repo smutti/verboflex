@@ -391,6 +391,7 @@ function AuthorizedDialog({
               <div className="space-y-(--space-sm)">
                 <Label htmlFor={fieldId}>Maximum characters</Label>
                 <Input
+                  className="min-h-[44px] min-w-[44px]"
                   ref={field}
                   id={fieldId}
                   type="number"
