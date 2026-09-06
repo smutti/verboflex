@@ -1,92 +1,99 @@
 ---
 phase: 04-localization-import-search-and-constraints
-checked_at: 2026-09-06T11:36:52Z
+checked_at: 2026-09-06T12:21:44Z
 reviewer: independent gsd-verifier
-status: gaps_found
-source_digest: sha256:b233e7e48f9f1c0a831338955418d832143f8614f69ebc7637143e74312b58d3
-score: "6/8 roadmap must-haves verified"
-scope: "Initial goal-backward audit; 27 plans, 20 requirements, 23 decisions, 52 edges, 2 prohibitions, 8 UI categories, 50 instances, 3 axes"
+status: human_needed
+source_digest: sha256:2df3766ead7f1aea3597a8ad8b99205f14508a4189109996149265a163017b3a
+score: "8/8 automated roadmap must-haves verified; 4 human checks pending"
+scope: "Re-verification; 27 plans, 20 requirements, 23 decisions, 52 edges, 2 prohibitions, 8 UI categories, 50 instances, 3 axes"
 ---
 
 # Phase 4: Localization Import, Search, and Constraints Verification
 
 **Goal:** Convert supported localization files into stable canonical translation records, import and refresh them without losing review context, and expose searchable translations with maximum-length constraints.
 
-**Verdict: gaps_found. Phase 4 must remain incomplete.** The full delivery attempt failed on Android import status polling HTTP 500. The required fresh green smoke and matching final review/security/evidence authority do not exist. Four focused human checks also remain; after fixing the automated gaps, these still prevent `status: passed`.
+**Verdict: human_needed.** Both previously recorded automated gaps are closed. The polling/activation correction and two ensuing constraint corrections have executable regression evidence, and the complete fresh gauntlet/build/deployment-like smoke passed. Code review and exact `SECURED` security review bind to the current source digest. **Phase 4 remains incomplete pending four human checks.** No user has reported their results, so this report must not be changed to `passed`.
 
-This is an initial verification: no earlier `04-VERIFICATION.md` or accepted override existed. SUMMARY claims were not used as implementation proof. Source, executable tests, command records, JUnit, and actual wiring were inspected. The report binds to the inspected production/test snapshot `df9053614f9e9a13a7d85ba5181a00b306061e3c` / `b233e7e4…`. At the end of this audit the workspace digest had changed to `sha256:d914c7b5257d287ac1f97086b7da8608996274110db3b894ea1c4ce2cd2afcfb` during the polling-race regression work. **This report is deliberately not certification of that changing workspace.** A new freeze and verification are required.
+**Re-verification:** previous verdict `gaps_found`, score 6/8, inspected digest `b233e7e4…`; current frozen implementation commit `231e5b1e2e574af8c38873ddcdb31e0ebca75c58` and digest above. Later commits `588b643` / `54d2325` update evidence/review metadata without changing this source digest. This bounded recheck inspected changed production paths, all three new regression files and migration, the fresh command/JUnit/artifact records, and exact inventory. Previously verified source families received a regression/evidence check rather than another broad test run.
 
-The Plan 20 strict validator permits only its closed frontmatter schema. Structured gaps and manual items are therefore preserved below as YAML in the report body, with the non-passing machine-readable status above. No override was created.
+The Plan 20 strict validator permits only its closed frontmatter schema. Structured re-verification and human items are preserved below as YAML in the body. No override was created; no prohibition was silently accepted.
 
 ## Observable roadmap truths
 
 | # | Truth | Status | Evidence |
 |---|---|---|---|
-| 1 | All four formats parse into one canonical contract. | VERIFIED | Registry exact-format dispatch, immutable core output; independently rerun four adapter dispatch cases and all four named golden tests passed. |
-| 2 | Canonical records retain product/repository/branch/path/format/stable key/language/text/state/locator. | VERIFIED | `models/translation.py`, migration 0016/0020, `stage_translation_parse`, `reconcile_canonical_translations`, and grouped-detail SQL. Persisted identity/provenance assertions are present in the successful JUnit activation cases. |
-| 3 | Golden fixtures cover valid, empty, malformed, escaped, Unicode, format boundaries. | VERIFIED | Four hand-authored expected JSON files plus fixture/conformance manifests; independent golden invocations passed; registry unsupported-input and exact inventory tests recorded passing. |
-| 4 | Celery imports/refreshes the published mapping without losing review context. | FAILED — BLOCKER | Worker/staging/activation/refresh paths exist and their persisted-state tests pass, but built deployment polling reports `import-android_xml-http-500`. Ordinary completion cannot yet be relied upon through the production API/UI path. |
-| 5 | Product managers search/filter product, language, key/text, state, violation. | VERIFIED | Bound SQL predicates and exact/prefix/partial ranking in `translation_search.py`; generated calls feed the five-filter page. Successful integration and browser records cover these fields. |
-| 6 | Detail exposes repository/file/branch/source context. | VERIFIED | Opaque route → generated detail → single SQL projection → full value/provenance cards. Four-role detail browser cases and source projection inspected. Native assistive-technology review remains separate. |
-| 7 | Authorized constraint CRUD recalculates after imports and through later edit seam. | VERIFIED | Two role-gated routes → locked optimistic service → shared grapheme recomputation; import activation invokes it before pointer publication. Passing integration records cover inheritance, override removal, rollback, stale versions, epoch, and edit seam. Actual translation editing is explicitly Phase 5. |
-| 8 | Parser checkpoint and final quality gate pass. | FAILED — BLOCKER | Final built-stack smoke exit 1; evidence frontmatter remains `in_progress`, code review `pending`, security `OPEN_THREATS` at an older digest, and strict `--check-all` exits 1. |
+| 1 | All four formats parse into one canonical contract. | VERIFIED | Exact-format registry dispatch and immutable output; the initial independent four-format dispatch/golden checks passed, and unchanged parser sources pass the final full run. |
+| 2 | Canonical records retain product/repository/branch/path/format/stable key/language/text/state/locator. | VERIFIED | Translation models, migrations 0016/0020, staging/reconciliation and grouped-detail SQL; final JUnit includes persisted identity/provenance cases. |
+| 3 | Complete golden fixtures cover valid, empty, malformed, escaped, Unicode and format boundaries. | VERIFIED | Four hand-authored expected JSON families, exact conformance inventory and hostile-input tests; final parser coverage is 1817 statements and 704 branches, 100%. |
+| 4 | Celery imports/refreshes the published mapping without losing stable review context. | VERIFIED | UUID worker → immutable stage → atomic activation; corrected detail/list polling obtains Product SHARE before authority reads. Four real-DB interleaving cases and fresh four-format built-stack smoke pass. Actual Bitbucket Cloud still requires the separately declared human integration check. |
+| 5 | Product managers search/filter product, language, key/text, state and violation. | VERIFIED | Bound SQL, exact/prefix/partial ordering and five-filter generated-client page; final backend/component/browser records pass. |
+| 6 | Detail exposes repository/file/branch/source context. | VERIFIED | Opaque protected route → generated detail → one SQL projection → full value/provenance cards; four-role browser cases pass. Native assistive-technology review remains open. |
+| 7 | Authorized constraint CRUD recalculates after imports and through later edit seam. | VERIFIED | Product-first locks and refreshed authority prevent activation inversion; retained-baseline epoch migration supports PUT/DELETE/no-op without changing activation. 33 new constraint/race/guard/migration cases plus existing recomputation tests pass. Translation editing itself remains Phase 5. |
+| 8 | Parser checkpoint and final tests/code review/deploy-build smoke pass. | VERIFIED — automated scope | All 27 final command records exit 0; code review has 172 paths and zero unresolved Critical/high findings; security exact SECURED; both intermediate validator modes pass at the same current digest. Whole-phase completion still awaits human checks. |
 
-**Score: 6/8 roadmap truths verified.** Implementation evidence below does not override the failed end-to-end truth or turn coverage-cardinality checks into behavioral proof.
+**Score: 8/8 automated roadmap truths verified; four human-verification items remain (including two flagged prohibitions).** This is not a completed phase or a `passed` verification. No runtime invariant remains merely present without passing behavioral evidence.
 
-## Evidence inspected and independently replayed
+## Fresh executable evidence and closed gaps
 
-Let **G** denote the private evidence directory:
-`/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-y0xqbkxp`.
+Let **G** denote:
+`/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-92tdd_0i`.
 
-G is a failed complete gate attempt, not final release evidence. `commands.json` records commands, UTC start/end, exit code, and output digest. `backend.xml` was parsed independently: **1,577 cases, zero failures/errors, zero skipped**. Named records include move identity retention, all-target source reset, superseded activation rejection, and constraint dataset-epoch/no-op/rollback. Frontend log records **590 tests / 32 files**, and browser log **21 cases**. Backend changed lines **3272/3272**, frontend **842/842**, and parser branch gate passed. These are specific coverage scopes; global 100% coverage is not claimed.
+The durable index is `docs/evidence/phase-04-run.json`. The verifier independently checked all five recorded artifact hashes against G, parsed JUnit, inspected the actual smoke output, and confirmed the current source digest. **1,614 backend cases passed, zero failures/errors, zero skipped.** All 37 cases from the three new concurrency/retained-epoch regression files appear in JUnit. Frontend has 590 passing cases, browser 21; backend changed lines 3285/3285 and frontend 842/842. Global 100% coverage is not claimed.
 
-| Check | Actual result | Status / limit |
+| Check / artifact | Independently observed result | Status |
 |---|---|---|
-| `uv run --project backend python tools/phase4_inventory.py` | Exact 27/20/23/52/0/2/8/50/3 counts | PASS for inventory equality only |
-| `uv run --project backend pytest backend/tests/architecture/test_phase4_scope.py -q -p no:cacheprovider` | 18 passed in 3.20 s | PASS: boundaries, routes, generated drift, negative controls |
-| `...test_conformance.py::test_registry_dispatches_every_confirmed_format_to_a_complete_result` | 4 passed in 0.21 s | PASS, verifier's own invocation |
-| `...test_conformance.py::test_separate_mapping_failures_are_atomic` | 4 passed in 0.31 s | PASS, verifier's own invocation |
-| `...test_android_xml.py::test_android_structured_markup_and_escape_golden_manifest` | 1 passed | PASS, verifier's own invocation |
-| `...test_qt_ts.py::test_qt_identity_numerus_variant_and_status_golden_manifest` | 1 passed | PASS, verifier's own invocation |
-| `...test_json.py::test_json_nested_locale_rooted_golden_manifest` | 1 passed | PASS, verifier's own invocation |
-| `...test_ios_strings.py::test_ios_valid_golden_manifest_emits_complete_scalar_values` | 1 passed | PASS, verifier's own invocation |
-| `npm --prefix frontend test -- --run src/features/translations/useTranslationSearch.test.ts -t 'aborts on typing before debounce and never revives a reverted generation'` | 1 passed in 524 ms | PASS; 27 excluded by selector, not disabled tests |
-| `...test_phase4_closeout_gate.py::test_security_metadata_cannot_downgrade_the_planned_register` | 3 passed | PASS, verifier's own invocation |
-| `gsd-tools query verify.artifacts` for all 27 plans | Every preexisting declared artifact passed existence/substance checks; this report was the sole then-missing artifact | Presence checks supplemented by source/data-flow inspection below |
-| `gsd-tools query verify.key-links` for all 27 plans | Literal path heuristics miss generated barrel imports, wrapper delegation, and indirect preference composition | Manually resolved functional links below; release evidence remains incomplete |
-| G full backend/frontend/build/static/lock/audit/generated-client/mutants/browser records | All pre-smoke sections exit 0 | Historical tested snapshot only; do not reuse after source change |
-| G `built-stack-smoke.log`, 11:26:47–11:27:42 UTC | Build/infrastructure/migrations/health/UUID queue pass; `import-android_xml-http-500`; exit 1 | FAILED — BLOCKER |
-| `uv run --project backend python tools/verify_phase4_closeout.py --check-all` | Exit 1, `invalid, missing, stale or non-passing evidence` | Correctly rejects current closeout |
+| `tools/phase4_inventory.py` | Exact 27 plans, 20 requirements, 23 decisions, 52 edges, zero flagged assumptions, 2 prohibitions, 8 categories, 50 UI instances, 3 axes | PASS for exact identity coverage |
+| `tools/verify_phase4_closeout.py --digest` | `sha256:2df3766ead7f1aea3597a8ad8b99205f14508a4189109996149265a163017b3a` | PASS current-source agreement |
+| G `commands.json` / durable run index | 27 command records; every exit zero; final run starts 12:10:38 UTC and finishes delivery at approximately 12:15:19 UTC | PASS |
+| G `backend.xml` | 1614 cases, zero failed/error/skipped; all 37 new race/retained-epoch cases included | PASS |
+| G artifact hash comparison | backend JUnit, backend coverage, frontend coverage, built smoke, commands: all five equal durable SHA-256 values | PASS |
+| G changed-line/parser records | Backend 3285/3285, frontend 842/842; parser 1817 statements, 704 branches, zero missed | PASS scoped coverage |
+| G frontend/browser records | 590 component/unit cases; 21 Playwright cases | PASS |
+| G mutation records | 12 selected semantic mutants killed/restored; four supplementary CR16 database-guard controls assert the intended rejection | PASS; mutation count is not full mutation coverage |
+| G `built-stack-smoke.log` | Build, migrations, backend/frontend/worker health, UUID queue, four formats/four roles, browser, provider audit, redaction and cleanup PASS; 62 seconds | PASS — local TLS Bitbucket mock, not live Bitbucket |
+| `tools/verify_phase4_closeout.py --check-code-review` | `status: passed`, artifacts 3, current digest | PASS, verifier's own invocation |
+| `tools/verify_phase4_closeout.py --check-security` | `status: passed`, artifacts 4, current digest | PASS, verifier's own invocation |
+| `tools/verify_phase4_closeout.py --check-all` | Rejects final `human_needed` verdict | EXPECTED non-pass: four unanswered human checks, not an automated implementation gap |
 
-No conventional `scripts/*/tests/probe-*.sh` is declared by these plans. Phase probes are the named gate, smoke, mutants and architecture controls above. The verifier did not start services or repeat the full suite; it inspected the existing full-run artifacts and reran bounded, selected checks. The deployment-like provider is a **local TLS Bitbucket mock**, not live Bitbucket Cloud.
+Initial independent bounded runs remain regression evidence for unchanged parser/frontend/architecture sources: exact adapter dispatch 4 passed; separate atomic failures 4 passed; one full-value golden test per Android/Qt/JSON/iOS passed; stale-typing cancellation 1 passed; phase scope architecture 18 passed; security metadata downgrade rejection 3 passed. They are supplemented by the current full-run artifacts above, not substituted for them.
+
+No conventional `scripts/*/tests/probe-*.sh` is declared by the plans. The named gauntlet/smoke/mutant controls are the phase probes. This verifier did not rerun the full suite, start services, or mutate a database. The existing localhost:8080 application is not evidence for this frozen build.
+
+### Changed critical paths
+
+| Correction | Actual implementation | Behavioral evidence / result |
+|---|---|---|
+| CR14 polling coherence | `services/import_jobs.py` obtains Product `FOR SHARE` in both `list_published_mapping_imports` and `get_import_job` before loading jobs/scopes; worker activation takes Product exclusively first. Same-product activation cannot commit between these authority reads. | `test_import_status_activation_race.py::test_polling_and_activation_share_one_coherent_snapshot`: detail/list × same/other product, 4 passing JUnit cases. Real PostgreSQL blocker observation; preactivation response running/not_created, next response current/active, unrelated product not blocked. |
+| CR15 constraint lock order/currentness | `translation_constraints.py::_lock_scope_authority` enters Product-first SHARE, then scope/mapping; `populate_existing` and anchor refresh discard stale identity-map authority. Explicit worker base-language branch retains existing transaction ownership. | `test_constraint_activation_race.py`: PUT/DELETE × same/other product, inactive/unpublished stale authority, missing worker scope; 7 passing cases. Assertions prove no mapping/scope lock inversion and correct final text/maximum. |
+| CR16 retained-baseline epoch | Migration `0021_retained_baseline_constraint_epoch.py` preserves the original activation predicate and adds only UPDATE, exact +1 epoch, unchanged complete row except epoch/update timestamp, authentic succeeded baseline/owner and valid monotonic current-execution state. Downgrade restores the original guard. | `test_retained_baseline_constraint_epoch.py`: 26 passing cases covering PUT/DELETE/no-op during queued/running/failed/reconciliation, eight forbidden identity/authority changes, inexact increments, forged baseline, backwards execution and roundtrip. Assertions preserve baseline IDs, content, constraints and schema. |
+
+Both original automated gaps are closed. The initial `import-android_xml-http-500` result is historical failed evidence, superseded by the deterministic correction and fresh green full gate. No symptom-only retry was accepted as its resolution.
 
 ## Artifact, wiring and data-flow verification
 
 | From → consumer | Actual source / data path | Verdict |
 |---|---|---|
-| Admin mapping UI → import HTTP | `PublishedMappingImports.tsx` invokes generated import operations (the plan's older `createImportJob/getImportJob` names are not literal current SDK names). Route persists job then UUID dispatcher queues it. | WIRED; runtime status race blocks complete workflow |
-| Import dispatcher → real Celery task | `services/import_jobs.py:1132` sends named task with UUID; `worker/import_tasks.py:104` loads UUID and executes production processor. | VERIFIED |
-| Production processor → provider bytes → parser | `worker/import_tasks.py:31` owns and closes adapter in finally; `import_jobs.py:2641` resolves immutable snapshots and current members in confirmed layout; registry is the single adapter dispatch. | VERIFIED at inspected source |
-| Registry → four substantive adapters | `localization/importing/registry.py` maps four exact formats, enforces aggregate limits, validates complete results, and joins Keys/Translations atomically. | VERIFIED by independent dispatch/golden/atomicity runs |
-| Parser output → durable stage → active dataset | `translation_imports.py:75` stages immutable execution-owned values/issues; `import_jobs.py:1832` final transaction locks authority; `translation_imports.py:602` publishes baseline and dataset together. | VERIFIED transaction implementation; completion polling FAILED |
-| Refresh → stable identity/history | `translation_imports.py:340` matches repository/branch/raw key, then language/selector; paths update locators; omitted identities tombstone; uncorrelated changes reset Draft; exact durable correlation is required for Approved retention. | VERIFIED by recorded persisted-state assertions |
-| Preview selection → publication → worker | `preview_jobs.py` binds selected language into confirmation; `products.py` copies it through candidate/publication; `_confirmed_parser_inputs` checks exact current language/layout. Legacy null does not manufacture canonical authority. | VERIFIED; reviewed currentness tests in source/run inventory |
-| Navigation → search page | `router.tsx:151` nests search/detail under protected workspace; `AppShell.tsx:64` exposes Translations; page composes options/preferences and hook. | VERIFIED |
-| Search UI → generated SDK → real SQL | Hook calls `searchTranslations`; API `translations.py` calls `search_translations`; bound SQL uses active-product/scope/translation tables with lookahead and stable tuple; response items become component rows. | FLOWING |
-| Search cursor → validation → append | HMAC, principal/dataset/filter binding and versioned bounded cursor; hook guards generation, abort, identity, repeated cursors, empty nonterminal pages and pagination progress. | VERIFIED; own cancellation test + integration/browser records |
-| Search row → detail → persisted context | Opaque ID link → `getTranslationGroup` → one `_DETAIL_SQL` statement → values, selectors, history, locators and constraints rendered as text. | FLOWING |
-| Constraint dialog → API → locks → projection | Generated PUT/DELETE → admin/manager dependency → scope/key/rule locks, exact expected version, monotonic generation, commit/rollback → fresh projection and cache invalidation. | FLOWING |
-| Import/edit/constraint changes → counts | `translation_constraints.py:109` applies one `grapheme_count` authority to display text; default inheritance/override and eligibility computed within caller transaction; import calls before publication. | VERIFIED |
-| Gate shell → real gate runner | `phase4_gauntlet.sh` execs `phase4_gate.py`, which runs architecture and browser tests; separate `phase4_smoke.sh` executes `phase4_smoke_browser.mjs` against built containers. | WIRED; last smoke FAILED |
-| Review/security/evidence → closeout | `verify_phase4_closeout.py` validates exact status, complete threat register, zero unresolved severe findings and same current digest. | WIRED; evidence NOT READY |
+| Admin mapping UI → import HTTP | `PublishedMappingImports.tsx` calls generated `listAdminPublishedMappingImports` / `startAdminPublishedMappingImport` and import status operations; API persists job then UUID dispatcher queues it. | WIRED; corrected completion polling and fresh smoke PASS |
+| Import dispatcher → Celery → provider | `services/import_jobs.py` sends UUID-only named task; `worker/import_tasks.py` owns production processor/adapter and closes adapter in finally. | VERIFIED |
+| Provider bytes → parser registry → adapters | `_process_import` discovers immutable commit sources/current confirmed-layout members; registry alone dispatches four bounded canonical adapters and joins Keys/Translations atomically. | VERIFIED |
+| Parser output → durable stage → activation | Immutable execution-owned stage and manifest; final transaction locks authority, reconciles, recomputes constraints, and changes baseline/dataset together. | FLOWING |
+| Refresh → identities/history/locators | Repository/branch/raw key plus language/typed selector stay stable; path updates locator; absence tombstones; uncorrelated changes reset Draft; Approved retention requires exact durable correlation. | VERIFIED |
+| Preview language → publication → worker | Exact selected language binds confirmation; candidate/publication preserve it; parser input validates current language/layout. Legacy null never manufactures canonical authority. | VERIFIED |
+| Protected navigation → search | Router/AppShell expose Translations; workspace/page compose current options/preferences and generation-safe search hook. | WIRED |
+| Search hook → generated SDK → SQL → rows | Bound active-product/scope predicates, stable keyset order, HMAC principal/filter/dataset cursor, complete response rendering. | FLOWING |
+| Opaque row → detail → persisted context | Generated detail → single SQL statement → full values, selectors, history, locators and effective constraint text cards. | FLOWING |
+| Constraint dialog → role gate → locked service | Only Admin/manager mutate; exact versions, monotonic generation, Product-first currentness, retained epoch, commit/rollback, fresh projection/cache invalidation. | FLOWING |
+| Import/edit/constraint changes → count authority | One grapheme function over display text; inheritance/override/eligibility recomputation runs within triggering transaction. | VERIFIED |
+| Shell gate → runner → browser/built smoke | `phase4_gauntlet.sh` → `phase4_gate.py`; component browser tests and separate built-stack driver both run. | WIRED; final complete run PASS |
+| Reviews/evidence → strict validator | Exact statuses/threat register/zero unresolved severe findings and matching current digest. | WIRED; review/security PASS, final human checkpoint pending |
 
-The literal key-link checker misses SDK imports through `../../api/client` and feature composition. These are not orphaned code: concrete calls and generated route paths are present. Likewise the preference module is composed by the page/workspace rather than called inside the transport hook. The smoke script's built-stack driver is separate from the mocked `translations.spec.ts` browser suite; both are invoked by the gate.
+The literal key-link checker misses SDK barrel imports and indirect preference/page/wrapper composition. The actual imports/calls/route registrations above resolve these links; there is no observed orphaned feature. The built smoke driver is distinct from `translations.spec.ts`, whose HTTP fixtures deliberately test browser composition.
 
-The detail response deliberately projects `pending_change=None` and `comments=[]`. These are explicit Phase 4 read-only absence states required by Plan 18/UI-SPEC, with comment/pending operations assigned to later phases. They do not masquerade as fetched Phase 4 comment data.
+Detail `pending_change=None` and `comments=[]` are explicit Phase 4 read-only absence states required by Plan 18/UI-SPEC. Actual comments/pending operations belong to later phases; these constants are not claims of fetched comment data.
 
 ## Requirements, decisions and edge/UI replay
 
-The exact identity tables below retain every manifest item and its executable/source binding. **VERIFIED here means the scoped implementation/test binding was inspected and successful execution evidence exists at the audited snapshot; it does not certify the failed whole release.** A named selector is stronger than a filename alone; filename-only entries are cross-checked with the matching named behavioral tests identified above and actual full-run records.
+The exact identity tables below retain every manifest item and its executable/source binding. **VERIFIED here means the scoped implementation/test binding was inspected and successful execution evidence exists at the audited snapshot; it does not certify the whole-phase human acceptance.** A named selector is stronger than a filename alone; filename-only entries are cross-checked with the matching named behavioral tests identified above and actual full-run records.
 
 The 20 plan requirement IDs exactly equal the Phase 4 REQUIREMENTS allocation; no orphan requirement was found. The requirement file's checked boxes are not the basis of this verdict.
 
@@ -106,7 +113,7 @@ The 20 plan requirement IDs exactly equal the Phase 4 REQUIREMENTS allocation; n
 | FMT-04 | 04-05 | VERIFIED — scoped implementation | `backend/src/verboflex/localization/importing/ios_strings.py`; `backend/tests/unit/localization/importing/test_ios_strings.py` |
 | FMT-06 | 04-06 | VERIFIED — scoped implementation | `backend/src/verboflex/localization/importing/registry.py`; `backend/tests/unit/localization/importing/test_conformance.py` |
 | FMT-07 | 04-10 | VERIFIED — scoped implementation | `backend/src/verboflex/models/translation.py`; `backend/tests/integration/test_migrations.py`; `backend/tests/unit/localization/importing/test_contracts.py` |
-| FMT-08 | 04-11 | FAILED — BLOCKER; completion polling | `backend/src/verboflex/services/translation_imports.py`; `backend/tests/integration/test_translation_import_activation.py` |
+| FMT-08 | 04-11 | VERIFIED — scoped implementation | `backend/src/verboflex/services/translation_imports.py`; `backend/tests/integration/test_translation_import_activation.py` |
 | SRCH-01 | 04-23 | VERIFIED — scoped implementation | `frontend/src/features/translations/TranslationSearchPage.tsx`; `frontend/src/features/translations/TranslationSearchPage.test.tsx` |
 | SRCH-02 | 04-23 | VERIFIED — scoped implementation | `frontend/src/features/translations/TranslationSearchPage.tsx`; `frontend/src/features/translations/TranslationSearchPage.test.tsx` |
 | SRCH-03 | 04-13 | VERIFIED — scoped implementation | `backend/src/verboflex/services/translation_search.py`; `backend/tests/integration/test_translation_search.py`; `backend/tests/api/test_translations.py` |
@@ -290,7 +297,7 @@ The canonical `gsd-tools query check.decision-coverage-verify` returned `honored
 
 ### Plan-specific must-haves
 
-The following ledger retains all 161 plan truth strings so the eight roadmap criteria do not hide additional plan obligations. Repeated roadmap/decision/edge statements are detail, not additional points in the 6/8 roadmap score. “VERIFIED” is scoped to the cited source/test snapshot. Final delivery, qualitative human judgments, and production polling remain explicitly non-passing.
+The following ledger retains all 161 plan truth strings so the eight roadmap criteria do not hide additional plan obligations. Repeated roadmap/decision/edge statements are detail, not additional points in the 8/8 roadmap score. “VERIFIED” is scoped to the cited source/test snapshot. Final automated delivery and production polling are verified; qualitative human judgments remain explicitly unresolved.
 
 | Plan / truth | Contract | Status | Evidence owner |
 |---|---|---|---|
@@ -346,7 +353,7 @@ The following ledger retains all 161 plan truth strings so the eight roadmap cri
 | 04-11/6 | Per D-12, changed source text preserves target text/context and resets every associated target value to Draft. | VERIFIED | `backend/tests/integration/test_translation_import_activation.py` |
 | 04-11/7 | Per D-23, every activated import invokes the same authoritative grapheme/effective-limit recomputation seam later used by translation edits. | VERIFIED | `backend/tests/integration/test_translation_import_activation.py` |
 | 04-12/1 | Per D-05/D-06, parser failure appears on the existing mapping row, retains prior baseline/dataset, caps five safe issues plus remainder, and orders separate issues Keys then Translations. | VERIFIED | `backend/tests/api/test_admin_mappings.py` |
-| 04-12/2 | The API distinguishes first canonical failure from a failed refresh with a retained active dataset and never implies that one side of a separate mapping activated. | FAILED — BLOCKER; concurrent completion status projection | `backend/tests/api/test_admin_mappings.py` |
+| 04-12/2 | The API distinguishes first canonical failure from a failed refresh with a retained active dataset and never implies that one side of a separate mapping activated. | VERIFIED — coherent-snapshot regression and final smoke | `backend/tests/api/test_admin_mappings.py` |
 | 04-12/3 | No exception, source excerpt, XML/JSON fragment, provider body, internal execution detail, or automatic detected URL reaches the public schema. | VERIFIED | `backend/tests/api/test_admin_mappings.py` |
 | 04-13/1 | Per D-02, results group one raw key and language while detail returns every scalar/structured value and selector separately. | VERIFIED | `backend/tests/integration/test_translation_search.py`; `backend/tests/api/test_translations.py` |
 | 04-13/2 | Per D-09/D-18, active-only is default; deleted-only and active-plus-deleted retain last-known provenance and context. | VERIFIED | `backend/tests/integration/test_translation_search.py`; `backend/tests/api/test_translations.py` |
@@ -409,13 +416,13 @@ The following ledger retains all 161 plan truth strings so the eight roadmap cri
 | 04-19/5 | No production module calls a parser implementation directly; repository import/parsing and later provider writes remain Celery-dispatched, while D-21's role-gated transactional maximum-length PUT/DELETE endpoints are explicitly allowed. | VERIFIED | `backend/tests/architecture/test_phase4_closeout_gate.py`; `backend/tests/architecture/test_phase4_scope.py` |
 | 04-19/6 | Translation-text, review-state, comment, approval, write-back, and provider mutations remain absent from Phase 4 HTTP routes. | VERIFIED | `backend/tests/architecture/test_phase4_closeout_gate.py`; `backend/tests/architecture/test_phase4_scope.py` |
 | 04-19/7 | No active dataset can mix executions, activate after supersession, expose raw parse/provider secrets, or bypass authorization-scoped search/detail/constraint projections. | VERIFIED | `backend/tests/architecture/test_phase4_closeout_gate.py`; `backend/tests/architecture/test_phase4_scope.py` |
-| 04-19/8 | Migration round trips, safe-parser hostile fixtures, import activation, cursor mutation probes, role matrices, post-install Python/npm vulnerability and approved-license/lock-identity checks, generated-client drift, frontend build, worker smoke, and browser smoke pass from one repeatable gauntlet. | FAILED — BLOCKER; final delivery/evidence absent | `backend/tests/architecture/test_phase4_closeout_gate.py`; `backend/tests/architecture/test_phase4_scope.py` |
-| 04-20/1 | A fresh targeted code review traces all 20 requirements and D-01..D-23 through shipped source/tests and records zero unresolved Critical/high defects. | FAILED — BLOCKER; final delivery/evidence absent | `backend/tests/architecture/test_phase4_closeout_gate.py` |
-| 04-20/2 | A fresh ASVS L1/STRIDE review verifies safe XML/resource bounds, authorization scope, non-enumerating errors, cursor binding, redaction, exact package approval, and stale/superseded activation with no open high-severity threat. | FAILED — BLOCKER; final delivery/evidence absent | `backend/tests/architecture/test_phase4_closeout_gate.py` |
-| 04-20/3 | The exact Phase 4 gauntlet and live smoke rerun from a clean service state after review and their commands/digests/timestamps are recorded. | FAILED — BLOCKER; final delivery/evidence absent | `backend/tests/architecture/test_phase4_closeout_gate.py` |
-| 04-20/4 | An independent goal-backward verifier checks observable behavior rather than task completion, replays the 20 requirements/23 decisions/52 edges/two prohibitions/UI inventory, and writes exact frontmatter `status: passed` only on exact coverage. | FAILED — BLOCKER; final delivery/evidence absent | `backend/tests/architecture/test_phase4_closeout_gate.py` |
-| 04-20/5 | Every review, security, verification, and evidence artifact carries the same nonempty post-gauntlet source digest; stale or mismatched evidence fails closed. | FAILED — BLOCKER; final delivery/evidence absent | `backend/tests/architecture/test_phase4_closeout_gate.py` |
-| 04-20/6 | A review, security, gauntlet, smoke, source-audit, UI, or prohibition gap prevents `status: passed` and produces an explicit remediation item; closeout never silently waives it. | FAILED — BLOCKER; final delivery/evidence absent | `backend/tests/architecture/test_phase4_closeout_gate.py` |
+| 04-19/8 | Migration round trips, safe-parser hostile fixtures, import activation, cursor mutation probes, role matrices, post-install Python/npm vulnerability and approved-license/lock-identity checks, generated-client drift, frontend build, worker smoke, and browser smoke pass from one repeatable gauntlet. | VERIFIED automated gates; UNCERTAIN human checkpoint | `backend/tests/architecture/test_phase4_closeout_gate.py`; `backend/tests/architecture/test_phase4_scope.py` |
+| 04-20/1 | A fresh targeted code review traces all 20 requirements and D-01..D-23 through shipped source/tests and records zero unresolved Critical/high defects. | VERIFIED automated gates; UNCERTAIN human checkpoint | `backend/tests/architecture/test_phase4_closeout_gate.py` |
+| 04-20/2 | A fresh ASVS L1/STRIDE review verifies safe XML/resource bounds, authorization scope, non-enumerating errors, cursor binding, redaction, exact package approval, and stale/superseded activation with no open high-severity threat. | VERIFIED automated gates; UNCERTAIN human checkpoint | `backend/tests/architecture/test_phase4_closeout_gate.py` |
+| 04-20/3 | The exact Phase 4 gauntlet and live smoke rerun from a clean service state after review and their commands/digests/timestamps are recorded. | VERIFIED automated gates; UNCERTAIN human checkpoint | `backend/tests/architecture/test_phase4_closeout_gate.py` |
+| 04-20/4 | An independent goal-backward verifier checks observable behavior rather than task completion, replays the 20 requirements/23 decisions/52 edges/two prohibitions/UI inventory, and writes exact frontmatter `status: passed` only on exact coverage. | VERIFIED automated gates; UNCERTAIN human checkpoint | `backend/tests/architecture/test_phase4_closeout_gate.py` |
+| 04-20/5 | Every review, security, verification, and evidence artifact carries the same nonempty post-gauntlet source digest; stale or mismatched evidence fails closed. | VERIFIED automated gates; UNCERTAIN human checkpoint | `backend/tests/architecture/test_phase4_closeout_gate.py` |
+| 04-20/6 | A review, security, gauntlet, smoke, source-audit, UI, or prohibition gap prevents `status: passed` and produces an explicit remediation item; closeout never silently waives it. | VERIFIED automated gates; UNCERTAIN human checkpoint | `backend/tests/architecture/test_phase4_closeout_gate.py` |
 | 04-21/1 | Per D-19, base-language default inheritance is dynamic, an explicit target override is independent, and removal restores inherited-or-none behavior. | VERIFIED | `backend/tests/integration/test_translation_constraints.py` |
 | 04-21/2 | Per D-20 and D-23, import, default/override mutation, removal, and the later translation-edit seam use the same versioned grapheme algorithm and transactional recomputation. | VERIFIED | `backend/tests/integration/test_translation_constraints.py` |
 | 04-21/3 | Per D-22, over-limit values remain retained Draft/readable but carry authoritative cannot-approve/cannot-submit status for later workflow boundaries. | VERIFIED | `backend/tests/integration/test_translation_constraints.py` |
@@ -456,25 +463,26 @@ The following ledger retains all 161 plan truth strings so the eight roadmap cri
 | 04-27/2 | Publishing a current candidate retains the same selected language, while a changed candidate language makes prior confirmation stale and never mutates old published history. | VERIFIED | `backend/tests/integration/test_product_publication.py` |
 | 04-27/3 | Direct, separate, repeated no-op, and legacy-null paths preserve exact values without choosing a conventional locale. | VERIFIED | `backend/tests/integration/test_product_publication.py` |
 
+
 ## Test quality and disconfirmation
 
 | Evidence family | Audit | Result |
 |---|---|---|
-| Parser golden suites | Assertions compare complete canonical projections with separately checked-in expected JSON; hostile tests assert empty values plus exact closed issue categories. No expectation-generation writer found in these suites. | Value/behavioral proof, not mere existence |
-| Activation/constraint integration | JUnit confirms named persisted-state cases ran; source assertions verify UUID/history/state, separate atomicity, rollback, inheritance and optimistic concurrency. | Strong behavioral proof for tested transactions |
-| Search/component/browser | Actual state/filter/response/focus assertions exist; backend rows are real PostgreSQL in integration tests, but browser `translations.spec.ts` deliberately intercepts HTTP with fixtures. | Browser tests prove presentation/composition, not live provider or built-stack import |
-| Inventory helper | AST confirms an assertion exists and selectors/files resolve; it cannot prove semantic coverage by itself. | Used for exact inventory only |
-| Disabled test scan | No requirement-linked disabled-test marker found in the selected parser, translation integration/API, component or browser files; JUnit records zero skipped. | No skip-based coverage claim |
-| Debt/stub scan | No unreferenced TBD/FIXME/XXX or TODO/HACK/PLACEHOLDER marker found across the 26 unique manifest delivery files. Null/empty comments and pending context are intentional Phase 4 contract states. | No blocker marker found in scanned delivery set |
-| Scope tests | Negative controls seed raw transport/content persistence/HTML/parser-boundary bypasses and assert rejection; generated OpenAPI matches. | Architecture checks are executable, not plan narration |
+| Parser golden suites | Full canonical projection comparisons against hand-authored expected JSON, plus exact closed failure categories; no circular expectation writer found. | Value/behavioral proof |
+| Activation/constraint tests | Persisted UUID/history/state/provenance, atomicity, rollback, inheritance and concurrency assertions; all current named records pass. | Behavioral proof |
+| Three new correction suites | Real PostgreSQL interleaving/blocker observations and state assertions; same/other-product controls; guard denials and downgrade/upgrade symmetry. All 37 active cases present in final JUnit. | Regression proof for the corrected paths |
+| Browser tests | Actual filter/response/focus assertions; HTTP fixtures are explicit; separate built-container smoke traverses real API/worker/DB with TLS provider mock. | UI/build composition proved; live provider/native accessibility not proved |
+| Inventory helper | Exact source/ID/selector equality plus assertion presence cannot alone establish behavior. | Used only with source and runtime evidence |
+| Disabled tests | Final JUnit: zero skipped. Initial scan found no disabled requirement-linked tests. Selector-excluded Vitest cases were not disabled tests. | No skip-based pass |
+| Debt/stubs | Initial delivery scan found no unreferenced blocker markers; changed correction sources contain substantive locks, validation and migration predicates. Intentional comment/pending absence is documented. | No unresolved implementation blocker found |
 
-**Disconfirmation:** (1) FMT-08 is incomplete through the actual UI/API completion path because the deployment smoke failed. (2) The “UI4 inventory covers 50” test proves counts only; it is not used as UI behavior proof, and the manifest rejects using that selector as a substitute. Browser viewport/reduced-motion tests also do not establish native 200% zoom or a screen-reader result. (3) The completion-poll/activation interleaving was absent from the successful old gauntlet; a new real-DB regression is being authored. These observations prevent an inflated PASS despite the passing suite totals.
+**Disconfirmation recheck:** the original missing polling interleaving is now covered by four real-DB cases and a green fresh smoke. The initially misleading UI inventory-count test is still not accepted as behavioral evidence; named component/browser tests remain its evidence. Mock provider runs and emulated widths still do not establish live Bitbucket, native 200% zoom, screen-reader behavior, or normative prohibition framing. Those limitations remain exactly the four human items below.
 
-**Reliance check:** No additional advisory coincidental-reliance item is asserted without a specific unsupported precondition. `pg_trgm` and PostgreSQL Unicode case-fold capability are declared deployment prerequisites and migration guards, not hidden fixture assumptions. Provider mocks remain explicitly limited evidence.
+No new coincidental-reliance advisory is asserted without a concrete unsupported precondition. The worker explicitly locks Product before subordinate authority and public constraint paths now enforce the same order. PostgreSQL capabilities remain declared prerequisites with migration guards.
 
 ## Human verification required — four items
 
-These survive even when the automated gaps are closed. They are warnings requiring an end-of-phase human decision, not new authorization requests for ordinary implementation.
+All automated gaps are closed; these four items remain unresolved. They are warnings requiring an end-of-phase human decision, not new authorization requests for ordinary implementation.
 
 1. **Live Bitbucket disposable-branch import and refresh.** Using the user's approved disposable repository/branch and credentials, import through the published mapping, verify active text and exact commit/file provenance, then externally change one target and refresh. Expect the affected value to become Draft while UUID/history/constraints remain and unrelated values retain state. This is the existing `04-VALIDATION.md` manual FMT-07/FMT-08 row. Local TLS provider mocks cannot establish real Bitbucket integration.
 
@@ -486,66 +494,54 @@ These survive even when the automated gaps are closed. They are warnings requiri
 
 Both prohibitions have `status: unverified, flagged: true` in the plans and no deterministic verification descriptor. Their source/test evidence supports a **NON-AUTHORITATIVE LLM judgment: consistent**, but this is not human acceptance. **unverified-prohibition — human review recommended (2)**. The verifier's prohibition protocol requires explicit per-item resolution at the end-of-phase checkpoint in interactive mode; `.planning/config.json` is `mode: interactive`.
 
-## Structured gaps and human-verification handoff
+
+## Structured re-verification and UAT handoff
 
 ```yaml
-gaps:
-  - truth: "Celery import completion is reliably observable through the published mapping API/UI."
-    status: failed
-    severity: BLOCKER
-    reason: "Final built-stack smoke stopped on import-android_xml-http-500."
-    artifacts:
-      - path: backend/src/verboflex/services/import_jobs.py
-        issue: "get_import_job/_record/_dataset_status load job and active scope through separate reads; coherent concurrent-completion projection requires regression proof."
-      - path: backend/tests/integration/test_import_status_activation_race.py
-        issue: "New regression work is not part of the inspected passing test snapshot."
-    missing:
-      - "Deterministic concurrent polling/activation test for detail and collection projections."
-      - "Correct the evidenced race and retain fail-closed handling for genuinely inconsistent durable authority."
-      - "Fresh full gauntlet including successful built-stack import smoke after source freeze."
-  - truth: "Final code, security, delivery and verification artifacts share fresh passing source authority."
-    status: failed
-    severity: BLOCKER
-    reason: "Evidence is in_progress; code review pending; security OPEN_THREATS/older digest; current source has changed; --check-all exits 1."
-    artifacts:
-      - path: docs/evidence/phase-04.md
-        issue: "Missing final source_digest and zero gauntlet_exit/smoke_exit authority."
-      - path: docs/reviews/phase-04-code-review.md
-        issue: "Final passing review must cover the race correction on the frozen digest."
-      - path: docs/reviews/phase-04-security-review.md
-        issue: "Needs fresh exact SECURED with all 78 registered threats reconciled to that digest."
-      - path: .planning/phases/04-localization-import-search-and-constraints/04-REVIEW.md
-        issue: "Consolidated gate remains pending and must agree with final review/security."
-    missing:
-      - "Freeze after all implementation/test/tool changes and rerun full gate."
-      - "Record sanitized commands, timestamps, exit codes and matching digest."
-      - "Re-review the correction and rerun this independent verification."
+re_verification:
+  previous_status: gaps_found
+  previous_score: "6/8"
+  previous_source_digest: sha256:b233e7e48f9f1c0a831338955418d832143f8614f69ebc7637143e74312b58d3
+  gaps_closed:
+    - "Coherent published-mapping import completion polling under activation."
+    - "Fresh passing gauntlet/smoke, code review and security evidence at one current digest."
+  gaps_remaining: []
+  regressions: []
+  follow_on_corrections_verified:
+    - "CR15 Product-first constraint lock ordering and fresh authority."
+    - "CR16 narrow retained-baseline constraint epoch and reversible migration 0021."
+gaps: []
+behavior_unverified: 0
+behavior_unverified_items: []
 human_verification:
-  - test: "Live Bitbucket disposable-branch import/refresh"
-    expected: "Exact provenance, retained stable context, only affected external target reset to Draft."
-    why_human: "Actual Bitbucket credentials/provider behavior are outside local mock evidence."
-  - test: "Native 200% zoom, keyboard and screen reader"
-    expected: "Readable reflow, usable dialogs/list announcements and correct focus restoration."
-    why_human: "Automated viewport/DOM evidence does not establish native assistive behavior."
-  - test: "Accept or reject no-inferred-rename transparency prohibition"
-    expected: "Deleted and new equal-text keys remain separate, without inferred-rename framing."
-    why_human: "Descriptor-less flagged judgment item; no human resolution recorded."
-  - test: "Accept or reject readable-over-limit values prohibition"
-    expected: "Full over-limit content remains readable and retainable in Draft without destructive framing."
-    why_human: "Descriptor-less flagged judgment item; no human resolution recorded."
+  - test: "Live Bitbucket disposable-branch import and external refresh"
+    expected: "Exact commit/file provenance; affected external target returns to Draft; stable UUID/history/constraints and unrelated state retained."
+    why_human: "No actual Bitbucket Cloud run has been reported; the automated provider is a local TLS mock."
+    source: "04-VALIDATION.md manual FMT-07/FMT-08 row"
+  - test: "Native 200% zoom, narrow/desktop keyboard navigation and screen reader"
+    expected: "No page overflow or clipped actions; understandable list/dialog announcements; correct detail/Back/error focus restoration."
+    why_human: "Viewport and DOM assertions do not establish native assistive behavior."
+    source: "04-VALIDATION.md manual SRCH-06/07/08 CONS-05 row; UI-SPEC accessibility contract"
+  - test: "Resolve the no-inferred-rename transparency prohibition"
+    expected: "Old deletion and new equal-text key remain separate, with no inferred-rename framing."
+    why_human: "Plan04-11 descriptor-less flagged judgment; human resolution not recorded."
+  - test: "Resolve the readable-over-limit values prohibition"
+    expected: "Full over-limit translation remains readable and retainable in Draft, without destructive-removal framing."
+    why_human: "Plan04-18 descriptor-less flagged judgment; human resolution not recorded."
 overrides_applied: 0
 coincidental_reliance_items: []
 ```
 
-## Deferred scope and next verification
+## Deferred scope and completion boundary
 
-Actual translation-edit, review-state/comment mutations belong to Phase 5; serializer/write-back behavior to Phase 6; provider branch/commit/PR submission to Phase 7. The Phase 4 shared edit-recompute and durable correlation seams are present and tested. These future operations are not missing Phase 4 artifacts. No current runtime/evidence failure is deferred: later roadmap phases do not excuse a failing Phase 4 delivery gate.
+Translation editing/review/comment mutations belong to Phase 5, format-safe writers to Phase 6, and branch/commit/PR submissions to Phase 7. The Phase 4 edit-recomputation and correlation seams are present and tested. No unresolved Phase 4 implementation defect is being transferred to a later phase.
 
-After the correction, recompute the source digest, inspect fresh full-gate results and all review ledgers, then run the exact Plan 20 validator:
+The exact Plan 20 final validator remains:
 
 ```sh
 uv run --project backend python tools/verify_phase4_closeout.py --check-all --manifest tools/phase4_source_manifest.txt --evidence docs/evidence/phase-04.md --code-review docs/reviews/phase-04-code-review.md --security-review docs/reviews/phase-04-security-review.md --review-ledger .planning/phases/04-localization-import-search-and-constraints/04-REVIEW.md --verification .planning/phases/04-localization-import-search-and-constraints/04-VERIFICATION.md
 ```
 
-Use `--check-code-review` and `--check-security` for their corresponding intermediate checks. These flags are booleans; artifact filenames use their separate named flags. While any of the four human items remains unresolved, a clean automated recheck should produce `human_needed`, never `passed`. The strict all-check appropriately rejects a non-passing final verdict. No files other than this report were authored by this verifier, and no commit was made.
+Its review/security modes independently pass. `--check-all` must continue to reject `human_needed` until the four UAT results are recorded and this verifier can reassess them. The report's schema and digest agree with the other final artifacts; the remaining non-passing authority is the explicit human checkpoint. Recommended next workflow: `$gsd-verify-work 4`. Do not mark the phase complete or create a passing closeout by changing the status without those results.
 
+Only this verification report was edited by this verifier. No implementation, test, database, service, or phase state was changed; no commit was made.
