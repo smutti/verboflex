@@ -36,6 +36,24 @@ def test_phase4_source_inventory_is_exact():
     }
 
 
+def test_source_inventory_rejects_new_flagged_assumption(tmp_path, monkeypatch):
+    import shutil
+
+    import yaml
+
+    module = inventory()
+    phase = tmp_path / "phase"
+    shutil.copytree(module.PHASE, phase)
+    plan = phase / "04-01-PLAN.md"
+    parts = plan.read_text().split("---", 2)
+    front = yaml.safe_load(parts[1])
+    front["must_haves"]["assumptions"] = [{"statement": "Unproven edge", "flagged": True}]
+    plan.write_text("---\n" + yaml.safe_dump(front) + "---" + parts[2])
+    monkeypatch.setattr(module, "PHASE", phase)
+    with pytest.raises(ValueError, match="assumption"):
+        module.source_inventory()
+
+
 @pytest.mark.parametrize("change", ["missing", "duplicate", "extra", "unreachable"])
 def test_manifest_rejects_missing_duplicate_extra_or_unreachable_evidence(change):
     module = inventory()
