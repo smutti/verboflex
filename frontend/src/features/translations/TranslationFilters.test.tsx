@@ -113,9 +113,7 @@ describe("TranslationFilters", () => {
           .getAllByRole("option")
           .map((option) => option.textContent),
       ).toEqual(choices);
-      await user.click(
-        screen.getByRole("option", { name: choice }),
-      );
+      await user.click(screen.getByRole("option", { name: choice }));
       expect(onChange).toHaveBeenCalledExactlyOnceWith({
         ...defaults,
         ...changed,
