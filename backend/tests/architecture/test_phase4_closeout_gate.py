@@ -62,6 +62,38 @@ def test_exact_valid_artifacts_are_accepted(kind):
     assert verifier().validate_document(document(kind), kind)["source_digest"].startswith("sha256:")
 
 
+def test_review_scope_metadata_is_typed_and_preserved():
+    metadata = dict(
+        reviewed="2026-09-06T10:16:26Z",
+        depth="standard",
+        files_reviewed=1,
+        files_reviewed_list=["backend/src/verboflex/services/translation_search.py"],
+        findings={"critical": 0, "warning": 0, "info": 0, "total": 0},
+    )
+    parsed = verifier().validate_document(document(**metadata), "review")
+    assert all(parsed[key] == value for key, value in metadata.items())
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"reviewed": False},
+        {"reviewed": "yesterday"},
+        {"depth": []},
+        {"files_reviewed": True},
+        {"files_reviewed": -1},
+        {"files_reviewed_list": "backend/a.py"},
+        {"files_reviewed_list": [True]},
+        {"findings": []},
+        {"findings": {"critical": False}},
+        {"findings": {"critical": -1, "warning": 0, "info": 0, "total": -1}},
+    ],
+)
+def test_review_scope_metadata_rejects_malformed_values(changes):
+    with pytest.raises(ValueError):
+        verifier().validate_document(document(**changes), "review")
+
+
 @pytest.mark.parametrize(
     "kind,changes",
     [
