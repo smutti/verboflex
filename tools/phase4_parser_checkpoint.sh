@@ -267,7 +267,13 @@ try:
         if identity == ("verboflex", "0.1.0"):
             assert license_name == "UNKNOWN" and url == "UNKNOWN"
             continue
-        assert license_name in ALLOWED
+        # Approved exact release: 04-07-SUMMARY; exact SPDX recorded in 04-14-SUMMARY.
+        # This is not a general allowance for CNRI-Python or other regex releases.
+        approved_regex = (
+            identity == ("regex", "2026.9.3")
+            and license_name == "Apache-2.0 AND CNRI-Python"
+        )
+        assert license_name in ALLOWED or approved_regex
         accepted += 1
     assert accepted > 0
 except (AssertionError, OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
