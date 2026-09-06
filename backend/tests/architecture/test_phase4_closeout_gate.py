@@ -10,7 +10,9 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def verifier():
-    spec = importlib.util.spec_from_file_location("phase4_closeout", ROOT / "tools/verify_phase4_closeout.py")
+    spec = importlib.util.spec_from_file_location(
+        "phase4_closeout", ROOT / "tools/verify_phase4_closeout.py"
+    )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
@@ -35,14 +37,22 @@ def test_exact_valid_artifacts_are_accepted(kind):
     assert verifier().validate_document(document(kind), kind)["source_digest"].startswith("sha256:")
 
 
-@pytest.mark.parametrize("kind,changes", [
-    ("review", {"status": "PASSED"}), ("review", {"status": "pass"}),
-    ("security", {"verdict": "secured"}), ("security", {"verdict": "NOT_SECURED"}),
-    ("verification", {"status": "Passed"}), ("verification", {"status": None}),
-    ("evidence", {"smoke_exit": False}), ("evidence", {"gauntlet_exit": "0"}),
-    ("evidence", {"smoke_exit": 1}), ("review", {"source_digest": "sha256:" + "A" * 64}),
-    ("review", {"unexpected": "passed"}),
-])
+@pytest.mark.parametrize(
+    "kind,changes",
+    [
+        ("review", {"status": "PASSED"}),
+        ("review", {"status": "pass"}),
+        ("security", {"verdict": "secured"}),
+        ("security", {"verdict": "NOT_SECURED"}),
+        ("verification", {"status": "Passed"}),
+        ("verification", {"status": None}),
+        ("evidence", {"smoke_exit": False}),
+        ("evidence", {"gauntlet_exit": "0"}),
+        ("evidence", {"smoke_exit": 1}),
+        ("review", {"source_digest": "sha256:" + "A" * 64}),
+        ("review", {"unexpected": "passed"}),
+    ],
+)
 def test_wrong_case_type_unknown_fields_and_missing_authority_fail(kind, changes):
     with pytest.raises(ValueError):
         verifier().validate_document(document(kind, **changes), kind)
@@ -55,7 +65,16 @@ def test_unresolved_severe_findings_cannot_hide_in_markdown(severity):
         verifier().validate_document(payload, "review")
 
 
-@pytest.mark.parametrize("payload", ["", "status: passed", "---\n[broken\n---", "---\nstatus: passed\nstatus: passed\n---", "---\nnull\n---"])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "",
+        "status: passed",
+        "---\n[broken\n---",
+        "---\nstatus: passed\nstatus: passed\n---",
+        "---\nnull\n---",
+    ],
+)
 def test_malformed_and_duplicate_frontmatter_fails(payload):
     with pytest.raises(ValueError):
         verifier().validate_document(payload, "review")
@@ -66,5 +85,6 @@ def test_missing_findings_header_and_mismatched_digest_fail():
     with pytest.raises(ValueError):
         module.validate_document(document().replace("Resolution", "Disposition"), "review")
     with pytest.raises(ValueError):
-        module.validate_digest_agreement([{"source_digest": "sha256:" + "a" * 64}, {"source_digest": "sha256:" + "b" * 64}])
-
+        module.validate_digest_agreement(
+            [{"source_digest": "sha256:" + "a" * 64}, {"source_digest": "sha256:" + "b" * 64}]
+        )

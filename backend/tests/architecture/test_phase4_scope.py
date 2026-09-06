@@ -10,7 +10,9 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def inventory():
-    spec = importlib.util.spec_from_file_location("phase4_inventory", ROOT / "tools/phase4_inventory.py")
+    spec = importlib.util.spec_from_file_location(
+        "phase4_inventory", ROOT / "tools/phase4_inventory.py"
+    )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
@@ -20,7 +22,18 @@ def inventory():
 
 def test_phase4_source_inventory_is_exact():
     module = inventory()
-    assert module.validate_manifest() == {"PLAN": 27, "GOAL": 1, "REQ": 20, "DECISION": 23, "EDGE": 52, "EDGE_ASSUMPTION": 0, "PROHIBITION": 2, "UI_CATEGORY": 8, "UI_INSTANCE": 50, "UI_AXIS": 3}
+    assert module.validate_manifest() == {
+        "PLAN": 27,
+        "GOAL": 1,
+        "REQ": 20,
+        "DECISION": 23,
+        "EDGE": 52,
+        "EDGE_ASSUMPTION": 0,
+        "PROHIBITION": 2,
+        "UI_CATEGORY": 8,
+        "UI_INSTANCE": 50,
+        "UI_AXIS": 3,
+    }
 
 
 @pytest.mark.parametrize("change", ["missing", "duplicate", "extra", "unreachable"])
@@ -43,14 +56,30 @@ def test_imports_cross_registry_boundary():
     inventory().validate_boundaries()
 
 
-@pytest.mark.parametrize("path,source", [
-    ("backend/src/verboflex/services/example.py", "from verboflex.localization.importing.android_xml import parse_android_xml"),
-    ("backend/src/verboflex/api/v1/routes/example.py", "from verboflex.localization.importing.registry import parse_mapping\nparse_mapping(data)"),
-    ("frontend/src/features/translations/example.ts", "localStorage.setItem('content', JSON.stringify(rows))"),
-    ("frontend/src/features/translations/example.ts", "fetch('/api/v1/translations')"),
-    ("frontend/src/features/translations/example.tsx", "const x = <div dangerouslySetInnerHTML={{__html: value}} />"),
-    ("frontend/src/features/translations/example.ts", "const count = new Intl.Segmenter()"),
-])
+@pytest.mark.parametrize(
+    "path,source",
+    [
+        (
+            "backend/src/verboflex/services/example.py",
+            "from verboflex.localization.importing.android_xml import parse_android_xml",
+        ),
+        (
+            "backend/src/verboflex/api/v1/routes/example.py",
+            "from verboflex.localization.importing.registry import parse_mapping\n"
+            "parse_mapping(data)",
+        ),
+        (
+            "frontend/src/features/translations/example.ts",
+            "localStorage.setItem('content', JSON.stringify(rows))",
+        ),
+        ("frontend/src/features/translations/example.ts", "fetch('/api/v1/translations')"),
+        (
+            "frontend/src/features/translations/example.tsx",
+            "const x = <div dangerouslySetInnerHTML={{__html: value}} />",
+        ),
+        ("frontend/src/features/translations/example.ts", "const count = new Intl.Segmenter()"),
+    ],
+)
 def test_seeded_boundary_shortcuts_fail(path, source):
     with pytest.raises(ValueError):
         inventory().validate_boundaries({path: source})
@@ -62,7 +91,12 @@ def test_no_deferred_phase4_operations():
     module = inventory()
     paths = create_app().openapi()["paths"]
     module.validate_routes(paths)
-    for path in ("/api/v1/translations/{id}", "/api/v1/translations/{id}/comments", "/api/v1/translations/{id}/approve", "/api/v1/translations/{id}/write-back"):
+    for path in (
+        "/api/v1/translations/{id}",
+        "/api/v1/translations/{id}/comments",
+        "/api/v1/translations/{id}/approve",
+        "/api/v1/translations/{id}/write-back",
+    ):
         with pytest.raises(ValueError):
             module.validate_routes({**paths, path: {"patch": {"operationId": "editTranslation"}}})
 
@@ -77,6 +111,32 @@ def test_api_routes_do_not_run_repository_work():
 
 def test_generated_contract_is_current():
     import json
+
     from verboflex.main import create_app
 
     assert json.loads((ROOT / "frontend/openapi.json").read_text()) == create_app().openapi()
+
+
+def test_api_coverage_detector_stays_exactly_false():
+    import json
+    import subprocess
+
+    result = subprocess.run(
+        [
+            "node",
+            "/Users/smutti/.codex/gsd-core/bin/gsd-tools.cjs",
+            "check",
+            "api-coverage.verify-pre",
+            "04",
+            "--raw",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    report = json.loads(result.stdout)
+    assert report["detected"] is False
+    assert report["passed"] is True
+    assert report["block"] is False
+    assert report["coverage_present"] is False
