@@ -5,10 +5,13 @@ from datetime import timedelta
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, text
+from alembic.config import Config
+from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import IntegrityError
 
+from alembic import command
 from tests.integration.test_translation_import_activation import (
+    BACKEND_ROOT,
     _json_result,
     _seed_running_direct_import,
     _stage_direct_manifest,
@@ -265,3 +268,79 @@ def test_retained_epoch_rejects_current_execution_older_than_baseline(activation
         factory.begin() as session,
     ):
         session.get_one(LocalizationScope, scope_id).dataset_version += 1
+
+
+def test_retained_epoch_migration_roundtrip_preserves_data_and_restores_prior_guard(
+    activation_session_factory,
+):
+    factory = activation_session_factory
+    baseline, repository_id, scope_id, group_id, actor_id = _active_baseline(factory)
+    _staged_refresh(factory, baseline, repository_id)
+    engine = factory.kw["bind"]
+    config = Config(BACKEND_ROOT / "alembic.ini")
+    config.set_main_option("sqlalchemy.url", engine.url.render_as_string(hide_password=False))
+    inspector = inspect(engine)
+    expected_columns = inspector.get_columns("localization_scopes")
+    expected_foreign_keys = inspector.get_foreign_keys("localization_scopes")
+    with factory() as session:
+        upgraded_function = session.scalar(
+            text(
+                "SELECT pg_get_functiondef("
+                "'verboflex_guard_localization_scope_activation()'::regprocedure)"
+            )
+        )
+    common = {"translation_group_id": group_id, "language": "it"}
+    try:
+        command.downgrade(config, "0020_bounded_key_identities")
+        with (
+            pytest.raises(
+                IntegrityError, match="localization scope activation authority violation"
+            ),
+            factory.begin() as session,
+        ):
+            translation_constraints.put_translation_constraint(
+                session, **common, max_chars=8, expected_version=0, actor_id=actor_id
+            )
+        with factory() as session:
+            assert session.get_one(LocalizationScope, scope_id).dataset_version == 1
+            assert session.get_one(TranslationValue, group_id).effective_max_chars is None
+        command.upgrade(config, "head")
+        with factory.begin() as session:
+            result = translation_constraints.put_translation_constraint(
+                session, **common, max_chars=8, expected_version=0, actor_id=actor_id
+            )
+        command.downgrade(config, "0020_bounded_key_identities")
+        with (
+            pytest.raises(
+                IntegrityError, match="localization scope activation authority violation"
+            ),
+            factory.begin() as session,
+        ):
+            translation_constraints.delete_translation_constraint(
+                session, **common, expected_version=result.version
+            )
+        command.upgrade(config, "head")
+        with factory.begin() as session:
+            translation_constraints.delete_translation_constraint(
+                session, **common, expected_version=result.version
+            )
+        with factory() as session:
+            scope = session.get_one(LocalizationScope, scope_id)
+            assert scope.dataset_version == 3 and scope.active_execution_id == baseline.execution_id
+            assert session.get_one(TranslationValue, group_id).translated_text == "Ciao"
+            assert (
+                session.scalar(
+                    text(
+                        "SELECT pg_get_functiondef("
+                        "'verboflex_guard_localization_scope_activation()'::regprocedure)"
+                    )
+                )
+                == upgraded_function
+            )
+        inspector = inspect(engine)
+        assert [column["name"] for column in inspector.get_columns("localization_scopes")] == [
+            column["name"] for column in expected_columns
+        ]
+        assert inspector.get_foreign_keys("localization_scopes") == expected_foreign_keys
+    finally:
+        command.upgrade(config, "head")
