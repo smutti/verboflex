@@ -8,6 +8,7 @@ import {
   type ElementType,
 } from "react";
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
 
 import {
   listAdminPublishedMappingImports,
@@ -15,6 +16,7 @@ import {
   type AdminPublishedMappingImportListResponse,
   type AdminPublishedMappingImportResponse,
   type AdminRepositoryResponse,
+  type ImportParserIssue,
 } from "../../../api/client";
 import {
   Alert,
@@ -39,6 +41,7 @@ import {
 } from "./mutationAuthority";
 import { importPollingIdentity, useImportPolling } from "./useImportPolling";
 import { RewrittenBaselineDialog } from "./RewrittenBaselineDialog";
+import { useSession } from "../../auth/session";
 
 const IMPORT_PAGE_LIMIT = 50;
 const MAX_IMPORT_PAGES = 50;
@@ -92,6 +95,94 @@ const SIDE_LABELS = {
   translations: "Translations",
 } as const;
 
+const PARSER_CATEGORIES: Record<ImportParserIssue["issue_code"], string> = {
+  malformed_file: "Malformed file",
+  ambiguous_structure: "Ambiguous structure",
+  unsupported_structure: "Unsupported structure",
+  duplicate_key: "Duplicate key",
+  base_language_required: "Base language required",
+};
+
+function hasParserFailure(item: AdminPublishedMappingImportResponse) {
+  return (
+    (item.state === "import_failed" || item.state === "may_be_stale") &&
+    (item.parser_issues.length > 0 ||
+      item.parser_issue_remaining_count > 0 ||
+      item.error_category === null)
+  );
+}
+
+function ConfigureBaseLanguage({ productId }: { productId: string }) {
+  const { state } = useSession();
+  if (
+    state.status !== "authenticated" ||
+    !state.principal.roles.includes("admin")
+  ) {
+    return null;
+  }
+  return (
+    <Button
+      asChild
+      variant="outline"
+      className="min-h-[44px] h-auto whitespace-normal motion-reduce:transition-none"
+    >
+      <Link to={`/admin/products/${encodeURIComponent(productId)}/preview`}>
+        Configure base language
+      </Link>
+    </Button>
+  );
+}
+
+function ParserIssues({
+  item,
+  productId,
+}: {
+  item: AdminPublishedMappingImportResponse;
+  productId: string;
+}) {
+  // Stable sort preserves the provider-file order projected within each side.
+  const sideOrder = { direct: 0, keys: 1, translations: 2 };
+  const issues = [...item.parser_issues]
+    .sort((a, b) => sideOrder[a.repository_side] - sideOrder[b.repository_side])
+    .slice(0, 5);
+  const remaining =
+    item.parser_issue_remaining_count +
+    Math.max(0, item.parser_issues.length - issues.length);
+  return (
+    <>
+      {issues.length > 0 ? (
+        <ul aria-label="Parser errors" className="grid min-w-0 w-full gap-2">
+          {issues.map((issue, index) => (
+            <li key={index} className="min-w-0 [overflow-wrap:anywhere]">
+              <span className="font-semibold">
+                {PARSER_CATEGORIES[issue.issue_code]}
+              </span>
+              <span className="block">
+                {SIDE_LABELS[issue.repository_side]}
+              </span>
+              <span className="block font-mono">{issue.path}</span>
+              {issue.line !== null ? (
+                <span>
+                  Line {issue.line}
+                  {issue.column !== null ? `, column ${issue.column}` : ""}
+                </span>
+              ) : issue.column !== null ? (
+                <span>Column {issue.column}</span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {remaining > 0 ? <p>And {remaining} more errors.</p> : null}
+      {item.parser_issues.some(
+        (issue) => issue.issue_code === "base_language_required",
+      ) ? (
+        <ConfigureBaseLanguage productId={productId} />
+      ) : null}
+    </>
+  );
+}
+
 const ERROR_COPY: Record<
   NonNullable<AdminPublishedMappingImportResponse["error_category"]>,
   { heading: string; message: string }
@@ -134,6 +225,12 @@ const ERROR_COPY: Record<
 };
 
 function fixedErrorCopy(item: AdminPublishedMappingImportResponse) {
+  if (hasParserFailure(item)) {
+    return {
+      heading: "Localization files could not be imported",
+      message: `One or more configured files are malformed, ambiguous, or contain unsupported structure. ${item.dataset_status === "retained" ? "The last successful translation dataset remains active." : "No translation dataset was created."}`,
+    };
+  }
   if (item.error_category === null) {
     return null;
   }
@@ -268,11 +365,13 @@ function RowError({
   item,
   mutationFailed,
   pollingFailed,
+  productId,
 }: {
   focusRef?: (element: HTMLDivElement | null) => void;
   item: AdminPublishedMappingImportResponse;
   mutationFailed: boolean;
   pollingFailed: boolean;
+  productId: string;
 }) {
   const errorCopy = fixedErrorCopy(item);
   if (errorCopy === null && !mutationFailed && !pollingFailed) {
@@ -296,9 +395,15 @@ function RowError({
       ref={focusRef}
       tabIndex={mutationFailed || pollingFailed ? -1 : undefined}
       variant={item.active_baseline === null ? "destructive" : "default"}
+      className="min-w-0 [overflow-wrap:anywhere]"
     >
-      <AlertTitle>{copy.heading}</AlertTitle>
-      <AlertDescription>{copy.message}</AlertDescription>
+      <AlertTitle className="line-clamp-none">{copy.heading}</AlertTitle>
+      <AlertDescription className="min-w-0">
+        <p>{copy.message}</p>
+        {hasParserFailure(item) ? (
+          <ParserIssues item={item} productId={productId} />
+        ) : null}
+      </AlertDescription>
     </Alert>
   );
 }
@@ -886,6 +991,7 @@ export function PublishedMappingImports({
                             repositories={repositories}
                           />
                           <RowError
+                            productId={productId}
                             focusRef={(element) =>
                               setMutationErrorRef(
                                 "desktop",
@@ -982,6 +1088,7 @@ export function PublishedMappingImports({
                     <LatestExecution item={item} />
                   </div>
                   <RowError
+                    productId={productId}
                     focusRef={(element) =>
                       setMutationErrorRef("mobile", item.mapping_id, element)
                     }
