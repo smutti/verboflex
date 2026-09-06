@@ -59,7 +59,10 @@ class TestResizeObserver {
             borderBoxSize: [
               { blockSize: height(element), inlineSize: window.innerWidth },
             ],
-          } as ResizeObserverEntry,
+            contentBoxSize: [],
+            devicePixelContentBoxSize: [],
+            contentRect: element.getBoundingClientRect(),
+          },
         ],
         this as unknown as ResizeObserver,
       );
@@ -154,12 +157,12 @@ beforeEach(() => {
   });
   Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
   vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(
-    function () {
+    function (this: HTMLElement) {
       return height(this);
     },
   );
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-    function () {
+    function (this: HTMLElement) {
       return {
         x: 0,
         y: 400 - window.scrollY,
@@ -184,7 +187,7 @@ describe("TranslationResultList window virtualization", () => {
   it("uses the exact approved adapter options and window scrollbar with opaque stable keys", async () => {
     const props = { ...defaults(), items: many(), nextCursor: "next" };
     mount(props);
-    await screen.findByRole("listitem");
+    await screen.findAllByRole("listitem");
     const options = vi.mocked(useWindowVirtualizer).mock.calls.at(-1)![0];
     expect(options.count).toBe(100);
     expect(options.estimateSize(0)).toBe(288);
@@ -201,7 +204,9 @@ describe("TranslationResultList window virtualization", () => {
       "overflow-scroll",
     );
     expect(list.style.overflow).toBe("");
-    expect(screen.getByText("100 translation groups loaded")).toBeVisible();
+    expect(
+      screen.getAllByText("100 translation groups loaded")[0],
+    ).toBeVisible();
     expect(props.onLoadMore).not.toHaveBeenCalled();
   });
 
@@ -452,7 +457,7 @@ describe("TranslationResultList six-part anatomy and safe content", () => {
     expect(screen.getByText("Empty translation")).toBeVisible();
     expect(screen.getByText("it-IT")).toBeVisible();
     expect(screen.getByText("No max length")).toBeVisible();
-    expect(screen.getByText("1 translation group loaded")).toBeVisible();
+    expect(screen.getAllByText("1 translation group loaded")[0]).toBeVisible();
   });
 
   it("keeps malicious markup, URLs, Unicode and long multiline values literal with no reveal or storage", async () => {
@@ -495,6 +500,58 @@ describe("TranslationResultList six-part anatomy and safe content", () => {
 });
 
 describe("TranslationResultList cursor and keyboard loading", () => {
+  it("focuses an explicit loading error while superseded callbacks cannot contaminate a new search", async () => {
+    const props = {
+      ...defaults(),
+      items: many(),
+      nextCursor: "next",
+      onLoadMore: vi.fn(async () => {
+        throw new Error("private upstream failure");
+      }),
+    };
+    const view = mount(props);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Load more translations" }),
+    );
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
+    expect(
+      screen.queryByText("private upstream failure"),
+    ).not.toBeInTheDocument();
+    view.update({
+      ...props,
+      requestIdentity: "another search",
+      onLoadMore: vi.fn(async () => {}),
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("allows a new generation to load before an old callback settles and ignores its late rejection", async () => {
+    let rejectOld!: (reason: Error) => void;
+    const props = {
+      ...defaults(),
+      nextCursor: "next",
+      onLoadMore: vi.fn(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectOld = reject;
+          }),
+      ),
+    };
+    const view = mount(props);
+    await waitFor(() => expect(props.onLoadMore).toHaveBeenCalledTimes(1));
+    const newLoad = vi.fn(async () => {});
+    view.update({
+      ...props,
+      requestIdentity: "another search",
+      onLoadMore: newLoad,
+    });
+    await waitFor(() => expect(newLoad).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      rejectOld(new Error("old failure"));
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("triggers the final rendered index once, and respects request identity and busy state", async () => {
     const props = { ...defaults(), items: many(), nextCursor: "cursor-1" };
     const view = mount(props);
