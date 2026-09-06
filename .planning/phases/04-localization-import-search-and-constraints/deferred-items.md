@@ -36,3 +36,12 @@
   formatting drift in migrations `0011_active_revision_revalidations.py` and
   `0012_import_jobs.py`; all Plan 04-13 files pass focused format, lint, and strict
   typing checks.
+
+## Observed during Plan 04-17
+
+- [ ] The existing `qs` / `typed-rest-client` development dependency chain still
+  reports two moderate advisories; the required high-severity audit passes and the
+  newly approved TanStack packages have no reported vulnerabilities. Dependency
+  remediation remains outside the result-list scope.
+- [ ] Vite still reports its existing greater-than-500-kB chunk advisory; the
+  production build passes. Bundling changes remain outside the result-list scope.

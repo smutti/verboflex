@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 4
 waived_count: 0
-fixed_count: 60
-total_count: 64
-last_updated: 2026-09-05T15:06:31.947Z
+fixed_count: 61
+total_count: 65
+last_updated: 2026-09-06T08:04:58.136Z
 ---
 
 # Broken Windows Ledger
@@ -79,6 +79,7 @@ last_updated: 2026-09-05T15:06:31.947Z
 | 62 | 04 | deviation | backend/tests/integration/test_translation_constraints.py |  | Constraint tests seed a dedicated mapping with absent base authority because published active-revision mappings are intentionally immutable. | fixed |  | 2026-09-05T14:27:19.765Z | 2026-09-05T14:27:41.887Z |
 | 63 | 04 | deviation | backend/src/verboflex/main.py | 52 | Expanded CORS allow-methods for the planned constraint PUT and DELETE browser mutations. | fixed |  | 2026-09-05T14:46:43.596Z | 2026-09-05T14:47:04.436Z |
 | 64 | 04 | deviation | frontend/src/features/admin/imports/PublishedMappingImports.test.tsx |  | Three legacy import-response test fixtures required the now-canonical dataset status and parser outcome fields after client regeneration. | fixed |  | 2026-09-05T15:06:06.881Z | 2026-09-05T15:06:31.947Z |
+| 65 | 04 | deviation | backend/src/verboflex/schemas/translations.py |  | Plan 04-17 added bounded canonical row metadata to the generated search summary; prerequisite repair complete and verified. | fixed |  | 2026-09-06T08:03:47.080Z | 2026-09-06T08:04:58.136Z |
 
 ````json
 [
@@ -849,6 +850,18 @@ last_updated: 2026-09-05T15:06:31.947Z
     "reason": "",
     "recorded_at": "2026-09-05T15:06:06.881Z",
     "resolved_at": "2026-09-05T15:06:31.947Z"
+  },
+  {
+    "id": 65,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/schemas/translations.py",
+    "line": null,
+    "description": "Plan 04-17 added bounded canonical row metadata to the generated search summary; prerequisite repair complete and verified.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T08:03:47.080Z",
+    "resolved_at": "2026-09-06T08:04:58.136Z"
   }
 ]
 ````
