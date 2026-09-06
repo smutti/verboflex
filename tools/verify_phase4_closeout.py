@@ -9,6 +9,7 @@ import json
 import re
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -32,7 +33,9 @@ def unique_mapping(loader, node):
     return result
 
 
-UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, unique_mapping)
+UniqueLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, unique_mapping
+)
 
 
 def frontmatter(document):
@@ -53,14 +56,75 @@ def validate_document(document, kind):
     required = {"source_digest", "verdict" if kind == "security" else "status"}
     if kind == "evidence":
         required |= {"gauntlet_exit", "smoke_exit"}
-    optional = {"phase", "created", "updated", "reviewer", "score", "scope", "checked_at"}
+    optional = {
+        "phase",
+        "created",
+        "updated",
+        "reviewer",
+        "score",
+        "scope",
+        "checked_at",
+    }
+    if kind == "review":
+        optional |= {
+            "reviewed",
+            "depth",
+            "files_reviewed",
+            "files_reviewed_list",
+            "findings",
+        }
     if not required <= data.keys() or data.keys() - required - optional:
         raise ValueError("missing or unknown fields")
-    if not isinstance(data["source_digest"], str) or not DIGEST.fullmatch(data["source_digest"]):
+    if not isinstance(data["source_digest"], str) or not DIGEST.fullmatch(
+        data["source_digest"]
+    ):
         raise ValueError("invalid source digest")
-    field, expected = ("verdict", "SECURED") if kind == "security" else ("status", "passed")
+    field, expected = (
+        ("verdict", "SECURED") if kind == "security" else ("status", "passed")
+    )
     if data[field] != expected:
         raise ValueError("non-passing verdict")
+    if kind == "review":
+        if "reviewed" in data:
+            reviewed = data["reviewed"]
+            if isinstance(reviewed, str):
+                try:
+                    reviewed = datetime.fromisoformat(reviewed)
+                except ValueError as error:
+                    raise ValueError("invalid review timestamp") from error
+            if not isinstance(reviewed, datetime) or reviewed.tzinfo is None:
+                raise ValueError("invalid review timestamp")
+        if "depth" in data and data["depth"] not in ("quick", "standard", "deep"):
+            raise ValueError("invalid review depth")
+        if "files_reviewed" in data and (
+            type(data["files_reviewed"]) is not int or data["files_reviewed"] < 0
+        ):
+            raise ValueError("invalid reviewed file count")
+        if "files_reviewed_list" in data:
+            paths = data["files_reviewed_list"]
+            if (
+                not isinstance(paths, list)
+                or any(not isinstance(path, str) or not path.strip() for path in paths)
+                or len(set(paths)) != len(paths)
+            ):
+                raise ValueError("invalid reviewed file list")
+            if "files_reviewed" in data and data["files_reviewed"] != len(paths):
+                raise ValueError("review scope count mismatch")
+        if "findings" in data:
+            counts = data["findings"]
+            if not isinstance(counts, dict) or counts.keys() != {
+                "critical",
+                "warning",
+                "info",
+                "total",
+            }:
+                raise ValueError("invalid review finding counts")
+            if any(type(count) is not int or count < 0 for count in counts.values()):
+                raise ValueError("invalid review finding count")
+            if counts["total"] != sum(
+                counts[key] for key in ("critical", "warning", "info")
+            ):
+                raise ValueError("review finding count mismatch")
     if kind == "evidence":
         for field in ("gauntlet_exit", "smoke_exit"):
             if type(data[field]) is not int or data[field] != 0:
@@ -146,16 +210,26 @@ def main():
     parser.add_argument("--check-all", action="store_true")
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--digest", action="store_true")
-    parser.add_argument("--manifest", type=Path, default=ROOT / "tools/phase4_source_manifest.txt")
-    parser.add_argument("--evidence", type=Path, default=ROOT / "docs/evidence/phase-04.md")
     parser.add_argument(
-        "--code-review", type=Path, default=ROOT / "docs/reviews/phase-04-code-review.md"
+        "--manifest", type=Path, default=ROOT / "tools/phase4_source_manifest.txt"
     )
     parser.add_argument(
-        "--security-review", type=Path, default=ROOT / "docs/reviews/phase-04-security-review.md"
+        "--evidence", type=Path, default=ROOT / "docs/evidence/phase-04.md"
+    )
+    parser.add_argument(
+        "--code-review",
+        type=Path,
+        default=ROOT / "docs/reviews/phase-04-code-review.md",
+    )
+    parser.add_argument(
+        "--security-review",
+        type=Path,
+        default=ROOT / "docs/reviews/phase-04-security-review.md",
     )
     parser.add_argument("--review-ledger", type=Path, default=PHASE / "04-REVIEW.md")
-    parser.add_argument("--verification", type=Path, default=PHASE / "04-VERIFICATION.md")
+    parser.add_argument(
+        "--verification", type=Path, default=PHASE / "04-VERIFICATION.md"
+    )
     args = parser.parse_args()
     if args.self_test:
         return subprocess.call(
@@ -215,7 +289,10 @@ if __name__ == "__main__":
     except ValueError, OSError:
         print(
             json.dumps(
-                {"status": "failed", "reason": "invalid, missing, stale or non-passing evidence"}
+                {
+                    "status": "failed",
+                    "reason": "invalid, missing, stale or non-passing evidence",
+                }
             ),
             file=sys.stderr,
         )
