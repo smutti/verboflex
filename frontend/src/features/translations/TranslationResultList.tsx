@@ -33,6 +33,23 @@ const SELECTOR_LABELS = {
   json_path: "JSON path",
 } as const;
 
+function rowPresentation(item: TranslationGroupSummaryResponse) {
+  return {
+    selectorLabels: [
+      ...new Set(
+        item.selector_kinds.flatMap((kind) =>
+          SELECTOR_LABELS[kind] === null ? [] : [SELECTOR_LABELS[kind]],
+        ),
+      ),
+    ],
+    languageLabel:
+      item.language_label && item.language_label !== item.language
+        ? `${item.language_label} (${item.language})`
+        : item.language,
+    detailsLabel: `Open details for ${item.raw_key} (${item.language})`,
+  };
+}
+
 export function TranslationResultList({
   items,
   nextCursor,
@@ -189,17 +206,8 @@ export function TranslationResultList({
       >
         {virtualRows.map((virtualRow) => {
           const item = items[virtualRow.index];
-          const selectorLabels = [
-            ...new Set(
-              item.selector_kinds.flatMap((kind) =>
-                SELECTOR_LABELS[kind] === null ? [] : [SELECTOR_LABELS[kind]],
-              ),
-            ),
-          ];
-          const languageLabel =
-            item.language_label && item.language_label !== item.language
-              ? `${item.language_label} (${item.language})`
-              : item.language;
+          const { selectorLabels, languageLabel, detailsLabel } =
+            rowPresentation(item);
           return (
             <article
               key={virtualRow.key}
@@ -323,7 +331,7 @@ export function TranslationResultList({
                 >
                   <Link
                     to={`/translations/${encodeURIComponent(item.id)}`}
-                    aria-label={`Open details for ${item.raw_key} (${item.language})`}
+                    aria-label={detailsLabel}
                     data-translation-group-id={item.id}
                     onClick={() => onOpenDetails?.(item.id)}
                   >
