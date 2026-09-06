@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 04
 current_phase_name: Localization Import, Search, and Constraints
 status: executing
-stopped_at: Completed 04-16-PLAN.md
-last_updated: "2026-09-06T07:45:50.552Z"
+stopped_at: Completed 04-17-PLAN.md
+last_updated: "2026-09-06T08:07:32.699Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 04 execution started
-state_head: 9b7da36a8dac58872ff7b4dde5581c8c3a35112e
+state_head: 151b58b04c88cb9e365d693ce6e10076b9b00041
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 104
-  completed_plans: 97
+  completed_plans: 98
   percent: 38
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 ## Current Position
 
 Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
-Plan: 20 of 27
+Plan: 21 of 27
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 04 execution started
 
@@ -157,6 +157,7 @@ Progress: [████████░░░░░░░░░░░░] 3/8 pha
 | Phase 04 P25 | 18min | 2 tasks | 5 files |
 | Phase 04 P15 | 12min | 2 tasks | 9 files |
 | Phase 04 P16 | 16h29min | 2 tasks | 4 files |
+| Phase 04 P17 | 18min | 1 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -472,6 +473,9 @@ Recent decisions affecting current work:
 - [Phase 04]: Typing immediately invalidates and aborts transport authority; only dispatch waits for the 300 ms debounce.
 - [Phase 04]: Reject foreign filter scope, repeated cursors, non-progressing nonterminal pages, and over-bound pages before appending any rows.
 - [Phase 04]: Retain loaded pages, literal query, filters, scroll offset, and focus identity only in feature-level React memory.
+- [Phase 04]: Search rows receive canonical selector kinds, source language, and one bounded last-known locator through generated summaries; value count never determines scalar identity.
+- [Phase 04]: Render grouped translations with useWindowVirtualizer, dynamic measurement, a 288px estimate, overscan eight, and useFlushSync false while preserving the browser scrollbar.
+- [Phase 04]: Fence automatic and manual continuation by request identity and cursor; only explicit loading errors focus the owning alert.
 
 ### Pending Todos
 
@@ -512,6 +516,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-06T07:45:50.439Z
-Stopped at: Completed 04-16-PLAN.md
+Last session: 2026-09-06T08:07:32.592Z
+Stopped at: Completed 04-17-PLAN.md
 Resume file: None
