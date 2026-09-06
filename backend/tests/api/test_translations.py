@@ -454,6 +454,38 @@ def test_options_are_server_ordered_and_exclude_inactive_datasets(
     }
 
 
+def test_options_scope_languages_without_narrowing_products_or_enumerating_missing_products(
+    translation_api_session_factory: sessionmaker[Session],
+) -> None:
+    alpha_id, alpha_group = _seed_visible_group(
+        translation_api_session_factory, product_name="Alpha"
+    )
+    beta_id, _ = _seed_visible_group(translation_api_session_factory, product_name="Beta")
+    hidden_id, _ = _seed_visible_group(
+        translation_api_session_factory, product_name="Hidden", active=False
+    )
+    with translation_api_session_factory.begin() as session:
+        value = session.get(TranslationValue, alpha_group)
+        assert value is not None
+        value.language = "en"
+    token = _create_authority(translation_api_session_factory, role_names=("viewer",))
+    _configure_dependencies(translation_api_session_factory)
+    products = [{"id": str(alpha_id), "name": "Alpha"}, {"id": str(beta_id), "name": "Beta"}]
+    for product_id, languages in [
+        (alpha_id, [{"code": "en", "label": "English"}]),
+        (beta_id, [{"code": "it", "label": "Italian"}]),
+        (hidden_id, []),
+        (uuid4(), []),
+    ]:
+        response = asyncio.run(
+            _request(
+                f"{TRANSLATIONS_PATH}/options", token=token, params={"product_id": str(product_id)}
+            )
+        )
+        assert response.status_code == 200
+        assert response.json() == {"products": products, "languages": languages}
+
+
 def test_search_uses_closed_bounds_literal_filters_and_fixed_cursor_errors(
     translation_api_session_factory: sessionmaker[Session],
 ) -> None:
