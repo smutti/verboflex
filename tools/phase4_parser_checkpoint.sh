@@ -131,6 +131,8 @@ record_command() {
   shift 3
   local output start end duration rc count="-" digest
   output="$HOST_RUNTIME_DIR/${record_id}.log"
+  : >"$output"
+  chmod 600 "$output"
   start=$(now_ms)
   set +e
   if [ "$record_id" = "container-smoke" ]; then
@@ -148,7 +150,9 @@ record_command() {
   if [ "$rc" -ne 0 ]; then
     printf 'phase4-parser-checkpoint error: %s failed (return_code=%s, output_sha256=%s)\n' \
       "$label" "$rc" "$digest" >&2
-    sed -n '1,120p' "$output" >&2
+    # This command may contain source text or credentials. Only its digest is
+    # public evidence; discard the own temporary raw failure artifact.
+    rm -f -- "$output"
     exit "$rc"
   fi
 
