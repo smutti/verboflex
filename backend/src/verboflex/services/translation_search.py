@@ -382,20 +382,25 @@ WITH authorized_products AS (
         product.display_name AS product_name,
         key.raw_key,
         scope.current_mapping_id AS mapping_id,
-        replace(lower(key.raw_key), 'ß', 'ss') COLLATE "C" AS stable_key,
+        casefold(key.raw_key COLLATE pg_unicode_fast) COLLATE "C" AS stable_key,
         value.language,
         CASE
             WHEN NOT :has_query THEN 3
             WHEN bool_or(
-                replace(lower(key.raw_key), 'ß', 'ss') = :query
-                OR replace(lower(coalesce(value.source_text, '')), 'ß', 'ss') = :query
-                OR replace(lower(value.display_text), 'ß', 'ss') = :query
+                casefold(key.raw_key COLLATE pg_unicode_fast)
+                    = casefold(:query COLLATE pg_unicode_fast)
+                OR casefold(coalesce(value.source_text, '') COLLATE pg_unicode_fast)
+                    = casefold(:query COLLATE pg_unicode_fast)
+                OR casefold(value.display_text COLLATE pg_unicode_fast)
+                    = casefold(:query COLLATE pg_unicode_fast)
             ) THEN 0
             WHEN bool_or(
-                replace(lower(key.raw_key), 'ß', 'ss') LIKE :prefix ESCAPE '\'
-                OR replace(lower(coalesce(value.source_text, '')), 'ß', 'ss')
-                    LIKE :prefix ESCAPE '\'
-                OR replace(lower(value.display_text), 'ß', 'ss') LIKE :prefix ESCAPE '\'
+                casefold(key.raw_key COLLATE pg_unicode_fast)
+                    LIKE casefold(:prefix COLLATE pg_unicode_fast) ESCAPE '\'
+                OR casefold(coalesce(value.source_text, '') COLLATE pg_unicode_fast)
+                    LIKE casefold(:prefix COLLATE pg_unicode_fast) ESCAPE '\'
+                OR casefold(value.display_text COLLATE pg_unicode_fast)
+                    LIKE casefold(:prefix COLLATE pg_unicode_fast) ESCAPE '\'
             ) THEN 1
             ELSE 2
         END AS rank,
@@ -430,10 +435,12 @@ WITH authorized_products AS (
              scope.current_mapping_id
     HAVING (
         NOT :has_query OR bool_or(
-            replace(lower(key.raw_key), 'ß', 'ss') LIKE :partial ESCAPE '\'
-            OR replace(lower(coalesce(value.source_text, '')), 'ß', 'ss')
-                LIKE :partial ESCAPE '\'
-            OR replace(lower(value.display_text), 'ß', 'ss') LIKE :partial ESCAPE '\'
+            casefold(key.raw_key COLLATE pg_unicode_fast)
+                LIKE casefold(:partial COLLATE pg_unicode_fast) ESCAPE '\'
+            OR casefold(coalesce(value.source_text, '') COLLATE pg_unicode_fast)
+                LIKE casefold(:partial COLLATE pg_unicode_fast) ESCAPE '\'
+            OR casefold(value.display_text COLLATE pg_unicode_fast)
+                LIKE casefold(:partial COLLATE pg_unicode_fast) ESCAPE '\'
         )
     )
     AND (

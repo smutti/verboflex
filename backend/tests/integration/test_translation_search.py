@@ -616,7 +616,7 @@ def test_partial_search_plan_can_reach_project_owned_trigram_index(
             session.execute(
                 text(
                     "EXPLAIN (COSTS OFF) SELECT id FROM translation_keys "
-                    "WHERE replace(lower(raw_key), 'ß', 'ss') LIKE :query ESCAPE '\\'"
+                    "WHERE casefold(raw_key COLLATE pg_unicode_fast) LIKE :query ESCAPE '\\'"
                 ),
                 {"query": "%index%"},
             ).scalars()

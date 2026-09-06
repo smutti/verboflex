@@ -4,7 +4,10 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import text
 
+from alembic import command
+from tests.integration.test_migrations import migrated_database
 from tests.integration.test_translation_constraints import (
     _seed_constraint_dataset,
 )
@@ -23,7 +26,7 @@ from verboflex.services.translation_constraints import (
 )
 from verboflex.services.translation_search import TranslationSearchFilters, get_translation_group
 
-__all__ = ["clean_search_database", "search_session_factory"]
+__all__ = ["clean_search_database", "search_session_factory", "migrated_database"]
 
 
 def test_separate_repository_detail_projects_base_default_before_and_after_override_removal(
@@ -138,13 +141,55 @@ def test_unicode_caseless_matching_agrees_for_key_source_and_target(
     product_id, scope_id = _seed_dataset(search_session_factory)
     values = {field: original} if field != "raw_key" else {}
     group_id = _add_group(
-        search_session_factory, product_id=product_id, scope_id=scope_id,
-        raw_key=original if field == "raw_key" else "unrelated", language="en",
+        search_session_factory,
+        product_id=product_id,
+        scope_id=scope_id,
+        raw_key=original if field == "raw_key" else "unrelated",
+        language="en",
         values=(values,),
     )
     for query in (original, folded, folded.upper()):
         page = _search(
-            search_session_factory, principal_id=uuid4(),
+            search_session_factory,
+            principal_id=uuid4(),
             filters=TranslationSearchFilters(query=query),
         )
         assert [(item.id, item.rank) for item in page.items] == [(group_id, 0)]
+
+
+def test_unicode_search_indexes_round_trip_without_changing_external_extension(migrated_database):
+    config, engine = migrated_database
+    command.upgrade(config, "0018_constraint_generation")
+    query = text(
+        "SELECT indexname, indexdef FROM pg_indexes WHERE indexname IN "
+        "('ix_translation_keys_search_raw_key_pattern',"
+        " 'ix_translation_keys_search_raw_key_trgm',"
+        " 'ix_translation_values_search_source_text_trgm',"
+        " 'ix_translation_values_search_display_text_trgm') ORDER BY indexname"
+    )
+    with engine.connect() as connection:
+        original = dict(connection.execute(query).all())
+        extension = connection.execute(
+            text("SELECT oid, extversion FROM pg_extension WHERE extname = 'pg_trgm'")
+        ).one()
+    assert len(original) == 4
+    command.upgrade(config, "0019_unicode_search_indexes")
+    with engine.connect() as connection:
+        updated = dict(connection.execute(query).all())
+        assert all(
+            "casefold" in definition and "pg_unicode_fast" in definition
+            for definition in updated.values()
+        )
+        assert "256" in updated["ix_translation_keys_search_raw_key_pattern"]
+        assert (
+            connection.execute(
+                text("SELECT oid, extversion FROM pg_extension WHERE extname = 'pg_trgm'")
+            ).one()
+            == extension
+        )
+    command.downgrade(config, "0018_constraint_generation")
+    with engine.connect() as connection:
+        assert dict(connection.execute(query).all()) == original
+    command.upgrade(config, "0019_unicode_search_indexes")
+    with engine.connect() as connection:
+        assert dict(connection.execute(query).all()) == updated
