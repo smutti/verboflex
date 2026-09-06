@@ -111,6 +111,9 @@ def source_digest():
             [
                 "git",
                 "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
                 "-z",
                 "backend",
                 "frontend",
@@ -125,7 +128,7 @@ def source_digest():
         .split("\0")
     )
     digest = hashlib.sha256()
-    for name in sorted(n for n in names if n):
+    for name in sorted({n for n in names if n}):
         path = ROOT / name
         digest.update(name.encode() + b"\0" + path.read_bytes() + b"\0")
     return "sha256:" + digest.hexdigest()
@@ -133,11 +136,21 @@ def source_digest():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check-code-review", type=Path)
-    parser.add_argument("--check-security", type=Path)
+    parser.add_argument("--check-code-review", action="store_true")
+    parser.add_argument("--check-security", action="store_true")
     parser.add_argument("--check-all", action="store_true")
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--digest", action="store_true")
+    parser.add_argument("--manifest", type=Path, default=ROOT / "tools/phase4_source_manifest.txt")
+    parser.add_argument("--evidence", type=Path, default=ROOT / "docs/evidence/phase-04.md")
+    parser.add_argument(
+        "--code-review", type=Path, default=ROOT / "docs/reviews/phase-04-code-review.md"
+    )
+    parser.add_argument(
+        "--security-review", type=Path, default=ROOT / "docs/reviews/phase-04-security-review.md"
+    )
+    parser.add_argument("--review-ledger", type=Path, default=PHASE / "04-REVIEW.md")
+    parser.add_argument("--verification", type=Path, default=PHASE / "04-VERIFICATION.md")
     args = parser.parse_args()
     if args.self_test:
         return subprocess.call(
@@ -154,21 +167,24 @@ def main():
         print(source_digest())
         return 0
     paths = []
-    if args.check_code_review:
-        paths.append((args.check_code_review, "review"))
-    if args.check_security:
-        paths.append((args.check_security, "security"))
-    if args.check_all:
+    if args.check_all or args.check_code_review or args.check_security:
         from phase4_inventory import validate_manifest
 
-        validate_manifest()
-        paths = [
-            (ROOT / "docs/reviews/phase-04-code-review.md", "review"),
-            (PHASE / "04-REVIEW.md", "review"),
-            (PHASE / "04-SECURITY.md", "security"),
-            (PHASE / "04-VERIFICATION.md", "verification"),
-            (ROOT / "docs/evidence/phase-04.md", "evidence"),
+        rows = [
+            json.loads(line)
+            for line in args.manifest.read_text().splitlines()
+            if line and not line.startswith("#")
         ]
+        validate_manifest(rows)
+        paths = [
+            (args.code_review, "review"),
+            (args.review_ledger, "review"),
+            (args.evidence, "evidence"),
+        ]
+        if args.check_all or args.check_security:
+            paths.append((args.security_review, "security"))
+        if args.check_all:
+            paths.append((args.verification, "verification"))
     if not paths:
         raise ValueError("select a validation mode")
     documents = [validate_document(path.read_text(), kind) for path, kind in paths]

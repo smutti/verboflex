@@ -94,14 +94,26 @@ def test_plan20_cli_flags_reach_fail_closed_validation(tmp_path):
     import json
     import subprocess
 
-    result = subprocess.run([
-        sys.executable, str(ROOT / "tools/verify_phase4_closeout.py"),
-        "--check-all", "--manifest", str(ROOT / "tools/phase4_source_manifest.txt"),
-        "--evidence", str(tmp_path / "missing.md"),
-        "--code-review", str(tmp_path / "missing.md"),
-        "--security-review", str(tmp_path / "missing.md"),
-        "--review-ledger", str(tmp_path / "missing.md"),
-        "--verification", str(tmp_path / "missing.md"),
-    ], capture_output=True, text=True)
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/verify_phase4_closeout.py"),
+            "--check-all",
+            "--manifest",
+            str(ROOT / "tools/phase4_source_manifest.txt"),
+            "--evidence",
+            str(tmp_path / "missing.md"),
+            "--code-review",
+            str(tmp_path / "missing.md"),
+            "--security-review",
+            str(tmp_path / "missing.md"),
+            "--review-ledger",
+            str(tmp_path / "missing.md"),
+            "--verification",
+            str(tmp_path / "missing.md"),
+        ],
+        capture_output=True,
+        text=True,
+    )
     assert result.returncode == 1
     assert json.loads(result.stderr)["status"] == "failed"
