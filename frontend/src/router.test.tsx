@@ -247,6 +247,7 @@ describe("session routes", () => {
   );
 
   it("restores direct translation search from only the server principal's authorized preferences", async () => {
+    vi.mocked(listTranslationOptions).mockReturnValueOnce(new Promise(() => {}));
     restorePrincipal();
     localStorage.setItem(
       translationPreferenceKey(ordinaryPrincipal.id),
