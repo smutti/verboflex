@@ -7,6 +7,7 @@ import importlib
 import importlib.util
 import os
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -497,6 +498,74 @@ def _separate_result() -> CanonicalParseResult:
             ),
         )
     )
+
+
+def test_reconciliation_fails_closed_when_source_provenance_is_not_visible(
+    activation_session_factory,
+    monkeypatch,
+):
+    factory = activation_session_factory
+    identity, repository_id = _seed_running_direct_import(factory)
+    manifest, _ = _stage_direct_manifest(
+        factory, identity=identity, repository_id=repository_id, result=_json_result()
+    )
+    with factory.begin() as session:
+        scope = session.scalar(select(LocalizationScope))
+        original_scalars = session.scalars
+        provenance_reads = 0
+
+        def missing_provenance(statement, *args, **kwargs):
+            nonlocal provenance_reads
+            if statement.column_descriptions[0].get("entity") is ImportSourceReference:
+                provenance_reads += 1
+                if provenance_reads > 2:
+                    return ()
+            return original_scalars(statement, *args, **kwargs)
+
+        # Emulate loss of visibility between manifest validation and use;
+        # canonical stage/manifest verification and reconciliation stay real.
+        monkeypatch.setattr(session, "scalars", missing_provenance)
+        with pytest.raises(
+            _translation_imports().TranslationImportRejected,
+            match="^canonical source provenance rejected$",
+        ):
+            _translation_imports().reconcile_canonical_translations(
+                session, identity=identity, scope=scope, manifest_digest=manifest.digest
+            )
+        assert scope.active_execution_id is None
+        assert provenance_reads == 3
+    with factory() as session:
+        assert tuple(session.scalars(select(TranslationValue))) == ()
+        assert tuple(session.scalars(select(TranslationKey))) == ()
+
+
+@pytest.mark.parametrize("defect", ["missing-manifest", "mismatched-source-reference"])
+def test_activation_requires_exact_manifest_and_staged_source_authority(
+    activation_session_factory, defect
+):
+    factory = activation_session_factory
+    identity, repository_id = _seed_running_direct_import(factory)
+    manifest, references = _stage_direct_manifest(
+        factory, identity=identity, repository_id=repository_id, result=_json_result()
+    )
+    digest = manifest.digest
+    if defect == "missing-manifest":
+        digest = None
+    else:
+        references = (replace(references[0], sha256="f" * 64),)
+    assert import_jobs.finish_import_execution(
+        factory, identity=identity, references=references, canonical_manifest_digest=digest
+    )
+    with factory() as session:
+        scope = session.scalar(select(LocalizationScope))
+        assert scope.active_execution_id is None and scope.dataset_version == 0
+        assert tuple(session.scalars(select(TranslationValue))) == ()
+        job = session.get_one(ImportJob, identity.import_id)
+        assert job.state == "import_failed" and job.error_category == "bounded_failure"
+        assert job.error_message == (
+            "The source could not be read within the safe import limits. "
+            "No import baseline was created. Review the mapping before retrying."
+        )
 
 
 def test_unrelated_activation_never_revives_a_deleted_key_without_values(

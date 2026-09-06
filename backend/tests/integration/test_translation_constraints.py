@@ -136,6 +136,136 @@ def test_recreated_constraint_rejects_old_incarnation_version(
         assert session.get_one(TranslationValue, ids["target_value"]).effective_max_chars == 8
 
 
+def test_ambiguous_base_constraints_fail_without_reprojecting_values(constraint_session_factory):
+    factory = constraint_session_factory
+    ids = _seed_constraint_dataset(factory)
+    with factory.begin() as session:
+        session.add_all(
+            [
+                _explicit_constraint(ids=ids, key="base_key", language="en", maximum=2),
+                _explicit_constraint(ids=ids, key="target_key", language="en", maximum=8),
+            ]
+        )
+    with (
+        factory.begin() as session,
+        pytest.raises(_translation_constraints().ConstraintAuthorityUnavailable, match="ambiguous"),
+    ):
+        _translation_constraints().recompute_translation_constraints(session, scope_id=ids["scope"])
+    with factory() as session:
+        value = session.get_one(TranslationValue, ids["target_value"])
+        assert value.effective_max_chars is None and not value.is_over_limit
+
+
+def test_missing_rule_cannot_be_updated_with_nonzero_version(constraint_session_factory):
+    factory = constraint_session_factory
+    ids = _seed_constraint_dataset(factory)
+    with factory.begin() as session:
+        with pytest.raises(_translation_constraints().ConstraintVersionConflict):
+            _translation_constraints().put_translation_constraint(
+                session,
+                translation_group_id=ids["target_value"],
+                language="it",
+                max_chars=2,
+                expected_version=1,
+                actor_id=ids["actor"],
+            )
+        assert session.scalar(select(TranslationConstraint.id)) is None
+    with factory() as session:
+        assert tuple(session.scalars(select(TranslationConstraint))) == ()
+
+
+def test_tombstoned_key_never_accepts_constraint_even_with_retained_value(
+    constraint_session_factory,
+):
+    factory = constraint_session_factory
+    ids = _seed_constraint_dataset(factory)
+    with factory.begin() as session:
+        key = session.get_one(TranslationKey, ids["target_key"])
+        key.is_deleted, key.deleted_at = True, datetime.now(UTC)
+    with factory.begin() as session:
+        with pytest.raises(_translation_constraints().ConstraintAuthorityUnavailable):
+            _translation_constraints().put_translation_constraint(
+                session,
+                translation_group_id=ids["target_value"],
+                language="it",
+                max_chars=2,
+                expected_version=0,
+                actor_id=ids["actor"],
+            )
+        assert session.scalar(select(TranslationConstraint.id)) is None
+    with factory() as session:
+        assert tuple(session.scalars(select(TranslationConstraint))) == ()
+        assert session.get_one(TranslationValue, ids["target_value"]).display_text == "Ciao"
+
+
+def test_nonleading_structured_value_cannot_impersonate_the_translation_group(
+    constraint_session_factory,
+):
+    factory = constraint_session_factory
+    ids = _seed_constraint_dataset(factory)
+    with factory.begin() as session:
+        session.add(
+            TranslationValue(
+                id=uuid4(),
+                scope_id=ids["scope"],
+                translation_key_id=ids["target_key"],
+                language="it",
+                selector_version=1,
+                selector_kind="android_quantity",
+                selector_bytes=b'{"quantity":"other"}',
+                selector_digest=_selector_digest(b'{"quantity":"other"}'),
+                source_text=None,
+                translated_text="Altri",
+                display_text="Altri",
+                structure=[],
+                review_state="draft",
+            )
+        )
+    with factory.begin() as session:
+        group_values = tuple(
+            session.scalars(
+                select(TranslationValue)
+                .where(TranslationValue.translation_key_id == ids["target_key"])
+                .order_by(TranslationValue.id)
+            )
+        )
+        with pytest.raises(_translation_constraints().ConstraintAuthorityUnavailable):
+            _translation_constraints().put_translation_constraint(
+                session,
+                translation_group_id=group_values[-1].id,
+                language="it",
+                max_chars=2,
+                expected_version=0,
+                actor_id=ids["actor"],
+            )
+        accepted = _translation_constraints().put_translation_constraint(
+            session,
+            translation_group_id=group_values[0].id,
+            language="it",
+            max_chars=2,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+        targets = tuple(value for value in accepted.values if value.language == "it")
+        assert len(targets) == 2 and all(value.maximum == 2 for value in targets)
+
+
+def test_edit_recomputation_rejects_an_unsaved_value_without_projecting_it(
+    constraint_session_factory,
+):
+    factory = constraint_session_factory
+    ids = _seed_constraint_dataset(factory)
+    unsaved_id = uuid4()
+    with factory.begin() as session:
+        unsaved = TranslationValue(
+            id=unsaved_id, scope_id=ids["scope"], translation_key_id=ids["target_key"]
+        )
+        with pytest.raises(_translation_constraints().ConstraintAuthorityUnavailable):
+            _translation_constraints().recompute_after_translation_edit(session, value=unsaved)
+        assert session.get(TranslationValue, unsaved_id) is None
+        assert session.get_one(TranslationValue, ids["target_value"]).display_text == "Ciao"
+
+
 def _selector_digest(selector_bytes: bytes) -> str:
     return hashlib.sha256(selector_bytes).hexdigest()
 
