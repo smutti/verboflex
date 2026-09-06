@@ -499,6 +499,59 @@ def _separate_result() -> CanonicalParseResult:
     )
 
 
+def test_unrelated_activation_never_revives_a_deleted_key_without_values(
+    activation_session_factory,
+):
+    factory = activation_session_factory
+    identity, repository_id = _seed_running_direct_import(factory)
+    manifest, references = _stage_direct_manifest(
+        factory, identity=identity, repository_id=repository_id, result=_json_result()
+    )
+    assert import_jobs.finish_import_execution(
+        factory, identity=identity, references=references, canonical_manifest_digest=manifest.digest
+    )
+    orphan_id, deleted_at = uuid4(), datetime.now(UTC)
+    with factory.begin() as session:
+        scope = session.scalar(select(LocalizationScope))
+        scope_id = scope.id
+        existing_ids = set(session.scalars(select(TranslationValue.id)))
+        session.add(
+            TranslationKey(
+                id=orphan_id,
+                scope_id=scope_id,
+                product_id=identity.product_id,
+                repository_id=repository_id,
+                configured_branch="main",
+                raw_key="retired-empty-key",
+                is_deleted=True,
+                deleted_at=deleted_at,
+            )
+        )
+    successor = _start_refresh_execution(factory, identity)
+    manifest, references = _stage_direct_manifest(
+        factory,
+        identity=successor,
+        repository_id=repository_id,
+        result=_json_result(),
+        commit_hash="b" * 40,
+    )
+    assert import_jobs.finish_import_execution(
+        factory,
+        identity=successor,
+        references=references,
+        canonical_manifest_digest=manifest.digest,
+    )
+    with factory() as session:
+        orphan = session.get_one(TranslationKey, orphan_id)
+        assert orphan.is_deleted and orphan.deleted_at == deleted_at
+        assert orphan.raw_key == "retired-empty-key" and orphan.values == []
+        assert set(session.scalars(select(TranslationValue.id))) == existing_ids
+        assert (
+            session.get_one(LocalizationScope, scope_id).active_execution_id
+            == successor.execution_id
+        )
+
+
 def test_long_raw_key_stages_and_activates_without_loss(activation_session_factory):
     factory = activation_session_factory
     identity, repository_id = _seed_running_direct_import(factory)
