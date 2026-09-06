@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Literal, cast
+from typing import Literal
 from unicodedata import category
 
 from verboflex.localization.importing.core import (
@@ -15,7 +15,6 @@ from verboflex.localization.importing.core import (
     CanonicalStructureNode,
     CanonicalValue,
     IssueCode,
-    RepositorySide,
     canonical_issue_order,
     canonical_value_order,
 )
@@ -590,7 +589,7 @@ def _failure(
         "base_language_required": "Base language is required.",
     }
     side = (
-        cast(RepositorySide, parser_input.repository_side)
+        parser_input.repository_side
         if parser_input.repository_side in {"direct", "keys", "translations"}
         else "direct"
     )

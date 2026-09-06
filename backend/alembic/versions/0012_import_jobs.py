@@ -319,14 +319,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Remove only the import persistence introduced by this revision."""
-    op.execute(
-        "DROP TRIGGER trg_import_source_references_guard "
-        "ON import_source_references"
-    )
+    op.execute("DROP TRIGGER trg_import_source_references_guard ON import_source_references")
     op.execute("DROP FUNCTION verboflex_guard_import_source_reference()")
-    op.execute(
-        "DROP TRIGGER trg_import_executions_terminal_immutable ON import_executions"
-    )
+    op.execute("DROP TRIGGER trg_import_executions_terminal_immutable ON import_executions")
     op.execute("DROP FUNCTION verboflex_guard_terminal_import_execution()")
     op.drop_index(
         "ix_import_source_references_execution_side_position",

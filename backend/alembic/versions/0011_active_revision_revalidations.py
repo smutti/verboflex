@@ -87,15 +87,11 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "revision_scope = 'active_revalidation'",
-            name=op.f(
-                "ck_active_revision_revalidation_confirmations_revision_scope_value"
-            ),
+            name=op.f("ck_active_revision_revalidation_confirmations_revision_scope_value"),
         ),
         sa.CheckConstraint(
             "revision_version > 0",
-            name=op.f(
-                "ck_active_revision_revalidation_confirmations_positive_revision_version"
-            ),
+            name=op.f("ck_active_revision_revalidation_confirmations_positive_revision_version"),
         ),
         sa.CheckConstraint(
             "connection_generation >= 0",
@@ -104,11 +100,8 @@ def upgrade() -> None:
             ),
         ),
         sa.CheckConstraint(
-            "char_length(preview_digest) = 64 "
-            "AND preview_digest ~ '^[0-9a-f]{64}$'",
-            name=op.f(
-                "ck_active_revision_revalidation_confirmations_preview_digest_sha256"
-            ),
+            "char_length(preview_digest) = 64 AND preview_digest ~ '^[0-9a-f]{64}$'",
+            name=op.f("ck_active_revision_revalidation_confirmations_preview_digest_sha256"),
         ),
         sa.CheckConstraint(
             "layout_candidate_version > 0",

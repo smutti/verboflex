@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 from types import MappingProxyType
-from typing import cast
 
 from verboflex.localization.importing.android_xml import parse_android_xml
 from verboflex.localization.importing.core import (
@@ -20,7 +19,6 @@ from verboflex.localization.importing.core import (
     CanonicalParserInput,
     CanonicalValue,
     IssueCode,
-    RepositorySide,
     canonical_issue_order,
     canonical_result_is_valid,
     canonical_selector_bytes,
@@ -67,7 +65,7 @@ def parse_canonical_snapshot(parser_input: CanonicalParserInput) -> CanonicalPar
         return _failure(parser_input, code="ambiguous_structure")
     if normalize_preview_locale(parser_input.base_language) is None:
         return _failure(parser_input, code="base_language_required")
-    adapter = _ADAPTERS.get(cast(CanonicalFormat, parser_input.format))
+    adapter = _ADAPTERS.get(parser_input.format)
     if adapter is None:
         return _failure(parser_input, code="unsupported_structure")
     try:
@@ -249,7 +247,7 @@ def _is_safe_relative_path(value: object) -> bool:
 
 def _failure(parser_input: CanonicalParserInput, *, code: IssueCode) -> CanonicalParseResult:
     side = (
-        cast(RepositorySide, parser_input.repository_side)
+        parser_input.repository_side
         if parser_input.repository_side in {"direct", "keys", "translations"}
         else "direct"
     )

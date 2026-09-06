@@ -21,7 +21,6 @@ from verboflex.localization.importing.core import (
     CanonicalStructureNode,
     CanonicalValue,
     IssueCode,
-    RepositorySide,
     StructureKind,
     canonical_issue_order,
     canonical_selector_digest,
@@ -920,7 +919,7 @@ def _failure(
         "base_language_required": "Base language is required.",
     }
     side = (
-        cast(RepositorySide, parser_input.repository_side)
+        parser_input.repository_side
         if parser_input.repository_side in {"direct", "keys", "translations"}
         else "direct"
     )

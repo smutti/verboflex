@@ -22,7 +22,6 @@ from verboflex.localization.importing.core import (
     CanonicalStructureNode,
     CanonicalValue,
     IssueCode,
-    RepositorySide,
     StructureKind,
     canonical_issue_order,
     canonical_value_order,
@@ -110,7 +109,7 @@ class _AndroidTreeTarget:
         return self._builder.pi(target, value)
 
     def start_cdata(self) -> None:
-        self._builder.start(_CDATA_TAG, {})  # type: ignore[arg-type]
+        self._builder.start(_CDATA_TAG, {})
 
     def end_cdata(self) -> None:
         self._builder.end(_CDATA_TAG)  # type: ignore[arg-type]
@@ -284,7 +283,7 @@ def _resource_values(
     pending_comments: list[CanonicalStructureNode] = []
     resource_position = 0
     for child in root:
-        if child.tag is StandardElementTree.Comment:
+        if cast(object, child.tag) is StandardElementTree.Comment:
             pending_comments.append(_comment_node(child))
             if (child.tail or "").strip():
                 raise _UnsupportedAndroidXml
@@ -412,7 +411,7 @@ def _plural_values(
     pending_comments: list[CanonicalStructureNode] = []
     item_position = 0
     for item in child:
-        if item.tag is StandardElementTree.Comment:
+        if cast(object, item.tag) is StandardElementTree.Comment:
             pending_comments.append(_comment_node(item))
             if (item.tail or "").strip():
                 raise _UnsupportedAndroidXml
@@ -491,7 +490,7 @@ def _array_values(
     pending_comments: list[CanonicalStructureNode] = []
     item_position = 0
     for item in child:
-        if item.tag is StandardElementTree.Comment:
+        if cast(object, item.tag) is StandardElementTree.Comment:
             pending_comments.append(_comment_node(item))
             if (item.tail or "").strip():
                 raise _UnsupportedAndroidXml
@@ -624,13 +623,13 @@ def _append_mixed_child(
         )
         cdata_ordinal[0] += 1
         visible.append(decoded)
-    elif child.tag is StandardElementTree.Comment:
+    elif cast(object, child.tag) is StandardElementTree.Comment:
         _append_structure_node(
             nodes,
             _comment_node(child),
             structure_prefix_size=structure_prefix_size,
         )
-    elif child.tag is StandardElementTree.ProcessingInstruction:
+    elif cast(object, child.tag) is StandardElementTree.ProcessingInstruction:
         raise _UnsupportedAndroidXml
     elif isinstance(child.tag, str):
         start_fields, end_fields = _inline_fields(child)
@@ -867,7 +866,7 @@ def _failure(
         "base_language_required": "Base language is required.",
     }
     repository_side = (
-        cast(RepositorySide, parser_input.repository_side)
+        parser_input.repository_side
         if parser_input.repository_side in {"direct", "keys", "translations"}
         else "direct"
     )

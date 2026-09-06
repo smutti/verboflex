@@ -13,9 +13,7 @@ FRONTEND_SOURCE = REPOSITORY_ROOT / "frontend" / "src"
 
 FORBIDDEN_RESOURCE_SEGMENTS = {
     "/comments",
-    "/constraints",
     "/pull-requests",
-    "/translations",
 }
 FORBIDDEN_PROVIDER_TOKENS = {
     "branch_create",
@@ -39,6 +37,8 @@ EXPECTED_MODEL_MODULES = {
     "repository.py",
     "role.py",
     "user.py",
+    "translation.py",
+    "translation_constraint.py",
 }
 
 
@@ -64,7 +64,7 @@ def test_openapi_has_no_deferred_resource_or_provider_write_surface() -> None:
 
 
 def test_phase2_persists_configuration_and_preview_authority_only() -> None:
-    """Only the approved Phase 2 graph and Phase 3 import authority are persisted."""
+    """Only the approved configuration, import and Phase 4 canonical graph persists."""
     model_modules = {
         path.name for path in (BACKEND_SOURCE / "models").glob("*.py") if path.name != "__init__.py"
     }
