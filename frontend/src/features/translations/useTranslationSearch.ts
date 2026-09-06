@@ -457,12 +457,9 @@ export function useTranslationSearch({
         queryRef.current,
         filtersRef.current,
       );
-      if (
-        current.requestIdentity !== identity ||
-        !cursorsRef.current.has(cursor)
-      ) {
-        return;
-      }
+      // Ready state with a cursor comes only from a validated page/snapshot.
+      // Criteria changes synchronously clear its cursor or enter loading;
+      // response authority is rechecked after the await below.
       const controller = new AbortController();
       const request: ActiveRequest = {
         controller,
