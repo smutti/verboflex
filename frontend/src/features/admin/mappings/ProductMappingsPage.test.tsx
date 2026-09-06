@@ -215,6 +215,13 @@ describe("administrator mapping cursor collections", () => {
   beforeEach(() => {
     createAdminCandidateMappingMock.mockReset();
     getAdminProductMock.mockReset();
+    getAdminProductMock.mockResolvedValue(
+      ok({
+        is_active: true,
+        active_revision: { id: publishedImport.active_revision_id },
+        candidate_revision: { version: 5 },
+      }) as never,
+    );
     getAdminRepositoryBranchMock.mockReset();
     listAdminCandidateMappingsMock.mockReset();
     listAdminPublishedMappingImportsMock.mockReset();
@@ -230,6 +237,76 @@ describe("administrator mapping cursor collections", () => {
   });
 
   afterEach(() => cleanup());
+
+  it("explains draft-only imports without requesting published imports even with a candidate version prop", async () => {
+    getAdminProductMock.mockResolvedValue(
+      ok({
+        is_active: false,
+        active_revision: null,
+        candidate_revision: { version: 5 },
+      }) as never,
+    );
+    listAdminCandidateMappingsMock.mockResolvedValue(
+      ok({ items: [], next_cursor: null }),
+    );
+    renderMappings();
+    expect(
+      await screen.findByText(
+        "Publish a validated mapping before running an import.",
+      ),
+    ).toBeVisible();
+    expect(listAdminPublishedMappingImportsMock).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText("Published imports unavailable"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("explains suspended imports without polling or enabling an import", async () => {
+    getAdminProductMock.mockResolvedValue(
+      ok({
+        is_active: false,
+        active_revision: { id: publishedImport.active_revision_id },
+        candidate_revision: { version: 5 },
+      }) as never,
+    );
+    listAdminCandidateMappingsMock.mockResolvedValue(
+      ok({ items: [], next_cursor: null }),
+    );
+    renderMappings();
+    expect(
+      await screen.findByText(
+        "Reactivate this product before running or refreshing imports.",
+      ),
+    ).toBeVisible();
+    expect(listAdminPublishedMappingImportsMock).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "Run import" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps published imports available when there is no candidate revision", async () => {
+    getAdminProductMock.mockResolvedValue(
+      ok({
+        is_active: true,
+        active_revision: { id: publishedImport.active_revision_id },
+        candidate_revision: null,
+      }) as never,
+    );
+    listAdminCandidateMappingsMock.mockResolvedValue(
+      ok({ items: [], next_cursor: null }),
+    );
+    listAdminPublishedMappingImportsMock.mockResolvedValue(
+      ok({ items: [publishedImport], next_cursor: null }),
+    );
+    renderMappingsWithServerVersion();
+    const table = await screen.findByRole("table", {
+      name: "Published mapping imports",
+    });
+    expect(
+      within(table).getByRole("button", { name: "Run import" }),
+    ).toBeEnabled();
+    expect(listAdminPublishedMappingImportsMock).toHaveBeenCalledOnce();
+  });
 
   it("runs one published direct import and waits for a server-confirmed state", async () => {
     let resolveStart!: (value: ReturnType<typeof ok<unknown>>) => void;

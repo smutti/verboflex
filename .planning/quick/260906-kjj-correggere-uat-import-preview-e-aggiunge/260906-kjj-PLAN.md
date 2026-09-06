@@ -14,3 +14,7 @@ Read SPEC.md in this directory. User explicitly approved v1; also verify babel i
 3. Fresh regression/coverage/type/lint/mutation/property/browser/security checks, evidence, backed-up Docker upgrade, and UAT retest handoff. Preserve prior reports as historical; never auto-pass live human checks.
 
 Run sequentially on codex/merge-phases-4-5. No remote writes, push or merge. No new dependencies proposed. Keep the user's existing product and provider configuration intact.
+
+## 2026-09-06 implementation checkpoint
+
+S1/S2 frontend correction implemented with RED/GREEN regression tests; see EVIDENCE.md. Root propagation and deletion remain approved but unimplemented. Live Babel inspection additionally found 42,766 string elements and 145 repeated occurrences within eight files; the canonical mapping limit is 5,000 values. MOKO addendum approval is recorded, but it explicitly preserves that budget and duplicate rejection. Pause the MOKO import claim at this contract boundary: no automatic limit increase, deduplication, remote data edits or fabricated import success. Full task and Phase 4 UAT remain incomplete; Docker has not been rebuilt for this checkpoint.

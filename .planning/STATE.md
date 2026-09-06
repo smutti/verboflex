@@ -6,7 +6,7 @@ status: executing
 stopped_at: Plan 04-20 automated closeout passed; four human checks pending in 04-UAT.md
 last_updated: "2026-09-06T12:36:50Z"
 last_activity: 2026-09-06
-last_activity_desc: Local app upgraded for Phase 04 UAT via quick task 260906-k7s; human tests pending
+last_activity_desc: Quick 260906-kjj S1/S2 frontend checkpoint; Babel capacity and duplicate-key findings require direction; remaining remediation and UAT pending
 state_head: 54d23254bd0d37863952297feea2240d694df50a
 progress:
   total_phases: 8
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
 Plan: 26 of 27
 Status: Human verification pending — 04-VERIFICATION.md is human_needed; run $gsd-verify-work 4
-Last activity: 2026-09-06 — Completed quick task 260906-k7s, local application upgraded preserving data; four Phase 04 human checks pending
+Last activity: 2026-09-06 — Quick 260906-kjj S1/S2 frontend checkpoint verified; Babel has 42,766 strings and duplicate keys against the approved 5,000-value bound. See quick-task EVIDENCE.md. Root/deletion/MOKO implementation and Docker deployment remain pending; four Phase 04 human checks remain unpassed.
 
 Progress: [████████░░░░░░░░░░░░] 3/8 phases ([████░░░░░░] 38%)
 

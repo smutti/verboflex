@@ -370,6 +370,12 @@ export function ProductMappingsPage({
   const versionControllerRef = useRef<AbortController | null>(null);
   const versionGenerationRef = useRef(0);
   const submitPendingRef = useRef(false);
+  const [importAuthority, setImportAuthority] = useState<{
+    productId: string;
+    accessToken: string;
+    published: boolean;
+    active: boolean;
+  } | null>(null);
   const [currentCandidateVersion, setCurrentCandidateVersion] =
     useState(candidateVersionProp);
   const [versionState, setVersionState] = useState<
@@ -527,11 +533,7 @@ export function ProductMappingsPage({
       if (versionGenerationRef.current !== generation) {
         return;
       }
-      if (candidateVersionProp !== undefined) {
-        setCurrentCandidateVersion(candidateVersionProp);
-        setVersionState("ready");
-        return;
-      }
+      setImportAuthority(null);
       setVersionState("loading");
       try {
         const result = await getAdminProduct({
@@ -545,7 +547,18 @@ export function ProductMappingsPage({
         ) {
           return;
         }
-        const version = result.data?.candidate_revision?.version;
+        if (result.data === undefined) {
+          setVersionState("error");
+          return;
+        }
+        setImportAuthority({
+          productId,
+          accessToken,
+          published: result.data.active_revision != null,
+          active: result.data.is_active === true,
+        });
+        const version =
+          candidateVersionProp ?? result.data.candidate_revision?.version;
         if (version === undefined) {
           setVersionState("error");
           return;
@@ -841,12 +854,27 @@ export function ProductMappingsPage({
         </p>
       </div>
 
-      <PublishedMappingImports
-        accessToken={accessToken}
-        headingLevel={embedded ? "h3" : "h2"}
-        productId={productId}
-        repositories={repositories}
-      />
+      {importAuthority?.productId === productId &&
+      importAuthority.accessToken === accessToken ? (
+        importAuthority.published && importAuthority.active ? (
+          <PublishedMappingImports
+            key={`${productId}:${accessToken}`}
+            accessToken={accessToken}
+            headingLevel={embedded ? "h3" : "h2"}
+            productId={productId}
+            repositories={repositories}
+          />
+        ) : (
+          <Alert>
+            <AlertTitle>Published mapping imports</AlertTitle>
+            <AlertDescription>
+              {importAuthority.published
+                ? "Reactivate this product before running or refreshing imports."
+                : "Publish a validated mapping before running an import."}
+            </AlertDescription>
+          </Alert>
+        )
+      ) : null}
 
       {pageState === "loading" ? (
         <section className="grid gap-3" role="status" aria-live="polite">
