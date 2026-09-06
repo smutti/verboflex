@@ -30,11 +30,9 @@ def document(kind="review", **changes):
     fields.update(changes)
     table = "\n| ID | Severity | Resolution |\n|---|---|---|\n| R1 | High | resolved |\n"
     if kind == "security":
-        table = (
-            "\n| ID | Severity | Disposition | Evidence | Resolution |\n"
-            "|---|---|---|---|---|\n"
-            "| T1 | High | mitigate | tests/unit/test_auth.py::test_denied | resolved |\n"
-        )
+        table = "\n| ID | Severity | Disposition | Evidence | Resolution |\n|---|---|---|---|---|\n"
+        for identifier in [*(f"T-04-{number:02d}" for number in range(1, 78)), "T-04-SC"]:
+            table += f"| {identifier} | High | mitigate | tests/unit/test_auth.py::test_denied | resolved |\n"
     return "---\n" + yaml.safe_dump(fields) + "---\n" + table
 
 
@@ -60,6 +58,22 @@ def test_severe_security_threat_requires_actual_evidence(evidence):
 @pytest.mark.parametrize("kind", ["review", "security", "verification", "evidence"])
 def test_exact_valid_artifacts_are_accepted(kind):
     assert verifier().validate_document(document(kind), kind)["source_digest"].startswith("sha256:")
+
+
+@pytest.mark.parametrize("defect", ["missing", "duplicate", "unknown", "only-fabricated"])
+def test_security_requires_all_planned_threats_exactly_once(defect):
+    payload = document("security")
+    row = "| T-04-01 | High | mitigate | tests/unit/test_auth.py::test_denied | resolved |\n"
+    if defect == "missing":
+        payload = payload.replace(row, "")
+    elif defect == "duplicate":
+        payload += row
+    elif defect == "unknown":
+        payload = payload.replace("| T-04-01 |", "| T-04-99 |")
+    else:
+        payload = payload.split("| T-04-01 |", 1)[0] + row.replace("T-04-01", "T1")
+    with pytest.raises(ValueError):
+        verifier().validate_document(payload, "security")
 
 
 def test_review_scope_metadata_is_typed_and_preserved():
