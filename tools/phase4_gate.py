@@ -19,9 +19,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
+PHASE4_BASE = "d987d5f48273d49234b07aacb3fa185337a1b4f2"
 LAYERS = (
     "source-scope-closeout",
     "backend-tests-migrations-parsers-worker",
+    "backend-changed-line-parser-coverage",
     "backend-types-lint-format",
     "generated-client",
     "frontend-unit-accessibility-coverage",
@@ -52,7 +54,9 @@ class Gate:
         self.directory = Path(tempfile.mkdtemp(prefix="verboflex-phase04-gate-"))
         os.chmod(self.directory, 0o700)
         self.environment = dict(os.environ, PHASE4_RESULT_DIR=str(self.directory))
-        self.environment["COVERAGE_FILE"] = str(self.directory / "backend-coverage-data")
+        self.environment["COVERAGE_FILE"] = str(
+            self.directory / "backend-coverage-data"
+        )
         self.containers = []
         self.processes = []
         self.records = []
@@ -89,7 +93,9 @@ class Gate:
             "output_sha256": hashlib.sha256(raw).hexdigest(),
         }
         self.records.append(record)
-        (self.directory / "commands.json").write_text(json.dumps(self.records, indent=2))
+        (self.directory / "commands.json").write_text(
+            json.dumps(self.records, indent=2)
+        )
         print(json.dumps(record), flush=True)
         if code != 0:
             raise ValueError("section failed: " + label)
@@ -97,7 +103,9 @@ class Gate:
 
     def capture(self, command):
         return (
-            subprocess.check_output(command, stderr=subprocess.DEVNULL, timeout=90).decode().strip()
+            subprocess.check_output(command, stderr=subprocess.DEVNULL, timeout=90)
+            .decode()
+            .strip()
         )
 
     def start_infrastructure(self):
@@ -129,7 +137,9 @@ class Gate:
             )
             deadline = time.monotonic() + 60
             ready = (
-                ["pg_isready", "-U", "postgres"] if service == "postgres" else ["redis-cli", "ping"]
+                ["pg_isready", "-U", "postgres"]
+                if service == "postgres"
+                else ["redis-cli", "ping"]
             )
             while subprocess.run(
                 ["docker", "exec", name, *ready],
@@ -140,7 +150,9 @@ class Gate:
                 if time.monotonic() > deadline:
                     raise ValueError("isolated service readiness timeout")
                 time.sleep(0.5)
-            host_port = self.capture(["docker", "port", name, port + "/tcp"]).rsplit(":", 1)[1]
+            host_port = self.capture(["docker", "port", name, port + "/tcp"]).rsplit(
+                ":", 1
+            )[1]
             if service == "postgres":
                 self.environment["VERBOFLEX_TEST_POSTGRES_ADMIN_URL"] = (
                     f"postgresql://postgres@127.0.0.1:{host_port}/postgres"
@@ -236,7 +248,9 @@ class Gate:
         deadline = time.monotonic() + 30
         while True:
             try:
-                with urllib.request.urlopen(url + "/translations/opaque", timeout=2) as response:
+                with urllib.request.urlopen(
+                    url + "/translations/opaque", timeout=2
+                ) as response:
                     assert response.status == 200
                 break
             except OSError:
@@ -312,7 +326,9 @@ def main():
                         "-q",
                     ],
                 )
-                gate.command("smoke-shell-controls", ["bash", "tools/tests/test_phase4_smoke.sh"])
+                gate.command(
+                    "smoke-shell-controls", ["bash", "tools/tests/test_phase4_smoke.sh"]
+                )
             elif layer == "backend-tests-migrations-parsers-worker":
                 gate.command(
                     layer,
@@ -326,7 +342,36 @@ def main():
                         "--cov=verboflex",
                         "--cov-branch",
                         "--cov-report=term-missing",
-                        "--cov-report=xml:" + str(gate.directory / "backend-coverage.xml"),
+                        "--cov-report=xml:"
+                        + str(gate.directory / "backend-coverage.xml"),
+                        # Whole-project coverage is diagnostic, as in Phase 3.
+                        # The following layer enforces changed-line and parser thresholds.
+                        "--cov-fail-under=0",
+                    ],
+                    cwd=BACKEND,
+                )
+            elif layer == "backend-changed-line-parser-coverage":
+                gate.command(
+                    "backend-changed-line-coverage",
+                    [
+                        "uv",
+                        "run",
+                        "diff-cover",
+                        str(gate.directory / "backend-coverage.xml"),
+                        "--compare-branch=" + PHASE4_BASE,
+                        "--fail-under=100",
+                    ],
+                    cwd=BACKEND,
+                )
+                gate.command(
+                    "parser-branch-coverage",
+                    [
+                        "uv",
+                        "run",
+                        "coverage",
+                        "report",
+                        "--include=*/localization/importing/*",
+                        "--fail-under=100",
                     ],
                     cwd=BACKEND,
                 )
@@ -337,7 +382,10 @@ def main():
                     ["ruff", "format", "--check", "src", "tests", "alembic"],
                 ):
                     gate.command(
-                        layer + "-" + command[0] + ("-format" if "format" in command else ""),
+                        layer
+                        + "-"
+                        + command[0]
+                        + ("-format" if "format" in command else ""),
                         ["uv", "run", *command],
                         cwd=BACKEND,
                     )
@@ -353,8 +401,25 @@ def main():
                         "run",
                         "test:coverage",
                         "--",
-                        "--coverage.reportsDirectory=" + str(gate.directory / "frontend-coverage"),
+                        "--coverage.reportsDirectory="
+                        + str(gate.directory / "frontend-coverage"),
+                        "--coverage.reporter=text",
+                        "--coverage.reporter=cobertura",
                     ],
+                )
+                gate.command(
+                    "frontend-changed-line-coverage",
+                    [
+                        "uv",
+                        "run",
+                        "diff-cover",
+                        str(
+                            gate.directory / "frontend-coverage/cobertura-coverage.xml"
+                        ),
+                        "--compare-branch=" + PHASE4_BASE,
+                        "--fail-under=100",
+                    ],
+                    cwd=BACKEND,
                 )
             elif layer == "frontend-types-lint-build":
                 for command in ("typecheck", "lint", "format:check", "build"):

@@ -11,6 +11,39 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 
 
+def test_gate_requires_changed_line_coverage_for_both_applications():
+    import ast
+
+    source = (ROOT / "tools/phase4_gate.py").read_text()
+    tree = ast.parse(source)
+    commands = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "command"
+    ]
+    coverage = {
+        node.args[0].value: node
+        for node in commands
+        if node.args
+        and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value
+        in {"backend-changed-line-coverage", "frontend-changed-line-coverage"}
+    }
+    assert set(coverage) == {"backend-changed-line-coverage", "frontend-changed-line-coverage"}
+    for command in coverage.values():
+        literal_args = {
+            node.value
+            for node in ast.walk(command)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        assert {"diff-cover", "--fail-under=100", "--compare-branch="} <= literal_args
+        assert any(
+            isinstance(node, ast.Name) and node.id == "PHASE4_BASE" for node in ast.walk(command)
+        )
+
+
 @pytest.mark.parametrize(
     "mode", ["full", "partial", "command-failure", "cleanup-failure", "source-drift"]
 )
