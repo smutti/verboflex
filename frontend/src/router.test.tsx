@@ -262,10 +262,10 @@ describe("session routes", () => {
 
   it("never mounts translation content or starts reads while checking or signed out", async () => {
     let rejectSession!: (
-      result: Awaited<ReturnType<typeof refreshAccessToken>>,
+      result: Awaited<ReturnType<typeof refreshAccessToken<false>>>,
     ) => void;
     refreshAccessTokenMock.mockReturnValue(
-      new Promise((resolve) => {
+      new Promise<Awaited<ReturnType<typeof refreshAccessToken<false>>>>((resolve) => {
         rejectSession = resolve;
       }),
     );
