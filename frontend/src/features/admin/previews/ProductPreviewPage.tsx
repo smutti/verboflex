@@ -494,7 +494,7 @@ function BaseLanguageSelect({
         base-language limit.
       </p>
       {required ? (
-        <p id={errorId} className="font-medium text-warning">
+        <p id={errorId} className="font-semibold text-warning">
           Base language required
         </p>
       ) : null}
