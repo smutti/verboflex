@@ -502,4 +502,38 @@ describe("TranslationSearchPage", () => {
     );
     expect(screen.queryByText("Open details private")).toBeNull();
   });
+
+  it("preserves literal query through token rotation while reauthorizing options and results", async () => {
+    const view = await mount();
+    fireEvent.change(screen.getByLabelText("Search keys and translations"), {
+      target: { value: "remember across refresh" },
+    });
+    fireEvent.keyDown(screen.getByLabelText("Search keys and translations"), {
+      key: "Enter",
+    });
+    await flush();
+    view.rerender(tree(principal, "rotated-token"));
+    await flush();
+    expect(screen.getByLabelText("Search keys and translations")).toHaveValue(
+      "remember across refresh",
+    );
+    expect(vi.mocked(searchTranslations).mock.lastCall?.[0]).toMatchObject({
+      auth: "rotated-token",
+      query: { q: "remember across refresh" },
+    });
+  });
+
+  it("keeps search usable when browser preference storage is blocked", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("Denied", "SecurityError");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Denied", "SecurityError");
+    });
+    await mount();
+    expect(searchTranslations).toHaveBeenCalledOnce();
+    expect(screen.getByLabelText("Search keys and translations")).toHaveValue(
+      "",
+    );
+  });
 });
