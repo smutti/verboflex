@@ -516,6 +516,7 @@ WITH authorized_products AS (
         product.display_name AS product_name,
         key.raw_key,
         key.is_deleted AS key_deleted,
+        scope.id AS scope_id,
         candidate.language,
         scope.current_mapping_id
     FROM authorized_products AS product
@@ -554,7 +555,15 @@ SELECT
     mapping.base_language,
     explicit_rule.max_chars AS explicit_maximum,
     explicit_rule.version AS constraint_version,
-    base_rule.max_chars AS base_maximum,
+    (
+        SELECT rule.max_chars
+        FROM translation_constraints AS rule
+        JOIN translation_keys AS base_key ON base_key.id = rule.translation_key_id
+        WHERE rule.scope_id = anchor.scope_id
+          AND base_key.scope_id = anchor.scope_id
+          AND base_key.raw_key = anchor.raw_key
+          AND rule.language = mapping.base_language
+    ) AS base_maximum,
     history.entries AS history,
     value.source_text,
     value.translated_text,
@@ -587,8 +596,6 @@ LEFT JOIN repositories AS repository ON repository.id = locator.repository_id
 LEFT JOIN product_repository_mappings AS mapping ON mapping.id = anchor.current_mapping_id
 LEFT JOIN translation_constraints AS explicit_rule
   ON explicit_rule.translation_key_id = anchor.key_id AND explicit_rule.language = anchor.language
-LEFT JOIN translation_constraints AS base_rule
-  ON base_rule.translation_key_id = anchor.key_id AND base_rule.language = mapping.base_language
 LEFT JOIN LATERAL (
     SELECT jsonb_agg(jsonb_build_object(
         'revision_number', revision.revision_number, 'review_state', revision.review_state,
