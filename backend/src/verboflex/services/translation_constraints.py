@@ -259,6 +259,7 @@ def put_translation_constraint(
         translation_key_id=key.id,
         language=language,
     )
+    changed = rule is None or rule.max_chars != maximum
     if rule is None:
         if expected != 0:
             raise ConstraintVersionConflict("constraint version conflict")
@@ -282,6 +283,8 @@ def put_translation_constraint(
             rule.version = key.constraint_generation
             rule.updated_by = actor_id
 
+    if changed and scope.active_execution_id is not None:
+        scope.dataset_version += 1
     values = recompute_translation_constraints(
         session,
         scope_id=scope.id,
@@ -327,6 +330,8 @@ def delete_translation_constraint(
     if rule.version != expected:
         raise ConstraintVersionConflict("constraint version conflict")
     session.delete(rule)
+    if scope.active_execution_id is not None:
+        scope.dataset_version += 1
     values = recompute_translation_constraints(
         session,
         scope_id=scope.id,
