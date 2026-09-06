@@ -1433,9 +1433,7 @@ def test_phase2_forbidden_bypasses_are_absent() -> None:
         if path.name != "__init__.py"
     }
     assert not any(
-        token in model_name
-        for model_name in model_names
-        for token in ("pull_request", "comment")
+        token in model_name for model_name in model_names for token in ("pull_request", "comment")
     )
     assert {name for name in model_names if "translation" in name or "canonical" in name} == {
         "translation",
