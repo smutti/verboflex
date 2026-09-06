@@ -25,6 +25,7 @@ import {
   issueToken,
   listAdminRevisionMappings,
   listTranslationOptions,
+  type TranslationOptionsResponse,
   searchTranslations,
   getTranslationGroup,
   readCurrentUser,
@@ -248,11 +249,14 @@ describe("session routes", () => {
   );
 
   it("restores direct translation search from only the server principal's authorized preferences", async () => {
-    let resolveOptions!: (
-      value: Awaited<ReturnType<typeof listTranslationOptions<false>>>,
-    ) => void;
+    let resolveOptions!: (value: {
+      data: TranslationOptionsResponse;
+      error: undefined;
+      request: Request;
+      response: Response;
+    }) => void;
     vi.mocked(listTranslationOptions).mockReturnValueOnce(
-      new Promise((resolve) => {
+      new Promise<Parameters<typeof resolveOptions>[0]>((resolve) => {
         resolveOptions = resolve;
       }),
     );
@@ -277,6 +281,8 @@ describe("session routes", () => {
           languages: [{ code: "it", label: "Italian" }],
         },
         error: undefined,
+        request: new Request("http://localhost/api/v1/translations/options"),
+        response: new Response(null, { status: 200 }),
       }),
     );
     await waitFor(() =>
