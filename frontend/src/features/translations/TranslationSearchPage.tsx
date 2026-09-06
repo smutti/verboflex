@@ -447,8 +447,9 @@ function SearchOptions({ context }: { context: TranslationsWorkspaceContext }) {
           ...preferences,
         };
         const snapshot = seed?.snapshot;
-        const validScope =
+        const validSnapshot =
           snapshot &&
+          snapshot.query === queryRef.current &&
           snapshot.filters.productId === filters.productId &&
           snapshot.filters.language === filters.language;
         setLoad({
@@ -458,7 +459,7 @@ function SearchOptions({ context }: { context: TranslationsWorkspaceContext }) {
             seed: {
               query: queryRef.current,
               filters,
-              snapshot: validScope ? snapshot : null,
+              snapshot: validSnapshot ? snapshot : null,
               focusControl: retryAction.current ? "query" : seed?.focusControl,
             },
           },
