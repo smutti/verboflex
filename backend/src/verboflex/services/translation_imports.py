@@ -505,17 +505,19 @@ def reconcile_canonical_translations(
             )
             if source_changed and value.language != mapping.base_language:
                 next_review_state = "draft"
-            elif (
-                target_changed or current_target_is_untracked
-            ) and value.review_state == "approved":
-                exact_correlation = staged.correlation_reference is not None and any(
-                    revision.correlation_reference == staged.correlation_reference
-                    and revision.source_text == staged.source_text
-                    and revision.translated_text == staged.translated_text
-                    and revision.display_text == staged.display_text
-                    and revision.structure == staged.structure
-                    and not revision.is_deleted
-                    for revision in value.revisions
+            elif target_changed or current_target_is_untracked:
+                exact_correlation = (
+                    value.review_state == "approved"
+                    and staged.correlation_reference is not None
+                    and any(
+                        revision.correlation_reference == staged.correlation_reference
+                        and revision.source_text == staged.source_text
+                        and revision.translated_text == staged.translated_text
+                        and revision.display_text == staged.display_text
+                        and revision.structure == staged.structure
+                        and not revision.is_deleted
+                        for revision in value.revisions
+                    )
                 )
                 if not exact_correlation:
                     next_review_state = "draft"
