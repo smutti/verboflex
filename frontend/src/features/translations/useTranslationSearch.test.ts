@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -78,7 +78,9 @@ function deferred<T>() {
 
 async function settleInitial() {
   await act(async () => {
-    await Promise.resolve();
+    for (let flush = 0; flush < 5; flush += 1) {
+      await Promise.resolve();
+    }
   });
 }
 
@@ -86,6 +88,8 @@ describe("useTranslationSearch", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     searchTranslationsMock.mockReset();
+    localStorage.clear();
+    sessionStorage.clear();
   });
 
   afterEach(() => {
@@ -110,7 +114,7 @@ describe("useTranslationSearch", () => {
     );
 
     await settleInitial();
-    await waitFor(() => expect(result.current.items).toEqual([group(1)]));
+    expect(result.current.items).toEqual([group(1)]);
 
     expect(searchTranslationsMock).toHaveBeenCalledOnce();
     expect(searchTranslationsMock).toHaveBeenCalledWith({
@@ -141,7 +145,7 @@ describe("useTranslationSearch", () => {
       }),
     );
     await settleInitial();
-    await waitFor(() => expect(searchTranslationsMock).toHaveBeenCalledOnce());
+    expect(searchTranslationsMock).toHaveBeenCalledOnce();
 
     act(() => {
       result.current.setQuery("fir");
@@ -155,7 +159,7 @@ describe("useTranslationSearch", () => {
       await vi.advanceTimersByTimeAsync(1);
     });
     expect(searchTranslationsMock).toHaveBeenCalledTimes(2);
-    expect(searchTranslationsMock.mock.calls[1]?.[0].query?.q).toBe("first");
+    expect(searchTranslationsMock.mock.calls[1]?.[0]?.query?.q).toBe("first");
 
     act(() => {
       result.current.setQuery("run on Enter");
@@ -172,7 +176,7 @@ describe("useTranslationSearch", () => {
       result.current.clearQuery();
     });
     expect(searchTranslationsMock).toHaveBeenCalledTimes(4);
-    expect(searchTranslationsMock.mock.calls[3]?.[0].query?.q).toBe("");
+    expect(searchTranslationsMock.mock.calls[3]?.[0]?.query?.q).toBe("");
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300);
     });
@@ -192,7 +196,7 @@ describe("useTranslationSearch", () => {
     );
     await settleInitial();
     expect(searchTranslationsMock).toHaveBeenCalledOnce();
-    const obsoleteSignal = searchTranslationsMock.mock.calls[0]?.[0].signal;
+    const obsoleteSignal = searchTranslationsMock.mock.calls[0]?.[0]?.signal;
 
     act(() => {
       result.current.setFilters({
@@ -202,7 +206,8 @@ describe("useTranslationSearch", () => {
     });
     expect(searchTranslationsMock).toHaveBeenCalledTimes(2);
     expect(obsoleteSignal?.aborted).toBe(true);
-    await waitFor(() => expect(result.current.items).toEqual([group(2)]));
+    await settleInitial();
+    expect(result.current.items).toEqual([group(2)]);
 
     obsolete.resolve(ok(page([group(1)], "obsolete-cursor")));
     await act(async () => Promise.resolve());
@@ -225,7 +230,8 @@ describe("useTranslationSearch", () => {
     await settleInitial();
     act(() => result.current.setQuery("new"));
     act(() => result.current.submitQuery());
-    await waitFor(() => expect(result.current.items).toEqual([group(3)]));
+    await settleInitial();
+    expect(result.current.items).toEqual([group(3)]);
 
     obsolete.reject(new Error("private stale diagnostics"));
     await act(async () => Promise.resolve());
@@ -234,16 +240,11 @@ describe("useTranslationSearch", () => {
     expect(result.current.loadMoreError).toBe(false);
   });
 
-  it("retains successful rows across load-more failure and retries without duplicates", async () => {
-    const firstPage = Array.from({ length: 50 }, (_, index) => group(index + 1));
-    const continuation = deferred<ReturnType<typeof ok>>();
+  it("aborts on typing before debounce and never revives a reverted generation", async () => {
+    const obsolete = deferred<ReturnType<typeof ok>>();
     searchTranslationsMock
-      .mockResolvedValueOnce(ok(page(firstPage, "cursor-2")))
-      .mockReturnValueOnce(continuation.promise as never)
-      .mockRejectedValueOnce(new Error("bounded failure"))
-      .mockResolvedValueOnce(
-        ok(page([group(50), group(51), group(51)], null)),
-      );
+      .mockReturnValueOnce(obsolete.promise as never)
+      .mockResolvedValueOnce(ok(page([group(2)], null)));
     const { result } = renderHook(() =>
       useTranslationSearch({
         accessToken: "memory-only-bearer",
@@ -251,7 +252,83 @@ describe("useTranslationSearch", () => {
       }),
     );
     await settleInitial();
-    await waitFor(() => expect(result.current.items).toHaveLength(50));
+    const signal = searchTranslationsMock.mock.calls[0]?.[0]?.signal;
+    act(() => result.current.setQuery("changed"));
+    expect(signal?.aborted).toBe(true);
+    act(() => result.current.setQuery(""));
+    obsolete.resolve(ok(page([group(1)], "obsolete-cursor")));
+    await settleInitial();
+    expect(result.current.items).toEqual([]);
+    await act(async () => vi.advanceTimersByTimeAsync(300));
+    expect(searchTranslationsMock).toHaveBeenCalledTimes(2);
+    expect(result.current.items).toEqual([group(2)]);
+  });
+
+  it.each([
+    ["foreign product", { ...group(2), product_id: "other-product" }],
+    ["foreign language", { ...group(2), language: "fr-FR" }],
+    ["foreign deletion", { ...group(2), is_deleted: true }],
+    ["foreign state", { ...group(2), states: ["approved"] }],
+    ["foreign length status", { ...group(2), within_limit_count: 0 }],
+  ])("rejects %s continuation rows without appending", async (_label, item) => {
+    searchTranslationsMock
+      .mockResolvedValueOnce(ok(page([group(1)], "cursor-2")))
+      .mockResolvedValueOnce(
+        ok(page([item as TranslationGroupSummaryResponse], null)),
+      );
+    const { result } = renderHook(() =>
+      useTranslationSearch({
+        accessToken: "memory-only-bearer",
+        initialFilters: {
+          ...defaultFilters,
+          productId: "product-alpha",
+          language: "it-IT",
+          state: "draft",
+          violation: "within_limit",
+        },
+      }),
+    );
+    await settleInitial();
+    await act(async () => result.current.loadMore());
+    expect(result.current.items).toEqual([group(1)]);
+    expect(result.current.loadMoreError).toBe(true);
+  });
+
+  it("rejects nonterminal continuation pages that make no identity progress", async () => {
+    searchTranslationsMock
+      .mockResolvedValueOnce(ok(page([group(1)], "cursor-2")))
+      .mockResolvedValueOnce(ok(page([group(1)], "cursor-3")));
+    const { result } = renderHook(() =>
+      useTranslationSearch({
+        accessToken: "memory-only-bearer",
+        initialFilters: defaultFilters,
+      }),
+    );
+    await settleInitial();
+    await act(async () => result.current.loadMore());
+    expect(result.current.items).toEqual([group(1)]);
+    expect(result.current.nextCursor).toBe("cursor-2");
+    expect(result.current.loadMoreError).toBe(true);
+  });
+
+  it("retains successful rows across load-more failure and retries without duplicates", async () => {
+    const firstPage = Array.from({ length: 50 }, (_, index) =>
+      group(index + 1),
+    );
+    const continuation = deferred<ReturnType<typeof ok>>();
+    searchTranslationsMock
+      .mockResolvedValueOnce(ok(page(firstPage, "cursor-2")))
+      .mockReturnValueOnce(continuation.promise as never)
+      .mockRejectedValueOnce(new Error("bounded failure"))
+      .mockResolvedValueOnce(ok(page([group(50), group(51), group(51)], null)));
+    const { result } = renderHook(() =>
+      useTranslationSearch({
+        accessToken: "memory-only-bearer",
+        initialFilters: defaultFilters,
+      }),
+    );
+    await settleInitial();
+    expect(result.current.items).toHaveLength(50);
 
     act(() => {
       void result.current.loadMore();
@@ -272,7 +349,7 @@ describe("useTranslationSearch", () => {
     expect(result.current.items.map(({ id }) => id)).toEqual(
       Array.from({ length: 51 }, (_, index) => `group-${index + 1}`),
     );
-    expect(searchTranslationsMock.mock.calls[3]?.[0].query?.cursor).toBe(
+    expect(searchTranslationsMock.mock.calls[3]?.[0]?.query?.cursor).toBe(
       "cursor-2",
     );
     expect(result.current.isEnd).toBe(true);
@@ -285,28 +362,36 @@ describe("useTranslationSearch", () => {
     ["empty non-terminal page", page([], "cursor-3")],
     [
       "over-bound page",
-      page(Array.from({ length: 51 }, (_, index) => group(index + 51)), null),
+      page(
+        Array.from({ length: 51 }, (_, index) => group(index + 51)),
+        null,
+      ),
     ],
-  ])("rejects an impossible %s continuation without replacing rows", async (_case, badPage) => {
-    const firstPage = Array.from({ length: 50 }, (_, index) => group(index + 1));
-    searchTranslationsMock
-      .mockResolvedValueOnce(ok(page(firstPage, "cursor-2")))
-      .mockResolvedValueOnce(ok(badPage));
-    const { result } = renderHook(() =>
-      useTranslationSearch({
-        accessToken: "memory-only-bearer",
-        initialFilters: defaultFilters,
-      }),
-    );
-    await settleInitial();
-    await waitFor(() => expect(result.current.items).toHaveLength(50));
+  ])(
+    "rejects an impossible %s continuation without replacing rows",
+    async (_case, badPage) => {
+      const firstPage = Array.from({ length: 50 }, (_, index) =>
+        group(index + 1),
+      );
+      searchTranslationsMock
+        .mockResolvedValueOnce(ok(page(firstPage, "cursor-2")))
+        .mockResolvedValueOnce(ok(badPage));
+      const { result } = renderHook(() =>
+        useTranslationSearch({
+          accessToken: "memory-only-bearer",
+          initialFilters: defaultFilters,
+        }),
+      );
+      await settleInitial();
+      expect(result.current.items).toHaveLength(50);
 
-    await act(async () => result.current.loadMore());
+      await act(async () => result.current.loadMore());
 
-    expect(result.current.items).toEqual(firstPage);
-    expect(result.current.nextCursor).toBe("cursor-2");
-    expect(result.current.loadMoreError).toBe(true);
-  });
+      expect(result.current.items).toEqual(firstPage);
+      expect(result.current.nextCursor).toBe("cursor-2");
+      expect(result.current.loadMoreError).toBe(true);
+    },
+  );
 
   it("does not request after the terminal cursor or while a continuation is active", async () => {
     const continuation = deferred<ReturnType<typeof ok>>();
@@ -320,7 +405,7 @@ describe("useTranslationSearch", () => {
       }),
     );
     await settleInitial();
-    await waitFor(() => expect(result.current.items).toEqual([group(1)]));
+    expect(result.current.items).toEqual([group(1)]);
 
     act(() => {
       void result.current.loadMore();
@@ -345,7 +430,7 @@ describe("useTranslationSearch", () => {
       }),
     );
     await settleInitial();
-    await waitFor(() => expect(first.result.current.items).toHaveLength(2));
+    expect(first.result.current.items).toHaveLength(2);
     const snapshot = first.result.current.createSnapshot(864, "group-2");
     first.unmount();
     searchTranslationsMock.mockClear();
