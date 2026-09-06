@@ -20,11 +20,16 @@ from tests.integration.test_translation_search import (
 )
 from verboflex.models.import_job import ImportExecution, ImportJob
 from verboflex.models.translation import LocalizationScope
+from verboflex.models.user import User
 from verboflex.services.translation_constraints import (
     delete_translation_constraint,
     put_translation_constraint,
 )
-from verboflex.services.translation_search import TranslationSearchFilters, get_translation_group
+from verboflex.services.translation_search import (
+    InvalidTranslationCursor,
+    TranslationSearchFilters,
+    get_translation_group,
+)
 
 __all__ = ["clean_search_database", "search_session_factory", "migrated_database"]
 
@@ -193,3 +198,61 @@ def test_unicode_search_indexes_round_trip_without_changing_external_extension(m
     command.upgrade(config, "0019_unicode_search_indexes")
     with engine.connect() as connection:
         assert dict(connection.execute(query).all()) == updated
+
+
+def test_constraint_change_invalidates_search_cursor_but_idempotent_retry_preserves_it(
+    search_session_factory,
+):
+    factory = search_session_factory
+    product_id, scope_id = _seed_dataset(factory)
+    group_ids = [
+        _add_group(
+            factory,
+            product_id=product_id,
+            scope_id=scope_id,
+            raw_key=f"constraint-{index:03d}",
+            language="en",
+            values=({"display_text": "A"},),
+        )
+        for index in range(51)
+    ]
+    actor = uuid4()
+    with factory.begin() as session:
+        session.add(
+            User(
+                id=actor,
+                email=f"cursor-{actor}@example.com",
+                display_name="Cursor reviewer",
+                hashed_password="unused",
+                is_active=True,
+                must_change_password=False,
+            )
+        )
+    filters = TranslationSearchFilters(violation="no_max")
+    first = _search(factory, principal_id=actor, filters=filters)
+    assert first.next_cursor is not None
+    with factory.begin() as session:
+        changed = put_translation_constraint(
+            session,
+            translation_group_id=group_ids[0],
+            language="en",
+            max_chars=0,
+            expected_version=0,
+            actor_id=actor,
+        )
+    with pytest.raises(InvalidTranslationCursor):
+        _search(factory, principal_id=actor, filters=filters, cursor=first.next_cursor)
+    refreshed = _search(factory, principal_id=actor)
+    assert refreshed.next_cursor is not None
+    with factory.begin() as session:
+        unchanged = put_translation_constraint(
+            session,
+            translation_group_id=group_ids[0],
+            language="en",
+            max_chars=0,
+            expected_version=changed.version,
+            actor_id=actor,
+        )
+    assert unchanged.version == changed.version
+    remaining = _search(factory, principal_id=actor, cursor=refreshed.next_cursor)
+    assert [item.id for item in remaining.items] == group_ids[50:]
