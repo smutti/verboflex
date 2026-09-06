@@ -84,6 +84,9 @@ MAX_CANONICAL_PATH_LENGTH = 4096
 MAX_CANONICAL_TEXT_LENGTH = 1_048_576
 MAX_CANONICAL_FIELD_NAME_LENGTH = 128
 MAX_CANONICAL_SEQUENCE_LENGTH = 4096
+# iOS permits 4096 comments plus interleaved whitespace and syntax nodes.
+# Format-specific limits may be stricter than this complete-value ceiling.
+MAX_CANONICAL_STRUCTURE_NODES = 16_384
 MAX_CANONICAL_ADDRESS_LENGTH = 128
 MAX_CANONICAL_COORDINATE = 2_147_483_647
 MAX_CANONICAL_ISSUE_MESSAGE_LENGTH = 256
@@ -234,6 +237,7 @@ class CanonicalValue:
         if (
             type(self.structure) is not tuple
             or not self.structure
+            or len(self.structure) > MAX_CANONICAL_STRUCTURE_NODES
             or any(type(node) is not CanonicalStructureNode for node in self.structure)
         ):
             raise ValueError("canonical value rejected")

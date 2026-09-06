@@ -51,11 +51,13 @@ def qt_input(dependencies=130):
 
 def ios_input():
     return CanonicalParserInput(
-        format="ios_strings", repository_side="direct",
+        format="ios_strings",
+        repository_side="direct",
         path="mobile/it_IT.lproj/Localizable.strings",
         content=b"/**/ " * 4096 + b'"key"="value";',
         layout_identity="ios-strings:mobile/{locale}.lproj/Localizable.strings",
-        layout_version=1, base_language="en",
+        layout_version=1,
+        base_language="en",
     )
 
 
@@ -76,7 +78,8 @@ def test_structure_ceiling_preserves_exact_limit_and_rejects_whole_mapping(forma
         excessive_input = android_input(inline_count=1364, comments=3)
         peer_input = android_input(inline_count=1)
         peer = replace(
-            peer_input, path="res/values/peer.xml",
+            peer_input,
+            path="res/values/peer.xml",
             content=peer_input.content.replace(b'name="structured"', b'name="peer"'),
         )
     else:

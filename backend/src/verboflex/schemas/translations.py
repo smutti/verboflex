@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from verboflex.localization.importing.core import MAX_CANONICAL_STRUCTURE_NODES
+
 LanguageCode = Annotated[
     str,
     Field(
@@ -162,7 +164,7 @@ class TranslationValueResponse(ClosedTranslationModel):
     source_text: BoundedText | None
     translated_text: BoundedText | None
     display_text: BoundedText
-    structure: Annotated[list[object], Field(max_length=128)]
+    structure: Annotated[list[object], Field(max_length=MAX_CANONICAL_STRUCTURE_NODES)]
     review_state: Literal["draft", "approved", "rejected"]
     grapheme_count: Annotated[int, Field(ge=0)]
     constraint: TranslationConstraintProjectionResponse

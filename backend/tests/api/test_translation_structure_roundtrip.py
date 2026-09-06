@@ -12,7 +12,11 @@ from tests.integration.test_translation_import_activation import (
     activation_session_factory,
     clean_activation_database,
 )
-from tests.unit.localization.importing.test_structure_bounds import android_input, ios_input, qt_input
+from tests.unit.localization.importing.test_structure_bounds import (
+    android_input,
+    ios_input,
+    qt_input,
+)
 from verboflex.localization.importing.registry import parse_canonical_mapping
 from verboflex.main import app
 from verboflex.models.translation import TranslationValue
@@ -26,7 +30,9 @@ def test_large_valid_structure_survives_activation_and_authenticated_detail(
     activation_session_factory, format
 ):
     factory = activation_session_factory
-    parser_input = {"android_xml": android_input, "qt_ts": qt_input, "ios_strings": ios_input}[format]()
+    parser_input = {"android_xml": android_input, "qt_ts": qt_input, "ios_strings": ios_input}[
+        format
+    ]()
     parsed = parse_canonical_mapping((parser_input,))
     assert parsed.issues == ()
     expected_structure = [node.to_mapping() for node in parsed.values[0].structure]
