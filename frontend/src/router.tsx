@@ -25,6 +25,8 @@ import { ProductRepositoriesPage } from "./features/admin/repositories/ProductRe
 import { UsersPage } from "./features/admin/users/UsersPage";
 import { ChangePasswordPage } from "./features/auth/ChangePasswordPage";
 import { LoginPage } from "./features/auth/LoginPage";
+import { TranslationSearchPage } from "./features/translations/TranslationSearchPage";
+import { TranslationsWorkspace } from "./features/translations/TranslationsWorkspace";
 import {
   SessionProvider,
   useSession,
@@ -41,6 +43,7 @@ export interface SessionRoutesProps {
   loginElement: ReactNode;
   changePasswordElement: ReactNode;
   ordinaryElement: ReactNode;
+  translationsElement?: ReactNode;
   adminElement?: ReactNode;
   adminRouteState?: AdminRouteState;
   accessDeniedElement?: ReactNode;
@@ -92,6 +95,7 @@ export function SessionRoutes({
   loginElement,
   changePasswordElement,
   ordinaryElement,
+  translationsElement,
   adminElement,
   adminRouteState = { status: "ready" },
   accessDeniedElement,
@@ -143,6 +147,9 @@ export function SessionRoutes({
   return (
     <Routes>
       <Route path="/" element={ordinaryElement} />
+      <Route path="/translations" element={translationsElement}>
+        <Route index element={<TranslationSearchPage />} />
+      </Route>
       <Route path="/admin/*" element={guardedAdminElement} />
       <Route path="*" element={<Navigate replace to="/" />} />
     </Routes>
@@ -239,6 +246,16 @@ export function AppRouter() {
       loginElement={<LoginPage />}
       changePasswordElement={<ChangePasswordPage />}
       ordinaryElement={<App />}
+      translationsElement={
+        authenticatedShellProps === null ? null : (
+          <AppShell {...authenticatedShellProps}>
+            <TranslationsWorkspace
+              accessToken={authenticatedShellProps.accessToken}
+              principal={authenticatedShellProps.principal}
+            />
+          </AppShell>
+        )
+      }
       adminElement={
         authenticatedShellProps === null ? null : (
           <AppShell {...authenticatedShellProps}>

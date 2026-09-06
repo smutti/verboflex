@@ -1,6 +1,12 @@
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   createMemoryRouter,
@@ -168,46 +174,101 @@ describe("session routes", () => {
     );
   }
 
-  it.each<RoleName>(["admin", "product_manager_reviewer", "translator", "viewer"])(
+  it.each<RoleName>([
+    "admin",
+    "product_manager_reviewer",
+    "translator",
+    "viewer",
+  ])(
     "opens direct translation search for authenticated %s with default query state",
     async (role) => {
       restorePrincipal(role);
-      localStorage.setItem(translationPreferenceKey("another-principal"),
-        JSON.stringify({ version: 1, productId: "product-a", language: "it" }));
+      localStorage.setItem(
+        translationPreferenceKey("another-principal"),
+        JSON.stringify({ version: 1, productId: "product-a", language: "it" }),
+      );
       renderApplication("/translations?query=ignored&language=it");
 
-      expect(await screen.findByRole("textbox", { name: "Search keys and translations" })).toHaveValue("");
-      expect(screen.getByRole("combobox", { name: "Product" })).toHaveTextContent("All products");
-      expect(screen.getByRole("combobox", { name: "Language" })).toHaveTextContent("All languages");
-      expect(within(screen.getByTestId("app-shell-content")).getByRole("heading", { name: "Translations", level: 1 })).toBeVisible();
-      await waitFor(() => expect(searchTranslations).toHaveBeenCalledWith(expect.objectContaining({
-        auth: "translation-session-token",
-        query: expect.objectContaining({ query: "", product_id: null, language: null, deleted: "active" }),
-      })));
-      expect(screen.getByTestId("current-route")).toHaveTextContent("/translations");
+      expect(
+        await screen.findByRole("textbox", {
+          name: "Search keys and translations",
+        }),
+      ).toHaveValue("");
+      expect(
+        screen.getByRole("combobox", { name: "Product" }),
+      ).toHaveTextContent("All products");
+      expect(
+        screen.getByRole("combobox", { name: "Language" }),
+      ).toHaveTextContent("All languages");
+      expect(
+        within(screen.getByTestId("app-shell-content")).getByRole("heading", {
+          name: "Translations",
+          level: 1,
+        }),
+      ).toBeVisible();
+      await waitFor(() =>
+        expect(searchTranslations).toHaveBeenCalledWith(
+          expect.objectContaining({
+            auth: "translation-session-token",
+            query: expect.objectContaining({
+              q: "",
+              product_id: null,
+              language: null,
+              deleted: "active",
+            }),
+          }),
+        ),
+      );
+      expect(screen.getByTestId("current-route")).toHaveTextContent(
+        "/translations",
+      );
     },
   );
 
   it("restores direct translation search from only the server principal's authorized preferences", async () => {
     restorePrincipal();
-    localStorage.setItem(translationPreferenceKey(ordinaryPrincipal.id),
-      JSON.stringify({ version: 1, productId: "product-a", language: "it" }));
+    localStorage.setItem(
+      translationPreferenceKey(ordinaryPrincipal.id),
+      JSON.stringify({ version: 1, productId: "product-a", language: "it" }),
+    );
     renderApplication("/translations");
 
-    expect(await screen.findByRole("textbox", { name: "Search keys and translations" })).toHaveValue("");
-    expect(screen.getByRole("combobox", { name: "Product" })).toHaveTextContent("Product A");
-    expect(screen.getByRole("combobox", { name: "Language" })).toHaveTextContent("Italian");
-    expect(listTranslationOptions).toHaveBeenCalledWith(expect.objectContaining({
-      auth: "translation-session-token", query: { product_id: "product-a" },
-    }));
-    expect(searchTranslations).toHaveBeenCalledWith(expect.objectContaining({
-      query: expect.objectContaining({ product_id: "product-a", language: "it" }),
-    }));
+    expect(
+      await screen.findByRole("textbox", {
+        name: "Search keys and translations",
+      }),
+    ).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Product" })).toHaveTextContent(
+      "Product A",
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Language" }),
+    ).toHaveTextContent("Italian");
+    expect(listTranslationOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auth: "translation-session-token",
+        query: { product_id: "product-a" },
+      }),
+    );
+    expect(searchTranslations).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.objectContaining({
+          product_id: "product-a",
+          language: "it",
+        }),
+      }),
+    );
   });
 
   it("never mounts translation content or starts reads while checking or signed out", async () => {
-    let rejectSession!: (result: Awaited<ReturnType<typeof refreshAccessToken>>) => void;
-    refreshAccessTokenMock.mockReturnValue(new Promise((resolve) => { rejectSession = resolve; }));
+    let rejectSession!: (
+      result: Awaited<ReturnType<typeof refreshAccessToken>>,
+    ) => void;
+    refreshAccessTokenMock.mockReturnValue(
+      new Promise((resolve) => {
+        rejectSession = resolve;
+      }),
+    );
     renderApplication("/translations");
     expect(screen.getByRole("status")).toHaveTextContent("Checking session");
     expect(screen.queryByRole("heading", { name: "Translations" })).toBeNull();
@@ -215,22 +276,31 @@ describe("session routes", () => {
     expect(searchTranslations).not.toHaveBeenCalled();
 
     rejectSession({ data: undefined, error: { detail: "No session" } });
-    expect(await screen.findByRole("button", { name: "Sign in to VerboFlex" })).toBeVisible();
+    expect(
+      await screen.findByRole("button", { name: "Sign in to VerboFlex" }),
+    ).toBeVisible();
     expect(screen.getByTestId("current-route")).toHaveTextContent("/login");
     expect(listTranslationOptions).not.toHaveBeenCalled();
     expect(searchTranslations).not.toHaveBeenCalled();
   });
 
   it("keeps password-change authority outside translations", async () => {
-    renderRoutes({ status: "password_change_required", accessToken: "restricted" }, "/translations");
-    expect(await screen.findByRole("heading", { name: "Password change route" })).toBeVisible();
+    renderRoutes(
+      { status: "password_change_required", accessToken: "restricted" },
+      "/translations",
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Password change route" }),
+    ).toBeVisible();
     expect(listTranslationOptions).not.toHaveBeenCalled();
   });
 
   it("bounds unknown nested translation paths through the existing workspace fallback", async () => {
     restorePrincipal();
     renderApplication("/translations/unknown/unsupported");
-    expect(await screen.findByRole("heading", { name: "Workspace", level: 1 })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Workspace", level: 1 }),
+    ).toBeVisible();
     expect(screen.getByTestId("current-route")).toHaveTextContent(/^\/$/);
     expect(listTranslationOptions).not.toHaveBeenCalled();
     expect(searchTranslations).not.toHaveBeenCalled();
