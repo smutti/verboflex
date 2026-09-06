@@ -1035,7 +1035,11 @@ def list_published_mapping_imports(
     if not 1 <= limit <= MAX_IMPORT_PAGE_SIZE or status_filter not in {"all", "attention"}:
         raise ValueError("invalid import collection input")
     with session.begin():
-        product = session.get(Product, product_id)
+        # Activation/publication take this first lock exclusively. Retain one
+        # read snapshot across jobs and eager mapping scopes in READ COMMITTED.
+        product = session.execute(
+            select(Product).where(Product.id == product_id).with_for_update(read=True)
+        ).scalar_one_or_none()
         if product is None or not product.is_active or product.active_revision_id is None:
             raise ImportNotFound("published imports unavailable")
         revision_id = product.active_revision_id
@@ -1308,7 +1312,11 @@ def get_import_job(
 ) -> ImportJobRecord:
     """Read PostgreSQL-authoritative import state without consulting Celery."""
     with session.begin():
-        product = session.get(Product, product_id)
+        # Match the worker's first authority lock before loading either the job
+        # or its scope; otherwise identity-map values can span activation commits.
+        product = session.execute(
+            select(Product).where(Product.id == product_id).with_for_update(read=True)
+        ).scalar_one_or_none()
         job = session.get(ImportJob, import_id)
         if (
             product is None

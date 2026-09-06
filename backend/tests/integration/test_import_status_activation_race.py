@@ -27,8 +27,9 @@ from verboflex.services import import_jobs
 
 
 @pytest.mark.parametrize("collection", [False, True])
+@pytest.mark.parametrize("cross_product", [False, True])
 def test_polling_and_activation_share_one_coherent_snapshot(
-    activation_session_factory, monkeypatch, collection
+    activation_session_factory, monkeypatch, collection, cross_product
 ):
     factory = activation_session_factory
     identity, repository = _seed_running_direct_import(factory)
@@ -40,6 +41,12 @@ def test_polling_and_activation_share_one_coherent_snapshot(
     path = f"/api/v1/admin/products/{identity.product_id}/" + (
         "published/mapping-imports" if collection else f"imports/{identity.import_id}"
     )
+    activation_identity = identity
+    if cross_product:
+        activation_identity, repository = _seed_running_direct_import(factory)
+        manifest, references = _stage_direct_manifest(
+            factory, identity=activation_identity, repository_id=repository, result=_json_result()
+        )
     original_statement = import_jobs._published_mapping_statement
     worker_ready = Event()
     worker_pid = []
@@ -55,12 +62,12 @@ def test_polling_and_activation_share_one_coherent_snapshot(
     def activate():
         result = import_jobs.finish_import_execution(
             factory,
-            identity=identity,
+            identity=activation_identity,
             references=references,
             canonical_manifest_digest=manifest.digest,
         )
         with factory() as verification:
-            job = verification.get_one(ImportJob, identity.import_id)
+            job = verification.get_one(ImportJob, activation_identity.import_id)
             assert job.state == "current", (job.state, job.error_category)
         return result
 
@@ -117,11 +124,13 @@ def test_polling_and_activation_share_one_coherent_snapshot(
             assert response.status_code == 200
             record = response.json()["items"][0] if collection else response.json()
             assert (record["state"], record["dataset_status"]) == ("running", "not_created")
-            assert blocked, "worker must wait for the in-flight polling snapshot"
+            assert blocked is (not cross_product), "only this product's activation must wait"
             refreshed = asyncio.run(request())
             assert refreshed.status_code == 200
             record = refreshed.json()["items"][0] if collection else refreshed.json()
-            assert (record["state"], record["dataset_status"]) == ("current", "active")
+            assert (record["state"], record["dataset_status"]) == (
+                ("running", "not_created") if cross_product else ("current", "active")
+            )
         finally:
             event.remove(engine, "before_cursor_execute", capture_worker)
             event.remove(engine, "before_cursor_execute", collection_jobs)
