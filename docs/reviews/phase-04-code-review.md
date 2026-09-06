@@ -1,17 +1,20 @@
 ---
 phase: 04-localization-import-search-and-constraints
-reviewed: 2026-09-06T10:16:26Z
+reviewed: 2026-09-06T11:03:00Z
 depth: standard
 reviewer: gsd-code-reviewer
 status: pending
-source_digest: pending-post-gauntlet-freeze
-files_reviewed: 69
+source_digest: sha256:71d41b57dcf7d1bac376166c936212a360afb54c8aa99d4fbca6dd3321c54659
+files_reviewed: 76
 files_reviewed_list:
   - backend/alembic/versions/0011_active_revision_revalidations.py
   - backend/alembic/versions/0012_import_jobs.py
   - backend/alembic/versions/0015_mapping_base_language.py
   - backend/alembic/versions/0016_canonical_translations.py
   - backend/alembic/versions/0017_translation_search_indexes.py
+  - backend/alembic/versions/0018_constraint_generation.py
+  - backend/alembic/versions/0019_unicode_search_indexes.py
+  - backend/alembic/versions/0020_bounded_key_identities.py
   - backend/pyproject.toml
   - backend/src/verboflex/api/v1/router.py
   - backend/src/verboflex/api/v1/routes/admin_mappings.py
@@ -70,18 +73,222 @@ files_reviewed_list:
   - frontend/src/features/translations/translationPreferences.ts
   - frontend/src/features/translations/useTranslationSearch.ts
   - frontend/src/router.tsx
+  - tools/phase4_gate.py
   - tools/phase4_gauntlet.sh
   - tools/phase4_inventory.py
+  - tools/phase4_parser_checkpoint.sh
+  - tools/phase4_smoke.py
   - tools/phase4_smoke.sh
+  - tools/phase4_smoke_browser.mjs
   - tools/verify_phase4_closeout.py
   - tools/verify_phase4_npm.mjs
   - tools/verify_translation_mutants.py
 findings:
-  critical: 9
-  warning: 0
+  critical: 6
+  warning: 6
   info: 0
-  total: 9
+  total: 12
 ---
+# Phase 04 code review — pending remediation and completion
+
+## Narrative Findings (AI reviewer)
+
+The final pass confirms two new functional BLOCKER findings (CR-10, CR-12) and independently reproduces the security auditor's high BLOCKER CR-11. Earlier CR-01 through CR-09 have identifiable source corrections, but none is being closed by inference from its fix commit or reported test success. Both reports remain pending. No production or test source was modified by this reviewer.
+
+The impact-severity totals are normalized: six high findings (CR-01/03/07/08/09/11), six medium findings (CR-02/04/05/06/10/12), and no critical-impact findings. The frontmatter critical bucket includes high impact; warning includes medium impact. All twelve are release BLOCKER classifications because they concern required behavior or gate integrity. Historical first-pass counts and proof below are retained explicitly as history.
+
+## Scope and evidence status
+
+Exact base: `d987d5f48273d49234b07aacb3fa185337a1b4f2`. Observed source revision: `2b3b0d6661d896984629c51fd536becbd421d46d`. The frontmatter digest is an observed source snapshot, not a claim of a post-gauntlet freeze. The fresh run started against this digest has been interrupted for confirmed defects; replacement evidence is required after fixes.
+
+The exact scoped diff currently contains 165 backend/frontend/tools/config paths. The 76-file list preserves the previous 69-file partial review inventory and adds seven omitted migration/delivery files inspected in this pass. It includes focused cross-boundary inspection of large existing modules and must not be interpreted as completion of standard full-file review. The earlier approximate 91-file production estimate did not count the complete tests/fixtures/generated/lock scope.
+
+Fully read in this continuation: canonical core/registry; translation search and constraint services; three new migrations; search hook, search page, result list, workspace, preferences, detail-authority helper and maximum-length dialog; gate runner and smoke Python/browser/shell delivery code; parser checkpoint script. Focused reads include Android tail rejection, reconciliation transitions, response schema, preview confirmation helpers, the complete import-job diff, and regression fixture/setup sections. The hook continuation guard removal was traced through every internal state write: validated snapshot/page creates the cursor; query changes clear it synchronously; filter/token changes enter initial loading; post-await generation, identity and cursor guards remain.
+
+Required context inspected includes AGENTS.md, .planning/config.json (no configured agent skills), the agent-skills bootstrap, Phase 04 CONTEXT, UI-SPEC, RESEARCH, Plan 20, source manifest, existing reports and closeout validator. No project .codex/skills or .agents/skills directory exists. No structural pre-pass was supplied. Long context/tool reads included truncation; the remaining full-read completion must be reconciled rather than presumed.
+
+## Current finding disposition
+
+| ID | File/line | Severity | Classification | Proof | Impact | Resolution | Remediation |
+|---|---|---|---|---|---|---|---|
+| CR-11 | `tools/verify_phase4_closeout.py:132` | high | BLOCKER | Independently invoked validate_document with SECURED, a valid-looking digest and only T1/high/mitigate/placeholder.py:1/resolved. It returned SECURED with zero required threat IDs. | The promised automated gate can accept omitted high threats; T-04-62/T-04-64 and Plan 20 exact security replay fail. | open | Compare exact registered T-04-01..77 plus T-04-SC set, cardinality and declared severity; reject duplicate, unknown, omitted and downgraded rows. Test each case; bind to actual source/evidence. |
+| CR-10 | `backend/src/verboflex/services/translation_search.py:421,449,791` | medium | BLOCKER | Production search/detail on a disposable migrated PostgreSQL fixture with two array values, one tombstoned, returned active_groups=0, deleted_groups=1, detail_deleted=True, retained_active_values=1. | Removing one variant hides the live siblings from normal search and disables the group's constraint UI. Tombstoned minimum UUID also disagrees with mutation's minimum-live anchor. | open | Keep stable canonical/group authority; mark group deleted only when key/all members are deleted; base current filters on live members; permit the stable group anchor only while live members remain. Regress actual parser refresh, default search, detail and constraint mutation for leading/nonleading removed variants. |
+| CR-12 | `frontend/src/features/translations/TranslationSearchPage.tsx:450,461`; `frontend/src/features/translations/useTranslationSearch.ts:280` | medium | BLOCKER | Back restores a saved snapshot while options await. The editable pending query is passed as initialQuery, but validScope checks only product/language and restoreSnapshot returns snapshot.query. A read-only transpile/VM probe returned enteredQuery=new, restoredQuery=old. | User input entered during options loading is overwritten with the old query and old results. | open | Invalidate old snapshot pages/query authority whenever the current query differs; retain the new input and request fresh results. Add a deferred-options Back-navigation component regression. |
+
+## Earlier corrections observed, awaiting independent regression closure
+
+| Finding | Source observation at reviewed snapshot | Remaining verification |
+|---|---|---|
+| CR-01 | Android plural/array item branches reject non-whitespace tails before constructing values. | Re-run both real registry tail cases and mapping atomic-failure regressions. |
+| CR-02 | Target-change logic no longer gates reset on Approved; only proven Approved correlation bypasses Draft. | Recheck rejected changed target and retained history/context in real activation. |
+| CR-03 | Durable key generation survives DELETE; migration 0018 lifts prior-key epoch and versions to bounded BIGINT. | Recheck ABA PUT/DELETE and migration tests, including distinct language rules. |
+| CR-04 | Detail base rule lookup now uses scope plus raw key across repository sides. | Recheck separate-side inheritance and override removal API/UI projections. |
+| CR-05 | Cursor contains filter digest and UUID/rank/language anchor, not raw key; decoder retains 2048 bound and database validates anchor. | Recheck 51 long-key groups, Unicode/escaped filter boundaries and final encoder invariant tests. |
+| CR-06 | Search uses PostgreSQL Unicode casefold for query/key/source/display; migration 0019 aligns expressions. | Recheck ligature/final-sigma tiers and migration/index behavior on PostgreSQL 18. |
+| CR-07 | API structure cap references canonical MAX_CANONICAL_STRUCTURE_NODES. | Recheck parser-valid large structure through authenticated API and regenerated client. |
+| CR-08 | Worker derives current file membership from confirmed immutable layout, not original preview file list. | Recheck move/add/remove/unsupported-new-file production refresh and separate mapping atomicity. |
+| CR-09 | Browser checks language-bound confirmation digest shape and exact identities without comparing with original unbound digest. | Recheck realistic unequal-digest draft and active confirmation tests. |
+
+Additional source review: migration 0020 bounds unique natural-key indexes with a full raw-key digest while preserving raw text and transactional downgrade failure. CanonicalValueBuffer bounds incremental UTF-8 JSON expansion in nested adapter buffers, peer-file aggregation, separate-side shared budget and post-join expansion. Exact budget/fidelity tests were inspected selectively; their full independent review/run remains outstanding. Constraint mutation now increments dataset_version when effective state changes, closing the earlier cursor-invalidation candidate in source.
+
+## Requirement and decision trace
+
+These are exact manifest entry points, not PASS assertions. Every row remains pending final source/test completion and fresh execution evidence; CR-10 additionally blocks active structured-group behavior and CR-12 blocks browser query continuity.
+
+| Kind | ID | Delivery source | Executable test entry points | Disposition |
+|---|---|---|---|---|
+| DECISION | D-01 | `backend/src/verboflex/localization/importing/android_xml.py` | `backend/tests/unit/localization/importing/test_android_xml.py` | pending |
+| DECISION | D-02 | `backend/src/verboflex/localization/importing/android_xml.py` | `backend/tests/unit/localization/importing/test_android_xml.py` | pending |
+| DECISION | D-03 | `backend/src/verboflex/localization/importing/core.py` | `backend/tests/unit/localization/importing/test_contracts.py` | pending |
+| DECISION | D-04 | `backend/src/verboflex/localization/importing/registry.py` | `backend/tests/unit/localization/importing/test_conformance.py` | pending |
+| DECISION | D-05 | `backend/src/verboflex/services/translation_imports.py` | `backend/tests/integration/test_translation_import_activation.py` | pending |
+| DECISION | D-06 | `backend/src/verboflex/services/translation_imports.py` | `backend/tests/integration/test_translation_import_activation.py` | pending |
+| DECISION | D-07 | `backend/src/verboflex/models/translation.py` | `backend/tests/integration/test_migrations.py`, `backend/tests/unit/localization/importing/test_contracts.py` | pending |
+| DECISION | D-08 | `backend/src/verboflex/services/translation_imports.py` | `backend/tests/integration/test_translation_import_activation.py` | pending |
+| DECISION | D-09 | `backend/src/verboflex/services/translation_imports.py` | `backend/tests/integration/test_translation_import_activation.py` | pending |
+| DECISION | D-10 | `backend/src/verboflex/services/translation_imports.py` | `backend/tests/integration/test_translation_import_activation.py` | pending |
+| DECISION | D-11 | `backend/src/verboflex/services/translation_imports.py` | `backend/tests/integration/test_translation_import_activation.py` | pending |
+| DECISION | D-12 | `backend/src/verboflex/services/translation_imports.py` | `backend/tests/integration/test_translation_import_activation.py` | pending |
+| DECISION | D-13 | `backend/src/verboflex/services/translation_imports.py` | `backend/tests/integration/test_translation_import_activation.py` | pending |
+| DECISION | D-14 | `frontend/src/features/translations/TranslationSearchPage.tsx` | `frontend/src/features/translations/TranslationSearchPage.test.tsx` | pending |
+| DECISION | D-15 | `backend/src/verboflex/services/translation_search.py` | `backend/tests/integration/test_translation_search.py`, `backend/tests/api/test_translations.py` | pending |
+| DECISION | D-16 | `frontend/src/features/translations/TranslationSearchPage.tsx` | `frontend/src/features/translations/TranslationSearchPage.test.tsx` | pending |
+| DECISION | D-17 | `frontend/src/features/translations/useTranslationSearch.ts` | `frontend/src/features/translations/useTranslationSearch.test.ts` | pending |
+| DECISION | D-18 | `backend/src/verboflex/services/translation_search.py` | `backend/tests/integration/test_translation_search.py`, `backend/tests/api/test_translations.py` | pending |
+| DECISION | D-19 | `backend/src/verboflex/services/translation_constraints.py` | `backend/tests/integration/test_translation_constraints.py` | pending |
+| DECISION | D-20 | `backend/src/verboflex/localization/graphemes.py` | `backend/tests/unit/localization/test_grapheme_count.py` | pending |
+| DECISION | D-21 | `backend/src/verboflex/api/v1/routes/translation_constraints.py` | `backend/tests/api/test_translation_constraints.py` | pending |
+| DECISION | D-22 | `backend/src/verboflex/services/translation_constraints.py` | `backend/tests/integration/test_translation_constraints.py` | pending |
+| DECISION | D-23 | `backend/src/verboflex/services/translation_constraints.py` | `backend/tests/integration/test_translation_constraints.py` | pending |
+| REQ | CONS-01 | `backend/src/verboflex/services/translation_constraints.py` | `backend/tests/integration/test_translation_constraints.py` | pending |
+| REQ | CONS-02 | `backend/src/verboflex/api/v1/routes/translation_constraints.py` | `backend/tests/api/test_translation_constraints.py` | pending |
+| REQ | CONS-03 | `backend/src/verboflex/localization/graphemes.py` | `backend/tests/unit/localization/test_grapheme_count.py` | pending |
+| REQ | CONS-04 | `backend/src/verboflex/services/translation_constraints.py` | `backend/tests/integration/test_translation_constraints.py` | pending |
+| REQ | CONS-05 | `backend/src/verboflex/api/v1/routes/translation_constraints.py` | `backend/tests/api/test_translation_constraints.py` | pending |
+| REQ | FMT-01 | `backend/src/verboflex/localization/importing/android_xml.py` | `backend/tests/unit/localization/importing/test_android_xml.py` | pending |
+| REQ | FMT-02 | `backend/src/verboflex/localization/importing/qt_ts.py` | `backend/tests/unit/localization/importing/test_qt_ts.py` | pending |
+| REQ | FMT-03 | `backend/src/verboflex/localization/importing/json.py` | `backend/tests/unit/localization/importing/test_json.py` | pending |
+| REQ | FMT-04 | `backend/src/verboflex/localization/importing/ios_strings.py` | `backend/tests/unit/localization/importing/test_ios_strings.py` | pending |
+| REQ | FMT-06 | `backend/src/verboflex/localization/importing/registry.py` | `backend/tests/unit/localization/importing/test_conformance.py` | pending |
+| REQ | FMT-07 | `backend/src/verboflex/models/translation.py` | `backend/tests/integration/test_migrations.py`, `backend/tests/unit/localization/importing/test_contracts.py` | pending |
+| REQ | FMT-08 | `backend/src/verboflex/services/translation_imports.py` | `backend/tests/integration/test_translation_import_activation.py` | pending |
+| REQ | SRCH-01 | `frontend/src/features/translations/TranslationSearchPage.tsx` | `frontend/src/features/translations/TranslationSearchPage.test.tsx` | pending |
+| REQ | SRCH-02 | `frontend/src/features/translations/TranslationSearchPage.tsx` | `frontend/src/features/translations/TranslationSearchPage.test.tsx` | pending |
+| REQ | SRCH-03 | `backend/src/verboflex/services/translation_search.py` | `backend/tests/integration/test_translation_search.py`, `backend/tests/api/test_translations.py` | pending |
+| REQ | SRCH-04 | `backend/src/verboflex/services/translation_search.py` | `backend/tests/integration/test_translation_search.py`, `backend/tests/api/test_translations.py` | pending |
+| REQ | SRCH-05 | `backend/src/verboflex/services/translation_search.py` | `backend/tests/integration/test_translation_search.py`, `backend/tests/api/test_translations.py` | pending |
+| REQ | SRCH-06 | `frontend/src/features/translations/TranslationDetailPage.tsx` | `frontend/src/features/translations/TranslationDetailPage.test.tsx`, `frontend/src/features/translations/MaximumLengthDialog.test.tsx`, `frontend/e2e/translations.spec.ts` | pending |
+| REQ | SRCH-07 | `frontend/src/features/translations/TranslationDetailPage.tsx` | `frontend/src/features/translations/TranslationDetailPage.test.tsx`, `frontend/src/features/translations/MaximumLengthDialog.test.tsx`, `frontend/e2e/translations.spec.ts` | pending |
+| REQ | SRCH-08 | `frontend/src/features/translations/useTranslationSearch.ts` | `frontend/src/features/translations/useTranslationSearch.test.ts` | pending |
+
+## Diagnostic commands and results
+
+- Read-only production-service probe used the existing search_session_factory fixture to create a uniquely named test database on the test PostgreSQL instance. It seeded one two-value group, tombstoned one sibling and called search_translations/get_translation_group. Result: active_groups=0, deleted_groups=1, detail_deleted=True, retained_active_values=1. The fixture dropped only its owned database; the user's application stack was untouched.
+- Read-only Node/TypeScript transpile+VM probe loaded the actual hook and called restoreSnapshot with a valid old snapshot and new initialQuery. Result: enteredQuery=new, restoredQuery=old.
+- Read-only Python runpy probe invoked the actual closeout validator with one unregistered security row. Result: accepted_verdict=SECURED, required_threats_present=0.
+- `uv run --project backend python tools/verify_phase4_closeout.py --digest` returned the frontmatter digest at the observed revision.
+- Full gauntlet and smoke are owned by Plan 19. No fresh passing final run is claimed here.
+
+## Remaining standard-review scope
+
+Before any passing verdict: complete full reads of large existing import/preview/product services beyond changed-function inspection; finish detail-page remainder and complete preview surface; review generated SDK/types/OpenAPI and lock identities as contract/config artifacts; read all changed behavioral tests/fixtures for reliability and false-positive coverage; reconcile the full source manifest/UI contracts. The current proof-bearing fixes must then be independently exercised. This is a deliberate incomplete handoff to free the reviewer slot for the requested frontend correction, not completion of the final code review.
+
+The following 89 exact diff files are not in the cumulative inspected-file list. Selective probes/read fragments do not promote them to reviewed status:
+
+- `backend/tests/api/test_admin_mappings.py`
+- `backend/tests/api/test_admin_previews.py`
+- `backend/tests/api/test_openapi_contract.py`
+- `backend/tests/api/test_phase4_failure_boundaries.py`
+- `backend/tests/api/test_translation_constraints.py`
+- `backend/tests/api/test_translation_structure_roundtrip.py`
+- `backend/tests/api/test_translations.py`
+- `backend/tests/architecture/test_background_boundaries.py`
+- `backend/tests/architecture/test_phase2_gap_closure.py`
+- `backend/tests/architecture/test_phase2_scope.py`
+- `backend/tests/architecture/test_phase3_scope.py`
+- `backend/tests/architecture/test_phase4_closeout_gate.py`
+- `backend/tests/architecture/test_phase4_gauntlet.py`
+- `backend/tests/architecture/test_phase4_license_policy.py`
+- `backend/tests/architecture/test_phase4_scope.py`
+- `backend/tests/architecture/test_translation_mutation_verifier.py`
+- `backend/tests/fixtures/localization/android/invalid_cases.json`
+- `backend/tests/fixtures/localization/android/manifest.json`
+- `backend/tests/fixtures/localization/android/scalar.expected.json`
+- `backend/tests/fixtures/localization/android/scalar.xml`
+- `backend/tests/fixtures/localization/android/valid_structured.expected.json`
+- `backend/tests/fixtures/localization/android/valid_structured.xml`
+- `backend/tests/fixtures/localization/conformance/direct.json`
+- `backend/tests/fixtures/localization/conformance/manifest.json`
+- `backend/tests/fixtures/localization/conformance/separate.json`
+- `backend/tests/fixtures/localization/ios/invalid_cases.json`
+- `backend/tests/fixtures/localization/ios/manifest.json`
+- `backend/tests/fixtures/localization/ios/valid.expected.json`
+- `backend/tests/fixtures/localization/ios/valid.strings`
+- `backend/tests/fixtures/localization/json/invalid_cases.json`
+- `backend/tests/fixtures/localization/json/manifest.json`
+- `backend/tests/fixtures/localization/json/valid_nested.expected.json`
+- `backend/tests/fixtures/localization/json/valid_nested.json`
+- `backend/tests/fixtures/localization/qt/invalid_cases.json`
+- `backend/tests/fixtures/localization/qt/manifest.json`
+- `backend/tests/fixtures/localization/qt/valid_structured.expected.json`
+- `backend/tests/fixtures/localization/qt/valid_structured.ts`
+- `backend/tests/integration/test_bounded_key_identities.py`
+- `backend/tests/integration/test_confirmed_layout_refresh.py`
+- `backend/tests/integration/test_constraint_generation_migration.py`
+- `backend/tests/integration/test_import_jobs.py`
+- `backend/tests/integration/test_migrations.py`
+- `backend/tests/integration/test_phase4_search_regressions.py`
+- `backend/tests/integration/test_preview_jobs.py`
+- `backend/tests/integration/test_product_publication.py`
+- `backend/tests/integration/test_translation_constraints.py`
+- `backend/tests/integration/test_translation_import_activation.py`
+- `backend/tests/integration/test_translation_search.py`
+- `backend/tests/unit/localization/importing/test_android_xml.py`
+- `backend/tests/unit/localization/importing/test_conformance.py`
+- `backend/tests/unit/localization/importing/test_contracts.py`
+- `backend/tests/unit/localization/importing/test_ios_strings.py`
+- `backend/tests/unit/localization/importing/test_json.py`
+- `backend/tests/unit/localization/importing/test_output_budget.py`
+- `backend/tests/unit/localization/importing/test_qt_ts.py`
+- `backend/tests/unit/localization/importing/test_structure_bounds.py`
+- `backend/tests/unit/localization/test_grapheme_count.py`
+- `backend/tests/unit/services/test_mappings.py`
+- `backend/tests/unit/test_phase4_parser_input_authority.py`
+- `backend/tests/unit/test_phase4_public_error_boundaries.py`
+- `backend/tests/unit/test_phase4_service_boundaries.py`
+- `backend/tests/unit/test_phase4_worker_boundaries.py`
+- `backend/tests/unit/test_preview_connection_authority.py`
+- `backend/uv.lock`
+- `frontend/e2e/admin-configuration.spec.ts`
+- `frontend/e2e/translations.spec.ts`
+- `frontend/openapi.json`
+- `frontend/package-lock.json`
+- `frontend/src/api/admin-client-contract.test.ts`
+- `frontend/src/api/client/index.ts`
+- `frontend/src/api/client/sdk.gen.ts`
+- `frontend/src/api/client/types.gen.ts`
+- `frontend/src/components/layout/AppShell.test.tsx`
+- `frontend/src/features/admin/imports/PublishedMappingImports.test.tsx`
+- `frontend/src/features/admin/imports/RewrittenBaselineDialog.test.tsx`
+- `frontend/src/features/admin/imports/useImportPolling.test.ts`
+- `frontend/src/features/admin/mappings/ProductMappingsPage.test.tsx`
+- `frontend/src/features/admin/previews/ProductPreviewPage.test.tsx`
+- `frontend/src/features/translations/MaximumLengthDialog.test.tsx`
+- `frontend/src/features/translations/TranslationDetailPage.test.tsx`
+- `frontend/src/features/translations/TranslationFilters.test.tsx`
+- `frontend/src/features/translations/TranslationResultList.test.tsx`
+- `frontend/src/features/translations/TranslationSearchPage.test.tsx`
+- `frontend/src/features/translations/translationPreferences.test.ts`
+- `frontend/src/features/translations/useTranslationSearch.test.ts`
+- `frontend/src/router.test.tsx`
+- `tools/phase4_source_manifest.txt`
+- `tools/tests/test_phase4_smoke.py`
+- `tools/tests/test_phase4_smoke.sh`
+
+## Historical first-pass evidence (immutable proof context)
+
+The following retained narrative describes the first partial pass and its original source snapshot. Its old line numbers, counts and open dispositions are historical; the current sections above control the present disposition. No previous proof or remediation description has been discarded.
+
 # Phase 04 code review — pending remediation
 
 ## Narrative Findings (AI reviewer)
