@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -232,6 +233,10 @@ class TranslationKey(Base):
             name="raw_key_length",
         ),
         CheckConstraint(_DELETION_CHECK, name="deletion_state"),
+        CheckConstraint(
+            "constraint_generation BETWEEN 0 AND 9007199254740991",
+            name="constraint_generation_non_negative",
+        ),
         UniqueConstraint(
             "scope_id",
             "repository_id",
@@ -271,6 +276,9 @@ class TranslationKey(Base):
     )
     configured_branch: Mapped[str] = mapped_column(String(255), nullable=False)
     raw_key: Mapped[str] = mapped_column(Text, nullable=False)
+    constraint_generation: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
     is_deleted: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

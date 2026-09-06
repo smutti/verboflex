@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -39,7 +40,7 @@ class TranslationConstraint(Base):
             "max_chars BETWEEN 0 AND 1048576",
             name="max_chars_bound",
         ),
-        CheckConstraint("version > 0", name="version_positive"),
+        CheckConstraint("version BETWEEN 1 AND 9007199254740991", name="version_positive"),
         UniqueConstraint(
             "translation_key_id",
             "language",
@@ -71,7 +72,7 @@ class TranslationConstraint(Base):
     language: Mapped[str] = mapped_column(String(64), nullable=False)
     max_chars: Mapped[int] = mapped_column(Integer, nullable=False)
     version: Mapped[int] = mapped_column(
-        Integer,
+        BigInteger,
         nullable=False,
         default=1,
         server_default="1",

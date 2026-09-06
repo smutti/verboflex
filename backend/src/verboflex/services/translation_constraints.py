@@ -262,12 +262,13 @@ def put_translation_constraint(
     if rule is None:
         if expected != 0:
             raise ConstraintVersionConflict("constraint version conflict")
+        key.constraint_generation += 1
         rule = TranslationConstraint(
             scope_id=scope.id,
             translation_key_id=key.id,
             language=language,
             max_chars=maximum,
-            version=1,
+            version=key.constraint_generation,
             created_by=actor_id,
             updated_by=actor_id,
         )
@@ -277,7 +278,8 @@ def put_translation_constraint(
             raise ConstraintVersionConflict("constraint version conflict")
         if rule.max_chars != maximum:
             rule.max_chars = maximum
-            rule.version += 1
+            key.constraint_generation = max(key.constraint_generation, rule.version) + 1
+            rule.version = key.constraint_generation
             rule.updated_by = actor_id
 
     values = recompute_translation_constraints(
