@@ -1325,7 +1325,7 @@ def test_translation_schemas_are_closed_bounded_and_non_leaking() -> None:
         "json_path",
     ]
     assert value["properties"]["selector_digest"]["pattern"] == "^[0-9a-f]{64}$"
-    assert value["properties"]["structure"]["maxItems"] == 128
+    assert value["properties"]["structure"]["maxItems"] == 4096
     assert value["properties"]["review_state"]["enum"] == [
         "draft",
         "approved",
