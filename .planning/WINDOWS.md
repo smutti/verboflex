@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 4
+open_count: 0
 waived_count: 0
-fixed_count: 64
-total_count: 68
-last_updated: 2026-09-06T09:22:51.007Z
+fixed_count: 90
+total_count: 90
+last_updated: 2026-09-06T12:22:08.913Z
 ---
 
 # Broken Windows Ledger
@@ -66,10 +66,10 @@ last_updated: 2026-09-06T09:22:51.007Z
 | 49 | 04 | deviation | tools/phase4_parser_checkpoint.sh |  | Preserved actionable container failures and idempotent cleanup. | fixed |  | 2026-09-05T09:11:04.695Z | 2026-09-05T09:11:04.936Z |
 | 50 | 04 | deviation | docs/evidence/phase-04-parser.md |  | Removed a self-triggering evidence sanitization phrase. | fixed |  | 2026-09-05T09:11:04.756Z | 2026-09-05T09:11:04.995Z |
 | 51 | 04 | deviation | tools/phase4_parser_checkpoint.sh |  | Confined coverage data to the owner-only runtime directory. | fixed |  | 2026-09-05T09:11:04.816Z | 2026-09-05T09:11:05.058Z |
-| 52 | 04 | lint-warning | backend/src/verboflex/localization/importing |  | Full backend mypy reports 12 pre-existing parser-module errors; Plan 04-08 focused model mypy passes. | open |  | 2026-09-05T09:29:10.936Z |  |
-| 53 | 04 | deviation | backend/tests/unit/localization |  | Default backend pytest collection collides on duplicate importing/preview test basenames; Plan 04-08 verified the complete corpus in split runs. | open |  | 2026-09-05T09:29:11.095Z |  |
-| 54 | 04 | deviation | backend/tests/architecture/test_phase2_scope.py |  | Phase 2 architecture guards still reject the Phase 4 canonical translation model modules | open |  | 2026-09-05T10:14:35.482Z |  |
-| 55 | 04 | unrun-verify | backend/tests/worker/test_smoke_task.py |  | Broad worker smoke requires Redis and a Celery worker at 127.0.0.1:56379 | open |  | 2026-09-05T10:14:35.637Z |  |
+| 52 | 04 | lint-warning | backend/src/verboflex/localization/importing |  | Full backend mypy reports 12 pre-existing parser-module errors; Plan 04-08 focused model mypy passes. | fixed |  | 2026-09-05T09:29:10.936Z | 2026-09-06T11:28:26.587Z |
+| 53 | 04 | deviation | backend/tests/unit/localization |  | Default backend pytest collection collides on duplicate importing/preview test basenames; Plan 04-08 verified the complete corpus in split runs. | fixed |  | 2026-09-05T09:29:11.095Z | 2026-09-06T11:28:26.737Z |
+| 54 | 04 | deviation | backend/tests/architecture/test_phase2_scope.py |  | Phase 2 architecture guards still reject the Phase 4 canonical translation model modules | fixed |  | 2026-09-05T10:14:35.482Z | 2026-09-06T11:28:26.888Z |
+| 55 | 04 | unrun-verify | backend/tests/worker/test_smoke_task.py |  | Broad worker smoke requires Redis and a Celery worker at 127.0.0.1:56379 | fixed |  | 2026-09-05T10:14:35.637Z | 2026-09-06T11:28:27.042Z |
 | 56 | 04 | deviation | backend/tests/api/test_openapi_contract.py |  | Used the historical pre-Plan-04-26 schema to prove the intended contract RED because the dependency had already supplied the live implementation. | fixed |  | 2026-09-05T11:01:37.424Z | 2026-09-05T11:01:43.610Z |
 | 57 | 04 | deviation | frontend/src/features/admin/previews/ProductPreviewPage.tsx |  | Updated existing generated-client consumers for the newly required base-language field before wiring exact selection. | fixed |  | 2026-09-05T11:01:37.483Z | 2026-09-05T11:01:43.673Z |
 | 58 | 04 | deviation | backend/tests/integration/test_translation_import_activation.py |  | Flushed the published test revision before assigning it as active to satisfy immutable-graph trigger ordering. | fixed |  | 2026-09-05T12:12:31.534Z | 2026-09-05T12:13:38.811Z |
@@ -83,6 +83,28 @@ last_updated: 2026-09-06T09:22:51.007Z
 | 66 | 04 | deviation | frontend/src/features/translations/TranslationSearchPage.tsx |  | Plan 04-18 fixed virtualized Back scroll drift with in-memory measured-row snapshots; 13 desktop/mobile browser journeys pass. | fixed |  | 2026-09-06T09:21:05.284Z | 2026-09-06T09:22:34.346Z |
 | 67 | 04 | deviation | backend/src/verboflex/schemas/translations.py |  | Plan 04-18 added bounded existing-detail rule authority, structured selectors and latest-50 revision metadata; generated client and 35 backend tests verified. | fixed |  | 2026-09-06T09:22:34.496Z | 2026-09-06T09:22:34.645Z |
 | 68 | 04 | deviation | frontend/src/features/translations/MaximumLengthDialog.tsx |  | Plan 04-18 locks completed writes while recovering failed authoritative detail refreshes, preventing duplicate mutation and misleading failure copy. | fixed |  | 2026-09-06T09:22:50.855Z | 2026-09-06T09:22:51.007Z |
+| 69 | 04 | deviation | tools/verify_phase4_closeout.py |  | Plan19 CR11 exact 78 threat IDs and authoritative severity/disposition binding corrected and verified by final gauntlet. | fixed |  | 2026-09-06T12:21:32.724Z | 2026-09-06T12:22:06.337Z |
+| 70 | 04 | deviation | backend/src/verboflex/services/preview_jobs.py |  | Plan19 Connect capability profile mismatch corrected in both preview authority guards. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:06.397Z | 2026-09-06T12:22:06.459Z |
+| 71 | 04 | deviation | backend/src/verboflex/localization/importing/android_xml.py |  | Plan19 CR01 Android plural and array non-whitespace tails rejected without content loss. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:06.520Z | 2026-09-06T12:22:06.578Z |
+| 72 | 04 | deviation | backend/src/verboflex/services/translation_imports.py |  | Plan19 CR02 externally changed rejected targets reset to Draft while preserving identity/history. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:06.638Z | 2026-09-06T12:22:06.700Z |
+| 73 | 04 | deviation | backend/alembic/versions/0018_constraint_generation.py |  | Plan19 CR03 durable optimistic generations prevent delete/recreate ABA, including pre-migration versions. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:06.762Z | 2026-09-06T12:22:06.821Z |
+| 74 | 04 | deviation | backend/src/verboflex/services/translation_search.py |  | Plan19 CR04 separate-repository inherited base rule detail matches canonical scope/raw-key authority. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:06.881Z | 2026-09-06T12:22:06.943Z |
+| 75 | 04 | deviation | backend/alembic/versions/0020_bounded_key_identities.py |  | Plan19 CR05 lossless full keys use bounded authenticated cursors and collision-safe digest natural identities. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:07.002Z | 2026-09-06T12:22:07.063Z |
+| 76 | 04 | deviation | backend/alembic/versions/0019_unicode_search_indexes.py |  | Plan19 CR06 SQL Unicode casefold and bounded indexes agree with normalized search queries. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:07.125Z | 2026-09-06T12:22:07.184Z |
+| 77 | 04 | deviation | backend/src/verboflex/localization/importing/core.py |  | Plan19 CR07 shared parser/API structure bounds and incremental aggregate output budget prevent metadata amplification. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:07.244Z | 2026-09-06T12:22:07.305Z |
+| 78 | 04 | deviation | backend/src/verboflex/services/import_jobs.py |  | Plan19 CR08 refresh discovers current members within exact confirmed layout rather than old preview filenames. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:07.365Z | 2026-09-06T12:22:07.431Z |
+| 79 | 04 | deviation | frontend/src/features/admin/previews/ProductPreviewPage.tsx |  | Plan19 CR09 preview confirmation validates bound response identity without comparing unbound request digest. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:07.490Z | 2026-09-06T12:22:07.551Z |
+| 80 | 04 | deviation | backend/src/verboflex/services/translation_search.py |  | Plan19 CR10 live structured siblings remain searchable with stable group identity and retained tombstone history. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:07.615Z | 2026-09-06T12:22:07.674Z |
+| 81 | 04 | deviation | tools/phase4_parser_checkpoint.sh |  | Plan19 T04-20 failed checkpoint output is safe identity/exit/digest only; own raw failed log removed. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:07.735Z | 2026-09-06T12:22:07.794Z |
+| 82 | 04 | deviation | frontend/src/features/translations/useTranslationSearch.ts |  | Plan19 CR12 deferred snapshot restore cannot overwrite a newer search query. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:07.854Z | 2026-09-06T12:22:07.914Z |
+| 83 | 04 | deviation | backend/src/verboflex/api/v1/routes/translations.py |  | Plan19 CR13 generated 422 unions match existing framework and domain error response bodies. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:07.980Z | 2026-09-06T12:22:08.043Z |
+| 84 | 04 | deviation | backend/src/verboflex/services/import_jobs.py |  | Plan19 CR14 Product-first polling lock prevents mixed activation snapshots and real HTTP500. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:08.107Z | 2026-09-06T12:22:08.171Z |
+| 85 | 04 | deviation | backend/src/verboflex/services/translation_constraints.py |  | Plan19 CR15 Product-first constraint locking prevents activation deadlocks and revalidates published authority. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:08.233Z | 2026-09-06T12:22:08.296Z |
+| 86 | 04 | deviation | backend/alembic/versions/0021_retained_baseline_constraint_epoch.py |  | Plan19 CR16 exact epoch-only updates preserve authentic retained baselines while all other activation guards remain strict. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:08.366Z | 2026-09-06T12:22:08.426Z |
+| 87 | 04 | deviation | backend/src/verboflex/schemas/translations.py |  | Plan19 Explicit page_size50 query string is accepted without admitting other page sizes. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:08.486Z | 2026-09-06T12:22:08.546Z |
+| 88 | 04 | deviation | backend/src/verboflex/services/translation_constraints.py |  | Plan19 Actual constraint changes invalidate dataset-bound cursors; idempotent retries preserve their epoch. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:08.605Z | 2026-09-06T12:22:08.666Z |
+| 89 | 04 | deviation | backend/src/verboflex/services/translation_imports.py |  | Plan19 Deleted empty orphan keys remain deleted during unrelated imports; real returning values still revive identity. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:08.728Z | 2026-09-06T12:22:08.787Z |
+| 90 | 04 | deviation | frontend/src/features/translations/TranslationSearchPage.tsx |  | Plan19 Independent UI findings and true deferred POST/options readiness regressions corrected without weakening assertions. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY. | fixed |  | 2026-09-06T12:22:08.850Z | 2026-09-06T12:22:08.913Z |
 
 ````json
 [
@@ -705,10 +727,10 @@ last_updated: 2026-09-06T09:22:51.007Z
     "file": "backend/src/verboflex/localization/importing",
     "line": null,
     "description": "Full backend mypy reports 12 pre-existing parser-module errors; Plan 04-08 focused model mypy passes.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-05T09:29:10.936Z",
-    "resolved_at": null
+    "resolved_at": "2026-09-06T11:28:26.587Z"
   },
   {
     "id": 53,
@@ -717,10 +739,10 @@ last_updated: 2026-09-06T09:22:51.007Z
     "file": "backend/tests/unit/localization",
     "line": null,
     "description": "Default backend pytest collection collides on duplicate importing/preview test basenames; Plan 04-08 verified the complete corpus in split runs.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-05T09:29:11.095Z",
-    "resolved_at": null
+    "resolved_at": "2026-09-06T11:28:26.737Z"
   },
   {
     "id": 54,
@@ -729,10 +751,10 @@ last_updated: 2026-09-06T09:22:51.007Z
     "file": "backend/tests/architecture/test_phase2_scope.py",
     "line": null,
     "description": "Phase 2 architecture guards still reject the Phase 4 canonical translation model modules",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-05T10:14:35.482Z",
-    "resolved_at": null
+    "resolved_at": "2026-09-06T11:28:26.888Z"
   },
   {
     "id": 55,
@@ -741,10 +763,10 @@ last_updated: 2026-09-06T09:22:51.007Z
     "file": "backend/tests/worker/test_smoke_task.py",
     "line": null,
     "description": "Broad worker smoke requires Redis and a Celery worker at 127.0.0.1:56379",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-05T10:14:35.637Z",
-    "resolved_at": null
+    "resolved_at": "2026-09-06T11:28:27.042Z"
   },
   {
     "id": 56,
@@ -901,6 +923,270 @@ last_updated: 2026-09-06T09:22:51.007Z
     "reason": "",
     "recorded_at": "2026-09-06T09:22:50.855Z",
     "resolved_at": "2026-09-06T09:22:51.007Z"
+  },
+  {
+    "id": 69,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "tools/verify_phase4_closeout.py",
+    "line": null,
+    "description": "Plan19 CR11 exact 78 threat IDs and authoritative severity/disposition binding corrected and verified by final gauntlet.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:21:32.724Z",
+    "resolved_at": "2026-09-06T12:22:06.337Z"
+  },
+  {
+    "id": 70,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/services/preview_jobs.py",
+    "line": null,
+    "description": "Plan19 Connect capability profile mismatch corrected in both preview authority guards. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:06.397Z",
+    "resolved_at": "2026-09-06T12:22:06.459Z"
+  },
+  {
+    "id": 71,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/localization/importing/android_xml.py",
+    "line": null,
+    "description": "Plan19 CR01 Android plural and array non-whitespace tails rejected without content loss. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:06.520Z",
+    "resolved_at": "2026-09-06T12:22:06.578Z"
+  },
+  {
+    "id": 72,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/services/translation_imports.py",
+    "line": null,
+    "description": "Plan19 CR02 externally changed rejected targets reset to Draft while preserving identity/history. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:06.638Z",
+    "resolved_at": "2026-09-06T12:22:06.700Z"
+  },
+  {
+    "id": 73,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/alembic/versions/0018_constraint_generation.py",
+    "line": null,
+    "description": "Plan19 CR03 durable optimistic generations prevent delete/recreate ABA, including pre-migration versions. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:06.762Z",
+    "resolved_at": "2026-09-06T12:22:06.821Z"
+  },
+  {
+    "id": 74,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/services/translation_search.py",
+    "line": null,
+    "description": "Plan19 CR04 separate-repository inherited base rule detail matches canonical scope/raw-key authority. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:06.881Z",
+    "resolved_at": "2026-09-06T12:22:06.943Z"
+  },
+  {
+    "id": 75,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/alembic/versions/0020_bounded_key_identities.py",
+    "line": null,
+    "description": "Plan19 CR05 lossless full keys use bounded authenticated cursors and collision-safe digest natural identities. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:07.002Z",
+    "resolved_at": "2026-09-06T12:22:07.063Z"
+  },
+  {
+    "id": 76,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/alembic/versions/0019_unicode_search_indexes.py",
+    "line": null,
+    "description": "Plan19 CR06 SQL Unicode casefold and bounded indexes agree with normalized search queries. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:07.125Z",
+    "resolved_at": "2026-09-06T12:22:07.184Z"
+  },
+  {
+    "id": 77,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/localization/importing/core.py",
+    "line": null,
+    "description": "Plan19 CR07 shared parser/API structure bounds and incremental aggregate output budget prevent metadata amplification. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:07.244Z",
+    "resolved_at": "2026-09-06T12:22:07.305Z"
+  },
+  {
+    "id": 78,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/services/import_jobs.py",
+    "line": null,
+    "description": "Plan19 CR08 refresh discovers current members within exact confirmed layout rather than old preview filenames. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:07.365Z",
+    "resolved_at": "2026-09-06T12:22:07.431Z"
+  },
+  {
+    "id": 79,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "frontend/src/features/admin/previews/ProductPreviewPage.tsx",
+    "line": null,
+    "description": "Plan19 CR09 preview confirmation validates bound response identity without comparing unbound request digest. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:07.490Z",
+    "resolved_at": "2026-09-06T12:22:07.551Z"
+  },
+  {
+    "id": 80,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/services/translation_search.py",
+    "line": null,
+    "description": "Plan19 CR10 live structured siblings remain searchable with stable group identity and retained tombstone history. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:07.615Z",
+    "resolved_at": "2026-09-06T12:22:07.674Z"
+  },
+  {
+    "id": 81,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "tools/phase4_parser_checkpoint.sh",
+    "line": null,
+    "description": "Plan19 T04-20 failed checkpoint output is safe identity/exit/digest only; own raw failed log removed. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:07.735Z",
+    "resolved_at": "2026-09-06T12:22:07.794Z"
+  },
+  {
+    "id": 82,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "frontend/src/features/translations/useTranslationSearch.ts",
+    "line": null,
+    "description": "Plan19 CR12 deferred snapshot restore cannot overwrite a newer search query. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:07.854Z",
+    "resolved_at": "2026-09-06T12:22:07.914Z"
+  },
+  {
+    "id": 83,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/api/v1/routes/translations.py",
+    "line": null,
+    "description": "Plan19 CR13 generated 422 unions match existing framework and domain error response bodies. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:07.980Z",
+    "resolved_at": "2026-09-06T12:22:08.043Z"
+  },
+  {
+    "id": 84,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/services/import_jobs.py",
+    "line": null,
+    "description": "Plan19 CR14 Product-first polling lock prevents mixed activation snapshots and real HTTP500. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:08.107Z",
+    "resolved_at": "2026-09-06T12:22:08.171Z"
+  },
+  {
+    "id": 85,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/services/translation_constraints.py",
+    "line": null,
+    "description": "Plan19 CR15 Product-first constraint locking prevents activation deadlocks and revalidates published authority. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:08.233Z",
+    "resolved_at": "2026-09-06T12:22:08.296Z"
+  },
+  {
+    "id": 86,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/alembic/versions/0021_retained_baseline_constraint_epoch.py",
+    "line": null,
+    "description": "Plan19 CR16 exact epoch-only updates preserve authentic retained baselines while all other activation guards remain strict. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:08.366Z",
+    "resolved_at": "2026-09-06T12:22:08.426Z"
+  },
+  {
+    "id": 87,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/schemas/translations.py",
+    "line": null,
+    "description": "Plan19 Explicit page_size50 query string is accepted without admitting other page sizes. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:08.486Z",
+    "resolved_at": "2026-09-06T12:22:08.546Z"
+  },
+  {
+    "id": 88,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/services/translation_constraints.py",
+    "line": null,
+    "description": "Plan19 Actual constraint changes invalidate dataset-bound cursors; idempotent retries preserve their epoch. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:08.605Z",
+    "resolved_at": "2026-09-06T12:22:08.666Z"
+  },
+  {
+    "id": 89,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "backend/src/verboflex/services/translation_imports.py",
+    "line": null,
+    "description": "Plan19 Deleted empty orphan keys remain deleted during unrelated imports; real returning values still revive identity. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:08.728Z",
+    "resolved_at": "2026-09-06T12:22:08.787Z"
+  },
+  {
+    "id": 90,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "frontend/src/features/translations/TranslationSearchPage.tsx",
+    "line": null,
+    "description": "Plan19 Independent UI findings and true deferred POST/options readiness regressions corrected without weakening assertions. Verified by final source-bound gauntlet; details and commits in 04-19-SUMMARY.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-06T12:22:08.850Z",
+    "resolved_at": "2026-09-06T12:22:08.913Z"
   }
 ]
 ````
