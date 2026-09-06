@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 04
 current_phase_name: Localization Import, Search, and Constraints
 status: executing
-stopped_at: Completed 04-24-PLAN.md
-last_updated: "2026-09-06T08:53:31.067Z"
+stopped_at: Completed 04-18-PLAN.md
+last_updated: "2026-09-06T09:23:04.996Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 04 execution started
-state_head: 77a1239e13fc1636ba339accb679b0b22b0bf5ad
+state_head: 55edea55ad00319364ade0567f1744accb9a8c75
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 104
-  completed_plans: 101
+  completed_plans: 102
   percent: 38
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 ## Current Position
 
 Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
-Plan: 24 of 27
+Plan: 25 of 27
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 04 execution started
 
@@ -161,6 +161,7 @@ Progress: [████████░░░░░░░░░░░░] 3/8 pha
 | Phase 04 P22 | 12min | 2 tasks | 4 files |
 | Phase 04 P23 | 18min | 2 tasks | 11 files |
 | Phase 04 P24 | 8min | 2 tasks | 4 files |
+| Phase 04 P18 | 29min | 3 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -484,6 +485,8 @@ Recent decisions affecting current work:
 - [Phase 04]: Resolve live global products and selected-product languages before mounting search; discard unavailable language before a changed-product query.
 - [Phase 04]: Workspace memory belongs to the principal lifetime; token rotation preserves input while reauthorizing options and reloading result pages.
 - [Phase 04]: Translation search inherits the established session redirects and Workspace fallback, with shared 44px navigation targets for every role.
+- [Phase 04]: Plan 04-18 projects existing explicit constraint versions, typed selectors and latest-50 revision metadata through the scoped detail API; browser authority is never inferred.
+- [Phase 04]: Plan 04-18 invalidates cached search authority after mutation while retaining navigation; unchanged Back restores in-memory measured virtual rows.
 
 ### Pending Todos
 
@@ -524,6 +527,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-06T08:53:30.966Z
-Stopped at: Completed 04-24-PLAN.md
+Last session: 2026-09-06T09:23:04.892Z
+Stopped at: Completed 04-18-PLAN.md
 Resume file: None
