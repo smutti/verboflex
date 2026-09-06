@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic.config import Config
 from psycopg import connect, sql
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
@@ -313,6 +313,51 @@ def test_query_normalization_bounds_and_like_literals() -> None:
     assert escape_like_literal(r"100%_done\\") == r"100\%\_done\\\\"
     with pytest.raises(TranslationSearchInputError, match="query"):
         normalize_search_query("x" * 257)
+
+
+def test_search_projects_canonical_row_metadata_without_per_group_queries(
+    search_session_factory: sessionmaker[Session],
+) -> None:
+    product_id, scope_id = _seed_dataset(search_session_factory)
+    for index, kind in enumerate(("scalar", "android_quantity", "json_path")):
+        _add_group(
+            search_session_factory,
+            product_id=product_id,
+            scope_id=scope_id,
+            raw_key=f"unchanged.[{index}]",
+            language="it",
+            values=({"selector_kind": kind, "source_text": "Source"},),
+            deleted=index == 2,
+        )
+    statements: list[str] = []
+    with search_session_factory() as session:
+        connection = session.connection()
+
+        def record_statement(_conn, _cursor, statement, _params, _context, _many):
+            statements.append(statement)
+
+        event.listen(connection, "before_cursor_execute", record_statement)
+        result = search_translations(
+            session,
+            principal_id=uuid4(),
+            filters=TranslationSearchFilters(deleted="all"),
+            cursor=None,
+            cursor_secret=CURSOR_SECRET,
+        )
+    assert len(statements) == 2  # Scope digest plus one bounded group projection.
+    assert [item.selector_kinds for item in result.items] == [
+        ("scalar",),
+        ("android_quantity",),
+        ("json_path",),
+    ]
+    assert all(item.source_language == "en" for item in result.items)
+    for item in result.items:
+        assert item.value_count == 1  # A single structured value is never scalar.
+        assert item.provenance is not None
+        assert item.provenance.repository_name == "Mobile translations"
+        assert item.provenance.branch == "main"
+        assert item.provenance.path == "locales/messages.json"
+    assert result.items[-1].is_deleted
 
 
 def test_search_groups_values_ranks_matches_and_preserves_mixed_state(

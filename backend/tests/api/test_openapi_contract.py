@@ -1247,6 +1247,24 @@ def test_translation_schemas_are_closed_bounded_and_non_leaking() -> None:
     assert summary["properties"]["rank"]["minimum"] == 0
     assert summary["properties"]["rank"]["maximum"] == 3
     assert summary["properties"]["value_count"]["minimum"] == 1
+    assert summary["properties"]["selector_kinds"]["minItems"] == 1
+    assert summary["properties"]["selector_kinds"]["maxItems"] == 6
+    assert summary["properties"]["selector_kinds"]["items"]["enum"] == [
+        "scalar",
+        "android_quantity",
+        "android_array_item",
+        "qt_numerus",
+        "qt_length_variant",
+        "json_path",
+    ]
+    assert (
+        _schema_variant(summary["properties"]["source_language"], type_name="string")["maxLength"]
+        == 64
+    )
+    provenance = schemas["TranslationSummaryProvenanceResponse"]
+    assert provenance["additionalProperties"] is False
+    assert set(provenance["properties"]) == {"repository_name", "branch", "path"}
+    assert provenance["properties"]["path"]["maxLength"] == 4096
     for count in ("over_limit_count", "within_limit_count", "no_max_count"):
         assert summary["properties"][count]["minimum"] == 0
     assert summary["properties"]["states"]["minItems"] == 1
