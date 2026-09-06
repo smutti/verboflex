@@ -110,6 +110,15 @@ const JOB_LABELS: Record<AdminPreviewJobResponse["state"], string> = {
   timed_out: "Timed out",
 };
 
+function hasActionableDuplicateReport(
+  job: AdminPreviewJobResponse | AdminActiveRevisionRevalidationJobResponse,
+) {
+  const summary = job.duplicate_report_summary;
+  return summary !== undefined && summary !== null
+    ? summary.group_count > 0 || !summary.complete
+    : false;
+}
+
 const FORMAT_LABELS: Record<
   AdminPreviewLayoutCandidateResponse["format"],
   string
@@ -679,7 +688,8 @@ function PreviewJobView({
         ) : null}
       </div>
 
-      {job.state === "succeeded" || job.state === "failed" ? (
+      {(job.state === "succeeded" || job.state === "failed") &&
+      hasActionableDuplicateReport(job) ? (
         <DuplicateKeysDialog
           key={previewJobIdentity(job)}
           accessToken={accessToken}
@@ -707,7 +717,11 @@ function PreviewJobView({
 
       {job.state === "failed" ? (
         <PreviewAlert title="Validation did not complete">
-          <p>Validation did not complete. Review the reason, then retry.</p>
+          <p>
+            {job.diagnostic_code === "repository_scan_limit_reached"
+              ? "The repository scan limit was reached. Set a narrower localization root in the mapping, then retry validation."
+              : "Validation did not complete. Review the reason, then retry."}
+          </p>
           <Button type="button" variant="outline" onClick={onRetry}>
             Retry validation
           </Button>
@@ -1342,9 +1356,20 @@ function PublishedMappingRecovery({
             {JOB_LABELS[job.state]}
           </Badge>
 
+          {(job.state === "succeeded" || job.state === "failed") &&
+          hasActionableDuplicateReport(job) ? (
+            <DuplicateKeysDialog
+              key={job.id}
+              accessToken={accessToken}
+              previewJobId={job.id}
+            />
+          ) : null}
+
           {job.state === "failed" || job.state === "timed_out" ? (
             <PreviewAlert title="Validation did not complete">
-              Validation did not complete. Run validation again.
+              {job.diagnostic_code === "repository_scan_limit_reached"
+                ? "The repository scan limit was reached. Set a narrower localization root in the mapping, then run validation again."
+                : "Validation did not complete. Run validation again."}
             </PreviewAlert>
           ) : null}
 

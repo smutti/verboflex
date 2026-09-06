@@ -5,12 +5,15 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from verboflex.api.v1.routes.admin_discovery import get_bitbucket_discovery_adapter
 from verboflex.auth.principal import Principal, require_roles
 from verboflex.db.session import get_db_session
 from verboflex.integrations.bitbucket.client import BitbucketHttpAdapter
+from verboflex.models.duplicate_report import DuplicateReportRow
+from verboflex.models.import_job import ImportJob
 from verboflex.schemas.admin_mappings import (
     AdminDirectMappingWriteRequest,
     AdminMappingConflictResponse,
@@ -18,6 +21,7 @@ from verboflex.schemas.admin_mappings import (
     AdminMappingResponse,
     AdminMappingWriteRequest,
 )
+from verboflex.schemas.duplicate_reports import DuplicateReportSummaryResponse
 from verboflex.schemas.imports import (
     AdminImportBaselineResponse,
     AdminImportOperationErrorResponse,
@@ -141,7 +145,35 @@ def _response(record: MappingRecord) -> AdminMappingResponse:
     )
 
 
-def _import_response(record: ImportJobRecord) -> AdminPublishedMappingImportResponse:
+def _import_report_summaries(
+    session: Session, records: tuple[ImportJobRecord, ...]
+) -> dict[UUID, DuplicateReportSummaryResponse]:
+    import_ids = tuple(record.id for record in records if record.id is not None)
+    if not import_ids:
+        return {}
+    rows = session.execute(
+        select(ImportJob.id, DuplicateReportRow)
+        .join(
+            DuplicateReportRow,
+            DuplicateReportRow.execution_id == ImportJob.current_execution_id,
+        )
+        .where(ImportJob.id.in_(import_ids))
+    )
+    return {
+        import_id: DuplicateReportSummaryResponse(
+            complete=report.complete,
+            group_count=report.group_count,
+            repeated_occurrences=report.repeated_occurrences,
+        )
+        for import_id, report in rows
+    }
+
+
+def _import_response(
+    record: ImportJobRecord,
+    *,
+    summary: DuplicateReportSummaryResponse | None = None,
+) -> AdminPublishedMappingImportResponse:
     return AdminPublishedMappingImportResponse(
         id=record.id,
         mapping_id=record.mapping_id,
@@ -169,6 +201,7 @@ def _import_response(record: ImportJobRecord) -> AdminPublishedMappingImportResp
             for issue in record.parser_issues
         ],
         parser_issue_remaining_count=record.parser_issue_remaining_count,
+        duplicate_report_summary=summary,
         active_baseline=(
             AdminImportBaselineResponse(
                 imported_at=record.active_baseline.imported_at,
@@ -197,6 +230,12 @@ def _import_response(record: ImportJobRecord) -> AdminPublishedMappingImportResp
         error_message=record.error_message,
         action=record.action,
     )
+
+
+def _summary_for_import(
+    summaries: dict[UUID, DuplicateReportSummaryResponse], record: ImportJobRecord
+) -> DuplicateReportSummaryResponse | None:
+    return summaries.get(record.id) if record.id is not None else None
 
 
 def _rewrite_comparison_response(
@@ -293,8 +332,12 @@ async def list_admin_published_mapping_imports(
         ) from error
     except ImportNotFound as error:
         _raise_import_error(error)
+    summaries = _import_report_summaries(session, page.items)
     return AdminPublishedMappingImportListResponse(
-        items=[_import_response(record) for record in page.items],
+        items=[
+            _import_response(record, summary=_summary_for_import(summaries, record))
+            for record in page.items
+        ],
         next_cursor=page.next_cursor,
     )
 
@@ -323,7 +366,10 @@ async def start_admin_published_mapping_import(
         )
     except (ImportNotFound, ImportConflict, ImportConnectionUnavailable) as error:
         _raise_import_error(error)
-    return _import_response(record)
+    return _import_response(
+        record,
+        summary=_summary_for_import(_import_report_summaries(session, (record,)), record),
+    )
 
 
 @router.get(
@@ -347,7 +393,10 @@ async def get_admin_import(
         )
     except ImportNotFound as error:
         _raise_import_error(error)
-    return _import_response(record)
+    return _import_response(
+        record,
+        summary=_summary_for_import(_import_report_summaries(session, (record,)), record),
+    )
 
 
 @router.get(
@@ -414,7 +463,10 @@ async def confirm_admin_import_rewrite_baseline(
         ) from error
     except ImportNotFound as error:
         _raise_import_error(error)
-    return _import_response(record)
+    return _import_response(
+        record,
+        summary=_summary_for_import(_import_report_summaries(session, (record,)), record),
+    )
 
 
 def _conflict(detail: str, field: str) -> JSONResponse:

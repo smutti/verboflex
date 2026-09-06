@@ -47,8 +47,8 @@ class Settings(BaseSettings):
     preview_hard_time_limit_seconds: int = Field(default=75, gt=0, le=300)
     preview_watchdog_grace_seconds: int = Field(default=15, gt=0, le=300)
     preview_watchdog_interval_seconds: int = Field(default=5, gt=0, le=300)
-    import_soft_time_limit_seconds: int = Field(default=60, gt=0, le=300)
-    import_hard_time_limit_seconds: int = Field(default=75, gt=0, le=300)
+    import_soft_time_limit_seconds: int = Field(default=180, gt=0, le=300)
+    import_hard_time_limit_seconds: int = Field(default=240, gt=0, le=300)
     import_watchdog_grace_seconds: int = Field(default=15, gt=0, le=300)
     import_watchdog_interval_seconds: int = Field(default=5, gt=0, le=300)
 

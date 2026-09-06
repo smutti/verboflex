@@ -7,6 +7,7 @@ import binascii
 import json
 import unicodedata
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import Select, and_, func, or_, select
@@ -14,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from verboflex.models.import_job import ImportJob
+from verboflex.models.preview_job import PreviewJob
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
     ProductMappingAllowedTarget,
@@ -32,6 +34,10 @@ class ProductVersionConflict(ValueError):
 
 class ProductNotFound(LookupError):
     """Raised when an administrator-selected UUID has no durable product."""
+
+
+class ProductDeletionBlocked(RuntimeError):
+    """Raised while a queued/running worker still owns product authority."""
 
 
 class InvalidProductCursor(ValueError):
@@ -107,7 +113,15 @@ def create_product(
     revision_id = uuid4()
     try:
         with session.begin():
-            if session.scalar(select(Product.id).where(Product.name_key == name_key)) is not None:
+            if (
+                session.scalar(
+                    select(Product.id).where(
+                        Product.name_key == name_key,
+                        Product.deleted_at.is_(None),
+                    )
+                )
+                is not None
+            ):
                 raise ProductNameConflict("product name is unavailable")
             product = Product(
                 id=product_id,
@@ -138,7 +152,9 @@ def create_product(
 
 def _locked_product(session: Session, product_id: UUID) -> Product:
     product = session.execute(
-        select(Product).where(Product.id == product_id).with_for_update()
+        select(Product)
+        .where(Product.id == product_id, Product.deleted_at.is_(None))
+        .with_for_update()
     ).scalar_one_or_none()
     if product is None:
         raise ProductNotFound("product unavailable")
@@ -175,6 +191,7 @@ def _require_product_name_available(
         select(Product.id).where(
             Product.name_key == name_key,
             Product.id != product_id,
+            Product.deleted_at.is_(None),
         )
     )
     if conflicting_id is not None:
@@ -382,7 +399,10 @@ def get_product(session: Session, *, product_id: UUID) -> ProductRecord:
     """Return one product through the closed active/candidate projection."""
     with session.begin():
         row = session.execute(
-            _product_projection_statement().where(Product.id == product_id)
+            _product_projection_statement().where(
+                Product.id == product_id,
+                Product.deleted_at.is_(None),
+            )
         ).one_or_none()
         if row is None:
             raise ProductNotFound("product unavailable")
@@ -461,6 +481,7 @@ def list_products(
     position = _decode_cursor(cursor, status=status) if cursor is not None else None
     with session.begin():
         statement = _product_projection_statement()
+        statement = statement.where(Product.deleted_at.is_(None))
         if status is not None:
             statement = statement.where(Product.is_active.is_(status == "active"))
         if position is not None:
@@ -496,3 +517,42 @@ def list_products(
             else None
         )
     return ProductPage(items=records, next_cursor=next_cursor)
+
+
+def delete_product(
+    session: Session,
+    *,
+    product_id: UUID,
+    deleted_by: UUID,
+) -> None:
+    """Hide one product atomically while retaining its complete history."""
+    with session.begin():
+        product = session.execute(
+            select(Product).where(Product.id == product_id).with_for_update()
+        ).scalar_one_or_none()
+        if product is None:
+            raise ProductNotFound("product unavailable")
+        if product.deleted_at is not None:
+            return
+        active_preview = session.scalar(
+            select(PreviewJob.id)
+            .where(
+                PreviewJob.product_id == product_id,
+                PreviewJob.state.in_(("queued", "running")),
+            )
+            .limit(1)
+        )
+        active_import = session.scalar(
+            select(ImportJob.id)
+            .where(
+                ImportJob.product_id == product_id,
+                ImportJob.state.in_(("queued", "running")),
+            )
+            .limit(1)
+        )
+        if active_preview is not None or active_import is not None:
+            raise ProductDeletionBlocked("active work")
+        product.is_active = False
+        product.deleted_at = datetime.now(UTC)
+        product.deleted_by = deleted_by
+        session.flush()

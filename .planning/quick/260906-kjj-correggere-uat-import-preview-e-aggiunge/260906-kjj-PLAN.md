@@ -1,7 +1,7 @@
 ---
 task: 260906-kjj
 type: quick
-status: executing
+status: complete
 gap_ids: [G-04-1]
 ---
 
@@ -30,3 +30,7 @@ Approval recorded in 7f5a934. Root, bounded MOKO/capacity, worker-stored diagnos
 ## 2026-09-06 MOKO semantic direction
 
 The user confirmed the direction to preserve unknown escapes and inter-element source text. `SPEC-MOKO-SEMANTICS.md` now makes the exact MOKO-only behavior, lossless edit obligation and retained rejection boundaries reviewable. Per the old-coder approval rule, the direction given before this document is input rather than approval of the unseen executable contract. Pause implementation until the user explicitly approves that file; all unrelated previously approved remaining slices stay approved.
+
+## 2026-09-06 completion
+
+The user subsequently approved the exact MOKO contract and the final all-format diagnostic/deletion completion. The approved implementation is complete: bounded MOKO import semantics, all-format duplicate diagnostics and inexpensive summaries, safe repository-scan diagnostics, coordinated import timeouts, history-preserving product deletion, generated API client, backed-up local Docker migration and disposable-product smoke all pass. Babel is truthfully diagnosed with 145 duplicate groups at the recorded source commit and remains blocked from canonical activation until those source duplicates are corrected. No Bitbucket write or existing-product deletion occurred. Human authenticated browser UAT remains a handoff and was not auto-marked passed.

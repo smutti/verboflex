@@ -13,6 +13,7 @@ from defusedxml import ElementTree  # type: ignore[import-untyped]
 from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped]
 
 from verboflex.localization.importing.core import (
+    CanonicalDiagnosticResult,
     CanonicalIssue,
     CanonicalLocator,
     CanonicalOutputLimitExceeded,
@@ -127,10 +128,27 @@ class _ParseState:
     message_count: int = 0
     value_count: int = 0
     seen_ids: set[str] = field(default_factory=set)
+    allow_duplicates: bool = False
 
 
 def parse_qt_ts(parser_input: CanonicalParserInput) -> CanonicalParseResult:
     """Parse one complete Qt TS document or return one closed failure."""
+    result = _parse_qt_ts(parser_input, allow_duplicates=False)
+    if type(result) is not CanonicalParseResult:
+        raise AssertionError("canonical Qt TS parse returned diagnostic output")
+    return result
+
+
+def inspect_qt_ts(
+    parser_input: CanonicalParserInput,
+) -> CanonicalDiagnosticResult | CanonicalParseResult:
+    """Parse valid Qt TS while retaining duplicate identities for diagnostics only."""
+    return _parse_qt_ts(parser_input, allow_duplicates=True)
+
+
+def _parse_qt_ts(
+    parser_input: CanonicalParserInput, *, allow_duplicates: bool
+) -> CanonicalDiagnosticResult | CanonicalParseResult:
     if type(parser_input) is not CanonicalParserInput:
         return _invalid_input_failure()
     try:
@@ -142,9 +160,14 @@ def parse_qt_ts(parser_input: CanonicalParserInput) -> CanonicalParseResult:
             parser_input=parser_input,
             language=language,
             source_language=source_language,
+            allow_duplicates=allow_duplicates,
         )
-        _require_unique_values(values)
-        return CanonicalParseResult(values=tuple(sorted(values, key=canonical_value_order)))
+        if not allow_duplicates:
+            _require_unique_values(values)
+        sorted_values = tuple(sorted(values, key=canonical_value_order))
+        if allow_duplicates:
+            return CanonicalDiagnosticResult(values=sorted_values)
+        return CanonicalParseResult(values=sorted_values)
     except _MalformedQtTs as error:
         return _failure(
             parser_input,
@@ -314,6 +337,7 @@ def _document_values(
     parser_input: CanonicalParserInput,
     language: str,
     source_language: str | None,
+    allow_duplicates: bool = False,
 ) -> tuple[CanonicalValue, ...]:
     document_fields: list[tuple[str, str]] = [
         ("version", root.attrib["version"]),
@@ -324,7 +348,7 @@ def _document_values(
     prefix: list[CanonicalStructureNode] = [
         CanonicalStructureNode(kind="qt_ts:document", fields=tuple(document_fields))
     ]
-    state = _ParseState()
+    state = _ParseState(allow_duplicates=allow_duplicates)
     values = CanonicalValueBuffer(source_bytes=len(parser_input.content))
     saw_defaultcodec = False
     saw_dependencies = False
@@ -478,7 +502,7 @@ def _message_values(
     identifier = message.attrib.get("id")
     if identifier is not None:
         _require_nonempty_text(identifier)
-        if identifier in state.seen_ids:
+        if identifier in state.seen_ids and not state.allow_duplicates:
             raise _DuplicateQtIdentity
         state.seen_ids.add(identifier)
     numerus_raw = message.attrib.get("numerus", "no")

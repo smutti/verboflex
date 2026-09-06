@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from verboflex.schemas.duplicate_reports import DuplicateReportSummaryResponse
+
 AdminActiveRevisionRevalidationErrorCode = (
     Literal[
         "enqueue_failed",
@@ -145,6 +147,8 @@ class AdminPreviewJobResponse(BaseModel):
         ]
         | None
     )
+    diagnostic_code: Literal["repository_scan_limit_reached"] | None
+    duplicate_report_summary: DuplicateReportSummaryResponse | None = None
     is_current: bool
     created_at: datetime
     started_at: datetime | None
@@ -197,6 +201,8 @@ class AdminActiveRevisionRevalidationJobResponse(BaseModel):
     ]
     result: AdminPreviewJobResultResponse | None
     error_code: AdminActiveRevisionRevalidationErrorCode
+    diagnostic_code: Literal["repository_scan_limit_reached"] | None
+    duplicate_report_summary: DuplicateReportSummaryResponse | None = None
     is_current: bool
     created_at: datetime
     started_at: datetime | None

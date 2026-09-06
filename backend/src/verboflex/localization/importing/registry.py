@@ -32,9 +32,9 @@ from verboflex.localization.importing.core import (
     canonical_selector_bytes,
     canonical_value_order,
 )
-from verboflex.localization.importing.ios_strings import parse_ios_strings
-from verboflex.localization.importing.json import parse_json_localization
-from verboflex.localization.importing.qt_ts import parse_qt_ts
+from verboflex.localization.importing.ios_strings import inspect_ios_strings, parse_ios_strings
+from verboflex.localization.importing.json import inspect_json_localization, parse_json_localization
+from verboflex.localization.importing.qt_ts import inspect_qt_ts, parse_qt_ts
 from verboflex.localization.preview.core import normalize_preview_locale
 
 _ISSUE_MESSAGES: dict[IssueCode, str] = {
@@ -61,16 +61,25 @@ def inspect_duplicate_snapshot(
     parser_input: CanonicalParserInput,
 ) -> tuple[tuple[CanonicalValue | AndroidDiagnosticKey, ...], tuple[CanonicalIssue, ...]]:
     """Diagnostic-only dispatch; no canonical uniqueness rule is relaxed."""
-    if parser_input.format != "android_xml":
+    if parser_input.format == "android_xml":
+        inspected = inspect_android_xml(parser_input)
+        values = (
+            inspect_unsupported_android_scalar_keys(parser_input)
+            if inspected.issues
+            else inspected.values
+        )
+        return values, inspected.issues
+    inspectors = {
+        "json": inspect_json_localization,
+        "ios_strings": inspect_ios_strings,
+        "qt_ts": inspect_qt_ts,
+    }
+    inspector = inspectors.get(parser_input.format)
+    if inspector is None:
         parsed = parse_canonical_snapshot(parser_input)
         return parsed.values, parsed.issues
-    inspected = inspect_android_xml(parser_input)
-    values = (
-        inspect_unsupported_android_scalar_keys(parser_input)
-        if inspected.issues
-        else inspected.values
-    )
-    return values, inspected.issues
+    diagnostic = inspector(parser_input)
+    return diagnostic.values, diagnostic.issues
 
 
 def parse_canonical_snapshot(parser_input: CanonicalParserInput) -> CanonicalParseResult:

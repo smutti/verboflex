@@ -675,6 +675,7 @@ def _published_mapping_statement(
         )
         .where(
             Product.is_active.is_(True),
+            Product.deleted_at.is_(None),
             ProductRevision.product_id == product_id,
             ProductRevision.is_published.is_(True),
             ProductRepositoryMapping.topology.in_(("direct", "separate")),
@@ -715,7 +716,12 @@ def _locked_published_mapping(
     product = session.execute(
         select(Product).where(Product.id == product_id).with_for_update()
     ).scalar_one_or_none()
-    if product is None or not product.is_active or product.active_revision_id is None:
+    if (
+        product is None
+        or product.deleted_at is not None
+        or not product.is_active
+        or product.active_revision_id is None
+    ):
         raise ImportNotFound("published import unavailable")
     revision = session.execute(
         select(ProductRevision)
@@ -1043,7 +1049,12 @@ def list_published_mapping_imports(
         product = session.execute(
             select(Product).where(Product.id == product_id).with_for_update(read=True)
         ).scalar_one_or_none()
-        if product is None or not product.is_active or product.active_revision_id is None:
+        if (
+            product is None
+            or product.deleted_at is not None
+            or not product.is_active
+            or product.active_revision_id is None
+        ):
             raise ImportNotFound("published imports unavailable")
         revision_id = product.active_revision_id
         position = (
@@ -1323,6 +1334,7 @@ def get_import_job(
         job = session.get(ImportJob, import_id)
         if (
             product is None
+            or product.deleted_at is not None
             or not product.is_active
             or product.active_revision_id is None
             or job is None
@@ -2131,7 +2143,7 @@ def _current_rewrite_authority(
     if for_update:
         product_statement = product_statement.with_for_update()
     product = session.execute(product_statement).scalar_one_or_none()
-    if product is None or not product.is_active:
+    if product is None or product.deleted_at is not None or not product.is_active:
         raise ImportNotFound("published import unavailable")
 
     mapping_statement = (
@@ -2518,6 +2530,7 @@ def require_current_import_baseline(
     ).scalar_one_or_none()
     if (
         product is None
+        or product.deleted_at is not None
         or not product.is_active
         or product.active_revision_id is None
         or mapping is None

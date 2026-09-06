@@ -414,6 +414,7 @@ def test_mapping_list_rejects_unbounded_or_unavailable_candidates(
                 id=product_id,
                 active_revision_id=missing_revision_id,
                 candidate_revision_id=None,
+                deleted_at=None,
             )
 
         def scalar(self, _statement: object) -> None:

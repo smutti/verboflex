@@ -1,4 +1,18 @@
-# Quick 260906-kjj — partial implementation checkpoint
+# Quick 260906-kjj — implementation evidence
+
+## 2026-09-06 final approved implementation — GREEN and deployed locally
+
+The approved quick-task implementation is complete at source digest `sha256:ac5ac91cec32207560b2ae3002c6b4940aa9d82f6182c58a6fb189746a5e259c`.
+
+- Final isolated backend gate: **1,680 passed** with randomized seed 419, PostgreSQL 18, Redis 7 and a real Celery worker; 169.27s and 97% whole-project coverage. Changed-line coverage against `25b7a95`: **183/183 executable lines, 100%**. Mypy passed for 111 source files and Ruff lint passed. Owner-only evidence: `/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ohhw1os6`; command-output SHA-256 `9d3bee3900717932979b50f2fe8e4931fa7cf696d6f61d02dbd85f81475d0561`.
+- Final frontend gate: **603 passed** across 33 files; TypeScript, ESLint, Prettier and the production build passed. Coverage was 87.14% statements / 80.58% branches / 88.10% lines; changed-line coverage was **49/49, 100%**. Vite retains the known advisory for a minified chunk above 500 kB.
+- The generated OpenAPI document and TypeScript client reproduce cleanly. Python dependency audit reports no known third-party vulnerabilities. npm reports no high-severity finding; two pre-existing moderate `qs` findings remain through `typed-rest-client` and were not auto-upgraded in this no-new-dependency change.
+- A private pre-migration PostgreSQL backup was retained at `/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-pre-kjj-backup.XXXXXX.Fb6r0HXgwe/verboflex.dump` (157,340 bytes, mode 0600, SHA-256 `1a62cd08fd65c35f9c3176de99c311b758c41d9c333d9f6bbedf9e237f9b9ca8`). Local Docker was rebuilt and migrated from 0021 through `0025_preview_diagnostics (head)`; backend, frontend, PostgreSQL, Redis and worker are healthy, Celery ping returns one node, `/api/v1/health` returns `ok`, and `/login` returns HTTP 200.
+- A local bearer-authorized smoke created one uniquely named disposable product, deleted it through the new endpoint, and verified its detail becomes 404. No existing product was deleted. Logical deletion retains history and releases only the live normalized name; queued/running preview or import work blocks deletion with 409.
+- Duplicate source inspection now enumerates Android/MOKO, JSON, iOS `.strings` and Qt `.ts` occurrences while canonical parsers remain strict. Preview and import responses expose only bounded report summaries, and the UI opens the existing read-only paginated duplicate report only when a report is actionable. Repository scan exhaustion has a stable diagnostic and asks for a narrower localization root.
+- The live read-only Babel evidence remains commit `6102ff5a2ba6a50bbf1d24f75f6e2a7fb3e7c625`: 19 files, 3,570,592 bytes and 145 duplicate groups. This is a successful complete diagnostic, **not** a canonical import. Babel remains blocked until the duplicates are fixed in Bitbucket; no first/last-wins behavior, partial activation or provider write was introduced.
+
+Human authenticated browser UAT was not auto-passed. The public login page was visually reachable after deployment, but the previously supplied password did not authenticate the sole current admin during the smoke attempt, so the authenticated UI verification remains for the user (or a separately authorized credential reset). This does not affect the bearer/API, role-matrix, UI component, migration or worker checks above. No push, PR or merge was performed.
 
 ## 2026-09-06 approved lossless MOKO semantics — GREEN checkpoint
 

@@ -14,6 +14,7 @@ from sqlalchemy import func, null, select, update
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from verboflex.core.config import get_settings
+from verboflex.integrations.bitbucket.client import BitbucketProviderReadError
 from verboflex.localization.preview.core import (
     normalize_preview_locale,
     validate_layout_candidate_mappings,
@@ -45,6 +46,7 @@ PreviewJobErrorCode = Literal[
     "time_limit_exceeded",
 ]
 RepositoryRole = Literal["direct", "keys", "translations"]
+PreviewDiagnosticCode = Literal["repository_scan_limit_reached"]
 
 _PREVIEW_JOB_STATES = {"queued", "running", "succeeded", "failed", "timed_out"}
 _PREVIEW_ERROR_CODES = {
@@ -57,6 +59,7 @@ _PREVIEW_ERROR_CODES = {
     "time_limit_exceeded",
 }
 _PREVIEW_RESULT_FIELDS = {"detector_version", "digest", "layout_candidates"}
+_PREVIEW_DIAGNOSTIC_CODES = {"repository_scan_limit_reached"}
 
 
 class PreviewJobNotFound(LookupError):
@@ -186,6 +189,7 @@ class PreviewJobRecord:
     repository_sides: tuple[PreviewRepositorySide, ...]
     result: dict[str, object] | None
     error_code: PreviewJobErrorCode | None
+    diagnostic_code: PreviewDiagnosticCode | None
     is_current: bool
     created_at: datetime
     started_at: datetime | None
@@ -230,6 +234,8 @@ def _record(row: PreviewJob, *, is_current: bool) -> PreviewJobRecord:
         raise PreviewJobConflict("persisted preview state rejected")
     if row.error_code is not None and row.error_code not in _PREVIEW_ERROR_CODES:
         raise PreviewJobConflict("persisted preview error rejected")
+    if row.diagnostic_code is not None and row.diagnostic_code not in _PREVIEW_DIAGNOSTIC_CODES:
+        raise PreviewJobConflict("persisted preview diagnostic rejected")
     identity = _identity(row)
     result = None if row.result is None else _closed_result(identity, row.result)
     return PreviewJobRecord(
@@ -247,6 +253,7 @@ def _record(row: PreviewJob, *, is_current: bool) -> PreviewJobRecord:
         repository_sides=_repository_sides(row),
         result=result,
         error_code=cast(PreviewJobErrorCode | None, row.error_code),
+        diagnostic_code=cast(PreviewDiagnosticCode | None, row.diagnostic_code),
         is_current=is_current,
         created_at=row.created_at,
         started_at=row.started_at,
@@ -515,7 +522,9 @@ def _locked_mapping(
     expected_candidate_version: int,
 ) -> tuple[ProductRevision, ProductRepositoryMapping]:
     product = session.execute(
-        select(Product).where(Product.id == product_id).with_for_update()
+        select(Product)
+        .where(Product.id == product_id, Product.deleted_at.is_(None))
+        .with_for_update()
     ).scalar_one_or_none()
     if product is None or product.candidate_revision_id is None:
         raise PreviewJobNotFound("preview candidate unavailable")
@@ -549,7 +558,9 @@ def _locked_active_revision_mapping(
     expected_active_revision_version: int,
 ) -> tuple[ProductRevision, ProductRepositoryMapping]:
     product = session.execute(
-        select(Product).where(Product.id == product_id).with_for_update()
+        select(Product)
+        .where(Product.id == product_id, Product.deleted_at.is_(None))
+        .with_for_update()
     ).scalar_one_or_none()
     if (
         product is None
@@ -842,6 +853,9 @@ def get_preview_job(session: Session, *, job_id: UUID) -> PreviewJobRecord:
         row = session.get(PreviewJob, job_id)
         if row is None:
             raise PreviewJobNotFound("preview job unavailable")
+        product = session.get(Product, row.product_id)
+        if product is None or product.deleted_at is not None:
+            raise PreviewJobNotFound("preview job unavailable")
         if row.revision_scope != "candidate":
             raise PreviewJobConflict("preview identity conflict")
         return _record(
@@ -859,6 +873,9 @@ def get_active_revision_revalidation_job(
     with session.begin():
         row = session.get(PreviewJob, job_id)
         if row is None or row.revision_scope != "active_revalidation":
+            raise PreviewJobNotFound("active revalidation job unavailable")
+        product = session.get(Product, row.product_id)
+        if product is None or product.deleted_at is not None:
             raise PreviewJobNotFound("active revalidation job unavailable")
         return _record(
             row,
@@ -1262,7 +1279,11 @@ def get_active_revision_revalidation_eligibility(
 ) -> ActiveRevisionRevalidationEligibility:
     """Project exact all-mapping recovery authority without changing durable state."""
     product = session.get(Product, product_id)
-    if product is None or product.active_revision_id != active_revision_id:
+    if (
+        product is None
+        or product.deleted_at is not None
+        or product.active_revision_id != active_revision_id
+    ):
         raise PreviewJobNotFound("active revision revalidation unavailable")
     revision = session.execute(
         select(ProductRevision).where(
@@ -1498,7 +1519,7 @@ def _current_revision(
     if for_update:
         product_statement = product_statement.with_for_update()
     product = session.execute(product_statement).scalar_one_or_none()
-    if product is None:
+    if product is None or product.deleted_at is not None:
         return None
     if row.revision_scope == "candidate":
         pointer_is_current = product.candidate_revision_id == row.candidate_revision_id
@@ -1642,6 +1663,7 @@ def _finish_preview_job(
     state: Literal["succeeded", "failed", "timed_out"],
     result: dict[str, object] | None = None,
     error_code: str | None = None,
+    diagnostic_code: PreviewDiagnosticCode | None = None,
 ) -> None:
     with factory.begin() as session:
         row = session.execute(
@@ -1655,6 +1677,7 @@ def _finish_preview_job(
             row.state = "failed"
             row.result = None
             row.error_code = failure_code
+            row.diagnostic_code = None
         else:
             row.state = state
             row.result = (
@@ -1663,6 +1686,7 @@ def _finish_preview_job(
                 else None
             )
             row.error_code = error_code
+            row.diagnostic_code = diagnostic_code if state == "failed" else None
         row.finished_at = now
         row.updated_at = now
 
@@ -1694,6 +1718,16 @@ def execute_preview_job(
             identity=identity,
             state="timed_out",
             error_code="time_limit_exceeded",
+        )
+    except BitbucketProviderReadError as error:
+        _finish_preview_job(
+            factory,
+            identity=identity,
+            state="failed",
+            error_code="processing_failed",
+            diagnostic_code=(
+                "repository_scan_limit_reached" if error.kind == "limit_exceeded" else None
+            ),
         )
     except Exception:
         _finish_preview_job(

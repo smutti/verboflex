@@ -65,6 +65,14 @@ class PreviewJob(Base):
             "AND result IS NULL AND error_code IS NOT NULL)",
             name="state_payload",
         ),
+        CheckConstraint(
+            "diagnostic_code IS NULL OR diagnostic_code = 'repository_scan_limit_reached'",
+            name="diagnostic_code_value",
+        ),
+        CheckConstraint(
+            "diagnostic_code IS NULL OR (state = 'failed' AND error_code = 'processing_failed')",
+            name="diagnostic_failure_only",
+        ),
         UniqueConstraint(
             "input_digest",
             "attempt",
@@ -137,6 +145,7 @@ class PreviewJob(Base):
     repository_sides: Mapped[list[dict[str, str]]] = mapped_column(JSONB, nullable=False)
     result: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    diagnostic_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

@@ -266,7 +266,9 @@ def _locked_candidate(
     expected_version: int,
 ) -> ProductRevision:
     product = session.execute(
-        select(Product).where(Product.id == product_id).with_for_update()
+        select(Product)
+        .where(Product.id == product_id, Product.deleted_at.is_(None))
+        .with_for_update()
     ).scalar_one_or_none()
     if product is None or product.candidate_revision_id is None:
         raise MappingNotFound("candidate unavailable")
@@ -571,7 +573,11 @@ def list_candidate_mappings(
     position = _decode_cursor(cursor) if cursor is not None else None
     with session.begin():
         product = session.get(Product, product_id)
-        if product is None or product.candidate_revision_id is None:
+        if (
+            product is None
+            or product.deleted_at is not None
+            or product.candidate_revision_id is None
+        ):
             raise MappingNotFound("candidate unavailable")
         candidate = session.get(ProductRevision, product.candidate_revision_id)
         if candidate is None or candidate.is_published:
@@ -598,10 +604,15 @@ def list_revision_mappings(
     position = _decode_cursor(cursor) if cursor is not None else None
     with session.begin():
         product = session.get(Product, product_id)
-        if product is None or revision_id not in {
-            product.active_revision_id,
-            product.candidate_revision_id,
-        }:
+        if (
+            product is None
+            or revision_id
+            not in {
+                product.active_revision_id,
+                product.candidate_revision_id,
+            }
+            or product.deleted_at is not None
+        ):
             raise MappingNotFound("revision unavailable")
         revision = session.scalar(
             select(ProductRevision).where(

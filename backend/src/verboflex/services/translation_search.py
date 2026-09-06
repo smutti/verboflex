@@ -21,7 +21,9 @@ CURSOR_VERSION = 2
 MAX_OPTION_COUNT = 500
 MAX_GROUP_VALUE_COUNT = 10_000
 _ZERO_UUID = UUID(int=0)
-_AUTHORIZED_ACTIVE_PRODUCTS_SQL = "SELECT id, display_name, name_key FROM products WHERE is_active"
+_AUTHORIZED_ACTIVE_PRODUCTS_SQL = (
+    "SELECT id, display_name, name_key FROM products WHERE is_active AND deleted_at IS NULL"
+)
 
 DeletedMode = Literal["active", "deleted", "all"]
 StateFilter = Literal["draft", "approved", "rejected"]

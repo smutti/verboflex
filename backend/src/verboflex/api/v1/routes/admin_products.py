@@ -4,7 +4,7 @@ from typing import Annotated, Any, NoReturn, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
 from verboflex.auth.principal import Principal, require_roles
@@ -12,6 +12,7 @@ from verboflex.db.session import get_db_session
 from verboflex.schemas.admin_products import (
     AdminProductConflictResponse,
     AdminProductCreateRequest,
+    AdminProductDeletionConflictResponse,
     AdminProductLifecycleConflictResponse,
     AdminProductListResponse,
     AdminProductPublishRequest,
@@ -33,12 +34,14 @@ from verboflex.services.preview_jobs import (
 )
 from verboflex.services.products import (
     InvalidProductCursor,
+    ProductDeletionBlocked,
     ProductNameConflict,
     ProductNotFound,
     ProductRecord,
     ProductRevisionRecord,
     ProductVersionConflict,
     create_product,
+    delete_product,
     get_product,
     list_products,
     save_product_candidate,
@@ -138,6 +141,12 @@ REACTIVATION_ELIGIBILITY_RESPONSES: dict[int | str, dict[str, Any]] = {
     status.HTTP_409_CONFLICT: {"model": ErrorResponse},
     status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
     status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
+}
+DELETE_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **AUTH_RESPONSES,
+    status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    status.HTTP_409_CONFLICT: {"model": AdminProductDeletionConflictResponse},
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
 }
 
 
@@ -272,6 +281,42 @@ async def update_admin_product_candidate(
     except (ProductNotFound, ProductVersionConflict, ValueError) as error:
         _raise_product_error(error)
     return _response(record)
+
+
+@router.delete(
+    "/{product_id}",
+    operation_id="delete_admin_product",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    response_model=None,
+    responses=DELETE_RESPONSES,
+)
+async def delete_admin_product(
+    product_id: UUID,
+    principal: AdminPrincipal,
+    session: AdminSession,
+) -> Response:
+    """Logically delete one idle product while retaining all history."""
+    try:
+        delete_product(
+            session,
+            product_id=product_id,
+            deleted_by=principal.user_id,
+        )
+    except ProductDeletionBlocked:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "Product deletion blocked",
+                "blockers": ["active_work"],
+            },
+        )
+    except ProductNotFound as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product unavailable",
+        ) from error
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(

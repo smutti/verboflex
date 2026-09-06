@@ -179,6 +179,11 @@ export type AdminActiveRevisionRevalidationJobResponse = {
      */
     detector_version: string;
     /**
+     * Diagnostic Code
+     */
+    diagnostic_code: 'repository_scan_limit_reached' | null;
+    duplicate_report_summary?: DuplicateReportSummaryResponse | null;
+    /**
      * Error Code
      */
     error_code: 'enqueue_failed' | 'processing_failed' | 'stale_attempt' | 'stale_active_revision' | 'stale_connection' | 'stale_identity' | 'time_limit_exceeded' | null;
@@ -799,6 +804,11 @@ export type AdminPreviewJobResponse = {
      */
     detector_version: string;
     /**
+     * Diagnostic Code
+     */
+    diagnostic_code: 'repository_scan_limit_reached' | null;
+    duplicate_report_summary?: DuplicateReportSummaryResponse | null;
+    /**
      * Error Code
      */
     error_code: 'enqueue_failed' | 'processing_failed' | 'stale_attempt' | 'stale_candidate' | 'stale_connection' | 'stale_identity' | 'time_limit_exceeded' | null;
@@ -987,6 +997,22 @@ export type AdminProductCreateRequest = {
      * Name
      */
     name: string;
+};
+
+/**
+ * AdminProductDeletionConflictResponse
+ *
+ * Closed reason why logical deletion cannot start yet.
+ */
+export type AdminProductDeletionConflictResponse = {
+    /**
+     * Blockers
+     */
+    blockers: Array<'active_work'>;
+    /**
+     * Detail
+     */
+    detail: 'Product deletion blocked';
 };
 
 /**
@@ -1215,6 +1241,7 @@ export type AdminPublishedMappingImportResponse = {
      */
     capability: 'ready' | 'reauthorization_required' | 'unavailable';
     dataset_status: ImportDatasetStatus;
+    duplicate_report_summary?: DuplicateReportSummaryResponse | null;
     /**
      * Error Category
      */
@@ -1710,6 +1737,24 @@ export type DuplicateReportResponse = {
      * Sources
      */
     sources: Array<DuplicateSourceResponse>;
+};
+
+/**
+ * DuplicateReportSummaryResponse
+ */
+export type DuplicateReportSummaryResponse = {
+    /**
+     * Complete
+     */
+    complete: boolean;
+    /**
+     * Group Count
+     */
+    group_count: number;
+    /**
+     * Repeated Occurrences
+     */
+    repeated_occurrences: number;
 };
 
 /**
@@ -2877,6 +2922,52 @@ export type CreateAdminProductResponses = {
 };
 
 export type CreateAdminProductResponse = CreateAdminProductResponses[keyof CreateAdminProductResponses];
+
+export type DeleteAdminProductData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}';
+};
+
+export type DeleteAdminProductErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: AdminProductDeletionConflictResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type DeleteAdminProductError = DeleteAdminProductErrors[keyof DeleteAdminProductErrors];
+
+export type DeleteAdminProductResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteAdminProductResponse = DeleteAdminProductResponses[keyof DeleteAdminProductResponses];
 
 export type GetAdminProductData = {
     body?: never;

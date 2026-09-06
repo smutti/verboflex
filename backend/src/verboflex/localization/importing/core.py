@@ -417,6 +417,30 @@ class CanonicalParseResult:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class CanonicalDiagnosticResult:
+    """Validated source occurrences for diagnostics, including duplicate identities."""
+
+    values: tuple[CanonicalValue, ...] = ()
+    issues: tuple[CanonicalIssue, ...] = ()
+
+    def __post_init__(self) -> None:
+        if type(self.values) is not tuple or type(self.issues) is not tuple:
+            raise ValueError("canonical diagnostic result rejected")
+        if any(type(value) is not CanonicalValue for value in self.values):
+            raise ValueError("canonical diagnostic result rejected")
+        if any(type(issue) is not CanonicalIssue for issue in self.issues):
+            raise ValueError("canonical diagnostic result rejected")
+        if self.values and self.issues:
+            raise ValueError("canonical diagnostic result rejected")
+        if self.values != tuple(sorted(self.values, key=canonical_value_order)):
+            raise ValueError("canonical diagnostic result rejected")
+        if self.issues != tuple(sorted(self.issues, key=canonical_issue_order)):
+            raise ValueError("canonical diagnostic result rejected")
+        if len(set(self.issues)) != len(self.issues):
+            raise ValueError("canonical diagnostic result rejected")
+
+
 class CanonicalParser(Protocol):
     """Callable implemented by every confirmed-format parser adapter."""
 

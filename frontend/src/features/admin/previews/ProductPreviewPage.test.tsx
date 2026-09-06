@@ -227,6 +227,7 @@ function activeRevalidationJob(
     connection_generation: 8,
     created_at: new Date().toISOString(),
     detector_version: "detector-v1",
+    diagnostic_code: null,
     error_code: null,
     finished_at: "2026-08-31T17:00:05Z",
     id: "00000000-0000-4000-8000-000000000701",
@@ -263,6 +264,7 @@ function previewJob(
     connection_generation: 7,
     created_at: "2026-08-28T12:00:00Z",
     detector_version: "detector-v1",
+    diagnostic_code: null,
     error_code: null,
     finished_at: "2026-08-28T12:00:05Z",
     id: "00000000-0000-4000-8000-000000000601",
@@ -473,6 +475,77 @@ describe("administrator product preview and publication page", () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  it.each([
+    [
+      "repository scan limit",
+      "repository_scan_limit_reached" as const,
+      "The repository scan limit was reached. Set a narrower localization root in the mapping, then retry validation.",
+    ],
+    [
+      "unknown worker failure",
+      null,
+      "Validation did not complete. Review the reason, then retry.",
+    ],
+  ])(
+    "renders safe recovery guidance for a %s",
+    async (_name, diagnosticCode, copy) => {
+      createJobMock.mockResolvedValueOnce(
+        ok(
+          previewJob({
+            diagnostic_code: diagnosticCode,
+            error_code: "processing_failed",
+            finished_at: "2026-09-06T12:00:00Z",
+            result: null,
+            state: "failed",
+          }),
+          202,
+        ),
+      );
+      renderPage();
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Run validation" }),
+      );
+      expect(await screen.findByText("Failed", { exact: true })).toBeVisible();
+
+      expect(screen.getByRole("alert")).toHaveTextContent(copy);
+      expect(
+        screen.getByRole("button", { name: "Retry validation" }),
+      ).toBeVisible();
+    },
+  );
+
+  it("offers duplicate diagnostics only when the worker stored an actionable summary", async () => {
+    renderPage();
+    await runValidation();
+    expect(
+      screen.queryByRole("button", { name: "View duplicate keys" }),
+    ).not.toBeInTheDocument();
+
+    cleanup();
+    createJobMock.mockResolvedValueOnce(
+      ok(
+        previewJob({
+          duplicate_report_summary: {
+            complete: true,
+            group_count: 2,
+            repeated_occurrences: 2,
+          },
+          result: {
+            detector_version: "detector-v1",
+            digest: "c".repeat(64),
+            layout_candidates: [],
+          },
+        }),
+        202,
+      ),
+    );
+    renderPage();
+    await runValidation();
+    expect(
+      screen.getByRole("button", { name: "View duplicate keys" }),
+    ).toBeVisible();
   });
 
   it("renders approved loading, bounded error, and not-run states", async () => {

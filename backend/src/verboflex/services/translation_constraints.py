@@ -464,7 +464,7 @@ def _lock_scope_authority(
             .with_for_update(read=True)
             .execution_options(populate_existing=True)
         ).scalar_one_or_none()
-        if product is None or not product.is_active:
+        if product is None or product.deleted_at is not None or not product.is_active:
             raise ConstraintAuthorityUnavailable("constraint scope is unavailable")
         locked_product_id = product.id
         active_revision_id = product.active_revision_id

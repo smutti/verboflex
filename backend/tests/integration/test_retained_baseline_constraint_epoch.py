@@ -298,8 +298,14 @@ def test_retained_epoch_migration_roundtrip_preserves_data_and_restores_prior_gu
             ),
             factory.begin() as session,
         ):
-            translation_constraints.put_translation_constraint(
-                session, **common, max_chars=8, expected_version=0, actor_id=actor_id
+            # Exercise the historical 0020 trigger directly: current ORM models
+            # intentionally include columns introduced after this old schema.
+            session.execute(
+                text(
+                    "UPDATE localization_scopes "
+                    "SET dataset_version = dataset_version + 1 WHERE id = :scope_id"
+                ),
+                {"scope_id": scope_id},
             )
         with factory() as session:
             assert session.get_one(LocalizationScope, scope_id).dataset_version == 1
@@ -316,8 +322,19 @@ def test_retained_epoch_migration_roundtrip_preserves_data_and_restores_prior_gu
             ),
             factory.begin() as session,
         ):
-            translation_constraints.delete_translation_constraint(
-                session, **common, expected_version=result.version
+            session.execute(
+                text(
+                    "DELETE FROM translation_constraints "
+                    "WHERE scope_id = :scope_id AND language = :language"
+                ),
+                {"scope_id": scope_id, "language": "it"},
+            )
+            session.execute(
+                text(
+                    "UPDATE localization_scopes "
+                    "SET dataset_version = dataset_version + 1 WHERE id = :scope_id"
+                ),
+                {"scope_id": scope_id},
             )
         command.upgrade(config, "head")
         with factory.begin() as session:

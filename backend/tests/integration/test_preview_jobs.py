@@ -33,6 +33,7 @@ from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
 from verboflex.integrations.bitbucket.client import (
     BitbucketBranch,
+    BitbucketProviderReadError,
     BitbucketSourceEntry,
     BitbucketSourcePage,
 )
@@ -505,6 +506,15 @@ def test_moko_duplicate_report_is_stored_paginated_and_admin_only(
             identity, factory=preview_session_factory, adapter=adapter
         ),
     )
+    job_status = asyncio.run(
+        _request("GET", f"/api/v1/admin/preview-jobs/{job_id}", access_token=admin)
+    )
+    assert job_status.status_code == 200
+    assert job_status.json()["duplicate_report_summary"] == {
+        "complete": True,
+        "group_count": 2,
+        "repeated_occurrences": 2,
+    }
     path = f"/api/v1/admin/preview-jobs/{job_id}/duplicates"
     assert asyncio.run(_request("GET", path, access_token=None)).status_code == 401
     assert asyncio.run(_request("GET", path, access_token=viewer)).status_code == 403
@@ -915,6 +925,8 @@ def test_admin_job_runs_api_to_distinct_worker_and_persists_terminal_state(
         "repository_sides",
         "result",
         "error_code",
+        "diagnostic_code",
+        "duplicate_report_summary",
         "created_at",
         "started_at",
         "finished_at",
@@ -1108,6 +1120,45 @@ def test_processor_output_rejects_forbidden_or_noncanonical_fields_without_persi
         assert row.error_code == "processing_failed"
         assert row.result is None
         assert forbidden_field not in str(row.repository_sides)
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_diagnostic"),
+    [
+        (BitbucketProviderReadError(kind="limit_exceeded"), "repository_scan_limit_reached"),
+        (RuntimeError("private worker detail"), None),
+    ],
+)
+def test_preview_failure_persists_only_a_safe_actionable_diagnostic(
+    preview_session_factory: sessionmaker[Session],
+    failure: Exception,
+    expected_diagnostic: str | None,
+) -> None:
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    with preview_session_factory() as session:
+        created = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+
+    def fail(_identity: object) -> dict[str, object]:
+        raise failure
+
+    execute_preview_job(preview_session_factory, job_id=created.id, processor=fail)
+
+    with preview_session_factory() as session:
+        persisted = session.get_one(PreviewJob, created.id)
+        assert persisted.state == "failed"
+        assert persisted.error_code == "processing_failed"
+        assert persisted.diagnostic_code == expected_diagnostic
+        assert "private worker detail" not in str(persisted.diagnostic_code)
+    with preview_session_factory() as session:
+        projected = get_preview_job(session, job_id=created.id)
+        assert projected.diagnostic_code == expected_diagnostic
 
 
 @pytest.mark.parametrize(
@@ -2985,6 +3036,95 @@ def test_active_revalidation_namespace_and_creation_guards_fail_closed(
             commits={"direct": COMMIT_HASH},
             enqueuer=lambda _job_id: None,
         )
+
+
+def test_preview_projection_rejects_unknown_diagnostic_code(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Never project an unrecognized persisted diagnostic to an API consumer."""
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    with preview_session_factory() as session:
+        created = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    with preview_session_factory() as session:
+        row = session.get_one(PreviewJob, created.id)
+        row.diagnostic_code = cast(Any, "unknown_diagnostic")
+        with (
+            session.no_autoflush,
+            pytest.raises(PreviewJobConflict, match="persisted preview diagnostic rejected"),
+        ):
+            _record(row, is_current=True)
+        session.rollback()
+
+
+def test_candidate_preview_is_hidden_after_product_deletion(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    product_id, _active_id, _candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    with preview_session_factory() as session:
+        created = create_or_reuse_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            expected_candidate_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    deleted_by = uuid4()
+    with preview_session_factory.begin() as session:
+        session.add(
+            User(
+                id=deleted_by,
+                email=f"deleted-preview-{deleted_by}@example.com",
+                display_name="Deleted Preview Admin",
+                hashed_password=hash_password("deleted preview administrator phrase!"),
+                is_active=True,
+                must_change_password=False,
+            )
+        )
+        product = session.get_one(Product, product_id)
+        product.is_active = False
+        product.deleted_at = datetime.now(UTC)
+        product.deleted_by = deleted_by
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobNotFound, match="preview job unavailable"),
+    ):
+        get_preview_job(session, job_id=created.id)
+
+
+def test_active_revalidation_is_hidden_after_product_deletion(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    preview_jobs = importlib.import_module("verboflex.services.preview_jobs")
+    product_id, revision_id, mapping_id, actor_id, _selected_layout_id = (
+        _seed_active_revalidation_authority(preview_session_factory)
+    )
+    with preview_session_factory() as session:
+        created = preview_jobs.create_or_reuse_active_revision_revalidation_job(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            mapping_id=mapping_id,
+            expected_active_revision_version=4,
+            commits={"direct": COMMIT_HASH},
+            enqueuer=lambda _job_id: None,
+        )
+    with preview_session_factory.begin() as session:
+        product = session.get_one(Product, product_id)
+        product.deleted_at = datetime.now(UTC)
+        product.deleted_by = actor_id
+    with (
+        preview_session_factory() as session,
+        pytest.raises(PreviewJobNotFound, match="active revalidation job unavailable"),
+    ):
+        preview_jobs.get_active_revision_revalidation_job(session, job_id=created.id)
 
 
 def test_active_revalidation_enqueue_failures_are_bounded_and_retryable(

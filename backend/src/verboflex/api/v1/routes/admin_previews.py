@@ -4,10 +4,13 @@ from typing import Annotated, Any, NoReturn, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from verboflex.auth.principal import Principal, require_roles
 from verboflex.db.session import get_db_session
+from verboflex.models.duplicate_report import DuplicateReportRow
+from verboflex.schemas.duplicate_reports import DuplicateReportSummaryResponse
 from verboflex.schemas.previews import (
     AdminActiveRevisionRevalidationConfirmationRequest,
     AdminActiveRevisionRevalidationConfirmationResponse,
@@ -68,7 +71,22 @@ def get_preview_job_enqueuer(request: Request) -> PreviewEnqueuer:
 PreviewEnqueueDependency = Annotated[PreviewEnqueuer, Depends(get_preview_job_enqueuer)]
 
 
-def _response(record: PreviewJobRecord) -> AdminPreviewJobResponse:
+def _duplicate_report_summary(
+    session: Session, *, preview_job_id: UUID
+) -> DuplicateReportSummaryResponse | None:
+    row = session.scalar(
+        select(DuplicateReportRow).where(DuplicateReportRow.preview_job_id == preview_job_id)
+    )
+    if row is None:
+        return None
+    return DuplicateReportSummaryResponse(
+        complete=row.complete,
+        group_count=row.group_count,
+        repeated_occurrences=row.repeated_occurrences,
+    )
+
+
+def _response(record: PreviewJobRecord, *, session: Session) -> AdminPreviewJobResponse:
     return AdminPreviewJobResponse(
         id=record.id,
         input_digest=record.input_digest,
@@ -95,6 +113,8 @@ def _response(record: PreviewJobRecord) -> AdminPreviewJobResponse:
             else None
         ),
         error_code=record.error_code,
+        diagnostic_code=record.diagnostic_code,
+        duplicate_report_summary=_duplicate_report_summary(session, preview_job_id=record.id),
         is_current=record.is_current,
         created_at=record.created_at,
         started_at=record.started_at,
@@ -104,6 +124,8 @@ def _response(record: PreviewJobRecord) -> AdminPreviewJobResponse:
 
 def _active_response(
     record: PreviewJobRecord,
+    *,
+    session: Session,
 ) -> AdminActiveRevisionRevalidationJobResponse:
     """Rename the internal compatibility fields at the active-revision boundary."""
     return AdminActiveRevisionRevalidationJobResponse(
@@ -134,6 +156,8 @@ def _active_response(
         error_code=(
             "stale_active_revision" if record.error_code == "stale_candidate" else record.error_code
         ),
+        diagnostic_code=record.diagnostic_code,
+        duplicate_report_summary=_duplicate_report_summary(session, preview_job_id=record.id),
         is_current=record.is_current,
         created_at=record.created_at,
         started_at=record.started_at,
@@ -268,7 +292,7 @@ async def create_admin_preview_job(
         )
     except (PreviewJobNotFound, PreviewJobConflict, PreviewConnectionUnavailable) as error:
         _raise_preview_error(error)
-    return _response(record)
+    return _response(record, session=session)
 
 
 @router.get(
@@ -287,7 +311,7 @@ async def get_admin_preview_job(
         record = get_preview_job(session, job_id=job_id)
     except PreviewJobNotFound as error:
         _raise_preview_error(error)
-    return _response(record)
+    return _response(record, session=session)
 
 
 @router.post(
@@ -362,7 +386,7 @@ async def create_admin_active_revision_revalidation_job(
         )
     except (PreviewJobNotFound, PreviewJobConflict, PreviewConnectionUnavailable) as error:
         _raise_active_revalidation_error(error)
-    return _active_response(record)
+    return _active_response(record, session=session)
 
 
 @router.get(
@@ -381,7 +405,7 @@ async def get_admin_active_revision_revalidation_job(
         record = get_active_revision_revalidation_job_record(session, job_id=job_id)
     except (PreviewJobNotFound, PreviewJobConflict) as error:
         _raise_active_revalidation_error(error)
-    return _active_response(record)
+    return _active_response(record, session=session)
 
 
 @router.post(

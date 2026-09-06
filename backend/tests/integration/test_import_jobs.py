@@ -676,7 +676,7 @@ def test_duplicate_report_pages_bind_execution_filters_and_occurrence_groups(
         execution.started_at = execution.created_at
         execution.finished_at = datetime.now(UTC)
         job.state = "import_failed"
-        job.error_category = "invalid_source"
+        job.error_category = "bounded_failure"
         job.error_message = "Import source rejected"
         sources = [
             dict(
@@ -688,6 +688,19 @@ def test_duplicate_report_pages_bind_execution_filters_and_occurrence_groups(
         ]
         store_report(session, report=report, sources=sources, execution_id=execution.id)
         store_report(session, report=report, sources=sources, execution_id=execution.id)
+    status = asyncio.run(
+        _request(
+            "GET",
+            f"/api/v1/admin/products/{product_id}/imports/{import_id}",
+            access_token=admin,
+        )
+    )
+    assert status.status_code == 200
+    assert status.json()["duplicate_report_summary"] == {
+        "complete": True,
+        "group_count": 2,
+        "repeated_occurrences": 48,
+    }
     first = asyncio.run(_request("GET", path + "&limit=1", access_token=admin))
     assert first.status_code == 200, first.text
     body = first.json()
@@ -1714,6 +1727,7 @@ def test_separate_import_activates_keys_then_translations_as_one_ordered_baselin
             "dataset_status": "not_created",
             "parser_issues": [],
             "parser_issue_remaining_count": 0,
+            "duplicate_report_summary": None,
             "active_baseline": None,
             "execution_number": None,
             "latest_execution_at": None,
@@ -1953,6 +1967,12 @@ def test_import_watchdog_settings_and_named_tasks_are_bounded_and_do_not_redispa
 ) -> None:
     celery_app = importlib.import_module("verboflex.worker.celery_app")
     import_tasks = importlib.import_module("verboflex.worker.import_tasks")
+    defaults = Settings()
+    assert defaults.import_soft_time_limit_seconds == 180
+    assert defaults.import_hard_time_limit_seconds == 240
+    assert defaults.import_max_terminalization_seconds == 260
+    assert import_tasks.run_import_job.soft_time_limit == 180
+    assert import_tasks.run_import_job.time_limit == 240
     settings = Settings(
         import_soft_time_limit_seconds=10,
         import_hard_time_limit_seconds=20,
@@ -3478,6 +3498,7 @@ def test_public_contract_has_exact_five_operations_and_closed_server_authority(
                 "dataset_status": "not_created",
                 "parser_issues": [],
                 "parser_issue_remaining_count": 0,
+                "duplicate_report_summary": None,
                 "active_baseline": None,
                 "execution_number": None,
                 "latest_execution_at": None,
@@ -3519,6 +3540,7 @@ def test_public_contract_has_exact_five_operations_and_closed_server_authority(
         "dataset_status",
         "parser_issues",
         "parser_issue_remaining_count",
+        "duplicate_report_summary",
         "active_baseline",
         "execution_number",
         "latest_execution_at",

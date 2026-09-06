@@ -220,6 +220,7 @@ def assert_complete_schema(engine: Engine) -> None:
         "ix_auth_sessions_family_id",
         "uq_auth_sessions_token_hash",
         "uq_auth_sessions_parent_id",
+        "uq_products_live_name_key",
     } <= index_names
 
     expected_phase2_indexes = {
@@ -234,7 +235,6 @@ def assert_complete_schema(engine: Engine) -> None:
     assert expected_phase2_indexes <= index_names
 
     expected_unique_constraints = {
-        "products": {"uq_products_name_key"},
         "repositories": {"uq_repositories_provider_identity"},
         "product_repository_mappings": {
             "uq_product_repository_mappings_confirmed_preview_job",
@@ -279,6 +279,51 @@ def test_migration_constraints_reject_duplicates_and_roll_back_atomically(
     with engine.connect() as connection:
         assert connection.execute(text("SELECT count(*) FROM users")).scalar_one() == 0
         assert connection.execute(text("SELECT count(*) FROM roles")).scalar_one() == 4
+
+
+def test_logical_product_deletion_downgrade_fails_after_live_name_reuse(
+    migrated_database: tuple[Config, Engine],
+) -> None:
+    """Never discard or merge retained product history to restore old uniqueness."""
+    config, engine = migrated_database
+    command.upgrade(config, "head")
+    actor_id = uuid4()
+    deleted_product_id = uuid4()
+    replacement_product_id = uuid4()
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, email, display_name, hashed_password) "
+                "VALUES (:id, :email, 'Deletion actor', 'not-a-secret')"
+            ),
+            {"id": actor_id, "email": f"delete-{actor_id}@example.com"},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO products "
+                "(id, display_name, name_key, is_active, deleted_at, deleted_by) VALUES "
+                "(:deleted_id, 'Reusable', 'reusable', false, now(), :actor_id), "
+                "(:replacement_id, 'Reusable', 'reusable', false, NULL, NULL)"
+            ),
+            {
+                "deleted_id": deleted_product_id,
+                "replacement_id": replacement_product_id,
+                "actor_id": actor_id,
+            },
+        )
+
+    with pytest.raises(
+        RuntimeError,
+        match="cannot downgrade logical product deletion after a deleted name has been reused",
+    ):
+        command.downgrade(config, "0023_duplicate_reports")
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT count(*) FROM products")).scalar_one() == 2
+        assert (
+            connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+            == "0025_preview_diagnostics"
+        )
 
 
 def test_declarative_metadata_contains_every_auth_model() -> None:

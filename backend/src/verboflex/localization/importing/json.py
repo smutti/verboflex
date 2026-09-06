@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from unicodedata import category
 
 from verboflex.localization.importing.core import (
+    CanonicalDiagnosticResult,
     CanonicalIssue,
     CanonicalLocator,
     CanonicalOutputLimitExceeded,
@@ -61,17 +62,36 @@ class _JsonObject:
 
 def parse_json_localization(parser_input: CanonicalParserInput) -> CanonicalParseResult:
     """Parse one confirmed JSON localization document without partial output."""
+    result = _parse_json_localization(parser_input, allow_duplicates=False)
+    if type(result) is not CanonicalParseResult:
+        raise AssertionError("canonical JSON parse returned diagnostic output")
+    return result
+
+
+def inspect_json_localization(
+    parser_input: CanonicalParserInput,
+) -> CanonicalDiagnosticResult | CanonicalParseResult:
+    """Parse valid JSON while retaining duplicate members for diagnostics only."""
+    return _parse_json_localization(parser_input, allow_duplicates=True)
+
+
+def _parse_json_localization(
+    parser_input: CanonicalParserInput, *, allow_duplicates: bool
+) -> CanonicalDiagnosticResult | CanonicalParseResult:
     if type(parser_input) is not CanonicalParserInput:
         return _invalid_input_failure()
     try:
         base_language = _require_input_authority(parser_input)
-        root = _load_document(parser_input.content)
+        root = _load_document(parser_input.content, allow_duplicates=allow_duplicates)
         values = _document_values(
             root=root,
             parser_input=parser_input,
             base_language=base_language,
         )
-        return CanonicalParseResult(values=tuple(sorted(values, key=canonical_value_order)))
+        sorted_values = tuple(sorted(values, key=canonical_value_order))
+        if allow_duplicates:
+            return CanonicalDiagnosticResult(values=sorted_values)
+        return CanonicalParseResult(values=sorted_values)
     except _MalformedJson:
         return _failure(parser_input, code="malformed_file")
     except _DuplicateJsonMember:
@@ -145,7 +165,7 @@ def _require_input_authority(parser_input: CanonicalParserInput) -> str:
     return base_language
 
 
-def _load_document(content: bytes) -> _JsonObject:
+def _load_document(content: bytes, *, allow_duplicates: bool = False) -> _JsonObject:
     if (
         not content
         or len(content) > MAX_CANONICAL_FILE_BYTES
@@ -157,7 +177,7 @@ def _load_document(content: bytes) -> _JsonObject:
         decoded = content.decode("utf-8", errors="strict")
         value = json.loads(
             decoded,
-            object_pairs_hook=_unique_object,
+            object_pairs_hook=_retain_object if allow_duplicates else _unique_object,
             parse_constant=_reject_constant,
         )
     except RecursionError as error:
@@ -179,6 +199,10 @@ def _unique_object(pairs: list[tuple[str, object]]) -> _JsonObject:
         seen.add(key)
         ordered.append((key, value))
     return _JsonObject(tuple(ordered))
+
+
+def _retain_object(pairs: list[tuple[str, object]]) -> _JsonObject:
+    return _JsonObject(tuple(pairs))
 
 
 def _reject_constant(token: str) -> object:

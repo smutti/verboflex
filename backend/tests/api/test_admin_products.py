@@ -315,7 +315,10 @@ def test_admin_create_and_detail_return_closed_active_and_candidate_summaries(
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/revisions/{{revision_id}}/reactivation-eligibility",
     }
     assert set(app.openapi()["paths"][revision_mappings_path]) == {"get"}
-    assert "delete" not in app.openapi()["paths"][f"{ADMIN_PRODUCTS_PATH}/{{product_id}}"]
+    delete_operation = app.openapi()["paths"][f"{ADMIN_PRODUCTS_PATH}/{{product_id}}"]["delete"]
+    assert delete_operation["operationId"] == "delete_admin_product"
+    assert delete_operation["security"] == [{"OAuth2PasswordBearer": []}]
+    assert set(delete_operation["responses"]) == {"204", "401", "403", "404", "409", "422"}
     assert "post" not in app.openapi()["paths"][f"{ADMIN_PRODUCTS_PATH}/{{product_id}}"]
 
 
@@ -2049,3 +2052,241 @@ def test_product_lifecycle_surface_exposes_no_provider_or_translation_write_capa
         post = operation["post"]
         assert post["security"] == [{"OAuth2PasswordBearer": []}]
         assert "409" in post["responses"] or path.endswith("/deactivate")
+
+
+def test_admin_delete_is_idempotent_hidden_history_preserving_and_name_reusable(
+    product_session_factory: sessionmaker[Session],
+) -> None:
+    admin_id, admin_token = create_authority(
+        product_session_factory, email="delete-admin@example.com", roles=("admin",)
+    )
+    configure_dependencies(product_session_factory)
+    created = asyncio.run(
+        product_request(
+            "POST",
+            access_token=admin_token,
+            json_body=create_payload(name="Reusable Product"),
+        )
+    )
+    assert created.status_code == 201
+    product_id = UUID(created.json()["id"])
+    deletion_path = f"{ADMIN_PRODUCTS_PATH}/{product_id}"
+    for role in ("viewer", "translator", "product_manager_reviewer"):
+        _, token = create_authority(
+            product_session_factory,
+            email=f"delete-{role}@example.com",
+            roles=(role,),
+        )
+        denied = asyncio.run(product_request("DELETE", access_token=token, path=deletion_path))
+        assert denied.status_code == 403
+    assert (
+        asyncio.run(product_request("DELETE", access_token=None, path=deletion_path)).status_code
+        == 401
+    )
+    deleted = asyncio.run(product_request("DELETE", access_token=admin_token, path=deletion_path))
+    assert deleted.status_code == 204 and deleted.content == b""
+    assert (
+        asyncio.run(
+            product_request("GET", access_token=admin_token, path=deletion_path)
+        ).status_code
+        == 404
+    )
+    hidden_candidate = asyncio.run(
+        product_request(
+            "GET",
+            access_token=admin_token,
+            path=f"{deletion_path}/candidate/mappings",
+        )
+    )
+    assert hidden_candidate.status_code == 404
+    hidden_update = asyncio.run(
+        product_request(
+            "PATCH",
+            access_token=admin_token,
+            path=deletion_path,
+            json_body={
+                "expected_candidate_version": 1,
+                "name": "Must stay deleted",
+                "description": None,
+            },
+        )
+    )
+    assert hidden_update.status_code == 404
+    listed = asyncio.run(product_request("GET", access_token=admin_token))
+    assert listed.status_code == 200 and listed.json()["items"] == []
+    repeated = asyncio.run(product_request("DELETE", access_token=admin_token, path=deletion_path))
+    assert repeated.status_code == 204 and repeated.content == b""
+    with product_session_factory() as session:
+        row = session.execute(
+            text("SELECT deleted_at, deleted_by, is_active FROM products WHERE id = :product_id"),
+            {"product_id": product_id},
+        ).one()
+        assert row.deleted_at is not None
+        assert row.deleted_by == admin_id
+        assert row.is_active is False
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(ProductRevision)
+                .where(ProductRevision.product_id == product_id)
+            )
+            == 1
+        )
+    replacement = asyncio.run(
+        product_request(
+            "POST",
+            access_token=admin_token,
+            json_body=create_payload(name="Reusable Product"),
+        )
+    )
+    assert replacement.status_code == 201
+    assert replacement.json()["id"] != str(product_id)
+    missing = asyncio.run(
+        product_request(
+            "DELETE",
+            access_token=admin_token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{uuid4()}",
+        )
+    )
+    assert missing.status_code == 404
+
+
+def test_product_delete_blocks_queued_preview_without_mutation(
+    product_session_factory: sessionmaker[Session],
+) -> None:
+    admin_id, admin_token = create_authority(
+        product_session_factory, email="delete-worker-admin@example.com", roles=("admin",)
+    )
+    configure_dependencies(product_session_factory)
+    created = asyncio.run(
+        product_request(
+            "POST",
+            access_token=admin_token,
+            json_body=create_payload(name="Busy Product"),
+        )
+    )
+    product_id = UUID(created.json()["id"])
+    mapping_id = _seed_candidate_mapping(product_session_factory, product_id=product_id)
+    now = datetime.now(UTC)
+    with product_session_factory.begin() as session:
+        product = session.get_one(Product, product_id)
+        revision = session.get_one(ProductRevision, product.candidate_revision_id)
+        mapping = session.get_one(ProductRepositoryMapping, mapping_id)
+        job = PreviewJob(
+            input_digest=hashlib.sha256(str(product_id).encode()).hexdigest(),
+            attempt=1,
+            state="queued",
+            product_id=product_id,
+            candidate_revision_id=revision.id,
+            candidate_revision_version=revision.version,
+            mapping_id=mapping.id,
+            topology="direct",
+            connection_generation=1,
+            detector_version="delete-test-v1",
+            layout_identity="delete-test-layout",
+            repository_sides=[],
+        )
+        session.add(job)
+        session.flush()
+        job_id = job.id
+    path = f"{ADMIN_PRODUCTS_PATH}/{product_id}"
+    blocked = asyncio.run(product_request("DELETE", access_token=admin_token, path=path))
+    assert blocked.status_code == 409
+    assert blocked.json() == {
+        "detail": "Product deletion blocked",
+        "blockers": ["active_work"],
+    }
+    with product_session_factory.begin() as session:
+        product = session.get_one(Product, product_id)
+        assert product.is_active is False
+        assert (
+            session.execute(
+                text("SELECT deleted_at FROM products WHERE id = :product_id"),
+                {"product_id": product_id},
+            ).scalar_one()
+            is None
+        )
+        job = session.get_one(PreviewJob, job_id)
+        job.state = "failed"
+        job.error_code = "invalid_source"
+        job.finished_at = now
+    assert (
+        asyncio.run(product_request("DELETE", access_token=admin_token, path=path)).status_code
+        == 204
+    )
+    with product_session_factory() as session:
+        assert (
+            session.execute(
+                text("SELECT deleted_by FROM products WHERE id = :product_id"),
+                {"product_id": product_id},
+            ).scalar_one()
+            == admin_id
+        )
+
+
+def test_product_delete_blocks_queued_import_without_mutation(
+    product_session_factory: sessionmaker[Session],
+) -> None:
+    admin_id, admin_token = create_authority(
+        product_session_factory,
+        email="delete-import-admin@example.com",
+        roles=("admin",),
+    )
+    configure_dependencies(product_session_factory)
+    product_id, revision_id = _seed_published_mapping_graph(
+        product_session_factory,
+        confirmed_by=admin_id,
+        name="Busy Import Product",
+    )
+    now = datetime.now(UTC)
+    with product_session_factory.begin() as session:
+        mapping = _revision_mapping_graph(session, revision_id=revision_id)[0]
+        job_id = uuid4()
+        execution_id = uuid4()
+        session.add(
+            ImportJob(
+                id=job_id,
+                product_id=product_id,
+                revision_id=revision_id,
+                mapping_id=mapping.id,
+                topology=mapping.topology,
+                state="queued",
+                current_execution_id=execution_id,
+                active_baseline_execution_id=None,
+                retry_count=0,
+                latest_execution_at=now,
+            )
+        )
+        session.flush()
+        session.add(
+            ImportExecution(
+                id=execution_id,
+                import_job_id=job_id,
+                sequence=1,
+                state="queued",
+                connection_generation=1,
+            )
+        )
+    path = f"{ADMIN_PRODUCTS_PATH}/{product_id}"
+    blocked = asyncio.run(product_request("DELETE", access_token=admin_token, path=path))
+    assert blocked.status_code == 409
+    assert blocked.json() == {
+        "detail": "Product deletion blocked",
+        "blockers": ["active_work"],
+    }
+    with product_session_factory.begin() as session:
+        product = session.get_one(Product, product_id)
+        assert product.is_active is True
+        assert product.deleted_at is None
+        job = session.get_one(ImportJob, job_id)
+        execution = session.get_one(ImportExecution, execution_id)
+        job.state = "import_failed"
+        job.error_category = "provider_unavailable"
+        job.error_message = "Import provider unavailable"
+        execution.state = "failed"
+        execution.started_at = now
+        execution.finished_at = now
+    assert (
+        asyncio.run(product_request("DELETE", access_token=admin_token, path=path)).status_code
+        == 204
+    )

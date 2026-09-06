@@ -250,6 +250,11 @@ EXPECTED_OPERATIONS = {
         {"200", "401", "403", "404", "422"},
         True,
     ),
+    ("/api/v1/admin/products/{product_id}", "delete"): (
+        "delete_admin_product",
+        {"204", "401", "403", "404", "409", "422"},
+        True,
+    ),
     ("/api/v1/admin/products/{product_id}", "patch"): (
         "update_admin_product_candidate",
         {"200", "401", "403", "404", "409", "422"},
@@ -600,6 +605,12 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
             "post",
         ): {"401", "403", "404", "409", "422", "503"},
         ("/api/v1/admin/products/{product_id}", "get"): {"401", "403", "404", "422"},
+        ("/api/v1/admin/products/{product_id}", "delete"): {
+            "401",
+            "403",
+            "404",
+            "422",
+        },
         ("/api/v1/admin/products/{product_id}", "patch"): {
             "401",
             "403",
@@ -699,6 +710,10 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
     assert (
         _response_schema(operations[("/api/v1/admin/products/{product_id}", "patch")], "409")
         == "#/components/schemas/AdminProductConflictResponse"
+    )
+    assert (
+        _response_schema(operations[("/api/v1/admin/products/{product_id}", "delete")], "409")
+        == "#/components/schemas/AdminProductDeletionConflictResponse"
     )
     mapping_collection = "/api/v1/admin/products/{product_id}/candidate/mappings"
     mapping_detail = mapping_collection + "/{mapping_id}"
@@ -887,7 +902,16 @@ def test_import_schema_literals_requirements_and_bounds_are_frozen() -> None:
     ):
         assert contract["additionalProperties"] is False
 
-    assert set(published["required"]) == set(published["properties"])
+    assert set(published["required"]) == set(published["properties"]) - {"duplicate_report_summary"}
+    summary = schemas["DuplicateReportSummaryResponse"]
+    assert summary["additionalProperties"] is False
+    assert set(summary["required"]) == {
+        "complete",
+        "group_count",
+        "repeated_occurrences",
+    }
+    assert summary["properties"]["group_count"]["maximum"] == 50_000
+    assert summary["properties"]["repeated_occurrences"]["maximum"] == 50_000
     assert published["properties"]["state"]["enum"] == [
         "not_imported",
         "queued",
@@ -1822,6 +1846,8 @@ def test_admin_preview_openapi_is_closed_current_and_source_free() -> None:
         "repository_sides",
         "result",
         "error_code",
+        "diagnostic_code",
+        "duplicate_report_summary",
         "is_current",
         "created_at",
         "started_at",
@@ -1973,6 +1999,8 @@ def test_active_revision_revalidation_openapi_is_exact_bounded_and_source_free()
             "repository_sides",
             "result",
             "error_code",
+            "diagnostic_code",
+            "duplicate_report_summary",
             "is_current",
             "created_at",
             "started_at",
@@ -2011,7 +2039,12 @@ def test_active_revision_revalidation_openapi_is_exact_bounded_and_source_free()
         contract = schemas[schema_name]
         assert contract["additionalProperties"] is False
         assert set(contract["properties"]) == properties
-        assert set(contract["required"]) == properties
+        optional = (
+            {"duplicate_report_summary"}
+            if schema_name == "AdminActiveRevisionRevalidationJobResponse"
+            else set()
+        )
+        assert set(contract["required"]) == properties - optional
 
     assert create_request["properties"]["commits"]["minItems"] == 1
     assert create_request["properties"]["commits"]["maxItems"] == 2

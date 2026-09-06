@@ -10,6 +10,7 @@ from verboflex.api.v1.routes.admin_previews import RESPONSES, AdminPrincipal, Ad
 from verboflex.models.duplicate_report import DuplicateReportRow
 from verboflex.models.import_job import ImportExecution, ImportJob
 from verboflex.models.preview_job import PreviewJob
+from verboflex.models.product import Product
 from verboflex.schemas.duplicate_reports import DuplicateReportResponse
 from verboflex.services.duplicate_reports import read_report
 
@@ -38,7 +39,8 @@ def preview_duplicates(
     group_id: Group = None,
 ) -> DuplicateReportResponse:
     job = session.get(PreviewJob, job_id)
-    if job is None:
+    product = session.get(Product, job.product_id) if job is not None else None
+    if job is None or product is None or product.deleted_at is not None:
         raise HTTPException(404, "Preview unavailable")
     if job.state in {"queued", "running"}:
         raise HTTPException(409, "Duplicate report is not finished")
@@ -80,8 +82,10 @@ def import_duplicates(
     owner = session.scalar(
         select(ImportExecution)
         .join(ImportJob, ImportJob.id == ImportExecution.import_job_id)
+        .join(Product, Product.id == ImportJob.product_id)
         .where(
             ImportJob.product_id == product_id,
+            Product.deleted_at.is_(None),
             ImportJob.id == import_id,
             ImportExecution.sequence == execution,
         )

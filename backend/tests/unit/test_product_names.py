@@ -132,6 +132,8 @@ def test_product_schema_registers_global_identity_and_revision_guards(
         "candidate_revision_id",
         "created_at",
         "updated_at",
+        "deleted_at",
+        "deleted_by",
     }
     assert {column["name"] for column in inspector.get_columns("product_revisions")} == {
         "id",
@@ -146,7 +148,7 @@ def test_product_schema_registers_global_identity_and_revision_guards(
         "updated_at",
     }
     product_indexes = {index["name"] for index in inspector.get_indexes("products")}
-    assert "uq_products_name_key" in product_indexes
+    assert "uq_products_live_name_key" in product_indexes
     foreign_keys = {
         foreign_key["name"]: (
             foreign_key["constrained_columns"],
@@ -160,6 +162,7 @@ def test_product_schema_registers_global_identity_and_revision_guards(
             ["id", "candidate_revision_id"],
             "RESTRICT",
         ),
+        "fk_products_deleted_by_users": (["deleted_by"], "RESTRICT"),
     }
     revision_foreign_key = inspector.get_foreign_keys("product_revisions")[0]
     assert revision_foreign_key["constrained_columns"] == ["product_id"]

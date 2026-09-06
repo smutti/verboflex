@@ -309,6 +309,7 @@ const phaseThreeAdminOperationIds = new Map([
   ["GET /api/v1/admin/products", "list_admin_products"],
   ["POST /api/v1/admin/products", "create_admin_product"],
   ["GET /api/v1/admin/products/{product_id}", "get_admin_product"],
+  ["DELETE /api/v1/admin/products/{product_id}", "delete_admin_product"],
   [
     "GET /api/v1/admin/products/{product_id}/imports/{import_id}",
     "get_admin_import",

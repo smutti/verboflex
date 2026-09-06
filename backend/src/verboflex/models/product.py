@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     Integer,
     String,
     Text,
@@ -18,6 +19,7 @@ from sqlalchemy import (
     event,
     func,
     select,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.engine import Connection
@@ -52,6 +54,26 @@ class Product(Base):
             use_alter=True,
         ),
         ForeignKeyConstraint(
+            ["deleted_by"],
+            ["users.id"],
+            name="fk_products_deleted_by_users",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(deleted_at IS NULL) = (deleted_by IS NULL)",
+            name="deleted_identity_complete",
+        ),
+        CheckConstraint(
+            "deleted_at IS NULL OR NOT is_active",
+            name="deleted_inactive",
+        ),
+        Index(
+            "uq_products_live_name_key",
+            "name_key",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        ForeignKeyConstraint(
             ["id", "candidate_revision_id"],
             ["product_revisions.product_id", "product_revisions.id"],
             name="fk_products_candidate_owned_revision",
@@ -62,7 +84,7 @@ class Product(Base):
 
     id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
-    name_key: Mapped[str] = mapped_column(String(360), nullable=False, unique=True)
+    name_key: Mapped[str] = mapped_column(String(360), nullable=False)
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
@@ -88,6 +110,8 @@ class Product(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by: Mapped[UUID | None] = mapped_column(PostgreSQLUUID(as_uuid=True), nullable=True)
 
     revisions: Mapped[list[ProductRevision]] = relationship(
         back_populates="product",

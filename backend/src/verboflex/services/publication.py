@@ -63,7 +63,9 @@ ConfirmationPredicate = Callable[
 
 def _locked_product(session: Session, product_id: UUID) -> Product:
     product = session.execute(
-        select(Product).where(Product.id == product_id).with_for_update()
+        select(Product)
+        .where(Product.id == product_id, Product.deleted_at.is_(None))
+        .with_for_update()
     ).scalar_one_or_none()
     if product is None:
         raise PublicationNotFound("product unavailable")
@@ -184,6 +186,7 @@ def _promote_candidate_identity(
         select(Product.id).where(
             Product.name_key == candidate.name_key,
             Product.id != product.id,
+            Product.deleted_at.is_(None),
         )
     )
     if conflicting_product_id is not None:

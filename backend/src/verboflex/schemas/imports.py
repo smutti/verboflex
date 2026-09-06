@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from verboflex.schemas.duplicate_reports import DuplicateReportSummaryResponse
+
 
 class ImportDatasetStatus(StrEnum):
     """Closed relationship between the current import and canonical dataset."""
@@ -103,6 +105,7 @@ class AdminPublishedMappingImportResponse(BaseModel):
     dataset_status: ImportDatasetStatus
     parser_issues: Annotated[list[ImportParserIssue], Field(max_length=5)]
     parser_issue_remaining_count: Annotated[int, Field(ge=0, le=495)]
+    duplicate_report_summary: DuplicateReportSummaryResponse | None = None
     active_baseline: AdminImportBaselineResponse | None
     execution_number: Annotated[int, Field(ge=1)] | None
     latest_execution_at: datetime | None

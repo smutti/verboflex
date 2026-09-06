@@ -26,6 +26,7 @@ import {
   createAdminProduct,
   createAdminRepository,
   deactivateAdminProduct,
+  deleteAdminProduct,
   getAdminProduct,
   getAdminRepositoryBranch,
   listAdminCandidateMappings,
@@ -91,6 +92,7 @@ vi.mock("../../../api/client", async (importOriginal) => {
     createAdminProduct: vi.fn(),
     createAdminRepository: vi.fn(),
     deactivateAdminProduct: vi.fn(),
+    deleteAdminProduct: vi.fn(),
     getAdminProduct: vi.fn(),
     getAdminRepositoryBranch: vi.fn(),
     listAdminCandidateMappings: vi.fn(),
@@ -117,6 +119,7 @@ const createAdminCandidateMappingMock = vi.mocked(createAdminCandidateMapping);
 const createAdminProductMock = vi.mocked(createAdminProduct);
 const createAdminRepositoryMock = vi.mocked(createAdminRepository);
 const deactivateAdminProductMock = vi.mocked(deactivateAdminProduct);
+const deleteAdminProductMock = vi.mocked(deleteAdminProduct);
 const getAdminProductMock = vi.mocked(getAdminProduct);
 const getAdminRepositoryBranchMock = vi.mocked(getAdminRepositoryBranch);
 const listAdminCandidateMappingsMock = vi.mocked(listAdminCandidateMappings);
@@ -413,6 +416,7 @@ function renderOverview() {
         accessToken="memory-only-admin-bearer"
         productId={activeProduct.id}
       />
+      <LocationMarker />
     </MemoryRouter>,
   );
 }
@@ -423,6 +427,7 @@ describe("administrator product configuration tracer", () => {
     createAdminProductMock.mockReset();
     createAdminRepositoryMock.mockReset();
     deactivateAdminProductMock.mockReset();
+    deleteAdminProductMock.mockReset();
     getAdminProductMock.mockReset();
     getAdminProductMock.mockResolvedValue(ok(activeProduct));
     getAdminRepositoryBranchMock.mockReset();
@@ -2304,6 +2309,124 @@ describe("administrator product configuration tracer", () => {
       resolveRetryDeactivate?.(ok({ ...activeProduct, is_active: false }));
     });
     expect(await screen.findByText("Inactive")).toBeVisible();
+  });
+
+  it("deletes only after explicit named confirmation and returns to Products", async () => {
+    deleteAdminProductMock.mockResolvedValueOnce(ok(undefined, 204));
+    renderOverview();
+    const user = userEvent.setup();
+    const trigger = await screen.findByRole("button", {
+      name: "Delete product",
+    });
+    await user.click(trigger);
+    const dialog = screen.getByRole("alertdialog", {
+      name: "Delete Zulu Mobile?",
+    });
+    expect(dialog).toHaveTextContent(
+      "VerboFlex will hide this product but keep its configuration and history.",
+    );
+    expect(dialog).toHaveTextContent("Bitbucket will not be changed.");
+
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(deleteAdminProductMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(trigger).toHaveFocus());
+
+    await user.click(trigger);
+    await user.click(
+      within(
+        screen.getByRole("alertdialog", { name: "Delete Zulu Mobile?" }),
+      ).getByRole("button", { name: "Delete product" }),
+    );
+    expect(deleteAdminProductMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: { product_id: activeProduct.id },
+    });
+    expect(deleteAdminProductMock).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(screen.getByTestId("current-location")).toHaveTextContent(
+        "/admin/products",
+      ),
+    );
+  });
+
+  it("keeps the delete dialog actionable when active work blocks deletion", async () => {
+    deleteAdminProductMock.mockResolvedValueOnce({
+      data: undefined,
+      error: {
+        detail: "Product deletion blocked",
+        blockers: ["active_work"],
+      },
+      request: new Request("http://localhost/api/v1/admin/products/product-id"),
+      response: new Response(null, { status: 409 }),
+    });
+    renderOverview();
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "Delete product" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Delete product" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Product deletion is temporarily blocked");
+    expect(alert).toHaveTextContent(
+      "Wait for the running import or preview to finish, then try again.",
+    );
+    expect(alert).toHaveFocus();
+    expect(screen.getByText("Active")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Delete product" }),
+    ).toBeEnabled();
+  });
+
+  it("keeps deletion single-flight, blocks dismissal, and ignores completion after unmount", async () => {
+    let resolveDelete:
+      ((value: ReturnType<typeof ok<undefined>>) => void) | undefined;
+    deleteAdminProductMock.mockReturnValueOnce(
+      new Promise<ReturnType<typeof ok<undefined>>>((resolve) => {
+        resolveDelete = resolve;
+      }),
+    );
+    const view = renderOverview();
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "Delete product" }),
+    );
+    const submit = screen.getByRole("button", { name: "Delete product" });
+    await user.click(submit);
+    expect(deleteAdminProductMock).toHaveBeenCalledOnce();
+    expect(submit).toBeDisabled();
+    // A hostile imperative event must still be fenced by the synchronous ref,
+    // even if it bypasses the browser's disabled-button behavior.
+    submit.removeAttribute("disabled");
+    fireEvent.click(submit);
+    expect(deleteAdminProductMock).toHaveBeenCalledOnce();
+
+    await user.keyboard("{Escape}");
+    expect(
+      screen.getByRole("alertdialog", { name: "Delete Zulu Mobile?" }),
+    ).toBeVisible();
+    view.unmount();
+    await act(async () => resolveDelete?.(ok(undefined, 204)));
+    expect(deleteAdminProductMock).toHaveBeenCalledOnce();
+  });
+
+  it("sanitizes a rejected deletion and keeps the named retry available", async () => {
+    deleteAdminProductMock.mockRejectedValueOnce(
+      new Error("provider_token=private-diagnostic"),
+    );
+    renderOverview();
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "Delete product" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Delete product" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Product not deleted");
+    expect(alert).not.toHaveTextContent("private-diagnostic");
+    expect(alert).toHaveFocus();
+    expect(
+      screen.getByRole("button", { name: "Delete product" }),
+    ).toBeEnabled();
   });
 
   it("mounts the product collection, new wizard, and URL-backed overview routes inside the guarded shell", async () => {

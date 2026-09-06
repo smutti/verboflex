@@ -107,6 +107,15 @@ class AdminProductLifecycleConflictResponse(BaseModel):
     blockers: list[AdminProductPublicationBlocker]
 
 
+class AdminProductDeletionConflictResponse(BaseModel):
+    """Closed reason why logical deletion cannot start yet."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    detail: Literal["Product deletion blocked"]
+    blockers: list[Literal["active_work"]]
+
+
 AdminProductStatus = Literal["active", "inactive"]
 
 

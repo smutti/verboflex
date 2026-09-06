@@ -1,8 +1,9 @@
 """Read-only bounded diagnostic projections."""
 
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DuplicateSourceResponse(BaseModel):
@@ -16,6 +17,13 @@ class DuplicateSourceResponse(BaseModel):
 class DuplicateOccurrenceResponse(BaseModel):
     path: str
     resource_position: int
+
+
+class DuplicateReportSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    complete: bool
+    group_count: Annotated[int, Field(ge=0, le=50_000)]
+    repeated_occurrences: Annotated[int, Field(ge=0, le=50_000)]
 
 
 class DuplicateGroupResponse(BaseModel):

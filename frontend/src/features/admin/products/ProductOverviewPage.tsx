@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import {
   deactivateAdminProduct,
@@ -31,6 +31,7 @@ import {
   TabsTrigger,
 } from "../../../components/ui/tabs";
 import { ProductDetailLayout } from "./ProductDetailLayout";
+import { ProductDeleteDialog } from "./ProductDeleteDialog";
 
 export interface ProductOverviewPageProps {
   accessToken: string;
@@ -78,6 +79,7 @@ export function ProductOverviewPage({
   productId,
 }: ProductOverviewPageProps) {
   const routeProductId = useParams<"productId">().productId;
+  const navigate = useNavigate();
   const resolvedProductId = productId ?? routeProductId;
   const loadGeneration = useRef(0);
   const deactivateTriggerRef = useRef<HTMLButtonElement>(null);
@@ -255,6 +257,11 @@ export function ProductOverviewPage({
                 Deactivate product
               </Button>
             ) : null}
+            <ProductDeleteDialog
+              accessToken={accessToken}
+              product={product}
+              onDeleted={() => navigate("/admin/products", { replace: true })}
+            />
           </div>
         </div>
 

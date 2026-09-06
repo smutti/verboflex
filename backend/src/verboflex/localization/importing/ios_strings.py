@@ -7,6 +7,7 @@ from typing import Literal
 from unicodedata import category
 
 from verboflex.localization.importing.core import (
+    CanonicalDiagnosticResult,
     CanonicalIssue,
     CanonicalLocator,
     CanonicalOutputLimitExceeded,
@@ -113,7 +114,7 @@ class _CanonicalStringsLexer(preview_ios._StringsLexer):
         self._comment_count = 0
         self._token_count = 0
 
-    def parse_entries(self) -> tuple[_LexicalEntry, ...]:
+    def parse_entries(self, *, allow_duplicates: bool = False) -> tuple[_LexicalEntry, ...]:
         entries: list[_LexicalEntry] = []
         leading = self._trivia(placement="before_entry")
         while self._position < self._length:
@@ -154,7 +155,8 @@ class _CanonicalStringsLexer(preview_ios._StringsLexer):
             trailing = tuple(replace(item, placement="after_document") for item in leading)
             entries[-1] = replace(entries[-1], trivia=(*entries[-1].trivia, *trailing))
         self._require_safe_decoded_values(entries)
-        self._require_unique_keys(entries)
+        if not allow_duplicates:
+            self._require_unique_keys(entries)
         return tuple(entries)
 
     def _quoted(self) -> tuple[str, preview_ios.SourceSpan]:
@@ -241,13 +243,31 @@ class _CanonicalStringsLexer(preview_ios._StringsLexer):
 
 def parse_ios_strings(parser_input: CanonicalParserInput) -> CanonicalParseResult:
     """Parse one confirmed ``.strings`` file into a complete canonical result."""
+    result = _parse_ios_strings(parser_input, allow_duplicates=False)
+    if type(result) is not CanonicalParseResult:
+        raise AssertionError("canonical iOS strings parse returned diagnostic output")
+    return result
+
+
+def inspect_ios_strings(
+    parser_input: CanonicalParserInput,
+) -> CanonicalDiagnosticResult | CanonicalParseResult:
+    """Parse valid ``.strings`` while retaining duplicate keys for diagnostics only."""
+    return _parse_ios_strings(parser_input, allow_duplicates=True)
+
+
+def _parse_ios_strings(
+    parser_input: CanonicalParserInput, *, allow_duplicates: bool
+) -> CanonicalDiagnosticResult | CanonicalParseResult:
     if type(parser_input) is not CanonicalParserInput:
         return _invalid_input_failure()
     decoded: _DecodedDocument | None = None
     try:
         language, base_language = _require_input_authority(parser_input)
         decoded = _decode_document(parser_input.content)
-        entries = _CanonicalStringsLexer(decoded.source).parse_entries()
+        entries = _CanonicalStringsLexer(decoded.source).parse_entries(
+            allow_duplicates=allow_duplicates
+        )
         values = CanonicalValueBuffer(source_bytes=len(parser_input.content))
         values.extend(
             _canonical_value(
@@ -261,7 +281,10 @@ def parse_ios_strings(parser_input: CanonicalParserInput) -> CanonicalParseResul
             )
             for entry_index, entry in enumerate(entries)
         )
-        return CanonicalParseResult(values=tuple(sorted(values, key=canonical_value_order)))
+        sorted_values = tuple(sorted(values, key=canonical_value_order))
+        if allow_duplicates:
+            return CanonicalDiagnosticResult(values=sorted_values)
+        return CanonicalParseResult(values=sorted_values)
     except _MalformedIosStrings as error:
         line, column = (
             _safe_coordinates(decoded.source, error.position) if decoded else (None, None)
