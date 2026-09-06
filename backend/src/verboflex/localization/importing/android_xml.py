@@ -16,11 +16,13 @@ from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped
 from verboflex.localization.importing.core import (
     CanonicalIssue,
     CanonicalLocator,
+    CanonicalOutputLimitExceeded,
     CanonicalParseResult,
     CanonicalParserInput,
     CanonicalSelector,
     CanonicalStructureNode,
     CanonicalValue,
+    CanonicalValueBuffer,
     IssueCode,
     StructureKind,
     canonical_issue_order,
@@ -151,7 +153,7 @@ def parse_android_xml(parser_input: CanonicalParserInput) -> CanonicalParseResul
         return _failure(parser_input, code="duplicate_key")
     except _AmbiguousAndroidLayout:
         return _failure(parser_input, code="ambiguous_structure")
-    except _UnsupportedAndroidXml:
+    except _UnsupportedAndroidXml, CanonicalOutputLimitExceeded:
         return _failure(parser_input, code="unsupported_structure")
     return CanonicalParseResult(values=tuple(sorted(values, key=canonical_value_order)))
 
@@ -171,7 +173,7 @@ def parse_android_xml_files(
     if sum(len(item.content) for item in parser_inputs) > MAX_ANDROID_AGGREGATE_BYTES:
         return _failure(parser_inputs[0], code="unsupported_structure")
 
-    values: list[CanonicalValue] = []
+    values = CanonicalValueBuffer(source_bytes=sum(len(item.content) for item in parser_inputs))
     issues: list[CanonicalIssue] = []
     ordered_inputs = sorted(
         parser_inputs,
@@ -182,7 +184,10 @@ def parse_android_xml_files(
         if result.issues:
             issues.extend(result.issues)
         else:
-            values.extend(result.values)
+            try:
+                values.extend(result.values)
+            except CanonicalOutputLimitExceeded:
+                return _failure(parser_input, code="unsupported_structure")
         if len(values) > MAX_ANDROID_VALUES:
             return _failure(parser_input, code="unsupported_structure")
     if issues:
@@ -278,7 +283,7 @@ def _resource_values(
         or any(uri != _XLIFF_NAMESPACE for uri in namespace_uris)
     ):
         raise _UnsupportedAndroidXml
-    values: list[CanonicalValue] = []
+    values = CanonicalValueBuffer(source_bytes=len(parser_input.content))
     seen_keys: set[str] = set()
     pending_comments: list[CanonicalStructureNode] = []
     resource_position = 0
@@ -312,7 +317,7 @@ def _resource_values(
         structure = last.structure + tuple(pending_comments)
         if len(structure) > MAX_ANDROID_STRUCTURE_NODES:
             raise _UnsupportedAndroidXml
-        values[-1] = replace(last, structure=structure)
+        values.replace_last(replace(last, structure=structure))
     return tuple(values)
 
 
@@ -406,7 +411,7 @@ def _plural_values(
             fields=_canonical_attributes(child.attrib),
         ),
     )
-    values: list[CanonicalValue] = []
+    values = CanonicalValueBuffer(source_bytes=len(parser_input.content))
     quantities: set[str] = set()
     pending_comments: list[CanonicalStructureNode] = []
     item_position = 0
@@ -486,7 +491,7 @@ def _array_values(
             fields=_canonical_attributes(child.attrib),
         ),
     )
-    values: list[CanonicalValue] = []
+    values = CanonicalValueBuffer(source_bytes=len(parser_input.content))
     pending_comments: list[CanonicalStructureNode] = []
     item_position = 0
     for item in child:
@@ -793,7 +798,7 @@ def _require_nonempty_text(value: str) -> None:
 
 
 def _require_nonempty_collection(
-    values: list[CanonicalValue],
+    values: CanonicalValueBuffer,
     pending_comments: list[CanonicalStructureNode],
 ) -> None:
     if not values or pending_comments:

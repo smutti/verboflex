@@ -14,10 +14,13 @@ from verboflex.localization.importing.core import (
     MAX_CANONICAL_VALUES,
     CanonicalFormat,
     CanonicalIssue,
+    CanonicalOutputBudget,
+    CanonicalOutputLimitExceeded,
     CanonicalParser,
     CanonicalParseResult,
     CanonicalParserInput,
     CanonicalValue,
+    CanonicalValueBuffer,
     IssueCode,
     canonical_issue_order,
     canonical_result_is_valid,
@@ -129,11 +132,14 @@ def parse_canonical_mapping(
     if sides != {"keys", "translations"}:
         return _failure(first, code="ambiguous_structure")
 
+    source_bytes = sum(len(item.content) for item in ordered_inputs)
+    budget = CanonicalOutputBudget(source_bytes=source_bytes)
     keys_result = _parse_complete_inputs(
-        tuple(item for item in ordered_inputs if item.repository_side == "keys")
+        tuple(item for item in ordered_inputs if item.repository_side == "keys"), budget=budget
     )
     translations_result = _parse_complete_inputs(
-        tuple(item for item in ordered_inputs if item.repository_side == "translations")
+        tuple(item for item in ordered_inputs if item.repository_side == "translations"),
+        budget=budget,
     )
     issues = (*keys_result.issues, *translations_result.issues)
     if issues:
@@ -144,20 +150,28 @@ def parse_canonical_mapping(
         keys_result=keys_result,
         translations_result=translations_result,
         failure_input=first,
+        source_bytes=source_bytes,
     )
 
 
 def _parse_complete_inputs(
     parser_inputs: tuple[CanonicalParserInput, ...],
+    *,
+    budget: CanonicalOutputBudget | None = None,
 ) -> CanonicalParseResult:
-    values: list[CanonicalValue] = []
+    values = CanonicalValueBuffer(
+        budget, source_bytes=sum(len(item.content) for item in parser_inputs)
+    )
     issues: list[CanonicalIssue] = []
     for parser_input in parser_inputs:
         result = parse_canonical_snapshot(parser_input)
         if result.issues:
             issues.extend(result.issues)
         else:
-            values.extend(result.values)
+            try:
+                values.extend(result.values)
+            except CanonicalOutputLimitExceeded:
+                return _failure(parser_input, code="unsupported_structure")
     if issues:
         return CanonicalParseResult(
             issues=tuple(sorted(set(issues), key=canonical_issue_order)[:MAX_CANONICAL_ISSUES])
@@ -175,6 +189,7 @@ def _join_separate_results(
     keys_result: CanonicalParseResult,
     translations_result: CanonicalParseResult,
     failure_input: CanonicalParserInput,
+    source_bytes: int = 0,
 ) -> CanonicalParseResult:
     source_by_identity: dict[tuple[str, bytes], CanonicalValue] = {}
     key_selectors: dict[str, set[bytes]] = {}
@@ -198,7 +213,7 @@ def _join_separate_results(
         if key_selectors[logical_key] != translation_selectors[logical_key]:
             return _failure(failure_input, code="unsupported_structure")
 
-    joined_translations = tuple(
+    joined_translations = (
         replace(
             value,
             source_text=(
@@ -213,7 +228,12 @@ def _join_separate_results(
         )
         for value in translations_result.values
     )
-    values = (*keys_result.values, *joined_translations)
+    values = CanonicalValueBuffer(source_bytes=source_bytes)
+    try:
+        values.extend(keys_result.values)
+        values.extend(joined_translations)
+    except CanonicalOutputLimitExceeded:
+        return _failure(failure_input, code="unsupported_structure")
     if len(values) > MAX_CANONICAL_VALUES:
         return _failure(failure_input, code="unsupported_structure")
     try:

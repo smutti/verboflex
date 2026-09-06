@@ -9,11 +9,13 @@ from unicodedata import category
 from verboflex.localization.importing.core import (
     CanonicalIssue,
     CanonicalLocator,
+    CanonicalOutputLimitExceeded,
     CanonicalParseResult,
     CanonicalParserInput,
     CanonicalSelector,
     CanonicalStructureNode,
     CanonicalValue,
+    CanonicalValueBuffer,
     IssueCode,
     canonical_issue_order,
     canonical_value_order,
@@ -246,7 +248,8 @@ def parse_ios_strings(parser_input: CanonicalParserInput) -> CanonicalParseResul
         language, base_language = _require_input_authority(parser_input)
         decoded = _decode_document(parser_input.content)
         entries = _CanonicalStringsLexer(decoded.source).parse_entries()
-        values = tuple(
+        values = CanonicalValueBuffer(source_bytes=len(parser_input.content))
+        values.extend(
             _canonical_value(
                 parser_input=parser_input,
                 decoded=decoded,
@@ -312,7 +315,7 @@ def parse_ios_strings_files(
     if sum(len(item.content) for item in parser_inputs) > MAX_IOS_AGGREGATE_BYTES:
         return _failure(parser_inputs[0], code="unsupported_structure")
 
-    values: list[CanonicalValue] = []
+    values = CanonicalValueBuffer(source_bytes=sum(len(item.content) for item in parser_inputs))
     issues: list[CanonicalIssue] = []
     ordered_inputs = sorted(parser_inputs, key=lambda item: (item.repository_side, item.path))
     for parser_input in ordered_inputs:
@@ -320,7 +323,10 @@ def parse_ios_strings_files(
         if result.issues:
             issues.extend(result.issues)
         else:
-            values.extend(result.values)
+            try:
+                values.extend(result.values)
+            except CanonicalOutputLimitExceeded:
+                return _failure(parser_input, code="unsupported_structure")
         if len(values) > MAX_IOS_ASSIGNMENTS:
             return _failure(parser_input, code="unsupported_structure")
     if issues:

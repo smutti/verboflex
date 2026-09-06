@@ -9,11 +9,13 @@ from unicodedata import category
 from verboflex.localization.importing.core import (
     CanonicalIssue,
     CanonicalLocator,
+    CanonicalOutputLimitExceeded,
     CanonicalParseResult,
     CanonicalParserInput,
     CanonicalSelector,
     CanonicalStructureNode,
     CanonicalValue,
+    CanonicalValueBuffer,
     IssueCode,
     canonical_issue_order,
     canonical_value_order,
@@ -97,7 +99,7 @@ def parse_json_localization_files(
     if sum(len(item.content) for item in parser_inputs) > MAX_JSON_AGGREGATE_BYTES:
         return _failure(parser_inputs[0], code="unsupported_structure")
 
-    values: list[CanonicalValue] = []
+    values = CanonicalValueBuffer(source_bytes=sum(len(item.content) for item in parser_inputs))
     issues: list[CanonicalIssue] = []
     ordered_inputs = sorted(parser_inputs, key=lambda item: (item.repository_side, item.path))
     for parser_input in ordered_inputs:
@@ -105,7 +107,10 @@ def parse_json_localization_files(
         if result.issues:
             issues.extend(result.issues)
         else:
-            values.extend(result.values)
+            try:
+                values.extend(result.values)
+            except CanonicalOutputLimitExceeded:
+                return _failure(parser_input, code="unsupported_structure")
         if len(values) > MAX_JSON_VALUES:
             return _failure(parser_input, code="unsupported_structure")
     if issues:
@@ -209,7 +214,7 @@ def _document_values(
 ) -> tuple[CanonicalValue, ...]:
     flat_identity = _flat_layout_identity(parser_input.path)
     rooted_identity = f"json:locale-rooted:{parser_input.path}"
-    values: list[CanonicalValue] = []
+    values = CanonicalValueBuffer(source_bytes=len(parser_input.content))
     if parser_input.layout_identity == flat_identity:
         path_layout = extract_preview_locale_path(parser_input.path, suffix=".json")
         if path_layout is None:
@@ -276,7 +281,7 @@ def _walk_object(
     layout: str,
     parents: tuple[str, ...],
     address: tuple[str | int, ...],
-    values: list[CanonicalValue],
+    values: CanonicalValueBuffer,
 ) -> None:
     for member_index, (member_name, member_value) in enumerate(value.pairs):
         _require_safe_string(member_name, allow_empty=False)

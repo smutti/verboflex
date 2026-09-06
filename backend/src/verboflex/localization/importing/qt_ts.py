@@ -15,11 +15,13 @@ from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped
 from verboflex.localization.importing.core import (
     CanonicalIssue,
     CanonicalLocator,
+    CanonicalOutputLimitExceeded,
     CanonicalParseResult,
     CanonicalParserInput,
     CanonicalSelector,
     CanonicalStructureNode,
     CanonicalValue,
+    CanonicalValueBuffer,
     IssueCode,
     StructureKind,
     canonical_issue_order,
@@ -175,7 +177,7 @@ def parse_qt_ts_files(
     if sum(len(item.content) for item in parser_inputs) > MAX_QT_AGGREGATE_BYTES:
         return _failure(parser_inputs[0], code="unsupported_structure")
 
-    values: list[CanonicalValue] = []
+    values = CanonicalValueBuffer(source_bytes=sum(len(item.content) for item in parser_inputs))
     issues: list[CanonicalIssue] = []
     ordered_inputs = sorted(
         parser_inputs,
@@ -186,7 +188,10 @@ def parse_qt_ts_files(
         if result.issues:
             issues.extend(result.issues)
         else:
-            values.extend(result.values)
+            try:
+                values.extend(result.values)
+            except CanonicalOutputLimitExceeded:
+                return _failure(parser_input, code="unsupported_structure")
         if len(values) > MAX_QT_VALUES:
             return _failure(parser_input, code="unsupported_structure")
     if issues:
@@ -320,7 +325,7 @@ def _document_values(
         CanonicalStructureNode(kind="qt_ts:document", fields=tuple(document_fields))
     ]
     state = _ParseState()
-    values: list[CanonicalValue] = []
+    values = CanonicalValueBuffer(source_bytes=len(parser_input.content))
     saw_defaultcodec = False
     saw_dependencies = False
     saw_context = False
@@ -427,7 +432,7 @@ def _context_values(
             )
         )
         index += 1
-    values: list[CanonicalValue] = []
+    values = CanonicalValueBuffer(source_bytes=len(parser_input.content))
     for message_index, message in enumerate(children[index:]):
         if message.tag != "message":
             raise _UnsupportedQtTs
@@ -682,7 +687,7 @@ def _numerus_values(
     nested_shapes = {bool(len(form)) for form in forms}
     if len(nested_shapes) != 1:
         raise _UnsupportedQtTs
-    values: list[CanonicalValue] = []
+    values = CanonicalValueBuffer(source_bytes=len(parser_input.content))
     for form_index, form in enumerate(forms):
         if not len(form):
             if form.attrib:
@@ -760,7 +765,7 @@ def _length_variant_values(
     form_index: int | None,
 ) -> tuple[CanonicalValue, ...]:
     priorities: set[int] = set()
-    values: list[CanonicalValue] = []
+    values = CanonicalValueBuffer(source_bytes=len(parser_input.content))
     for variant in variants:
         if set(variant.attrib) != {"priority"} or len(variant):
             raise _UnsupportedQtTs

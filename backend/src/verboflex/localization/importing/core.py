@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import Literal, Protocol, TypeGuard, get_args
 
@@ -258,6 +259,73 @@ class CanonicalValue:
             "structure": [node.to_mapping() for node in self.structure],
             "translated_text": self.translated_text,
         }
+
+
+class CanonicalOutputLimitExceeded(ValueError):
+    """Canonical expansion exceeded its bounded source-plus-20-MiB allowance."""
+
+
+@dataclass(slots=True)
+class CanonicalOutputBudget:
+    source_bytes: int = 0
+    used_bytes: int = 0
+
+    @property
+    def remaining_bytes(self) -> int:
+        return MAX_CANONICAL_AGGREGATE_BYTES + self.source_bytes - self.used_bytes
+
+
+class CanonicalValueBuffer:
+    """Retain only bounded compact UTF-8 JSON value output, incrementally.
+
+    Individual values already have bounded fields and structure. Counting encoder
+    chunks avoids allocating a complete serialized document. Nested adapter
+    buffers bound intermediates before they can be merged into a whole file.
+    """
+
+    def __init__(
+        self, budget: CanonicalOutputBudget | None = None, *, source_bytes: int = 0
+    ) -> None:
+        # The input limit is 20 MiB, so mapping output is at most 40 MiB.
+        # Crediting input bytes preserves valid whitespace-rich boundary files;
+        # the additional 20 MiB bounds duplicated metadata and JSON overhead.
+        self._budget = (
+            budget if budget is not None else CanonicalOutputBudget(source_bytes=source_bytes)
+        )
+        self._values: list[CanonicalValue] = []
+
+    @staticmethod
+    def _size(value: CanonicalValue, limit: int) -> int:
+        encoder = json.JSONEncoder(ensure_ascii=False, separators=(",", ":"))
+        size = 0
+        for chunk in encoder.iterencode(value.to_mapping()):
+            size += len(chunk.encode("utf-8"))
+            if size > limit:
+                raise CanonicalOutputLimitExceeded("canonical output limit exceeded")
+        return size
+
+    def append(self, value: CanonicalValue) -> None:
+        self._budget.used_bytes += self._size(value, self._budget.remaining_bytes)
+        self._values.append(value)
+
+    def extend(self, values: Iterable[CanonicalValue]) -> None:
+        for value in values:
+            self.append(value)
+
+    def replace_last(self, value: CanonicalValue) -> None:
+        old_size = self._size(self._values[-1], self._budget.used_bytes)
+        new_size = self._size(value, self._budget.remaining_bytes + old_size)
+        self._budget.used_bytes += new_size - old_size
+        self._values[-1] = value
+
+    def __len__(self) -> int:
+        return len(self._values)
+
+    def __iter__(self) -> Iterator[CanonicalValue]:
+        return iter(self._values)
+
+    def __getitem__(self, index: int) -> CanonicalValue:
+        return self._values[index]
 
 
 @dataclass(frozen=True, slots=True)
