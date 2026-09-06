@@ -600,6 +600,55 @@ describe("TranslationSearchPage", () => {
       screen.getByRole("link", { name: "Open details memory" }),
     ).toHaveFocus();
   });
+  it.each(["new query", ""])(
+    "preserves edited query %j while Back navigation reauthorizes saved results",
+    async (nextQuery) => {
+      vi.mocked(searchTranslations).mockResolvedValue({
+        data: { items: [group("memory")], next_cursor: null },
+      } as never);
+      await mount();
+      fireEvent.change(screen.getByLabelText("Search keys and translations"), {
+        target: { value: "memory query" },
+      });
+      fireEvent.keyDown(screen.getByLabelText("Search keys and translations"), {
+        key: "Enter",
+      });
+      await flush();
+      fireEvent.click(
+        screen.getByRole("link", { name: "Open details memory" }),
+      );
+      await flush();
+
+      const pending = deferred<never>();
+      vi.mocked(listTranslationOptions).mockReturnValueOnce(pending.promise);
+      const count = vi.mocked(searchTranslations).mock.calls.length;
+      fireEvent.click(screen.getByRole("button", { name: "Back" }));
+      await flush();
+      fireEvent.change(screen.getByLabelText("Search keys and translations"), {
+        target: { value: nextQuery },
+      });
+      expect(searchTranslations).toHaveBeenCalledTimes(count);
+      vi.mocked(searchTranslations).mockResolvedValueOnce({
+        data: { items: [group("fresh")], next_cursor: null },
+      } as never);
+      await act(async () => pending.resolve({ data: options } as never));
+      await flush();
+
+      expect(screen.getByLabelText("Search keys and translations")).toHaveValue(
+        nextQuery,
+      );
+      expect(searchTranslations).toHaveBeenCalledTimes(count + 1);
+      expect(vi.mocked(searchTranslations).mock.lastCall?.[0]?.query?.q).toBe(
+        nextQuery,
+      );
+      expect(
+        screen.queryByRole("link", { name: "Open details memory" }),
+      ).toBeNull();
+      expect(
+        screen.getByRole("link", { name: "Open details fresh" }),
+      ).toBeVisible();
+    },
+  );
   it("drops search memory and cancels pending work when principal changes", async () => {
     const pending = deferred<never>();
     vi.mocked(searchTranslations).mockReturnValueOnce(pending.promise);
