@@ -206,6 +206,13 @@ function restoreSnapshot(
   initialQuery: string,
   initialFilters: TranslationSearchFilters,
 ): RestoredState {
+  const fallback: RestoredState = {
+    filters: normalizeFilters(initialFilters),
+    navigation: null,
+    query: initialQuery,
+    search: null,
+    cursors: new Set(),
+  };
   if (
     !isRecord(initialSnapshot) ||
     initialSnapshot.version !== SNAPSHOT_VERSION ||
@@ -217,13 +224,7 @@ function restoreSnapshot(
     (initialSnapshot.focusedGroupId !== null &&
       typeof initialSnapshot.focusedGroupId !== "string")
   ) {
-    return {
-      filters: normalizeFilters(initialFilters),
-      navigation: null,
-      query: initialQuery,
-      search: null,
-      cursors: new Set(),
-    };
+    return fallback;
   }
 
   const filters = normalizeFilters(
@@ -234,23 +235,11 @@ function restoreSnapshot(
   let items: readonly TranslationGroupSummaryResponse[] = [];
   for (const [index, page] of initialSnapshot.pages.entries()) {
     if (!validPage(page, cursors, filters, items)) {
-      return {
-        filters: normalizeFilters(initialFilters),
-        navigation: null,
-        query: initialQuery,
-        search: null,
-        cursors: new Set(),
-      };
+      return fallback;
     }
     const nextCursor = page.next_cursor ?? null;
     if (index < initialSnapshot.pages.length - 1 && nextCursor === null) {
-      return {
-        filters: normalizeFilters(initialFilters),
-        navigation: null,
-        query: initialQuery,
-        search: null,
-        cursors: new Set(),
-      };
+      return fallback;
     }
     if (nextCursor !== null) {
       cursors.add(nextCursor);
@@ -261,13 +250,7 @@ function restoreSnapshot(
     initialSnapshot.pages.length === 0 ||
     initialSnapshot.requestIdentity !== identity
   ) {
-    return {
-      filters: normalizeFilters(initialFilters),
-      navigation: null,
-      query: initialQuery,
-      search: null,
-      cursors: new Set(),
-    };
+    return fallback;
   }
 
   const finalPage = initialSnapshot.pages.at(-1);
