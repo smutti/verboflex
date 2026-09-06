@@ -32,6 +32,7 @@ def test_generation_migration_roundtrip_backfills_live_and_deleted_rule_owners(
     )
     command.downgrade(config, "0017_translation_search_indexes")
     command.upgrade(config, "0018_constraint_generation")
+    command.upgrade(config, "head")
     with factory() as session:
         assert session.get_one(TranslationKey, ids["base_key"]).constraint_generation == 2147483647
         assert (
@@ -46,6 +47,7 @@ def test_generation_migration_roundtrip_backfills_live_and_deleted_rule_owners(
     # Schema roundtrip preserves low live versions and their original meaning.
     command.downgrade(config, "0017_translation_search_indexes")
     command.upgrade(config, "0018_constraint_generation")
+    command.upgrade(config, "head")
     with factory.begin() as session:
         live = service.put_translation_constraint(
             session,

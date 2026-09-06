@@ -11,6 +11,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Computed,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -85,6 +86,9 @@ _EFFECTIVE_CONSTRAINT_SOURCE_CHECK = _enum_check(
 _ISSUE_CODE_CHECK = _enum_check("issue_code", ParseIssueCode)
 _LANGUAGE_CHECK = "language ~ '^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$'"
 _DIGEST_CHECK = "char_length(selector_digest) = 64 AND selector_digest ~ '^[0-9a-f]{64}$'"
+# UTF8 is asserted by migration 0020. Escape bytea input syntax before hashing
+# so literal backslashes, hex-like prefixes and octal text retain exact bytes.
+_RAW_KEY_DIGEST = "sha256(replace(raw_key, chr(92), chr(92)||chr(92))::bytea)"
 _DELETION_CHECK = (
     "(NOT is_deleted AND deleted_at IS NULL) OR (is_deleted AND deleted_at IS NOT NULL)"
 )
@@ -241,7 +245,7 @@ class TranslationKey(Base):
             "scope_id",
             "repository_id",
             "configured_branch",
-            "raw_key",
+            "raw_key_digest",
             name="uq_translation_keys_natural_identity",
         ),
         UniqueConstraint(
@@ -276,6 +280,9 @@ class TranslationKey(Base):
     )
     configured_branch: Mapped[str] = mapped_column(String(255), nullable=False)
     raw_key: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_key_digest: Mapped[bytes] = mapped_column(
+        LargeBinary, Computed(_RAW_KEY_DIGEST, persisted=True), nullable=False
+    )
     constraint_generation: Mapped[int] = mapped_column(
         BigInteger, nullable=False, default=0, server_default="0"
     )
@@ -740,7 +747,7 @@ class StagedTranslationValue(Base):
             "import_execution_id",
             "repository_id",
             "configured_branch",
-            "raw_key",
+            "raw_key_digest",
             "language",
             "selector_version",
             "selector_digest",
@@ -785,6 +792,9 @@ class StagedTranslationValue(Base):
     )
     configured_branch: Mapped[str] = mapped_column(String(255), nullable=False)
     raw_key: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_key_digest: Mapped[bytes] = mapped_column(
+        LargeBinary, Computed(_RAW_KEY_DIGEST, persisted=True), nullable=False
+    )
     language: Mapped[str] = mapped_column(String(64), nullable=False)
     selector_version: Mapped[int] = mapped_column(Integer, nullable=False)
     selector_kind: Mapped[str] = mapped_column(String(32), nullable=False)
