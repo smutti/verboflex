@@ -1,6 +1,6 @@
 ---
 phase: 04
-status: passed
+status: pending
 source_digest: sha256:d7306c29f5131dfc5f23318cb89664e83946742dab9f3982832e9bf082313406
 gauntlet_exit: 0
 smoke_exit: 0
@@ -8,7 +8,7 @@ smoke_exit: 0
 
 # Phase 04 executable delivery evidence
 
-The complete fresh `bash tools/phase4_gauntlet.sh` passed on frozen delivery commit `ec6fd68`, from 2026-09-06 11:44:08 UTC through 11:48:56 UTC (plus bounded startup/cleanup). All 27 command records returned zero. The final result was written only after source-digest equality and cleanup succeeded. This is passing Plan19 delivery evidence; Plan20 independently owns phase review/security/verification verdicts and remaining human judgment.
+The complete fresh `bash tools/phase4_gauntlet.sh` passed on frozen delivery commit `ec6fd68`, from 2026-09-06 11:44:08 UTC through 11:48:56 UTC (plus bounded startup/cleanup). All 27 command records returned zero. The final result was written only after source-digest equality and cleanup succeeded. **This run is now historical, not closeout-eligible:** subsequent independent review confirmed CR15 (constraint/activation lock inversion) and CR16 (retained-baseline constraint epoch rejected during refresh). Their corrections and a fresh complete gate are required before Plan19 completion. Plan20 independently owns phase review/security/verification verdicts and remaining human judgment.
 
 - Durable exact argv, working directories, UTC timestamps, durations, exit codes, output hashes, twelve mutation records, and artifact hashes: [phase-04-run.json](phase-04-run.json).
 - Owner-only original evidence: `/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp` (`result.json`, `commands.json`, `backend.xml`, `backend-coverage.xml`, `frontend-coverage/cobertura-coverage.xml`, named section logs).
@@ -16,7 +16,7 @@ The complete fresh `bash tools/phase4_gauntlet.sh` passed on frozen delivery com
 - Toolchain authority: `backend/pyproject.toml`, `backend/uv.lock`, `frontend/package.json`, `frontend/package-lock.json`; PostgreSQL 18 and Redis 7 isolated images. Approved regex 2026.9.3 and React Virtual 3.14.10 retained; no new dependency/version upgrade.
 - Spec approval: no separate fresh SPEC approval obtained for the autonomous corrective work; it follows the pre-existing Phase04 plans/context and coordinator-authorized regression scenarios. Treat this as layered evidence, not independent proof that the specification is complete.
 
-## Final fresh gauntlet
+## Last complete gauntlet (historical pending CR15/CR16)
 
 | Layer | Executed check | Result |
 |---|---|---|
@@ -55,7 +55,7 @@ Official API detector rerun: `node /Users/smutti/.codex/gsd-core/bin/gsd-tools.c
 
 ## Independent verification and limits
 
-Fresh-context code-review and security agents inspected the delivery separately from implementation, found behavioral defects, and rechecked the corrections. They do not establish independent model-family diversity. The coordinating GSD workflow classified the findings and required fixes rather than waivers. Their final digest-bound reports are `docs/reviews/phase-04-code-review.md` and `docs/reviews/phase-04-security-review.md`; Plan20 owns their final promotion after independently reading this run. At evidence authoring, delivery is passed and final report promotion is pending; no stale review is relabeled as final.
+Fresh-context code-review and security agents inspected the delivery separately from implementation, found behavioral defects, and rechecked the corrections. They do not establish independent model-family diversity. The coordinating GSD workflow classified the findings and required fixes rather than waivers. Their final digest-bound reports are `docs/reviews/phase-04-code-review.md` and `docs/reviews/phase-04-security-review.md`; Plan20 owns their final promotion after independently reading the final run. Delivery is pending CR15/CR16 corrections and fresh evidence; no stale review is relabeled as final.
 
 No specified automated delivery layer was omitted or substituted. Live Bitbucket tenant availability is not exercised: the isolated smoke uses the audited TLS provider fixture. Assistive-technology/usability and the two transparency/values prohibitions retain human judgment; these are not silently marked automated passes. Global 100% coverage is not a newly invented requirement. No confirmed behavioral finding was dismissed; exploratory oracle mistakes and interrupted/failed runs are disclosed below.
 
