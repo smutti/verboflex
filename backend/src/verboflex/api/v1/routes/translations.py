@@ -16,12 +16,14 @@ from verboflex.schemas.translations import (
     TranslationErrorResponse,
     TranslationGroupDetailResponse,
     TranslationGroupSummaryResponse,
+    TranslationHistoryResponse,
     TranslationLanguageOptionResponse,
     TranslationOptionsResponse,
     TranslationProductOptionResponse,
     TranslationProvenanceResponse,
     TranslationSearchPageResponse,
     TranslationSearchQuery,
+    TranslationSelectorFieldResponse,
     TranslationSummaryProvenanceResponse,
     TranslationValueResponse,
 )
@@ -87,6 +89,16 @@ def _value_response(value: TranslationValueDetail) -> TranslationValueResponse:
         selector_version=value.selector_version,
         selector_kind=value.selector_kind,
         selector_digest=value.selector_digest,
+        selector_fields=(
+            [
+                TranslationSelectorFieldResponse.model_validate(field)
+                for field in value.selector_fields
+            ]
+            if value.selector_fields is not None
+            else None
+        ),
+        history=[TranslationHistoryResponse.model_validate(entry) for entry in value.history],
+        history_has_more=value.history_has_more,
         source_text=value.source_text,
         translated_text=value.translated_text,
         display_text=value.display_text,
@@ -123,6 +135,10 @@ def _detail_response(detail: TranslationGroupDetail) -> TranslationGroupDetailRe
         raw_key=detail.raw_key,
         language=detail.language,
         language_label=language_label(detail.language),
+        base_language=detail.base_language,
+        explicit_maximum=detail.explicit_maximum,
+        constraint_version=detail.constraint_version,
+        base_maximum=detail.base_maximum,
         states=list(detail.states),
         state_summary=detail.state_summary,
         is_deleted=detail.is_deleted,

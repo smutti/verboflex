@@ -124,6 +124,20 @@ class TranslationProvenanceResponse(ClosedTranslationModel):
     column: Annotated[int | None, Field(ge=1, le=2_147_483_647)]
 
 
+class TranslationSelectorFieldResponse(ClosedTranslationModel):
+    name: Annotated[str, Field(min_length=1, max_length=128)]
+    value: BoundedText | int | bool | Annotated[list[BoundedText | int], Field(max_length=4096)]
+
+
+class TranslationHistoryResponse(ClosedTranslationModel):
+    revision_number: Annotated[int, Field(ge=1)]
+    review_state: Literal["draft", "approved", "rejected"]
+    is_deleted: bool
+    created_at: datetime
+    commit_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
+    execution_id: UUID
+
+
 class TranslationValueResponse(ClosedTranslationModel):
     id: UUID
     selector_version: Literal[1]
@@ -136,6 +150,9 @@ class TranslationValueResponse(ClosedTranslationModel):
         "json_path",
     ]
     selector_digest: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    selector_fields: Annotated[list[TranslationSelectorFieldResponse], Field(max_length=128)] | None
+    history: Annotated[list[TranslationHistoryResponse], Field(max_length=50)]
+    history_has_more: bool
     source_text: BoundedText | None
     translated_text: BoundedText | None
     display_text: BoundedText
@@ -155,6 +172,10 @@ class TranslationGroupDetailResponse(ClosedTranslationModel):
     raw_key: Annotated[str, Field(min_length=1, max_length=1_048_576)]
     language: LanguageCode
     language_label: Annotated[str, Field(min_length=1, max_length=128)]
+    base_language: LanguageCode | None
+    explicit_maximum: Annotated[int | None, Field(ge=0, le=1_048_576)]
+    constraint_version: Annotated[int | None, Field(ge=1)]
+    base_maximum: Annotated[int | None, Field(ge=0, le=1_048_576)]
     states: Annotated[
         list[Literal["draft", "approved", "rejected"]],
         Field(min_length=1, max_length=3),

@@ -177,6 +177,9 @@ class TranslationValueDetail:
     selector_version: Literal[1]
     selector_kind: SelectorKind
     selector_digest: str
+    selector_fields: tuple[dict[str, object], ...] | None
+    history: tuple[dict[str, object], ...]
+    history_has_more: bool
     source_text: str | None
     translated_text: str | None
     display_text: str
@@ -202,6 +205,10 @@ class TranslationGroupDetail:
     state_summary: StateSummary
     is_deleted: bool
     values: tuple[TranslationValueDetail, ...]
+    base_language: str | None
+    explicit_maximum: int | None
+    constraint_version: int | None
+    base_maximum: int | None
     pending_change: None = None
     comments: tuple[str, ...] = ()
 
@@ -509,7 +516,8 @@ WITH authorized_products AS (
         product.display_name AS product_name,
         key.raw_key,
         key.is_deleted AS key_deleted,
-        candidate.language
+        candidate.language,
+        scope.current_mapping_id
     FROM authorized_products AS product
     JOIN localization_scopes AS scope
       ON scope.product_id = product.id
@@ -542,6 +550,12 @@ SELECT
     value.selector_version,
     value.selector_kind,
     value.selector_digest,
+    value.selector_bytes,
+    mapping.base_language,
+    explicit_rule.max_chars AS explicit_maximum,
+    explicit_rule.version AS constraint_version,
+    base_rule.max_chars AS base_maximum,
+    history.entries AS history,
     value.source_text,
     value.translated_text,
     value.display_text,
@@ -570,6 +584,22 @@ JOIN translation_values AS value
  AND value.language = anchor.language
 LEFT JOIN translation_value_locators AS locator ON locator.value_id = value.id
 LEFT JOIN repositories AS repository ON repository.id = locator.repository_id
+LEFT JOIN product_repository_mappings AS mapping ON mapping.id = anchor.current_mapping_id
+LEFT JOIN translation_constraints AS explicit_rule
+  ON explicit_rule.translation_key_id = anchor.key_id AND explicit_rule.language = anchor.language
+LEFT JOIN translation_constraints AS base_rule
+  ON base_rule.translation_key_id = anchor.key_id AND base_rule.language = mapping.base_language
+LEFT JOIN LATERAL (
+    SELECT jsonb_agg(jsonb_build_object(
+        'revision_number', revision.revision_number, 'review_state', revision.review_state,
+        'is_deleted', revision.is_deleted, 'created_at', revision.created_at,
+        'commit_hash', revision.source_commit_hash, 'execution_id', revision.import_execution_id
+    ) ORDER BY revision.revision_number DESC) AS entries
+    FROM (
+        SELECT * FROM translation_value_revisions
+        WHERE value_id = value.id ORDER BY revision_number DESC LIMIT 51
+    ) AS revision
+) AS history ON true
 ORDER BY locator.position NULLS LAST, value.selector_kind COLLATE "C", value.id
 LIMIT {MAX_GROUP_VALUE_COUNT + 1}
 """
@@ -668,6 +698,20 @@ def _provenance(row: dict[str, object]) -> TranslationProvenance | None:
     )
 
 
+def _selector_fields(raw: object, kind: object) -> tuple[dict[str, object], ...] | None:
+    """Expose typed canonical fields; malformed legacy metadata is explicitly absent."""
+    try:
+        payload = json.loads(bytes(cast(bytes, raw)))
+        if payload["version"] != 1 or payload["kind"] != kind:
+            return None
+        fields = payload["fields"]
+        if not isinstance(fields, dict) or len(fields) > 128:
+            return None
+        return tuple({"name": name, "value": value} for name, value in fields.items())
+    except ValueError, TypeError, KeyError:
+        return None
+
+
 def get_translation_group(
     session: Session,
     *,
@@ -690,6 +734,9 @@ def get_translation_group(
             selector_version=cast(Literal[1], row["selector_version"]),
             selector_kind=cast(SelectorKind, row["selector_kind"]),
             selector_digest=str(row["selector_digest"]),
+            selector_fields=_selector_fields(row["selector_bytes"], row["selector_kind"]),
+            history=tuple(cast(list[dict[str, object]], row["history"] or [])[:50]),
+            history_has_more=len(cast(list[object], row["history"] or [])) > 50,
             source_text=(str(row["source_text"]) if row["source_text"] is not None else None),
             translated_text=(
                 str(row["translated_text"]) if row["translated_text"] is not None else None
@@ -716,6 +763,10 @@ def get_translation_group(
         state_summary=_state_summary(states),
         is_deleted=bool(first["key_deleted"]) or any(value.is_deleted for value in values),
         values=values,
+        base_language=cast(str | None, first["base_language"]),
+        explicit_maximum=cast(int | None, first["explicit_maximum"]),
+        constraint_version=cast(int | None, first["constraint_version"]),
+        base_maximum=cast(int | None, first["base_maximum"]),
     )
 
 

@@ -1286,6 +1286,10 @@ def test_translation_schemas_are_closed_bounded_and_non_leaking() -> None:
 
     detail = schemas["TranslationGroupDetailResponse"]
     assert set(detail["properties"]) == {
+        "base_language",
+        "explicit_maximum",
+        "constraint_version",
+        "base_maximum",
         "id",
         "product_id",
         "product_name",
@@ -1306,6 +1310,9 @@ def test_translation_schemas_are_closed_bounded_and_non_leaking() -> None:
     assert detail["properties"]["comments"]["maxItems"] == 0
 
     value = schemas["TranslationValueResponse"]
+    assert value["properties"]["history"]["maxItems"] == 50
+    assert schemas["TranslationHistoryResponse"]["additionalProperties"] is False
+    assert schemas["TranslationSelectorFieldResponse"]["additionalProperties"] is False
     assert set(value["required"]) == set(value["properties"])
     assert value["properties"]["id"]["format"] == "uuid"
     assert value["properties"]["selector_version"]["const"] == 1

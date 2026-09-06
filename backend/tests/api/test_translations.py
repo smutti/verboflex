@@ -310,7 +310,15 @@ def _add_group(
                     language=language,
                     selector_version=1,
                     selector_kind=str(value_data.get("selector_kind", "scalar")),
-                    selector_bytes=json.dumps({"version": 1, "kind": str(value_data.get("selector_kind", "scalar")), "fields": {"quantity": "other"} if value_data.get("selector_kind") == "android_quantity" else {}}).encode(),
+                    selector_bytes=json.dumps(
+                        {
+                            "version": 1,
+                            "kind": str(value_data.get("selector_kind", "scalar")),
+                            "fields": {"quantity": "other"}
+                            if value_data.get("selector_kind") == "android_quantity"
+                            else {},
+                        }
+                    ).encode(),
                     selector_digest=f"{position + 1:064x}",
                     source_text=value_data.get("source_text"),
                     translated_text=value_data.get("translated_text"),
@@ -625,6 +633,74 @@ def test_detail_projects_every_selector_constraint_provenance_and_absence(
     assert constrained["selector_fields"] == [{"name": "quantity", "value": "other"}]
     assert constrained["history"] == []
     assert constrained["history_has_more"] is False
+
+
+def test_detail_reads_exact_rule_versions_and_bounded_newest_history(
+    translation_api_session_factory: sessionmaker[Session],
+) -> None:
+    from verboflex.models.translation import TranslationValueRevision
+    from verboflex.models.translation_constraint import TranslationConstraint
+
+    _, group_id = _seed_visible_group(translation_api_session_factory)
+    token = _create_authority(translation_api_session_factory, role_names=("admin",))
+    _configure_dependencies(translation_api_session_factory)
+    with translation_api_session_factory.begin() as session:
+        value = session.get_one(TranslationValue, group_id)
+        locator = session.get_one(TranslationValueLocator, group_id)
+        actor = session.scalars(select(User)).one()
+        for language, maximum, version in (("en", 80, 2), ("it", 5, 3)):
+            session.add(
+                TranslationConstraint(
+                    scope_id=value.scope_id,
+                    translation_key_id=value.translation_key_id,
+                    language=language,
+                    max_chars=maximum,
+                    version=version,
+                    created_by=actor.id,
+                    updated_by=actor.id,
+                )
+            )
+        for number in range(1, 52):
+            session.add(
+                TranslationValueRevision(
+                    value_id=value.id,
+                    translation_key_id=value.translation_key_id,
+                    revision_number=number,
+                    revision_digest=f"{number:064x}",
+                    import_job_id=locator.import_job_id,
+                    import_execution_id=locator.import_execution_id,
+                    source_reference_position=0,
+                    source_commit_hash="a" * 40,
+                    source_text=None,
+                    translated_text="old",
+                    display_text="old",
+                    structure=[],
+                    review_state="approved",
+                    is_deleted=False,
+                    deleted_at=None,
+                )
+            )
+    response = asyncio.run(_request(f"{TRANSLATIONS_PATH}/{group_id}", token=token))
+    assert response.status_code == 200
+    body = response.json()
+    assert (body["base_maximum"], body["explicit_maximum"], body["constraint_version"]) == (
+        80,
+        5,
+        3,
+    )
+    value = next(item for item in body["values"] if item["id"] == str(group_id))
+    assert value["history_has_more"] is True
+    assert [entry["revision_number"] for entry in value["history"]] == list(range(51, 1, -1))
+    assert value["history"][0]["review_state"] == "approved"
+    assert value["history"][0]["commit_hash"] == "a" * 40
+    assert set(value["history"][0]) == {
+        "revision_number",
+        "review_state",
+        "is_deleted",
+        "created_at",
+        "commit_hash",
+        "execution_id",
+    }
 
 
 def test_deleted_detail_remains_reachable_and_inaccessible_ids_do_not_enumerate(

@@ -1846,9 +1846,25 @@ export type TranslationErrorResponse = {
  */
 export type TranslationGroupDetailResponse = {
     /**
+     * Base Language
+     */
+    base_language: string | null;
+    /**
+     * Base Maximum
+     */
+    base_maximum: number | null;
+    /**
      * Comments
      */
     comments: Array<string>;
+    /**
+     * Constraint Version
+     */
+    constraint_version: number | null;
+    /**
+     * Explicit Maximum
+     */
+    explicit_maximum: number | null;
     /**
      * Id
      */
@@ -1983,6 +1999,36 @@ export type TranslationGroupSummaryResponse = {
 };
 
 /**
+ * TranslationHistoryResponse
+ */
+export type TranslationHistoryResponse = {
+    /**
+     * Commit Hash
+     */
+    commit_hash: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Execution Id
+     */
+    execution_id: string;
+    /**
+     * Is Deleted
+     */
+    is_deleted: boolean;
+    /**
+     * Review State
+     */
+    review_state: 'draft' | 'approved' | 'rejected';
+    /**
+     * Revision Number
+     */
+    revision_number: number;
+};
+
+/**
  * TranslationLanguageOptionResponse
  */
 export type TranslationLanguageOptionResponse = {
@@ -2085,6 +2131,20 @@ export type TranslationSearchPageResponse = {
 };
 
 /**
+ * TranslationSelectorFieldResponse
+ */
+export type TranslationSelectorFieldResponse = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Value
+     */
+    value: string | number | boolean | Array<string | number>;
+};
+
+/**
  * TranslationSummaryProvenanceResponse
  *
  * One bounded last-known locator for a result group's leading member.
@@ -2122,6 +2182,14 @@ export type TranslationValueResponse = {
      */
     grapheme_count: number;
     /**
+     * History
+     */
+    history: Array<TranslationHistoryResponse>;
+    /**
+     * History Has More
+     */
+    history_has_more: boolean;
+    /**
      * Id
      */
     id: string;
@@ -2138,6 +2206,10 @@ export type TranslationValueResponse = {
      * Selector Digest
      */
     selector_digest: string;
+    /**
+     * Selector Fields
+     */
+    selector_fields: Array<TranslationSelectorFieldResponse> | null;
     /**
      * Selector Kind
      */
