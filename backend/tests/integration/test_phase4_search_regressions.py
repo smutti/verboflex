@@ -3,6 +3,8 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import pytest
+
 from tests.integration.test_translation_constraints import (
     _seed_constraint_dataset,
 )
@@ -19,7 +21,7 @@ from verboflex.services.translation_constraints import (
     delete_translation_constraint,
     put_translation_constraint,
 )
-from verboflex.services.translation_search import get_translation_group
+from verboflex.services.translation_search import TranslationSearchFilters, get_translation_group
 
 __all__ = ["clean_search_database", "search_session_factory"]
 
@@ -31,16 +33,31 @@ def test_separate_repository_detail_projects_base_default_before_and_after_overr
     import_id, execution_id = uuid4(), uuid4()
     now = datetime.now(UTC)
     with search_session_factory.begin() as session:
-        session.add(ImportJob(
-            id=import_id, product_id=ids["product"], revision_id=ids["revision"],
-            mapping_id=ids["mapping"], topology="separate", state="running",
-            current_execution_id=execution_id, retry_count=0, latest_execution_at=now,
-        ))
+        session.add(
+            ImportJob(
+                id=import_id,
+                product_id=ids["product"],
+                revision_id=ids["revision"],
+                mapping_id=ids["mapping"],
+                topology="separate",
+                state="running",
+                current_execution_id=execution_id,
+                retry_count=0,
+                latest_execution_at=now,
+            )
+        )
         session.flush()
-        session.add(ImportExecution(
-            id=execution_id, import_job_id=import_id, sequence=1, state="succeeded",
-            connection_generation=1, started_at=now, finished_at=now,
-        ))
+        session.add(
+            ImportExecution(
+                id=execution_id,
+                import_job_id=import_id,
+                sequence=1,
+                state="succeeded",
+                connection_generation=1,
+                started_at=now,
+                finished_at=now,
+            )
+        )
         session.flush()
         job = session.get_one(ImportJob, import_id)
         job.state = "current"
@@ -51,8 +68,12 @@ def test_separate_repository_detail_projects_base_default_before_and_after_overr
         scope.active_execution_id = execution_id
         scope.dataset_version = 1
         put_translation_constraint(
-            session, translation_group_id=ids["base_value"], language="en",
-            max_chars=3, expected_version=0, actor_id=ids["actor"],
+            session,
+            translation_group_id=ids["base_value"],
+            language="en",
+            max_chars=3,
+            expected_version=0,
+            actor_id=ids["actor"],
         )
     with search_session_factory() as session:
         inherited = get_translation_group(session, group_id=ids["target_value"])
@@ -62,12 +83,18 @@ def test_separate_repository_detail_projects_base_default_before_and_after_overr
     assert inherited.values[0].constraint.source == "base_default"
     with search_session_factory.begin() as session:
         override = put_translation_constraint(
-            session, translation_group_id=ids["target_value"], language="it",
-            max_chars=8, expected_version=0, actor_id=ids["actor"],
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=8,
+            expected_version=0,
+            actor_id=ids["actor"],
         )
     with search_session_factory.begin() as session:
         removed = delete_translation_constraint(
-            session, translation_group_id=ids["target_value"], language="it",
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
             expected_version=override.version,
         )
     with search_session_factory() as session:
@@ -83,10 +110,16 @@ def test_long_key_boundary_cursor_is_bounded_and_preserves_exact_order(search_se
     product_id, scope_id = _seed_dataset(search_session_factory)
     ids = []
     for index in range(51):
-        ids.append(_add_group(
-            search_session_factory, product_id=product_id, scope_id=scope_id,
-            raw_key=f"{index:03d}" + "k" * 1600, language="en", values=({},),
-        ))
+        ids.append(
+            _add_group(
+                search_session_factory,
+                product_id=product_id,
+                scope_id=scope_id,
+                raw_key=f"{index:03d}" + "k" * 1600,
+                language="en",
+                values=({},),
+            )
+        )
     principal = uuid4()
     first = _search(search_session_factory, principal_id=principal)
     assert [item.id for item in first.items] == ids[:50]
@@ -95,3 +128,23 @@ def test_long_key_boundary_cursor_is_bounded_and_preserves_exact_order(search_se
     second = _search(search_session_factory, principal_id=principal, cursor=first.next_cursor)
     assert [item.id for item in second.items] == ids[50:]
     assert second.next_cursor is None
+
+
+@pytest.mark.parametrize("original,folded", [("ﬀ", "ff"), ("ς", "σ"), ("ﬃ", "ffi")])
+@pytest.mark.parametrize("field", ["raw_key", "source_text", "display_text"])
+def test_unicode_caseless_matching_agrees_for_key_source_and_target(
+    search_session_factory, original, folded, field
+):
+    product_id, scope_id = _seed_dataset(search_session_factory)
+    values = {field: original} if field != "raw_key" else {}
+    group_id = _add_group(
+        search_session_factory, product_id=product_id, scope_id=scope_id,
+        raw_key=original if field == "raw_key" else "unrelated", language="en",
+        values=(values,),
+    )
+    for query in (original, folded, folded.upper()):
+        page = _search(
+            search_session_factory, principal_id=uuid4(),
+            filters=TranslationSearchFilters(query=query),
+        )
+        assert [(item.id, item.rank) for item in page.items] == [(group_id, 0)]

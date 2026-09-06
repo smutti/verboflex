@@ -1,6 +1,7 @@
 """Fail-closed service inputs and malformed stored projections remain bounded."""
 
 import base64
+import hashlib
 import hmac
 import json
 from types import SimpleNamespace
@@ -32,8 +33,10 @@ def test_direct_search_callers_cannot_bypass_public_filter_bounds(values):
 
 def signed_cursor(payload):
     body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+
     def encode(value):
         return base64.urlsafe_b64encode(value).decode().rstrip("=")
+
     return encode(body) + "." + encode(hmac.digest(b"secret", body, "sha256"))
 
 
@@ -54,15 +57,25 @@ def signed_cursor(payload):
 def test_signed_cursor_still_requires_exact_closed_authority(change):
     filters = search.TranslationSearchFilters()
     payload = {
-        "filters": search._canonical_filter(filters),
-        "last": [0, "key", "en", str(uuid4())],
+        "filters": hashlib.sha256(
+            json.dumps(
+                search._canonical_filter(filters), sort_keys=True, separators=(",", ":")
+            ).encode()
+        ).hexdigest(),
+        "last": [0, "en", str(uuid4())],
         "scope": "scope",
-        "v": 1,
+        "v": 2,
     }
+    assert (
+        search._decode_cursor(
+            signed_cursor(payload), scope_digest="scope", filters=filters, cursor_secret="secret"
+        ).rank
+        == 0
+    )
     if change == "extra":
         payload["extra"] = "ignored?"
     elif change == "version":
-        payload["v"] = 2
+        payload["v"] = 1
     elif change == "filters":
         payload["filters"] = {}
     elif change == "last-type":
@@ -83,13 +96,19 @@ def test_signed_cursor_still_requires_exact_closed_authority(change):
 
 
 def test_cursor_emission_and_unsigned_search_are_bounded():
-    with pytest.raises(search.TranslationSearchInputError, match="cursor exceeds"):
-        search._encode_cursor(
-            scope_digest="scope",
-            filters=search.TranslationSearchFilters(),
-            position=search._CursorPosition(0, "x" * 3000, "en", uuid4()),
-            cursor_secret="secret",
-        )
+    filters = search.TranslationSearchFilters(query="ﬃ" * 256)
+    position = search._CursorPosition(0, "en", uuid4())
+    cursor = search._encode_cursor(
+        scope_digest="scope",
+        filters=filters,
+        position=position,
+        cursor_secret="secret",
+    )
+    assert len(cursor) <= search.MAX_CURSOR_CHARS
+    assert (
+        search._decode_cursor(cursor, scope_digest="scope", filters=filters, cursor_secret="secret")
+        == position
+    )
     session = Mock()
     with pytest.raises(search.TranslationSearchInputError, match="signing secret"):
         search.search_translations(
@@ -212,3 +231,70 @@ def test_existing_staging_is_not_silently_overwritten():
     with pytest.raises(imports.TranslationImportRejected, match="already exists"):
         imports._reject_existing_staging(session, execution_id=uuid4())
     session.add.assert_not_called()
+
+
+def test_invalid_parse_results_and_correlation_are_rejected_before_transaction():
+    from verboflex.localization.importing.core import CanonicalParseResult
+
+    factory = Mock()
+    with pytest.raises(imports.TranslationImportRejected, match="parser result"):
+        imports.stage_translation_parse(
+            factory, identity=SimpleNamespace(), references=(), result=object()
+        )
+    with pytest.raises(imports.TranslationImportRejected, match="correlation"):
+        imports.stage_translation_parse(
+            factory,
+            identity=SimpleNamespace(),
+            references=(),
+            result=CanonicalParseResult(),
+            correlation_references={"untrusted": "x" * 257},
+        )
+    factory.begin.assert_not_called()
+
+
+def test_reconciliation_cannot_assume_base_language_or_scope():
+    session = Mock()
+    identity = SimpleNamespace(mapping_id=uuid4(), product_id=uuid4())
+    session.get.return_value = None
+    with pytest.raises(imports.TranslationImportRejected, match="base language"):
+        imports.reconcile_canonical_translations(
+            session, identity=identity, scope=SimpleNamespace(), manifest_digest="a" * 64
+        )
+    session.get.return_value = SimpleNamespace(base_language="en", identity_key="mapping")
+    with pytest.raises(imports.TranslationImportRejected, match="scope authority"):
+        imports.reconcile_canonical_translations(
+            session,
+            identity=identity,
+            scope=SimpleNamespace(product_id=uuid4()),
+            manifest_digest="a" * 64,
+        )
+    session.flush.assert_not_called()
+
+
+def test_tombstone_requires_matching_repository_provenance():
+    with pytest.raises(imports.TranslationImportRejected, match="tombstone provenance"):
+        imports._tombstone_reference({}, value=SimpleNamespace(locator=None))
+
+
+def test_staged_manifest_requires_complete_execution_owned_rows():
+    session = Mock()
+    session.scalars.side_effect = [(), (), ()]
+    with pytest.raises(imports.TranslationImportRejected, match="incomplete"):
+        imports.require_complete_staged_manifest(
+            session, identity=SimpleNamespace(execution_id=uuid4()), manifest_digest="a" * 64
+        )
+    session.flush.assert_not_called()
+
+
+def test_activation_rejects_the_wrong_execution_before_any_pointer_write():
+    session = Mock()
+    with pytest.raises(imports.TranslationImportRejected, match="activation authority"):
+        imports.activate_translation_dataset(
+            session,
+            identity=SimpleNamespace(import_id=uuid4()),
+            scope=SimpleNamespace(),
+            job=SimpleNamespace(id=uuid4()),
+            execution=SimpleNamespace(),
+            manifest_digest="a" * 64,
+        )
+    session.flush.assert_not_called()
