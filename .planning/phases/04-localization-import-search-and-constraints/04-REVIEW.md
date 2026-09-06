@@ -1,11 +1,11 @@
 ---
 phase: 04-localization-import-search-and-constraints
-reviewed: 2026-09-06T11:25:00Z
+reviewed: 2026-09-06T11:54:11Z
 depth: standard
 reviewer: gsd-code-reviewer
 status: pending
-source_digest: sha256:b233e7e48f9f1c0a831338955418d832143f8614f69ebc7637143e74312b58d3
-files_reviewed: 168
+source_digest: sha256:d7306c29f5131dfc5f23318cb89664e83946742dab9f3982832e9bf082313406
+files_reviewed: 169
 files_reviewed_list:
   - backend/alembic/versions/0011_active_revision_revalidations.py
   - backend/alembic/versions/0012_import_jobs.py
@@ -89,6 +89,7 @@ files_reviewed_list:
   - backend/tests/integration/test_confirmed_layout_refresh.py
   - backend/tests/integration/test_constraint_generation_migration.py
   - backend/tests/integration/test_import_jobs.py
+  - backend/tests/integration/test_import_status_activation_race.py
   - backend/tests/integration/test_migrations.py
   - backend/tests/integration/test_phase4_search_regressions.py
   - backend/tests/integration/test_preview_jobs.py
@@ -177,23 +178,23 @@ files_reviewed_list:
   - tools/verify_translation_mutants.py
 findings:
   critical: 6
-  warning: 7
+  warning: 10
   info: 0
-  total: 13
+  total: 16
 ---
 # Phase 04 — Independent code review
 
 ## Narrative Findings (AI reviewer)
 
-All 13 classified findings have independently inspected corrections and passing behavioral regressions. The final built-stack smoke then failed with an HTTP 500 while polling the Android import. That new runtime-gate failure remains blocking and is under diagnosis; no speculative cause or severity is assigned here. The review is **pending**, not a passing phase verdict.
+CR-01 through CR-14 have independently inspected corrections and passing behavioral regressions. CR-14 resolves the real Android import-polling HTTP 500, and the subsequent full gate and built-stack smoke passed. The bounded lock-order recheck then reproduced two additional constraint/refresh defects: CR-15 deadlock and CR-16 retained-baseline constraint mutation rejection. Both remain open BLOCKERs. The review is **pending**, not a passing phase verdict.
 
-Severity normalization: six high (CR-01/03/07/08/09/11), seven medium (CR-02/04/05/06/10/12/13), zero critical-impact findings. All thirteen were BLOCKER classifications because they violated required behavior or the closeout trust boundary. The historical frontmatter `critical` bucket includes high impact; `warning` includes medium impact. Counts retain discovered findings, not current unresolved defects. Historical first-pass nine-Critical bucket was five high/four medium, not nine critical-impact findings.
+Severity normalization: six high (CR-01/03/07/08/09/11), ten medium (CR-02/04/05/06/10/12/13/14/15/16), zero critical-impact findings. All sixteen carry BLOCKER classifications because they violated required behavior or the closeout trust boundary. The historical frontmatter `critical` bucket includes high impact; `warning` includes medium impact. Counts retain discovered findings, not current unresolved defects. Historical first-pass nine-Critical bucket was five high/four medium, not nine critical-impact findings.
 
 ## Scope and method
 
-Exact prephase base: `d987d5f48273d49234b07aacb3fa185337a1b4f2`. Final observed source revision: `df9053614f9e9a13a7d85ba5181a00b306061e3c`; last production change `47a33ad`. The source digest includes tracked/unignored backend/frontend/tools, tests, generated artifacts, locks and delivery configuration; it excludes review/evidence/planning to avoid self-reference. The current digest is observed, not yet certified post-gauntlet.
+Exact prephase base: `d987d5f48273d49234b07aacb3fa185337a1b4f2`. Final observed source revision: `ec6fd68f03515266b043fe5d0450615acfabca96`; last production change `ec6fd68`. The source digest includes tracked/unignored backend/frontend/tools, tests, generated artifacts, locks and delivery configuration; it excludes review/evidence/planning to avoid self-reference. The current digest was independently reread after the completed gauntlet, but the newly reproduced defects prevent approval.
 
-The full diff inventory is **168 paths**, reconciled to the frontmatter list with no missing or extra path. This is a cumulative standard per-file source/diff review: new implementation and test files were read; changes to pre-existing large services/tests were read with called-function, fixture and import context. Earlier selective inspection was extended across all omitted generated/client, package/lock, delivery-control and behavioral-test paths. It is not a claim of a fresh audit of every unchanged line of the prephase application.
+The full diff inventory is **169 paths**, reconciled to the frontmatter list with no missing or extra path. This is a cumulative standard per-file source/diff review: new implementation and test files were read; changes to pre-existing large services/tests were read with called-function, fixture and import context. Earlier selective inspection was extended across all omitted generated/client, package/lock, delivery-control and behavioral-test paths. It is not a claim of a fresh audit of every unchanged line of the prephase application.
 
 Required context includes AGENTS.md, config, agent-skills bootstrap, complete Phase 04 CONTEXT/UI-SPEC/RESEARCH/Plan 20, source manifest and prior reviews. No project skills or structural pre-pass were present. GSD code review governed the read-only source scope and report disposition; API-contract review guidance prompted the real wire-versus-generated 422 check (CR-13). The existing graph was only a navigation aid, not proof.
 
@@ -218,6 +219,10 @@ File/line references in these rows identify the first independently observed def
 | CR-10 | `backend/src/verboflex/services/translation_search.py:421,449,791` | medium | BLOCKER | Production search/detail on a disposable migrated PostgreSQL fixture with two array values, one tombstoned, returned active_groups=0, deleted_groups=1, detail_deleted=True, retained_active_values=1. | Removing one variant hides the live siblings from normal search and disables the group's constraint UI. Tombstoned minimum UUID also disagrees with mutation's minimum-live anchor. | resolved | 1ecc596 / 64a5e38; actual two-language Android refresh tombstones the minimum UUID but preserves live group/search/constraint authority; active query/state/violation ignores retired matches, all-mode retains history; all-target deletion rejects mutation. Independently passed R1/R4. |
 | CR-12 | `frontend/src/features/translations/TranslationSearchPage.tsx:450,461`; `frontend/src/features/translations/useTranslationSearch.ts:280` | medium | BLOCKER | Back restores a saved snapshot while options await. The editable pending query is passed as initialQuery, but validScope checks only product/language and restoreSnapshot returns snapshot.query. A read-only transpile/VM probe returned enteredQuery=new, restoredQuery=old. | User input entered during options loading is overwritten with the old query and old results. | resolved | 645219c; current query must equal saved snapshot query before restoration; real Back + deferred options tests exercise changed query and cleared query, request fresh results, and retain unchanged Back restoration. Independently passed R2. |
 | CR-13 | `backend/src/verboflex/api/v1/routes/translations.py:54`; `backend/src/verboflex/api/v1/routes/translation_constraints.py:66`; `frontend/src/api/client/types.gen.ts:4431` | medium | BLOCKER | Plain FastAPI routes return framework validation detail arrays, but all three 422 schemas/generated errors declared only domain detail strings; actual invalid page_size/body tests expose mismatch. | Typed API consumers receive an undocumented error shape for valid framework rejection; schema contract and runtime disagree. | resolved | 47a33ad: explicit anyOf domain error plus HTTPValidationError for search/PUT/DELETE only; six real HTTP validation/domain cases, exact schema refs, generated-client unions independently checked and passed (R3). |
+
+| CR-14 | `backend/src/verboflex/services/import_jobs.py:1038,1315` | medium | BLOCKER | Real worker activation between job and mapping/scope reads mixed a stale running job with the new active dataset, causing detail HTTP 500 or collection current/not_created. | Routine polling fails during a successful import; the status API contradicts its active dataset. | resolved | ec6fd68 takes Product SHARE before both polling authority snapshots, matching worker Product-first locking. Four actual HTTP detail/collection × same/cross-product interleavings prove coherent results and only same-product blocking; R7 independently passed. |
+| CR-15 | `backend/src/verboflex/services/translation_constraints.py:449,457`; `backend/src/verboflex/services/import_jobs.py:1852,1862` | medium | BLOCKER | Actual constraint service locks scope then mapping; actual activation locks Product then mapping then scope. A migrated PostgreSQL fixture and deterministic after-lock barriers produced psycopg DeadlockDetected, with process 85607 waiting on transaction 203680 held by 85608 and the reverse wait on 203679. | An ordinary constraint save concurrent with refresh fails HTTP 503; activation may instead be chosen as the deadlock victim. This is an actual cyclic wait, not a speculative order difference or a defect caused by polling SHARE. | open | Acquire and validate product authority before constraint scope/mapping locks using a consistent Product-first order; add actual same-product constraint/activation interleaving regression and cross-product independence assertion. Preserve optimistic conflicts and inactive/stale authority rejection. |
+| CR-16 | `backend/alembic/versions/0016_canonical_translations.py:63,1001`; `backend/src/verboflex/services/translation_constraints.py:290` | medium | BLOCKER | Without threads or concurrent worker activity, activate JSON, start/stage a refresh, read the retained group successfully, then call put_translation_constraint. Its dataset_version update raises psycopg ForeignKeyViolation: localization scope activation authority violation. The ANY UPDATE trigger requires job=current/current_execution=active execution even when only the retained dataset epoch changes. | Every changed constraint save against the visible retained baseline fails while refresh is running; Product lock serialization alone cannot correct this mismatch. | open | Narrowly distinguish unchanged valid retained-baseline metadata/epoch updates from actual activation-authority changes. Preserve strict current execution/job/mapping ownership checks for activation, with a forward migration and regressions for running/failed retained data, invalid activation swaps, PUT/DELETE and no-op behavior. |
 
 ## Subsystem adversarial checks
 
@@ -291,18 +296,23 @@ All observed on 2026-09-06. These focused invocations complement, and do not sub
 - **R4:** `backend/.venv/bin/python -m pytest backend/tests/integration/test_structured_group_deletion.py backend/tests/api/test_translations.py backend/tests/api/test_translation_constraints.py backend/tests/architecture/test_phase4_scope.py -q` — exit 0, **60 passed in 7.31s**; includes stronger 64a5e38 historical-only violation regression.
 - **R5:** from frontend, `npm test -- --run src/features/translations/TranslationResultList.test.tsx src/features/translations/TranslationDetailPage.test.tsx src/features/translations/MaximumLengthDialog.test.tsx src/features/admin/imports/PublishedMappingImports.test.tsx` — exit 0, **120 passed / 4 files in 1.27s**.
 - **R6:** `backend/.venv/bin/python -m pytest backend/tests/architecture/test_phase4_checkpoint_redaction.py -q` — exit 0, **1 passed in 0.08s**; extracts actual shell function, verifies exact safe stderr/digest, absence of canary and deletion of its raw output file.
+- **R7:** `backend/.venv/bin/python -m pytest backend/tests/integration/test_import_status_activation_race.py backend/tests/integration/test_import_jobs.py backend/tests/api/test_admin_mappings.py -q` — exit 0, **95 passed in 16.38s**; includes all four same/cross-product real HTTP polling interleavings.
+- **CR-15 independent RED:** disposable activation fixture with initial real JSON activation and a staged successor. Real `get_translation_group` then `put_translation_constraint` runs in one thread; an after-cursor barrier holds its scope lock until the actual `finish_import_execution` thread holds its mapping lock. PostgreSQL `handle_error` captured `DeadlockDetected` and the cyclic transaction wait graph above. No source or test edits were made. The fixture database was dropped.
+- **CR-16 independent RED:** same initialized/staged fixture but no worker, concurrency or event hook. Real group read succeeds; real constraint PUT fails `ForeignKeyViolation`, trigger function line 28. This isolates retained-baseline authority from deadlocking and excludes transient retry as an explanation. The fixture database was dropped.
 - Read-only defect probes: mixed-deletion production PostgreSQL group returned active_groups=0/deleted_groups=1/detail_deleted=True despite one live member; actual hook transpile probe restored old query over new input; actual validator accepted fabricated T1-only SECURED. These are historical RED proofs, not current behavior.
-- Latest `backend/.venv/bin/python tools/verify_phase4_closeout.py --digest` yielded the frontmatter digest after whitespace-only df90536. No further behavior change was observed.
+- Latest `backend/.venv/bin/python tools/verify_phase4_closeout.py --digest` yielded the frontmatter digest after ec6fd68 and the completed mutation window.
 
 ## Delivery and consolidated gate
 
-**Blocked delivery:** Plan 19's final run at df90536 reached the built-stack smoke after passing backend/frontend, mutation and responsive browser layers. The live Docker Android import polling returned HTTP 500 (reported by the orchestrator on 2026-09-06); its cause and narrow correction are still under diagnosis. Required remediation: identify the actual container response/trace, add the real regression, independently recheck the fix, rerun the fresh full gate and smoke, and recompute the exact source digest. Security's all-78-row independent report and the goal-backward verifier remain separate owned artifacts; this code review does not replace either.
+**Pending correction:** the earlier df90536 built-stack Android polling HTTP 500 is preserved as CR-14's historical failure and is now independently corrected. Plan 19 reported the subsequent ec6fd68 full run passed after cleanup: 1,581 backend tests, 590 frontend tests, backend/frontend changed-line and parser coverage 100%, 12 killed reversible mutants, 21 responsive browser journeys, and actual four-format/four-role Docker smoke. Source digest was independently reread unchanged. Run evidence: `/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp/result.json`. That legitimate passing run did not include the newly reproduced CR-15/CR-16 cases and therefore does not close this code review.
 
-The actual `--check-code-review --manifest tools/phase4_source_manifest.txt --evidence docs/evidence/phase-04.md --code-review docs/reviews/phase-04-code-review.md --review-ledger .planning/phases/04-localization-import-search-and-constraints/04-REVIEW.md` invocation exited **1**, reporting invalid, missing, stale or non-passing evidence. The exact pending reports therefore fail closed. A separate in-memory structure-only validation (temporarily replacing only status, without writing a passed artifact) confirmed both identical 168-file ledgers have valid typed metadata and resolved finding rows; that is not delivery acceptance. Any runtime failure or source change requires the bounded independent recheck and fresh same-digest evidence before status can become passed.
+Required remaining work is bounded: correct CR-15 and CR-16, independently recheck the changed lock/retained-authority safeguards and regressions, and rerun the fresh same-digest gate and smoke. No broader rereview of unchanged source is required. Security's all-78-row independent report and goal-backward verifier remain separately owned artifacts.
+
+The actual code-review gate is required to reject these pending reports. The previous invocation exited **1** for invalid, missing, stale or non-passing evidence. The current reports retain exact typed metadata, normalized findings and the full cumulative 169-file ledger; report structure is not delivery acceptance. No passed status has been written.
 
 ## Historical review snapshots — preserved proof, not current disposition
 
-The quoted material below is the previous partial/interim report body, preserved verbatim as historical evidence. Its old counts, line numbers, open findings and remaining-scope statements applied to those snapshots. The normalized resolved table and exact 168-path inventory above supersede their disposition; the quotation prevents old unresolved tables from being interpreted as current finding rows.
+The quoted material below is the previous partial/interim report body, preserved verbatim as historical evidence. Its old counts, line numbers, open findings and remaining-scope statements applied to those snapshots. The normalized current finding table and exact 169-path inventory above supersede their disposition; the quotation prevents old unresolved tables from being interpreted as current finding rows.
 
 > # Phase 04 code review — pending remediation and completion
 >
