@@ -3,6 +3,7 @@
 import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event, current_thread
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import event, select, text
@@ -122,7 +123,8 @@ def test_constraint_and_activation_complete_without_lock_inversion(
                     ):
                         blocked_before_mapping = not worker_mapping_locked.is_set()
                         assert cross_product or blocked_before_mapping, (
-                            "activation acquired mapping before waiting on the constraint: lock inversion"
+                            "activation acquired mapping before waiting on the constraint: "
+                            "lock inversion"
                         )
                         break
                     assert time.monotonic() < deadline, "worker did not reach real database barrier"
@@ -160,8 +162,10 @@ def test_constraint_and_activation_complete_without_lock_inversion(
             event.remove(engine, "after_cursor_execute", interleave)
 
 
+@pytest.mark.parametrize("change", ["inactive", "unpublished"])
 def test_constraint_revalidates_product_after_preloaded_authority_becomes_inactive(
     activation_session_factory,
+    change,
 ):
     factory = activation_session_factory
     identity, _repository, actor, group = _active_dataset(factory)
@@ -169,7 +173,11 @@ def test_constraint_revalidates_product_after_preloaded_authority_becomes_inacti
         assert not get_translation_group(session, group_id=group).is_deleted
         session.get_one(TranslationValue, group)
         with factory.begin() as concurrent:
-            concurrent.get_one(Product, identity.product_id).is_active = False
+            product = concurrent.get_one(Product, identity.product_id)
+            if change == "inactive":
+                product.is_active = False
+            else:
+                product.active_revision_id = None
         with pytest.raises(translation_constraints.ConstraintAuthorityUnavailable):
             translation_constraints.put_translation_constraint(
                 session,
@@ -180,3 +188,13 @@ def test_constraint_revalidates_product_after_preloaded_authority_becomes_inacti
                 actor_id=actor,
             )
         session.rollback()
+
+
+def test_worker_recomputation_does_not_assume_a_missing_scope_exists(activation_session_factory):
+    with (
+        activation_session_factory.begin() as session,
+        pytest.raises(translation_constraints.ConstraintAuthorityUnavailable, match="scope"),
+    ):
+        translation_constraints.recompute_translation_constraints(
+            session, scope_id=uuid4(), base_language="en"
+        )

@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from verboflex.localization.graphemes import grapheme_count
+from verboflex.models.product import Product
 from verboflex.models.product_mapping import ProductRepositoryMapping
 from verboflex.models.translation import LocalizationScope, TranslationKey, TranslationValue
 from verboflex.models.translation_constraint import TranslationConstraint
@@ -366,6 +367,9 @@ def _lock_mutation_group(
         scope_id=anchor.scope_id,
         base_language=None,
     )
+    # An activation may have completed between the tentative anchor read and
+    # acquiring Product. Re-read tombstone state under the shared product lock.
+    session.refresh(anchor)
     key = session.execute(
         select(TranslationKey)
         .where(
@@ -374,6 +378,7 @@ def _lock_mutation_group(
             TranslationKey.is_deleted.is_(False),
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalar_one_or_none()
     if key is None:
         raise ConstraintAuthorityUnavailable("constraint group is unavailable")
@@ -446,13 +451,35 @@ def _lock_scope_authority(
     scope_id: UUID,
     base_language: str | None,
 ) -> tuple[LocalizationScope, str]:
+    if base_language is None:
+        # Public mutation/recomputation must enter the same Product-first lock
+        # hierarchy as publication and activation. The tentative scope read is
+        # only a lookup; all authority is checked again after taking this lock.
+        product_id = session.execute(
+            select(LocalizationScope.product_id).where(LocalizationScope.id == scope_id)
+        ).scalar_one_or_none()
+        product = session.execute(
+            select(Product)
+            .where(Product.id == product_id)
+            .with_for_update(read=True)
+            .execution_options(populate_existing=True)
+        ).scalar_one_or_none()
+        if product is None or not product.is_active:
+            raise ConstraintAuthorityUnavailable("constraint scope is unavailable")
+        locked_product_id = product.id
+        active_revision_id = product.active_revision_id
     scope = session.execute(
-        select(LocalizationScope).where(LocalizationScope.id == scope_id).with_for_update()
+        select(LocalizationScope)
+        .where(LocalizationScope.id == scope_id)
+        .with_for_update()
+        .execution_options(populate_existing=base_language is None)
     ).scalar_one_or_none()
     if scope is None:
         raise ConstraintAuthorityUnavailable("constraint scope is unavailable")
     if base_language is not None:
         return scope, base_language
+    if scope.product_id != locked_product_id or scope.current_revision_id != active_revision_id:
+        raise ConstraintAuthorityUnavailable("constraint scope is unavailable")
     mapping = session.execute(
         select(ProductRepositoryMapping)
         .where(
@@ -460,6 +487,7 @@ def _lock_scope_authority(
             ProductRepositoryMapping.revision_id == scope.current_revision_id,
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalar_one_or_none()
     if mapping is None or mapping.base_language is None:
         raise ConstraintAuthorityUnavailable("constraint base authority is unavailable")
