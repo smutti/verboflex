@@ -63,7 +63,18 @@ MUTATION_RESPONSES: dict[int | str, dict[str, Any]] = {
     **AUTH_RESPONSES,
     status.HTTP_404_NOT_FOUND: {"model": TranslationConstraintErrorResponse},
     status.HTTP_409_CONFLICT: {"model": TranslationConstraintErrorResponse},
-    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": TranslationConstraintErrorResponse},
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {
+        "content": {
+            "application/json": {
+                "schema": {
+                    "anyOf": [
+                        {"$ref": "#/components/schemas/TranslationConstraintErrorResponse"},
+                        {"$ref": "#/components/schemas/HTTPValidationError"},
+                    ]
+                }
+            }
+        }
+    },
     status.HTTP_503_SERVICE_UNAVAILABLE: {"model": TranslationConstraintErrorResponse},
 }
 

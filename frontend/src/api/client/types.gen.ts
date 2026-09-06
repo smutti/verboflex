@@ -4428,7 +4428,7 @@ export type SearchTranslationsErrors = {
     /**
      * Unprocessable Content
      */
-    422: TranslationErrorResponse;
+    422: TranslationErrorResponse | HttpValidationError;
     /**
      * Service Unavailable
      */
@@ -4570,7 +4570,7 @@ export type DeleteTranslationConstraintErrors = {
     /**
      * Unprocessable Content
      */
-    422: TranslationConstraintErrorResponse;
+    422: TranslationConstraintErrorResponse | HttpValidationError;
     /**
      * Service Unavailable
      */
@@ -4624,7 +4624,7 @@ export type PutTranslationConstraintErrors = {
     /**
      * Unprocessable Content
      */
-    422: TranslationConstraintErrorResponse;
+    422: TranslationConstraintErrorResponse | HttpValidationError;
     /**
      * Service Unavailable
      */

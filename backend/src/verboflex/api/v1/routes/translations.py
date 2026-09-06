@@ -51,7 +51,18 @@ AUTH_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 SEARCH_RESPONSES: dict[int | str, dict[str, Any]] = {
     **AUTH_RESPONSES,
-    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": TranslationErrorResponse},
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {
+        "content": {
+            "application/json": {
+                "schema": {
+                    "anyOf": [
+                        {"$ref": "#/components/schemas/TranslationErrorResponse"},
+                        {"$ref": "#/components/schemas/HTTPValidationError"},
+                    ]
+                }
+            }
+        }
+    },
     status.HTTP_503_SERVICE_UNAVAILABLE: {"model": TranslationErrorResponse},
 }
 DETAIL_RESPONSES: dict[int | str, dict[str, Any]] = {
