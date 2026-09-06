@@ -283,6 +283,27 @@ class Gate:
         self.closed = True
 
 
+def require_clean_source():
+    changed = subprocess.check_output(
+        [
+            "git",
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--",
+            "backend",
+            "frontend",
+            "tools",
+            "docker-compose.yml",
+            ".env.example",
+            "AGENTS.md",
+        ],
+        cwd=ROOT,
+    )
+    if changed.strip():
+        raise ValueError("full evidence requires committed delivery sources")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--list", action="store_true")
@@ -296,6 +317,8 @@ def main():
 
     digest = source_digest()
     try:
+        if not args.section:
+            require_clean_source()
         gate.start_infrastructure()
         for layer in LAYERS:
             if args.section and args.section != layer:
