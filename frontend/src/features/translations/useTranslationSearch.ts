@@ -28,6 +28,7 @@ export interface TranslationSearchSnapshot {
   pages: readonly TranslationSearchPageResponse[];
   scrollAnchor: number;
   focusedGroupId: string | null;
+  invalidated?: boolean;
 }
 
 export interface UseTranslationSearchOptions {
@@ -231,6 +232,20 @@ function restoreSnapshot(
     initialSnapshot.filters as unknown as TranslationSearchFilters,
   );
   const identity = translationSearchIdentity(initialSnapshot.query, filters);
+  if (
+    initialSnapshot.invalidated === true &&
+    initialSnapshot.requestIdentity === identity
+  ) {
+    return {
+      ...fallback,
+      filters,
+      query: initialSnapshot.query,
+      navigation: {
+        scrollAnchor: initialSnapshot.scrollAnchor,
+        focusedGroupId: initialSnapshot.focusedGroupId,
+      },
+    };
+  }
   const cursors = new Set<string>();
   let items: readonly TranslationGroupSummaryResponse[] = [];
   for (const [index, page] of initialSnapshot.pages.entries()) {

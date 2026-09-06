@@ -18,6 +18,10 @@ import {
 } from "../../components/ui/tooltip";
 import type { TranslationsWorkspaceContext } from "./TranslationsWorkspace";
 import {
+  MaximumLengthDialog,
+  type ConstraintMutationMode,
+} from "./MaximumLengthDialog";
+import {
   completeTranslationDetail,
   lengthStatusLabel,
   reviewStateLabel,
@@ -254,7 +258,33 @@ function TranslationValueCard({
   );
 }
 
-function LoadedDetail({ detail }: { detail: TranslationGroupDetailResponse }) {
+function LoadedDetail({
+  detail,
+  onChanged,
+}: {
+  detail: TranslationGroupDetailResponse;
+  onChanged: (detail: TranslationGroupDetailResponse) => void;
+}) {
+  const context = useOutletContext<TranslationsWorkspaceContext>();
+  const [dialog, setDialog] = useState<{
+    mode: ConstraintMutationMode;
+    trigger: HTMLButtonElement;
+    fallback: HTMLButtonElement | null;
+  } | null>(null);
+  const primaryAction = useRef<HTMLButtonElement>(null);
+  const canMutate =
+    context.principal.roles.some(
+      (role) => role === "admin" || role === "product_manager_reviewer",
+    ) &&
+    detail.base_language !== null &&
+    !detail.is_deleted &&
+    detail.values.every((value) => value.selector_fields !== null);
+  const mutationLabel =
+    detail.explicit_maximum !== null
+      ? "Edit max length"
+      : detail.language !== detail.base_language && detail.base_maximum !== null
+        ? "Add language override"
+        : "Set max length";
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
@@ -318,6 +348,41 @@ function LoadedDetail({ detail }: { detail: TranslationGroupDetailResponse }) {
         </Section>
         <aside className="min-w-0 space-y-(--space-xl)">
           <Section title="Maximum length">
+            {canMutate && (
+              <div className="flex flex-wrap gap-(--space-sm)">
+                <Button
+                  ref={primaryAction}
+                  className={actionClass}
+                  onClick={(event) =>
+                    setDialog({
+                      mode:
+                        detail.explicit_maximum === null ? "create" : "edit",
+                      trigger: event.currentTarget,
+                      fallback: primaryAction.current,
+                    })
+                  }
+                >
+                  {mutationLabel}
+                </Button>
+                {detail.explicit_maximum !== null && (
+                  <Button
+                    className={actionClass}
+                    variant="outline"
+                    onClick={(event) =>
+                      setDialog({
+                        mode: "remove",
+                        trigger: event.currentTarget,
+                        fallback: primaryAction.current,
+                      })
+                    }
+                  >
+                    {detail.language === detail.base_language
+                      ? "Remove base limit"
+                      : "Remove language override"}
+                  </Button>
+                )}
+              </div>
+            )}
             <p>{ruleSourceLabel(detail)}</p>
             {detail.values.map((value) => (
               <div key={value.id} className="space-y-(--space-sm)">
@@ -346,6 +411,26 @@ function LoadedDetail({ detail }: { detail: TranslationGroupDetailResponse }) {
           </Section>
         </aside>
       </div>
+      {dialog && (
+        <MaximumLengthDialog
+          accessToken={context.accessToken}
+          detail={detail}
+          roles={context.principal.roles}
+          mode={dialog.mode}
+          triggerElement={dialog.trigger}
+          fallbackElement={dialog.fallback}
+          onClose={() => setDialog(null)}
+          onChanged={(fresh) => {
+            if (context.snapshot)
+              context.setSnapshot({
+                ...context.snapshot,
+                pages: [],
+                invalidated: true,
+              });
+            onChanged(fresh);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -401,7 +486,10 @@ function DetailRequest({
         Back to translations
       </Link>
       {current?.data ? (
-        <LoadedDetail detail={current.data} />
+        <LoadedDetail
+          detail={current.data}
+          onChanged={(data) => setLoad({ attempt, data })}
+        />
       ) : current?.error ? (
         <Alert>
           <AlertTitle>
