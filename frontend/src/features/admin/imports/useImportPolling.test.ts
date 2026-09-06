@@ -61,6 +61,31 @@ function publishedImport(
 }
 
 describe("bounded published import polling", () => {
+  it.each(["missing", "foreign"])(
+    "discards %s polling authority without replacing the visible execution",
+    async (kind) => {
+      getImportMock.mockResolvedValue(
+        kind === "missing"
+          ? ({ data: undefined } as never)
+          : ok(publishedImport({ id: "foreign", state: "current" })),
+      );
+      const announce = vi.fn();
+      const { result } = renderHook(() =>
+        useImportPolling({
+          accessToken: "token",
+          initialImport: publishedImport(),
+          productId: "product-1",
+          onAnnouncement: announce,
+        }),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      expect(result.current.importRecord).toEqual(publishedImport());
+      expect(announce).not.toHaveBeenCalled();
+      expect(result.current.pollingError).toBe(kind === "missing");
+    },
+  );
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-03T12:00:00Z"));

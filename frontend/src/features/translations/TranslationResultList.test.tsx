@@ -500,6 +500,18 @@ describe("TranslationResultList six-part anatomy and safe content", () => {
 });
 
 describe("TranslationResultList cursor and keyboard loading", () => {
+  it("does not resubmit an already attempted unchanged cursor after completion", async () => {
+    const p = { ...defaults(), items: many(), nextCursor: "same-cursor" };
+    mount(p);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Load more translations" }),
+    );
+    expect(p.onLoadMore).toHaveBeenCalledOnce();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Load more translations" }),
+    );
+    expect(p.onLoadMore).toHaveBeenCalledOnce();
+  });
   it("focuses an explicit loading error while superseded callbacks cannot contaminate a new search", async () => {
     const props = {
       ...defaults(),

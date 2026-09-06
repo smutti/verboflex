@@ -20,6 +20,15 @@ const options: TranslationOptionsResponse = {
 };
 
 describe("translation search preferences", () => {
+  it.each([null, [], "foreign", 12])(
+    "rejects non-record preference input %j",
+    (candidate) => {
+      expect(sanitizeTranslationPreferences(candidate, options)).toEqual({
+        productId: null,
+        language: null,
+      });
+    },
+  );
   beforeEach(() => {
     localStorage.clear();
   });

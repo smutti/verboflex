@@ -361,6 +361,72 @@ async function selectBaseLanguage(language = "en") {
 }
 
 describe("administrator product preview and publication page", () => {
+  it("reports a rejected current preview confirmation without granting publication authority", async () => {
+    confirmMock.mockRejectedValueOnce(new Error("private transport failure"));
+    renderPage();
+    await runValidation();
+    await userEvent.click(
+      screen.getByRole("radio", { name: "Android XML — app/src/main/res" }),
+    );
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Base language" }),
+    );
+    await userEvent.click(screen.getByRole("option", { name: "en" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Confirm preview" }),
+    );
+    expect(await screen.findByText("Preview not confirmed")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Publish product" }),
+    ).toBeDisabled();
+    expect(document.body).not.toHaveTextContent("private transport failure");
+  });
+  it("ignores an active confirmation response after the recovery page unmounts", async () => {
+    let resolveConfirmation!: (
+      value: ReturnType<typeof failure<{ detail: string }>>,
+    ) => void;
+    getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValueOnce(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+    getReactivationEligibilityMock.mockResolvedValueOnce(
+      ok(reactivationEligibility(false)),
+    );
+    createActiveRevalidationMock.mockResolvedValue(
+      ok(activeRevalidationJob(), 202),
+    );
+    confirmActiveRevalidationMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveConfirmation = resolve;
+      }) as never,
+    );
+    const view = renderPage(inactiveActiveOnlyProduct.id);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Run validation again" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("radio", {
+        name: "Android XML — app/src/main/res",
+      }),
+    );
+    await selectBaseLanguage();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Confirm preview" }),
+    );
+    await waitFor(() =>
+      expect(confirmActiveRevalidationMock).toHaveBeenCalledOnce(),
+    );
+    const eligibilityCalls = getReactivationEligibilityMock.mock.calls.length;
+    view.unmount();
+    await act(async () =>
+      resolveConfirmation(failure({ detail: "private stale response" })),
+    );
+    expect(getReactivationEligibilityMock).toHaveBeenCalledTimes(
+      eligibilityCalls,
+    );
+    expect(reactivateMock).not.toHaveBeenCalled();
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     confirmActiveRevalidationMock.mockReset();
     confirmMock.mockReset();

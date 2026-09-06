@@ -157,6 +157,80 @@ function renderImports(
 }
 
 describe("published mapping import collection", () => {
+  it.each([false, true])(
+    "reconciles a slower collection against execution and revision authority (new revision=%s)",
+    async (newRevision) => {
+      const accepted = publishedImport("mapping-1", {
+        id: "import-1",
+        execution_number: 2,
+        state: "running",
+        action: "import_in_progress",
+      });
+      const incoming = {
+        ...accepted,
+        state: "queued" as const,
+        active_revision_id: newRevision ? "revision-2" : "revision-1",
+      };
+      listImportsMock
+        .mockResolvedValueOnce(
+          ok({ items: [publishedImport("mapping-1")], next_cursor: null }),
+        )
+        .mockResolvedValueOnce(ok({ items: [incoming], next_cursor: null }));
+      startImportMock.mockResolvedValueOnce(ok(accepted));
+      renderImports();
+      const table = await screen.findByRole("table");
+      await userEvent.click(
+        within(table).getByRole("button", { name: "Run import" }),
+      );
+      await waitFor(() => expect(listImportsMock).toHaveBeenCalledTimes(2));
+      expect(
+        within(table).getByText(newRevision ? "Queued" : "Running"),
+      ).toBeVisible();
+      expect(
+        within(table).queryByText(newRevision ? "Running" : "Queued"),
+      ).toBeNull();
+    },
+  );
+  it.each([false, true])(
+    "finishes a mobile-initiated import without stealing moved focus (%s)",
+    async (moveFocus) => {
+      let resolveStart!: (
+        value: ReturnType<typeof ok<AdminPublishedMappingImportResponse>>,
+      ) => void;
+      const initial = publishedImport("mapping-1");
+      const terminal = publishedImport("mapping-1", {
+        id: "import-1",
+        execution_number: 1,
+        state: "current",
+        action: "refresh_import",
+      });
+      listImportsMock
+        .mockResolvedValueOnce(ok({ items: [initial], next_cursor: null }))
+        .mockResolvedValueOnce(ok({ items: [terminal], next_cursor: null }));
+      startImportMock.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveStart = resolve;
+        }) as never,
+      );
+      renderImports();
+      const list = await screen.findByLabelText(
+        "Published mapping imports mobile list",
+      );
+      const run = within(list).getByRole("button", { name: "Run import" });
+      await userEvent.click(run);
+      render(<button>Unrelated action</button>);
+      const outside = screen.getByRole("button", { name: "Unrelated action" });
+      if (moveFocus) outside.focus();
+      await act(async () => resolveStart(ok(terminal)));
+      expect(await within(list).findByText("Current")).toBeVisible();
+      if (moveFocus) expect(outside).toHaveFocus();
+      else
+        expect(
+          within(list).getByRole("button", { name: "Refresh import" }),
+        ).toHaveFocus();
+      expect(startImportMock).toHaveBeenCalledOnce();
+    },
+  );
   beforeEach(() => {
     vi.mocked(getAdminImport).mockReset();
     vi.mocked(useSession).mockReturnValue({

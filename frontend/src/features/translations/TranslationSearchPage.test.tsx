@@ -9,6 +9,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import {
   Link,
+  Outlet,
   MemoryRouter,
   Route,
   Routes,
@@ -24,6 +25,7 @@ import {
 import { TranslationSearchPage } from "./TranslationSearchPage";
 import { TranslationsWorkspace } from "./TranslationsWorkspace";
 import { translationPreferenceKey } from "./translationPreferences";
+import { translationSearchIdentity } from "./useTranslationSearch";
 
 vi.mock("../../api/client", async (original) => ({
   ...(await original<typeof import("../../api/client")>()),
@@ -183,6 +185,121 @@ afterEach(() => {
 });
 
 describe("TranslationSearchPage", () => {
+  it("clears pending options criteria and aborts the superseded option request", async () => {
+    const pending = deferred<never>();
+    vi.mocked(listTranslationOptions).mockReturnValueOnce(pending.promise);
+    render(tree());
+    await flush();
+    const signal = vi.mocked(listTranslationOptions).mock.calls[0][0]?.signal;
+    fireEvent.change(screen.getByLabelText("Search keys and translations"), {
+      target: { value: "discard this" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    await flush();
+    expect(signal?.aborted).toBe(true);
+    expect(screen.getByLabelText("Search keys and translations")).toHaveValue(
+      "",
+    );
+    expect(
+      vi.mocked(searchTranslations).mock.lastCall?.[0]?.query,
+    ).toMatchObject({ q: "", product_id: null, language: null });
+    await act(async () =>
+      pending.resolve({ data: { products: [], languages: [] } } as never),
+    );
+    expect(screen.getByRole("combobox", { name: "Product" })).toHaveTextContent(
+      "All products",
+    );
+  });
+  it.each([null, "later"])(
+    "restores navigation before deferred result focus is available (%s)",
+    async (focusedGroupId) => {
+      const filters = {
+        productId: null,
+        language: null,
+        state: null,
+        violation: null,
+        deleted: "active" as const,
+      };
+      vi.mocked(searchTranslations).mockResolvedValue({
+        data: { items: [group("later")], next_cursor: null },
+      } as never);
+      render(
+        <MemoryRouter initialEntries={["/translations"]}>
+          <Routes>
+            <Route
+              element={
+                <Outlet
+                  context={{
+                    principal,
+                    accessToken: "token",
+                    setSnapshot: vi.fn(),
+                    snapshot: {
+                      version: 1,
+                      query: "",
+                      filters,
+                      pages: [{ items: [group("first")], next_cursor: "next" }],
+                      requestIdentity: translationSearchIdentity("", filters),
+                      scrollAnchor: 480,
+                      focusedGroupId,
+                    },
+                  }}
+                />
+              }
+            >
+              <Route path="translations" element={<TranslationSearchPage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>,
+      );
+      await flush();
+      expect(window.scrollTo).toHaveBeenCalledWith({
+        top: 480,
+        behavior: "instant",
+      });
+      expect(searchTranslations).not.toHaveBeenCalled();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Load more translations" }),
+      );
+      await flush();
+      const later = screen.getByRole("link", { name: "Open details later" });
+      if (focusedGroupId) expect(later).toHaveFocus();
+      else expect(later).not.toHaveFocus();
+    },
+  );
+  it("retains query input across pending and failed options retries and focuses only explicit failure", async () => {
+    const pending = deferred<never>();
+    vi.mocked(listTranslationOptions)
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValueOnce({ error: {} } as never);
+    render(tree());
+    fireEvent.change(screen.getByLabelText("Search keys and translations"), {
+      target: { value: "literal pending query" },
+    });
+    await act(async () => pending.resolve({ error: {} } as never));
+    await flush();
+    expect(screen.getByLabelText("Search keys and translations")).toHaveValue(
+      "literal pending query",
+    );
+    expect(screen.getByRole("alert")).not.toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Retry search" }));
+    await flush();
+    expect(screen.getByRole("alert")).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Retry search" }));
+    await flush();
+    expect(screen.getByLabelText("Search keys and translations")).toHaveFocus();
+    expect(vi.mocked(searchTranslations).mock.lastCall?.[0]?.query?.q).toBe(
+      "literal pending query",
+    );
+  });
+
+  it("focuses a current explicit search retry failure", async () => {
+    vi.mocked(searchTranslations).mockResolvedValue({ error: {} } as never);
+    await mount();
+    expect(screen.getByRole("alert")).not.toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Retry search" }));
+    await flush();
+    expect(screen.getByRole("alert")).toHaveFocus();
+  });
   it("waits for live options before searching and exposes the exact query contract", async () => {
     const pending = deferred<never>();
     vi.mocked(listTranslationOptions).mockReturnValueOnce(pending.promise);

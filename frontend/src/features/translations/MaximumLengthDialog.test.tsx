@@ -142,6 +142,49 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("Maximum length — CONS-01..05 pending/conflict/input authority", () => {
+  it.each(["mutation", "detail"])(
+    "rejects a foreign %s projection without retrying a durable write",
+    async (projection) => {
+      if (projection === "mutation")
+        vi.mocked(putTranslationConstraint).mockResolvedValue(
+          success({ ...mutation(), language: "fr" }),
+        );
+      else
+        vi.mocked(getTranslationGroup).mockResolvedValue(
+          success({ ...fresh(), language: "fr" }),
+        );
+      const p = props();
+      render(<MaximumLengthDialog {...p} />);
+      await userEvent.click(
+        screen.getByRole("button", { name: "Save max length" }),
+      );
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Maximum length saved; current details could not be loaded",
+      );
+      expect(p.onChanged).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("button", { name: "Save max length" }),
+      ).toBeDisabled();
+      expect(putTranslationConstraint).toHaveBeenCalledOnce();
+    },
+  );
+  it("dismisses conflict replacement confirmation without discarding entered input", async () => {
+    vi.mocked(putTranslationConstraint).mockResolvedValue(failure(409));
+    render(<MaximumLengthDialog {...props()} />);
+    fireEvent.change(screen.getByRole("spinbutton"), {
+      target: { value: "27" },
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save max length" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Reload current value" }),
+    );
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(screen.getByRole("spinbutton")).toHaveValue(27);
+    expect(getTranslationGroup).not.toHaveBeenCalled();
+  });
   it.each([0, 1048576])(
     "accepts inclusive integer %s with exact expected version",
     async (value) => {
@@ -236,6 +279,11 @@ describe("Maximum length — CONS-01..05 pending/conflict/input authority", () =
       expect(cancel).not.toHaveAttribute("aria-busy", "true");
       await userEvent.keyboard("{Escape}");
       fireEvent.pointerDown(document.body);
+      if (action === "save") {
+        const overlay = document.querySelector('[data-slot="dialog-overlay"]')!;
+        fireEvent.pointerDown(overlay, { button: 0 });
+        fireEvent.click(overlay);
+      }
       expect(p.onClose).not.toHaveBeenCalled();
       expect(
         action === "save"

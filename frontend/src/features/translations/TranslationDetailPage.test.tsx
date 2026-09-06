@@ -369,18 +369,67 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
       expect(screen.queryByText(/menu\./)).toBeNull();
     },
   );
-  it("blocks inconsistent mandatory authority without leaking the record", async () => {
+  it.each([
+    "count",
+    "comments",
+    "states",
+    "version-pair",
+    "negative-maximum",
+    "duplicate-value",
+  ])(
+    "blocks inconsistent %s authority without leaking the record",
+    async (defect) => {
+      const data = detailFixture();
+      if (defect === "count") data.values[0].constraint.actual = 3;
+      if (defect === "comments") data.comments = [{}] as never;
+      if (defect === "states") data.states = [];
+      if (defect === "version-pair") data.constraint_version = 1;
+      if (defect === "negative-maximum") {
+        data.explicit_maximum = -1;
+        data.constraint_version = 2;
+      }
+      if (defect === "duplicate-value") data.values.push(data.values[0]);
+      vi.mocked(getTranslationGroup).mockResolvedValue({
+        data,
+        error: undefined,
+      });
+      mount("admin");
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Translation details unavailable",
+      );
+      expect(screen.queryByText(data.raw_key)).toBeNull();
+    },
+  );
+  it("announces clipboard failure without exposing the rejected error", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByText("Translation content");
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(
+      new Error("private clipboard error"),
+    );
+    await user.click(
+      within(screen.getByRole("region", { name: "Source context" })).getByRole(
+        "button",
+        { name: "Copy full commit" },
+      ),
+    );
+    expect(await screen.findByText("Commit could not be copied")).toBeVisible();
+    expect(document.body).not.toHaveTextContent("private clipboard error");
+  });
+  it("opens a versioned removal confirmation from the detail action", async () => {
     const data = detailFixture();
-    data.values[0].constraint.actual = 3;
+    data.explicit_maximum = 5;
+    data.constraint_version = 2;
     vi.mocked(getTranslationGroup).mockResolvedValue({
       data,
       error: undefined,
     });
     mount("admin");
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Translation details unavailable",
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Remove language override" }),
     );
-    expect(screen.queryByText(data.raw_key)).toBeNull();
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("Remove");
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("inherit");
   });
   it("loads with skeletons, silently aborts abandoned requests and supports retry/back", async () => {
     vi.mocked(getTranslationGroup).mockRejectedValueOnce(

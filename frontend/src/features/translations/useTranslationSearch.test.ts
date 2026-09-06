@@ -88,6 +88,120 @@ async function settleInitial() {
 }
 
 describe("useTranslationSearch", () => {
+  it.each([
+    ["malformed cursor", [page([group(1)], 42 as never)]],
+    [
+      "nonterminal after terminal",
+      [page([group(1)], null), page([group(2)], null)],
+    ],
+  ])(
+    "rejects %s snapshots and fetches fresh authority",
+    async (_name, pages) => {
+      searchTranslationsMock.mockResolvedValue(ok(page([group(9)], null)));
+      const { result } = renderHook(() =>
+        useTranslationSearch({
+          accessToken: "token",
+          initialFilters: defaultFilters,
+          initialSnapshot: {
+            version: 1,
+            query: "",
+            filters: defaultFilters,
+            pages,
+            requestIdentity: translationSearchIdentity("", defaultFilters),
+            scrollAnchor: 30,
+            focusedGroupId: null,
+          },
+        }),
+      );
+      await settleInitial();
+      expect(searchTranslationsMock).toHaveBeenCalledOnce();
+      expect(result.current.items).toEqual([group(9)]);
+      expect(result.current.restoredNavigation).toBeNull();
+    },
+  );
+
+  it("restores a nonterminal snapshot and advances each distinct server cursor once", async () => {
+    searchTranslationsMock
+      .mockResolvedValueOnce(ok(page([group(2)], "next-2")))
+      .mockResolvedValueOnce(ok(page([group(3)], null)));
+    const { result } = renderHook(() =>
+      useTranslationSearch({
+        accessToken: "token",
+        initialFilters: defaultFilters,
+        initialSnapshot: {
+          version: 1,
+          query: "",
+          filters: defaultFilters,
+          pages: [page([group(1)], "next-1")],
+          requestIdentity: translationSearchIdentity("", defaultFilters),
+          scrollAnchor: 30,
+          focusedGroupId: null,
+        },
+      }),
+    );
+    await settleInitial();
+    expect(searchTranslationsMock).not.toHaveBeenCalled();
+    await act(async () => result.current.loadMore());
+    expect(result.current.nextCursor).toBe("next-2");
+    await act(async () => result.current.loadMore());
+    expect(
+      searchTranslationsMock.mock.calls.map(
+        ([request]) => request?.query?.cursor,
+      ),
+    ).toEqual(["next-1", "next-2"]);
+    expect(result.current.items).toEqual([group(1), group(2), group(3)]);
+  });
+
+  it("reauthorizes token rotation during debounce and ignores identical query assignments", async () => {
+    searchTranslationsMock.mockResolvedValue(ok(page([], null)));
+    const { result, rerender } = renderHook(
+      ({ token }) =>
+        useTranslationSearch({
+          accessToken: token,
+          initialFilters: defaultFilters,
+        }),
+      { initialProps: { token: "old" } },
+    );
+    await settleInitial();
+    act(() => {
+      result.current.setQuery("pending");
+      result.current.setQuery("pending");
+    });
+    rerender({ token: "new" });
+    await settleInitial();
+    expect(searchTranslationsMock).toHaveBeenCalledTimes(2);
+    expect(searchTranslationsMock.mock.lastCall?.[0]).toMatchObject({
+      auth: "new",
+      query: { q: "pending" },
+    });
+    act(() => vi.advanceTimersByTime(300));
+    await settleInitial();
+    expect(searchTranslationsMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("applies a filter during debounce without a duplicate delayed search", async () => {
+    searchTranslationsMock.mockResolvedValue(ok(page([], null)));
+    const { result } = renderHook(() =>
+      useTranslationSearch({
+        accessToken: "token",
+        initialFilters: defaultFilters,
+      }),
+    );
+    await settleInitial();
+    act(() => result.current.setQuery("pending"));
+    act(() =>
+      result.current.setFilters({ ...defaultFilters, language: "it-IT" }),
+    );
+    await settleInitial();
+    expect(searchTranslationsMock.mock.lastCall?.[0]?.query).toMatchObject({
+      q: "pending",
+      language: "it-IT",
+    });
+    act(() => vi.advanceTimersByTime(300));
+    await settleInitial();
+    expect(searchTranslationsMock).toHaveBeenCalledTimes(2);
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
     searchTranslationsMock.mockReset();
