@@ -449,7 +449,7 @@ describe("authenticated application shell", () => {
     });
   });
 
-  it("exposes a quiet desktop navigation landmark with only the current workspace", () => {
+  it("exposes a quiet desktop primary navigation landmark", () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
         <AppShell
@@ -546,7 +546,7 @@ describe("authenticated application shell", () => {
       within(navigation)
         .getAllByRole("link")
         .map((link) => link.textContent?.trim()),
-    ).toEqual(["Workspace", "Products", "Users", "Bitbucket"]);
+    ).toEqual(["Workspace", "Translations", "Products", "Users", "Bitbucket"]);
 
     await user.click(within(navigation).getByRole("link", { name: "Users" }));
 
@@ -646,6 +646,8 @@ describe("authenticated application shell", () => {
 
   it.each([
     ["/", "Workspace"],
+    ["/translations", "Translations"],
+    ["/translations/group-123", "Translations"],
     ["/admin/products", "Products"],
     ["/admin/products/product-123/preview", "Products"],
     ["/admin/users", "Users"],
@@ -774,7 +776,7 @@ describe("authenticated application shell", () => {
       }),
     ).toBeVisible();
 
-    for (const name of ["Products", "Users", "Bitbucket"]) {
+    for (const name of ["Translations", "Products", "Users", "Bitbucket"]) {
       expect(screen.getByRole("link", { name })).toHaveClass(
         "min-w-0",
         "max-w-full",
@@ -802,5 +804,65 @@ describe("authenticated application shell", () => {
     const sheet = await screen.findByRole("dialog", { name: "Navigation" });
     expect(within(sheet).queryByText("Administration")).toBeNull();
     expect(within(sheet).queryByRole("link", { name: "Users" })).toBeNull();
+  });
+
+  it.each<CurrentUserResponse["roles"][number]>([
+    "admin", "product_manager_reviewer", "translator", "viewer",
+  ])("places an accessible Translations destination after Workspace for %s", async (role) => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <AppShell accessToken="token" onLogout={vi.fn()} principal={{ ...principal, roles: [role] }} />
+        <LocationMarker />
+      </MemoryRouter>,
+    );
+    const navigation = screen.getByRole("navigation", { name: "Primary navigation" });
+    const links = within(navigation).getAllByRole("link");
+    expect(links.slice(0, 2).map((link) => link.textContent?.trim())).toEqual(["Workspace", "Translations"]);
+    const translations = within(navigation).getByRole("link", { name: "Translations" });
+    expect(translations).toHaveAttribute("href", "/translations");
+    expect(translations).not.toHaveAttribute("aria-current");
+    expect(translations).toHaveClass("focus-visible:ring-[3px]", "min-w-0", "max-w-full", "whitespace-normal");
+    expect(translations.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    links[0].focus();
+    await user.tab();
+    expect(translations).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByTestId("shell-current-route")).toHaveTextContent("/translations");
+    expect(translations).toHaveAttribute("aria-current", "page");
+  });
+
+  it.each([320, 768, 1024])("selects Translations from the collapsed Sheet at %ipx and restores trigger focus", async (width) => {
+    setViewportWidth(width);
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <AppShell accessToken="token" onLogout={vi.fn()} principal={ordinaryPrincipal} />
+        <LocationMarker />
+      </MemoryRouter>,
+    );
+    const trigger = screen.getByRole("button", { name: "Open navigation" });
+    await user.click(trigger);
+    const sheet = await screen.findByRole("dialog", { name: "Navigation" });
+    const navigation = within(sheet).getByRole("navigation", { name: "Primary navigation" });
+    expect(within(navigation).getAllByRole("link").map((link) => link.textContent?.trim())).toEqual(["Workspace", "Translations"]);
+    const translations = within(navigation).getByRole("link", { name: "Translations" });
+    translations.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByTestId("shell-current-route")).toHaveTextContent("/translations");
+    expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
+    expect(trigger).toHaveFocus();
+    await user.keyboard("{Enter}");
+    const reopened = await screen.findByRole("dialog", { name: "Navigation" });
+    expect(within(reopened).getByRole("link", { name: "Translations", current: "page" })).toBeVisible();
+  });
+
+  it("does not mark a similarly prefixed route as Translations", () => {
+    render(
+      <MemoryRouter initialEntries={["/translations-other"]}>
+        <AppShell accessToken="token" onLogout={vi.fn()} principal={ordinaryPrincipal} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("link", { name: "Translations" })).not.toHaveAttribute("aria-current");
   });
 });
