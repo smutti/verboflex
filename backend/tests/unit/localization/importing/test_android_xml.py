@@ -424,16 +424,16 @@ def test_android_decoded_key_and_selector_equality_is_exact() -> None:
     assert {value.logical_key for value in result.values} == {"café", "cafe\u0301"}
 
 
-def test_android_file_byte_limit_accepts_exact_and_rejects_one_over() -> None:
+@pytest.mark.parametrize("dispatch", ["registry", "adapter"])
+def test_android_file_byte_limit_accepts_exact_and_rejects_one_over(dispatch: str) -> None:
     android = _android_module()
     _, registry = _canonical_modules()
 
-    exact = registry.parse_canonical_snapshot(
-        _input(content=_padded_xml(android.MAX_CANONICAL_FILE_BYTES))
+    parse = (
+        registry.parse_canonical_snapshot if dispatch == "registry" else android.parse_android_xml
     )
-    over = registry.parse_canonical_snapshot(
-        _input(content=_padded_xml(android.MAX_CANONICAL_FILE_BYTES + 1))
-    )
+    exact = parse(_input(content=_padded_xml(android.MAX_CANONICAL_FILE_BYTES)))
+    over = parse(_input(content=_padded_xml(android.MAX_CANONICAL_FILE_BYTES + 1)))
 
     assert len(exact.values) == 1
     assert exact.issues == ()

@@ -250,6 +250,7 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
       expect(document.querySelector("img, script")).toBeNull();
       expect(screen.getByText("Pending change: None")).toBeVisible();
       expect(screen.getByText("Comments: No comments yet")).toBeVisible();
+      expect(screen.getByText("Actual: 6 · Maximum: 5")).toBeVisible();
       expect(screen.getAllByText("Over limit by 1").length).toBeGreaterThan(0);
       expect(screen.getByText("Revision 1")).toBeVisible();
       expect(screen.getByText("old-execution")).toBeVisible();
