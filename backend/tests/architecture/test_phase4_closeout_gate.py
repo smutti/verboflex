@@ -32,7 +32,10 @@ def document(kind="review", **changes):
     if kind == "security":
         table = "\n| ID | Severity | Disposition | Evidence | Resolution |\n|---|---|---|---|---|\n"
         for identifier in [*(f"T-04-{number:02d}" for number in range(1, 78)), "T-04-SC"]:
-            table += f"| {identifier} | High | mitigate | tests/unit/test_auth.py::test_denied | resolved |\n"
+            table += (
+                f"| {identifier} | High | mitigate | "
+                "tests/unit/test_auth.py::test_denied | resolved |\n"
+            )
     return "---\n" + yaml.safe_dump(fields) + "---\n" + table
 
 
