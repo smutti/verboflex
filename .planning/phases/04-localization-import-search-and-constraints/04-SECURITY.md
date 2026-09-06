@@ -1,13 +1,15 @@
 ---
 phase: 04
 slug: localization-import-search-and-constraints
-status: verified
+status: draft
 threats_open: 0
 asvs_level: 1
 created: 2026-09-06
 ---
 
 # Phase 04 — Security
+
+> Reopened after the recorded audit: independent code review reproduced a constraint/activation deadlock (CR-15) and rejection of constraint changes on a retained baseline during refresh (CR-16). These are unresolved delivery/constraint correctness blockers. The SECURED result below is historical, not current phase approval; correction and independent source-bound recheck are pending. `threats_open` describes the preceding registered-threat audit only.
 
 Final independent typed gsd-security-auditor verdict: SECURED at implementation `ec6fd68f03515266b043fe5d0450615acfabca96`. All 78 dispositions are verified: 76 mitigations and two already-planned documented medium acceptances; zero open high/critical threats. The polling/activation race was corrected and independently rechecked. The fresh complete gauntlet and built-stack smoke passed on the same source digest. This does not substitute for the separate end-of-phase human acceptance checks. The auditor modified no implementation.
 

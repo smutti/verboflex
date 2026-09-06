@@ -2,11 +2,13 @@
 phase: 04
 created: 2026-09-06
 reviewer: independent gsd-security-auditor
-verdict: SECURED
+verdict: ESCALATE
 source_digest: sha256:d7306c29f5131dfc5f23318cb89664e83946742dab9f3982832e9bf082313406
 ---
 
 # Phase 04 — Independent Security Review
+
+> Reopened after the recorded audit: independent code review reproduced a constraint/activation deadlock (CR-15) and rejection of constraint changes on a retained baseline during refresh (CR-16). The SECURED audit below is historical. The current release verdict is ESCALATE until these blockers are corrected and independently rechecked at the final digest; no passing phase claim is made.
 
 Final independent typed gsd-security-auditor verdict: SECURED at implementation `ec6fd68f03515266b043fe5d0450615acfabca96`. All 78 dispositions are verified: 76 mitigations and two already-planned documented medium acceptances; zero open high/critical threats. The polling/activation race was corrected and independently rechecked. The fresh complete gauntlet and built-stack smoke passed on the same source digest. This does not substitute for the separate end-of-phase human acceptance checks. The auditor modified no implementation.
 
