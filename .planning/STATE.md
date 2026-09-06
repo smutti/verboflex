@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 04
 current_phase_name: Localization Import, Search, and Constraints
 status: executing
-stopped_at: Completed 04-15-PLAN.md
-last_updated: "2026-09-05T15:08:33.933Z"
+stopped_at: Completed 04-16-PLAN.md
+last_updated: "2026-09-06T07:45:50.552Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 04 execution started
-state_head: 5bd9d47323ee5425bbc054cebe3ba1e41b30e7c2
+state_head: 9b7da36a8dac58872ff7b4dde5581c8c3a35112e
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 104
-  completed_plans: 96
+  completed_plans: 97
   percent: 38
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 ## Current Position
 
 Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
-Plan: 19 of 27
+Plan: 20 of 27
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 04 execution started
 
@@ -156,6 +156,7 @@ Progress: [████████░░░░░░░░░░░░] 3/8 pha
 | Phase 04 P21 | 17min | 2 tasks | 3 files |
 | Phase 04 P25 | 18min | 2 tasks | 5 files |
 | Phase 04 P15 | 12min | 2 tasks | 9 files |
+| Phase 04 P16 | 16h29min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -467,6 +468,10 @@ Recent decisions affecting current work:
 - [Phase 04]: FastAPI exports and the pinned generator own every transport type; generated files are never edited by hand and api:check is the drift authority.
 - [Phase 04]: Recursive contract tests reject credentials, provider or source bodies, parser exceptions, SQL, queue, staging, and correlation internals from public translation and parser-outcome schemas.
 - [Phase 04]: Null versus zero, closed state/source/status enums, selector version and kind, provenance, deletion, bounds, and optimistic versions stay explicit in generated TypeScript.
+- [Phase 04]: Persist exactly version, productId, and language under an authenticated-principal key, validating selections against live generated options.
+- [Phase 04]: Typing immediately invalidates and aborts transport authority; only dispatch waits for the 300 ms debounce.
+- [Phase 04]: Reject foreign filter scope, repeated cursors, non-progressing nonterminal pages, and over-bound pages before appending any rows.
+- [Phase 04]: Retain loaded pages, literal query, filters, scroll offset, and focus identity only in feature-level React memory.
 
 ### Pending Todos
 
@@ -507,6 +512,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-05T15:08:33.835Z
-Stopped at: Completed 04-15-PLAN.md
+Last session: 2026-09-06T07:45:50.439Z
+Stopped at: Completed 04-16-PLAN.md
 Resume file: None
