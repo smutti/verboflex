@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 SEARCH_PAGE_SIZE = 50
 MAX_SEARCH_QUERY_CHARS = 256
 MAX_CURSOR_CHARS = 2048
-CURSOR_VERSION = 1
+CURSOR_VERSION = 2
 MAX_OPTION_COUNT = 500
 MAX_GROUP_VALUE_COUNT = 10_000
 _ZERO_UUID = UUID(int=0)
@@ -220,7 +220,6 @@ class TranslationGroupUnavailable(LookupError):
 @dataclass(frozen=True, slots=True)
 class _CursorPosition:
     rank: int
-    stable_key: str
     language: str
     group_id: UUID
 
@@ -302,10 +301,9 @@ def _encode_cursor(
     cursor_secret: str,
 ) -> str:
     payload = {
-        "filters": _canonical_filter(filters),
+        "filters": _filter_digest(filters),
         "last": [
             position.rank,
-            position.stable_key,
             position.language,
             str(position.group_id),
         ],
@@ -318,6 +316,12 @@ def _encode_cursor(
     if len(cursor) > MAX_CURSOR_CHARS:
         raise TranslationSearchInputError("cursor exceeds its allowed bound")
     return cursor
+
+
+def _filter_digest(filters: TranslationSearchFilters) -> str:
+    """Bound cursor size independently of Unicode expansion in filter values."""
+    body = json.dumps(_canonical_filter(filters), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(body.encode()).hexdigest()
 
 
 def _decode_cursor(
@@ -345,19 +349,22 @@ def _decode_cursor(
             raise ValueError
         if payload["scope"] != scope_digest:
             raise ValueError
-        if payload["filters"] != _canonical_filter(filters):
+        if payload["filters"] != _filter_digest(filters):
             raise ValueError
         last = payload["last"]
-        if not isinstance(last, list) or len(last) != 4:
+        if not isinstance(last, list) or len(last) != 3:
+            raise ValueError
+        if type(last[0]) is not int or last[0] not in (0, 1, 2, 3):
+            raise ValueError
+        if not isinstance(last[1], str) or not 1 <= len(last[1]) <= 64:
+            raise ValueError
+        if not isinstance(last[2], str) or str(UUID(last[2])) != last[2]:
             raise ValueError
         position = _CursorPosition(
-            rank=int(last[0]),
-            stable_key=str(last[1]),
-            language=str(last[2]),
-            group_id=UUID(str(last[3])),
+            rank=last[0],
+            language=last[1],
+            group_id=UUID(last[2]),
         )
-        if position.rank not in (0, 1, 2, 3):
-            raise ValueError
         return position
     except (TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise InvalidTranslationCursor("invalid translation cursor") from error
@@ -447,24 +454,30 @@ WITH authorized_products AS (
         OR (CAST(:violation AS text) = 'no_max'
             AND bool_or(value.effective_max_chars IS NULL))
     )
+), cursor_anchor AS (
+    SELECT rank, stable_key, language, group_id
+    FROM grouped
+    WHERE group_id = :last_group_id AND rank = :last_rank
+      AND language = :last_language
 ), page AS (
     SELECT *
     FROM grouped
     WHERE NOT :has_cursor OR (
         rank, stable_key, language COLLATE "C", group_id
     ) > (
-        :last_rank, :last_key COLLATE "C", :last_language COLLATE "C", :last_group_id
+        SELECT rank, stable_key, language COLLATE "C", group_id FROM cursor_anchor
     )
     ORDER BY rank, stable_key, language COLLATE "C", group_id
     LIMIT :lookahead
 )
-SELECT page.*, mapping.base_language AS source_language,
+SELECT page.*, validity.cursor_valid, mapping.base_language AS source_language,
        locator.path AS provenance_path, locator.configured_branch AS provenance_branch,
        coalesce(repository.descriptive_name,
                 repository.workspace || '/' || repository.repository_slug)
            AS provenance_repository_name
-FROM page
-JOIN product_repository_mappings AS mapping ON mapping.id = page.mapping_id
+FROM (SELECT NOT :has_cursor OR EXISTS(SELECT 1 FROM cursor_anchor) AS cursor_valid) AS validity
+LEFT JOIN page ON true
+LEFT JOIN product_repository_mappings AS mapping ON mapping.id = page.mapping_id
 LEFT JOIN translation_value_locators AS locator ON locator.value_id = page.group_id
 LEFT JOIN repositories AS repository ON repository.id = locator.repository_id
 ORDER BY rank, stable_key, language COLLATE "C", group_id
@@ -809,7 +822,6 @@ def search_translations(
                 "has_query": filters.query is not None,
                 "language": filters.language,
                 "last_group_id": position.group_id if position is not None else _ZERO_UUID,
-                "last_key": position.stable_key if position is not None else "",
                 "last_language": position.language if position is not None else "",
                 "last_rank": position.rank if position is not None else -1,
                 "lookahead": filters.page_size + 1,
@@ -824,6 +836,9 @@ def search_translations(
         .mappings()
         .all()
     )
+    if not rows[0]["cursor_valid"]:
+        raise InvalidTranslationCursor("invalid translation cursor")
+    rows = [row for row in rows if row["group_id"] is not None]
     has_more = len(rows) > filters.page_size
     visible_rows = rows[: filters.page_size]
     items = tuple(
@@ -867,7 +882,6 @@ def search_translations(
             filters=filters,
             position=_CursorPosition(
                 rank=last["rank"],
-                stable_key=last["stable_key"],
                 language=last["language"],
                 group_id=last["group_id"],
             ),
