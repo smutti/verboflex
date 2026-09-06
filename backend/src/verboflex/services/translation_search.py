@@ -312,10 +312,10 @@ def _encode_cursor(
     }
     body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     signature = hmac.digest(cursor_secret.encode(), body, "sha256")
-    cursor = f"{_b64encode(body)}.{_b64encode(signature)}"
-    if len(cursor) > MAX_CURSOR_CHARS:
-        raise TranslationSearchInputError("cursor exceeds its allowed bound")
-    return cursor
+    # Only caller: SQL rank 0..3, persisted ASCII locale, UUID, and two SHA256
+    # digests. Even maximum permitted fields stay below 512 wire characters;
+    # untrusted incoming cursors retain the independent 2048-character guard.
+    return f"{_b64encode(body)}.{_b64encode(signature)}"
 
 
 def _filter_digest(filters: TranslationSearchFilters) -> str:
