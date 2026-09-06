@@ -9,6 +9,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,11 +18,15 @@ import {
   startAdminPublishedMappingImport,
   type AdminPublishedMappingImportResponse,
   type AdminRepositoryResponse,
+  type ImportParserIssue,
+  type RoleName,
 } from "../../../api/client";
+import { useSession } from "../../auth/session";
 import { PublishedMappingImports } from "./PublishedMappingImports";
 import { useImportPolling } from "./useImportPolling";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
+vi.mock("../../auth/session", () => ({ useSession: vi.fn() }));
 
 vi.mock("../../../api/client", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../../api/client")>();
@@ -145,11 +150,24 @@ function renderImports(
       repositories={repositories}
       {...props}
     />,
+    { wrapper: MemoryRouter },
   );
 }
 
 describe("published mapping import collection", () => {
   beforeEach(() => {
+    vi.mocked(useSession).mockReturnValue({
+      state: {
+        status: "authenticated",
+        accessToken: "memory-only-admin-bearer",
+        principal: {
+          id: "admin-1",
+          roles: ["admin"],
+          email: "admin@example.com",
+          must_change_password: false,
+        },
+      },
+    } as ReturnType<typeof useSession>);
     listImportsMock.mockReset();
     startImportMock.mockReset();
     toastSuccessMock.mockReset();
@@ -164,6 +182,219 @@ describe("published mapping import collection", () => {
   });
 
   afterEach(() => cleanup());
+
+  function parserIssue(
+    issue_code: ImportParserIssue["issue_code"] = "malformed_file",
+    overrides: Partial<ImportParserIssue> = {},
+  ): ImportParserIssue {
+    return {
+      issue_code,
+      message_key: `import.parser.${issue_code}`,
+      path: "locales/en.json",
+      repository_side: "direct",
+      line: null,
+      column: null,
+      ...overrides,
+    };
+  }
+
+  function parserFailure(
+    overrides: Partial<AdminPublishedMappingImportResponse> = {},
+  ) {
+    return publishedImport("mapping-1", {
+      id: "import-1",
+      execution_number: 2,
+      action: "retry_import",
+      state: "import_failed",
+      error_category: "bounded_failure",
+      parser_issues: [parserIssue()],
+      ...overrides,
+    });
+  }
+
+  it.each([false, true])(
+    "renders the exact atomic parser failure with retained dataset=%s",
+    async (retained) => {
+      listImportsMock.mockResolvedValue(
+        ok({
+          items: [
+            parserFailure({
+              dataset_status: retained ? "retained" : "not_created",
+              state: retained ? "may_be_stale" : "import_failed",
+              active_baseline: retained
+                ? baseline({
+                    commit: "a".repeat(40),
+                    repositoryId: "repository-1",
+                    role: "direct",
+                  })
+                : null,
+              error_message: "SECRET provider body <xml>source</xml>",
+            }),
+          ],
+          next_cursor: null,
+        }),
+      );
+      renderImports();
+      const row = await screen.findByTestId("published-import-row-mapping-1");
+      const alert = within(row).getByRole("alert");
+      expect(alert).toHaveTextContent(
+        "Localization files could not be imported",
+      );
+      expect(alert).toHaveTextContent(
+        `One or more configured files are malformed, ambiguous, or contain unsupported structure. ${retained ? "The last successful translation dataset remains active." : "No translation dataset was created."}`,
+      );
+      expect(row).toHaveTextContent(
+        retained ? "May be stale" : "Import failed",
+      );
+      if (retained) expect(row).toHaveTextContent("a".repeat(12));
+      expect(within(row).getAllByRole("button")).toHaveLength(1);
+      expect(
+        within(row).getByRole("button", { name: "Retry import" }),
+      ).toBeEnabled();
+      expect(document.body).not.toHaveTextContent("SECRET provider body");
+      expect(within(row).queryByRole("link")).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([0, 1, 5, 7])(
+    "bounds %s parser issues and preserves provider order within Keys before Translations",
+    async (count) => {
+      const categories = [
+        "malformed_file",
+        "ambiguous_structure",
+        "unsupported_structure",
+        "duplicate_key",
+        "base_language_required",
+      ] as const;
+      const issues = Array.from({ length: count }, (_, index) =>
+        parserIssue(categories[index % 5], {
+          path: `locales/${count - index}.json`,
+          repository_side: index % 2 ? "keys" : "translations",
+          line: index === 0 ? 12 : null,
+          column: index === 0 ? 4 : null,
+        }),
+      );
+      listImportsMock.mockResolvedValue(
+        ok({
+          items: [
+            parserFailure({
+              error_category: count === 0 ? null : "bounded_failure",
+              topology: "separate",
+              parser_issues: issues,
+              parser_issue_remaining_count: count > 5 ? 8 : 0,
+            }),
+          ],
+          next_cursor: null,
+        }),
+      );
+      renderImports();
+      const row = await screen.findByTestId("published-import-row-mapping-1");
+      const alert = within(row).getByRole("alert");
+      expect(alert).toHaveTextContent(
+        "Localization files could not be imported",
+      );
+      const shown = within(alert).queryAllByRole("listitem");
+      expect(shown).toHaveLength(Math.min(5, count));
+      const ordered = [...issues]
+        .sort(
+          (a, b) =>
+            Number(a.repository_side === "translations") -
+            Number(b.repository_side === "translations"),
+        )
+        .slice(0, 5);
+      ordered.forEach((issue, index) => {
+        expect(shown[index]).toHaveTextContent(issue.path);
+        expect(shown[index]).toHaveTextContent(
+          issue.repository_side === "keys" ? "Keys" : "Translations",
+        );
+        if (issue.line !== null)
+          expect(shown[index]).toHaveTextContent("Line 12, column 4");
+        else expect(shown[index]).not.toHaveTextContent(/Line|column/);
+      });
+      if (count > 5) expect(alert).toHaveTextContent("And 10 more errors.");
+      else expect(alert).not.toHaveTextContent(/And .* more errors/);
+    },
+  );
+
+  it("uses all five closed categories and literal paths without exposing extra issue fields", async () => {
+    const codes = [
+      "malformed_file",
+      "ambiguous_structure",
+      "unsupported_structure",
+      "duplicate_key",
+      "base_language_required",
+    ] as const;
+    listImportsMock.mockResolvedValue(
+      ok({
+        items: [
+          parserFailure({
+            parser_issues: codes.map((code) => ({
+              ...parserIssue(code, {
+                path: '<img src=x onerror="alert(1)">.json',
+                line: 9,
+              }),
+              message: "SECRET source excerpt",
+              exception: "SQL provider exception",
+            })),
+          }),
+        ],
+        next_cursor: null,
+      }),
+    );
+    renderImports();
+    const row = await screen.findByTestId("published-import-row-mapping-1");
+    for (const label of [
+      "Malformed file",
+      "Ambiguous structure",
+      "Unsupported structure",
+      "Duplicate key",
+      "Base language required",
+    ])
+      expect(within(row).getByText(label)).toBeVisible();
+    expect(row).toHaveTextContent('<img src=x onerror="alert(1)">.json');
+    expect(row.querySelector("img")).toBeNull();
+    expect(row).not.toHaveTextContent(/SECRET|SQL provider|column/);
+    expect(row).toHaveTextContent("Line 9");
+  });
+
+  it.each<RoleName>([
+    "admin",
+    "product_manager_reviewer",
+    "translator",
+    "viewer",
+  ])(
+    "offers exact product base-language recovery only for admin, role=%s",
+    async (role) => {
+      const session = vi.mocked(useSession).getMockImplementation()!();
+      if (session.state.status === "authenticated")
+        session.state.principal.roles = [role];
+      vi.mocked(useSession).mockReturnValue(session);
+      listImportsMock.mockResolvedValue(
+        ok({
+          items: [
+            parserFailure({
+              parser_issues: [parserIssue("base_language_required")],
+            }),
+          ],
+          next_cursor: null,
+        }),
+      );
+      renderImports({ productId: "product-specific-42" });
+      const row = await screen.findByTestId("published-import-row-mapping-1");
+      if (role === "admin")
+        expect(
+          within(row).getByRole("link", { name: "Configure base language" }),
+        ).toHaveAttribute(
+          "href",
+          "/admin/products/product-specific-42/preview",
+        );
+      else expect(within(row).queryByRole("link")).not.toBeInTheDocument();
+      expect(within(row).getAllByRole("button")).toHaveLength(1);
+      expect(
+        within(row).getByRole("button", { name: "Retry import" }),
+      ).toBeEnabled();
+    },
+  );
 
   it("UI3-C02 renders the named empty state after the complete collection loads", async () => {
     renderImports();
