@@ -1,6 +1,6 @@
 {
   "status": "passed",
-  "source_digest": "sha256:d7306c29f5131dfc5f23318cb89664e83946742dab9f3982832e9bf082313406",
+  "source_digest": "sha256:2df3766ead7f1aea3597a8ad8b99205f14508a4189109996149265a163017b3a",
   "gauntlet_exit": 0,
   "sections": [
     "source-scope-closeout",
@@ -32,10 +32,10 @@
       ],
       "cwd": "backend",
       "exit": 0,
-      "started_at": "2026-09-06T11:44:08.868917+00:00",
-      "completed_at": "2026-09-06T11:44:13.675511+00:00",
-      "duration_seconds": 4.807,
-      "output_sha256": "4ae60b1f722d0b5dd3cd82d07c9f33fd88eb9fdc2904ba576f8cbee0cd5c66ab"
+      "started_at": "2026-09-06T12:10:38.462305+00:00",
+      "completed_at": "2026-09-06T12:10:42.834920+00:00",
+      "duration_seconds": 4.373,
+      "output_sha256": "4ba3528e206bdddda12d42c0181c124d58eced7a629050db39a8f235992e6ef2"
     },
     {
       "section": "smoke-tooling-controls",
@@ -50,9 +50,9 @@
       ],
       "cwd": ".",
       "exit": 0,
-      "started_at": "2026-09-06T11:44:13.675785+00:00",
-      "completed_at": "2026-09-06T11:44:14.166235+00:00",
-      "duration_seconds": 0.49,
+      "started_at": "2026-09-06T12:10:42.835248+00:00",
+      "completed_at": "2026-09-06T12:10:43.338076+00:00",
+      "duration_seconds": 0.503,
       "output_sha256": "ff73c3b52ec6f9e718effa95c0d20b197d8448ce77ac3ccff7acce737a494962"
     },
     {
@@ -63,8 +63,8 @@
       ],
       "cwd": ".",
       "exit": 0,
-      "started_at": "2026-09-06T11:44:14.166503+00:00",
-      "completed_at": "2026-09-06T11:44:14.178129+00:00",
+      "started_at": "2026-09-06T12:10:43.338384+00:00",
+      "completed_at": "2026-09-06T12:10:43.350692+00:00",
       "duration_seconds": 0.012,
       "output_sha256": "9d6fffd44ef7eb44be56bfc6a9873fd161ca76517291d52219df744f227846c3"
     },
@@ -76,19 +76,19 @@
         "pytest",
         "-q",
         "--randomly-seed=419",
-        "--junitxml=/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp/backend.xml",
+        "--junitxml=/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-92tdd_0i/backend.xml",
         "--cov=verboflex",
         "--cov-branch",
         "--cov-report=term-missing",
-        "--cov-report=xml:/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp/backend-coverage.xml",
+        "--cov-report=xml:/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-92tdd_0i/backend-coverage.xml",
         "--cov-fail-under=0"
       ],
       "cwd": "backend",
       "exit": 0,
-      "started_at": "2026-09-06T11:44:14.178352+00:00",
-      "completed_at": "2026-09-06T11:46:43.913267+00:00",
-      "duration_seconds": 149.736,
-      "output_sha256": "ac794c9c52ed9ee659ecae3947b935f9faecf7f96924ad36597c5cc19142f520"
+      "started_at": "2026-09-06T12:10:43.350921+00:00",
+      "completed_at": "2026-09-06T12:13:18.305339+00:00",
+      "duration_seconds": 154.953,
+      "output_sha256": "be44bda68e0afeb6e6e4d36e6369d705d886576b88e92d497d01ca3a51097d5d"
     },
     {
       "section": "backend-changed-line-coverage",
@@ -96,16 +96,16 @@
         "uv",
         "run",
         "diff-cover",
-        "/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp/backend-coverage.xml",
+        "/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-92tdd_0i/backend-coverage.xml",
         "--compare-branch=d987d5f48273d49234b07aacb3fa185337a1b4f2",
         "--fail-under=100"
       ],
       "cwd": "backend",
       "exit": 0,
-      "started_at": "2026-09-06T11:46:43.913658+00:00",
-      "completed_at": "2026-09-06T11:46:44.241762+00:00",
-      "duration_seconds": 0.328,
-      "output_sha256": "309743982ccaba1a3c5238897325aa68ad44528d605a04f6ff843449da201b99"
+      "started_at": "2026-09-06T12:13:18.305820+00:00",
+      "completed_at": "2026-09-06T12:13:18.555080+00:00",
+      "duration_seconds": 0.249,
+      "output_sha256": "a58bffe5181268c74e51b24e2829553c7160bfd4455519f8a60f1dfa87df91cc"
     },
     {
       "section": "parser-branch-coverage",
@@ -119,9 +119,9 @@
       ],
       "cwd": "backend",
       "exit": 0,
-      "started_at": "2026-09-06T11:46:44.242039+00:00",
-      "completed_at": "2026-09-06T11:46:44.435059+00:00",
-      "duration_seconds": 0.193,
+      "started_at": "2026-09-06T12:13:18.555323+00:00",
+      "completed_at": "2026-09-06T12:13:18.702291+00:00",
+      "duration_seconds": 0.147,
       "output_sha256": "245a1c01e122db27c1e9b5b6d6bac775735c7328c7d6452c9f0c47f372eb980c"
     },
     {
@@ -134,9 +134,9 @@
       ],
       "cwd": "backend",
       "exit": 0,
-      "started_at": "2026-09-06T11:46:44.435363+00:00",
-      "completed_at": "2026-09-06T11:46:44.937192+00:00",
-      "duration_seconds": 0.502,
+      "started_at": "2026-09-06T12:13:18.702555+00:00",
+      "completed_at": "2026-09-06T12:13:18.969334+00:00",
+      "duration_seconds": 0.267,
       "output_sha256": "4d8615a3b23c25b3ef6259d7367cc2da9b7b794b659325c4369cb165f735b3bd"
     },
     {
@@ -151,9 +151,9 @@
       ],
       "cwd": "backend",
       "exit": 0,
-      "started_at": "2026-09-06T11:46:44.937519+00:00",
-      "completed_at": "2026-09-06T11:46:45.023245+00:00",
-      "duration_seconds": 0.086,
+      "started_at": "2026-09-06T12:13:18.969584+00:00",
+      "completed_at": "2026-09-06T12:13:19.048849+00:00",
+      "duration_seconds": 0.079,
       "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
     },
     {
@@ -170,10 +170,10 @@
       ],
       "cwd": "backend",
       "exit": 0,
-      "started_at": "2026-09-06T11:46:45.023532+00:00",
-      "completed_at": "2026-09-06T11:46:45.071386+00:00",
-      "duration_seconds": 0.048,
-      "output_sha256": "d05c0280a19426e07f212d7f92b01fa368423f6d58445c9cd7c94542fd26843b"
+      "started_at": "2026-09-06T12:13:19.049091+00:00",
+      "completed_at": "2026-09-06T12:13:19.094915+00:00",
+      "duration_seconds": 0.046,
+      "output_sha256": "2c4b768286e17cda517ae9db713c30a0a2a586356b1d5e3c9a172febf0e63ba6"
     },
     {
       "section": "generated-client",
@@ -186,10 +186,10 @@
       ],
       "cwd": ".",
       "exit": 0,
-      "started_at": "2026-09-06T11:46:45.071650+00:00",
-      "completed_at": "2026-09-06T11:46:46.307603+00:00",
-      "duration_seconds": 1.236,
-      "output_sha256": "3e913a7b44644086eb62a0ef2168e01ef6469f1606aeb7c771b2dd6cd3f7f540"
+      "started_at": "2026-09-06T12:13:19.095194+00:00",
+      "completed_at": "2026-09-06T12:13:20.230104+00:00",
+      "duration_seconds": 1.135,
+      "output_sha256": "2a46c860f2d2753ee7bca75ae3ab1bd2934ffedb8078de618bbd5518fc4c5260"
     },
     {
       "section": "frontend-unit-accessibility-coverage",
@@ -200,16 +200,16 @@
         "run",
         "test:coverage",
         "--",
-        "--coverage.reportsDirectory=/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp/frontend-coverage",
+        "--coverage.reportsDirectory=/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-92tdd_0i/frontend-coverage",
         "--coverage.reporter=text",
         "--coverage.reporter=cobertura"
       ],
       "cwd": ".",
       "exit": 0,
-      "started_at": "2026-09-06T11:46:46.307996+00:00",
-      "completed_at": "2026-09-06T11:46:59.177880+00:00",
-      "duration_seconds": 12.87,
-      "output_sha256": "bb783bf080a90599d6d3f336049c355d377384aa27259cdb1c3746ba2e88ff59"
+      "started_at": "2026-09-06T12:13:20.230422+00:00",
+      "completed_at": "2026-09-06T12:13:32.647775+00:00",
+      "duration_seconds": 12.417,
+      "output_sha256": "d9aeeec2d22fedb02fff8b7e4929d5eb90c372375c18e55351302a026a707510"
     },
     {
       "section": "frontend-changed-line-coverage",
@@ -217,15 +217,15 @@
         "uv",
         "run",
         "diff-cover",
-        "/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp/frontend-coverage/cobertura-coverage.xml",
+        "/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-92tdd_0i/frontend-coverage/cobertura-coverage.xml",
         "--compare-branch=d987d5f48273d49234b07aacb3fa185337a1b4f2",
         "--fail-under=100"
       ],
       "cwd": "backend",
       "exit": 0,
-      "started_at": "2026-09-06T11:46:59.178447+00:00",
-      "completed_at": "2026-09-06T11:46:59.430939+00:00",
-      "duration_seconds": 0.253,
+      "started_at": "2026-09-06T12:13:32.648678+00:00",
+      "completed_at": "2026-09-06T12:13:32.901138+00:00",
+      "duration_seconds": 0.252,
       "output_sha256": "60b68fbbac06959cd5aec6d805da8c3ec2f97cb56c890a712a24d5fe80546f0e"
     },
     {
@@ -239,9 +239,9 @@
       ],
       "cwd": ".",
       "exit": 0,
-      "started_at": "2026-09-06T11:46:59.431511+00:00",
-      "completed_at": "2026-09-06T11:47:01.497160+00:00",
-      "duration_seconds": 2.066,
+      "started_at": "2026-09-06T12:13:32.901407+00:00",
+      "completed_at": "2026-09-06T12:13:34.919673+00:00",
+      "duration_seconds": 2.018,
       "output_sha256": "6b6a7f08689e37762d405e6e8847052dcfb970da952e13ec69f5fdf90d283554"
     },
     {
@@ -255,9 +255,9 @@
       ],
       "cwd": ".",
       "exit": 0,
-      "started_at": "2026-09-06T11:47:01.497494+00:00",
-      "completed_at": "2026-09-06T11:47:04.590421+00:00",
-      "duration_seconds": 3.093,
+      "started_at": "2026-09-06T12:13:34.920019+00:00",
+      "completed_at": "2026-09-06T12:13:37.949560+00:00",
+      "duration_seconds": 3.03,
       "output_sha256": "c134767a6bc58cc900b414477f33f82b1e44358a2d473ffe33f1c34e31b77f2f"
     },
     {
@@ -271,9 +271,9 @@
       ],
       "cwd": ".",
       "exit": 0,
-      "started_at": "2026-09-06T11:47:04.590714+00:00",
-      "completed_at": "2026-09-06T11:47:05.663703+00:00",
-      "duration_seconds": 1.073,
+      "started_at": "2026-09-06T12:13:37.949879+00:00",
+      "completed_at": "2026-09-06T12:13:38.959947+00:00",
+      "duration_seconds": 1.01,
       "output_sha256": "b4453a8b694c6de35d26000b859534e1d2cd3883ab118c531f044ab980ce678d"
     },
     {
@@ -287,10 +287,10 @@
       ],
       "cwd": ".",
       "exit": 0,
-      "started_at": "2026-09-06T11:47:05.664012+00:00",
-      "completed_at": "2026-09-06T11:47:08.113627+00:00",
-      "duration_seconds": 2.45,
-      "output_sha256": "e2e3ab7e24e5dcc036e7c3ccc0253806d1c2b1604acb7858ee7a43fc3ef20cba"
+      "started_at": "2026-09-06T12:13:38.960257+00:00",
+      "completed_at": "2026-09-06T12:13:41.266547+00:00",
+      "duration_seconds": 2.306,
+      "output_sha256": "82ca108fbf6912161418e48d8010a8d7107adb5e2f921241cea8f57652bfe316"
     },
     {
       "section": "python-vulnerabilities",
@@ -301,9 +301,9 @@
       ],
       "cwd": "backend",
       "exit": 0,
-      "started_at": "2026-09-06T11:47:08.114016+00:00",
-      "completed_at": "2026-09-06T11:47:18.757398+00:00",
-      "duration_seconds": 10.644,
+      "started_at": "2026-09-06T12:13:41.266834+00:00",
+      "completed_at": "2026-09-06T12:13:42.122758+00:00",
+      "duration_seconds": 0.856,
       "output_sha256": "f82c381625d03c68ddf9f598904e5ebbb4931236a5160cefcf1633a1e4b26eed"
     },
     {
@@ -317,9 +317,9 @@
       ],
       "cwd": "backend",
       "exit": 0,
-      "started_at": "2026-09-06T11:47:18.757830+00:00",
-      "completed_at": "2026-09-06T11:47:19.124366+00:00",
-      "duration_seconds": 0.367,
+      "started_at": "2026-09-06T12:13:42.123140+00:00",
+      "completed_at": "2026-09-06T12:13:42.442461+00:00",
+      "duration_seconds": 0.319,
       "output_sha256": "b2d5b0a42c97c04c5ea3c86e98a754ea4d384dc27f68155e83c2c6bc9b1bfb1c"
     },
     {
@@ -328,13 +328,13 @@
         "bash",
         "tools/phase4_parser_checkpoint.sh",
         "--license-policy",
-        "/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp/licenses.json"
+        "/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-92tdd_0i/licenses.json"
       ],
       "cwd": ".",
       "exit": 0,
-      "started_at": "2026-09-06T11:47:19.124847+00:00",
-      "completed_at": "2026-09-06T11:47:19.172267+00:00",
-      "duration_seconds": 0.047,
+      "started_at": "2026-09-06T12:13:42.442902+00:00",
+      "completed_at": "2026-09-06T12:13:42.491097+00:00",
+      "duration_seconds": 0.048,
       "output_sha256": "9bab453dffcc318fafa65b05c9c06a31a3a54ef9f7eef055ed79b88fe5a78afa"
     },
     {
@@ -348,9 +348,9 @@
       ],
       "cwd": "backend",
       "exit": 0,
-      "started_at": "2026-09-06T11:47:19.172613+00:00",
-      "completed_at": "2026-09-06T11:47:19.220491+00:00",
-      "duration_seconds": 0.048,
+      "started_at": "2026-09-06T12:13:42.491415+00:00",
+      "completed_at": "2026-09-06T12:13:42.538188+00:00",
+      "duration_seconds": 0.047,
       "output_sha256": "756d762a3413cb2f4c56aa7329cefef662e1443bb74185259b7506334ed42a51"
     },
     {
@@ -364,9 +364,9 @@
       ],
       "cwd": ".",
       "exit": 0,
-      "started_at": "2026-09-06T11:47:19.220814+00:00",
-      "completed_at": "2026-09-06T11:47:21.035804+00:00",
-      "duration_seconds": 1.815,
+      "started_at": "2026-09-06T12:13:42.538498+00:00",
+      "completed_at": "2026-09-06T12:13:44.793764+00:00",
+      "duration_seconds": 2.255,
       "output_sha256": "a01559c4bedd8b4eb60cf38e7413c73dc3a34b384c3c131887540b91f84a1786"
     },
     {
@@ -381,9 +381,9 @@
       ],
       "cwd": ".",
       "exit": 0,
-      "started_at": "2026-09-06T11:47:21.036189+00:00",
-      "completed_at": "2026-09-06T11:47:21.291170+00:00",
-      "duration_seconds": 0.255,
+      "started_at": "2026-09-06T12:13:44.794606+00:00",
+      "completed_at": "2026-09-06T12:13:45.064537+00:00",
+      "duration_seconds": 0.27,
       "output_sha256": "9f02ba6d90d632bf1f091639f08df2e7009d59d3242106c48b260b5efe8b2c78"
     },
     {
@@ -394,9 +394,9 @@
       ],
       "cwd": ".",
       "exit": 0,
-      "started_at": "2026-09-06T11:47:21.291823+00:00",
-      "completed_at": "2026-09-06T11:47:21.430119+00:00",
-      "duration_seconds": 0.138,
+      "started_at": "2026-09-06T12:13:45.064944+00:00",
+      "completed_at": "2026-09-06T12:13:45.215241+00:00",
+      "duration_seconds": 0.15,
       "output_sha256": "10dd9cbcaf409a63b58f4be49f326be87d1d5dd66326ee131df14005f933ba98"
     },
     {
@@ -408,9 +408,9 @@
       ],
       "cwd": ".",
       "exit": 0,
-      "started_at": "2026-09-06T11:47:21.430472+00:00",
-      "completed_at": "2026-09-06T11:47:21.472321+00:00",
-      "duration_seconds": 0.042,
+      "started_at": "2026-09-06T12:13:45.215683+00:00",
+      "completed_at": "2026-09-06T12:13:45.263456+00:00",
+      "duration_seconds": 0.048,
       "output_sha256": "721e6be69ec7b08baae9d6bc75b59ad5dfeba77fda2cbcf0f59a3b7faa305531"
     },
     {
@@ -421,9 +421,9 @@
       ],
       "cwd": ".",
       "exit": 0,
-      "started_at": "2026-09-06T11:47:21.472711+00:00",
-      "completed_at": "2026-09-06T11:47:41.554783+00:00",
-      "duration_seconds": 20.082,
+      "started_at": "2026-09-06T12:13:45.263903+00:00",
+      "completed_at": "2026-09-06T12:14:04.455727+00:00",
+      "duration_seconds": 19.192,
       "output_sha256": "55d0d9ba936b0ba4a2d1fc3480e43289c280a1ee21ce3e9db380b2d71e5d2206"
     },
     {
@@ -439,10 +439,10 @@
       ],
       "cwd": ".",
       "exit": 0,
-      "started_at": "2026-09-06T11:47:41.845924+00:00",
-      "completed_at": "2026-09-06T11:47:54.713528+00:00",
-      "duration_seconds": 12.868,
-      "output_sha256": "9bc71277baae350852328a2fc8272a063238c66ba06a7465922396d27a0957bd"
+      "started_at": "2026-09-06T12:14:04.747377+00:00",
+      "completed_at": "2026-09-06T12:14:17.397536+00:00",
+      "duration_seconds": 12.65,
+      "output_sha256": "3f3cb64c8d775410b5763ec7728fcef4c91e1825ac3310f95e6b3ed33c0fe5dc"
     },
     {
       "section": "built-stack-smoke",
@@ -452,14 +452,14 @@
       ],
       "cwd": ".",
       "exit": 0,
-      "started_at": "2026-09-06T11:47:54.713937+00:00",
-      "completed_at": "2026-09-06T11:48:56.562650+00:00",
-      "duration_seconds": 61.849,
-      "output_sha256": "befb603102946a4856d62763c1351de750f5856603cab1e19c915f6205e38550"
+      "started_at": "2026-09-06T12:14:17.397892+00:00",
+      "completed_at": "2026-09-06T12:15:19.311684+00:00",
+      "duration_seconds": 61.913,
+      "output_sha256": "c5797f4ac69280423272c08db7e6ddb5834bd35f1ada9e0e7009f5a3a848e79a"
     }
   ],
-  "source_commit": "ec6fd68",
-  "evidence_directory": "/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp",
+  "source_commit": "231e5b1",
+  "evidence_directory": "/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-92tdd_0i",
   "smoke_exit": 0,
   "mutation_results": [
     {
@@ -623,10 +623,102 @@
     }
   ],
   "artifact_sha256": {
-    "backend.xml": "ce89215fe00649b768f80caa9987aa9678b4085494a3fd9fa351e9373939fb30",
-    "backend-coverage.xml": "ab527b36f74d01e42916e4617d683ea7f8f7ae7bb8db55ca7b99e288a2647540",
-    "frontend-coverage/cobertura-coverage.xml": "92d0dbb475af006fc75f470dbac8361c03dfd479cb18af92c2362c655c389abe",
-    "built-stack-smoke.log": "befb603102946a4856d62763c1351de750f5856603cab1e19c915f6205e38550",
-    "commands.json": "d6372309f4897569e69fad7b6f7d3083fe666abfb3431657092330d36ab30919"
+    "backend.xml": "fe3ba6ff1c8cff51decc0243f2103ad458d4105bb2b832b0b728a5763b5472ee",
+    "backend-coverage.xml": "e6b2423ed47ad1cb4995ae9ecff4e7222533782efcf24e07e92d83ca92210446",
+    "frontend-coverage/cobertura-coverage.xml": "d7efa888631b619a14f90d31ef337896a0154a124ddf5c65823198ca8883516d",
+    "built-stack-smoke.log": "c5797f4ac69280423272c08db7e6ddb5834bd35f1ada9e0e7009f5a3a848e79a",
+    "commands.json": "321d4430710a6f9f4ce1f971ac7b5515403bc89d04455a99b1c8ac7daefedacc"
+  },
+  "supplementary_cr16_db_mutation_records": [
+    {
+      "section": "cr16-mutant-row-identity",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "backend",
+        "python",
+        "-c",
+        "\nimport pytest\nfrom sqlalchemy import text\nimport sys\nneedle, replacement, target = sys.argv[1:]\nclass GuardMutation:\n    def __init__(self):\n        self.killed = False\n    @pytest.hookimpl(hookwrapper=True)\n    def pytest_runtest_call(self, item):\n        factory = item.funcargs[\"activation_session_factory\"]\n        with factory.begin() as session:\n            original = session.scalar(text(\"SELECT pg_get_functiondef('verboflex_guard_localization_scope_activation()'::regprocedure)\"))\n            changed = original.replace(needle, replacement, 1)\n            assert changed != original, \"mutant did not execute\"\n            session.execute(text(changed))\n        try:\n            yield\n        finally:\n            with factory.begin() as session:\n                session.execute(text(original))\n    @pytest.hookimpl(hookwrapper=True)\n    def pytest_runtest_makereport(self, item, call):\n        outcome = yield\n        report = outcome.get_result()\n        if report.when == \"call\":\n            self.killed = report.failed and \"DID NOT RAISE\" in str(report.longrepr)\nplugin = GuardMutation()\ncode = pytest.main([\"backend/tests/integration/test_retained_baseline_constraint_epoch.py::\" + target, \"-q\", \"--tb=short\"], plugins=[plugin])\nassert code == 1 and plugin.killed, \"mutant survived or failed for an unrelated reason\"\nprint(\"DB guard mutant killed by the original behavioral assertion:\", target)\n",
+        "AND (to_jsonb(NEW) - 'dataset_version' - 'updated_at')\n           = (to_jsonb(OLD) - 'dataset_version' - 'updated_at')",
+        "AND TRUE",
+        "test_retained_epoch_does_not_authorize_scope_or_activation_changes[created_at]"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T12:08:53.555657+00:00",
+      "completed_at": "2026-09-06T12:08:54.597591+00:00",
+      "duration_seconds": 1.042,
+      "output_sha256": "37626965040d35d2dddb4f923bc04710142bb48ab4d7496970c37447640c4189"
+    },
+    {
+      "section": "cr16-mutant-exact-increment",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "backend",
+        "python",
+        "-c",
+        "\nimport pytest\nfrom sqlalchemy import text\nimport sys\nneedle, replacement, target = sys.argv[1:]\nclass GuardMutation:\n    def __init__(self):\n        self.killed = False\n    @pytest.hookimpl(hookwrapper=True)\n    def pytest_runtest_call(self, item):\n        factory = item.funcargs[\"activation_session_factory\"]\n        with factory.begin() as session:\n            original = session.scalar(text(\"SELECT pg_get_functiondef('verboflex_guard_localization_scope_activation()'::regprocedure)\"))\n            changed = original.replace(needle, replacement, 1)\n            assert changed != original, \"mutant did not execute\"\n            session.execute(text(changed))\n        try:\n            yield\n        finally:\n            with factory.begin() as session:\n                session.execute(text(original))\n    @pytest.hookimpl(hookwrapper=True)\n    def pytest_runtest_makereport(self, item, call):\n        outcome = yield\n        report = outcome.get_result()\n        if report.when == \"call\":\n            self.killed = report.failed and \"DID NOT RAISE\" in str(report.longrepr)\nplugin = GuardMutation()\ncode = pytest.main([\"backend/tests/integration/test_retained_baseline_constraint_epoch.py::\" + target, \"-q\", \"--tb=short\"], plugins=[plugin])\nassert code == 1 and plugin.killed, \"mutant survived or failed for an unrelated reason\"\nprint(\"DB guard mutant killed by the original behavioral assertion:\", target)\n",
+        "= OLD.dataset_version::bigint + 1",
+        ">= OLD.dataset_version::bigint",
+        "test_retained_epoch_requires_exact_increment[2]"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T12:08:54.597946+00:00",
+      "completed_at": "2026-09-06T12:08:55.638126+00:00",
+      "duration_seconds": 1.04,
+      "output_sha256": "05b5746ca05633740c376d5fba00c0d2591958f70102396595744b6c4ea86571"
+    },
+    {
+      "section": "cr16-mutant-baseline-owner",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "backend",
+        "python",
+        "-c",
+        "\nimport pytest\nfrom sqlalchemy import text\nimport sys\nneedle, replacement, target = sys.argv[1:]\nclass GuardMutation:\n    def __init__(self):\n        self.killed = False\n    @pytest.hookimpl(hookwrapper=True)\n    def pytest_runtest_call(self, item):\n        factory = item.funcargs[\"activation_session_factory\"]\n        with factory.begin() as session:\n            original = session.scalar(text(\"SELECT pg_get_functiondef('verboflex_guard_localization_scope_activation()'::regprocedure)\"))\n            changed = original.replace(needle, replacement, 1)\n            assert changed != original, \"mutant did not execute\"\n            session.execute(text(changed))\n        try:\n            yield\n        finally:\n            with factory.begin() as session:\n                session.execute(text(original))\n    @pytest.hookimpl(hookwrapper=True)\n    def pytest_runtest_makereport(self, item, call):\n        outcome = yield\n        report = outcome.get_result()\n        if report.when == \"call\":\n            self.killed = report.failed and \"DID NOT RAISE\" in str(report.longrepr)\nplugin = GuardMutation()\ncode = pytest.main([\"backend/tests/integration/test_retained_baseline_constraint_epoch.py::\" + target, \"-q\", \"--tb=short\"], plugins=[plugin])\nassert code == 1 and plugin.killed, \"mutant survived or failed for an unrelated reason\"\nprint(\"DB guard mutant killed by the original behavioral assertion:\", target)\n",
+        "AND job.active_baseline_execution_id = execution.id",
+        "AND TRUE",
+        "test_retained_epoch_requires_authentic_job_baseline"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T12:08:55.638434+00:00",
+      "completed_at": "2026-09-06T12:08:56.637659+00:00",
+      "duration_seconds": 0.999,
+      "output_sha256": "14f3ac3de80b23313c2c50dbf46df8520eca652d512df6717b6ab330df757ac4"
+    },
+    {
+      "section": "cr16-mutant-monotonic-execution",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "backend",
+        "python",
+        "-c",
+        "\nimport pytest\nfrom sqlalchemy import text\nimport sys\nneedle, replacement, target = sys.argv[1:]\nclass GuardMutation:\n    def __init__(self):\n        self.killed = False\n    @pytest.hookimpl(hookwrapper=True)\n    def pytest_runtest_call(self, item):\n        factory = item.funcargs[\"activation_session_factory\"]\n        with factory.begin() as session:\n            original = session.scalar(text(\"SELECT pg_get_functiondef('verboflex_guard_localization_scope_activation()'::regprocedure)\"))\n            changed = original.replace(needle, replacement, 1)\n            assert changed != original, \"mutant did not execute\"\n            session.execute(text(changed))\n        try:\n            yield\n        finally:\n            with factory.begin() as session:\n                session.execute(text(original))\n    @pytest.hookimpl(hookwrapper=True)\n    def pytest_runtest_makereport(self, item, call):\n        outcome = yield\n        report = outcome.get_result()\n        if report.when == \"call\":\n            self.killed = report.failed and \"DID NOT RAISE\" in str(report.longrepr)\nplugin = GuardMutation()\ncode = pytest.main([\"backend/tests/integration/test_retained_baseline_constraint_epoch.py::\" + target, \"-q\", \"--tb=short\"], plugins=[plugin])\nassert code == 1 and plugin.killed, \"mutant survived or failed for an unrelated reason\"\nprint(\"DB guard mutant killed by the original behavioral assertion:\", target)\n",
+        "AND current_execution.sequence >= execution.sequence",
+        "AND TRUE",
+        "test_retained_epoch_rejects_current_execution_older_than_baseline"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T12:08:56.637942+00:00",
+      "completed_at": "2026-09-06T12:08:57.688185+00:00",
+      "duration_seconds": 1.05,
+      "output_sha256": "70dc870c454557094c3037e22ab107cf21d9574f54431c3c6c5121b0fea92467"
+    }
+  ],
+  "historical_run": {
+    "source_commit": "ec6fd68",
+    "source_digest": "sha256:d7306c29f5131dfc5f23318cb89664e83946742dab9f3982832e9bf082313406",
+    "evidence_commit": "84cfc19",
+    "disposition": "passed before independent CR15/CR16 discovery; superseded by current fresh pass"
   }
 }
