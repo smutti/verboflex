@@ -75,6 +75,80 @@ def test_worker_builds_exact_direct_or_paired_inputs(monkeypatch, separate):
     )
 
 
+@pytest.mark.parametrize("separate", [False, True])
+@pytest.mark.parametrize(
+    ("format", "layout", "old_path", "current_paths", "outside"),
+    [
+        (
+            "android_xml",
+            "app/res",
+            "app/res/values/old.xml",
+            ("app/res/values/moved.xml", "app/res/values-fr/new.xml"),
+            "other/res/values/a.xml",
+        ),
+        (
+            "json",
+            "json:flat-per-locale:locales/{locale}.json",
+            "locales/en.json",
+            ("locales/en.json", "locales/fr.json"),
+            "other/fr.json",
+        ),
+        (
+            "qt_ts",
+            "qt-ts:translations/app_{locale}.ts",
+            "translations/app_en.ts",
+            ("translations/app_en.ts", "translations/app_fr.ts"),
+            "translations/other_fr.ts",
+        ),
+        (
+            "ios_strings",
+            "ios-strings:app/{locale}.lproj/Localizable.strings",
+            "app/en.lproj/Localizable.strings",
+            ("app/en.lproj/Localizable.strings", "app/fr.lproj/Localizable.strings"),
+            "other/fr.lproj/Localizable.strings",
+        ),
+    ],
+)
+def test_current_snapshot_membership_uses_confirmed_layout_not_old_files(
+    monkeypatch, separate, format, layout, old_path, current_paths, outside
+):
+    session, identity, mapping, _, preview, _ = authority(monkeypatch, separate=separate)
+    side = "translations" if separate else "direct"
+    selected = build_layout_candidate(
+        format=format,
+        repository_side=side,
+        layout_identity=layout,
+        files=(old_path,),
+        values={"en": {"hello": "Hello"}},
+    )
+    candidates = [selected]
+    if separate:
+        candidates.append(
+            build_layout_candidate(
+                format=format,
+                repository_side="keys",
+                layout_identity=layout,
+                files=(old_path,),
+                values={"en": {"hello": "Hello"}},
+            )
+        )
+    mapping.selected_layout_candidate_id = selected.id
+    preview.result["layout_candidates"] = [candidate.to_mapping() for candidate in candidates]
+    # Deliberately opaque: discovery must not rerun the narrower preview grammar.
+    contents = {
+        (role, path): b"canonical parser owns validation"
+        for role in (("keys", side) if separate else (side,))
+        for path in (*current_paths, outside)
+    }
+    result = import_jobs._confirmed_parser_inputs(
+        session, identity=identity, source_contents=contents
+    )
+    assert {(item.repository_side, item.path) for item in result} == {
+        (role, path) for role in (("keys", side) if separate else (side,)) for path in current_paths
+    }
+    assert all(item.layout_identity == layout and item.format == format for item in result)
+
+
 @pytest.mark.parametrize(
     "defect",
     [
