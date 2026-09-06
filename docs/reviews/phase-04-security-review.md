@@ -2,13 +2,13 @@
 phase: 04
 created: 2026-09-06
 reviewer: independent gsd-security-auditor
-verdict: OPEN_THREATS
-source_digest: sha256:71d41b57dcf7d1bac376166c936212a360afb54c8aa99d4fbca6dd3321c54659
+verdict: ESCALATE
+source_digest: sha256:b233e7e48f9f1c0a831338955418d832143f8614f69ebc7637143e74312b58d3
 ---
 
 # Phase 04 — Independent Security Review
 
-Independent typed gsd-security-auditor source audit of commit `2b3b0d6661d896984629c51fd536becbd421d46d`. This is an interim source audit, not release certification. The source digest below is historical and invalidated by corrective work. CLOSED/resolved means controls and relevant executable tests were found, not that the unfinished final gauntlet passed. 72 source-level closures, six pending rechecks, including two high blockers. No implementation was modified by the auditor.
+Independent typed gsd-security-auditor recheck of commit `df9053614f9e9a13a7d85ba5181a00b306061e3c`. All 78 source dispositions are verified: 76 mitigations and two already-planned documented medium acceptances; zero open registered high threats. This is NOT release certification: the built-stack smoke returned HTTP 500 during import polling and a concurrency correction is underway. CLOSED/resolved means source mitigation verified at this digest, not that the final delivery gate passed. The eventual fix requires another source-bound recheck. No implementation was modified by the auditor.
 
 ## ASVS L1 / STRIDE Verification
 
@@ -35,12 +35,12 @@ The register was authored at planning time. Verification inspected the declared 
 | T-04-17 | high | mitigate | backend/src/verboflex/localization/importing/registry.py; backend/tests/unit/localization/importing/test_conformance.py; backend/tests/unit/localization/importing/test_output_budget.py | resolved |
 | T-04-18 | high | mitigate | backend/src/verboflex/localization/importing/registry.py; backend/tests/unit/localization/importing/test_conformance.py; backend/tests/unit/localization/importing/test_output_budget.py | resolved |
 | T-04-19 | high | mitigate | tools/phase4_parser_checkpoint.sh:132; tools/phase4_parser_checkpoint.sh:156; backend/tests/architecture/test_phase4_gauntlet.py | resolved |
-| T-04-20 | medium | mitigate | tools/phase4_parser_checkpoint.sh:132; tools/phase4_parser_checkpoint.sh:156; backend/tests/architecture/test_phase4_gauntlet.py | open: failure path dumps raw output; remove dump and prove canary redaction |
+| T-04-20 | medium | mitigate | tools/phase4_parser_checkpoint.sh; backend/tests/architecture/test_phase4_checkpoint_redaction.py; independently verified canary rejection, digest-only failure and failed raw-log removal | resolved |
 | T-04-21 | high | mitigate | backend/alembic/versions/0015_mapping_base_language.py; backend/tests/integration/test_migrations.py | resolved |
 | T-04-22 | high | mitigate | backend/src/verboflex/services/preview_jobs.py; backend/src/verboflex/services/products.py; backend/tests/integration/test_preview_jobs.py; backend/tests/integration/test_product_publication.py | resolved |
 | T-04-23 | medium | mitigate | backend/src/verboflex/services/preview_jobs.py; backend/src/verboflex/services/products.py; backend/tests/integration/test_preview_jobs.py; backend/tests/integration/test_product_publication.py | resolved |
 | T-04-24 | high | mitigate | frontend/src/features/admin/previews/ProductPreviewPage.tsx; backend/src/verboflex/api/v1/routes/admin_previews.py; backend/tests/api/test_admin_previews.py; frontend/src/features/admin/previews/ProductPreviewPage.test.tsx | resolved |
-| T-04-25 | medium | accept | frontend/src/features/admin/previews/ProductPreviewPage.tsx; backend/src/verboflex/api/v1/routes/admin_previews.py; backend/tests/api/test_admin_previews.py; frontend/src/features/admin/previews/ProductPreviewPage.test.tsx | open: planned acceptance recorded below; independent log recheck pending |
+| T-04-25 | medium | accept | frontend/src/features/admin/previews/ProductPreviewPage.tsx; backend/src/verboflex/api/v1/routes/admin_previews.py; backend/tests/api/test_admin_previews.py; frontend/src/features/admin/previews/ProductPreviewPage.test.tsx | documented acceptance |
 | T-04-26 | high | mitigate | frontend/src/features/admin/previews/ProductPreviewPage.tsx; backend/src/verboflex/api/v1/routes/admin_previews.py; backend/tests/api/test_admin_previews.py; frontend/src/features/admin/previews/ProductPreviewPage.test.tsx | resolved |
 | T-04-27 | high | mitigate | backend/alembic/versions/0016_canonical_translations.py; backend/alembic/versions/0020_bounded_key_identities.py; backend/tests/integration/test_migrations.py; backend/tests/integration/test_translation_import_activation.py | resolved |
 | T-04-28 | high | mitigate | backend/alembic/versions/0016_canonical_translations.py; backend/alembic/versions/0020_bounded_key_identities.py; backend/tests/integration/test_migrations.py; backend/tests/integration/test_translation_import_activation.py | resolved |
@@ -67,19 +67,19 @@ The register was authored at planning time. Verification inspected the declared 
 | T-04-49 | high | mitigate | frontend/src/features/translations/TranslationResultList.tsx; frontend/src/features/translations/TranslationResultList.test.tsx; backend/src/verboflex/services/translation_search.py | resolved |
 | T-04-50 | high | mitigate | frontend/src/features/translations/TranslationResultList.tsx; frontend/src/features/translations/TranslationResultList.test.tsx; backend/src/verboflex/services/translation_search.py | resolved |
 | T-04-51 | medium | mitigate | frontend/src/features/translations/TranslationResultList.tsx; frontend/src/features/translations/TranslationResultList.test.tsx; backend/src/verboflex/services/translation_search.py | resolved |
-| T-04-52 | medium | mitigate | frontend/src/features/translations/TranslationResultList.tsx; frontend/src/features/translations/TranslationResultList.test.tsx; backend/src/verboflex/services/translation_search.py | open: CR-10 mixed live/tombstoned variants; correction awaits independent recheck |
+| T-04-52 | medium | mitigate | backend/src/verboflex/services/translation_search.py; backend/src/verboflex/services/translation_constraints.py; backend/tests/integration/test_structured_group_deletion.py; real parser/activation refresh preserves live group and stable anchor | resolved |
 | T-04-53 | high | mitigate | frontend/src/features/translations/TranslationDetailPage.tsx; frontend/src/features/translations/MaximumLengthDialog.tsx; frontend/src/features/translations/TranslationDetailPage.test.tsx; frontend/src/features/translations/MaximumLengthDialog.test.tsx; backend/tests/api/test_translation_constraints.py; backend/tests/api/test_translations.py | resolved |
 | T-04-54 | high | mitigate | frontend/src/features/translations/TranslationDetailPage.tsx; frontend/src/features/translations/MaximumLengthDialog.tsx; frontend/src/features/translations/TranslationDetailPage.test.tsx; frontend/src/features/translations/MaximumLengthDialog.test.tsx; backend/tests/api/test_translation_constraints.py; backend/tests/api/test_translations.py | resolved |
 | T-04-55 | high | mitigate | frontend/src/features/translations/TranslationDetailPage.tsx; frontend/src/features/translations/MaximumLengthDialog.tsx; frontend/src/features/translations/TranslationDetailPage.test.tsx; frontend/src/features/translations/MaximumLengthDialog.test.tsx; backend/tests/api/test_translation_constraints.py; backend/tests/api/test_translations.py | resolved |
-| T-04-56 | medium | accept | frontend/src/features/translations/TranslationDetailPage.tsx; frontend/src/features/translations/MaximumLengthDialog.tsx; frontend/src/features/translations/TranslationDetailPage.test.tsx; frontend/src/features/translations/MaximumLengthDialog.test.tsx; backend/tests/api/test_translation_constraints.py; backend/tests/api/test_translations.py | open: planned acceptance recorded below; independent log recheck pending |
+| T-04-56 | medium | accept | frontend/src/features/translations/TranslationDetailPage.tsx; frontend/src/features/translations/MaximumLengthDialog.tsx; frontend/src/features/translations/TranslationDetailPage.test.tsx; frontend/src/features/translations/MaximumLengthDialog.test.tsx; backend/tests/api/test_translation_constraints.py; backend/tests/api/test_translations.py | documented acceptance |
 | T-04-57 | high | mitigate | tools/phase4_inventory.py; backend/tests/architecture/test_phase4_scope.py | resolved |
 | T-04-58 | high | mitigate | tools/phase4_gate.py; tools/phase4_smoke.sh; tools/phase4_smoke.py; tools/tests/test_phase4_smoke.py; backend/tests/architecture/test_phase4_gauntlet.py | resolved |
 | T-04-59 | high | mitigate | tools/phase4_gate.py; tools/phase4_smoke.sh; tools/phase4_smoke.py; tools/tests/test_phase4_smoke.py; backend/tests/architecture/test_phase4_gauntlet.py | resolved |
 | T-04-60 | high | mitigate | tools/verify_translation_mutants.py; backend/tests/architecture/test_translation_mutation_verifier.py | resolved |
-| T-04-61 | high | mitigate | tools/verify_phase4_closeout.py; tools/phase4_gate.py; backend/tests/architecture/test_phase4_closeout_gate.py; independent read-only fabricated T1 report reproduction (accepted with exit 0) | resolved |
-| T-04-62 | high | mitigate | tools/verify_phase4_closeout.py; tools/phase4_gate.py; backend/tests/architecture/test_phase4_closeout_gate.py; independent read-only fabricated T1 report reproduction (accepted with exit 0) | open: CR-11 omitted or downgraded registered threats accepted |
-| T-04-63 | high | mitigate | tools/verify_phase4_closeout.py; tools/phase4_gate.py; backend/tests/architecture/test_phase4_closeout_gate.py; independent read-only fabricated T1 report reproduction (accepted with exit 0) | resolved |
-| T-04-64 | high | mitigate | tools/verify_phase4_closeout.py; tools/phase4_gate.py; backend/tests/architecture/test_phase4_closeout_gate.py; independent read-only fabricated T1 report reproduction (accepted with exit 0) | open: CR-11 missing authoritative severity/disposition binding |
+| T-04-61 | high | mitigate | tools/phase4_gate.py; backend/tests/architecture/test_phase4_gauntlet.py; backend/tests/architecture/test_phase4_closeout_gate.py; exact command/timestamp/exit/digest ledger and source-drift rejection | resolved |
+| T-04-62 | high | mitigate | tools/verify_phase4_closeout.py; backend/tests/architecture/test_phase4_closeout_gate.py; independent probes reject missing, duplicate, unknown and fabricated-only threat ledgers | resolved |
+| T-04-63 | high | mitigate | tools/phase4_gate.py; tools/phase4_smoke.py; tools/tests/test_phase4_smoke.py; content-free output and seeded secret/source redaction; final artifact scan pending | resolved |
+| T-04-64 | high | mitigate | tools/verify_phase4_closeout.py; backend/tests/architecture/test_phase4_closeout_gate.py; authoritative planned severity/disposition binding and conflicting-plan duplicate rejection | resolved |
 | T-04-65 | medium | mitigate | frontend/src/features/translations/translationPreferences.ts; frontend/src/features/translations/useTranslationSearch.ts; frontend/src/features/translations/translationPreferences.test.ts; frontend/src/features/translations/useTranslationSearch.test.ts | resolved |
 | T-04-66 | high | mitigate | frontend/src/features/translations/translationPreferences.ts; frontend/src/features/translations/useTranslationSearch.ts; frontend/src/features/translations/translationPreferences.test.ts; frontend/src/features/translations/useTranslationSearch.test.ts | resolved |
 | T-04-67 | high | mitigate | frontend/src/features/translations/translationPreferences.ts; frontend/src/features/translations/useTranslationSearch.ts; frontend/src/features/translations/translationPreferences.test.ts; frontend/src/features/translations/useTranslationSearch.test.ts | resolved |
@@ -101,5 +101,4 @@ A read-only `runpy.run_path` call to `validate_document(document, "security")` a
 
 ## Pending Final Evidence
 
-The current complete gauntlet was interrupted after CR-10; its results cannot establish a release pass. Recheck CR-10, CR-11, checkpoint failure-output redaction, documented planned risks, new source digest, complete gauntlet, isolated live smoke and final artifact redaction. Related frontend CR-12 remains a code-review gate. No final SECURED verdict is claimed.
-
+CR-10, CR-11, checkpoint redaction, planned risks, CR-12 and CR-13 were independently rechecked. The later complete gauntlet passed backend/frontend, coverage, static/build/dependency, mutation and browser sections but failed with import polling HTTP 500. The new polling/activation concurrency correction, a fresh complete gauntlet/smoke, final artifact scan and final source-bound independent review remain required. No final SECURED verdict is claimed.
