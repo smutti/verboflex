@@ -171,13 +171,14 @@ function previewConfirmationMatches(
   confirmation: AdminPreviewConfirmationResponse,
   job: AdminPreviewJobResponse,
   candidate: AdminPreviewLayoutCandidateResponse,
-  previewDigest: string,
   baseLanguage: string,
 ) {
   return (
     confirmation.job_id === job.id &&
     confirmation.mapping_id === job.mapping_id &&
-    confirmation.preview_digest === previewDigest &&
+    // The server binds base_language into this digest after validating the
+    // original request digest. Do not compare it with the unbound preview digest.
+    /^[0-9a-f]{64}$/.test(confirmation.preview_digest) &&
     confirmation.layout_candidate_id === candidate.id &&
     confirmation.layout_candidate_version === candidate.version &&
     confirmation.base_language === baseLanguage
@@ -188,7 +189,6 @@ function activeConfirmationMatches(
   confirmation: AdminActiveRevisionRevalidationConfirmationResponse,
   job: AdminActiveRevisionRevalidationJobResponse,
   candidate: AdminPreviewLayoutCandidateResponse,
-  previewDigest: string,
   baseLanguage: string,
 ) {
   return (
@@ -198,7 +198,7 @@ function activeConfirmationMatches(
     confirmation.active_revision_version === job.active_revision_version &&
     confirmation.mapping_id === job.mapping_id &&
     confirmation.connection_generation === job.connection_generation &&
-    confirmation.preview_digest === previewDigest &&
+    /^[0-9a-f]{64}$/.test(confirmation.preview_digest) &&
     confirmation.layout_candidate_id === candidate.id &&
     confirmation.layout_candidate_version === candidate.version &&
     confirmation.base_language === baseLanguage
@@ -632,7 +632,6 @@ function PreviewJobView({
           response.data,
           job,
           selectedCandidate,
-          result.digest,
           selectedBaseLanguage,
         )
       ) {
@@ -1237,7 +1236,6 @@ function PublishedMappingRecovery({
           response.data,
           job,
           selectedCandidate,
-          result.digest,
           selectedBaseLanguage,
         )
       ) {

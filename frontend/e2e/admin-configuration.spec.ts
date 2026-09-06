@@ -387,7 +387,7 @@ function previewJob(
       state === "succeeded"
         ? {
             detector_version: "detector-v1",
-            digest: `preview-digest-${attempt}`,
+            digest: "c".repeat(64),
             layout_candidates: layoutCandidates(),
           }
         : null,
@@ -1101,17 +1101,29 @@ test("product collection preserves API order across all states and responsive pr
   }
 });
 
-test("CR09: a language-bound confirmation digest enables publication", async ({ page }) => {
+test("CR09: a language-bound confirmation digest enables publication", async ({
+  page,
+}) => {
   const state = defaultState();
+  state.mappings = [directMapping];
   state.previewAttempts = 1;
   await installAdminApi(page, state);
   await page.goto("/admin/products/product-1/preview");
-  await page.getByRole("button", { name: "Run validation", exact: true }).click();
-  await page.getByRole("radio", { name: "Android XML — app/src/main/res" }).check();
+  await page
+    .getByRole("button", { name: "Run validation", exact: true })
+    .click();
+  await page
+    .getByRole("radio", { name: "Android XML — Android XML", exact: true })
+    .check();
   await chooseSelect(page, "Base language", "en");
-  const publish = page.getByRole("button", { name: "Publish product", exact: true });
+  const publish = page.getByRole("button", {
+    name: "Publish changes",
+    exact: true,
+  });
   await expect(publish).toBeDisabled();
-  await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Confirm preview", exact: true })
+    .click();
   await expect(page.getByText("Confirmed", { exact: true })).toBeVisible();
   await expect(publish).toBeEnabled();
 });
