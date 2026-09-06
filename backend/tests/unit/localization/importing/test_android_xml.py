@@ -36,7 +36,10 @@ def _android_module() -> Any:
 @pytest.mark.parametrize("tail", ["LOST", "\n LOST \t"])
 def test_android_structured_item_tail_cannot_silently_discard_content(container, item, tail):
     _, registry = _canonical_modules()
-    content = f'<resources><string name="peer">Peer</string><{container} name="items">{item}{tail}</{container}></resources>'.encode()
+    content = (
+        '<resources><string name="peer">Peer</string>'
+        f'<{container} name="items">{item}{tail}</{container}></resources>'
+    ).encode()
     result = registry.parse_canonical_snapshot(_input(content=content))
     assert result.values == ()
     assert [issue.code for issue in result.issues] == ["unsupported_structure"]

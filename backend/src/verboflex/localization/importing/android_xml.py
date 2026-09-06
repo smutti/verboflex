@@ -416,7 +416,7 @@ def _plural_values(
             if (item.tail or "").strip():
                 raise _UnsupportedAndroidXml
             continue
-        if item.tag != "item":
+        if item.tag != "item" or (item.tail or "").strip():
             raise _UnsupportedAndroidXml
         _require_attributes(item, allowed={"quantity"}, required={"quantity"})
         quantity = item.attrib["quantity"]
@@ -495,7 +495,7 @@ def _array_values(
             if (item.tail or "").strip():
                 raise _UnsupportedAndroidXml
             continue
-        if item.tag != "item" or item.attrib:
+        if item.tag != "item" or item.attrib or (item.tail or "").strip():
             raise _UnsupportedAndroidXml
         if item_position >= MAX_ANDROID_VALUES:
             raise _UnsupportedAndroidXml
