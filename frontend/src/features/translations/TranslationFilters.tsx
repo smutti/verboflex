@@ -117,6 +117,7 @@ export function TranslationFilters({
         ))}
       </div>
       <Button
+        data-clear-translation-filters
         type="button"
         variant="outline"
         className="min-h-[44px]"

@@ -1,0 +1,472 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useOutletContext } from "react-router-dom";
+import {
+  listTranslationOptions,
+  type TranslationOptionsResponse,
+} from "../../api/client";
+import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { Skeleton } from "../../components/ui/skeleton";
+import { TranslationFilters } from "./TranslationFilters";
+import { TranslationResultList } from "./TranslationResultList";
+import {
+  loadTranslationPreferences,
+  sanitizeTranslationPreferences,
+  saveTranslationPreferences,
+} from "./translationPreferences";
+import {
+  useTranslationSearch,
+  type TranslationSearchFilters,
+  type TranslationSearchSnapshot,
+} from "./useTranslationSearch";
+import type { TranslationsWorkspaceContext } from "./TranslationsWorkspace";
+
+const DEFAULT_FILTERS: TranslationSearchFilters = {
+  productId: null,
+  language: null,
+  state: null,
+  violation: null,
+  deleted: "active",
+};
+const EMPTY_OPTIONS: TranslationOptionsResponse = {
+  products: [],
+  languages: [],
+};
+type Seed = {
+  query: string;
+  filters: TranslationSearchFilters;
+  snapshot?: TranslationSearchSnapshot | null;
+  focusControl?: string;
+};
+type ReadyOptions = { options: TranslationOptionsResponse; seed: Seed };
+
+function LoadingResults() {
+  return (
+    <div className="space-y-(--space-md)" role="status" aria-live="polite">
+      <span>Loading translations</span>
+      {Array.from({ length: 5 }, (_, index) => (
+        <div
+          key={index}
+          data-translation-skeleton
+          className="grid grid-cols-1 gap-(--space-md) border-b p-(--space-md) md:grid-cols-6"
+          aria-hidden="true"
+        >
+          {Array.from({ length: 6 }, (_, column) => (
+            <Skeleton key={column} className="h-12 w-full" />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SearchError({
+  onRetry,
+  alertRef,
+}: {
+  onRetry: () => void;
+  alertRef?: React.Ref<HTMLDivElement>;
+}) {
+  return (
+    <Alert ref={alertRef} tabIndex={-1}>
+      <AlertTitle>Translations could not be loaded</AlertTitle>
+      <AlertDescription className="space-y-(--space-md)">
+        <p>
+          Your filters are still available. Retry the search without leaving
+          this page.
+        </p>
+        <Button type="button" variant="outline" onClick={onRetry}>
+          Retry search
+        </Button>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+function ResolvedSearch({
+  ready,
+  context,
+  onRestart,
+}: {
+  ready: ReadyOptions;
+  context: TranslationsWorkspaceContext;
+  onRestart: (seed: Seed) => void;
+}) {
+  const { options, seed } = ready;
+  const search = useTranslationSearch({
+    accessToken: context.accessToken,
+    initialQuery: seed.query,
+    initialFilters: seed.filters,
+    initialSnapshot: seed.snapshot,
+  });
+  const resultHeading = useRef<HTMLHeadingElement>(null);
+  const resultRegion = useRef<HTMLElement>(null);
+  const alertRef = useRef<HTMLDivElement>(null);
+  const explicitAction = useRef(false);
+  const previousIdentity = useRef(search.requestIdentity);
+  const restorationDone = useRef(false);
+  const { setSnapshot } = context;
+  const { createSnapshot, query, filters, items, nextCursor, requestIdentity } =
+    search;
+  useEffect(() => {
+    setSnapshot(createSnapshot(window.scrollY, null));
+  }, [
+    setSnapshot,
+    createSnapshot,
+    query,
+    filters,
+    items,
+    nextCursor,
+    requestIdentity,
+  ]);
+
+  useEffect(() => {
+    try {
+      saveTranslationPreferences(
+        localStorage,
+        context.principal.id,
+        options,
+        search.filters,
+      );
+    } catch {
+      /* Storage can be disabled; search stays usable in memory. */
+    }
+  }, [context.principal.id, options, search.filters]);
+
+  useEffect(() => {
+    if (
+      search.requestIdentity &&
+      previousIdentity.current !== search.requestIdentity
+    ) {
+      previousIdentity.current = search.requestIdentity;
+      resultHeading.current?.scrollIntoView({
+        behavior: "instant",
+        block: "start",
+      });
+    }
+  }, [search.requestIdentity]);
+
+  useEffect(() => {
+    let active = true;
+    if (search.initialError && explicitAction.current)
+      queueMicrotask(() => {
+        if (active) alertRef.current?.focus();
+      });
+    return () => {
+      active = false;
+    };
+  }, [search.initialError]);
+
+  useEffect(() => {
+    if (seed.focusControl) {
+      if (seed.focusControl === "clear") {
+        document
+          .querySelector<HTMLButtonElement>("[data-clear-translation-filters]")
+          ?.focus({ preventScroll: true });
+        return;
+      }
+      const control = Array.from(
+        document.querySelectorAll<HTMLElement>('[role="combobox"]'),
+      ).find((element) => element.id.endsWith(`-${seed.focusControl}`));
+      control?.focus({ preventScroll: true });
+    }
+  }, [seed.focusControl]);
+
+  useEffect(() => {
+    const navigation = search.restoredNavigation;
+    if (!navigation || restorationDone.current) return;
+    window.scrollTo({ top: navigation.scrollAnchor, behavior: "instant" });
+    const restoreFocus = () => {
+      if (!navigation.focusedGroupId) {
+        restorationDone.current = true;
+        return true;
+      }
+      const link = Array.from(
+        resultRegion.current?.querySelectorAll<HTMLAnchorElement>(
+          "a[data-translation-group-id]",
+        ) ?? [],
+      ).find(
+        (element) =>
+          element.dataset.translationGroupId === navigation.focusedGroupId,
+      );
+      if (!link) return false;
+      link.focus({ preventScroll: true });
+      restorationDone.current = true;
+      return true;
+    };
+    if (restoreFocus()) return;
+    const observer = new MutationObserver(() => {
+      if (restoreFocus()) observer.disconnect();
+    });
+    if (resultRegion.current)
+      observer.observe(resultRegion.current, {
+        childList: true,
+        subtree: true,
+      });
+    return () => observer.disconnect();
+  }, [search.restoredNavigation]);
+
+  const clearAll = () => {
+    context.setSnapshot(null);
+    onRestart({ query: "", filters: DEFAULT_FILTERS, focusControl: "clear" });
+  };
+  const changeFilters = (filters: TranslationSearchFilters) => {
+    explicitAction.current = true;
+    if (filters.productId !== search.filters.productId) {
+      onRestart({ query: search.query, filters, focusControl: "productId" });
+    } else search.setFilters(filters);
+  };
+  const filtered =
+    search.query !== "" ||
+    search.filters.productId !== null ||
+    search.filters.language !== null ||
+    search.filters.state != null ||
+    search.filters.violation != null ||
+    search.filters.deleted !== "active";
+  const criteria = [
+    search.query && `Search: ${search.query}`,
+    search.filters.productId &&
+      `Product: ${options.products.find((item) => item.id === search.filters.productId)?.name}`,
+    search.filters.language && `Language: ${search.filters.language}`,
+    search.filters.state && `Approval state: ${search.filters.state}`,
+    search.filters.violation && `Length status: ${search.filters.violation}`,
+    search.filters.deleted !== "active" &&
+      `Deleted status: ${search.filters.deleted}`,
+  ]
+    .filter(Boolean)
+    .join("; ");
+
+  return (
+    <>
+      <div className="space-y-(--space-sm)">
+        <Label htmlFor="translation-query">Search keys and translations</Label>
+        <Input
+          id="translation-query"
+          className="min-h-[44px]"
+          placeholder="Enter a key or text"
+          aria-describedby="translation-query-help"
+          value={search.query}
+          onChange={(event) => {
+            explicitAction.current = true;
+            if (event.target.value === "") search.clearQuery();
+            else search.setQuery(event.target.value);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              explicitAction.current = true;
+              search.submitQuery();
+            }
+          }}
+        />
+        <p
+          id="translation-query-help"
+          className="text-body text-muted-foreground"
+        >
+          Searches original keys, source text, and translated text.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-[44px]"
+          onClick={() => {
+            explicitAction.current = true;
+            search.clearQuery();
+          }}
+        >
+          Clear search
+        </Button>
+      </div>
+      <TranslationFilters
+        filters={search.filters}
+        options={options}
+        onChange={changeFilters}
+        onClear={clearAll}
+      />
+      <section
+        ref={resultRegion}
+        className="min-w-0 space-y-(--space-md)"
+        aria-labelledby="translation-results-heading"
+      >
+        <h2
+          ref={resultHeading}
+          id="translation-results-heading"
+          className="text-heading font-semibold"
+        >
+          Translation results
+        </h2>
+        {search.isInitialLoading ? (
+          <LoadingResults />
+        ) : search.initialError ? (
+          <SearchError
+            alertRef={alertRef}
+            onRetry={() => {
+              explicitAction.current = true;
+              void search.retryInitial();
+            }}
+          />
+        ) : search.items.length === 0 ? (
+          <div role="status" className="space-y-(--space-sm)">
+            <h3 className="text-heading font-semibold">
+              {filtered
+                ? "No translations match these filters"
+                : "No translations available"}
+            </h3>
+            <p>
+              {filtered
+                ? "Change your search or clear the filters to see more translations."
+                : "Complete an import for an active product, or choose another authorized product."}
+            </p>
+            {filtered && (
+              <p className="wrap-anywhere">Active criteria: {criteria}</p>
+            )}
+          </div>
+        ) : (
+          <TranslationResultList
+            items={search.items}
+            nextCursor={search.nextCursor}
+            requestIdentity={search.requestIdentity}
+            loadingMore={search.loadingMore}
+            loadMoreError={search.loadMoreError}
+            onLoadMore={search.loadMore}
+            onRetryLoadMore={search.retryLoadMore}
+            onOpenDetails={(id) =>
+              context.setSnapshot(search.createSnapshot(window.scrollY, id))
+            }
+          />
+        )}
+      </section>
+    </>
+  );
+}
+
+function SearchOptions({ context }: { context: TranslationsWorkspaceContext }) {
+  const [seed, setSeed] = useState<Seed | null>(() =>
+    context.snapshot
+      ? {
+          query: context.snapshot.query,
+          filters: context.snapshot.filters,
+          snapshot: context.snapshot,
+        }
+      : null,
+  );
+  const [request, setRequest] = useState(0);
+  const [load, setLoad] = useState<{
+    request: number;
+    ready?: ReadyOptions;
+    failed?: boolean;
+  }>({ request: 0 });
+  const ready = load.request === request ? load.ready : undefined;
+  const failed = load.request === request && load.failed;
+  const principalId = context.principal.id;
+  const accessToken = context.accessToken;
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const global = await listTranslationOptions({
+          auth: accessToken,
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        if (!global.data) throw new Error("Options unavailable");
+        let choices = global.data;
+        let preferences;
+        if (seed)
+          preferences = sanitizeTranslationPreferences(seed.filters, choices);
+        else {
+          try {
+            preferences = loadTranslationPreferences(
+              localStorage,
+              principalId,
+              choices,
+            );
+          } catch {
+            preferences = { productId: null, language: null };
+          }
+        }
+        if (preferences.productId !== null) {
+          const scoped = await listTranslationOptions({
+            auth: accessToken,
+            query: { product_id: preferences.productId },
+            signal: controller.signal,
+          });
+          if (controller.signal.aborted) return;
+          if (!scoped.data) throw new Error("Options unavailable");
+          choices = scoped.data;
+          preferences = sanitizeTranslationPreferences(preferences, choices);
+        }
+        const filters = {
+          ...DEFAULT_FILTERS,
+          ...seed?.filters,
+          ...preferences,
+        };
+        const snapshot = seed?.snapshot;
+        const validScope =
+          snapshot &&
+          snapshot.filters.productId === filters.productId &&
+          snapshot.filters.language === filters.language;
+        setLoad({
+          request,
+          ready: {
+            options: choices,
+            seed: {
+              query: typeof seed?.query === "string" ? seed.query : "",
+              filters,
+              snapshot: validScope ? snapshot : null,
+              focusControl: seed?.focusControl,
+            },
+          },
+        });
+      } catch {
+        if (!controller.signal.aborted) setLoad({ request, failed: true });
+      }
+    })();
+    return () => controller.abort();
+  }, [accessToken, principalId, request, seed]);
+  const restart = useCallback((next: Seed) => {
+    setSeed(next);
+    setRequest((value) => value + 1);
+  }, []);
+  return (
+    <div className="grid min-w-0 gap-(--space-xl)">
+      <header className="space-y-(--space-sm)">
+        <h1 className="text-display font-semibold">Translations</h1>
+        <p className="text-muted-foreground">
+          Find imported localization keys, text, review state, and length
+          constraints across your authorized products.
+        </p>
+      </header>
+      {ready ? (
+        <ResolvedSearch
+          key={request}
+          ready={ready}
+          context={context}
+          onRestart={restart}
+        />
+      ) : (
+        <>
+          <TranslationFilters
+            filters={seed?.filters ?? DEFAULT_FILTERS}
+            options={load.ready?.options ?? EMPTY_OPTIONS}
+            disabled
+            onChange={() => {}}
+            onClear={() => restart({ query: "", filters: DEFAULT_FILTERS })}
+          />
+          {failed ? (
+            <SearchError onRetry={() => setRequest((value) => value + 1)} />
+          ) : (
+            <LoadingResults />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+export function TranslationSearchPage() {
+  const context = useOutletContext<TranslationsWorkspaceContext>();
+  return <SearchOptions key={context.accessToken} context={context} />;
+}
