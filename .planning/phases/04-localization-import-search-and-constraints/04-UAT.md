@@ -3,7 +3,7 @@ status: testing
 phase: 04-localization-import-search-and-constraints
 source: [04-VERIFICATION.md]
 started: 2026-09-06T12:26:20Z
-updated: 2026-09-06T12:26:20Z
+updated: 2026-09-06T12:36:50Z
 ---
 
 ## Current Test
@@ -21,11 +21,14 @@ awaiting: user response
 
 Gli automatismi sono verdi sulla sorgente con digest
 `sha256:2df3766ead7f1aea3597a8ad8b99205f14508a4189109996149265a163017b3a`.
-Lo smoke Docker ha usato uno stack isolato con provider Bitbucket TLS simulato,
-poi ripulito. L'applicazione preesistente su localhost:8080 non è stata aggiornata
-da questa verifica. Prima delle prove preparare la build verificata e identificare
-esplicitamente repository/branch di test; non usare dati di produzione e non
-riportare credenziali nei risultati. Nessuna prova manuale è stata dichiarata passata.
+Lo smoke di fase ha usato uno stack isolato con provider Bitbucket TLS simulato,
+poi ripulito. Il 2026-09-06 l'app su localhost:8080 è stata aggiornata dalla stessa
+sorgente verificata tramite quick task 260906-k7s, con backup e migrazioni fino a
+0021_retained_constraint_epoch. Backend, frontend e worker sono sani; utente,
+prodotto e connessione Bitbucket conservati. Non esiste ancora alcun mapping:
+prima della prova configurare e pubblicare repository/branch usa-e-getta, formato,
+layout e lingua base. Non usare dati di produzione né riportare credenziali nei
+risultati. Nessuna prova manuale è stata dichiarata passata.
 
 ## Tests
 
@@ -59,4 +62,3 @@ skipped: 0
 blocked: 0
 
 ## Gaps
-
