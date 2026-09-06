@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from collections.abc import Generator, Iterator, Sequence
 from datetime import UTC, datetime, timedelta
@@ -309,7 +310,7 @@ def _add_group(
                     language=language,
                     selector_version=1,
                     selector_kind=str(value_data.get("selector_kind", "scalar")),
-                    selector_bytes=f"selector-{position}".encode(),
+                    selector_bytes=json.dumps({"version": 1, "kind": str(value_data.get("selector_kind", "scalar")), "fields": {"quantity": "other"} if value_data.get("selector_kind") == "android_quantity" else {}}).encode(),
                     selector_digest=f"{position + 1:064x}",
                     source_text=value_data.get("source_text"),
                     translated_text=value_data.get("translated_text"),
@@ -574,6 +575,10 @@ def test_detail_projects_every_selector_constraint_provenance_and_absence(
     assert body["raw_key"] == "menu.save<script>alert(1)</script>"
     assert body["language"] == "it"
     assert body["language_label"] == "Italian"
+    assert body["base_language"] == "en"
+    assert body["explicit_maximum"] is None
+    assert body["constraint_version"] is None
+    assert body["base_maximum"] is None
     assert body["state_summary"] == "mixed"
     assert body["is_deleted"] is False
     assert body["pending_change"] is None
@@ -617,6 +622,9 @@ def test_detail_projects_every_selector_constraint_provenance_and_absence(
         "column": 1,
     }
     assert constrained["structure"] == [{"quantity": "other"}]
+    assert constrained["selector_fields"] == [{"name": "quantity", "value": "other"}]
+    assert constrained["history"] == []
+    assert constrained["history_has_more"] is False
 
 
 def test_deleted_detail_remains_reachable_and_inaccessible_ids_do_not_enumerate(
