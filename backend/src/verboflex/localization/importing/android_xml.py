@@ -152,6 +152,7 @@ def inspect_android_xml(
         ):
             raise _UnsupportedAndroidXml
         language = _confirmed_language(parser_input)
+        is_moko = moko_layout(parser_input.path) is not None
         root, namespace_uris = _parse_root(parser_input.content)
         values = _resource_values(
             root=root,
@@ -159,6 +160,8 @@ def inspect_android_xml(
             parser_input=parser_input,
             language=language,
             allow_duplicates=allow_duplicates,
+            allow_literal_unknown_escapes=is_moko,
+            allow_opaque_resource_text=is_moko,
         )
     except _MalformedAndroidXml as error:
         return _failure(
@@ -358,11 +361,13 @@ def _resource_values(
     parser_input: CanonicalParserInput,
     language: str,
     allow_duplicates: bool = False,
+    allow_literal_unknown_escapes: bool = False,
+    allow_opaque_resource_text: bool = False,
 ) -> tuple[CanonicalValue, ...]:
     if (
         root.tag != "resources"
         or root.attrib
-        or (root.text or "").strip()
+        or ((root.text or "").strip() and not allow_opaque_resource_text)
         or any(uri != _XLIFF_NAMESPACE for uri in namespace_uris)
     ):
         raise _UnsupportedAndroidXml
@@ -373,7 +378,7 @@ def _resource_values(
     for child in root:
         if cast(object, child.tag) is StandardElementTree.Comment:
             pending_comments.append(_comment_node(child))
-            if (child.tail or "").strip():
+            if (child.tail or "").strip() and not allow_opaque_resource_text:
                 raise _UnsupportedAndroidXml
             continue
         if not isinstance(child.tag, str):
@@ -384,6 +389,8 @@ def _resource_values(
             parser_input=parser_input,
             language=language,
             prefix=tuple(pending_comments),
+            allow_literal_unknown_escapes=allow_literal_unknown_escapes,
+            allow_opaque_resource_tail=allow_opaque_resource_text,
         )
         pending_comments.clear()
         if key in seen_keys and not allow_duplicates:
@@ -411,6 +418,8 @@ def _resource_value(
     parser_input: CanonicalParserInput,
     language: str,
     prefix: tuple[CanonicalStructureNode, ...] = (),
+    allow_literal_unknown_escapes: bool = False,
+    allow_opaque_resource_tail: bool = False,
 ) -> tuple[str, tuple[CanonicalValue, ...]]:
     if child.tag == "string":
         return _string_values(
@@ -419,6 +428,8 @@ def _resource_value(
             parser_input=parser_input,
             language=language,
             prefix=prefix,
+            allow_literal_unknown_escapes=allow_literal_unknown_escapes,
+            allow_opaque_resource_tail=allow_opaque_resource_tail,
         )
     if child.tag == "plurals":
         return _plural_values(
@@ -427,6 +438,8 @@ def _resource_value(
             parser_input=parser_input,
             language=language,
             prefix=prefix,
+            allow_literal_unknown_escapes=allow_literal_unknown_escapes,
+            allow_opaque_resource_tail=allow_opaque_resource_tail,
         )
     if child.tag == "string-array":
         return _array_values(
@@ -435,6 +448,8 @@ def _resource_value(
             parser_input=parser_input,
             language=language,
             prefix=prefix,
+            allow_literal_unknown_escapes=allow_literal_unknown_escapes,
+            allow_opaque_resource_tail=allow_opaque_resource_tail,
         )
     raise _UnsupportedAndroidXml
 
@@ -446,9 +461,11 @@ def _string_values(
     parser_input: CanonicalParserInput,
     language: str,
     prefix: tuple[CanonicalStructureNode, ...],
+    allow_literal_unknown_escapes: bool,
+    allow_opaque_resource_tail: bool,
 ) -> tuple[str, tuple[CanonicalValue, ...]]:
     _require_attributes(child, allowed=_STRING_ATTRIBUTES, required={"name"})
-    if (child.tail or "").strip():
+    if (child.tail or "").strip() and not allow_opaque_resource_tail:
         raise _UnsupportedAndroidXml
     key = child.attrib["name"]
     _require_nonempty_text(key)
@@ -456,6 +473,7 @@ def _string_values(
     display_text, content_nodes = _mixed_content(
         child,
         structure_prefix_size=len(prefix) + 1,
+        allow_literal_unknown_escapes=allow_literal_unknown_escapes,
     )
     structure = (
         prefix
@@ -482,9 +500,13 @@ def _plural_values(
     parser_input: CanonicalParserInput,
     language: str,
     prefix: tuple[CanonicalStructureNode, ...],
+    allow_literal_unknown_escapes: bool,
+    allow_opaque_resource_tail: bool,
 ) -> tuple[str, tuple[CanonicalValue, ...]]:
     _require_attributes(child, allowed=_COLLECTION_ATTRIBUTES, required={"name"})
-    if (child.text or "").strip() or (child.tail or "").strip():
+    if (child.text or "").strip() or (
+        (child.tail or "").strip() and not allow_opaque_resource_tail
+    ):
         raise _UnsupportedAndroidXml
     key = child.attrib["name"]
     _require_nonempty_text(key)
@@ -516,6 +538,7 @@ def _plural_values(
         display_text, content_nodes = _mixed_content(
             item,
             structure_prefix_size=len(header) + len(pending_comments) + 1,
+            allow_literal_unknown_escapes=allow_literal_unknown_escapes,
         )
         structure = (
             header
@@ -562,9 +585,13 @@ def _array_values(
     parser_input: CanonicalParserInput,
     language: str,
     prefix: tuple[CanonicalStructureNode, ...],
+    allow_literal_unknown_escapes: bool,
+    allow_opaque_resource_tail: bool,
 ) -> tuple[str, tuple[CanonicalValue, ...]]:
     _require_attributes(child, allowed=_COLLECTION_ATTRIBUTES, required={"name"})
-    if (child.text or "").strip() or (child.tail or "").strip():
+    if (child.text or "").strip() or (
+        (child.tail or "").strip() and not allow_opaque_resource_tail
+    ):
         raise _UnsupportedAndroidXml
     key = child.attrib["name"]
     _require_nonempty_text(key)
@@ -590,6 +617,7 @@ def _array_values(
         display_text, content_nodes = _mixed_content(
             item,
             structure_prefix_size=len(header) + len(pending_comments) + 1,
+            allow_literal_unknown_escapes=allow_literal_unknown_escapes,
         )
         structure = (
             header
@@ -668,6 +696,7 @@ def _mixed_content(
     element: Element,
     *,
     structure_prefix_size: int,
+    allow_literal_unknown_escapes: bool,
 ) -> tuple[str, tuple[CanonicalStructureNode, ...]]:
     nodes: list[CanonicalStructureNode] = []
     visible: list[str] = []
@@ -678,6 +707,7 @@ def _mixed_content(
         kind="android_xml:text",
         raw=element.text or "",
         structure_prefix_size=structure_prefix_size,
+        allow_literal_unknown_escapes=allow_literal_unknown_escapes,
     )
     for child in element:
         _append_mixed_child(
@@ -686,6 +716,7 @@ def _mixed_content(
             visible=visible,
             cdata_ordinal=cdata_ordinal,
             structure_prefix_size=structure_prefix_size,
+            allow_literal_unknown_escapes=allow_literal_unknown_escapes,
         )
     return "".join(visible), tuple(nodes)
 
@@ -697,10 +728,11 @@ def _append_mixed_child(
     visible: list[str],
     cdata_ordinal: list[int],
     structure_prefix_size: int,
+    allow_literal_unknown_escapes: bool = False,
 ) -> None:
     if child.tag is _CDATA_TAG:
         raw = child.text or ""
-        decoded = _decode_android_escapes(raw)
+        decoded = _decode_android_escapes(raw, allow_literal_unknown=allow_literal_unknown_escapes)
         _append_structure_node(
             nodes,
             CanonicalStructureNode(
@@ -732,6 +764,7 @@ def _append_mixed_child(
             kind="android_xml:text",
             raw=child.text or "",
             structure_prefix_size=structure_prefix_size,
+            allow_literal_unknown_escapes=allow_literal_unknown_escapes,
         )
         for nested in child:
             _append_mixed_child(
@@ -740,6 +773,7 @@ def _append_mixed_child(
                 visible=visible,
                 cdata_ordinal=cdata_ordinal,
                 structure_prefix_size=structure_prefix_size,
+                allow_literal_unknown_escapes=allow_literal_unknown_escapes,
             )
         _append_structure_node(
             nodes,
@@ -755,6 +789,7 @@ def _append_mixed_child(
             kind="android_xml:tail",
             raw=child.tail,
             structure_prefix_size=structure_prefix_size,
+            allow_literal_unknown_escapes=allow_literal_unknown_escapes,
         )
 
 
@@ -765,8 +800,9 @@ def _append_text_node(
     kind: str,
     raw: str,
     structure_prefix_size: int,
+    allow_literal_unknown_escapes: bool,
 ) -> None:
-    decoded = _decode_android_escapes(raw)
+    decoded = _decode_android_escapes(raw, allow_literal_unknown=allow_literal_unknown_escapes)
     _append_structure_node(
         nodes,
         CanonicalStructureNode(
@@ -821,7 +857,7 @@ def _inline_fields(
     )
 
 
-def _decode_android_escapes(raw: str) -> str:
+def _decode_android_escapes(raw: str, *, allow_literal_unknown: bool = False) -> str:
     if _contains_forbidden_control(raw):
         raise _UnsupportedAndroidXml
     decoded: list[str] = []
@@ -840,7 +876,13 @@ def _decode_android_escapes(raw: str) -> str:
             decoded.append(simple)
             index += 2
             continue
-        if escape != "u" or index + 6 > len(raw):
+        if escape != "u":
+            if allow_literal_unknown:
+                decoded.extend(("\\", escape))
+                index += 2
+                continue
+            raise _UnsupportedAndroidXml
+        if index + 6 > len(raw):
             raise _UnsupportedAndroidXml
         token = raw[index + 2 : index + 6]
         if not all(character in "0123456789abcdefABCDEF" for character in token):

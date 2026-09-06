@@ -1,5 +1,23 @@
 # Quick 260906-kjj — partial implementation checkpoint
 
+## 2026-09-06 approved lossless MOKO semantics — GREEN checkpoint
+
+Approved executable contract: `SPEC-MOKO-SEMANTICS.md`, approval message "Approvo", specification commit `555ffd2`.
+
+- M1/M2: `backend/tests/unit/localization/importing/test_moko_semantics.py` proves literal unknown MOKO escapes, known-escape decoding, malformed Unicode/trailing-backslash rejection and unchanged generic Android rejection.
+- M3/M4: the same file proves opaque direct `<resources>` text creates no identity, real resource positions remain stable, minimal scalar replacement preserves all bytes outside the selected body, self-closing values work, forged locators fail, and forbidden XML structures remain rejected.
+- M5: the duplicate test combines opaque text, literal escapes and duplicates and now produces a complete exact report. The durable read-only live probe against repository UUID `ee938eee-26bb-4f69-920f-bce502bba261`, branch `master`, root `babel/src/commonMain/moko-resources`, commit `6102ff5a2ba6a50bbf1d24f75f6e2a7fb3e7c625` reports 19 files / 3,570,592 bytes / 145 groups / 145 repeated occurrences / `diagnostic_complete=true` / no issue codes / canonical import `blocked_by_duplicates`. No source text, keys, credentials or provider writes were emitted.
+- M6: Hypothesis ran 80 bounded parse/edit combinations per suite run. A manual mutant that dropped the backslash from an unknown escape was executed; the property failed with `\\z` becoming `z`, then passed after exact restoration.
+
+Fresh source-bound checks after the final code edit:
+
+- `tools/phase4_gate.py --section backend-tests-migrations-parsers-worker`: **1664 passed**, randomized seed 419, 172.67s, whole-project branch coverage 97%. Gate command exit 0, source digest `sha256:6528f86d7d8faac19397612f04aac609e2b5fdb92950e8732c30ddf7ce6d1bb3`, private evidence `/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-_293_409`, output SHA-256 `49eb930c5fcd74fb2120d0e657fff6e3a729e4856710ccc7ff7255d1cdf1f3ff`.
+- `diff-cover ... --compare-branch=555ffd2 --fail-under=100`: **82/82 changed executable lines, 100%**.
+- Targeted parser/architecture regression: **119 passed**. Ruff and mypy: pass, 111 source files. `git diff --check`: pass.
+- The first full isolated attempt correctly failed 4 tests: one compatibility default was missing and the new module bypassed the parser registry. Production code was corrected (no architecture-test exemption); the 35 focused regressions passed before the fresh full run. Failed evidence is retained at `/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ab6lr9fg`.
+
+This closes only the approved MOKO semantic addendum. Babel remains blocked by source duplicates and has not been canonically imported. The broader quick task remains incomplete: no Docker upgrade, product deletion, push, PR, merge or UAT state change.
+
 ## 2026-09-06 source-bound regression checkpoint (not release-ready)
 
 - Isolated `tools/phase4_gate.py --section backend-tests-migrations-parsers-worker`: **1647 passed**, randomized seed 419, real isolated PostgreSQL/Redis/worker, 177.27s. Gate reports **partial**, not full gauntlet. Source digest before this evidence edit: `sha256:2f4af99f2a109b35f9263a8f0d23c44c5fd8e0a9d7216fa21140b11ff50f94c8`. Private evidence directory: `/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-1y2qh9g8`; command log SHA-256 `8c3c0eaadbe1eb7322e9544eb363558cfded9097188060340909ed8a07da9796`.
