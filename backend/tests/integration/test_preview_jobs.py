@@ -53,6 +53,7 @@ from verboflex.models.product_mapping import (
 from verboflex.models.repository import Repository
 from verboflex.models.role import Role
 from verboflex.models.user import User
+from verboflex.services.bitbucket_oauth import PULLREQUEST_WRITE_SCOPE
 from verboflex.services.preview_jobs import (
     PreviewJobConflict,
     PreviewJobIdentity,
@@ -260,7 +261,7 @@ def _seed_preview_graph(
         connection.generation = 7
         connection.access_token_ciphertext = "encrypted-access"
         connection.refresh_token_ciphertext = None
-        connection.scope_profile = "repository"
+        connection.scope_profile = PULLREQUEST_WRITE_SCOPE
         connection.provider_expires_at = now + timedelta(hours=1)
         connection.connected_at = now
         connection.revoked_at = None

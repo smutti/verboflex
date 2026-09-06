@@ -384,7 +384,7 @@ def _confirm_revision_mappings(
         connection.generation = 7
         connection.access_token_ciphertext = "encrypted-access"
         connection.refresh_token_ciphertext = None
-        connection.scope_profile = "repository"
+        connection.scope_profile = "pullrequest:write"
         connection.provider_expires_at = now + timedelta(hours=1)
         connection.connected_at = now
         connection.revoked_at = None

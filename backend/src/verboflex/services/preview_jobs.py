@@ -25,6 +25,7 @@ from verboflex.models.preview_job import (
 )
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import ProductRepositoryMapping
+from verboflex.services.bitbucket_oauth import PULLREQUEST_WRITE_SCOPE
 
 PREVIEW_TASK_NAME = "verboflex.preview.run"
 PREVIEW_DETECTOR_VERSION = "preview-skeleton-v1"
@@ -586,7 +587,7 @@ def _connected_generation(session: Session) -> int:
         connection is None
         or connection.access_token_ciphertext is None
         or connection.refresh_token_ciphertext is not None
-        or connection.scope_profile != "repository"
+        or connection.scope_profile != PULLREQUEST_WRITE_SCOPE
         or connection.provider_expires_at is None
         or connection.provider_expires_at <= datetime.now(UTC)
         or connection.revoked_at is not None
@@ -1529,7 +1530,7 @@ def _current_connection(
         or connection.generation != row.connection_generation
         or connection.access_token_ciphertext is None
         or connection.refresh_token_ciphertext is not None
-        or connection.scope_profile != "repository"
+        or connection.scope_profile != PULLREQUEST_WRITE_SCOPE
         or connection.provider_expires_at is None
         or connection.provider_expires_at <= datetime.now(UTC)
         or connection.revoked_at is not None
