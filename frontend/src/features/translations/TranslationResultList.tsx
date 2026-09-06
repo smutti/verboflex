@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useWindowVirtualizer } from "@tanstack/react-virtual";
+import {
+  useWindowVirtualizer,
+  type VirtualItem,
+} from "@tanstack/react-virtual";
 import { Link } from "react-router-dom";
 
 import type { TranslationGroupSummaryResponse } from "../../api/client";
@@ -15,7 +18,12 @@ interface TranslationResultListProps {
   loadMoreError: boolean;
   onLoadMore: () => Promise<void>;
   onRetryLoadMore: () => Promise<void>;
-  onOpenDetails?: (translationGroupId: string) => void;
+  initialMeasurements?: VirtualItem[];
+  initialOffset?: number;
+  onOpenDetails?: (
+    translationGroupId: string,
+    measurements: VirtualItem[],
+  ) => void;
 }
 
 const STATE_LABELS = {
@@ -59,6 +67,8 @@ export function TranslationResultList({
   onLoadMore,
   onRetryLoadMore,
   onOpenDetails,
+  initialMeasurements,
+  initialOffset,
 }: TranslationResultListProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
@@ -121,6 +131,8 @@ export function TranslationResultList({
     useFlushSync: false,
     getItemKey,
     scrollMargin,
+    initialMeasurementsCache: initialMeasurements,
+    initialOffset,
   });
   const virtualRows = virtualizer.getVirtualItems();
   const lastRenderedIndex = virtualRows.at(-1)?.index;
@@ -333,7 +345,9 @@ export function TranslationResultList({
                     to={`/translations/${encodeURIComponent(item.id)}`}
                     aria-label={detailsLabel}
                     data-translation-group-id={item.id}
-                    onClick={() => onOpenDetails?.(item.id)}
+                    onClick={() =>
+                      onOpenDetails?.(item.id, virtualizer.takeSnapshot())
+                    }
                   >
                     Open details
                   </Link>

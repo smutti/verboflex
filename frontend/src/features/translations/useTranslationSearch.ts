@@ -29,6 +29,8 @@ export interface TranslationSearchSnapshot {
   scrollAnchor: number;
   focusedGroupId: string | null;
   invalidated?: boolean;
+  measurements?: import("@tanstack/react-virtual").VirtualItem[];
+  viewportWidth?: number;
 }
 
 export interface UseTranslationSearchOptions {

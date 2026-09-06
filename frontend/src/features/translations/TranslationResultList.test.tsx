@@ -594,7 +594,10 @@ describe("TranslationResultList cursor and keyboard loading", () => {
     const link = screen.getAllByRole("link")[0];
     link.focus();
     await user.keyboard("{Enter}");
-    expect(props.onOpenDetails).toHaveBeenCalledWith(props.items[0].id);
+    expect(props.onOpenDetails).toHaveBeenCalledWith(
+      props.items[0].id,
+      expect.any(Array),
+    );
   });
 
   it("announces appends only, remains silent on scroll, and removes terminal loading controls", async () => {

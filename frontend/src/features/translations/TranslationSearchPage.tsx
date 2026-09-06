@@ -176,7 +176,8 @@ function ResolvedSearch({
 
   useEffect(() => {
     const navigation = search.restoredNavigation;
-    if (!navigation || restorationDone.current) return;
+    if (!navigation || restorationDone.current || search.isInitialLoading)
+      return;
     window.scrollTo({ top: navigation.scrollAnchor, behavior: "instant" });
     const restoreFocus = () => {
       if (!navigation.focusedGroupId) {
@@ -206,7 +207,7 @@ function ResolvedSearch({
         subtree: true,
       });
     return () => observer.disconnect();
-  }, [search.restoredNavigation]);
+  }, [search.restoredNavigation, search.isInitialLoading]);
 
   const clearAll = () => {
     context.setSnapshot(null);
@@ -332,8 +333,20 @@ function ResolvedSearch({
             loadMoreError={search.loadMoreError}
             onLoadMore={search.loadMore}
             onRetryLoadMore={search.retryLoadMore}
-            onOpenDetails={(id) =>
-              context.setSnapshot(search.createSnapshot(window.scrollY, id))
+            initialOffset={search.restoredNavigation?.scrollAnchor}
+            initialMeasurements={
+              search.restoredNavigation &&
+              !seed.snapshot?.invalidated &&
+              seed.snapshot?.viewportWidth === window.innerWidth
+                ? seed.snapshot.measurements
+                : undefined
+            }
+            onOpenDetails={(id, measurements) =>
+              context.setSnapshot({
+                ...search.createSnapshot(window.scrollY, id),
+                measurements,
+                viewportWidth: window.innerWidth,
+              })
             }
           />
         )}
