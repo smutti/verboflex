@@ -20,13 +20,28 @@ DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 SECURITY_IDS = {*(f"T-04-{number:02d}" for number in range(1, 78)), "T-04-SC"}
 
 
-def planned_security_ids():
-    planned = {
-        identifier
-        for plan in PHASE.glob("04-*-PLAN.md")
-        for identifier in re.findall(r"\|\s*(T-04-(?:\d{2}|SC))\s*\|", plan.read_text())
-    }
-    if planned != SECURITY_IDS:
+def planned_security_register():
+    planned = {}
+    for plan in PHASE.glob("04-*-PLAN.md"):
+        for line in plan.read_text().splitlines():
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            if not cells[0].startswith("T-04-"):
+                continue
+            if len(cells) != 6:
+                raise ValueError("malformed planned security threat")
+            identifier, severity, disposition = cells[0], cells[3], cells[4]
+            if severity not in {"critical", "high", "medium", "low", "info"} or disposition not in {
+                "mitigate",
+                "accept",
+                "transfer",
+                "avoid",
+            }:
+                raise ValueError("invalid planned security metadata")
+            metadata = (severity, disposition)
+            if identifier in planned and planned[identifier] != metadata:
+                raise ValueError("conflicting planned security metadata")
+            planned[identifier] = metadata
+    if planned.keys() != SECURITY_IDS:
         raise ValueError("planned security inventory drift")
     return planned
 
@@ -45,9 +60,7 @@ def unique_mapping(loader, node):
     return result
 
 
-UniqueLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, unique_mapping
-)
+UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, unique_mapping)
 
 
 def frontmatter(document):
@@ -87,13 +100,9 @@ def validate_document(document, kind):
         }
     if not required <= data.keys() or data.keys() - required - optional:
         raise ValueError("missing or unknown fields")
-    if not isinstance(data["source_digest"], str) or not DIGEST.fullmatch(
-        data["source_digest"]
-    ):
+    if not isinstance(data["source_digest"], str) or not DIGEST.fullmatch(data["source_digest"]):
         raise ValueError("invalid source digest")
-    field, expected = (
-        ("verdict", "SECURED") if kind == "security" else ("status", "passed")
-    )
+    field, expected = ("verdict", "SECURED") if kind == "security" else ("status", "passed")
     if data[field] != expected:
         raise ValueError("non-passing verdict")
     if kind == "review":
@@ -133,15 +142,14 @@ def validate_document(document, kind):
                 raise ValueError("invalid review finding counts")
             if any(type(count) is not int or count < 0 for count in counts.values()):
                 raise ValueError("invalid review finding count")
-            if counts["total"] != sum(
-                counts[key] for key in ("critical", "warning", "info")
-            ):
+            if counts["total"] != sum(counts[key] for key in ("critical", "warning", "info")):
                 raise ValueError("review finding count mismatch")
     if kind == "evidence":
         for field in ("gauntlet_exit", "smoke_exit"):
             if type(data[field]) is not int or data[field] != 0:
                 raise ValueError("nonzero or inexact delivery result")
     if kind in {"review", "security"}:
+        planned = planned_security_register() if kind == "security" else {}
         headers = None
         tables = 0
         seen_threats = set()
@@ -149,10 +157,7 @@ def validate_document(document, kind):
             if not line.strip().startswith("|"):
                 headers = None
                 continue
-            raw_cells = [
-                re.sub(r"[*`]", "", c).strip()
-                for c in line.strip().strip("|").split("|")
-            ]
+            raw_cells = [re.sub(r"[*`]", "", c).strip() for c in line.strip().strip("|").split("|")]
             cells = [cell.casefold() for cell in raw_cells]
             if "severity" in cells:
                 if "resolution" not in cells:
@@ -178,6 +183,11 @@ def validate_document(document, kind):
                 if identifier not in SECURITY_IDS or identifier in seen_threats:
                     raise ValueError("unknown or duplicate security threat")
                 seen_threats.add(identifier)
+                disposition = {"mitigated": "mitigate", "accepted": "accept"}.get(
+                    finding["disposition"], finding["disposition"]
+                )
+                if (finding["severity"], disposition) != planned[identifier]:
+                    raise ValueError("security metadata differs from planned register")
             severity = finding["severity"]
             if severity not in {"critical", "high", "medium", "low", "info", "none"}:
                 raise ValueError("unknown severity")
@@ -190,7 +200,7 @@ def validate_document(document, kind):
                     raise ValueError("missing mitigation proof")
         if not tables:
             raise ValueError("missing structured findings table")
-        if kind == "security" and seen_threats != planned_security_ids():
+        if kind == "security" and seen_threats != planned.keys():
             raise ValueError("incomplete security threat inventory")
     return data
 
@@ -239,12 +249,8 @@ def main():
     parser.add_argument("--check-all", action="store_true")
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--digest", action="store_true")
-    parser.add_argument(
-        "--manifest", type=Path, default=ROOT / "tools/phase4_source_manifest.txt"
-    )
-    parser.add_argument(
-        "--evidence", type=Path, default=ROOT / "docs/evidence/phase-04.md"
-    )
+    parser.add_argument("--manifest", type=Path, default=ROOT / "tools/phase4_source_manifest.txt")
+    parser.add_argument("--evidence", type=Path, default=ROOT / "docs/evidence/phase-04.md")
     parser.add_argument(
         "--code-review",
         type=Path,
@@ -256,9 +262,7 @@ def main():
         default=ROOT / "docs/reviews/phase-04-security-review.md",
     )
     parser.add_argument("--review-ledger", type=Path, default=PHASE / "04-REVIEW.md")
-    parser.add_argument(
-        "--verification", type=Path, default=PHASE / "04-VERIFICATION.md"
-    )
+    parser.add_argument("--verification", type=Path, default=PHASE / "04-VERIFICATION.md")
     args = parser.parse_args()
     if args.self_test:
         return subprocess.call(
