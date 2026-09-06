@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 04
 current_phase_name: Localization Import, Search, and Constraints
 status: executing
-stopped_at: Completed 04-22-PLAN.md
-last_updated: "2026-09-06T08:23:34.608Z"
+stopped_at: Completed 04-23-PLAN.md
+last_updated: "2026-09-06T08:44:27.597Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 04 execution started
-state_head: 5e43e8de589e6797069fa32b7ff6ff8822b25fed
+state_head: 56c574b260bdd4fdeca0dd94db595dd237fb7392
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 104
-  completed_plans: 99
+  completed_plans: 100
   percent: 38
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 ## Current Position
 
 Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
-Plan: 22 of 27
+Plan: 23 of 27
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 04 execution started
 
@@ -159,6 +159,7 @@ Progress: [████████░░░░░░░░░░░░] 3/8 pha
 | Phase 04 P16 | 16h29min | 2 tasks | 4 files |
 | Phase 04 P17 | 18min | 1 tasks | 14 files |
 | Phase 04 P22 | 12min | 2 tasks | 4 files |
+| Phase 04 P23 | 18min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -479,6 +480,8 @@ Recent decisions affecting current work:
 - [Phase 04]: Fence automatic and manual continuation by request identity and cursor; only explicit loading errors focus the owning alert.
 - [Phase 04]: Parser outcomes use canonical dataset_status and five fixed safe categories with administrator-only base-language recovery.
 - [Phase 04]: Accepted import projections become visible immediately; generation-fenced status GETs and execution-monotonic collection reconciliation preserve terminal authority.
+- [Phase 04]: Resolve live global products and selected-product languages before mounting search; discard unavailable language before a changed-product query.
+- [Phase 04]: Workspace memory belongs to the principal lifetime; token rotation preserves input while reauthorizing options and reloading result pages.
 
 ### Pending Todos
 
@@ -519,6 +522,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-06T08:23:34.511Z
-Stopped at: Completed 04-22-PLAN.md
+Last session: 2026-09-06T08:44:27.497Z
+Stopped at: Completed 04-23-PLAN.md
 Resume file: None
