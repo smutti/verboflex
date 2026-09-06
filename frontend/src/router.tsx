@@ -26,6 +26,7 @@ import { UsersPage } from "./features/admin/users/UsersPage";
 import { ChangePasswordPage } from "./features/auth/ChangePasswordPage";
 import { LoginPage } from "./features/auth/LoginPage";
 import { TranslationSearchPage } from "./features/translations/TranslationSearchPage";
+import { TranslationDetailPage } from "./features/translations/TranslationDetailPage";
 import { TranslationsWorkspace } from "./features/translations/TranslationsWorkspace";
 import {
   SessionProvider,
@@ -149,6 +150,7 @@ export function SessionRoutes({
       <Route path="/" element={ordinaryElement} />
       <Route path="/translations" element={translationsElement}>
         <Route index element={<TranslationSearchPage />} />
+        <Route path=":translationGroupId" element={<TranslationDetailPage />} />
       </Route>
       <Route path="/admin/*" element={guardedAdminElement} />
       <Route path="*" element={<Navigate replace to="/" />} />

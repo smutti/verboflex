@@ -176,12 +176,23 @@ describe("session routes", () => {
     );
   }
 
-  it.each<RoleName>(["admin", "product_manager_reviewer", "translator", "viewer"])("resolves authenticated opaque detail child for %s", async role => {
+  it.each<RoleName>([
+    "admin",
+    "product_manager_reviewer",
+    "translator",
+    "viewer",
+  ])("resolves authenticated opaque detail child for %s", async (role) => {
     restorePrincipal(role);
-    vi.mocked(getTranslationGroup).mockResolvedValue({data: undefined, error: {detail: "Translation unavailable"}, response: new Response(null, {status: 404})});
+    vi.mocked(getTranslationGroup).mockResolvedValue({
+      data: undefined,
+      error: { detail: "Translation unavailable" },
+      response: new Response(null, { status: 404 }),
+    });
     renderApplication("/translations/opaque-group");
     expect(await screen.findByText("Translation not available")).toBeVisible();
-    expect(screen.getByTestId("current-route")).toHaveTextContent("/translations/opaque-group");
+    expect(screen.getByTestId("current-route")).toHaveTextContent(
+      "/translations/opaque-group",
+    );
   });
 
   it.each<RoleName>([
