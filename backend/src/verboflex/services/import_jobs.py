@@ -6,6 +6,7 @@ import base64
 import binascii
 import hashlib
 import json
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -2790,7 +2791,6 @@ def _confirmed_parser_inputs(
             if candidate.repository_side == "keys"
             and candidate.format == selected_candidate.format
             and mapping.base_language in candidate.languages
-            and all(("keys", path) in source_contents for path in candidate.files)
         )
         if len(keys_candidates) != 1:
             return ()
@@ -2801,10 +2801,14 @@ def _confirmed_parser_inputs(
         candidate = candidates_by_side.get(side.role)
         if candidate is None:
             return ()
-        for path in candidate.files:
-            content = source_contents.get((side.role, path))
-            if content is None:
-                return ()
+        current_files = tuple(
+            (path, content)
+            for (role, path), content in sorted(source_contents.items())
+            if role == side.role and _path_belongs_to_confirmed_layout(candidate, path)
+        )
+        if not current_files:
+            return ()
+        for path, content in current_files:
             parser_inputs.append(
                 CanonicalParserInput(
                     format=candidate.format,
@@ -2817,6 +2821,31 @@ def _confirmed_parser_inputs(
                 )
             )
     return tuple(parser_inputs)
+
+
+def _path_belongs_to_confirmed_layout(candidate: PreviewLayoutCandidate, path: str) -> bool:
+    """Select current files, never treating a historical preview list as a manifest.
+
+    Layout templates are immutable confirmation authority. Content and locale
+    validity remain the canonical parser's responsibility, including malformed
+    new files and structures the read-only preview grammar cannot represent.
+    """
+    layout = candidate.layout_identity
+    if candidate.format == "android_xml":
+        return re.fullmatch(re.escape(layout) + r"/values[^/]*/[^/]+\.xml", path) is not None
+    if candidate.format == "json" and layout.startswith("json:locale-rooted:"):
+        return path == layout.removeprefix("json:locale-rooted:")
+    template_prefixes = {
+        "json": "json:flat-per-locale:",
+        "qt_ts": "qt-ts:",
+        "ios_strings": "ios-strings:",
+    }
+    prefix = template_prefixes.get(candidate.format)
+    if prefix is None or not layout.startswith(prefix):
+        return False
+    template = layout.removeprefix(prefix)
+    pattern = re.escape(template).replace(re.escape("{locale}"), r"[^/]+")
+    return re.fullmatch(pattern, path) is not None
 
 
 async def classify_import_movement(

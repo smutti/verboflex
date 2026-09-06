@@ -30,6 +30,8 @@ from verboflex.services.publication import publish_product_candidate
 from verboflex.worker import import_tasks
 from verboflex.worker.preview_tasks import process_preview
 
+__all__ = ["clean_preview_database", "preview_session_factory"]
+
 
 class RefreshSource(ProviderResourceSpy):
     async def compare_repository_ancestry(self, _session, **kwargs):
@@ -169,7 +171,7 @@ def test_worker_refresh_tracks_new_locale_and_moved_files_without_changing_ident
                 .where(TranslationKey.raw_key == "hello")
             )
         )
-        assert {value.language: value.text for value in values} == {
+        assert {value.language: value.display_text for value in values} == {
             "en": "Hello",
             "it": "Salve",
             "fr": "Bonjour",
@@ -201,7 +203,7 @@ def test_worker_refresh_tracks_new_locale_and_moved_files_without_changing_ident
     assert failed.active_baseline_execution_id == refreshed.active_baseline_execution_id
     with factory() as session:
         assert session.get_one(LocalizationScope, scope.id).dataset_version == epoch
-        assert session.get_one(TranslationValue, original["it"][0]).text == "Salve"
+        assert session.get_one(TranslationValue, original["it"][0]).display_text == "Salve"
         issues = list(session.scalars(select(TranslationParseIssue)))
         assert issues
         assert all("PRIVATE_RAW_FAILURE" not in issue.message for issue in issues)
