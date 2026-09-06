@@ -232,6 +232,7 @@ describe("administrator mapping cursor collections", () => {
   afterEach(() => cleanup());
 
   it("runs one published direct import and waits for a server-confirmed state", async () => {
+    let resolveStart!: (value: ReturnType<typeof ok<unknown>>) => void;
     let resolveRefetch!: (value: ReturnType<typeof ok<unknown>>) => void;
     listAdminPublishedMappingImportsMock
       .mockResolvedValueOnce(
@@ -242,14 +243,9 @@ describe("administrator mapping cursor collections", () => {
           resolveRefetch = resolve;
         }),
       );
-    startAdminPublishedMappingImportMock.mockResolvedValueOnce(
-      ok({
-        ...publishedImport,
-        action: "import_in_progress",
-        execution_number: 1,
-        id: "00000000-0000-4000-8000-000000000097",
-        latest_execution_at: "2026-09-03T12:00:00Z",
-        state: "queued",
+    startAdminPublishedMappingImportMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveStart = resolve;
       }),
     );
     listAdminCandidateMappingsMock.mockResolvedValueOnce(
@@ -283,10 +279,30 @@ describe("administrator mapping cursor collections", () => {
       },
       signal: expect.any(AbortSignal),
     });
+    // Dispatch alone is not authority: retain the previous state until POST accepts.
+    expect(within(importTable).getByText("Not imported")).toBeVisible();
+    expect(runImport).toBeDisabled();
+    expect(listAdminPublishedMappingImportsMock).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveStart(
+        ok({
+          ...publishedImport,
+          action: "import_in_progress",
+          execution_number: 1,
+          id: "00000000-0000-4000-8000-000000000097",
+          latest_execution_at: "2026-09-03T12:00:00Z",
+          state: "queued",
+        }),
+      );
+    });
     await waitFor(() =>
       expect(listAdminPublishedMappingImportsMock).toHaveBeenCalledTimes(2),
     );
-    expect(within(importTable).getByText("Not imported")).toBeVisible();
+    // The accepted server projection is authoritative even while GET is pending.
+    expect(within(importTable).getByText("Queued")).toBeVisible();
+    expect(
+      within(importTable).getByRole("button", { name: "Import in progress" }),
+    ).toBeDisabled();
 
     await act(async () => {
       resolveRefetch(
