@@ -97,7 +97,12 @@ describe("useTranslationSearch", () => {
   });
 
   it("binds the complete canonical identity and fixed 50-group first page", async () => {
-    searchTranslationsMock.mockResolvedValue(ok(page([group(1)], null)));
+    const approved: TranslationGroupSummaryResponse = {
+      ...group(1),
+      state_summary: "approved",
+      states: ["approved"],
+    };
+    searchTranslationsMock.mockResolvedValue(ok(page([approved], null)));
     const filters: TranslationSearchFilters = {
       productId: "product-alpha",
       language: "it-IT",
@@ -114,7 +119,7 @@ describe("useTranslationSearch", () => {
     );
 
     await settleInitial();
-    expect(result.current.items).toEqual([group(1)]);
+    expect(result.current.items).toEqual([approved]);
 
     expect(searchTranslationsMock).toHaveBeenCalledOnce();
     expect(searchTranslationsMock).toHaveBeenCalledWith({
@@ -457,5 +462,101 @@ describe("useTranslationSearch", () => {
     });
     expect(localStorage).toHaveLength(0);
     expect(sessionStorage).toHaveLength(0);
+  });
+
+  it("bounds duplicate initial retries and separates initial from appended loading", async () => {
+    const retry = deferred<ReturnType<typeof ok>>();
+    searchTranslationsMock
+      .mockRejectedValueOnce(new Error("private detail"))
+      .mockReturnValueOnce(retry.promise as never);
+    const { result } = renderHook(() =>
+      useTranslationSearch({
+        accessToken: "token",
+        initialFilters: defaultFilters,
+      }),
+    );
+    expect(result.current.isInitialLoading).toBe(true);
+    await settleInitial();
+    expect(result.current.canRetryInitial).toBe(true);
+    act(() => {
+      void result.current.retryInitial();
+      void result.current.retryInitial();
+    });
+    expect(searchTranslationsMock).toHaveBeenCalledTimes(2);
+    expect(result.current.isInitialLoading).toBe(true);
+    expect(result.current.loadingMore).toBe(false);
+    retry.resolve(ok(page([group(1)], null)));
+    await settleInitial();
+    expect(result.current.initialError).toBe(false);
+    act(() => {
+      result.current.submitQuery();
+      result.current.setFilters({ ...defaultFilters });
+    });
+    expect(searchTranslationsMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["success", "failure"])(
+    "ignores stale continuation %s after filters change",
+    async (outcome) => {
+      const obsolete = deferred<ReturnType<typeof ok>>();
+      searchTranslationsMock
+        .mockResolvedValueOnce(ok(page([group(1)], "old-cursor")))
+        .mockReturnValueOnce(obsolete.promise as never)
+        .mockResolvedValueOnce(ok(page([group(3)], null)));
+      const { result } = renderHook(() =>
+        useTranslationSearch({
+          accessToken: "token",
+          initialFilters: defaultFilters,
+        }),
+      );
+      await settleInitial();
+      act(() => {
+        void result.current.loadMore();
+      });
+      expect(result.current.loadingMore).toBe(true);
+      expect(result.current.items).toEqual([group(1)]);
+      act(() =>
+        result.current.setFilters({ ...defaultFilters, language: "it-IT" }),
+      );
+      await settleInitial();
+      if (outcome === "success")
+        obsolete.resolve(ok(page([group(2)], "foreign-cursor")));
+      else obsolete.reject(new Error("private stale error"));
+      await settleInitial();
+      expect(result.current.items).toEqual([group(3)]);
+      expect(result.current.nextCursor).toBeNull();
+      expect(result.current.loadMoreError).toBe(false);
+    },
+  );
+
+  it("rejects mismatched snapshots and cancels work on unmount", async () => {
+    searchTranslationsMock.mockResolvedValueOnce(ok(page([group(1)], null)));
+    const first = renderHook(() =>
+      useTranslationSearch({
+        accessToken: "token",
+        initialFilters: defaultFilters,
+      }),
+    );
+    await settleInitial();
+    const snapshot = first.result.current.createSnapshot(10, "group-1");
+    first.unmount();
+    const pending = deferred<ReturnType<typeof ok>>();
+    searchTranslationsMock.mockReturnValueOnce(pending.promise as never);
+    const next = renderHook(() =>
+      useTranslationSearch({
+        accessToken: "token",
+        initialFilters: defaultFilters,
+        initialSnapshot: { ...snapshot, query: "foreign query" },
+      }),
+    );
+    await settleInitial();
+    expect(next.result.current.items).toEqual([]);
+    expect(next.result.current.restoredNavigation).toBeNull();
+    expect(searchTranslationsMock).toHaveBeenCalledTimes(2);
+    const signal = searchTranslationsMock.mock.calls[1]?.[0]?.signal;
+    next.unmount();
+    expect(signal?.aborted).toBe(true);
+    pending.resolve(ok(page([group(2)], null)));
+    await settleInitial();
   });
 });
