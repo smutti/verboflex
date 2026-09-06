@@ -1,7 +1,7 @@
 ---
 phase: 04
 slug: localization-import-search-and-constraints
-status: draft
+status: verified
 threats_open: 0
 asvs_level: 1
 created: 2026-09-06
@@ -9,7 +9,7 @@ created: 2026-09-06
 
 # Phase 04 — Security
 
-Independent typed gsd-security-auditor recheck of commit `df9053614f9e9a13a7d85ba5181a00b306061e3c`. All 78 source dispositions are verified: 76 mitigations and two already-planned documented medium acceptances; zero open registered high threats. This is NOT release certification: the built-stack smoke returned HTTP 500 during import polling and a concurrency correction is underway. CLOSED/resolved means source mitigation verified at this digest, not that the final delivery gate passed. The eventual fix requires another source-bound recheck. No implementation was modified by the auditor.
+Final independent typed gsd-security-auditor verdict: SECURED at implementation `ec6fd68f03515266b043fe5d0450615acfabca96`. All 78 dispositions are verified: 76 mitigations and two already-planned documented medium acceptances; zero open high/critical threats. The polling/activation race was corrected and independently rechecked. The fresh complete gauntlet and built-stack smoke passed on the same source digest. This does not substitute for the separate end-of-phase human acceptance checks. The auditor modified no implementation.
 
 ## Trust Boundaries
 
@@ -119,14 +119,18 @@ These are the two medium-risk dispositions already present in the approved Phase
 | 2026-09-06 | 78 | 72 source-verified | 6, of which 2 high blockers | Initial independent gsd-security-auditor |
 | 2026-09-06 | 78 | 78 source-verified | 0 registered blockers; delivery smoke failed | Independent correction recheck |
 
-Observed digest: `sha256:b233e7e48f9f1c0a831338955418d832143f8614f69ebc7637143e74312b58d3`. The later complete gauntlet passed pre-smoke sections but failed with import polling HTTP 500; owned-resource cleanup completed. A replacement green run, final artifact scan, source freeze and independent recheck remain required.
+Observed digest: `sha256:d7306c29f5131dfc5f23318cb89664e83946742dab9f3982832e9bf082313406`. Historical attempts found a polling/activation race; deterministic real-HTTP tests reproduced it. The corrected final complete run passed, including four-format/four-role smoke and owned-resource cleanup.
 
 ## Sign-Off
 
 - [x] All 78 planned threats have dispositions.
 - [x] Previously planned medium accepted risks documented.
-- [x] No registered source mitigation blockers remain at the audited digest; runtime delivery blocker remains.
-- [ ] Fresh gauntlet and smoke evidence bound to final source.
-- [ ] Independent final security recheck complete.
+- [x] No registered source mitigation blockers remain at the final audited digest.
+- [x] Fresh gauntlet and smoke evidence bound to final source.
+- [x] Independent final security recheck complete.
 
-**Approval:** pending.
+**Approval:** security verified 2026-09-06; human UAT remains a separate phase gate.
+
+## Final Security Evidence — 2026-09-06
+
+Independently inspected `result.json`, all 27 `commands.json` records, output hashes and owner-only log modes in `/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp`. Every command exited 0. The complete run was 11:44:08–11:48:56 UTC. Backend: 1,581 passed; frontend: 590 passed; changed-line coverage: 3,274/3,274 backend and 842/842 frontend; parser: 1,817 statements and 704 branches, 100%. Twelve semantic mutations were killed and restored; 21 browser journeys passed. Final built-stack smoke exited 0 in 61.849 seconds: four formats, four roles, Redis/log redaction and cleanup passed. Build, type, lint, formatting, generated-contract and dependency policies passed. Durable command reproduction and results are recorded in `docs/evidence/phase-04.md`.

@@ -2,13 +2,13 @@
 phase: 04
 created: 2026-09-06
 reviewer: independent gsd-security-auditor
-verdict: ESCALATE
-source_digest: sha256:b233e7e48f9f1c0a831338955418d832143f8614f69ebc7637143e74312b58d3
+verdict: SECURED
+source_digest: sha256:d7306c29f5131dfc5f23318cb89664e83946742dab9f3982832e9bf082313406
 ---
 
 # Phase 04 — Independent Security Review
 
-Independent typed gsd-security-auditor recheck of commit `df9053614f9e9a13a7d85ba5181a00b306061e3c`. All 78 source dispositions are verified: 76 mitigations and two already-planned documented medium acceptances; zero open registered high threats. This is NOT release certification: the built-stack smoke returned HTTP 500 during import polling and a concurrency correction is underway. CLOSED/resolved means source mitigation verified at this digest, not that the final delivery gate passed. The eventual fix requires another source-bound recheck. No implementation was modified by the auditor.
+Final independent typed gsd-security-auditor verdict: SECURED at implementation `ec6fd68f03515266b043fe5d0450615acfabca96`. All 78 dispositions are verified: 76 mitigations and two already-planned documented medium acceptances; zero open high/critical threats. The polling/activation race was corrected and independently rechecked. The fresh complete gauntlet and built-stack smoke passed on the same source digest. This does not substitute for the separate end-of-phase human acceptance checks. The auditor modified no implementation.
 
 ## ASVS L1 / STRIDE Verification
 
@@ -99,6 +99,10 @@ The register was authored at planning time. Verification inspected the declared 
 
 A read-only `runpy.run_path` call to `validate_document(document, "security")` accepted a sole fabricated `T1/high/mitigate/placeholder.py:1/resolved` row with `verdict: SECURED`, omitting all 78 registered threats. Exit code was 0. No files were created. CR-11 requires exact inventory and planned severity/disposition checks, with adversarial tests.
 
-## Pending Final Evidence
+## Final Source-Bound Evidence
 
-CR-10, CR-11, checkpoint redaction, planned risks, CR-12 and CR-13 were independently rechecked. The later complete gauntlet passed backend/frontend, coverage, static/build/dependency, mutation and browser sections but failed with import polling HTTP 500. The new polling/activation concurrency correction, a fresh complete gauntlet/smoke, final artifact scan and final source-bound independent review remain required. No final SECURED verdict is claimed.
+CR-10/11, checkpoint redaction, planned risks, CR-12/13 and the polling/activation correction were independently rechecked. The complete final gate passed. Product-first shared polling locks preserve worker lock order, database-backed admin authority, exact revisions and cursor binding; the four real-HTTP interleavings cover same/cross-product coherence. T-04-31/36/38 remain closed.
+
+## Final Security Evidence — 2026-09-06
+
+Independently inspected `result.json`, all 27 `commands.json` records, output hashes and owner-only log modes in `/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp`. Every command exited 0. The complete run was 11:44:08–11:48:56 UTC. Backend: 1,581 passed; frontend: 590 passed; changed-line coverage: 3,274/3,274 backend and 842/842 frontend; parser: 1,817 statements and 704 branches, 100%. Twelve semantic mutations were killed and restored; 21 browser journeys passed. Final built-stack smoke exited 0 in 61.849 seconds: four formats, four roles, Redis/log redaction and cleanup passed. Build, type, lint, formatting, generated-contract and dependency policies passed. Durable command reproduction and results are recorded in `docs/evidence/phase-04.md`.
