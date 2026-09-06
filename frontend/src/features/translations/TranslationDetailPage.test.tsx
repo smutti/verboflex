@@ -1,17 +1,18 @@
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getTranslationGroup,
+  putTranslationConstraint,
   type TranslationGroupDetailResponse,
   type RoleName,
 } from "../../api/client";
 import { TranslationDetailPage } from "./TranslationDetailPage";
 import { TranslationsWorkspace } from "./TranslationsWorkspace";
 
-vi.mock("../../api/client", () => ({ getTranslationGroup: vi.fn() }));
+vi.mock("../../api/client", () => ({ getTranslationGroup: vi.fn(), putTranslationConstraint: vi.fn(), deleteTranslationConstraint: vi.fn() }));
 
 export function detailFixture(): TranslationGroupDetailResponse {
   return {
@@ -119,6 +120,17 @@ afterEach(() => {
 });
 
 describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/partial", () => {
+  it("shows role-specific constraint actions and replaces authoritative status while invalidating search pages", async () => {
+    const data=detailFixture();const fresh=detailFixture();fresh.explicit_maximum=9;fresh.constraint_version=1;fresh.values[0].constraint={actual:6,maximum:9,source:"language_override",status:"within_limit",overage:0};
+    vi.mocked(getTranslationGroup).mockResolvedValueOnce({data,error:undefined}).mockResolvedValue({data:fresh,error:undefined});
+    vi.mocked(putTranslationConstraint).mockResolvedValue({data:{translation_group_id:data.id,language:data.language,base_language:"en",explicit_maximum:9,version:1,total_count:1,violating_count:0,values:[{id:"value-1",language:"it",constraint:fresh.values[0].constraint,approval_eligible:true,submission_eligible:true}]},error:undefined});
+    const snapshot={query:"retain me",pages:[{items:[],next_cursor:null}],scrollAnchor:123,focusedGroupId:data.id};const setSnapshot=vi.fn();
+    render(<MemoryRouter initialEntries={["/translations/opaque-group"]}><Routes><Route path="/translations" element={<Outlet context={{accessToken:"token",principal:{id:"person",roles:["admin"]},snapshot,setSnapshot}}/>}><Route path=":translationGroupId" element={<TranslationDetailPage/>}/></Route></Routes></MemoryRouter>);
+    const trigger=await screen.findByRole("button",{name:"Add language override"});await userEvent.click(trigger);
+    fireEvent.change(screen.getByRole("spinbutton"),{target:{value:"9"}});await userEvent.click(screen.getByRole("button",{name:"Save max length"}));
+    await waitFor(()=>expect(screen.queryByRole("dialog")).toBeNull());expect(screen.getByRole("button",{name:"Edit max length"})).toHaveFocus();
+    expect(setSnapshot).toHaveBeenCalledWith({...snapshot,pages:[],invalidated:true});expect(screen.getAllByText("Within limit").length).toBeGreaterThan(0);expect(screen.getByTestId("target-value-1")).toHaveTextContent("<img");
+  });
   it.each<RoleName>([
     "admin",
     "product_manager_reviewer",

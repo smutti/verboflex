@@ -144,6 +144,17 @@ describe("useTranslationSearch", () => {
     );
   });
 
+  it("invalidates mutated pages while preserving query filters and return navigation", async () => {
+    searchTranslationsMock.mockResolvedValue(ok(page([group(1)], null)));
+    const initialSnapshot = {version: 1 as const, requestIdentity: translationSearchIdentity("settings", defaultFilters), query:"settings", filters: defaultFilters, pages:[], scrollAnchor:864, focusedGroupId:"group-1", invalidated:true};
+    const {result}=renderHook(()=>useTranslationSearch({accessToken:"token",initialQuery:"settings",initialFilters:defaultFilters,initialSnapshot}));
+    await settleInitial();
+    expect(searchTranslationsMock).toHaveBeenCalledTimes(1);
+    expect(result.current.query).toBe("settings");
+    expect(result.current.restoredNavigation).toEqual({scrollAnchor:864,focusedGroupId:"group-1"});
+    expect(result.current.items).toEqual([group(1)]);
+  });
+
   it("coalesces typing for 300ms while Enter and clear run once immediately", async () => {
     searchTranslationsMock.mockResolvedValue(ok(page([], null)));
     const { result } = renderHook(() =>
