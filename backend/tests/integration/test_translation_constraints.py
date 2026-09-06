@@ -678,6 +678,73 @@ def _activate_json_import(
     )
 
 
+def test_constraint_changes_advance_active_dataset_epoch_but_noop_and_rollback_do_not(
+    constraint_session_factory,
+):
+    factory = constraint_session_factory
+    service = _translation_constraints()
+    identity, repository_id = _seed_running_direct_import(factory)
+    _activate_json_import(
+        factory,
+        identity=identity,
+        repository_id=repository_id,
+        translated="Ciao",
+        commit_hash="a" * 40,
+    )
+    actor_id = uuid4()
+    with factory.begin() as session:
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        scope_id = scope.id
+        original_epoch = scope.dataset_version
+        value = session.scalar(
+            select(TranslationValue).where(
+                TranslationValue.scope_id == scope_id, TranslationValue.language == "it"
+            )
+        )
+        group_id = value.id
+        session.add(
+            User(
+                id=actor_id,
+                email=f"epoch-{actor_id}@example.com",
+                display_name="Epoch reviewer",
+                hashed_password="unused",
+                is_active=True,
+                must_change_password=False,
+            )
+        )
+    common = {"translation_group_id": group_id, "language": "it"}
+    with factory.begin() as session:
+        created = service.put_translation_constraint(
+            session, **common, max_chars=2, expected_version=0, actor_id=actor_id
+        )
+        assert session.get_one(LocalizationScope, scope_id).dataset_version == original_epoch + 1
+    with factory.begin() as session:
+        unchanged = service.put_translation_constraint(
+            session, **common, max_chars=2, expected_version=created.version, actor_id=actor_id
+        )
+        assert unchanged.version == created.version
+        assert session.get_one(LocalizationScope, scope_id).dataset_version == original_epoch + 1
+    with factory() as session:
+        service.put_translation_constraint(
+            session, **common, max_chars=9, expected_version=created.version, actor_id=actor_id
+        )
+        assert session.get_one(LocalizationScope, scope_id).dataset_version == original_epoch + 2
+        session.rollback()
+    with factory.begin() as session:
+        assert session.get_one(LocalizationScope, scope_id).dataset_version == original_epoch + 1
+        removed = service.delete_translation_constraint(
+            session, **common, expected_version=created.version
+        )
+        assert removed.explicit_maximum is None
+        assert session.get_one(LocalizationScope, scope_id).dataset_version == original_epoch + 2
+        assert (
+            session.get_one(LocalizationScope, scope_id).active_execution_id
+            == identity.execution_id
+        )
+
+
 def test_import_activation_recomputes_violation_and_eligibility_in_one_transaction(
     constraint_session_factory: sessionmaker[Session],
 ) -> None:
