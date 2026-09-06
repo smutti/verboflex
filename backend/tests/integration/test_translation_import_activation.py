@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import importlib.util
 import os
@@ -496,6 +497,29 @@ def _separate_result() -> CanonicalParseResult:
             ),
         )
     )
+
+
+def test_long_raw_key_stages_and_activates_without_loss(activation_session_factory):
+    factory = activation_session_factory
+    identity, repository_id = _seed_running_direct_import(factory)
+    # Incompressible enough to exceed PostgreSQL's 2704-byte B-tree entry limit.
+    raw_key = "".join(hashlib.sha256(str(i).encode()).hexdigest() for i in range(60))
+    result = _json_result(raw_key=raw_key)
+    assert not result.issues and all(value.logical_key == raw_key for value in result.values)
+    manifest, references = _stage_direct_manifest(
+        factory, identity=identity, repository_id=repository_id, result=result
+    )
+    with factory() as session:
+        staged = tuple(session.scalars(select(StagedTranslationValue)))
+        assert len(staged) == 2 and all(row.raw_key == raw_key for row in staged)
+    assert import_jobs.finish_import_execution(
+        factory, identity=identity, references=references, canonical_manifest_digest=manifest.digest
+    )
+    with factory() as session:
+        key = session.scalar(select(TranslationKey))
+        assert key.raw_key == raw_key
+        values = tuple(session.scalars(select(TranslationValue)))
+        assert {value.display_text for value in values} == {"Hello", "Ciao"}
 
 
 def _stage_direct_manifest(
