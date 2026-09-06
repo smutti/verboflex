@@ -80,7 +80,10 @@ def test_refresh_removing_one_variant_keeps_stable_group_and_live_constraint_aut
     ids = iter(UUID(int=value) for value in range(100, 130))
     with monkeypatch.context() as patch:
         patch.setattr(translation_imports, "uuid4", lambda: next(ids))
-        activate(identity, '<item quantity="one">Uno</item><item quantity="other">Altri</item>')
+        activate(
+            identity,
+            '<item quantity="one">Uno molto lungo</item><item quantity="other">Altri</item>',
+        )
     actor = uuid4()
     with factory.begin() as session:
         values = tuple(
@@ -91,7 +94,7 @@ def test_refresh_removing_one_variant_keeps_stable_group_and_live_constraint_aut
             )
         )
         old_group_id = values[0].id
-        assert values[0].display_text == "Uno"
+        assert values[0].display_text == "Uno molto lungo"
         values[0].review_state = "approved"
         session.add(
             User(
@@ -130,11 +133,23 @@ def test_refresh_removing_one_variant_keeps_stable_group_and_live_constraint_aut
             session,
             translation_group_id=old_group_id,
             language="it",
-            max_chars=3,
+            max_chars=10,
             expected_version=0,
             actor_id=actor,
         )
-        assert changed.explicit_maximum == 3
+        assert changed.explicit_maximum == 10
+    assert search(violation="over_limit") == ()
+    assert len(search(violation="over_limit", deleted="all")) == 1
+    assert len(search(violation="within_limit")) == 1
+    with factory.begin() as session:
+        changed = put_translation_constraint(
+            session,
+            translation_group_id=old_group_id,
+            language="it",
+            max_chars=3,
+            expected_version=changed.version,
+            actor_id=actor,
+        )
         assert any(value.language == "it" and value.is_over_limit for value in changed.values)
     assert len(search(violation="over_limit")) == 1
     final = _start_refresh_execution(factory, successor)
