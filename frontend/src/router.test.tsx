@@ -265,9 +265,11 @@ describe("session routes", () => {
       result: Awaited<ReturnType<typeof refreshAccessToken<false>>>,
     ) => void;
     refreshAccessTokenMock.mockReturnValue(
-      new Promise<Awaited<ReturnType<typeof refreshAccessToken<false>>>>((resolve) => {
-        rejectSession = resolve;
-      }),
+      new Promise<Awaited<ReturnType<typeof refreshAccessToken<false>>>>(
+        (resolve) => {
+          rejectSession = resolve;
+        },
+      ),
     );
     renderApplication("/translations");
     expect(screen.getByRole("status")).toHaveTextContent("Checking session");

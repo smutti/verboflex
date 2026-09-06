@@ -2,6 +2,7 @@ import type { CurrentUserResponse } from "../../api/client";
 import {
   Boxes,
   Cloud,
+  Languages,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -55,6 +56,12 @@ const WORKSPACE_DESTINATION: NavigationDestination = {
   icon: LayoutDashboard,
   label: "Workspace",
   to: "/",
+};
+
+const TRANSLATIONS_DESTINATION: NavigationDestination = {
+  icon: Languages,
+  label: "Translations",
+  to: "/translations",
 };
 
 const ADMINISTRATION_DESTINATIONS: NavigationDestination[] = [
@@ -178,6 +185,10 @@ function WorkspaceNavigation({
       <div>
         <DestinationLink
           destination={WORKSPACE_DESTINATION}
+          onNavigate={onNavigate}
+        />
+        <DestinationLink
+          destination={TRANSLATIONS_DESTINATION}
           onNavigate={onNavigate}
         />
       </div>
