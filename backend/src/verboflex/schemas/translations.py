@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 LanguageCode = Annotated[
     str,
@@ -34,6 +34,12 @@ class TranslationSearchQuery(ClosedTranslationModel):
     deleted: Literal["active", "deleted", "all"] = "active"
     page_size: Literal[50] = 50
     cursor: Annotated[str | None, Field(min_length=1, max_length=2048)] = None
+
+    @field_validator("page_size", mode="before")
+    @classmethod
+    def normalize_http_page_size(cls, value: object) -> object:
+        """Accept the exact query-string spelling of the fixed integer contract."""
+        return 50 if value == "50" else value
 
 
 class TranslationProductOptionResponse(ClosedTranslationModel):
