@@ -41,6 +41,7 @@ import {
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Label } from "../../../components/ui/label";
+import { Input } from "../../../components/ui/input";
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
 import {
   Select,
@@ -75,6 +76,8 @@ type MappingConflictField =
   | "translations_source_branch";
 
 interface MappingDraftFingerprintInput {
+  primaryRoot?: string;
+  translationsRoot?: string;
   allowedTargetBranches: string[];
   defaultTargetBranch: string;
   directRepositoryId: string;
@@ -97,6 +100,8 @@ function mappingDraftFingerprint(input: MappingDraftFingerprintInput) {
           defaultTargetBranch: input.defaultTargetBranch,
           primaryRepositoryId: input.directRepositoryId,
           primarySourceBranch: input.directSourceBranch,
+          primaryRoot: input.primaryRoot ?? "",
+          translationsRoot: "",
           topology: input.topology,
           translationsRepositoryId: null,
           translationsSourceBranch: null,
@@ -106,6 +111,8 @@ function mappingDraftFingerprint(input: MappingDraftFingerprintInput) {
           defaultTargetBranch: input.defaultTargetBranch,
           primaryRepositoryId: input.keysRepositoryId,
           primarySourceBranch: input.keysSourceBranch,
+          primaryRoot: input.primaryRoot ?? "",
+          translationsRoot: input.translationsRoot ?? "",
           topology: input.topology,
           translationsRepositoryId: input.translationsRepositoryId,
           translationsSourceBranch: input.translationsSourceBranch,
@@ -141,6 +148,8 @@ function savedMappingFingerprint(mapping: AdminMappingResponse | null) {
     topology: mapping.topology,
     translationsRepositoryId: mapping.translations_repository_id ?? "",
     translationsSourceBranch: mapping.translations_source_branch ?? "",
+    primaryRoot: mapping.primary_localization_root ?? "",
+    translationsRoot: mapping.translations_localization_root ?? "",
   });
 }
 
@@ -387,6 +396,8 @@ export function ProductMappingsPage({
   const [keysRepositoryId, setKeysRepositoryId] = useState("");
   const [translationsRepositoryId, setTranslationsRepositoryId] = useState("");
   const [directSourceBranch, setDirectSourceBranch] = useState("");
+  const [primaryRoot, setPrimaryRoot] = useState("");
+  const [translationsRoot, setTranslationsRoot] = useState("");
   const [keysSourceBranch, setKeysSourceBranch] = useState("");
   const [translationsSourceBranch, setTranslationsSourceBranch] = useState("");
   const [allowedTargetBranches, setAllowedTargetBranches] = useState<string[]>(
@@ -412,6 +423,8 @@ export function ProductMappingsPage({
   const currentDraftFingerprint = useMemo(
     () =>
       mappingDraftFingerprint({
+        primaryRoot,
+        translationsRoot,
         allowedTargetBranches,
         defaultTargetBranch,
         directRepositoryId,
@@ -423,6 +436,8 @@ export function ProductMappingsPage({
         translationsSourceBranch,
       }),
     [
+      primaryRoot,
+      translationsRoot,
       allowedTargetBranches,
       defaultTargetBranch,
       directRepositoryId,
@@ -619,6 +634,8 @@ export function ProductMappingsPage({
   }
 
   function clearMappingSelection() {
+    setPrimaryRoot("");
+    setTranslationsRoot("");
     setDirectRepositoryId("");
     setKeysRepositoryId("");
     setTranslationsRepositoryId("");
@@ -656,6 +673,8 @@ export function ProductMappingsPage({
   }
 
   function beginEdit(mapping: AdminMappingResponse) {
+    setPrimaryRoot(mapping.primary_localization_root ?? "");
+    setTranslationsRoot(mapping.translations_localization_root ?? "");
     setEditingMapping(mapping);
     setTopology(mapping.topology);
     setCurrentCandidateVersion(mapping.candidate_version);
@@ -742,6 +761,7 @@ export function ProductMappingsPage({
             topology: "direct",
             repository_id: directRepositoryId,
             source_branch: directSourceBranch,
+            ...(primaryRoot ? { localization_root: primaryRoot } : {}),
             allowed_target_branches: normalizedAllowedTargetBranches,
             default_target_branch: defaultTargetBranch,
             expected_candidate_version: currentCandidateVersion,
@@ -753,11 +773,15 @@ export function ProductMappingsPage({
                 role: "keys",
                 repository_id: keysRepositoryId,
                 source_branch: keysSourceBranch,
+                ...(primaryRoot ? { localization_root: primaryRoot } : {}),
               },
               {
                 role: "translations",
                 repository_id: translationsRepositoryId,
                 source_branch: translationsSourceBranch,
+                ...(translationsRoot
+                  ? { localization_root: translationsRoot }
+                  : {}),
               },
             ],
             allowed_target_branches: normalizedAllowedTargetBranches,
@@ -1004,6 +1028,38 @@ export function ProductMappingsPage({
               noun="repository"
               loadMoreLabel="Load more repositories for mappings"
             />
+          </div>
+
+          <div className="grid gap-3">
+            <Label htmlFor={`${directId}-root`}>
+              {topology === "direct"
+                ? "Localization root (optional)"
+                : "Keys localization root (optional)"}
+            </Label>
+            <Input
+              id={`${directId}-root`}
+              maxLength={4096}
+              value={primaryRoot}
+              onChange={(event) => setPrimaryRoot(event.target.value)}
+              placeholder="babel/src/commonMain/moko-resources"
+            />
+            <p className="text-sm text-muted-foreground">
+              Leave empty to scan from the repository root. Use an exact
+              relative directory, without leading or trailing slash.
+            </p>
+            {topology === "separate" ? (
+              <>
+                <Label htmlFor={`${separateId}-root`}>
+                  Translations localization root (optional)
+                </Label>
+                <Input
+                  id={`${separateId}-root`}
+                  maxLength={4096}
+                  value={translationsRoot}
+                  onChange={(event) => setTranslationsRoot(event.target.value)}
+                />
+              </>
+            ) : null}
           </div>
 
           <fieldset className="grid gap-3">

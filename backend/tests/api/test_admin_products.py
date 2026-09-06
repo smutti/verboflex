@@ -301,6 +301,7 @@ def test_admin_create_and_detail_return_closed_active_and_candidate_summaries(
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/published/mapping-imports",
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/published/mappings/{{mapping_id}}/imports",
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/imports/{{import_id}}",
+        f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/imports/{{import_id}}/duplicates",
         (
             f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/published/mappings/{{mapping_id}}"
             "/imports/{import_id}/rewrite-comparison"

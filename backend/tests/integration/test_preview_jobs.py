@@ -453,6 +453,108 @@ def _confirmable_processor(identity: object) -> dict[str, object]:
     }
 
 
+@pytest.mark.parametrize("role_name", ["viewer", "translator", "product_manager_reviewer"])
+def test_duplicate_reads_reject_every_nonadmin_role(preview_session_factory, role_name):
+    _configure_dependencies(preview_session_factory)
+    token = _create_authority(preview_session_factory, role_name=role_name)
+    paths = [
+        f"/api/v1/admin/preview-jobs/{uuid4()}/duplicates",
+        f"/api/v1/admin/products/{uuid4()}/imports/{uuid4()}/duplicates?execution=1",
+    ]
+    for path in paths:
+        assert asyncio.run(_request("GET", path, access_token=None)).status_code == 401
+        assert asyncio.run(_request("GET", path, access_token=token)).status_code == 403
+
+
+def test_moko_duplicate_report_is_stored_paginated_and_admin_only(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    _configure_dependencies(preview_session_factory)
+    admin = _create_authority(preview_session_factory, role_name="admin")
+    viewer = _create_authority(preview_session_factory, role_name="viewer")
+    product_id, _, _, mapping_id = _seed_preview_graph(preview_session_factory)
+    app.state.preview_job_enqueuer = PersistedUuidEnqueuer(preview_session_factory)
+    created = asyncio.run(
+        _request(
+            "POST",
+            f"/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs",
+            access_token=admin,
+            json={
+                "expected_candidate_version": 4,
+                "commits": [{"role": "direct", "commit_hash": COMMIT_HASH}],
+            },
+        )
+    )
+    assert created.status_code == 202
+    job_id = UUID(created.json()["id"])
+    adapter = ReadOnlyAndroidSourceAdapter(
+        files={
+            "moko-resources/base/strings.xml": (
+                b'<resources><string name="dup">secret body</string>'
+                b'<string name="dup">another body</string><string name="second">x</string>'
+                b'<string name="second">y</string></resources>'
+            )
+        }
+    )
+    from verboflex.worker.preview_tasks import process_preview
+
+    execute_preview_job(
+        preview_session_factory,
+        job_id=job_id,
+        processor=lambda identity: process_preview(
+            identity, factory=preview_session_factory, adapter=adapter
+        ),
+    )
+    path = f"/api/v1/admin/preview-jobs/{job_id}/duplicates"
+    assert asyncio.run(_request("GET", path, access_token=None)).status_code == 401
+    assert asyncio.run(_request("GET", path, access_token=viewer)).status_code == 403
+    report = asyncio.run(_request("GET", path + "?limit=1", access_token=admin))
+    assert report.status_code == 200
+    body = report.json()
+    assert body["complete"] is True
+    assert body["group_count"] == 2
+    assert body["repeated_occurrences"] == 2
+    assert len(body["items"]) == 1
+    assert body["next_cursor"] is not None
+    assert "secret body" not in report.text and "another body" not in report.text
+    assert body["sources"][0]["commit_hash"] == COMMIT_HASH
+    assert body["sources"][0]["source_branch"] == "main"
+    for invalid_query in ("?limit=0", "?limit=101", "?cursor=not-a-cursor"):
+        assert (
+            asyncio.run(_request("GET", path + invalid_query, access_token=admin)).status_code
+            == 422
+        )
+    assert (
+        asyncio.run(
+            _request("GET", f"/api/v1/admin/preview-jobs/{uuid4()}/duplicates", access_token=admin)
+        ).status_code
+        == 404
+    )
+    assert (
+        asyncio.run(
+            _request(
+                "GET",
+                f"/api/v1/admin/products/{product_id}/imports/{job_id}/duplicates?execution=1",
+                access_token=admin,
+            )
+        ).status_code
+        == 404
+    )
+    next_page = asyncio.run(
+        _request("GET", path + "?cursor=" + body["next_cursor"], access_token=admin)
+    )
+    assert next_page.status_code == 200
+    assert next_page.json()["items"][0]["id"] != body["items"][0]["id"]
+    stale_filter = asyncio.run(
+        _request("GET", path + "?language=it&cursor=" + body["next_cursor"], access_token=admin)
+    )
+    assert stale_filter.status_code == 422
+    job = asyncio.run(
+        _request("GET", f"/api/v1/admin/preview-jobs/{job_id}", access_token=admin)
+    ).json()
+    assert job["result"]["layout_candidates"] == []
+
+
 def test_android_preview_completes_read_only(
     preview_session_factory: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,

@@ -5,13 +5,18 @@ from __future__ import annotations
 from dataclasses import replace
 from types import MappingProxyType
 
-from verboflex.localization.importing.android_xml import parse_android_xml
+from verboflex.localization.importing.android_xml import (
+    AndroidDiagnosticKey,
+    inspect_android_xml,
+    inspect_unsupported_android_scalar_keys,
+    parse_android_xml,
+)
 from verboflex.localization.importing.core import (
     MAX_CANONICAL_AGGREGATE_BYTES,
     MAX_CANONICAL_FILE_BYTES,
     MAX_CANONICAL_FILES,
     MAX_CANONICAL_ISSUES,
-    MAX_CANONICAL_VALUES,
+    MAX_CANONICAL_MAPPING_VALUES,
     CanonicalFormat,
     CanonicalIssue,
     CanonicalOutputBudget,
@@ -50,6 +55,22 @@ _ADAPTERS: MappingProxyType[CanonicalFormat, CanonicalParser] = MappingProxyType
     }
 )
 _REPOSITORY_SIDE_ORDER = {"direct": 0, "keys": 1, "translations": 2}
+
+
+def inspect_duplicate_snapshot(
+    parser_input: CanonicalParserInput,
+) -> tuple[tuple[CanonicalValue | AndroidDiagnosticKey, ...], tuple[CanonicalIssue, ...]]:
+    """Diagnostic-only dispatch; no canonical uniqueness rule is relaxed."""
+    if parser_input.format != "android_xml":
+        parsed = parse_canonical_snapshot(parser_input)
+        return parsed.values, parsed.issues
+    inspected = inspect_android_xml(parser_input)
+    values = (
+        inspect_unsupported_android_scalar_keys(parser_input)
+        if inspected.issues
+        else inspected.values
+    )
+    return values, inspected.issues
 
 
 def parse_canonical_snapshot(parser_input: CanonicalParserInput) -> CanonicalParseResult:
@@ -127,13 +148,13 @@ def parse_canonical_mapping(
         return _failure(first, code="duplicate_key")
 
     sides = {parser_input.repository_side for parser_input in ordered_inputs}
+    budget = CanonicalOutputBudget(mapping=True)
     if sides == {"direct"}:
-        return _parse_complete_inputs(ordered_inputs)
+        return _parse_complete_inputs(ordered_inputs, budget=budget)
     if sides != {"keys", "translations"}:
         return _failure(first, code="ambiguous_structure")
 
     source_bytes = sum(len(item.content) for item in ordered_inputs)
-    budget = CanonicalOutputBudget(source_bytes=source_bytes)
     keys_result = _parse_complete_inputs(
         tuple(item for item in ordered_inputs if item.repository_side == "keys"), budget=budget
     )
@@ -160,7 +181,7 @@ def _parse_complete_inputs(
     budget: CanonicalOutputBudget | None = None,
 ) -> CanonicalParseResult:
     values = CanonicalValueBuffer(
-        budget, source_bytes=sum(len(item.content) for item in parser_inputs)
+        budget if budget is not None else CanonicalOutputBudget(mapping=True)
     )
     issues: list[CanonicalIssue] = []
     for parser_input in parser_inputs:
@@ -176,7 +197,7 @@ def _parse_complete_inputs(
         return CanonicalParseResult(
             issues=tuple(sorted(set(issues), key=canonical_issue_order)[:MAX_CANONICAL_ISSUES])
         )
-    if len(values) > MAX_CANONICAL_VALUES:
+    if len(values) > MAX_CANONICAL_MAPPING_VALUES:
         return _failure(parser_inputs[0], code="unsupported_structure")
     try:
         return CanonicalParseResult(values=tuple(sorted(values, key=canonical_value_order)))
@@ -228,13 +249,13 @@ def _join_separate_results(
         )
         for value in translations_result.values
     )
-    values = CanonicalValueBuffer(source_bytes=source_bytes)
+    values = CanonicalValueBuffer(CanonicalOutputBudget(mapping=True))
     try:
         values.extend(keys_result.values)
         values.extend(joined_translations)
     except CanonicalOutputLimitExceeded:
         return _failure(failure_input, code="unsupported_structure")
-    if len(values) > MAX_CANONICAL_VALUES:
+    if len(values) > MAX_CANONICAL_MAPPING_VALUES:
         return _failure(failure_input, code="unsupported_structure")
     try:
         return CanonicalParseResult(values=tuple(sorted(values, key=canonical_value_order)))

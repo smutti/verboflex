@@ -642,6 +642,8 @@ def test_revision_mapping_read_is_owned_cursor_faithful_and_mutation_free(
                     "primary_repository_id"
                 ],
                 "primary_source_branch": "active/main",
+                "primary_localization_root": None,
+                "translations_localization_root": None,
                 "translations_repository_id": None,
                 "translations_source_branch": None,
                 "allowed_target_branches": ["active/release"],
@@ -721,6 +723,69 @@ def test_revision_mapping_read_is_owned_cursor_faithful_and_mutation_free(
     )
 
 
+def test_localization_root_roundtrips_and_changes_candidate_authority(
+    mapping_session_factory: sessionmaker[Session],
+) -> None:
+    product_id, active_id, _ = _seed_candidate(mapping_session_factory)
+    repository_id = _seed_repository(mapping_session_factory)
+    _configure_dependencies(
+        mapping_session_factory, BranchAdapter(("main", "release/1", "release/2"))
+    )
+    token = _create_authority(mapping_session_factory, email="admin@example.com", roles=("admin",))
+    before = _active_snapshot(mapping_session_factory, product_id=product_id, active_id=active_id)
+    payload = {
+        **_direct_payload(repository_id),
+        "localization_root": "babel/src/commonMain/moko-resources",
+    }
+    created = asyncio.run(
+        _request("POST", path=_mapping_path(product_id), access_token=token, json_body=payload)
+    )
+    assert created.status_code == 201
+    assert created.json()["primary_localization_root"] == payload["localization_root"]
+    mapping_id = UUID(created.json()["id"])
+    payload.update(expected_candidate_version=5, localization_root="translations")
+    updated = asyncio.run(
+        _request(
+            "PATCH",
+            path=_mapping_path(product_id, mapping_id),
+            access_token=token,
+            json_body=payload,
+        )
+    )
+    assert updated.status_code == 200
+    assert updated.json()["candidate_version"] == 6
+    assert updated.json()["primary_localization_root"] == "translations"
+    assert updated.json()["selected_layout_candidate_id"] is None
+    listed = asyncio.run(_request("GET", path=_mapping_path(product_id), access_token=token))
+    assert listed.json()["items"][0]["primary_localization_root"] == "translations"
+    assert (
+        _active_snapshot(mapping_session_factory, product_id=product_id, active_id=active_id)
+        == before
+    )
+
+
+@pytest.mark.parametrize("root", ["", "/absolute", "../escape", "a/../b", "a\\b", "a/%2e%2e/b"])
+def test_invalid_localization_root_is_rejected_before_discovery(
+    mapping_session_factory: sessionmaker[Session],
+    root: str,
+) -> None:
+    product_id, _, _ = _seed_candidate(mapping_session_factory)
+    repository_id = _seed_repository(mapping_session_factory)
+    adapter = BranchAdapter(("main", "release/1", "release/2"))
+    _configure_dependencies(mapping_session_factory, adapter)
+    token = _create_authority(mapping_session_factory, email="admin@example.com", roles=("admin",))
+    response = asyncio.run(
+        _request(
+            "POST",
+            path=_mapping_path(product_id),
+            access_token=token,
+            json_body={**_direct_payload(repository_id), "localization_root": root},
+        )
+    )
+    assert response.status_code == 422
+    assert not adapter.calls
+
+
 def test_direct_create_update_conflicts_and_noop_preserve_active_revision(
     mapping_session_factory: sessionmaker[Session],
 ) -> None:
@@ -755,6 +820,8 @@ def test_direct_create_update_conflicts_and_noop_preserve_active_revision(
         "topology": "direct",
         "primary_repository_id": str(repository_id),
         "primary_source_branch": "main",
+        "primary_localization_root": None,
+        "translations_localization_root": None,
         "translations_repository_id": None,
         "translations_source_branch": None,
         "allowed_target_branches": ["release/1", "release/2"],
@@ -1084,6 +1151,8 @@ def test_separate_mapping_api_is_closed_versioned_and_topology_safe(
         "topology": "separate",
         "primary_repository_id": str(keys_repository_id),
         "primary_source_branch": "keys/main",
+        "primary_localization_root": None,
+        "translations_localization_root": None,
         "translations_repository_id": str(translations_repository_id),
         "translations_source_branch": "translations/main",
         "allowed_target_branches": ["release/1", "release/2"],

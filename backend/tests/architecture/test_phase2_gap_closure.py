@@ -1441,7 +1441,7 @@ def test_phase2_forbidden_bypasses_are_absent() -> None:
     }
 
     admin_routes = _admin_route_functions()
-    assert len(admin_routes) == 34 + 5  # Phase 2 routes plus five sealed Phase 3 import operations.
+    assert len(admin_routes) == 34 + 5 + 2  # C4 adds only two read-only diagnostic children.
     for path, function in admin_routes:
         annotations = {
             ast.unparse(argument.annotation)

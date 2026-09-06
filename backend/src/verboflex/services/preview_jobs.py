@@ -146,6 +146,7 @@ class PreviewRepositorySide:
     repository_id: UUID
     source_branch: str
     commit_hash: str
+    localization_root: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +214,7 @@ def _repository_sides(row: PreviewJob) -> tuple[PreviewRepositorySide, ...]:
                 repository_id=UUID(side["repository_id"]),
                 source_branch=side["source_branch"],
                 commit_hash=side["commit_hash"],
+                localization_root=side.get("localization_root"),
             )
             for side in row.repository_sides
         )
@@ -330,6 +332,11 @@ def _complete_preview_digest(
                 "repository_id": str(side.repository_id),
                 "role": side.role,
                 "source_branch": side.source_branch,
+                **(
+                    {"localization_root": side.localization_root}
+                    if side.localization_root is not None
+                    else {}
+                ),
             }
             for side in identity.repository_sides
         ],
@@ -610,6 +617,11 @@ def _complete_sides(
             "repository_id": str(side.repository_id),
             "source_branch": side.source_branch,
             "commit_hash": commits[side.role],
+            **(
+                {"localization_root": side.localization_root}
+                if side.localization_root is not None
+                else {}
+            ),
         }
         for side in persisted_sides
     ]

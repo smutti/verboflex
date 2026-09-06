@@ -2,6 +2,11 @@
 
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.models.duplicate_report import (
+    DuplicateGroupRow,
+    DuplicateOccurrenceRow,
+    DuplicateReportRow,
+)
 from verboflex.models.import_job import (
     ImportExecution,
     ImportJob,
@@ -38,6 +43,9 @@ __all__ = [
     "AuthSession",
     "ActiveRevisionRevalidationConfirmation",
     "BitbucketConnection",
+    "DuplicateGroupRow",
+    "DuplicateOccurrenceRow",
+    "DuplicateReportRow",
     "EffectiveConstraintSource",
     "ImportExecution",
     "ImportJob",

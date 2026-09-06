@@ -183,6 +183,7 @@ class ImportRepositorySideRecord:
     role: RepositoryRole
     repository_id: UUID
     source_branch: str
+    localization_root: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,6 +302,7 @@ class ImportExecutionSide:
     workspace: str
     repository_slug: str
     source_branch: str
+    localization_root: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -691,6 +693,7 @@ def _mapping_sides(
             role=cast(RepositoryRole, side.role),
             repository_id=side.repository_id,
             source_branch=side.source_branch,
+            localization_root=side.localization_root,
         )
         for side in mapping.sides
     )
@@ -1444,6 +1447,7 @@ def start_import_execution(
                             workspace=repository.workspace,
                             repository_slug=repository.repository_slug,
                             source_branch=side.source_branch,
+                            localization_root=side.localization_root,
                         )
                     )
         now = datetime.now(UTC)
@@ -1913,9 +1917,12 @@ def _finish_import_execution_transaction(
             and job.topology == mapping.topology
             and connection_generation == identity.connection_generation
             and current_sides is not None
-            and tuple((side.role, side.repository_id, side.source_branch) for side in current_sides)
+            and tuple(
+                (side.role, side.repository_id, side.source_branch, side.localization_root)
+                for side in current_sides
+            )
             == tuple(
-                (side.role, side.repository_id, side.source_branch)
+                (side.role, side.repository_id, side.source_branch, side.localization_root)
                 for side in identity.repository_sides
             )
         )
@@ -2389,6 +2396,7 @@ def _persisted_execution_identity(
                 workspace=repository.workspace,
                 repository_slug=repository.repository_slug,
                 source_branch=side.source_branch,
+                localization_root=side.localization_root,
             )
         )
     return ImportExecutionIdentity(
@@ -2667,6 +2675,7 @@ async def _process_import(
                 repository=repository,
                 branch=side.source_branch,
                 adapter=adapter,
+                localization_root=side.localization_root,
             )
         for source_file in snapshot.files:
             source_contents[(side.role, source_file.path)] = source_file.content
@@ -2696,7 +2705,60 @@ async def _process_import(
     if not canonical_import_enabled:
         return ImportProcessingResult(references=durable_references)
     if parser_inputs:
+        from verboflex.localization.duplicate_diagnostics import inspect_duplicate_keys
+        from verboflex.services.duplicate_reports import store_report
+
+        report = inspect_duplicate_keys(parser_inputs)
+        with factory.begin() as session:
+            owner = session.scalar(
+                select(ImportExecution)
+                .where(ImportExecution.id == identity.execution_id)
+                .with_for_update()
+            )
+            job = session.get(ImportJob, identity.import_id)
+            if (
+                owner is not None
+                and owner.state == "running"
+                and owner.sequence == identity.sequence
+                and job is not None
+                and job.current_execution_id == identity.execution_id
+            ):
+                source_summaries = list(
+                    {
+                        (
+                            ref.repository_side,
+                            ref.repository_id,
+                            ref.source_branch,
+                            ref.commit_hash,
+                        ): dict(
+                            repository_side=ref.repository_side,
+                            repository_id=str(ref.repository_id),
+                            source_branch=ref.source_branch,
+                            commit_hash=ref.commit_hash,
+                        )
+                        for ref in durable_references
+                    }.values()
+                )
+                store_report(
+                    session,
+                    report=report,
+                    sources=source_summaries,
+                    execution_id=identity.execution_id,
+                )
         parse_result = parse_canonical_mapping(parser_inputs)
+        if not parse_result.issues and (report.groups or not report.complete):
+            parse_result = CanonicalParseResult(
+                issues=(
+                    CanonicalIssue(
+                        code="duplicate_key" if report.groups else "unsupported_structure",
+                        repository_side=parser_inputs[0].repository_side,
+                        path=parser_inputs[0].path,
+                        message="Duplicate localization key."
+                        if report.groups
+                        else "Diagnostic scan is incomplete.",
+                    ),
+                )
+            )
     else:
         parse_result = CanonicalParseResult(
             issues=(

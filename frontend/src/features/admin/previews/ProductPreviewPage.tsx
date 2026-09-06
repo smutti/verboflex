@@ -65,6 +65,7 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { useCursorCollection } from "../useCursorCollection";
+import { DuplicateKeysDialog } from "../imports/DuplicateKeysDialog";
 import {
   nextPreviewPollDelay,
   previewJobIdentity,
@@ -677,6 +678,14 @@ function PreviewJobView({
           </div>
         ) : null}
       </div>
+
+      {job.state === "succeeded" || job.state === "failed" ? (
+        <DuplicateKeysDialog
+          key={previewJobIdentity(job)}
+          accessToken={accessToken}
+          previewJobId={job.id}
+        />
+      ) : null}
 
       {pollingError ? (
         <PreviewAlert title="Status unavailable">

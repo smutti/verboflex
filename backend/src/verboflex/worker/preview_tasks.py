@@ -5,20 +5,28 @@ from collections.abc import Mapping
 from uuid import UUID
 
 from billiard.exceptions import SoftTimeLimitExceeded  # type: ignore[import-untyped]
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from verboflex.core.config import get_settings
 from verboflex.db.session import SessionFactory
 from verboflex.integrations.bitbucket.client import BitbucketHttpAdapter
+from verboflex.localization.duplicate_diagnostics import inspect_duplicate_keys
+from verboflex.localization.importing.core import CanonicalParserInput
+from verboflex.localization.moko_layout import moko_layout
 from verboflex.localization.preview.registry import detect_preview_layouts
+from verboflex.models.preview_job import PreviewJob
 from verboflex.services.bitbucket_oauth import (
     BitbucketOAuthService,
     BitbucketOAuthTokenExchange,
 )
+from verboflex.services.duplicate_reports import store_report
 from verboflex.services.preview_jobs import (
     PreviewJobIdentity,
     PreviewJobTimedOut,
     PreviewProcessor,
+    _current_failure_code,
+    _matches_started_identity,
     execute_preview_job,
     reconcile_stale_preview_jobs,
 )
@@ -36,6 +44,8 @@ async def _process_preview(
     adapter: SourceDiscoveryAdapter,
 ) -> dict[str, object]:
     candidates: list[dict[str, object]] = []
+    diagnostic_inputs: list[CanonicalParserInput] = []
+    diagnostic_sources: list[dict[str, str]] = []
     for side in identity.repository_sides:
         with factory() as session:
             snapshot = await discover_live_repository_sources(
@@ -43,15 +53,59 @@ async def _process_preview(
                 repository_id=side.repository_id,
                 branch=side.source_branch,
                 adapter=adapter,
+                localization_root=side.localization_root,
             )
         if snapshot.commit_hash != side.commit_hash:
             raise ValueError("preview commit changed during discovery")
+        diagnostic_sources.append(
+            dict(
+                repository_side=side.role,
+                repository_id=str(side.repository_id),
+                source_branch=side.source_branch,
+                commit_hash=side.commit_hash,
+            )
+        )
+        for file in snapshot.files:
+            layout = moko_layout(file.path)
+            if layout is not None:
+                diagnostic_inputs.append(
+                    CanonicalParserInput(
+                        format="android_xml",
+                        repository_side=side.role,
+                        path=file.path,
+                        content=file.content,
+                        layout_identity=layout[0],
+                        layout_version=1,
+                        base_language="und",
+                    )
+                )
         candidates.extend(
             detect_preview_layouts(
                 snapshot.files,
                 repository_side=side.role,
             ).to_mappings()
         )
+    if diagnostic_inputs:
+        report = inspect_duplicate_keys(tuple(diagnostic_inputs))
+        if report.groups or not report.complete:
+            # A diagnostic result never authorizes a clean subset of a mapping.
+            candidates.clear()
+        with factory.begin() as session:
+            owner = session.scalar(
+                select(PreviewJob).where(PreviewJob.id == identity.job_id).with_for_update()
+            )
+            if (
+                owner is not None
+                and owner.state == "running"
+                and _matches_started_identity(owner, identity)
+                and _current_failure_code(session, owner, for_update=True) is None
+            ):
+                store_report(
+                    session,
+                    report=report,
+                    sources=diagnostic_sources,
+                    preview_job_id=identity.job_id,
+                )
     candidates.sort(
         key=lambda candidate: (
             str(candidate["repository_side"]),

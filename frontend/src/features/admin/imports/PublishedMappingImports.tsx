@@ -41,6 +41,7 @@ import {
 } from "./mutationAuthority";
 import { importPollingIdentity, useImportPolling } from "./useImportPolling";
 import { RewrittenBaselineDialog } from "./RewrittenBaselineDialog";
+import { DuplicateKeysDialog } from "./DuplicateKeysDialog";
 import { useSession } from "../../auth/session";
 
 const IMPORT_PAGE_LIMIT = 50;
@@ -430,13 +431,42 @@ function RowError({
   );
 }
 
+function AdminDuplicateAction({
+  accessToken,
+  productId,
+  item,
+}: {
+  accessToken: string;
+  productId: string;
+  item: AdminPublishedMappingImportResponse;
+}) {
+  const { state } = useSession();
+  if (
+    state.status !== "authenticated" ||
+    !state.principal.roles.includes("admin")
+  )
+    return null;
+  return (
+    <DuplicateKeysDialog
+      accessToken={accessToken}
+      productId={productId}
+      importId={item.id!}
+      execution={item.execution_number!}
+    />
+  );
+}
+
 function ImportAction({
+  accessToken,
+  productId,
   automaticUpdatesPaused,
   item,
   onAction,
   onRefreshStatus,
   pending,
 }: {
+  accessToken: string;
+  productId: string;
   automaticUpdatesPaused: boolean;
   item: AdminPublishedMappingImportResponse;
   onAction: (trigger: HTMLButtonElement) => void;
@@ -446,6 +476,18 @@ function ImportAction({
   const inProgress = item.action === "import_in_progress";
   return (
     <div className="grid gap-2">
+      {item.id !== null &&
+      item.execution_number &&
+      hasParserFailure(item) &&
+      item.parser_issues.some(
+        (issue) => issue.issue_code === "duplicate_key",
+      ) ? (
+        <AdminDuplicateAction
+          accessToken={accessToken}
+          productId={productId}
+          item={item}
+        />
+      ) : null}
       <Button
         type="button"
         variant="outline"
@@ -1110,6 +1152,8 @@ export function PublishedMappingImports({
                         </TableCell>
                         <TableCell className="align-top">
                           <ImportAction
+                            accessToken={accessToken}
+                            productId={productId}
                             automaticUpdatesPaused={automaticUpdatesPaused}
                             item={item}
                             onAction={(triggerElement) => {
@@ -1187,6 +1231,8 @@ export function PublishedMappingImports({
                     }
                   />
                   <ImportAction
+                    accessToken={accessToken}
+                    productId={productId}
                     automaticUpdatesPaused={automaticUpdatesPaused}
                     item={item}
                     onAction={(triggerElement) => {

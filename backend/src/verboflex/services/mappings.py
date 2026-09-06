@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
+from verboflex.integrations.bitbucket.urls import validate_localization_root
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
     ProductMappingAllowedTarget,
@@ -80,6 +81,8 @@ class MappingRecord:
     selected_layout_candidate_id: UUID | None
     selected_layout_version: int | None
     candidate_version: int
+    primary_localization_root: str | None = None
+    translations_localization_root: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +92,7 @@ class MappingSideInput:
     role: Literal["keys", "translations"]
     repository_id: UUID
     source_branch: str
+    localization_root: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +168,15 @@ def _separate_identity(
     )
 
 
+def _localization_root(value: str | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        return validate_localization_root(value)
+    except ValueError:
+        raise InvalidMappingInput("invalid localization root") from None
+
+
 def _separate_sides(raw_sides: object) -> tuple[MappingSideInput, MappingSideInput]:
     if isinstance(raw_sides, (str, bytes)) or not isinstance(raw_sides, Iterable):
         raise InvalidMappingInput("separate requires exact keys and translations sides")
@@ -178,25 +191,32 @@ def _separate_sides(raw_sides: object) -> tuple[MappingSideInput, MappingSideInp
     if keys.repository_id == translations.repository_id:
         raise InvalidMappingInput("separate repository sides must remain explicit")
     return (
-        MappingSideInput("keys", keys.repository_id, _exact_branch(keys.source_branch)),
+        MappingSideInput(
+            "keys",
+            keys.repository_id,
+            _exact_branch(keys.source_branch),
+            _localization_root(keys.localization_root),
+        ),
         MappingSideInput(
             "translations",
             translations.repository_id,
             _exact_branch(translations.source_branch),
+            _localization_root(translations.localization_root),
         ),
     )
 
 
 def _side_rows(
-    sides: Iterable[tuple[str, UUID, str]],
+    sides: Iterable[tuple[str, UUID, str, str | None]],
 ) -> list[ProductMappingRepositorySide]:
     return [
         ProductMappingRepositorySide(
             role=role,
             repository_id=repository_id,
             source_branch=source_branch,
+            localization_root=localization_root,
         )
-        for role, repository_id, source_branch in sides
+        for role, repository_id, source_branch, localization_root in sides
     ]
 
 
@@ -288,6 +308,10 @@ def _record(
         topology=topology,
         primary_repository_id=primary.repository_id,
         primary_source_branch=primary.source_branch,
+        primary_localization_root=primary.localization_root,
+        translations_localization_root=translations.localization_root
+        if translations is not None
+        else None,
         translations_repository_id=(
             translations.repository_id if translations is not None else None
         ),
@@ -605,9 +629,11 @@ async def create_direct_mapping(
     allowed_target_branches: object,
     default_target_branch: object,
     adapter: BranchDiscoveryAdapter,
+    localization_root: str | None = None,
 ) -> MappingRecord:
     """Create one exact direct mapping and advance its candidate once."""
     exact_source = _exact_branch(source_branch)
+    root = _localization_root(localization_root)
     targets, default_target = _normalized_targets(
         allowed_target_branches,
         default_target=default_target_branch,
@@ -641,7 +667,7 @@ async def create_direct_mapping(
                 revision_id=candidate.id,
                 topology="direct",
                 identity_key=identity_key,
-                sides=_side_rows((("direct", repository_id, exact_source),)),
+                sides=_side_rows((("direct", repository_id, exact_source, root),)),
                 allowed_targets=_target_rows(targets, default_target=default_target),
             )
             session.add(mapping)
@@ -663,9 +689,11 @@ async def update_direct_mapping(
     allowed_target_branches: object,
     default_target_branch: object,
     adapter: BranchDiscoveryAdapter,
+    localization_root: str | None = None,
 ) -> MappingRecord:
     """Replace one direct candidate mapping or preserve a semantic no-op."""
     exact_source = _exact_branch(source_branch)
+    root = _localization_root(localization_root)
     targets, default_target = _normalized_targets(
         allowed_target_branches,
         default_target=default_target_branch,
@@ -698,6 +726,7 @@ async def update_direct_mapping(
                 current.topology == "direct"
                 and current.primary_repository_id == repository_id
                 and current.primary_source_branch == exact_source
+                and current.primary_localization_root == root
                 and current.allowed_target_branches == targets
                 and current.default_target_branch == default_target
             ):
@@ -720,7 +749,7 @@ async def update_direct_mapping(
             mapping.preview_confirmed_by = None
             mapping.preview_confirmed_at = None
             mapping.updated_at = datetime.now(UTC)
-            mapping.sides = _side_rows((("direct", repository_id, exact_source),))
+            mapping.sides = _side_rows((("direct", repository_id, exact_source, root),))
             mapping.allowed_targets = _target_rows(
                 targets,
                 default_target=default_target,
@@ -787,7 +816,7 @@ async def create_separate_mapping(
                 topology="separate",
                 identity_key=identity_key,
                 sides=_side_rows(
-                    (side.role, side.repository_id, side.source_branch)
+                    (side.role, side.repository_id, side.source_branch, side.localization_root)
                     for side in (keys, translations)
                 ),
                 allowed_targets=_target_rows(targets, default_target=default_target),
@@ -854,8 +883,10 @@ async def update_separate_mapping(
                 current.topology == "separate"
                 and current.primary_repository_id == keys.repository_id
                 and current.primary_source_branch == keys.source_branch
+                and current.primary_localization_root == keys.localization_root
                 and current.translations_repository_id == translations.repository_id
                 and current.translations_source_branch == translations.source_branch
+                and current.translations_localization_root == translations.localization_root
                 and current.allowed_target_branches == targets
                 and current.default_target_branch == default_target
             ):
@@ -879,7 +910,8 @@ async def update_separate_mapping(
             mapping.preview_confirmed_at = None
             mapping.updated_at = datetime.now(UTC)
             mapping.sides = _side_rows(
-                (side.role, side.repository_id, side.source_branch) for side in (keys, translations)
+                (side.role, side.repository_id, side.source_branch, side.localization_root)
+                for side in (keys, translations)
             )
             mapping.allowed_targets = _target_rows(
                 targets,

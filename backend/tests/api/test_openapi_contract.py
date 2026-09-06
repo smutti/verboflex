@@ -21,6 +21,10 @@ GENERATED_CLIENT = FRONTEND_SOURCE / "api" / "client"
 PREVIEW_CONFIRMATION_PATH = "/api/v1/admin/preview-jobs/{job_id}/confirmation"
 
 IMPORT_OPERATIONS = {
+    ("/api/v1/admin/products/{product_id}/imports/{import_id}/duplicates", "get"): (
+        "get_admin_import_duplicates",
+        {"200", "401", "403", "404", "409", "422", "503"},
+    ),
     ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get"): (
         "list_admin_published_mapping_imports",
         {"200", "401", "403", "404", "422"},
@@ -78,6 +82,16 @@ TRANSLATION_OPERATIONS = {
 }
 
 EXPECTED_OPERATIONS = {
+    ("/api/v1/admin/products/{product_id}/imports/{import_id}/duplicates", "get"): (
+        "get_admin_import_duplicates",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    ("/api/v1/admin/preview-jobs/{job_id}/duplicates", "get"): (
+        "get_admin_preview_duplicates",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
     ("/api/v1/admin/bitbucket", "get"): (
         "get_admin_bitbucket_status",
         {"200", "401", "403", "503"},
@@ -795,8 +809,8 @@ def test_import_operation_surface_is_exact_unique_and_bearer_protected() -> None
         assert set(operation["responses"]) == response_codes
         assert operation["security"] == [{"OAuth2PasswordBearer": []}]
 
-    assert len(operation_ids) == 5
-    assert len(set(operation_ids)) == 5
+    assert len(operation_ids) == 6  # C4 adds the read-only duplicate report.
+    assert len(set(operation_ids)) == 6
 
     list_operation = import_operations[
         ("/api/v1/admin/products/{product_id}/published/mapping-imports", "get")

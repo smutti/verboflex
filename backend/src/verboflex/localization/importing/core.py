@@ -79,6 +79,8 @@ MAX_CANONICAL_FILE_BYTES = 1_048_576
 MAX_CANONICAL_AGGREGATE_BYTES = 20_971_520
 MAX_CANONICAL_FILES = 500
 MAX_CANONICAL_VALUES = 5_000
+MAX_CANONICAL_MAPPING_VALUES = 50_000
+MAX_CANONICAL_MAPPING_OUTPUT_BYTES = 128 * 1_048_576
 MAX_CANONICAL_DEPTH = 12
 MAX_CANONICAL_ISSUES = 5
 MAX_CANONICAL_PATH_LENGTH = 4096
@@ -269,9 +271,13 @@ class CanonicalOutputLimitExceeded(ValueError):
 class CanonicalOutputBudget:
     source_bytes: int = 0
     used_bytes: int = 0
+    mapping: bool = False
+    used_values: int = 0
 
     @property
     def remaining_bytes(self) -> int:
+        if self.mapping:
+            return MAX_CANONICAL_MAPPING_OUTPUT_BYTES - self.used_bytes
         return MAX_CANONICAL_AGGREGATE_BYTES + self.source_bytes - self.used_bytes
 
 
@@ -305,7 +311,10 @@ class CanonicalValueBuffer:
         return size
 
     def append(self, value: CanonicalValue) -> None:
+        if self._budget.mapping and self._budget.used_values >= MAX_CANONICAL_MAPPING_VALUES:
+            raise CanonicalOutputLimitExceeded("canonical value limit exceeded")
         self._budget.used_bytes += self._size(value, self._budget.remaining_bytes)
+        self._budget.used_values += 1
         self._values.append(value)
 
     def extend(self, values: Iterable[CanonicalValue]) -> None:
@@ -453,7 +462,9 @@ def canonical_issue_order(issue: CanonicalIssue) -> tuple[int, str, int, int, st
     )
 
 
-def canonical_result_is_valid(result: object) -> TypeGuard[CanonicalParseResult]:
+def canonical_result_is_valid(
+    result: object, *, mapping: bool = False
+) -> TypeGuard[CanonicalParseResult]:
     """Validate an adapter result again at the shared trust boundary.
 
     The canonical dataclasses validate at construction time.  Adapters are still
@@ -463,10 +474,22 @@ def canonical_result_is_valid(result: object) -> TypeGuard[CanonicalParseResult]
     """
     if type(result) is not CanonicalParseResult:
         return False
-    if len(result.values) > MAX_CANONICAL_VALUES or len(result.issues) > MAX_CANONICAL_ISSUES:
+    value_limit = MAX_CANONICAL_MAPPING_VALUES if mapping else MAX_CANONICAL_VALUES
+    if len(result.values) > value_limit or len(result.issues) > MAX_CANONICAL_ISSUES:
         return False
     try:
         rebuilt_values = tuple(_rebuild_value(value) for value in result.values)
+        if mapping:
+            counts: dict[tuple[str, str], int] = {}
+            used_bytes = 0
+            for value in rebuilt_values:
+                file_identity = (value.locator.repository_side, value.locator.path)
+                counts[file_identity] = counts.get(file_identity, 0) + 1
+                if counts[file_identity] > MAX_CANONICAL_VALUES:
+                    return False
+                used_bytes += CanonicalValueBuffer._size(
+                    value, MAX_CANONICAL_MAPPING_OUTPUT_BYTES - used_bytes
+                )
         rebuilt_issues = tuple(_rebuild_issue(issue) for issue in result.issues)
         rebuilt = CanonicalParseResult(values=rebuilt_values, issues=rebuilt_issues)
     except AttributeError, TypeError, ValueError:

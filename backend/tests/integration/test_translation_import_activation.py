@@ -843,6 +843,23 @@ def test_stage_parser_failure_records_only_bounded_safe_issues(
     assert scope is None or scope.active_execution_id is None
 
 
+def test_stage_rejects_mismatched_localization_root_authority(activation_session_factory):
+    identity, repository_id = _seed_running_direct_import(activation_session_factory)
+    forged = replace(
+        identity,
+        repository_sides=(replace(identity.repository_sides[0], localization_root="other"),),
+    )
+    assert (
+        _translation_imports().stage_translation_parse(
+            activation_session_factory,
+            identity=forged,
+            references=(_reference(repository_id),),
+            result=_direct_result(),
+        )
+        is None
+    )
+
+
 def test_stage_rejects_a_late_noncurrent_execution_without_rows(
     activation_session_factory: sessionmaker[Session],
 ) -> None:
@@ -1326,6 +1343,55 @@ def test_refresh_source_change_resets_all_targets_and_preserves_target_text(
     assert target.translated_text == "Ciao"
     assert target.review_state == "draft"
     assert revision_count == initial_revision_count + 1
+
+
+def test_initial_activation_batches_values_without_per_value_database_roundtrips(
+    activation_session_factory,
+):
+    from sqlalchemy import event, func
+
+    factory = activation_session_factory
+    identity, repository_id = _seed_running_direct_import(factory)
+    content = (
+        "<resources>"
+        + "".join(f'<string name="key{i}">Text {i}</string>' for i in range(500))
+        + "</resources>"
+    ).encode()
+    result = parse_canonical_mapping(
+        (
+            CanonicalParserInput(
+                format="android_xml",
+                repository_side="direct",
+                path="res/values/strings.xml",
+                content=content,
+                layout_identity="res",
+                layout_version=1,
+                base_language="en",
+            ),
+        )
+    )
+    manifest, references = _stage_direct_manifest(
+        factory, identity=identity, repository_id=repository_id, result=result
+    )
+    statements = []
+
+    def observed(_connection, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(statement.split()[0])
+
+    engine = factory.kw["bind"]
+    event.listen(engine, "before_cursor_execute", observed)
+    try:
+        assert import_jobs.finish_import_execution(
+            factory,
+            identity=identity,
+            references=references,
+            canonical_manifest_digest=manifest.digest,
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", observed)
+    with factory() as session:
+        assert session.scalar(select(func.count()).select_from(TranslationValue)) == 500
+    assert len(statements) < 150, f"Per-value database work: {len(statements)} statements"
 
 
 def test_activation_advances_dataset_and_baseline_to_the_same_execution(

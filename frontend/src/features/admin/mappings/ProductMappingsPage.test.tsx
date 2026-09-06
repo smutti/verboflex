@@ -238,6 +238,27 @@ describe("administrator mapping cursor collections", () => {
 
   afterEach(() => cleanup());
 
+  it("offers a localization directory and protects an unsaved root", async () => {
+    listAdminCandidateMappingsMock.mockResolvedValue(
+      ok({ items: [], next_cursor: null }),
+    );
+    renderMappingsWithServerVersion();
+    const root = await screen.findByRole("textbox", {
+      name: "Localization root (optional)",
+    });
+    await userEvent.type(root, "babel/src/commonMain/moko-resources");
+    expect(root).toHaveValue("babel/src/commonMain/moko-resources");
+    expect(
+      screen.getByText(/Leave empty to scan from the repository root/),
+    ).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("link", { name: "Users destination" }),
+    );
+    expect(
+      await screen.findByRole("alertdialog", { name: "Leave without saving?" }),
+    ).toBeVisible();
+  });
+
   it("explains draft-only imports without requesting published imports even with a candidate version prop", async () => {
     getAdminProductMock.mockResolvedValue(
       ok({

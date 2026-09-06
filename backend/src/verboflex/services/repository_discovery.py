@@ -19,7 +19,10 @@ from verboflex.integrations.bitbucket.client import (
     BitbucketProviderReadError,
     BitbucketSourcePage,
 )
-from verboflex.integrations.bitbucket.urls import validate_repository_relative_path
+from verboflex.integrations.bitbucket.urls import (
+    validate_localization_root,
+    validate_repository_relative_path,
+)
 from verboflex.services.repositories import RepositoryRecord, get_repository
 
 DEFAULT_BRANCH_PAGE_SIZE = 50
@@ -255,8 +258,14 @@ async def discover_repository_sources_for_record(
     repository: RepositoryRecord,
     branch: str,
     adapter: SourceDiscoveryAdapter,
+    localization_root: str | None = None,
 ) -> RepositorySourceSnapshot:
     """Resolve one branch and read every candidate under the immutable A-03 budget."""
+    root = (
+        validate_localization_root(localization_root)
+        if localization_root is not None
+        else None
+    )
     resolved = await adapter.resolve_repository_branch(
         session,
         workspace=repository.workspace,
@@ -270,7 +279,7 @@ async def discover_repository_sources_for_record(
     entry_count = 0
     seen_paths: set[str] = set()
     candidate_entries: list[tuple[str, int]] = []
-    directories: deque[str | None] = deque([None])
+    directories: deque[str | None] = deque([root])
     while directories:
         directory_path = directories.popleft()
         next_url: str | None = None
@@ -288,6 +297,8 @@ async def discover_repository_sources_for_record(
             pages += 1
             for entry in page.entries:
                 path = normalize_repository_relative_path(entry.path)
+                if root is not None and not path.startswith(root + "/"):
+                    raise BitbucketProviderReadError(kind="invalid_source")
                 if path in seen_paths:
                     raise BitbucketProviderReadError(kind="invalid_source")
                 seen_paths.add(path)
@@ -346,6 +357,7 @@ async def discover_live_repository_sources(
     repository_id: UUID,
     branch: str,
     adapter: SourceDiscoveryAdapter,
+    localization_root: str | None = None,
 ) -> RepositorySourceSnapshot:
     """Resolve one registered repository before any commit-bound provider read."""
     repository = get_repository(session, repository_id=repository_id)
@@ -354,4 +366,5 @@ async def discover_live_repository_sources(
         repository=repository,
         branch=branch,
         adapter=adapter,
+        localization_root=localization_root,
     )

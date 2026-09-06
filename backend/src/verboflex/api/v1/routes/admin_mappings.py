@@ -129,6 +129,8 @@ def _response(record: MappingRecord) -> AdminMappingResponse:
         topology=record.topology,
         primary_repository_id=record.primary_repository_id,
         primary_source_branch=record.primary_source_branch,
+        primary_localization_root=record.primary_localization_root,
+        translations_localization_root=record.translations_localization_root,
         translations_repository_id=record.translations_repository_id,
         translations_source_branch=record.translations_source_branch,
         allowed_target_branches=list(record.allowed_target_branches),
@@ -560,6 +562,7 @@ async def create_admin_candidate_mapping(
                 expected_candidate_version=payload.expected_candidate_version,
                 repository_id=payload.repository_id,
                 source_branch=payload.source_branch,
+                localization_root=payload.localization_root,
                 allowed_target_branches=payload.allowed_target_branches,
                 default_target_branch=payload.default_target_branch,
                 adapter=adapter,
@@ -570,7 +573,9 @@ async def create_admin_candidate_mapping(
                 product_id=product_id,
                 expected_candidate_version=payload.expected_candidate_version,
                 repository_sides=tuple(
-                    MappingSideInput(side.role, side.repository_id, side.source_branch)
+                    MappingSideInput(
+                        side.role, side.repository_id, side.source_branch, side.localization_root
+                    )
                     for side in payload.sides
                 ),
                 allowed_target_branches=payload.allowed_target_branches,
@@ -618,6 +623,7 @@ async def update_admin_candidate_mapping(
                 expected_candidate_version=payload.expected_candidate_version,
                 repository_id=payload.repository_id,
                 source_branch=payload.source_branch,
+                localization_root=payload.localization_root,
                 allowed_target_branches=payload.allowed_target_branches,
                 default_target_branch=payload.default_target_branch,
                 adapter=adapter,
@@ -629,7 +635,9 @@ async def update_admin_candidate_mapping(
                 mapping_id=mapping_id,
                 expected_candidate_version=payload.expected_candidate_version,
                 repository_sides=tuple(
-                    MappingSideInput(side.role, side.repository_id, side.source_branch)
+                    MappingSideInput(
+                        side.role, side.repository_id, side.source_branch, side.localization_root
+                    )
                     for side in payload.sides
                 ),
                 allowed_target_branches=payload.allowed_target_branches,

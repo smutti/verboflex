@@ -337,6 +337,10 @@ export type AdminDirectMappingWriteRequest = {
      */
     expected_candidate_version: number;
     /**
+     * Localization Root
+     */
+    localization_root?: string | null;
+    /**
      * Repository Id
      */
     repository_id: string;
@@ -631,6 +635,10 @@ export type AdminMappingResponse = {
      */
     id: string;
     /**
+     * Primary Localization Root
+     */
+    primary_localization_root?: string | null;
+    /**
      * Primary Repository Id
      */
     primary_repository_id: string;
@@ -650,6 +658,10 @@ export type AdminMappingResponse = {
      * Topology
      */
     topology: 'direct' | 'separate';
+    /**
+     * Translations Localization Root
+     */
+    translations_localization_root?: string | null;
     /**
      * Translations Repository Id
      */
@@ -1320,6 +1332,10 @@ export type AdminRepositoryResponse = {
  */
 export type AdminSeparateMappingSideWriteRequest = {
     /**
+     * Localization Root
+     */
+    localization_root?: string | null;
+    /**
      * Repository Id
      */
     repository_id: string;
@@ -1600,6 +1616,122 @@ export type DeleteTranslationConstraintRequest = {
      * Expected Version
      */
     expected_version: number;
+};
+
+/**
+ * DuplicateGroupResponse
+ */
+export type DuplicateGroupResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Key Length
+     */
+    key_length: number;
+    /**
+     * Key Preview
+     */
+    key_preview: string;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Next Occurrence Cursor
+     */
+    next_occurrence_cursor: string | null;
+    /**
+     * Occurrence Count
+     */
+    occurrence_count: number;
+    /**
+     * Occurrences
+     */
+    occurrences: Array<DuplicateOccurrenceResponse>;
+    /**
+     * Repository Side
+     */
+    repository_side: string;
+};
+
+/**
+ * DuplicateOccurrenceResponse
+ */
+export type DuplicateOccurrenceResponse = {
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Resource Position
+     */
+    resource_position: number;
+};
+
+/**
+ * DuplicateReportResponse
+ */
+export type DuplicateReportResponse = {
+    /**
+     * Complete
+     */
+    complete: boolean;
+    /**
+     * Execution
+     */
+    execution: number;
+    /**
+     * Group Count
+     */
+    group_count: number;
+    /**
+     * Issue Codes
+     */
+    issue_codes: Array<string>;
+    /**
+     * Items
+     */
+    items: Array<DuplicateGroupResponse>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+    /**
+     * Repeated Occurrences
+     */
+    repeated_occurrences: number;
+    /**
+     * Report Id
+     */
+    report_id: string;
+    /**
+     * Sources
+     */
+    sources: Array<DuplicateSourceResponse>;
+};
+
+/**
+ * DuplicateSourceResponse
+ */
+export type DuplicateSourceResponse = {
+    /**
+     * Commit Hash
+     */
+    commit_hash: string;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Repository Side
+     */
+    repository_side: string;
+    /**
+     * Source Branch
+     */
+    source_branch: string;
 };
 
 /**
@@ -2592,6 +2724,77 @@ export type ConfirmAdminPreviewJobResponses = {
 
 export type ConfirmAdminPreviewJobResponse = ConfirmAdminPreviewJobResponses[keyof ConfirmAdminPreviewJobResponses];
 
+export type GetAdminPreviewDuplicatesData = {
+    body?: never;
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Language
+         */
+        language?: string | null;
+        /**
+         * File
+         */
+        file?: string | null;
+        /**
+         * Group Id
+         */
+        group_id?: string | null;
+    };
+    url: '/api/v1/admin/preview-jobs/{job_id}/duplicates';
+};
+
+export type GetAdminPreviewDuplicatesErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetAdminPreviewDuplicatesError = GetAdminPreviewDuplicatesErrors[keyof GetAdminPreviewDuplicatesErrors];
+
+export type GetAdminPreviewDuplicatesResponses = {
+    /**
+     * Successful Response
+     */
+    200: DuplicateReportResponse;
+};
+
+export type GetAdminPreviewDuplicatesResponse = GetAdminPreviewDuplicatesResponses[keyof GetAdminPreviewDuplicatesResponses];
+
 export type ListAdminProductsData = {
     body?: never;
     path?: never;
@@ -3081,6 +3284,85 @@ export type GetAdminImportResponses = {
 };
 
 export type GetAdminImportResponse = GetAdminImportResponses[keyof GetAdminImportResponses];
+
+export type GetAdminImportDuplicatesData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Import Id
+         */
+        import_id: string;
+    };
+    query: {
+        /**
+         * Execution
+         */
+        execution: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Language
+         */
+        language?: string | null;
+        /**
+         * File
+         */
+        file?: string | null;
+        /**
+         * Group Id
+         */
+        group_id?: string | null;
+    };
+    url: '/api/v1/admin/products/{product_id}/imports/{import_id}/duplicates';
+};
+
+export type GetAdminImportDuplicatesErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetAdminImportDuplicatesError = GetAdminImportDuplicatesErrors[keyof GetAdminImportDuplicatesErrors];
+
+export type GetAdminImportDuplicatesResponses = {
+    /**
+     * Successful Response
+     */
+    200: DuplicateReportResponse;
+};
+
+export type GetAdminImportDuplicatesResponse = GetAdminImportDuplicatesResponses[keyof GetAdminImportDuplicatesResponses];
 
 export type PublishAdminProductCandidateData = {
     body: AdminProductPublishRequest;

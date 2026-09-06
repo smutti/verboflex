@@ -179,6 +179,7 @@ class ProductMappingRepositorySide(Base):
         nullable=False,
     )
     source_branch: Mapped[str] = mapped_column(String(255), nullable=False)
+    localization_root: Mapped[str | None] = mapped_column(String(4096), nullable=True)
 
     mapping: Mapped[ProductRepositoryMapping] = relationship(back_populates="sides")
 

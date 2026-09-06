@@ -622,13 +622,13 @@ def test_registry_closes_all_mapping_preflight_and_join_defenses(
         scoped.setattr(registry, "MAX_CANONICAL_FILE_BYTES", 0)
         assert registry.parse_canonical_mapping((_input("json"),)).issues
     with monkeypatch.context() as scoped:
-        scoped.setattr(registry, "MAX_CANONICAL_VALUES", 0)
+        scoped.setattr(registry, "MAX_CANONICAL_MAPPING_VALUES", 0)
         assert registry.parse_canonical_mapping((_input("json"),)).issues
 
     keys_result = registry.parse_canonical_snapshot(valid_input)
     translations_result = registry.parse_canonical_snapshot(translation_input)
     with monkeypatch.context() as scoped:
-        scoped.setattr(registry, "MAX_CANONICAL_VALUES", 0)
+        scoped.setattr(registry, "MAX_CANONICAL_MAPPING_VALUES", 0)
         assert registry._join_separate_results(
             keys_result=keys_result,
             translations_result=translations_result,

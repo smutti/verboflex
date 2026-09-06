@@ -204,6 +204,14 @@ def validate_repository_relative_path(path: str) -> str:
     return "/".join(parts)
 
 
+def validate_localization_root(path: str) -> str:
+    """Require an exact raw directory, never an encoded traversal alias."""
+    validated = validate_repository_relative_path(path)
+    if unquote(validated) != validated:
+        raise ValueError(BITBUCKET_URL_REJECTED_MESSAGE)
+    return validated
+
+
 def validate_provider_commit_hash(commit_hash: str) -> str:
     """Return one full provider commit hash without accepting symbolic revisions."""
     if (

@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import insert, select, update
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
+from verboflex.localization.graphemes import grapheme_count
 from verboflex.localization.importing.core import (
     MAX_CANONICAL_ISSUES,
     CanonicalParseResult,
@@ -81,7 +82,7 @@ def stage_translation_parse(
     correlation_references: Mapping[CorrelationIdentity, str] | None = None,
 ) -> StagedParseManifest | None:
     """Persist one immutable inactive parse result for an exact running execution."""
-    if not canonical_result_is_valid(result):
+    if not canonical_result_is_valid(result, mapping=True):
         raise TranslationImportRejected("canonical parser result rejected")
     correlations = correlation_references or {}
     if any(
@@ -124,7 +125,6 @@ def stage_translation_parse(
             )
         session.flush()
 
-        staged_payloads: list[dict[str, object]] = []
         for position, value in enumerate(result.values):
             matched_reference = reference_by_locator.get(
                 (value.locator.repository_side, value.locator.path)
@@ -164,7 +164,6 @@ def stage_translation_parse(
                 "structure": [node.to_mapping() for node in value.structure],
                 "translated_text": value.translated_text,
             }
-            staged_payloads.append(payload)
             session.add(
                 StagedTranslationValue(
                     import_execution_id=execution.id,
@@ -173,6 +172,8 @@ def stage_translation_parse(
                     **payload,
                 )
             )
+            if (position + 1) % 500 == 0:
+                session.flush()
 
         issue_payloads: list[dict[str, object]] = []
         for position, issue in enumerate(result.issues[:MAX_CANONICAL_ISSUES]):
@@ -194,16 +195,11 @@ def stage_translation_parse(
                 )
             )
         session.flush()
-        digest = _manifest_digest(
-            identity=identity,
-            references=validated_references,
-            values=staged_payloads,
-            issues=issue_payloads,
-        )
+        digest = staged_manifest_digest(session, identity=identity)
         return StagedParseManifest(
             execution_id=execution.id,
             digest=digest,
-            value_count=len(staged_payloads),
+            value_count=len(result.values),
             issue_count=len(issue_payloads),
         )
 
@@ -223,12 +219,11 @@ def staged_manifest_digest(
             .order_by(ImportSourceReference.position)
         )
     )
-    staged_values = tuple(
-        session.scalars(
-            select(StagedTranslationValue)
-            .where(StagedTranslationValue.import_execution_id == identity.execution_id)
-            .order_by(StagedTranslationValue.position)
-        )
+    staged_values = session.scalars(
+        select(StagedTranslationValue)
+        .where(StagedTranslationValue.import_execution_id == identity.execution_id)
+        .order_by(StagedTranslationValue.position)
+        .execution_options(yield_per=500)
     )
     issues = tuple(
         session.scalars(
@@ -253,7 +248,7 @@ def staged_manifest_digest(
     return _manifest_digest(
         identity=identity,
         references=reference_records,
-        values=[_staged_payload(value) for value in staged_values],
+        values=(_staged_payload(value) for value in staged_values),
         issues=[
             {
                 "column": issue.column,
@@ -384,6 +379,15 @@ def reconcile_canonical_translations(
     key_by_identity = {
         (key.repository_id, key.configured_branch, key.raw_key): key for key in existing_keys
     }
+    if not existing_keys:
+        return _insert_initial_dataset(
+            session,
+            identity=identity,
+            scope=scope,
+            staged_values=staged_values,
+            references=reference_by_position,
+            now=reconciled_at,
+        )
     source_changed_raw_keys: set[str] = set()
     for staged in staged_values:
         if staged.language != mapping.base_language:
@@ -425,9 +429,10 @@ def reconcile_canonical_translations(
                 repository_id=staged.repository_id,
                 configured_branch=staged.configured_branch,
                 raw_key=staged.raw_key,
+                values=[],
+                constraints=[],
             )
             session.add(key)
-            session.flush()
             key_by_identity[key_identity] = key
         elif key.is_deleted:
             key.is_deleted = False
@@ -462,9 +467,10 @@ def reconcile_canonical_translations(
                 review_state="draft",
                 is_deleted=parser_deleted,
                 deleted_at=reconciled_at if parser_deleted else None,
+                revisions=[],
+                locator=None,
             )
             session.add(value)
-            session.flush()
             key.values.append(value)
             created_value_ids.append(value.id)
             affected_value_ids.add(value.id)
@@ -554,6 +560,8 @@ def reconcile_canonical_translations(
             staged=staged,
             reference=reference,
         )
+        if (staged.position + 1) % 500 == 0:
+            session.flush()
 
     for key in existing_keys:
         for value in key.values:
@@ -596,6 +604,148 @@ def reconcile_canonical_translations(
         updated_value_ids=tuple(updated_value_ids),
         tombstoned_value_ids=tuple(tombstoned_value_ids),
         affected_value_ids=tuple(sorted(affected_value_ids, key=str)),
+    )
+
+
+def _insert_initial_dataset(
+    session: Session,
+    *,
+    identity: ImportExecutionIdentity,
+    scope: LocalizationScope,
+    staged_values: tuple[StagedTranslationValue, ...],
+    references: Mapping[int, ImportSourceReference],
+    now: datetime,
+) -> ReconciliationResult:
+    """Batch an empty scope without retaining a second full ORM object graph.
+
+    The caller has verified the complete manifest and locked the scope. An empty
+    scope has no keys or constraints (FK-owned), so initial constraint projection
+    is exactly 'none'; refreshes continue through semantic reconciliation.
+    """
+    key_ids: dict[tuple[UUID, str, str], UUID] = {}
+    all_deleted: dict[UUID, bool] = {}
+    created: list[UUID] = []
+    for offset in range(0, len(staged_values), 500):
+        keys: list[dict[str, object]] = []
+        values: list[dict[str, object]] = []
+        revisions: list[dict[str, object]] = []
+        locators: list[dict[str, object]] = []
+        for staged in staged_values[offset : offset + 500]:
+            reference = references.get(staged.source_reference_position)
+            if reference is None:
+                raise TranslationImportRejected("canonical source provenance rejected")
+            natural_key = (staged.repository_id, staged.configured_branch, staged.raw_key)
+            key_id = key_ids.get(natural_key)
+            if key_id is None:
+                key_id = uuid4()
+                key_ids[natural_key] = key_id
+                all_deleted[key_id] = True
+                keys.append(
+                    dict(
+                        id=key_id,
+                        scope_id=scope.id,
+                        product_id=scope.product_id,
+                        repository_id=staged.repository_id,
+                        configured_branch=staged.configured_branch,
+                        raw_key=staged.raw_key,
+                        is_deleted=False,
+                        deleted_at=None,
+                    )
+                )
+            value_id = uuid4()
+            deleted = _staged_value_is_deleted(staged)
+            all_deleted[key_id] = all_deleted[key_id] and deleted
+            common = dict(
+                source_text=staged.source_text,
+                translated_text=staged.translated_text,
+                display_text=staged.display_text,
+                structure=staged.structure,
+                review_state="draft",
+                is_deleted=deleted,
+                deleted_at=now if deleted else None,
+            )
+            values.append(
+                dict(
+                    id=value_id,
+                    scope_id=scope.id,
+                    translation_key_id=key_id,
+                    language=staged.language,
+                    selector_version=staged.selector_version,
+                    selector_kind=staged.selector_kind,
+                    selector_bytes=staged.selector_bytes,
+                    selector_digest=staged.selector_digest,
+                    grapheme_count=grapheme_count(staged.display_text),
+                    effective_max_chars=None,
+                    effective_constraint_source="none",
+                    is_over_limit=False,
+                    **common,
+                )
+            )
+            revisions.append(
+                dict(
+                    id=uuid4(),
+                    value_id=value_id,
+                    translation_key_id=key_id,
+                    revision_number=1,
+                    import_job_id=identity.import_id,
+                    import_execution_id=identity.execution_id,
+                    source_reference_position=reference.position,
+                    source_commit_hash=reference.commit_hash,
+                    correlation_reference=staged.correlation_reference,
+                    **common,
+                    revision_digest=_revision_digest(
+                        value_id=value_id,
+                        revision_number=1,
+                        identity=identity,
+                        source_reference_position=reference.position,
+                        source_commit_hash=reference.commit_hash,
+                        source_text=staged.source_text,
+                        translated_text=staged.translated_text,
+                        display_text=staged.display_text,
+                        structure=staged.structure,
+                        review_state="draft",
+                        is_deleted=deleted,
+                        correlation_reference=staged.correlation_reference,
+                    ),
+                )
+            )
+            locators.append(
+                dict(
+                    value_id=value_id,
+                    translation_key_id=key_id,
+                    import_job_id=identity.import_id,
+                    import_execution_id=identity.execution_id,
+                    source_reference_position=reference.position,
+                    repository_side=staged.repository_side,
+                    repository_id=staged.repository_id,
+                    configured_branch=staged.configured_branch,
+                    source_commit_hash=reference.commit_hash,
+                    format=staged.format,
+                    path=staged.path,
+                    position=staged.locator_position,
+                    structural_address=staged.structural_address,
+                    line=staged.line,
+                    column=staged.column,
+                )
+            )
+            created.append(value_id)
+        if keys:
+            session.execute(insert(TranslationKey), keys)
+        session.execute(insert(TranslationValue), values)
+        session.execute(insert(TranslationValueRevision), revisions)
+        session.execute(insert(TranslationValueLocator), locators)
+    deleted_keys = [key_id for key_id, deleted in all_deleted.items() if deleted]
+    for offset in range(0, len(deleted_keys), 500):
+        session.execute(
+            update(TranslationKey)
+            .where(TranslationKey.id.in_(deleted_keys[offset : offset + 500]))
+            .values(is_deleted=True, deleted_at=now)
+        )
+    return ReconciliationResult(
+        created_value_ids=tuple(created),
+        updated_value_ids=(),
+        tombstoned_value_ids=(),
+        affected_value_ids=tuple(sorted(created, key=str)),
     )
 
 
@@ -947,9 +1097,12 @@ def _lock_current_staging_authority(
         or job.state != "running"
         or execution is None
         or execution.state != "running"
-        or tuple((side.role, side.repository_id, side.source_branch) for side in mapping.sides)
+        or tuple(
+            (side.role, side.repository_id, side.source_branch, side.localization_root)
+            for side in mapping.sides
+        )
         != tuple(
-            (side.role, side.repository_id, side.source_branch)
+            (side.role, side.repository_id, side.source_branch, side.localization_root)
             for side in identity.repository_sides
         )
     ):
@@ -967,6 +1120,7 @@ def _validate_references(
     side_authority = {
         side.role: (side.repository_id, side.source_branch) for side in identity.repository_sides
     }
+    roots = {side.role: side.localization_root for side in identity.repository_sides}
     seen: set[tuple[str, str]] = set()
     for position, reference in enumerate(references):
         authority = side_authority.get(reference.repository_side)
@@ -981,6 +1135,10 @@ def _validate_references(
             or not reference.path
             or reference.path.startswith("/")
             or ".." in reference.path.split("/")
+            or (
+                roots.get(reference.repository_side) is not None
+                and not reference.path.startswith(str(roots[reference.repository_side]) + "/")
+            )
             or (reference.repository_side, reference.path) in seen
         ):
             raise TranslationImportRejected("canonical source references rejected")
@@ -1043,7 +1201,7 @@ def _manifest_digest(
     *,
     identity: ImportExecutionIdentity,
     references: tuple[ImportSourceReferenceRecord, ...],
-    values: list[dict[str, object]],
+    values: Iterable[dict[str, object]],
     issues: list[dict[str, object]],
 ) -> str:
     payload = {
@@ -1070,20 +1228,28 @@ def _manifest_digest(
             }
             for reference in references
         ],
-        "values": [
-            {
-                **payload,
-                "repository_id": str(payload["repository_id"]),
-                "selector_bytes": cast(bytes, payload["selector_bytes"]).decode("utf-8"),
-            }
-            for payload in values
-        ],
-        "version": 1,
     }
-    encoded = json.dumps(
+    header = json.dumps(
         payload,
         ensure_ascii=False,
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    digest = hashlib.sha256(header[:-1] + b',"values":[')
+    for position, value in enumerate(values):
+        if position:
+            digest.update(b",")
+        digest.update(
+            json.dumps(
+                {
+                    **value,
+                    "repository_id": str(value["repository_id"]),
+                    "selector_bytes": cast(bytes, value["selector_bytes"]).decode("utf-8"),
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        )
+    digest.update(b'],"version":1}')
+    return digest.hexdigest()

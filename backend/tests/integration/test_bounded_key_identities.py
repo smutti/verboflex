@@ -54,6 +54,9 @@ def test_bounded_identity_migration_roundtrip_preserves_existing_key_and_digest(
         key = session.scalar(select(TranslationKey))
         assert (key.id, key.raw_key, key.raw_key_digest) == original
         assert key.raw_key_digest == hashlib.sha256(key.raw_key.encode("utf8")).digest()
+    # Keep the historical 0019/0020 assertion, then restore the shared module
+    # fixture to current metadata before subsequent tests use newly added fields.
+    command.upgrade(config, "head")
 
 
 @pytest.mark.parametrize("table", ["translation_keys", "staged_translation_values"])

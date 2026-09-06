@@ -287,6 +287,14 @@ const phaseThreeAdminOperationIds = new Map([
   ],
   ["GET /api/v1/admin/preview-jobs/{job_id}", "get_admin_preview_job"],
   [
+    "GET /api/v1/admin/preview-jobs/{job_id}/duplicates",
+    "get_admin_preview_duplicates",
+  ],
+  [
+    "GET /api/v1/admin/products/{product_id}/imports/{import_id}/duplicates",
+    "get_admin_import_duplicates",
+  ],
+  [
     "POST /api/v1/admin/preview-jobs/{job_id}/confirmation",
     "confirm_admin_preview_job",
   ],

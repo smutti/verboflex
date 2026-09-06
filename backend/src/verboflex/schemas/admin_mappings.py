@@ -3,7 +3,13 @@
 from typing import Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
+
+from verboflex.integrations.bitbucket.urls import validate_localization_root
+
+LocalizationRoot = Annotated[
+    str, Field(max_length=4096), AfterValidator(validate_localization_root)
+]
 
 
 class AdminDirectMappingWriteRequest(BaseModel):
@@ -13,6 +19,7 @@ class AdminDirectMappingWriteRequest(BaseModel):
 
     topology: Literal["direct"]
     repository_id: UUID
+    localization_root: LocalizationRoot | None = None
     source_branch: Annotated[str, Field(min_length=1, max_length=255)]
     allowed_target_branches: Annotated[list[str], Field(min_length=1, max_length=100)]
     default_target_branch: Annotated[str, Field(min_length=1, max_length=255)]
@@ -26,6 +33,7 @@ class AdminSeparateMappingSideWriteRequest(BaseModel):
 
     role: Literal["keys", "translations"]
     repository_id: UUID
+    localization_root: LocalizationRoot | None = None
     source_branch: Annotated[str, Field(min_length=1, max_length=255)]
 
 
@@ -72,6 +80,8 @@ class AdminMappingResponse(BaseModel):
     selected_layout_candidate_id: UUID | None
     selected_layout_version: int | None
     candidate_version: int
+    primary_localization_root: str | None = None
+    translations_localization_root: str | None = None
 
 
 class AdminMappingListResponse(BaseModel):

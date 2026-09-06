@@ -28,6 +28,7 @@ FORBIDDEN_PROVIDER_TOKENS = {
     "wiki",
 }
 EXPECTED_MODEL_MODULES = {
+    "duplicate_report.py",
     "auth_session.py",
     "bitbucket_connection.py",
     "import_job.py",

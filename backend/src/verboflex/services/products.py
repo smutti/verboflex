@@ -235,6 +235,7 @@ def _clone_active_revision_graph(
                         role=side.role,
                         repository_id=side.repository_id,
                         source_branch=side.source_branch,
+                        localization_root=side.localization_root,
                     )
                     for side in active_mapping.sides
                 ],

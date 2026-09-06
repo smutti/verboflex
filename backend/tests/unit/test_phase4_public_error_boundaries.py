@@ -119,7 +119,11 @@ def test_rewrite_identity_cannot_assume_a_persisted_repository_still_exists():
     session.get.return_value = None
     mapping = SimpleNamespace(
         topology="direct",
-        sides=[SimpleNamespace(role="direct", repository_id=uuid4(), source_branch="main")],
+        sides=[
+            SimpleNamespace(
+                role="direct", repository_id=uuid4(), source_branch="main", localization_root=None
+            )
+        ],
     )
     with pytest.raises(imports.ImportRewriteStale, match="^import rewrite proposal stale$"):
         imports._persisted_execution_identity(
@@ -181,6 +185,9 @@ def test_confirmed_layout_path_rejects_mismatched_template_grammar():
 @pytest.mark.anyio
 async def test_worker_rejects_execution_lost_between_parse_and_staging(monkeypatch):
     identity = SimpleNamespace(
+        execution_id=uuid4(),
+        import_id=uuid4(),
+        sequence=1,
         repository_sides=(
             SimpleNamespace(
                 role="direct",
@@ -188,8 +195,9 @@ async def test_worker_rejects_execution_lost_between_parse_and_staging(monkeypat
                 workspace="workspace",
                 repository_slug="app",
                 source_branch="main",
+                localization_root=None,
             ),
-        )
+        ),
     )
     content = b'{"en":{"key":"Hello"},"it":{"key":"Ciao"}}'
     discovered = SimpleNamespace(
@@ -221,6 +229,10 @@ async def test_worker_rejects_execution_lost_between_parse_and_staging(monkeypat
     factory = Mock()
     factory.return_value.__enter__ = Mock(return_value=Mock())
     factory.return_value.__exit__ = Mock(return_value=False)
+    diagnostic_session = Mock()
+    diagnostic_session.scalar.return_value = None
+    factory.begin.return_value.__enter__ = Mock(return_value=diagnostic_session)
+    factory.begin.return_value.__exit__ = Mock(return_value=False)
     with pytest.raises(ValueError, match="^canonical import execution is stale$"):
         await imports._process_import(identity, factory=factory, adapter=Mock())
     parsed = stage.call_args.kwargs["result"]

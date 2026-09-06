@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import cast
 from unicodedata import category
 from xml.etree import ElementTree as StandardElementTree
@@ -28,6 +28,7 @@ from verboflex.localization.importing.core import (
     canonical_issue_order,
     canonical_value_order,
 )
+from verboflex.localization.moko_layout import moko_layout
 from verboflex.localization.preview.core import normalize_preview_locale
 
 MAX_CANONICAL_FILE_BYTES = 1_048_576
@@ -123,8 +124,24 @@ class _AndroidTreeTarget:
         return self._builder.close()
 
 
+@dataclass(frozen=True, slots=True)
+class AndroidXmlInspection:
+    """Noncanonical source occurrences; never eligible for activation."""
+
+    values: tuple[CanonicalValue, ...] = ()
+    issues: tuple[CanonicalIssue, ...] = ()
+
+
 def parse_android_xml(parser_input: CanonicalParserInput) -> CanonicalParseResult:
-    """Parse the complete bounded Android resource grammar without partial output."""
+    """Parse the complete bounded Android grammar with canonical uniqueness."""
+    inspected = inspect_android_xml(parser_input, allow_duplicates=False)
+    return CanonicalParseResult(values=inspected.values, issues=inspected.issues)
+
+
+def inspect_android_xml(
+    parser_input: CanonicalParserInput, *, allow_duplicates: bool = True
+) -> AndroidXmlInspection | CanonicalParseResult:
+    """Validate the same grammar while retaining duplicate source occurrences."""
     if type(parser_input) is not CanonicalParserInput:
         return _invalid_input_failure()
     try:
@@ -141,6 +158,7 @@ def parse_android_xml(parser_input: CanonicalParserInput) -> CanonicalParseResul
             namespace_uris=namespace_uris,
             parser_input=parser_input,
             language=language,
+            allow_duplicates=allow_duplicates,
         )
     except _MalformedAndroidXml as error:
         return _failure(
@@ -155,7 +173,60 @@ def parse_android_xml(parser_input: CanonicalParserInput) -> CanonicalParseResul
         return _failure(parser_input, code="ambiguous_structure")
     except _UnsupportedAndroidXml, CanonicalOutputLimitExceeded:
         return _failure(parser_input, code="unsupported_structure")
-    return CanonicalParseResult(values=tuple(sorted(values, key=canonical_value_order)))
+    return AndroidXmlInspection(values=tuple(sorted(values, key=canonical_value_order)))
+
+
+@dataclass(frozen=True, slots=True)
+class AndroidDiagnosticKey:
+    """Source identity only; never a canonical translation value."""
+
+    logical_key: str
+    language: str
+    selector: CanonicalSelector
+    locator: CanonicalLocator
+
+
+def inspect_unsupported_android_scalar_keys(
+    parser_input: CanonicalParserInput,
+) -> tuple[AndroidDiagnosticKey, ...]:
+    """Retain scalar identities in an explicitly incomplete semantic scan.
+
+    Text outside resources and unknown escapes remain unsupported; this helper
+    cannot make them importable and never interprets or returns translation text.
+    """
+    try:
+        language = _confirmed_language(parser_input)
+        root, _ = _parse_root(parser_input.content)
+        if root.tag != "resources":
+            return ()
+        result: list[AndroidDiagnosticKey] = []
+        position = 0
+        for child in root:
+            if cast(object, child.tag) is StandardElementTree.Comment:
+                continue
+            if position >= MAX_ANDROID_VALUES:
+                return ()
+            if child.tag == "string" and child.attrib.get("name"):
+                key = child.attrib["name"]
+                _require_nonempty_text(key)
+                result.append(
+                    AndroidDiagnosticKey(
+                        logical_key=key,
+                        language=language,
+                        selector=CanonicalSelector(kind="scalar", fields=()),
+                        locator=CanonicalLocator(
+                            format="android_xml",
+                            repository_side=parser_input.repository_side,
+                            path=parser_input.path,
+                            position=position,
+                            structural_address=("resources", "string", position),
+                        ),
+                    )
+                )
+            position += 1
+        return tuple(result)
+    except ValueError, DefusedXmlException, StandardElementTree.ParseError:
+        return ()
 
 
 def parse_android_xml_files(
@@ -202,6 +273,17 @@ def parse_android_xml_files(
 
 
 def _confirmed_language(parser_input: CanonicalParserInput) -> str:
+    moko = moko_layout(parser_input.path)
+    if moko is not None:
+        layout, locale = moko
+        if layout != parser_input.layout_identity or parser_input.layout_version != 1:
+            raise _AmbiguousAndroidLayout
+        language = (
+            normalize_preview_locale(parser_input.base_language) if locale == "default" else locale
+        )
+        if language is None:
+            raise _UnsupportedAndroidXml
+        return language
     match = _ANDROID_PATH.fullmatch(parser_input.path)
     if match is None:
         raise _UnsupportedAndroidXml
@@ -275,6 +357,7 @@ def _resource_values(
     namespace_uris: frozenset[str],
     parser_input: CanonicalParserInput,
     language: str,
+    allow_duplicates: bool = False,
 ) -> tuple[CanonicalValue, ...]:
     if (
         root.tag != "resources"
@@ -303,7 +386,7 @@ def _resource_values(
             prefix=tuple(pending_comments),
         )
         pending_comments.clear()
-        if key in seen_keys:
+        if key in seen_keys and not allow_duplicates:
             raise _DuplicateAndroidKey
         seen_keys.add(key)
         if len(values) + len(resource_values) > MAX_ANDROID_VALUES:

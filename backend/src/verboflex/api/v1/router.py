@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from verboflex.api.v1.routes import (
     admin_bitbucket,
     admin_discovery,
+    admin_duplicates,
     admin_mappings,
     admin_previews,
     admin_products,
@@ -29,6 +30,7 @@ api_router.include_router(admin_bitbucket.router)
 api_router.include_router(admin_discovery.router)
 api_router.include_router(admin_mappings.router)
 api_router.include_router(admin_previews.router)
+api_router.include_router(admin_duplicates.router)
 api_router.include_router(admin_users.router)
 api_router.include_router(admin_products.router)
 api_router.include_router(admin_repositories.router)

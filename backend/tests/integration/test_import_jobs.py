@@ -610,6 +610,126 @@ def _assert_secret_free(value: object) -> None:
             _assert_secret_free(child)
 
 
+def test_duplicate_report_reads_are_admin_only_and_resource_owned(import_session_factory):
+    _configure_dependencies(import_session_factory)
+    paths = [
+        f"/api/v1/admin/preview-jobs/{uuid4()}/duplicates",
+        f"/api/v1/admin/products/{uuid4()}/imports/{uuid4()}/duplicates?execution=1",
+    ]
+    for path in paths:
+        assert asyncio.run(_request("GET", path, access_token=None)).status_code == 401
+    for role in ("translator", "viewer", "product_manager_reviewer"):
+        token = _create_principal(import_session_factory, role_name=role)
+        for path in paths:
+            assert asyncio.run(_request("GET", path, access_token=token)).status_code == 403
+    admin = _create_admin(import_session_factory)
+    for path in paths:
+        assert asyncio.run(_request("GET", path, access_token=admin)).status_code == 404
+
+
+def test_duplicate_report_pages_bind_execution_filters_and_occurrence_groups(
+    import_session_factory,
+):
+    from verboflex.localization.duplicate_diagnostics import (
+        DuplicateGroup,
+        DuplicateOccurrence,
+        DuplicateReport,
+    )
+    from verboflex.services.duplicate_reports import store_report
+
+    _configure_dependencies(import_session_factory)
+    admin = _create_admin(import_session_factory)
+    product_id, _, repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
+    created = asyncio.run(
+        _request(
+            "POST",
+            f"/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+            access_token=admin,
+        )
+    )
+    assert created.status_code == 202
+    import_id = UUID(created.json()["id"])
+    path = f"/api/v1/admin/products/{product_id}/imports/{import_id}/duplicates?execution=1"
+    assert asyncio.run(_request("GET", path, access_token=admin)).status_code == 409
+    report = DuplicateReport(
+        groups=tuple(
+            DuplicateGroup(
+                id=f"{i:064x}",
+                repository_side="direct",
+                language="en" if i == 0 else "it",
+                key_preview="<script>key</script>",
+                key_length=20,
+                occurrences=tuple(
+                    DuplicateOccurrence(f"res/{i}/strings.xml", p) for p in range(25)
+                ),
+            )
+            for i in range(2)
+        )
+    )
+    with import_session_factory.begin() as session:
+        job = session.get(ImportJob, import_id)
+        execution = session.get(ImportExecution, job.current_execution_id)
+        execution.state = "failed"
+        execution.started_at = execution.created_at
+        execution.finished_at = datetime.now(UTC)
+        job.state = "import_failed"
+        job.error_category = "invalid_source"
+        job.error_message = "Import source rejected"
+        sources = [
+            dict(
+                repository_side="direct",
+                repository_id=str(repository_id),
+                source_branch="main",
+                commit_hash=COMMIT_HASH,
+            )
+        ]
+        store_report(session, report=report, sources=sources, execution_id=execution.id)
+        store_report(session, report=report, sources=sources, execution_id=execution.id)
+    first = asyncio.run(_request("GET", path + "&limit=1", access_token=admin))
+    assert first.status_code == 200, first.text
+    body = first.json()
+    assert body["group_count"] == 2 and body["repeated_occurrences"] == 48
+    assert body["sources"][0]["commit_hash"] == COMMIT_HASH
+    assert len(body["items"]) == 1 and len(body["items"][0]["occurrences"]) == 20
+    assert body["items"][0]["key_preview"] == "<script>key</script>"
+    _assert_secret_free(body)
+    cursor = body["next_cursor"]
+    second = asyncio.run(_request("GET", path + "&cursor=" + cursor, access_token=admin))
+    assert second.status_code == 200 and second.json()["next_cursor"] is None
+    assert second.json()["items"][0]["id"] != body["items"][0]["id"]
+    stale = asyncio.run(_request("GET", path + "&language=it&cursor=" + cursor, access_token=admin))
+    assert stale.status_code == 422
+    group = body["items"][0]
+    more = asyncio.run(
+        _request(
+            "GET",
+            path + "&group_id=" + group["id"] + "&cursor=" + group["next_occurrence_cursor"],
+            access_token=admin,
+        )
+    )
+    assert more.status_code == 200
+    assert [o["resource_position"] for o in more.json()["items"][0]["occurrences"]] == list(
+        range(20, 25)
+    )
+    filtered = asyncio.run(
+        _request("GET", path + "&file=res/1/strings.xml&language=it", access_token=admin)
+    )
+    assert filtered.status_code == 200 and len(filtered.json()["items"]) == 1
+    for suffix, status_code in (("&limit=101", 422), ("&cursor=garbage", 422)):
+        assert (
+            asyncio.run(_request("GET", path + suffix, access_token=admin)).status_code
+            == status_code
+        )
+    for wrong in (
+        path.replace(str(product_id), str(uuid4())),
+        path.replace("execution=1", "execution=2"),
+    ):
+        assert asyncio.run(_request("GET", wrong, access_token=admin)).status_code == 404
+
+
 def test_direct_import_tracer_runs_api_worker_provider_and_persists_baseline(
     import_session_factory: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,
@@ -3421,6 +3541,7 @@ def test_public_contract_has_exact_five_operations_and_closed_server_authority(
         "list_admin_published_mapping_imports",
         "start_admin_published_mapping_import",
         "get_admin_import",
+        "get_admin_import_duplicates",
         "get_admin_import_rewrite_comparison",
         "confirm_admin_import_rewrite_baseline",
     }

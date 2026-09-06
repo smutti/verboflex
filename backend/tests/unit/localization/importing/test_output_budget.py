@@ -8,6 +8,7 @@ import pytest
 
 from tests.unit.localization.importing.test_structure_bounds import qt_input
 from verboflex.localization.importing.core import (
+    CanonicalOutputBudget,
     CanonicalOutputLimitExceeded,
     CanonicalParserInput,
     CanonicalValueBuffer,
@@ -19,6 +20,24 @@ from verboflex.localization.importing.registry import (
 )
 
 OUTPUT_LIMIT = 20_971_520
+
+
+def test_mapping_encoded_budget_is_exactly_128_mib_and_keeps_prior_values():
+    parsed = parse_canonical_snapshot(qt_input(dependencies=1))
+    value = replace(parsed.values[0], source_text='é"' * 30_000)
+    limit = 128 * 1_048_576
+    count, remainder = divmod(limit, value_bytes((value,)))
+    first = replace(value, source_text=value.source_text + "x" * remainder)
+    budget = CanonicalOutputBudget(mapping=True)
+    values = CanonicalValueBuffer(budget)
+    values.append(first)
+    values.extend(value for _ in range(count - 1))
+    assert budget.used_bytes == limit
+    assert len(values) == count
+    with pytest.raises(CanonicalOutputLimitExceeded):
+        values.replace_last(replace(value, source_text=value.source_text + "x"))
+    assert budget.used_bytes == limit
+    assert values[-1] == value
 
 
 @pytest.mark.parametrize("source_bytes", [0, OUTPUT_LIMIT])
@@ -168,9 +187,14 @@ def observe_value_construction(monkeypatch, adapter_name):
 
 
 @pytest.mark.parametrize("parse", [parse_canonical_mapping, parse_qt_ts_files])
-def test_qt_output_budget_is_shared_across_peer_files(parse):
+def test_qt_output_budget_is_shared_across_peer_files(parse, monkeypatch):
     first = amplified_input(messages=120)
     second = amplified_input(messages=120, language="fr")
+    # C1 separates aggregate capacity from file expansion. Retain this small
+    # deterministic amplification probe under an explicit aggregate test budget.
+    monkeypatch.setattr(
+        "verboflex.localization.importing.core.MAX_CANONICAL_MAPPING_OUTPUT_BYTES", OUTPUT_LIMIT
+    )
     for source in (first, second):
         accepted = parse_canonical_snapshot(source)
         assert accepted.issues == ()
@@ -181,7 +205,10 @@ def test_qt_output_budget_is_shared_across_peer_files(parse):
     assert [issue.code for issue in rejected.issues] == ["unsupported_structure"]
 
 
-def test_output_budget_is_shared_across_separate_repository_sides():
+def test_output_budget_is_shared_across_separate_repository_sides(monkeypatch):
+    monkeypatch.setattr(
+        "verboflex.localization.importing.core.MAX_CANONICAL_MAPPING_OUTPUT_BYTES", OUTPUT_LIMIT
+    )
     keys = replace(amplified_input(messages=120, language="en"), repository_side="keys")
     translations = replace(amplified_input(messages=120), repository_side="translations")
     assert parse_canonical_snapshot(keys).issues == ()
@@ -191,7 +218,11 @@ def test_output_budget_is_shared_across_separate_repository_sides():
     assert [issue.code for issue in result.issues] == ["unsupported_structure"]
 
 
-def test_source_join_cannot_reintroduce_unbounded_output_after_both_sides_pass():
+def test_source_join_cannot_reintroduce_unbounded_output_after_both_sides_pass(monkeypatch):
+    monkeypatch.setattr(
+        "verboflex.localization.importing.core.MAX_CANONICAL_MAPPING_OUTPUT_BYTES", OUTPUT_LIMIT
+    )
+
     def source(side, content):
         return CanonicalParserInput(
             format="json",
