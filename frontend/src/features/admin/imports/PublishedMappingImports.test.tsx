@@ -432,37 +432,42 @@ describe("published mapping import collection", () => {
     });
   }
 
-  it("adopts an accepted retry immediately and prevents stale collection rollback or duplicate retry", async () => {
-    const initial = parserFailure();
-    const queued = runningImport({ execution_number: 3 });
-    let resolveCollection:
-      ((value: ReturnType<typeof ok<unknown>>) => void) | undefined;
-    listImportsMock
-      .mockResolvedValueOnce(ok({ items: [initial], next_cursor: null }))
-      .mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolveCollection = resolve;
-        }) as never,
+  it.each([true, false])(
+    "adopts an accepted import immediately and prevents stale collection rollback, retry=%s",
+    async (retrying) => {
+      const initial = retrying ? parserFailure() : publishedImport("mapping-1");
+      const queued = runningImport({ execution_number: 3 });
+      let resolveCollection:
+        ((value: ReturnType<typeof ok<unknown>>) => void) | undefined;
+      listImportsMock
+        .mockResolvedValueOnce(ok({ items: [initial], next_cursor: null }))
+        .mockReturnValueOnce(
+          new Promise((resolve) => {
+            resolveCollection = resolve;
+          }) as never,
+        );
+      startImportMock.mockResolvedValueOnce(ok(queued));
+      renderImports();
+      const row = await screen.findByTestId("published-import-row-mapping-1");
+      await userEvent.click(
+        within(row).getByRole("button", {
+          name: retrying ? "Retry import" : "Run import",
+        }),
       );
-    startImportMock.mockResolvedValueOnce(ok(queued));
-    renderImports();
-    const row = await screen.findByTestId("published-import-row-mapping-1");
-    await userEvent.click(
-      within(row).getByRole("button", { name: "Retry import" }),
-    );
-    await waitFor(() => expect(listImportsMock).toHaveBeenCalledTimes(2));
-    expect(
-      within(row).getByRole("button", { name: "Import in progress" }),
-    ).toBeDisabled();
-    await act(async () =>
-      resolveCollection?.(ok({ items: [initial], next_cursor: null })),
-    );
-    expect(row).toHaveTextContent("Queued");
-    expect(
-      within(row).getByRole("button", { name: "Import in progress" }),
-    ).toBeDisabled();
-    expect(startImportMock).toHaveBeenCalledOnce();
-  });
+      await waitFor(() => expect(listImportsMock).toHaveBeenCalledTimes(2));
+      expect(
+        within(row).getByRole("button", { name: "Import in progress" }),
+      ).toBeDisabled();
+      await act(async () =>
+        resolveCollection?.(ok({ items: [initial], next_cursor: null })),
+      );
+      expect(row).toHaveTextContent("Queued");
+      expect(
+        within(row).getByRole("button", { name: "Import in progress" }),
+      ).toBeDisabled();
+      expect(startImportMock).toHaveBeenCalledOnce();
+    },
+  );
 
   it("polls queued and running only, retains the dataset, and focuses a user-triggered terminal failure", async () => {
     await realPolling();

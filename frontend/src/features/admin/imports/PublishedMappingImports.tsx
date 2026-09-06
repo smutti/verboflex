@@ -120,10 +120,7 @@ function preserveNewerImport(
   current: AdminPublishedMappingImportResponse,
   incoming: AdminPublishedMappingImportResponse,
 ) {
-  if (
-    current.active_revision_id !== incoming.active_revision_id ||
-    current.id !== incoming.id
-  )
+  if (current.active_revision_id !== incoming.active_revision_id)
     return incoming;
   const currentExecution = current.execution_number ?? 0;
   const incomingExecution = incoming.execution_number ?? 0;
@@ -588,6 +585,7 @@ export function PublishedMappingImports({
   useEffect(() => {
     let active = true;
     const pendingRequests = pendingRef.current;
+    const initiatedImports = initiatedImportsRef.current;
     queueMicrotask(() => {
       if (active) {
         setPendingMappings(
@@ -608,7 +606,7 @@ export function PublishedMappingImports({
         pending.controller.abort();
       }
       pendingRequests.clear();
-      initiatedImportsRef.current.clear();
+      initiatedImports.clear();
       pendingErrorFocusRef.current = null;
     };
   }, [authorityIdentity]);
