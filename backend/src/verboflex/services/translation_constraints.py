@@ -359,7 +359,7 @@ def _lock_mutation_group(
     if not isinstance(language, str) or _LANGUAGE_PATTERN.fullmatch(language) is None:
         raise ConstraintInputInvalid("language is invalid")
     anchor = session.get(TranslationValue, translation_group_id)
-    if anchor is None or anchor.language != language or anchor.is_deleted:
+    if anchor is None or anchor.language != language:
         raise ConstraintAuthorityUnavailable("constraint group is unavailable")
     scope, base_language = _lock_scope_authority(
         session,
@@ -383,12 +383,26 @@ def _lock_mutation_group(
             TranslationValue.scope_id == scope.id,
             TranslationValue.translation_key_id == key.id,
             TranslationValue.language == language,
-            TranslationValue.is_deleted.is_(False),
         )
         .order_by(TranslationValue.id)
         .limit(1)
     )
     if leading_value_id != translation_group_id:
+        raise ConstraintAuthorityUnavailable("constraint group is unavailable")
+    if (
+        anchor.is_deleted
+        and session.scalar(
+            select(TranslationValue.id)
+            .where(
+                TranslationValue.scope_id == scope.id,
+                TranslationValue.translation_key_id == key.id,
+                TranslationValue.language == language,
+                TranslationValue.is_deleted.is_(False),
+            )
+            .limit(1)
+        )
+        is None
+    ):
         raise ConstraintAuthorityUnavailable("constraint group is unavailable")
     return scope, key, base_language
 

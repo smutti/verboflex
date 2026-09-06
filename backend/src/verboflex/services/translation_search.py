@@ -387,26 +387,30 @@ WITH authorized_products AS (
         CASE
             WHEN NOT :has_query THEN 3
             WHEN bool_or(
+                (:deleted <> 'active' OR NOT value.is_deleted) AND (
                 casefold(key.raw_key COLLATE pg_unicode_fast)
                     = casefold(:query COLLATE pg_unicode_fast)
                 OR casefold(coalesce(value.source_text, '') COLLATE pg_unicode_fast)
                     = casefold(:query COLLATE pg_unicode_fast)
                 OR casefold(value.display_text COLLATE pg_unicode_fast)
                     = casefold(:query COLLATE pg_unicode_fast)
+                )
             ) THEN 0
             WHEN bool_or(
+                (:deleted <> 'active' OR NOT value.is_deleted) AND (
                 casefold(key.raw_key COLLATE pg_unicode_fast)
                     LIKE casefold(:prefix COLLATE pg_unicode_fast) ESCAPE '\'
                 OR casefold(coalesce(value.source_text, '') COLLATE pg_unicode_fast)
                     LIKE casefold(:prefix COLLATE pg_unicode_fast) ESCAPE '\'
                 OR casefold(value.display_text COLLATE pg_unicode_fast)
                     LIKE casefold(:prefix COLLATE pg_unicode_fast) ESCAPE '\'
+                )
             ) THEN 1
             ELSE 2
         END AS rank,
-        (array_agg(value.source_text ORDER BY value.id)
+        (array_agg(value.source_text ORDER BY value.is_deleted, value.id)
             FILTER (WHERE value.source_text IS NOT NULL))[1] AS source_text,
-        (array_agg(value.translated_text ORDER BY value.id)
+        (array_agg(value.translated_text ORDER BY value.is_deleted, value.id)
             FILTER (WHERE value.translated_text IS NOT NULL))[1] AS translated_text,
         count(*)::integer AS value_count,
         array_agg(DISTINCT value.selector_kind ORDER BY value.selector_kind) AS selector_kinds,
@@ -418,7 +422,7 @@ WITH authorized_products AS (
         array_agg(DISTINCT value.review_state ORDER BY value.review_state) AS states,
         bool_or(value.is_over_limit) AS has_over_limit,
         bool_or(value.effective_max_chars IS NULL) AS has_no_max,
-        bool_or(key.is_deleted OR value.is_deleted) AS is_deleted
+        bool_and(key.is_deleted OR value.is_deleted) AS is_deleted
     FROM authorized_products AS product
     JOIN localization_scopes AS scope
       ON scope.product_id = product.id
@@ -435,31 +439,37 @@ WITH authorized_products AS (
              scope.current_mapping_id
     HAVING (
         NOT :has_query OR bool_or(
+            (:deleted <> 'active' OR NOT value.is_deleted) AND (
             casefold(key.raw_key COLLATE pg_unicode_fast)
                 LIKE casefold(:partial COLLATE pg_unicode_fast) ESCAPE '\'
             OR casefold(coalesce(value.source_text, '') COLLATE pg_unicode_fast)
                 LIKE casefold(:partial COLLATE pg_unicode_fast) ESCAPE '\'
             OR casefold(value.display_text COLLATE pg_unicode_fast)
                 LIKE casefold(:partial COLLATE pg_unicode_fast) ESCAPE '\'
+            )
         )
     )
     AND (
         CAST(:deleted AS text) = 'all'
         OR (CAST(:deleted AS text) = 'active'
-            AND NOT bool_or(key.is_deleted OR value.is_deleted))
+            AND NOT bool_and(key.is_deleted OR value.is_deleted))
         OR (CAST(:deleted AS text) = 'deleted'
-            AND bool_or(key.is_deleted OR value.is_deleted))
+            AND bool_and(key.is_deleted OR value.is_deleted))
     )
     AND (CAST(:state AS text) IS NULL
-        OR bool_or(value.review_state = CAST(:state AS text)))
+        OR bool_or(value.review_state = CAST(:state AS text)
+            AND (:deleted <> 'active' OR NOT value.is_deleted)))
     AND (
         CAST(:violation AS text) IS NULL
-        OR (CAST(:violation AS text) = 'over_limit' AND bool_or(value.is_over_limit))
+        OR (CAST(:violation AS text) = 'over_limit' AND bool_or(value.is_over_limit
+            AND (:deleted <> 'active' OR NOT value.is_deleted)))
         OR (CAST(:violation AS text) = 'within_limit' AND bool_or(
             value.effective_max_chars IS NOT NULL AND NOT value.is_over_limit
+            AND (:deleted <> 'active' OR NOT value.is_deleted)
         ))
         OR (CAST(:violation AS text) = 'no_max'
-            AND bool_or(value.effective_max_chars IS NULL))
+            AND bool_or(value.effective_max_chars IS NULL
+                AND (:deleted <> 'active' OR NOT value.is_deleted)))
     )
 ), cursor_anchor AS (
     SELECT rank, stable_key, language, group_id
@@ -788,7 +798,7 @@ def get_translation_group(
         language=str(first["language"]),
         states=states,
         state_summary=_state_summary(states),
-        is_deleted=bool(first["key_deleted"]) or any(value.is_deleted for value in values),
+        is_deleted=bool(first["key_deleted"]) or all(value.is_deleted for value in values),
         values=values,
         base_language=cast(str | None, first["base_language"]),
         explicit_maximum=cast(int | None, first["explicit_maximum"]),
