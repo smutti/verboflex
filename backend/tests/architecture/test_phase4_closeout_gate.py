@@ -9,6 +9,18 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 
 
+def planned_rows():
+    rows = {}
+    for plan in (ROOT / ".planning/phases/04-localization-import-search-and-constraints").glob(
+        "04-*-PLAN.md"
+    ):
+        for line in plan.read_text().splitlines():
+            cells = [cell.strip() for cell in line.strip("|").split("|")]
+            if cells[0].startswith("T-04-"):
+                rows[cells[0]] = cells
+    return rows
+
+
 def verifier():
     spec = importlib.util.spec_from_file_location(
         "phase4_closeout", ROOT / "tools/verify_phase4_closeout.py"
@@ -31,9 +43,9 @@ def document(kind="review", **changes):
     table = "\n| ID | Severity | Resolution |\n|---|---|---|\n| R1 | High | resolved |\n"
     if kind == "security":
         table = "\n| ID | Severity | Disposition | Evidence | Resolution |\n|---|---|---|---|---|\n"
-        for identifier in [*(f"T-04-{number:02d}" for number in range(1, 78)), "T-04-SC"]:
+        for identifier, row in sorted(planned_rows().items()):
             table += (
-                f"| {identifier} | High | mitigate | "
+                f"| {identifier} | {row[3].title()} | {row[4]} | "
                 "tests/unit/test_auth.py::test_denied | resolved |\n"
             )
     return "---\n" + yaml.safe_dump(fields) + "---\n" + table
@@ -77,6 +89,45 @@ def test_security_requires_all_planned_threats_exactly_once(defect):
         payload = payload.split("| T-04-01 |", 1)[0] + row.replace("T-04-01", "T1")
     with pytest.raises(ValueError):
         verifier().validate_document(payload, "security")
+
+
+@pytest.mark.parametrize(
+    "identifier,old,new",
+    [
+        ("T-04-01", "High | mitigate", "low | accept"),
+        ("T-04-37", "Medium | mitigate", "Medium | accept"),
+        ("T-04-25", "Medium | accept", "Medium | transfer"),
+    ],
+)
+def test_security_metadata_cannot_downgrade_the_planned_register(identifier, old, new):
+    payload = document("security")
+    original = f"| {identifier} | {old} |"
+    assert original in payload
+    payload = payload.replace(original, f"| {identifier} | {new} |")
+    if identifier == "T-04-01":
+        payload = payload.replace("test_denied | resolved", "test_denied | open", 1)
+    with pytest.raises(ValueError):
+        verifier().validate_document(payload, "security")
+
+
+@pytest.mark.parametrize("conflict", ["severity", "disposition", "consistent"])
+def test_duplicate_planned_threat_metadata_must_agree(tmp_path, monkeypatch, conflict):
+    rows = planned_rows()
+    plan = "\n".join("| " + " | ".join(row) + " |" for row in rows.values())
+    duplicate = rows["T-04-SC"].copy()
+    if conflict == "severity":
+        duplicate[3] = "low"
+    elif conflict == "disposition":
+        duplicate[4] = "accept"
+    (tmp_path / "04-01-PLAN.md").write_text(plan)
+    (tmp_path / "04-02-PLAN.md").write_text("| " + " | ".join(duplicate) + " |")
+    module = verifier()
+    monkeypatch.setattr(module, "PHASE", tmp_path)
+    if conflict == "consistent":
+        assert module.validate_document(document("security"), "security")["verdict"] == "SECURED"
+    else:
+        with pytest.raises(ValueError):
+            module.validate_document(document("security"), "security")
 
 
 def test_review_scope_metadata_is_typed_and_preserved():
