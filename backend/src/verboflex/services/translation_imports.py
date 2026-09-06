@@ -584,9 +584,6 @@ def reconcile_canonical_translations(
         if all_values_deleted and not key.is_deleted:
             key.is_deleted = True
             key.deleted_at = reconciled_at
-        elif not all_values_deleted and key.is_deleted:
-            key.is_deleted = False
-            key.deleted_at = None
 
     session.flush()
     recompute_translation_constraints(
