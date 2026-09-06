@@ -418,6 +418,7 @@ describe("published mapping import collection", () => {
     return parserFailure({
       action: "import_in_progress",
       state: "queued",
+      execution_number: 3,
       error_category: null,
       dataset_status: "retained",
       parser_issues: [],

@@ -159,6 +159,7 @@ describe("bounded published import polling", () => {
     expect(getImportMock).toHaveBeenLastCalledWith({
       auth: "memory-only-admin-bearer",
       path: { import_id: "import-1", product_id: "product-1" },
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -327,6 +328,6 @@ describe("bounded published import polling", () => {
     await act(async () => Promise.resolve());
 
     expect(getImportMock).toHaveBeenCalledTimes(1);
-    expect(getImportMock.mock.calls[0]?.[0]).not.toHaveProperty("signal");
+    expect(getImportMock.mock.calls[0]?.[0].signal?.aborted).toBe(true);
   });
 });

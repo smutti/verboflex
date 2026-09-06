@@ -112,6 +112,31 @@ function hasParserFailure(item: AdminPublishedMappingImportResponse) {
   );
 }
 
+function isImportActive(item: AdminPublishedMappingImportResponse) {
+  return item.state === "queued" || item.state === "running";
+}
+
+function preserveNewerImport(
+  current: AdminPublishedMappingImportResponse,
+  incoming: AdminPublishedMappingImportResponse,
+) {
+  if (
+    current.active_revision_id !== incoming.active_revision_id ||
+    current.id !== incoming.id
+  )
+    return incoming;
+  const currentExecution = current.execution_number ?? 0;
+  const incomingExecution = incoming.execution_number ?? 0;
+  if (currentExecution > incomingExecution) return current;
+  if (
+    currentExecution === incomingExecution &&
+    ((!isImportActive(current) && isImportActive(incoming)) ||
+      (current.state === "running" && incoming.state === "queued"))
+  )
+    return current;
+  return incoming;
+}
+
 function ConfigureBaseLanguage({ productId }: { productId: string }) {
   const { state } = useSession();
   if (
@@ -393,7 +418,7 @@ function RowError({
   return (
     <Alert
       ref={focusRef}
-      tabIndex={mutationFailed || pollingFailed ? -1 : undefined}
+      tabIndex={-1}
       variant={item.active_baseline === null ? "destructive" : "default"}
       className="min-w-0 [overflow-wrap:anywhere]"
     >
@@ -427,7 +452,7 @@ function ImportAction({
       <Button
         type="button"
         variant="outline"
-        className="min-h-[44px] w-full whitespace-normal"
+        className="min-h-[44px] h-auto w-full whitespace-normal motion-reduce:transition-none"
         disabled={pending || inProgress}
         aria-busy={pending || inProgress}
         onClick={(event) => onAction(event.currentTarget)}
@@ -442,7 +467,7 @@ function ImportAction({
           <Button
             type="button"
             variant="outline"
-            className="min-h-[44px] w-full whitespace-normal"
+            className="min-h-[44px] h-auto w-full whitespace-normal motion-reduce:transition-none"
             onClick={onRefreshStatus}
           >
             Refresh status
@@ -536,6 +561,9 @@ export function PublishedMappingImports({
   const desktopMutationErrorRefs = useRef(new Map<string, HTMLDivElement>());
   const mobileMutationErrorRefs = useRef(new Map<string, HTMLDivElement>());
   const pendingErrorFocusRef = useRef<string | null>(null);
+  const initiatedImportsRef = useRef(
+    new Map<string, { identity: string; trigger: HTMLButtonElement }>(),
+  );
   const [collectionState, setCollectionState] =
     useState<CollectionState>("loading");
   const [items, setItems] = useState<AdminPublishedMappingImportResponse[]>([]);
@@ -580,6 +608,7 @@ export function PublishedMappingImports({
         pending.controller.abort();
       }
       pendingRequests.clear();
+      initiatedImportsRef.current.clear();
       pendingErrorFocusRef.current = null;
     };
   }, [authorityIdentity]);
@@ -635,7 +664,16 @@ export function PublishedMappingImports({
           }
           const nextCursor: string | null = result.data.next_cursor ?? null;
           if (nextCursor === null) {
-            setItems(collected);
+            setItems((current) =>
+              collected.map((incoming) => {
+                const previous = current.find(
+                  (item) => item.mapping_id === incoming.mapping_id,
+                );
+                return preserveVisibleState && previous !== undefined
+                  ? preserveNewerImport(previous, incoming)
+                  : incoming;
+              }),
+            );
             setCollectionState("ready");
             setMutationFailures(new Set());
             setStatusRefreshFailures(new Set());
@@ -687,6 +725,17 @@ export function PublishedMappingImports({
 
   const updatePollingState = useCallback(
     (mappingId: string, snapshot: PollingSnapshot) => {
+      // Persist terminal observation so a slower collection response cannot restart it.
+      if (!isImportActive(snapshot.importRecord)) {
+        setItems((current) =>
+          current.map((item) =>
+            item.mapping_id === mappingId &&
+            JSON.stringify(item) === snapshot.sourceProjectionKey
+              ? preserveNewerImport(item, snapshot.importRecord)
+              : item,
+          ),
+        );
+      }
       setPollingSnapshots((current) => {
         const previous = current.get(mappingId);
         if (
@@ -739,6 +788,32 @@ export function PublishedMappingImports({
     [items, pollingSnapshots, productId],
   );
 
+  useEffect(() => {
+    for (const { importRecord } of visibleItems) {
+      const initiated = initiatedImportsRef.current.get(
+        importRecord.mapping_id,
+      );
+      if (
+        initiated === undefined ||
+        isImportActive(importRecord) ||
+        initiated.identity !== importPollingIdentity(productId, importRecord)
+      )
+        continue;
+      initiatedImportsRef.current.delete(importRecord.mapping_id);
+      if (
+        !initiated.trigger.isConnected ||
+        (document.activeElement !== initiated.trigger &&
+          document.activeElement !== document.body)
+      )
+        continue;
+      const alert = initiated.trigger
+        .closest("tr, article")
+        ?.querySelector<HTMLDivElement>('[role="alert"]');
+      if (alert !== null && alert !== undefined) alert.focus();
+      else initiated.trigger.focus();
+    }
+  }, [visibleItems, productId]);
+
   const setMutationErrorRef = useCallback(
     (
       surface: "desktop" | "mobile",
@@ -786,7 +861,10 @@ export function PublishedMappingImports({
   }, [focusMutationError, mutationFailures, statusRefreshFailures]);
 
   const startImport = useCallback(
-    async (item: AdminPublishedMappingImportResponse) => {
+    async (
+      item: AdminPublishedMappingImportResponse,
+      trigger: HTMLButtonElement,
+    ) => {
       const activePending = pendingRef.current.get(item.mapping_id);
       if (
         !isStartAction(item.action) ||
@@ -847,6 +925,18 @@ export function PublishedMappingImports({
           throw new Error("import unavailable");
         }
         accepted = true;
+        const acceptedImport = result.data;
+        initiatedImportsRef.current.set(item.mapping_id, {
+          identity: importPollingIdentity(productId, acceptedImport),
+          trigger,
+        });
+        setItems((current) =>
+          current.map((previous) =>
+            previous.mapping_id === item.mapping_id
+              ? preserveNewerImport(previous, acceptedImport)
+              : previous,
+          ),
+        );
         toast.success("Import started");
         const refreshed = await loadCompleteCollection(true);
         if (!refreshed) {
@@ -1032,7 +1122,7 @@ export function PublishedMappingImports({
                                   triggerElement,
                                 });
                               } else {
-                                void startImport(item);
+                                void startImport(item, triggerElement);
                               }
                             }}
                             onRefreshStatus={() =>
@@ -1109,7 +1199,7 @@ export function PublishedMappingImports({
                           triggerElement,
                         });
                       } else {
-                        void startImport(item);
+                        void startImport(item, triggerElement);
                       }
                     }}
                     onRefreshStatus={() =>

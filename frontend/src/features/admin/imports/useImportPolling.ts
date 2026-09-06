@@ -66,6 +66,7 @@ export function useImportPolling({
   const initialProjectionKey = JSON.stringify(initialImport);
   const identityRef = useRef(initialIdentity);
   const requestGenerationRef = useRef(0);
+  const controllerRef = useRef<AbortController | null>(null);
   const lastStateRef = useRef(initialImport.state);
   const announcementRef = useRef(onAnnouncement);
   const mountedRef = useRef(true);
@@ -98,12 +99,14 @@ export function useImportPolling({
     return () => {
       mountedRef.current = false;
       requestGenerationRef.current += 1;
+      controllerRef.current?.abort();
     };
   }, []);
 
   useEffect(() => {
     identityRef.current = initialIdentity;
     requestGenerationRef.current += 1;
+    controllerRef.current?.abort();
     lastStateRef.current = initialImport.state;
   }, [accessToken, initialIdentity, initialImport.state, initialProjectionKey]);
 
@@ -114,21 +117,28 @@ export function useImportPolling({
         return;
       }
       const expectedIdentity = initialIdentity;
-      const expectedGeneration = requestGenerationRef.current;
+      const expectedGeneration = ++requestGenerationRef.current;
+      controllerRef.current?.abort();
+      const controller = new AbortController();
+      controllerRef.current = controller;
       try {
         const result = await getAdminImport({
           auth: accessToken,
           path: { import_id: importId, product_id: productId },
+          signal: controller.signal,
         });
         if (
           !mountedRef.current ||
           requestGenerationRef.current !== expectedGeneration ||
           identityRef.current !== expectedIdentity ||
-          result.data === undefined ||
-          importPollingIdentity(productId, result.data) !== expectedIdentity
+          controller.signal.aborted
         ) {
           return;
         }
+        if (result.data === undefined)
+          throw new Error("import status unavailable");
+        if (importPollingIdentity(productId, result.data) !== expectedIdentity)
+          return;
         if (result.data.state !== lastStateRef.current) {
           lastStateRef.current = result.data.state;
           announcementRef.current?.(STATE_LABELS[result.data.state]);
@@ -149,6 +159,7 @@ export function useImportPolling({
       } catch {
         if (
           mountedRef.current &&
+          !controller.signal.aborted &&
           requestGenerationRef.current === expectedGeneration &&
           identityRef.current === expectedIdentity
         ) {
@@ -160,6 +171,8 @@ export function useImportPolling({
             sourceProjectionKey: initialProjectionKey,
           });
         }
+      } finally {
+        if (controllerRef.current === controller) controllerRef.current = null;
       }
     },
     [
