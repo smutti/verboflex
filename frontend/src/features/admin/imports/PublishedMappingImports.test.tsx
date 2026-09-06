@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  getAdminImport,
   listAdminPublishedMappingImports,
   startAdminPublishedMappingImport,
   type AdminPublishedMappingImportResponse,
@@ -32,6 +33,7 @@ vi.mock("../../../api/client", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../../api/client")>();
   return {
     ...original,
+    getAdminImport: vi.fn(),
     listAdminPublishedMappingImports: vi.fn(),
     startAdminPublishedMappingImport: vi.fn(),
   };
@@ -156,6 +158,7 @@ function renderImports(
 
 describe("published mapping import collection", () => {
   beforeEach(() => {
+    vi.mocked(getAdminImport).mockReset();
     vi.mocked(useSession).mockReturnValue({
       state: {
         status: "authenticated",
@@ -181,7 +184,10 @@ describe("published mapping import collection", () => {
     }));
   });
 
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
 
   function parserIssue(
     issue_code: ImportParserIssue["issue_code"] = "malformed_file",
@@ -393,6 +399,224 @@ describe("published mapping import collection", () => {
       expect(
         within(row).getByRole("button", { name: "Retry import" }),
       ).toBeEnabled();
+    },
+  );
+
+  async function realPolling() {
+    const original =
+      await vi.importActual<typeof import("./useImportPolling")>(
+        "./useImportPolling",
+      );
+    useImportPollingMock.mockImplementation(original.useImportPolling);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-06T08:00:00Z"));
+  }
+
+  function runningImport(
+    overrides: Partial<AdminPublishedMappingImportResponse> = {},
+  ) {
+    return parserFailure({
+      action: "import_in_progress",
+      state: "queued",
+      error_category: null,
+      dataset_status: "retained",
+      parser_issues: [],
+      latest_execution_at: "2026-09-06T08:00:00Z",
+      active_baseline: baseline({
+        commit: "a".repeat(40),
+        repositoryId: "repository-1",
+        role: "direct",
+      }),
+      ...overrides,
+    });
+  }
+
+  it("adopts an accepted retry immediately and prevents stale collection rollback or duplicate retry", async () => {
+    const initial = parserFailure();
+    const queued = runningImport({ execution_number: 3 });
+    let resolveCollection:
+      ((value: ReturnType<typeof ok<unknown>>) => void) | undefined;
+    listImportsMock
+      .mockResolvedValueOnce(ok({ items: [initial], next_cursor: null }))
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveCollection = resolve;
+        }) as never,
+      );
+    startImportMock.mockResolvedValueOnce(ok(queued));
+    renderImports();
+    const row = await screen.findByTestId("published-import-row-mapping-1");
+    await userEvent.click(
+      within(row).getByRole("button", { name: "Retry import" }),
+    );
+    await waitFor(() => expect(listImportsMock).toHaveBeenCalledTimes(2));
+    expect(
+      within(row).getByRole("button", { name: "Import in progress" }),
+    ).toBeDisabled();
+    await act(async () =>
+      resolveCollection?.(ok({ items: [initial], next_cursor: null })),
+    );
+    expect(row).toHaveTextContent("Queued");
+    expect(
+      within(row).getByRole("button", { name: "Import in progress" }),
+    ).toBeDisabled();
+    expect(startImportMock).toHaveBeenCalledOnce();
+  });
+
+  it("polls queued and running only, retains the dataset, and focuses a user-triggered terminal failure", async () => {
+    await realPolling();
+    const queued = runningImport();
+    listImportsMock
+      .mockResolvedValueOnce(
+        ok({ items: [parserFailure()], next_cursor: null }),
+      )
+      .mockResolvedValue(ok({ items: [queued], next_cursor: null }));
+    startImportMock.mockResolvedValueOnce(ok(queued));
+    vi.mocked(getAdminImport)
+      .mockResolvedValueOnce(ok({ ...queued, state: "running" }))
+      .mockResolvedValueOnce(
+        ok({
+          ...queued,
+          state: "may_be_stale",
+          action: "retry_import",
+          parser_issues: [parserIssue()],
+        }),
+      );
+    renderImports();
+    await act(async () => {});
+    const row = screen.getByTestId("published-import-row-mapping-1");
+    const retry = within(row).getByRole("button", { name: "Retry import" });
+    retry.focus();
+    await act(async () => retry.click());
+    expect(row).toHaveTextContent("a".repeat(12));
+    await act(async () => vi.advanceTimersByTimeAsync(2000));
+    expect(row).toHaveTextContent("Running");
+    await act(async () => vi.advanceTimersByTimeAsync(2000));
+    expect(row).toHaveTextContent("May be stale");
+    expect(row).toHaveTextContent("a".repeat(12));
+    expect(within(row).getByRole("alert")).toHaveFocus();
+    expect(
+      document.querySelector('[aria-live="polite"][aria-atomic="true"]'),
+    ).toHaveTextContent("May be stale");
+    await act(async () => vi.advanceTimersByTimeAsync(100000));
+    expect(getAdminImport).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a newer terminal manual status when an older request arrives late", async () => {
+    await realPolling();
+    const queued = runningImport({
+      latest_execution_at: "2026-09-06T07:00:00Z",
+    });
+    const pending: Array<(value: ReturnType<typeof ok<unknown>>) => void> = [];
+    listImportsMock.mockResolvedValue(
+      ok({ items: [queued], next_cursor: null }),
+    );
+    vi.mocked(getAdminImport).mockImplementation(
+      () => new Promise((resolve) => pending.push(resolve)) as never,
+    );
+    renderImports();
+    await act(async () => {});
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    const row = screen.getByTestId("published-import-row-mapping-1");
+    const refresh = within(row).getByRole("button", { name: "Refresh status" });
+    await act(async () => {
+      refresh.click();
+      refresh.click();
+    });
+    await act(async () =>
+      pending[1](
+        ok({
+          ...queued,
+          state: "may_be_stale",
+          action: "retry_import",
+          parser_issues: [parserIssue()],
+        }),
+      ),
+    );
+    await act(async () => pending[0](ok(queued)));
+    expect(row).toHaveTextContent("May be stale");
+    expect(row).not.toHaveTextContent("Queued");
+    expect(
+      within(row).getByRole("button", { name: "Retry import" }),
+    ).toBeEnabled();
+  });
+
+  it("ignores a poll after unmount and never steals focus for background parser failure", async () => {
+    await realPolling();
+    const queued = runningImport();
+    let resolvePoll:
+      ((value: ReturnType<typeof ok<unknown>>) => void) | undefined;
+    listImportsMock.mockResolvedValue(
+      ok({ items: [queued], next_cursor: null }),
+    );
+    vi.mocked(getAdminImport).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePoll = resolve;
+      }) as never,
+    );
+    const view = renderImports();
+    await act(async () => {});
+    const heading = screen.getByRole("heading", {
+      name: "Published mapping imports",
+    });
+    heading.setAttribute("tabindex", "-1");
+    heading.focus();
+    await act(async () => vi.advanceTimersByTimeAsync(2000));
+    await act(async () =>
+      resolvePoll?.(
+        ok({
+          ...queued,
+          state: "may_be_stale",
+          action: "retry_import",
+          parser_issues: [parserIssue()],
+        }),
+      ),
+    );
+    expect(heading).toHaveFocus();
+    view.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([390, 768, 1440])(
+    "keeps parser anatomy wrapping, keyboard focus and reduced-motion controls at width %s",
+    async (width) => {
+      vi.stubGlobal("innerWidth", width);
+      listImportsMock.mockResolvedValue(
+        ok({
+          items: [
+            parserFailure({
+              parser_issues: [
+                parserIssue("malformed_file", {
+                  path: `locales/${"verylongsegment".repeat(50)}.json`,
+                }),
+              ],
+            }),
+          ],
+          next_cursor: null,
+        }),
+      );
+      renderImports();
+      const row = await screen.findByTestId("published-import-row-mapping-1");
+      const surface =
+        width < 768
+          ? screen.getByLabelText("Published mapping imports mobile list")
+          : row;
+      const alert = within(surface).getByRole("alert");
+      expect(alert).toHaveClass("min-w-0", "[overflow-wrap:anywhere]");
+      expect(alert.querySelector('[data-slot="alert-title"]')).toHaveClass(
+        "line-clamp-none",
+      );
+      const retry = within(surface).getByRole("button", {
+        name: "Retry import",
+      });
+      retry.focus();
+      expect(retry).toHaveFocus();
+      expect(retry).toHaveClass(
+        "min-h-[44px]",
+        "whitespace-normal",
+        "motion-reduce:transition-none",
+      );
+      vi.unstubAllGlobals();
     },
   );
 
