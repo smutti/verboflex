@@ -1368,6 +1368,7 @@ describe("administrator product preview and publication page", () => {
     expect(baseLanguage).toHaveAttribute("aria-invalid", "true");
     expect(baseLanguage).toHaveAccessibleName("Base language");
     expect(screen.getByText("Base language required")).toBeVisible();
+    expect(screen.getByText("Base language required")).toHaveClass("font-semibold");
     expect(
       screen.getByRole("button", { name: "Confirm preview" }),
     ).toBeDisabled();
