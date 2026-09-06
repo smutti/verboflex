@@ -92,6 +92,11 @@ def validate_document(document, kind):
                 raise ValueError("unknown severity")
             if severity in {"critical", "high"} and finding["resolution"] != "resolved":
                 raise ValueError("unresolved severe finding")
+            if kind == "security" and severity in {"critical", "high"}:
+                if finding.get("disposition") not in {"mitigate", "mitigated"}:
+                    raise ValueError("severe security threat cannot be waived")
+                if finding.get("evidence", "") in {"", "none", "pending", "n/a", "-"}:
+                    raise ValueError("missing mitigation proof")
         if not tables:
             raise ValueError("missing structured findings table")
     return data

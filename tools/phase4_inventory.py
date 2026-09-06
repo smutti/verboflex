@@ -65,6 +65,9 @@ def source_inventory():
         front = yaml.safe_load(text.split("---", 2)[1])
         plan = f"04-{int(front['plan']):02}"
         items["PLAN"][plan] = plan
+        for assumption in front.get("assumptions", []) + front["must_haves"].get("assumptions", []):
+            if isinstance(assumption, dict) and assumption.get("flagged") is True:
+                raise ValueError("flagged edge assumption requires executable coverage")
         for req in front.get("requirements", []):
             items["REQ"].setdefault(req, plan)
         for truth in front["must_haves"].get("truths", []):
