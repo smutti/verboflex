@@ -1079,7 +1079,7 @@ def test_translation_operation_surface_is_exact_unique_and_bearer_protected() ->
             )
     for operation, status_codes in (
         (options, ("503",)),
-        (search, ("422", "503")),
+        (search, ("503",)),
         (detail, ("404", "503")),
     ):
         for status_code in status_codes:
@@ -1088,10 +1088,22 @@ def test_translation_operation_surface_is_exact_unique_and_bearer_protected() ->
             )
     assert _response_schema(detail, "422") == ("#/components/schemas/HTTPValidationError")
     for operation in (put_constraint, delete_constraint):
-        for status_code in ("404", "409", "422", "503"):
+        for status_code in ("404", "409", "503"):
             assert _response_schema(operation, status_code) == (
                 "#/components/schemas/TranslationConstraintErrorResponse"
             )
+
+    for operation, domain_error in (
+        (search, "TranslationErrorResponse"),
+        (put_constraint, "TranslationConstraintErrorResponse"),
+        (delete_constraint, "TranslationConstraintErrorResponse"),
+    ):
+        assert operation["responses"]["422"]["content"]["application/json"]["schema"] == {
+            "anyOf": [
+                {"$ref": f"#/components/schemas/{domain_error}"},
+                {"$ref": "#/components/schemas/HTTPValidationError"},
+            ]
+        }
 
     option_parameters = _parameters_by_name(options)
     assert set(option_parameters) == {"product_id"}
