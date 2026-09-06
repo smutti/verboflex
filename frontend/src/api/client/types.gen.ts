@@ -1939,6 +1939,7 @@ export type TranslationGroupSummaryResponse = {
      * Product Name
      */
     product_name: string;
+    provenance: TranslationSummaryProvenanceResponse | null;
     /**
      * Rank
      */
@@ -1947,6 +1948,14 @@ export type TranslationGroupSummaryResponse = {
      * Raw Key
      */
     raw_key: string;
+    /**
+     * Selector Kinds
+     */
+    selector_kinds: Array<'scalar' | 'android_quantity' | 'android_array_item' | 'qt_numerus' | 'qt_length_variant' | 'json_path'>;
+    /**
+     * Source Language
+     */
+    source_language: string | null;
     /**
      * Source Text
      */
@@ -2073,6 +2082,26 @@ export type TranslationSearchPageResponse = {
      * Next Cursor
      */
     next_cursor?: string | null;
+};
+
+/**
+ * TranslationSummaryProvenanceResponse
+ *
+ * One bounded last-known locator for a result group's leading member.
+ */
+export type TranslationSummaryProvenanceResponse = {
+    /**
+     * Branch
+     */
+    branch: string;
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Repository Name
+     */
+    repository_name: string;
 };
 
 /**

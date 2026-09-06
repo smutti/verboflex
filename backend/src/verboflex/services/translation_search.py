@@ -76,6 +76,15 @@ class TranslationSearchFilters:
 
 
 @dataclass(frozen=True, slots=True)
+class TranslationSummaryProvenance:
+    """One bounded last-known locator, not all of a group's source locations."""
+
+    repository_name: str
+    branch: str
+    path: str
+
+
+@dataclass(frozen=True, slots=True)
 class TranslationGroupSummary:
     """One raw-key plus language group without selector loss."""
 
@@ -86,7 +95,10 @@ class TranslationGroupSummary:
     language: str
     rank: int
     source_text: str | None
+    source_language: str | None
     translated_text: str | None
+    selector_kinds: tuple[SelectorKind, ...]
+    provenance: TranslationSummaryProvenance | None
     value_count: int
     over_limit_count: int
     within_limit_count: int
@@ -355,6 +367,7 @@ WITH authorized_products AS (
         key.product_id,
         product.display_name AS product_name,
         key.raw_key,
+        scope.current_mapping_id AS mapping_id,
         replace(lower(key.raw_key), 'ß', 'ss') COLLATE "C" AS stable_key,
         value.language,
         CASE
@@ -377,6 +390,7 @@ WITH authorized_products AS (
         (array_agg(value.translated_text ORDER BY value.id)
             FILTER (WHERE value.translated_text IS NOT NULL))[1] AS translated_text,
         count(*)::integer AS value_count,
+        array_agg(DISTINCT value.selector_kind ORDER BY value.selector_kind) AS selector_kinds,
         count(*) FILTER (WHERE value.is_over_limit)::integer AS over_limit_count,
         count(*) FILTER (
             WHERE value.effective_max_chars IS NOT NULL AND NOT value.is_over_limit
@@ -398,7 +412,8 @@ WITH authorized_products AS (
      AND value.translation_key_id = key.id
     WHERE (CAST(:product_id AS uuid) IS NULL OR product.id = CAST(:product_id AS uuid))
       AND (CAST(:language AS text) IS NULL OR value.language = CAST(:language AS text))
-    GROUP BY key.id, key.product_id, product.display_name, key.raw_key, value.language
+    GROUP BY key.id, key.product_id, product.display_name, key.raw_key, value.language,
+             scope.current_mapping_id
     HAVING (
         NOT :has_query OR bool_or(
             replace(lower(key.raw_key), 'ß', 'ss') LIKE :partial ESCAPE '\'
@@ -436,7 +451,15 @@ WITH authorized_products AS (
     ORDER BY rank, stable_key, language COLLATE "C", group_id
     LIMIT :lookahead
 )
-SELECT * FROM page
+SELECT page.*, mapping.base_language AS source_language,
+       locator.path AS provenance_path, locator.configured_branch AS provenance_branch,
+       coalesce(repository.descriptive_name,
+                repository.workspace || '/' || repository.repository_slug)
+           AS provenance_repository_name
+FROM page
+JOIN product_repository_mappings AS mapping ON mapping.id = page.mapping_id
+LEFT JOIN translation_value_locators AS locator ON locator.value_id = page.group_id
+LEFT JOIN repositories AS repository ON repository.id = locator.repository_id
 ORDER BY rank, stable_key, language COLLATE "C", group_id
 """
 )
@@ -751,7 +774,18 @@ def search_translations(
             language=row["language"],
             rank=row["rank"],
             source_text=row["source_text"],
+            source_language=row["source_language"],
             translated_text=row["translated_text"],
+            selector_kinds=tuple(row["selector_kinds"]),
+            provenance=(
+                TranslationSummaryProvenance(
+                    repository_name=row["provenance_repository_name"],
+                    branch=row["provenance_branch"],
+                    path=row["provenance_path"],
+                )
+                if row["provenance_path"] is not None
+                else None
+            ),
             value_count=row["value_count"],
             over_limit_count=row["over_limit_count"],
             within_limit_count=row["within_limit_count"],

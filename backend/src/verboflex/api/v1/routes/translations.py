@@ -22,6 +22,7 @@ from verboflex.schemas.translations import (
     TranslationProvenanceResponse,
     TranslationSearchPageResponse,
     TranslationSearchQuery,
+    TranslationSummaryProvenanceResponse,
     TranslationValueResponse,
 )
 from verboflex.services.translation_search import (
@@ -216,7 +217,18 @@ async def search_translation_collection(
                 language_label=language_label(item.language),
                 rank=item.rank,
                 source_text=item.source_text,
+                source_language=item.source_language,
                 translated_text=item.translated_text,
+                selector_kinds=list(item.selector_kinds),
+                provenance=(
+                    TranslationSummaryProvenanceResponse(
+                        repository_name=item.provenance.repository_name,
+                        branch=item.provenance.branch,
+                        path=item.provenance.path,
+                    )
+                    if item.provenance is not None
+                    else None
+                ),
                 value_count=item.value_count,
                 over_limit_count=item.over_limit_count,
                 within_limit_count=item.within_limit_count,

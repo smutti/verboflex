@@ -51,6 +51,14 @@ class TranslationOptionsResponse(ClosedTranslationModel):
     languages: Annotated[list[TranslationLanguageOptionResponse], Field(max_length=500)]
 
 
+class TranslationSummaryProvenanceResponse(ClosedTranslationModel):
+    """One bounded last-known locator for a result group's leading member."""
+
+    repository_name: Annotated[str, Field(min_length=1, max_length=201)]
+    branch: Annotated[str, Field(min_length=1, max_length=255)]
+    path: Annotated[str, Field(min_length=1, max_length=4096)]
+
+
 class TranslationGroupSummaryResponse(ClosedTranslationModel):
     id: UUID
     product_id: UUID
@@ -60,7 +68,22 @@ class TranslationGroupSummaryResponse(ClosedTranslationModel):
     language_label: Annotated[str, Field(min_length=1, max_length=128)]
     rank: Annotated[int, Field(ge=0, le=3)]
     source_text: BoundedText | None
+    source_language: LanguageCode | None
     translated_text: BoundedText | None
+    selector_kinds: Annotated[
+        list[
+            Literal[
+                "scalar",
+                "android_quantity",
+                "android_array_item",
+                "qt_numerus",
+                "qt_length_variant",
+                "json_path",
+            ]
+        ],
+        Field(min_length=1, max_length=6),
+    ]
+    provenance: TranslationSummaryProvenanceResponse | None
     value_count: Annotated[int, Field(ge=1)]
     over_limit_count: Annotated[int, Field(ge=0)]
     within_limit_count: Annotated[int, Field(ge=0)]
