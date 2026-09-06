@@ -26,3 +26,7 @@ User requested fixing import capacity and a UI mode exposing duplicate keys. Pro
 ## 2026-09-06 approved extension implementation (supersedes the historical wait above)
 
 Approval recorded in 7f5a934. Root, bounded MOKO/capacity, worker-stored diagnostic API/UI, streaming manifests and batched initial activation implemented; full backend/frontend regression suites pass at the source digest in EVIDENCE.md. This is a GREEN regression checkpoint, not a completed quick task or release. Remaining work includes timeout coordination, complete all-format diagnostics and summary projections, refresh/search scale, root/UI authority edges, S5 discovery messaging, logical deletion, missing changed-line/mutation/browser/security gates and backed-up Docker upgrade. Babel currently has 145 duplicate groups plus additional unsupported escape/inter-element-text semantics; surface the latter before extending interpretation. No new approval is needed for the already-approved remaining slices.
+
+## 2026-09-06 MOKO semantic direction
+
+The user confirmed the direction to preserve unknown escapes and inter-element source text. `SPEC-MOKO-SEMANTICS.md` now makes the exact MOKO-only behavior, lossless edit obligation and retained rejection boundaries reviewable. Per the old-coder approval rule, the direction given before this document is input rather than approval of the unseen executable contract. Pause implementation until the user explicitly approves that file; all unrelated previously approved remaining slices stay approved.
