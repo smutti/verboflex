@@ -17,6 +17,18 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 PHASE = ROOT / ".planning/phases/04-localization-import-search-and-constraints"
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
+SECURITY_IDS = {*(f"T-04-{number:02d}" for number in range(1, 78)), "T-04-SC"}
+
+
+def planned_security_ids():
+    planned = {
+        identifier
+        for plan in PHASE.glob("04-*-PLAN.md")
+        for identifier in re.findall(r"\|\s*(T-04-(?:\d{2}|SC))\s*\|", plan.read_text())
+    }
+    if planned != SECURITY_IDS:
+        raise ValueError("planned security inventory drift")
+    return planned
 
 
 class UniqueLoader(yaml.SafeLoader):
@@ -132,17 +144,27 @@ def validate_document(document, kind):
     if kind in {"review", "security"}:
         headers = None
         tables = 0
+        seen_threats = set()
         for line in body.splitlines():
             if not line.strip().startswith("|"):
                 headers = None
                 continue
-            cells = [
-                re.sub(r"[*`]", "", c).strip().casefold()
+            raw_cells = [
+                re.sub(r"[*`]", "", c).strip()
                 for c in line.strip().strip("|").split("|")
             ]
+            cells = [cell.casefold() for cell in raw_cells]
             if "severity" in cells:
                 if "resolution" not in cells:
                     raise ValueError("missing resolution column")
+                if kind == "security" and not {
+                    "id",
+                    "severity",
+                    "disposition",
+                    "evidence",
+                    "resolution",
+                } <= set(cells):
+                    raise ValueError("missing security threat columns")
                 headers = cells
                 tables += 1
                 continue
@@ -151,6 +173,11 @@ def validate_document(document, kind):
             if len(cells) != len(headers):
                 raise ValueError("malformed finding row")
             finding = dict(zip(headers, cells, strict=True))
+            if kind == "security":
+                identifier = raw_cells[headers.index("id")]
+                if identifier not in SECURITY_IDS or identifier in seen_threats:
+                    raise ValueError("unknown or duplicate security threat")
+                seen_threats.add(identifier)
             severity = finding["severity"]
             if severity not in {"critical", "high", "medium", "low", "info", "none"}:
                 raise ValueError("unknown severity")
@@ -163,6 +190,8 @@ def validate_document(document, kind):
                     raise ValueError("missing mitigation proof")
         if not tables:
             raise ValueError("missing structured findings table")
+        if kind == "security" and seen_threats != planned_security_ids():
+            raise ValueError("incomplete security threat inventory")
     return data
 
 
