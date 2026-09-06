@@ -144,10 +144,11 @@ def _detail_response(detail: TranslationGroupDetail) -> TranslationGroupDetailRe
 async def list_translation_options(
     _principal: CurrentPrincipal,
     session: TranslationSession,
+    product_id: Annotated[UUID | None, Query()] = None,
 ) -> TranslationOptionsResponse:
     """List exact active products and languages available to the principal."""
     try:
-        options = get_translation_options(session)
+        options = get_translation_options(session, product_id=product_id)
     except Exception as error:
         _service_unavailable(error)
     return TranslationOptionsResponse(

@@ -467,7 +467,12 @@ def test_options_scope_languages_without_narrowing_products_or_enumerating_missi
     with translation_api_session_factory.begin() as session:
         value = session.get(TranslationValue, alpha_group)
         assert value is not None
-        value.language = "en"
+        for member in session.scalars(
+            select(TranslationValue).where(
+                TranslationValue.translation_key_id == value.translation_key_id
+            )
+        ):
+            member.language = "en"
     token = _create_authority(translation_api_session_factory, role_names=("viewer",))
     _configure_dependencies(translation_api_session_factory)
     products = [{"id": str(alpha_id), "name": "Alpha"}, {"id": str(beta_id), "name": "Beta"}]

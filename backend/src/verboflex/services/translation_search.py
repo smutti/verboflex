@@ -481,6 +481,7 @@ WITH authorized_products AS (
       ON scope.product_id = product.id
      AND scope.active_execution_id IS NOT NULL
     JOIN translation_values AS value ON value.scope_id = scope.id
+    WHERE (CAST(:product_id AS uuid) IS NULL OR product.id = CAST(:product_id AS uuid))
     ORDER BY language
     LIMIT {MAX_OPTION_COUNT + 1}
 )
@@ -603,9 +604,11 @@ def _state_summary(states: tuple[StateFilter, ...]) -> StateSummary:
     return states[0] if len(states) == 1 else "mixed"
 
 
-def get_translation_options(session: Session) -> TranslationOptions:
+def get_translation_options(
+    session: Session, *, product_id: UUID | None = None
+) -> TranslationOptions:
     """Return current active product and language choices in server order."""
-    rows = session.execute(_OPTIONS_SQL).mappings().all()
+    rows = session.execute(_OPTIONS_SQL, {"product_id": product_id}).mappings().all()
     products: list[TranslationProductOption] = []
     seen_products: set[UUID] = set()
     language_codes: set[str] = set()

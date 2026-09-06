@@ -4377,7 +4377,12 @@ export type SearchTranslationsResponse = SearchTranslationsResponses[keyof Searc
 export type ListTranslationOptionsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Product Id
+         */
+        product_id?: string | null;
+    };
     url: '/api/v1/translations/options';
 };
 
@@ -4390,6 +4395,10 @@ export type ListTranslationOptionsErrors = {
      * Forbidden
      */
     403: ErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
     /**
      * Service Unavailable
      */

@@ -57,7 +57,7 @@ IMPORT_OPERATIONS = {
 TRANSLATION_OPERATIONS = {
     ("/api/v1/translations/options", "get"): (
         "listTranslationOptions",
-        {"200", "401", "403", "503"},
+        {"200", "401", "403", "422", "503"},
     ),
     ("/api/v1/translations", "get"): (
         "searchTranslations",
@@ -331,7 +331,7 @@ EXPECTED_OPERATIONS = {
     ),
     ("/api/v1/translations/options", "get"): (
         "listTranslationOptions",
-        {"200", "401", "403", "503"},
+        {"200", "401", "403", "422", "503"},
         True,
     ),
     ("/api/v1/translations", "get"): (
@@ -1093,7 +1093,10 @@ def test_translation_operation_surface_is_exact_unique_and_bearer_protected() ->
                 "#/components/schemas/TranslationConstraintErrorResponse"
             )
 
-    assert "parameters" not in options
+    option_parameters = _parameters_by_name(options)
+    assert set(option_parameters) == {"product_id"}
+    assert option_parameters["product_id"]["required"] is False
+    assert option_parameters["product_id"]["in"] == "query"
     search_parameters = _parameters_by_name(search)
     assert set(search_parameters) == {
         "q",

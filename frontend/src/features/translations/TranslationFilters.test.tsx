@@ -4,6 +4,13 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TranslationFilters } from "./TranslationFilters";
 
+Object.defineProperties(HTMLElement.prototype, {
+  hasPointerCapture: { configurable: true, value: () => false },
+  setPointerCapture: { configurable: true, value: () => {} },
+  releasePointerCapture: { configurable: true, value: () => {} },
+  scrollIntoView: { configurable: true, value: () => {} },
+});
+
 afterEach(cleanup);
 const defaults = {
   productId: null,
@@ -107,7 +114,7 @@ describe("TranslationFilters", () => {
           .map((option) => option.textContent),
       ).toEqual(choices);
       await user.click(
-        screen.getByRole("option", { name: choice, exact: true }),
+        screen.getByRole("option", { name: choice }),
       );
       expect(onChange).toHaveBeenCalledExactlyOnceWith({
         ...defaults,
