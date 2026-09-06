@@ -301,7 +301,8 @@ function previewConfirmation(
     layout_candidate_id: selectedCandidate.id,
     layout_candidate_version: selectedCandidate.version,
     mapping_id: mapping.id,
-    preview_digest: "c".repeat(64),
+    // Confirmation binds the selected language; it is not the preview request digest.
+    preview_digest: "d".repeat(64),
   };
 }
 
@@ -1480,6 +1481,60 @@ describe("administrator product preview and publication page", () => {
     ).toBeDisabled();
   });
 
+  it.each([
+    { job_id: "foreign-job" },
+    { mapping_id: "foreign-mapping" },
+    { layout_candidate_id: "foreign-layout" },
+    { preview_digest: "not-a-sha256-digest" },
+  ])("rejects foreign or malformed language-bound draft authority %j", async (mismatch) => {
+    confirmMock.mockResolvedValueOnce(ok({ ...previewConfirmation(candidates[0], "en"), ...mismatch }));
+    renderPage();
+    await runValidation();
+    await userEvent.click(screen.getByRole("radio", { name: "Android XML — app/src/main/res" }));
+    await selectBaseLanguage();
+    await userEvent.click(screen.getByRole("button", { name: "Confirm preview" }));
+    expect(await screen.findByRole("alert", { name: "Preview not confirmed" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Publish product" })).toBeDisabled();
+  });
+
+  it.each([
+    { base_language: "it" },
+    { job_id: "foreign-job" },
+    { active_revision_version: 99 },
+    { connection_generation: 99 },
+    { preview_digest: "not-a-sha256-digest" },
+  ])("rejects foreign or malformed language-bound active authority %j", async (mismatch) => {
+    const job = activeRevalidationJob();
+    getProductMock.mockResolvedValueOnce(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValueOnce(ok({ items: [confirmedActiveMapping], next_cursor: null }));
+    getReactivationEligibilityMock.mockResolvedValueOnce(ok(reactivationEligibility(false)));
+    createActiveRevalidationMock.mockResolvedValueOnce(ok(job));
+    confirmActiveRevalidationMock.mockResolvedValueOnce(ok({
+      active_revision_id: job.active_revision_id,
+      active_revision_version: job.active_revision_version,
+      base_language: "en",
+      commits: job.repository_sides,
+      confirmed_at: "2026-08-31T17:00:06Z",
+      confirmed_by: "admin",
+      connection_generation: job.connection_generation,
+      job_id: job.id,
+      layout_candidate_id: candidates[0].id,
+      layout_candidate_version: candidates[0].version,
+      mapping_id: job.mapping_id,
+      preview_digest: "d".repeat(64),
+      product_id: job.product_id,
+      ...mismatch,
+    }));
+    renderPage(inactiveActiveOnlyProduct.id);
+    await userEvent.click(await screen.findByRole("button", { name: "Run validation again" }));
+    await userEvent.click(await screen.findByRole("radio", { name: "Android XML — app/src/main/res" }));
+    await selectBaseLanguage();
+    await userEvent.click(screen.getByRole("button", { name: "Confirm preview" }));
+    expect(await screen.findByRole("alert", { name: "Preview not confirmed" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Reactivate product" })).toBeDisabled();
+    expect(getReactivationEligibilityMock).toHaveBeenCalledTimes(1);
+  });
+
   it("invalidates stale confirmation on language or candidate change and deduplicates submission", async () => {
     let resolveConfirmation!: (
       value: ReturnType<typeof ok<AdminPreviewConfirmationResponse>>,
@@ -1722,7 +1777,7 @@ describe("administrator product preview and publication page", () => {
     expect(publishMock).not.toHaveBeenCalled();
   });
 
-  it("recovers generation-stale active mappings without candidate mutation", async () => {
+  it("recovers generation-stale active mappings with a language-bound confirmation digest without candidate mutation", async () => {
     const staleEligibility = reactivationEligibility(false);
     const currentEligibility = reactivationEligibility(true);
     const queuedJob = activeRevalidationJob({
@@ -1763,7 +1818,7 @@ describe("administrator product preview and publication page", () => {
         layout_candidate_id: candidates[0].id,
         layout_candidate_version: candidates[0].version,
         mapping_id: succeededJob.mapping_id,
-        preview_digest: succeededJob.result!.digest,
+        preview_digest: "d".repeat(64),
         product_id: succeededJob.product_id,
       }),
     );

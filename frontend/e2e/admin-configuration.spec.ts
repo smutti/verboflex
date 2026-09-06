@@ -707,13 +707,14 @@ async function installAdminApi(page: Page, state: AdminMockState) {
     if (pathname.endsWith("/confirmation") && method === "POST") {
       const body = requestBody(route);
       return json(route, {
+        base_language: body.base_language,
         confirmed_at: now,
         confirmed_by: "admin-user",
         job_id: `preview-job-${state.previewAttempts}`,
         layout_candidate_id: body.layout_candidate_id,
         layout_candidate_version: 1,
         mapping_id: "mapping-direct",
-        preview_digest: body.preview_digest,
+        preview_digest: "d".repeat(64),
       });
     }
     if (pathname === "/api/v1/admin/repositories" && method === "GET") {
@@ -1098,6 +1099,21 @@ test("product collection preserves API order across all states and responsive pr
       ),
     ).toBe(true);
   }
+});
+
+test("CR09: a language-bound confirmation digest enables publication", async ({ page }) => {
+  const state = defaultState();
+  state.previewAttempts = 1;
+  await installAdminApi(page, state);
+  await page.goto("/admin/products/product-1/preview");
+  await page.getByRole("button", { name: "Run validation", exact: true }).click();
+  await page.getByRole("radio", { name: "Android XML — app/src/main/res" }).check();
+  await chooseSelect(page, "Base language", "en");
+  const publish = page.getByRole("button", { name: "Publish product", exact: true });
+  await expect(publish).toBeDisabled();
+  await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
+  await expect(page.getByText("Confirmed", { exact: true })).toBeVisible();
+  await expect(publish).toBeEnabled();
 });
 
 test("five-step configuration reuses repositories, exposes both topologies, and clears one-time user secrets", async ({
