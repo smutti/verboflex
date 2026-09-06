@@ -25,6 +25,7 @@ import {
   listAdminRevisionMappings,
   listTranslationOptions,
   searchTranslations,
+  getTranslationGroup,
   readCurrentUser,
   readSystemStatus,
   refreshAccessToken,
@@ -48,6 +49,7 @@ vi.mock("./api/client", () => ({
   listAdminRevisionMappings: vi.fn(),
   listTranslationOptions: vi.fn(),
   searchTranslations: vi.fn(),
+  getTranslationGroup: vi.fn(),
   logout: vi.fn(),
   readCurrentUser: vi.fn(),
   readHealth: vi.fn(),
@@ -173,6 +175,14 @@ describe("session routes", () => {
       </MemoryRouter>,
     );
   }
+
+  it.each<RoleName>(["admin", "product_manager_reviewer", "translator", "viewer"])("resolves authenticated opaque detail child for %s", async role => {
+    restorePrincipal(role);
+    vi.mocked(getTranslationGroup).mockResolvedValue({data: undefined, error: {detail: "Translation unavailable"}, response: new Response(null, {status: 404})});
+    renderApplication("/translations/opaque-group");
+    expect(await screen.findByText("Translation not available")).toBeVisible();
+    expect(screen.getByTestId("current-route")).toHaveTextContent("/translations/opaque-group");
+  });
 
   it.each<RoleName>([
     "admin",
