@@ -283,6 +283,9 @@ describe("administrator mapping cursor collections", () => {
       },
       signal: expect.any(AbortSignal),
     });
+    await waitFor(() =>
+      expect(listAdminPublishedMappingImportsMock).toHaveBeenCalledTimes(2),
+    );
     expect(within(importTable).getByText("Not imported")).toBeVisible();
 
     await act(async () => {
