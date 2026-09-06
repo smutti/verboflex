@@ -52,6 +52,7 @@ class Gate:
         self.directory = Path(tempfile.mkdtemp(prefix="verboflex-phase04-gate-"))
         os.chmod(self.directory, 0o700)
         self.environment = dict(os.environ, PHASE4_RESULT_DIR=str(self.directory))
+        self.environment["COVERAGE_FILE"] = str(self.directory / "backend-coverage-data")
         self.containers = []
         self.processes = []
         self.records = []
@@ -299,6 +300,19 @@ def main():
                     ],
                     cwd=BACKEND,
                 )
+                gate.command(
+                    "smoke-tooling-controls",
+                    [
+                        "uv",
+                        "run",
+                        "--project",
+                        "backend",
+                        "pytest",
+                        "tools/tests/test_phase4_smoke.py",
+                        "-q",
+                    ],
+                )
+                gate.command("smoke-shell-controls", ["bash", "tools/tests/test_phase4_smoke.sh"])
             elif layer == "backend-tests-migrations-parsers-worker":
                 gate.command(
                     layer,
@@ -309,6 +323,10 @@ def main():
                         "-q",
                         "--randomly-seed=419",
                         "--junitxml=" + str(gate.directory / "backend.xml"),
+                        "--cov=verboflex",
+                        "--cov-branch",
+                        "--cov-report=term-missing",
+                        "--cov-report=xml:" + str(gate.directory / "backend-coverage.xml"),
                     ],
                     cwd=BACKEND,
                 )
@@ -339,7 +357,7 @@ def main():
                     ],
                 )
             elif layer == "frontend-types-lint-build":
-                for command in ("typecheck", "lint", "build"):
+                for command in ("typecheck", "lint", "format:check", "build"):
                     gate.command(
                         layer + "-" + command,
                         ["npm", "--prefix", "frontend", "run", command],
