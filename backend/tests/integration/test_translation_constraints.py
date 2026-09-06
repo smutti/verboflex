@@ -95,6 +95,47 @@ def _translation_imports() -> Any:
     return importlib.import_module("verboflex.services.translation_imports")
 
 
+@pytest.mark.parametrize("stale_action", ["put", "delete"])
+def test_recreated_constraint_rejects_old_incarnation_version(
+    constraint_session_factory, stale_action
+):
+    service = _translation_constraints()
+    factory = constraint_session_factory
+    ids = _seed_constraint_dataset(factory)
+    common = {"translation_group_id": ids["target_value"], "language": "it"}
+    with factory.begin() as session:
+        first = service.put_translation_constraint(
+            session, **common, max_chars=2, expected_version=0, actor_id=ids["actor"]
+        )
+    with factory.begin() as session:
+        service.delete_translation_constraint(session, **common, expected_version=first.version)
+    with factory.begin() as session:
+        recreated = service.put_translation_constraint(
+            session, **common, max_chars=8, expected_version=0, actor_id=ids["actor"]
+        )
+    with pytest.raises(service.ConstraintVersionConflict), factory.begin() as session:
+        if stale_action == "put":
+            service.put_translation_constraint(
+                session,
+                **common,
+                max_chars=1,
+                expected_version=first.version,
+                actor_id=ids["actor"],
+            )
+        else:
+            service.delete_translation_constraint(session, **common, expected_version=first.version)
+    assert recreated.version > first.version
+    with factory() as session:
+        rule = session.scalar(
+            select(TranslationConstraint).where(
+                TranslationConstraint.translation_key_id == ids["target_key"],
+                TranslationConstraint.language == "it",
+            )
+        )
+        assert rule.max_chars == 8 and rule.version == recreated.version
+        assert session.get_one(TranslationValue, ids["target_value"]).effective_max_chars == 8
+
+
 def _selector_digest(selector_bytes: bytes) -> str:
     return hashlib.sha256(selector_bytes).hexdigest()
 
