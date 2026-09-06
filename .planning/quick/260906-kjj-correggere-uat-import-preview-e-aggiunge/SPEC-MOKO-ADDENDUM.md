@@ -1,6 +1,6 @@
-# Proposed addendum — Babel's observed MOKO XML layout
+# Approved addendum — Babel's observed MOKO XML layout
 
-Status: proposed, not approved. SPEC.md v1 remains approved unchanged.
+Status: approved by the user on 2026-09-06: "Approvo". SPEC.md v1 remains approved unchanged.
 
 ## Purpose
 
