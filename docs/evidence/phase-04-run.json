@@ -1,0 +1,632 @@
+{
+  "status": "passed",
+  "source_digest": "sha256:d7306c29f5131dfc5f23318cb89664e83946742dab9f3982832e9bf082313406",
+  "gauntlet_exit": 0,
+  "sections": [
+    "source-scope-closeout",
+    "backend-tests-migrations-parsers-worker",
+    "backend-changed-line-parser-coverage",
+    "backend-types-lint-format",
+    "generated-client",
+    "frontend-unit-accessibility-coverage",
+    "frontend-types-lint-build",
+    "python-vulnerabilities",
+    "python-license-policy",
+    "npm-vulnerabilities",
+    "npm-lock-license-identity",
+    "adversarial-mutations",
+    "browser-responsive-smoke",
+    "built-stack-smoke"
+  ],
+  "records": [
+    {
+      "section": "source-scope-closeout",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "tests/architecture/test_phase4_scope.py",
+        "tests/architecture/test_phase4_closeout_gate.py",
+        "tests/architecture/test_background_boundaries.py",
+        "-q"
+      ],
+      "cwd": "backend",
+      "exit": 0,
+      "started_at": "2026-09-06T11:44:08.868917+00:00",
+      "completed_at": "2026-09-06T11:44:13.675511+00:00",
+      "duration_seconds": 4.807,
+      "output_sha256": "4ae60b1f722d0b5dd3cd82d07c9f33fd88eb9fdc2904ba576f8cbee0cd5c66ab"
+    },
+    {
+      "section": "smoke-tooling-controls",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "backend",
+        "pytest",
+        "tools/tests/test_phase4_smoke.py",
+        "-q"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T11:44:13.675785+00:00",
+      "completed_at": "2026-09-06T11:44:14.166235+00:00",
+      "duration_seconds": 0.49,
+      "output_sha256": "ff73c3b52ec6f9e718effa95c0d20b197d8448ce77ac3ccff7acce737a494962"
+    },
+    {
+      "section": "smoke-shell-controls",
+      "command": [
+        "bash",
+        "tools/tests/test_phase4_smoke.sh"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T11:44:14.166503+00:00",
+      "completed_at": "2026-09-06T11:44:14.178129+00:00",
+      "duration_seconds": 0.012,
+      "output_sha256": "9d6fffd44ef7eb44be56bfc6a9873fd161ca76517291d52219df744f227846c3"
+    },
+    {
+      "section": "backend-tests-migrations-parsers-worker",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "--randomly-seed=419",
+        "--junitxml=/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp/backend.xml",
+        "--cov=verboflex",
+        "--cov-branch",
+        "--cov-report=term-missing",
+        "--cov-report=xml:/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp/backend-coverage.xml",
+        "--cov-fail-under=0"
+      ],
+      "cwd": "backend",
+      "exit": 0,
+      "started_at": "2026-09-06T11:44:14.178352+00:00",
+      "completed_at": "2026-09-06T11:46:43.913267+00:00",
+      "duration_seconds": 149.736,
+      "output_sha256": "ac794c9c52ed9ee659ecae3947b935f9faecf7f96924ad36597c5cc19142f520"
+    },
+    {
+      "section": "backend-changed-line-coverage",
+      "command": [
+        "uv",
+        "run",
+        "diff-cover",
+        "/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp/backend-coverage.xml",
+        "--compare-branch=d987d5f48273d49234b07aacb3fa185337a1b4f2",
+        "--fail-under=100"
+      ],
+      "cwd": "backend",
+      "exit": 0,
+      "started_at": "2026-09-06T11:46:43.913658+00:00",
+      "completed_at": "2026-09-06T11:46:44.241762+00:00",
+      "duration_seconds": 0.328,
+      "output_sha256": "309743982ccaba1a3c5238897325aa68ad44528d605a04f6ff843449da201b99"
+    },
+    {
+      "section": "parser-branch-coverage",
+      "command": [
+        "uv",
+        "run",
+        "coverage",
+        "report",
+        "--include=*/localization/importing/*",
+        "--fail-under=100"
+      ],
+      "cwd": "backend",
+      "exit": 0,
+      "started_at": "2026-09-06T11:46:44.242039+00:00",
+      "completed_at": "2026-09-06T11:46:44.435059+00:00",
+      "duration_seconds": 0.193,
+      "output_sha256": "245a1c01e122db27c1e9b5b6d6bac775735c7328c7d6452c9f0c47f372eb980c"
+    },
+    {
+      "section": "backend-types-lint-format-mypy",
+      "command": [
+        "uv",
+        "run",
+        "mypy",
+        "src"
+      ],
+      "cwd": "backend",
+      "exit": 0,
+      "started_at": "2026-09-06T11:46:44.435363+00:00",
+      "completed_at": "2026-09-06T11:46:44.937192+00:00",
+      "duration_seconds": 0.502,
+      "output_sha256": "4d8615a3b23c25b3ef6259d7367cc2da9b7b794b659325c4369cb165f735b3bd"
+    },
+    {
+      "section": "backend-types-lint-format-ruff",
+      "command": [
+        "uv",
+        "run",
+        "ruff",
+        "check",
+        "src",
+        "tests"
+      ],
+      "cwd": "backend",
+      "exit": 0,
+      "started_at": "2026-09-06T11:46:44.937519+00:00",
+      "completed_at": "2026-09-06T11:46:45.023245+00:00",
+      "duration_seconds": 0.086,
+      "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "section": "backend-types-lint-format-ruff-format",
+      "command": [
+        "uv",
+        "run",
+        "ruff",
+        "format",
+        "--check",
+        "src",
+        "tests",
+        "alembic"
+      ],
+      "cwd": "backend",
+      "exit": 0,
+      "started_at": "2026-09-06T11:46:45.023532+00:00",
+      "completed_at": "2026-09-06T11:46:45.071386+00:00",
+      "duration_seconds": 0.048,
+      "output_sha256": "d05c0280a19426e07f212d7f92b01fa368423f6d58445c9cd7c94542fd26843b"
+    },
+    {
+      "section": "generated-client",
+      "command": [
+        "npm",
+        "--prefix",
+        "frontend",
+        "run",
+        "api:check"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T11:46:45.071650+00:00",
+      "completed_at": "2026-09-06T11:46:46.307603+00:00",
+      "duration_seconds": 1.236,
+      "output_sha256": "3e913a7b44644086eb62a0ef2168e01ef6469f1606aeb7c771b2dd6cd3f7f540"
+    },
+    {
+      "section": "frontend-unit-accessibility-coverage",
+      "command": [
+        "npm",
+        "--prefix",
+        "frontend",
+        "run",
+        "test:coverage",
+        "--",
+        "--coverage.reportsDirectory=/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp/frontend-coverage",
+        "--coverage.reporter=text",
+        "--coverage.reporter=cobertura"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T11:46:46.307996+00:00",
+      "completed_at": "2026-09-06T11:46:59.177880+00:00",
+      "duration_seconds": 12.87,
+      "output_sha256": "bb783bf080a90599d6d3f336049c355d377384aa27259cdb1c3746ba2e88ff59"
+    },
+    {
+      "section": "frontend-changed-line-coverage",
+      "command": [
+        "uv",
+        "run",
+        "diff-cover",
+        "/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp/frontend-coverage/cobertura-coverage.xml",
+        "--compare-branch=d987d5f48273d49234b07aacb3fa185337a1b4f2",
+        "--fail-under=100"
+      ],
+      "cwd": "backend",
+      "exit": 0,
+      "started_at": "2026-09-06T11:46:59.178447+00:00",
+      "completed_at": "2026-09-06T11:46:59.430939+00:00",
+      "duration_seconds": 0.253,
+      "output_sha256": "60b68fbbac06959cd5aec6d805da8c3ec2f97cb56c890a712a24d5fe80546f0e"
+    },
+    {
+      "section": "frontend-types-lint-build-typecheck",
+      "command": [
+        "npm",
+        "--prefix",
+        "frontend",
+        "run",
+        "typecheck"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T11:46:59.431511+00:00",
+      "completed_at": "2026-09-06T11:47:01.497160+00:00",
+      "duration_seconds": 2.066,
+      "output_sha256": "6b6a7f08689e37762d405e6e8847052dcfb970da952e13ec69f5fdf90d283554"
+    },
+    {
+      "section": "frontend-types-lint-build-lint",
+      "command": [
+        "npm",
+        "--prefix",
+        "frontend",
+        "run",
+        "lint"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T11:47:01.497494+00:00",
+      "completed_at": "2026-09-06T11:47:04.590421+00:00",
+      "duration_seconds": 3.093,
+      "output_sha256": "c134767a6bc58cc900b414477f33f82b1e44358a2d473ffe33f1c34e31b77f2f"
+    },
+    {
+      "section": "frontend-types-lint-build-format:check",
+      "command": [
+        "npm",
+        "--prefix",
+        "frontend",
+        "run",
+        "format:check"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T11:47:04.590714+00:00",
+      "completed_at": "2026-09-06T11:47:05.663703+00:00",
+      "duration_seconds": 1.073,
+      "output_sha256": "b4453a8b694c6de35d26000b859534e1d2cd3883ab118c531f044ab980ce678d"
+    },
+    {
+      "section": "frontend-types-lint-build-build",
+      "command": [
+        "npm",
+        "--prefix",
+        "frontend",
+        "run",
+        "build"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T11:47:05.664012+00:00",
+      "completed_at": "2026-09-06T11:47:08.113627+00:00",
+      "duration_seconds": 2.45,
+      "output_sha256": "e2e3ab7e24e5dcc036e7c3ccc0253806d1c2b1604acb7858ee7a43fc3ef20cba"
+    },
+    {
+      "section": "python-vulnerabilities",
+      "command": [
+        "uv",
+        "run",
+        "pip-audit"
+      ],
+      "cwd": "backend",
+      "exit": 0,
+      "started_at": "2026-09-06T11:47:08.114016+00:00",
+      "completed_at": "2026-09-06T11:47:18.757398+00:00",
+      "duration_seconds": 10.644,
+      "output_sha256": "f82c381625d03c68ddf9f598904e5ebbb4931236a5160cefcf1633a1e4b26eed"
+    },
+    {
+      "section": "python-license-policy-inventory",
+      "command": [
+        "uv",
+        "run",
+        "pip-licenses",
+        "--format=json",
+        "--with-urls"
+      ],
+      "cwd": "backend",
+      "exit": 0,
+      "started_at": "2026-09-06T11:47:18.757830+00:00",
+      "completed_at": "2026-09-06T11:47:19.124366+00:00",
+      "duration_seconds": 0.367,
+      "output_sha256": "b2d5b0a42c97c04c5ea3c86e98a754ea4d384dc27f68155e83c2c6bc9b1bfb1c"
+    },
+    {
+      "section": "python-license-policy",
+      "command": [
+        "bash",
+        "tools/phase4_parser_checkpoint.sh",
+        "--license-policy",
+        "/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp/licenses.json"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T11:47:19.124847+00:00",
+      "completed_at": "2026-09-06T11:47:19.172267+00:00",
+      "duration_seconds": 0.047,
+      "output_sha256": "9bab453dffcc318fafa65b05c9c06a31a3a54ef9f7eef055ed79b88fe5a78afa"
+    },
+    {
+      "section": "regex-exact-identity",
+      "command": [
+        "uv",
+        "run",
+        "python",
+        "-c",
+        "import regex; assert regex.__version__ == '2026.9.3'; print(regex.__version__)"
+      ],
+      "cwd": "backend",
+      "exit": 0,
+      "started_at": "2026-09-06T11:47:19.172613+00:00",
+      "completed_at": "2026-09-06T11:47:19.220491+00:00",
+      "duration_seconds": 0.048,
+      "output_sha256": "756d762a3413cb2f4c56aa7329cefef662e1443bb74185259b7506334ed42a51"
+    },
+    {
+      "section": "npm-vulnerabilities",
+      "command": [
+        "npm",
+        "--prefix",
+        "frontend",
+        "audit",
+        "--audit-level=high"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T11:47:19.220814+00:00",
+      "completed_at": "2026-09-06T11:47:21.035804+00:00",
+      "duration_seconds": 1.815,
+      "output_sha256": "a01559c4bedd8b4eb60cf38e7413c73dc3a34b384c3c131887540b91f84a1786"
+    },
+    {
+      "section": "npm-lock-license-identity-tree",
+      "command": [
+        "npm",
+        "--prefix",
+        "frontend",
+        "ls",
+        "--all",
+        "--json"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T11:47:21.036189+00:00",
+      "completed_at": "2026-09-06T11:47:21.291170+00:00",
+      "duration_seconds": 0.255,
+      "output_sha256": "9f02ba6d90d632bf1f091639f08df2e7009d59d3242106c48b260b5efe8b2c78"
+    },
+    {
+      "section": "npm-lock-license-identity",
+      "command": [
+        "node",
+        "tools/verify_phase4_npm.mjs"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T11:47:21.291823+00:00",
+      "completed_at": "2026-09-06T11:47:21.430119+00:00",
+      "duration_seconds": 0.138,
+      "output_sha256": "10dd9cbcaf409a63b58f4be49f326be87d1d5dd66326ee131df14005f933ba98"
+    },
+    {
+      "section": "npm-lock-license-identity-controls",
+      "command": [
+        "node",
+        "tools/verify_phase4_npm.mjs",
+        "--self-test"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T11:47:21.430472+00:00",
+      "completed_at": "2026-09-06T11:47:21.472321+00:00",
+      "duration_seconds": 0.042,
+      "output_sha256": "721e6be69ec7b08baae9d6bc75b59ad5dfeba77fda2cbcf0f59a3b7faa305531"
+    },
+    {
+      "section": "adversarial-mutations",
+      "command": [
+        "/Users/smutti/Documents/personal/verboflex/backend/.venv/bin/python",
+        "tools/verify_translation_mutants.py"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T11:47:21.472711+00:00",
+      "completed_at": "2026-09-06T11:47:41.554783+00:00",
+      "duration_seconds": 20.082,
+      "output_sha256": "55d0d9ba936b0ba4a2d1fc3480e43289c280a1ee21ce3e9db380b2d71e5d2206"
+    },
+    {
+      "section": "browser-responsive-smoke",
+      "command": [
+        "npm",
+        "--prefix",
+        "frontend",
+        "run",
+        "e2e",
+        "--",
+        "translations.spec.ts"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T11:47:41.845924+00:00",
+      "completed_at": "2026-09-06T11:47:54.713528+00:00",
+      "duration_seconds": 12.868,
+      "output_sha256": "9bc71277baae350852328a2fc8272a063238c66ba06a7465922396d27a0957bd"
+    },
+    {
+      "section": "built-stack-smoke",
+      "command": [
+        "bash",
+        "tools/phase4_smoke.sh"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "started_at": "2026-09-06T11:47:54.713937+00:00",
+      "completed_at": "2026-09-06T11:48:56.562650+00:00",
+      "duration_seconds": 61.849,
+      "output_sha256": "befb603102946a4856d62763c1351de750f5856603cab1e19c915f6205e38550"
+    }
+  ],
+  "source_commit": "ec6fd68",
+  "evidence_directory": "/var/folders/0t/8j9ddhjn68393k7yzdpwnjl80000gp/T/verboflex-phase04-gate-ud275fvp",
+  "smoke_exit": 0,
+  "mutation_results": [
+    {
+      "expected_test": [
+        "/Users/smutti/Documents/personal/verboflex/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "backend/tests/unit/localization/importing/test_android_xml.py::test_android_hostile_fixture_inventory_fails_closed_without_network",
+        "-q",
+        "--import-mode=importlib"
+      ],
+      "mutant": "unsafe-xml",
+      "restored_digest": "875bb61c0e98acde8224e1aea5e9620fd98731eb081c2a92f4a9dbe5d0ddec77",
+      "returncode": 1
+    },
+    {
+      "expected_test": [
+        "/Users/smutti/Documents/personal/verboflex/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "backend/tests/unit/localization/importing/test_android_xml.py::test_android_file_byte_limit_accepts_exact_and_rejects_one_over",
+        "-q",
+        "--import-mode=importlib"
+      ],
+      "mutant": "input-bound",
+      "restored_digest": "875bb61c0e98acde8224e1aea5e9620fd98731eb081c2a92f4a9dbe5d0ddec77",
+      "returncode": 1
+    },
+    {
+      "expected_test": [
+        "/Users/smutti/Documents/personal/verboflex/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "backend/tests/unit/localization/importing/test_contracts.py::test_selector_bytes_are_sorted_compact_typed_and_sequence_ordered",
+        "-q",
+        "--import-mode=importlib"
+      ],
+      "mutant": "selector-collision",
+      "restored_digest": "5c01d855ece78f3192cdf1cae703808c5d0a0342003492a5e1b069ea63d551d2",
+      "returncode": 1
+    },
+    {
+      "expected_test": [
+        "/Users/smutti/Documents/personal/verboflex/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "backend/tests/integration/test_translation_import_activation.py::test_activation_advances_dataset_and_baseline_to_the_same_execution",
+        "-q",
+        "--import-mode=importlib"
+      ],
+      "mutant": "partial-activation",
+      "restored_digest": "dcc5e0cc9877138a0e93f56d42b2aa444ef6c2748bc7030c1ce6b6ebebea50c3",
+      "returncode": 1
+    },
+    {
+      "expected_test": [
+        "/Users/smutti/Documents/personal/verboflex/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "backend/tests/integration/test_translation_import_activation.py::test_superseded_activation_cannot_replace_current_dataset",
+        "-q",
+        "--import-mode=importlib"
+      ],
+      "mutant": "stale-execution",
+      "restored_digest": "34ea09a766198b70d92c30526a7b7a726fed46d8c82d33aa46e3cdbbeb514c9d",
+      "returncode": 1
+    },
+    {
+      "expected_test": [
+        "/Users/smutti/Documents/personal/verboflex/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "backend/tests/integration/test_translation_search.py::test_keyset_cursor_is_bounded_tamper_proof_scope_bound_and_stale_safe",
+        "-q",
+        "--import-mode=importlib"
+      ],
+      "mutant": "offset-pagination",
+      "restored_digest": "55eb6e35ad057a4197125bc7cbda7d12baa9e3a3e56b510678eb30055439c2d8",
+      "returncode": 1
+    },
+    {
+      "expected_test": [
+        "/Users/smutti/Documents/personal/verboflex/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "backend/tests/integration/test_translation_search.py::test_keyset_cursor_is_bounded_tamper_proof_scope_bound_and_stale_safe",
+        "-q",
+        "--import-mode=importlib"
+      ],
+      "mutant": "unbound-cursor",
+      "restored_digest": "55eb6e35ad057a4197125bc7cbda7d12baa9e3a3e56b510678eb30055439c2d8",
+      "returncode": 1
+    },
+    {
+      "expected_test": [
+        "/Users/smutti/Documents/personal/verboflex/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "backend/tests/integration/test_translation_search.py::test_query_normalization_bounds_and_like_literals",
+        "-q",
+        "--import-mode=importlib"
+      ],
+      "mutant": "literal-wildcard",
+      "restored_digest": "55eb6e35ad057a4197125bc7cbda7d12baa9e3a3e56b510678eb30055439c2d8",
+      "returncode": 1
+    },
+    {
+      "expected_test": [
+        "/Users/smutti/Documents/personal/verboflex/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "backend/tests/api/test_translations.py::test_options_are_server_ordered_and_exclude_inactive_datasets",
+        "-q",
+        "--import-mode=importlib"
+      ],
+      "mutant": "cross-product-scope",
+      "restored_digest": "55eb6e35ad057a4197125bc7cbda7d12baa9e3a3e56b510678eb30055439c2d8",
+      "returncode": 1
+    },
+    {
+      "expected_test": [
+        "/Users/smutti/Documents/personal/verboflex/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "backend/tests/api/test_translation_constraints.py::test_constraint_routes_enforce_four_role_matrix_and_keep_detail_readable",
+        "-q",
+        "--import-mode=importlib"
+      ],
+      "mutant": "role-bypass",
+      "restored_digest": "681aa7131eb05434b8c7c8835d94441b6dd078ce0473329066bc5fcad86da5d4",
+      "returncode": 1
+    },
+    {
+      "expected_test": [
+        "npm",
+        "--prefix",
+        "frontend",
+        "test",
+        "--",
+        "--run",
+        "src/features/translations/TranslationDetailPage.test.tsx",
+        "-t",
+        "reads inert complete content"
+      ],
+      "mutant": "client-length-authority",
+      "restored_digest": "9280115efc4e0d1f4b2180552f84290b6caac05855e15fdd9eb9d40ea8ee11b8",
+      "returncode": 1
+    },
+    {
+      "expected_test": [
+        "/Users/smutti/Documents/personal/verboflex/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "backend/tests/unit/localization/test_grapheme_count.py::test_counts_uax29_extended_grapheme_clusters",
+        "-q",
+        "--import-mode=importlib"
+      ],
+      "mutant": "code-point-count",
+      "restored_digest": "8fbd9f8e823e4bb0db175852ea3ac57ce04e027cc6015dd600cdd2207e2771d5",
+      "returncode": 1
+    }
+  ],
+  "artifact_sha256": {
+    "backend.xml": "ce89215fe00649b768f80caa9987aa9678b4085494a3fd9fa351e9373939fb30",
+    "backend-coverage.xml": "ab527b36f74d01e42916e4617d683ea7f8f7ae7bb8db55ca7b99e288a2647540",
+    "frontend-coverage/cobertura-coverage.xml": "92d0dbb475af006fc75f470dbac8361c03dfd479cb18af92c2362c655c389abe",
+    "built-stack-smoke.log": "befb603102946a4856d62763c1351de750f5856603cab1e19c915f6205e38550",
+    "commands.json": "d6372309f4897569e69fad7b6f7d3083fe666abfb3431657092330d36ab30919"
+  }
+}
