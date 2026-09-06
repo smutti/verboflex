@@ -342,7 +342,7 @@ def _coverage_rows(text: str) -> list[tuple[str, str]]:
 
 
 def _assert_coverage_contract(rows: Sequence[tuple[str, str]]) -> None:
-    provider = importlib.import_module("test_provider_boundaries")
+    provider = importlib.import_module("tests.architecture.test_provider_boundaries")
     expected = {
         **{name: "INTEGRATE" for name in provider.EXPECTED_INTEGRATED_CAPABILITIES},
         **{name: "OPT-OUT" for name in provider.EXPECTED_OPTED_OUT_CAPABILITIES},
@@ -491,8 +491,8 @@ def test_semantic_and_coverage_guards_reject_equal_count_substitutions() -> None
 
 def test_provider_and_background_guards_expose_non_vacuous_negative_controls() -> None:
     """Architecture guards must reject a synthetic provider write and route task call."""
-    provider = importlib.import_module("test_provider_boundaries")
-    background = importlib.import_module("test_background_boundaries")
+    provider = importlib.import_module("tests.architecture.test_provider_boundaries")
+    background = importlib.import_module("tests.architecture.test_background_boundaries")
 
     assert hasattr(provider, "_assert_phase3_provider_tree")
     assert hasattr(background, "_assert_no_worker_boundary_violations")
