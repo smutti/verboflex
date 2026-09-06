@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import {
+  act,
   cleanup,
   render,
   screen,
@@ -247,7 +248,14 @@ describe("session routes", () => {
   );
 
   it("restores direct translation search from only the server principal's authorized preferences", async () => {
-    vi.mocked(listTranslationOptions).mockReturnValueOnce(new Promise(() => {}));
+    let resolveOptions!: (
+      value: Awaited<ReturnType<typeof listTranslationOptions<false>>>,
+    ) => void;
+    vi.mocked(listTranslationOptions).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOptions = resolve;
+      }),
+    );
     restorePrincipal();
     localStorage.setItem(
       translationPreferenceKey(ordinaryPrincipal.id),
@@ -260,8 +268,21 @@ describe("session routes", () => {
         name: "Search keys and translations",
       }),
     ).toHaveValue("");
-    expect(screen.getByRole("combobox", { name: "Product" })).toHaveTextContent(
-      "Product A",
+    expect(screen.getByRole("combobox", { name: "Product" })).toBeDisabled();
+    expect(searchTranslations).not.toHaveBeenCalled();
+    await act(async () =>
+      resolveOptions({
+        data: {
+          products: [{ id: "product-a", name: "Product A" }],
+          languages: [{ code: "it", label: "Italian" }],
+        },
+        error: undefined,
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("combobox", { name: "Product" }),
+      ).toHaveTextContent("Product A"),
     );
     expect(
       screen.getByRole("combobox", { name: "Language" }),
