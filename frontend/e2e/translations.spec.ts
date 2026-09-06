@@ -329,6 +329,109 @@ test("UI4 inventory covers 50 instances, eight categories and three open axes", 
   ]).toHaveLength(3);
 });
 
+for (const width of [320, 375, 768, 1024, 1440]) {
+  test(`UI4 visual contract: typography, surfaces, targets, navigation and reduced motion at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await setup(page);
+    await page.goto("/translations");
+    await expect(page.getByRole("link", { name: /Open details/ }).first()).toBeVisible();
+    const label = page.getByText("Search keys and translations", { exact: true });
+    await expect.soft(label).toHaveCSS("font-size", "12px");
+    await expect.soft(label).toHaveCSS("font-weight", "600");
+    await expect.soft(label).toHaveCSS("line-height", "15.6px");
+    await expect.soft(page.locator("main")).toHaveCSS("padding-left", width < 768 ? "24px" : "32px");
+    await expect.soft(page.locator("#translation-query").locator("..")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    const product = page.getByRole("combobox", { name: "Product", exact: true });
+    await expect.soft(product).toHaveCSS("font-size", "14px");
+    await product.click();
+    const option = page.getByRole("option").first();
+    await expect.soft(option).toHaveCSS("background-color", "rgb(248, 250, 252)");
+    await expect.soft(option).toHaveCSS("color", "rgb(17, 24, 39)");
+    await expect.soft(option).toHaveCSS("font-size", "14px");
+    await expect.soft(page.locator('[data-slot="select-content"]')).toHaveCSS("animation-name", "none");
+    await page.keyboard.press("Escape");
+    if (width < 768) await page.getByRole("button", { name: "Open navigation" }).click();
+    const current = page.getByRole("link", { name: "Translations", exact: true });
+    await expect.soft(current).toHaveCSS("background-color", "rgb(248, 250, 252)");
+    await expect.soft(current).toHaveCSS("font-weight", "600");
+    if (width < 768) await page.keyboard.press("Escape");
+    await page.getByRole("link", { name: /Open details/ }).first().click();
+    await expect.soft(page.getByRole("alert").filter({ hasText: "cannot be approved" })).toHaveCSS("color", "rgb(180, 83, 9)");
+    await page.getByRole("button", { name: "Add language override" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect.soft(dialog).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect.soft(dialog).toHaveCSS("padding", "24px");
+    await expect.soft(dialog).toHaveCSS("gap", "16px");
+    await expect.soft(dialog).toHaveCSS("animation-name", "none");
+    await expect.soft(page.getByRole("heading", { name: "Set maximum length" })).toHaveCSS("font-size", "20px");
+    await expect.soft(page.locator('[data-slot="dialog-description"]')).toHaveCSS("font-size", "14px");
+    expect.soft((await page.getByRole("spinbutton").boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await page.route("**/api/v1/translations/group-0", r => json(r, {}, 503));
+    await page.getByRole("spinbutton").fill("9");
+    await page.getByRole("button", { name: "Save max length" }).click();
+    const title = dialog.locator('[data-slot="alert-title"]');
+    await expect(title).toContainText("Maximum length saved; current details could not be loaded");
+    await expect.soft(title).toHaveCSS("-webkit-line-clamp", "none");
+    expect.soft(await title.evaluate(e => e.scrollHeight <= e.clientHeight)).toBe(true);
+    expect.soft(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
+
+test("UI4 E-01: detail heading survives loading and error; only explicit current retry focuses its alert", async ({ page }) => {
+  await setup(page);
+  let release!: () => void;
+  await page.route("**/api/v1/translations/group-0", async r => {
+    await new Promise<void>(resolve => { release = resolve; });
+    await json(r, {}, 503);
+  });
+  await page.goto("/translations/group-0");
+  await expect.soft(page.getByRole("heading", { name: "Translation details", exact: true })).toHaveCount(1);
+  release();
+  await expect(page.getByRole("button", { name: "Retry details" })).toBeVisible();
+  await expect.soft(page.getByRole("alert")).not.toBeFocused();
+  await page.getByRole("button", { name: "Retry details" }).click();
+  await expect.poll(() => page.getByText("Loading translation details").count()).toBe(1);
+  release();
+  await expect.soft(page.getByRole("heading", { name: "Translation details", exact: true })).toHaveCount(1);
+  await expect.soft(page.getByRole("alert")).toBeFocused();
+});
+
+test("UI4 E-02 C-02 E-03: query persists through options loading/failure with neutral motionless skeletons", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await setup(page);
+  await page.goto("/translations");
+  const query = page.getByRole("textbox", { name: "Search keys and translations" });
+  await query.fill("retained query");
+  let release!: () => void;
+  await page.route("**/api/v1/translations/options**", async r => {
+    await new Promise<void>(resolve => { release = resolve; });
+    await json(r, {}, 503);
+  });
+  await page.getByRole("combobox", { name: "Product", exact: true }).click();
+  await page.getByRole("option", { name: "Mobile product", exact: true }).click();
+  await expect.soft(query).toHaveValue("retained query");
+  await expect.soft(page.locator('[data-slot="skeleton"]').first()).toHaveCSS("background-color", "rgb(229, 231, 235)");
+  await expect.soft(page.locator('[data-slot="skeleton"]').first()).toHaveCSS("animation-name", "none");
+  release();
+  const retry = page.getByRole("button", { name: "Retry search" });
+  await expect(retry).toBeVisible();
+  await expect.soft(query).toHaveValue("retained query");
+  expect.soft((await retry.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+});
+
+test("UI4 CW-01: filtered-empty criteria use visible filter labels", async ({ page }) => {
+  await setup(page);
+  await page.route("**/api/v1/translations?**", r => json(r, { items: [], next_cursor: null }));
+  await page.goto("/translations");
+  for (const [label, choice] of [["Approval state", "Approved"], ["Length status", "No max length"], ["Deleted status", "Active and deleted"]]) {
+    await page.getByRole("combobox", { name: label, exact: true }).click();
+    await page.getByRole("option", { name: choice, exact: true }).click();
+  }
+  await expect(page.getByText(/Active criteria:/)).toContainText("Approval state: Approved; Length status: No max length; Deleted status: Active and deleted");
+});
+
 for (const viewport of [
   { name: "desktop", width: 1440, height: 900 },
   { name: "mobile", width: 320, height: 800 },

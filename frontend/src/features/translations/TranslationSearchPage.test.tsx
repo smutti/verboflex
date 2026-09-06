@@ -190,6 +190,7 @@ describe("TranslationSearchPage", () => {
     await flush();
     expect(searchTranslations).not.toHaveBeenCalled();
     expect(screen.getByRole("combobox", { name: "Product" })).toBeDisabled();
+    expect(screen.getByLabelText("Search keys and translations")).toHaveValue("");
     await act(async () => pending.resolve({ data: options } as never));
     await flush();
     expect(

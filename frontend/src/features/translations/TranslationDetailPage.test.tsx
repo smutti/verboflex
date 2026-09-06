@@ -378,6 +378,7 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
     );
     mount();
     expect(screen.getByText("Loading translation details")).toBeVisible();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Translation details");
     await userEvent.click(
       await screen.findByRole("button", { name: "Retry details" }),
     );
@@ -389,6 +390,15 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
     expect(
       vi.mocked(getTranslationGroup).mock.calls[0][0].signal?.aborted,
     ).toBe(true);
+  });
+  it("focuses only the current explicit retry failure while retaining the route heading", async () => {
+    vi.mocked(getTranslationGroup).mockRejectedValue(new Error("private"));
+    mount();
+    const firstAlert = await screen.findByRole("alert");
+    expect(firstAlert).not.toHaveFocus();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Translation details");
+    await userEvent.click(screen.getByRole("button", { name: "Retry details" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
   });
   it("copies only a user-requested complete commit and announces bounded success", async () => {
     const user = userEvent.setup();
