@@ -108,6 +108,128 @@ def _translation_imports() -> Any:
     return importlib.import_module("verboflex.services.translation_imports")
 
 
+def test_restore_deleted_identity_keeps_uuid_and_returns_draft(activation_session_factory):
+    factory = activation_session_factory
+    identity, repository = _seed_running_direct_import(factory)
+    _reconcile_staged_result(
+        factory, identity=identity, repository_id=repository, result=_json_result()
+    )
+    with factory.begin() as session:
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        value = _value_for(session, scope_id=scope.id, raw_key="welcome", language="it")
+        value.review_state = "approved"
+        value_id, key_id = value.id, value.translation_key_id
+    removed = _start_refresh_execution(factory, identity)
+    _reconcile_staged_result(
+        factory,
+        identity=removed,
+        repository_id=repository,
+        result=_json_result(raw_key="replacement"),
+        commit_hash="b" * 40,
+    )
+    restored = _start_refresh_execution(factory, removed)
+    _reconcile_staged_result(
+        factory,
+        identity=restored,
+        repository_id=repository,
+        result=_json_result(),
+        commit_hash="c" * 40,
+    )
+    with factory() as session:
+        value = session.get_one(TranslationValue, value_id)
+        key = session.get_one(TranslationKey, key_id)
+        assert value.review_state == "draft"
+        assert not value.is_deleted and value.deleted_at is None
+        assert not key.is_deleted and key.deleted_at is None
+        assert len(value.revisions) == 3
+
+
+def test_stage_provenance_mismatch_rolls_back_every_created_row(activation_session_factory):
+    factory = activation_session_factory
+    identity, repository = _seed_running_direct_import(factory)
+    service = _translation_imports()
+    with pytest.raises(service.TranslationImportRejected, match="source reference"):
+        service.stage_translation_parse(
+            factory,
+            identity=identity,
+            references=(_reference(repository, path="different.json"),),
+            result=_direct_result(),
+        )
+    with factory() as session:
+        assert (
+            session.scalar(
+                select(ImportSourceReference).where(
+                    ImportSourceReference.execution_id == identity.execution_id
+                )
+            )
+            is None
+        )
+        assert (
+            session.scalar(
+                select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+            )
+            is None
+        )
+
+
+def test_reconciliation_rejects_mutated_manifest_without_changes(activation_session_factory):
+    factory = activation_session_factory
+    identity, repository = _seed_running_direct_import(factory)
+    manifest, _ = _stage_direct_manifest(
+        factory, identity=identity, repository_id=repository, result=_direct_result()
+    )
+    service = _translation_imports()
+    with factory.begin() as session:
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        wrong_digest = ("a" if manifest.digest[0] != "a" else "b") + manifest.digest[1:]
+        with pytest.raises(service.TranslationImportRejected, match="digest mismatch"):
+            service.reconcile_canonical_translations(
+                session, identity=identity, scope=scope, manifest_digest=wrong_digest
+            )
+        assert (
+            session.scalar(select(TranslationKey).where(TranslationKey.scope_id == scope.id))
+            is None
+        )
+        assert scope.active_execution_id is None
+
+
+def test_external_target_change_resets_rejected_to_draft_with_history(activation_session_factory):
+    factory = activation_session_factory
+    identity, repository = _seed_running_direct_import(factory)
+    _reconcile_staged_result(
+        factory, identity=identity, repository_id=repository, result=_json_result()
+    )
+    with factory.begin() as session:
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        value = _value_for(session, scope_id=scope.id, raw_key="welcome", language="it")
+        value.review_state = "rejected"
+        value_id, key_id = value.id, value.translation_key_id
+        prior_revision_id = value.revisions[0].id
+    refresh = _start_refresh_execution(factory, identity)
+    _reconcile_staged_result(
+        factory,
+        identity=refresh,
+        repository_id=repository,
+        result=_json_result(translated="Nuovo"),
+        commit_hash="b" * 40,
+    )
+    with factory() as session:
+        value = session.get_one(TranslationValue, value_id)
+        assert value.translation_key_id == key_id
+        assert value.translated_text == "Nuovo" and value.review_state == "draft"
+        assert len(value.revisions) == 2
+        assert any(
+            revision.id == prior_revision_id and revision.translated_text == "Ciao"
+            for revision in value.revisions
+        )
+
+
 def _seed_running_direct_import(
     factory: sessionmaker[Session],
 ) -> tuple[import_jobs.ImportExecutionIdentity, UUID]:
