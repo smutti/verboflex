@@ -839,6 +839,7 @@ describe("authenticated application shell", () => {
       expect(translations).not.toHaveAttribute("aria-current");
       expect(translations).toHaveClass(
         "focus-visible:ring-[3px]",
+        "min-h-[44px]",
         "min-w-0",
         "max-w-full",
         "whitespace-normal",
