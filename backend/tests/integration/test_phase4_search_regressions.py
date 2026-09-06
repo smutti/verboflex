@@ -1,5 +1,8 @@
 """Independent-review regressions over real PostgreSQL search authority."""
 
+import base64
+import hmac
+import json
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -12,6 +15,7 @@ from tests.integration.test_translation_constraints import (
     _seed_constraint_dataset,
 )
 from tests.integration.test_translation_search import (
+    CURSOR_SECRET,
     _add_group,
     _search,
     _seed_dataset,
@@ -32,6 +36,40 @@ from verboflex.services.translation_search import (
 )
 
 __all__ = ["clean_search_database", "search_session_factory", "migrated_database"]
+
+
+def test_signed_cursor_must_resolve_its_seek_anchor_in_the_authorized_dataset(
+    search_session_factory,
+):
+    factory = search_session_factory
+    product_id, scope_id = _seed_dataset(factory)
+    ids = [
+        _add_group(
+            factory,
+            product_id=product_id,
+            scope_id=scope_id,
+            raw_key=f"anchor-{index:03d}",
+            language="en",
+            values=({},),
+        )
+        for index in range(51)
+    ]
+    actor = uuid4()
+    first = _search(factory, principal_id=actor)
+    assert first.next_cursor is not None
+    assert [
+        item.id for item in _search(factory, principal_id=actor, cursor=first.next_cursor).items
+    ] == ids[50:]
+    body_token = first.next_cursor.split(".")[0]
+    payload = json.loads(base64.urlsafe_b64decode(body_token + "=" * (-len(body_token) % 4)))
+    payload["last"][2] = str(uuid4())
+    body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    signature = hmac.digest(CURSOR_SECRET.encode(), body, "sha256")
+    cursor = ".".join(
+        base64.urlsafe_b64encode(part).decode().rstrip("=") for part in (body, signature)
+    )
+    with pytest.raises(InvalidTranslationCursor, match="invalid translation cursor"):
+        _search(factory, principal_id=actor, cursor=cursor)
 
 
 def test_separate_repository_detail_projects_base_default_before_and_after_override_removal(

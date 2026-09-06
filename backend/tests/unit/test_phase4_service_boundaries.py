@@ -49,6 +49,8 @@ def signed_cursor(payload):
         "last-type",
         "last-count",
         "rank",
+        "language",
+        "uuid",
         "noncanonical",
         "empty",
         "oversized",
@@ -84,6 +86,10 @@ def test_signed_cursor_still_requires_exact_closed_authority(change):
         payload["last"] = []
     elif change == "rank":
         payload["last"][0] = 4
+    elif change == "language":
+        payload["last"][1] = ""
+    elif change == "uuid":
+        payload["last"][2] = "00000000-0000-0000-0000-0000000000AB"
     cursor = signed_cursor(payload)
     if change == "noncanonical":
         cursor = cursor.replace(".", "=.")
