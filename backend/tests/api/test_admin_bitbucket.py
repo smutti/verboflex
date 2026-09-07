@@ -342,30 +342,33 @@ def test_admin_client_credentials_connect_reconnect_status_and_revoke(
     assert admin_id
 
 
-def test_client_credentials_status_uses_exact_expiry_boundary(
+def test_client_credentials_status_renews_automatically_at_skew_boundary(
     bitbucket_api_session_factory: sessionmaker[Session],
 ) -> None:
-    """Public status changes to recovery state exactly at provider expiry."""
+    """Reading status renews expiring client credentials without admin action."""
     _admin_id, admin_token = create_authority(
         bitbucket_api_session_factory,
         email="expiry-admin@example.com",
         roles=("admin",),
     )
     clock = MutableClock()
-    service = BitbucketOAuthService(
-        settings=oauth_settings(), token_exchange=FakeTokenExchange(), clock=clock
-    )
+    exchange = FakeTokenExchange()
+    service = BitbucketOAuthService(settings=oauth_settings(), token_exchange=exchange, clock=clock)
     configure_dependencies(bitbucket_api_session_factory, service)
     asyncio.run(
         bitbucket_request("POST", path=f"{BITBUCKET_PATH}/connect", access_token=admin_token)
     )
 
-    clock.current += timedelta(seconds=3599)
+    clock.current += timedelta(seconds=3539)
     before = asyncio.run(bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token))
     assert_bounded_status(before, "Connected")
     clock.current += timedelta(seconds=1)
-    expired = asyncio.run(bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token))
-    assert_bounded_status(expired, "Reauthorization required")
+    renewed = asyncio.run(bitbucket_request("GET", path=BITBUCKET_PATH, access_token=admin_token))
+    renewed_body = assert_bounded_status(renewed, "Connected")
+    assert renewed_body["expires_at"] == (clock.current + timedelta(hours=1)).isoformat().replace(
+        "+00:00", "Z"
+    )
+    assert len(exchange.calls) == 2
 
 
 def test_legacy_authority_projects_reauthorization_required_capability(

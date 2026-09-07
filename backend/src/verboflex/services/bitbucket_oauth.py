@@ -302,41 +302,84 @@ class BitbucketOAuthService:
             raise ValueError(INVALID_KEYRING_MESSAGE) from error
 
     def public_status(self, session: Session) -> BitbucketConnectionPublicStatus:
-        """Read one bounded status with provider expiry as authoritative."""
+        """Renew expiring authority and return one bounded public status."""
         evaluated_at = self._now()
         with session.begin():
             connection = session.get(BitbucketConnection, 1)
-            if connection is None:
-                return self._status("unavailable", None, evaluated_at=evaluated_at)
-            has_access = connection.access_token_ciphertext is not None
-            has_refresh = connection.refresh_token_ciphertext is not None
-            if has_refresh and not has_access:
-                state: Literal[
-                    "disconnected",
-                    "connected",
-                    "reauthorization_required",
-                    "unavailable",
-                ] = "unavailable"
-            elif connection.revoked_at is not None:
-                state = "disconnected"
-            elif has_refresh or (
-                has_access and connection.scope_profile == LEGACY_REPOSITORY_SCOPE
-            ):
-                state = "reauthorization_required"
-            elif has_access and connection.scope_profile != PULLREQUEST_WRITE_SCOPE:
-                state = "unavailable"
-            elif has_access and (
-                connection.provider_expires_at is None
-                or connection.provider_expires_at <= evaluated_at
-            ):
-                state = "reauthorization_required"
-            elif has_access:
-                state = "connected"
-            elif connection.connected_at is not None or connection.provider_expires_at is not None:
-                state = "reauthorization_required"
-            else:
-                state = "disconnected"
-            return self._status(state, connection, evaluated_at=evaluated_at)
+            renewal_due = self._renewal_is_due(connection, evaluated_at=evaluated_at)
+            if not renewal_due:
+                return self._status(
+                    self._public_state(connection, evaluated_at=evaluated_at),
+                    connection,
+                    evaluated_at=evaluated_at,
+                )
+
+        try:
+            self._renew_access_token_if_needed(session)
+        except OAuthConnectionUnavailable:
+            evaluated_at = self._now()
+            with session.begin():
+                connection = session.get(BitbucketConnection, 1)
+                return self._status("unavailable", connection, evaluated_at=evaluated_at)
+
+        evaluated_at = self._now()
+        with session.begin():
+            connection = session.get(BitbucketConnection, 1)
+            return self._status(
+                self._public_state(connection, evaluated_at=evaluated_at),
+                connection,
+                evaluated_at=evaluated_at,
+            )
+
+    @staticmethod
+    def _renewal_is_due(
+        connection: BitbucketConnection | None,
+        *,
+        evaluated_at: datetime,
+    ) -> bool:
+        return bool(
+            connection is not None
+            and connection.revoked_at is None
+            and connection.scope_profile == PULLREQUEST_WRITE_SCOPE
+            and connection.access_token_ciphertext is not None
+            and connection.refresh_token_ciphertext is None
+            and connection.provider_expires_at is not None
+            and connection.provider_expires_at
+            <= evaluated_at + timedelta(seconds=TOKEN_RENEWAL_SKEW_SECONDS)
+        )
+
+    @staticmethod
+    def _public_state(
+        connection: BitbucketConnection | None,
+        *,
+        evaluated_at: datetime,
+    ) -> Literal[
+        "disconnected",
+        "connected",
+        "reauthorization_required",
+        "unavailable",
+    ]:
+        if connection is None:
+            return "unavailable"
+        has_access = connection.access_token_ciphertext is not None
+        has_refresh = connection.refresh_token_ciphertext is not None
+        if has_refresh and not has_access:
+            return "unavailable"
+        if connection.revoked_at is not None:
+            return "disconnected"
+        if has_refresh or (has_access and connection.scope_profile == LEGACY_REPOSITORY_SCOPE):
+            return "reauthorization_required"
+        if has_access and connection.scope_profile != PULLREQUEST_WRITE_SCOPE:
+            return "unavailable"
+        if has_access and (
+            connection.provider_expires_at is None or connection.provider_expires_at <= evaluated_at
+        ):
+            return "reauthorization_required"
+        if has_access:
+            return "connected"
+        if connection.connected_at is not None or connection.provider_expires_at is not None:
+            return "reauthorization_required"
+        return "disconnected"
 
     @staticmethod
     def _status(
@@ -423,7 +466,6 @@ class BitbucketOAuthService:
                 raise OAuthGenerationRejected(GENERATION_REJECTED_MESSAGE)
 
     def _renew_access_token_if_needed(self, session: Session) -> None:
-        renewal_error: OAuthConnectionUnavailable | None = None
         renewed_at = self._now()
         with session.begin():
             connection = self._lock_connection(session)
@@ -433,22 +475,15 @@ class BitbucketOAuthService:
                 seconds=TOKEN_RENEWAL_SKEW_SECONDS
             ):
                 return
-            try:
-                access_token, expires_in = self._exchange_and_validate()
-            except OAuthConnectionUnavailable as error:
-                self._invalidate_expired_generation(session, connection)
-                renewal_error = error
-            else:
-                self._persist_access_only(
-                    session,
-                    connection,
-                    access_token=access_token,
-                    expires_in=expires_in,
-                    acquired_at=renewed_at,
-                    replace_connected_at=False,
-                )
-        if renewal_error is not None:
-            raise renewal_error
+            access_token, expires_in = self._exchange_and_validate()
+            self._persist_access_only(
+                session,
+                connection,
+                access_token=access_token,
+                expires_in=expires_in,
+                acquired_at=renewed_at,
+                replace_connected_at=False,
+            )
 
     def _exchange_and_validate(self) -> tuple[str, int]:
         try:
@@ -489,17 +524,6 @@ class BitbucketOAuthService:
             state="connected",
             generation=connection.generation,
         )
-
-    @staticmethod
-    def _invalidate_expired_generation(
-        session: Session,
-        connection: BitbucketConnection,
-    ) -> None:
-        connection.generation += 1
-        connection.access_token_ciphertext = None
-        connection.refresh_token_ciphertext = None
-        connection.revoked_at = None
-        session.flush()
 
     def revoke(
         self,

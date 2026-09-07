@@ -424,9 +424,6 @@ def test_client_credentials_expiry_renews_once_for_concurrent_leases(
         service.acquire_client_credentials(session, actor_id=ADMIN_ID)
 
     clock.current = CLIENT_CREDENTIALS_NOW + timedelta(hours=1)
-    with oauth_session_factory() as session:
-        assert service.public_status(session).state == "reauthorization_required"
-
     exchange.started = Event()
     exchange.release = Event()
 
@@ -448,13 +445,14 @@ def test_client_credentials_expiry_renews_once_for_concurrent_leases(
         assert service.public_status(session).state == "connected"
 
 
-def test_client_credentials_renewal_failure_invalidates_expired_generation(
+def test_client_credentials_renewal_failure_is_transient_and_retries_automatically(
     oauth_session_factory: sessionmaker[Session],
 ) -> None:
-    """Failed or incomplete renewal cannot lease stale expired authority."""
+    """Renewal failures preserve retry authority but never lease an expired token."""
     from verboflex.services.bitbucket_oauth import (
         BitbucketOAuthService,
         OAuthConnectionUnavailable,
+        OAuthGenerationRejected,
     )
 
     clock = MutableClock(CLIENT_CREDENTIALS_NOW)
@@ -475,7 +473,7 @@ def test_client_credentials_renewal_failure_invalidates_expired_generation(
         service.acquire_repository_read_lease(session)
     with oauth_session_factory() as session:
         failed_status = service.public_status(session)
-        assert failed_status.state == "reauthorization_required"
+        assert failed_status.state == "unavailable"
         assert set(failed_status.__dataclass_fields__) == {
             "state",
             "connected_at",
@@ -483,59 +481,71 @@ def test_client_credentials_renewal_failure_invalidates_expired_generation(
             "revoked_at",
             "capability_profile",
         }
-        assert failed_status.capability_profile.source_read == "reauthorization_required"
-        assert failed_status.capability_profile.source_write == "reauthorization_required"
-        assert failed_status.capability_profile.pull_request == "reauthorization_required"
+        assert failed_status.capability_profile.source_read == "unavailable"
+        assert failed_status.capability_profile.source_write == "unavailable"
+        assert failed_status.capability_profile.pull_request == "unavailable"
         with pytest.raises(OAuthConnectionUnavailable):
             service.require_current_repository_read_lease(session, stale_lease)
 
     snapshot = _connection_snapshot(oauth_session_factory)
-    assert snapshot[0] == 2
-    assert snapshot[1:3] == (None, None)
+    assert snapshot[0] == 1
+    assert snapshot[1] is not None
+    assert snapshot[2] is None
 
     exchange.error = None
-    exchange.scope = "pullrequest:write"
     with oauth_session_factory() as session:
-        service.acquire_client_credentials(session, actor_id=ADMIN_ID)
+        assert service.public_status(session).state == "connected"
+        with pytest.raises(OAuthGenerationRejected):
+            service.require_current_repository_read_lease(session, stale_lease)
+
+    snapshot = _connection_snapshot(oauth_session_factory)
+    assert snapshot[0] == 2
+    assert snapshot[1] is not None
+    assert snapshot[2] is None
+
     clock.current += timedelta(hours=1)
     exchange.scope = "pullrequest:write repository:admin"
-    with oauth_session_factory() as session, pytest.raises(OAuthConnectionUnavailable):
-        service.acquire_repository_read_lease(session)
     with oauth_session_factory() as session:
-        assert service.public_status(session).state == "reauthorization_required"
+        assert service.public_status(session).state == "unavailable"
     snapshot = _connection_snapshot(oauth_session_factory)
-    assert snapshot[0] == 4
-    assert snapshot[1:3] == (None, None)
+    assert snapshot[0] == 2
+    assert snapshot[1] is not None
+    assert snapshot[2] is None
+
+    exchange.scope = "pullrequest:write"
+    with oauth_session_factory() as session:
+        assert service.public_status(session).state == "connected"
+    assert _connection_snapshot(oauth_session_factory)[0] == 3
 
 
 def test_client_credentials_expiry_boundary_is_authoritative(
     oauth_session_factory: sessionmaker[Session],
 ) -> None:
-    """The credential is connected just before expiry and rejected at expiry."""
+    """Status renews at the skew boundary and rejects the predecessor lease."""
     from verboflex.services.bitbucket_oauth import (
         BitbucketOAuthService,
-        OAuthConnectionUnavailable,
+        OAuthGenerationRejected,
     )
 
     clock = MutableClock(CLIENT_CREDENTIALS_NOW)
+    exchange = FakeTokenExchange()
     service = BitbucketOAuthService(
         settings=oauth_settings(),
-        token_exchange=FakeTokenExchange(),
+        token_exchange=exchange,
         clock=clock,
     )
     with oauth_session_factory() as session:
         service.acquire_client_credentials(session)
-    clock.current += timedelta(seconds=3599)
+        stale_lease = service.acquire_repository_read_lease(session)
+    clock.current += timedelta(seconds=3539)
     with oauth_session_factory() as session:
         assert service.public_status(session).state == "connected"
     clock.current += timedelta(seconds=1)
     with oauth_session_factory() as session:
-        assert service.public_status(session).state == "reauthorization_required"
-        with pytest.raises(OAuthConnectionUnavailable):
-            service.require_current_repository_read_lease(
-                session,
-                type("Lease", (), {"generation": 1})(),
-            )
+        assert service.public_status(session).state == "connected"
+        with pytest.raises(OAuthGenerationRejected):
+            service.require_current_repository_read_lease(session, stale_lease)
+    assert len(exchange.client_credentials_calls) == 2
 
 
 def test_client_credentials_accepts_maximum_datetime_safe_token_lifetime(
