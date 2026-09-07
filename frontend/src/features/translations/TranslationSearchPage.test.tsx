@@ -126,9 +126,13 @@ function Detail() {
     </>
   );
 }
-function tree(user = principal, token = "token") {
+function tree(
+  user = principal,
+  token = "token",
+  initialEntry = "/translations",
+) {
   return (
-    <MemoryRouter initialEntries={["/translations"]}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route
           path="/translations"
@@ -185,6 +189,23 @@ afterEach(() => {
 });
 
 describe("TranslationSearchPage", () => {
+  it("automatically applies a valid product filter from the imported-strings URL", async () => {
+    preference("beta", null);
+
+    render(tree(principal, "token", "/translations?product_id=alpha"));
+    await flush();
+
+    expect(screen.getByRole("combobox", { name: "Product" })).toHaveTextContent(
+      "Alpha",
+    );
+    expect(vi.mocked(listTranslationOptions)).toHaveBeenCalledWith(
+      expect.objectContaining({ query: { product_id: "alpha" } }),
+    );
+    expect(
+      vi.mocked(searchTranslations).mock.lastCall?.[0]?.query,
+    ).toMatchObject({ product_id: "alpha" });
+  });
+
   it("clears pending options criteria and aborts the superseded option request", async () => {
     const pending = deferred<never>();
     vi.mocked(listTranslationOptions).mockReturnValueOnce(pending.promise);

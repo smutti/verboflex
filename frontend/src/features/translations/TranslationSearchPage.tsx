@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useSearchParams } from "react-router-dom";
 import {
   listTranslationOptions,
   type TranslationOptionsResponse,
@@ -369,22 +369,35 @@ function ResolvedSearch({
   );
 }
 
-function SearchOptions({ context }: { context: TranslationsWorkspaceContext }) {
+function SearchOptions({
+  context,
+  requestedProductId,
+}: {
+  context: TranslationsWorkspaceContext;
+  requestedProductId: string | null;
+}) {
   const [pendingQuery, setPendingQuery] = useState(
     context.snapshot?.query ?? "",
   );
   const queryRef = useRef(pendingQuery);
   const retryAction = useRef(false);
   const optionsAlert = useRef<HTMLDivElement>(null);
-  const [seed, setSeed] = useState<Seed | null>(() =>
-    context.snapshot
+  const [seed, setSeed] = useState<Seed | null>(() => {
+    if (requestedProductId !== null) {
+      return {
+        query: "",
+        filters: { ...DEFAULT_FILTERS, productId: requestedProductId },
+        snapshot: null,
+      };
+    }
+    return context.snapshot
       ? {
           query: context.snapshot.query,
           filters: context.snapshot.filters,
           snapshot: context.snapshot,
         }
-      : null,
-  );
+      : null;
+  });
   const [request, setRequest] = useState(0);
   const [load, setLoad] = useState<{
     request: number;
@@ -546,5 +559,13 @@ function SearchOptions({ context }: { context: TranslationsWorkspaceContext }) {
 
 export function TranslationSearchPage() {
   const context = useOutletContext<TranslationsWorkspaceContext>();
-  return <SearchOptions key={context.accessToken} context={context} />;
+  const [searchParams] = useSearchParams();
+  const requestedProductId = searchParams.get("product_id")?.trim() || null;
+  return (
+    <SearchOptions
+      key={`${context.accessToken}:${requestedProductId ?? ""}`}
+      context={context}
+      requestedProductId={requestedProductId}
+    />
+  );
 }

@@ -292,6 +292,116 @@ describe("published mapping import collection", () => {
     });
   }
 
+  it("shows truthful automatic progress from the server-owned import state", async () => {
+    listImportsMock.mockResolvedValue(
+      ok({
+        items: [
+          publishedImport("queued", {
+            action: "import_in_progress",
+            execution_number: 1,
+            id: "import-queued",
+            state: "queued",
+          }),
+          publishedImport("running", {
+            action: "import_in_progress",
+            execution_number: 2,
+            id: "import-running",
+            state: "running",
+          }),
+          publishedImport("current", {
+            action: "refresh_import",
+            active_baseline: baseline({
+              commit: "c".repeat(40),
+              repositoryId: "repository-1",
+              role: "direct",
+            }),
+            dataset_status: "active",
+            execution_number: 3,
+            id: "import-current",
+            state: "current",
+          }),
+        ],
+        next_cursor: null,
+      }),
+    );
+
+    renderImports();
+
+    const queued = await screen.findByRole("progressbar", {
+      name: "Import progress for mapping queued",
+    });
+    expect(queued).toHaveAttribute("aria-valuenow", "1");
+    expect(queued).toHaveAttribute(
+      "aria-valuetext",
+      "Step 1 of 3: Waiting for the import worker",
+    );
+    const running = screen.getByRole("progressbar", {
+      name: "Import progress for mapping running",
+    });
+    expect(running).toHaveAttribute("aria-valuenow", "2");
+    expect(running).toHaveAttribute(
+      "aria-valuetext",
+      "Step 2 of 3: Reading and validating repository files",
+    );
+    expect(
+      screen.getByRole("progressbar", {
+        name: "Import progress for mapping current",
+      }),
+    ).toHaveAttribute("aria-valuenow", "3");
+  });
+
+  it("automatically consolidates warnings and links to imported strings for this product", async () => {
+    listImportsMock.mockResolvedValue(
+      ok({
+        items: [
+          parserFailure({
+            duplicate_report_summary: {
+              complete: true,
+              group_count: 7,
+              repeated_occurrences: 11,
+            },
+            parser_issue_remaining_count: 4,
+            parser_issues: [parserIssue("duplicate_key")],
+          }),
+          publishedImport("ready", {
+            action: "refresh_import",
+            active_baseline: baseline({
+              commit: "d".repeat(40),
+              repositoryId: "repository-1",
+              role: "direct",
+            }),
+            dataset_status: "active",
+            execution_number: 1,
+            id: "import-ready",
+            state: "current",
+          }),
+        ],
+        next_cursor: null,
+      }),
+    );
+
+    renderImports();
+
+    await userEvent.click(
+      await screen.findByRole("tab", { name: "Warnings (1)" }),
+    );
+    const warnings = screen.getByRole("tabpanel", { name: "Warnings (1)" });
+    expect(warnings).toHaveTextContent(
+      "7 duplicate key groups · 11 repeated occurrences",
+    );
+    expect(warnings).toHaveTextContent("5 parser warnings");
+    expect(
+      within(warnings).getByRole("button", { name: "View duplicate keys" }),
+    ).toBeEnabled();
+
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Imported strings" }),
+    );
+    expect(
+      screen.getByRole("link", { name: "View imported strings" }),
+    ).toHaveAttribute("href", "/translations?product_id=product-1");
+  });
+
   it.each([false, true])(
     "renders the exact atomic parser failure with retained dataset=%s",
     async (retained) => {
@@ -571,8 +681,18 @@ describe("published mapping import collection", () => {
     expect(row).toHaveTextContent("a".repeat(12));
     await act(async () => vi.advanceTimersByTimeAsync(2000));
     expect(row).toHaveTextContent("Running");
+    expect(
+      screen.getByRole("progressbar", {
+        name: "Import progress for mapping mapping-1",
+      }),
+    ).toHaveAttribute("aria-valuenow", "2");
     await act(async () => vi.advanceTimersByTimeAsync(2000));
     expect(row).toHaveTextContent("May be stale");
+    expect(
+      screen.getByRole("progressbar", {
+        name: "Import progress for mapping mapping-1",
+      }),
+    ).toHaveAttribute("aria-valuenow", "3");
     expect(row).toHaveTextContent("a".repeat(12));
     expect(within(row).getByRole("alert")).toHaveFocus();
     expect(

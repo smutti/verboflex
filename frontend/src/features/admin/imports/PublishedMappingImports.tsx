@@ -27,6 +27,12 @@ import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Skeleton } from "../../../components/ui/skeleton";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../../../components/ui/tabs";
+import {
   Table,
   TableBody,
   TableCell,
@@ -115,6 +121,89 @@ function hasParserFailure(item: AdminPublishedMappingImportResponse) {
 
 function isImportActive(item: AdminPublishedMappingImportResponse) {
   return item.state === "queued" || item.state === "running";
+}
+
+function importProgress(item: AdminPublishedMappingImportResponse) {
+  switch (item.state) {
+    case "not_imported":
+      return { step: 0, label: "Ready to start" };
+    case "queued":
+      return { step: 1, label: "Step 1 of 3: Waiting for the import worker" };
+    case "running":
+      return {
+        step: 2,
+        label: "Step 2 of 3: Reading and validating repository files",
+      };
+    case "current":
+      return { step: 3, label: "Step 3 of 3: Imported strings are available" };
+    case "review_required":
+      return { step: 3, label: "Step 3 of 3: Source changes need review" };
+    case "import_failed":
+    case "may_be_stale":
+      return { step: 3, label: "Step 3 of 3: Completed with warnings" };
+  }
+}
+
+function parserWarningCount(item: AdminPublishedMappingImportResponse) {
+  return (
+    (item.parser_issues?.length ?? 0) + (item.parser_issue_remaining_count ?? 0)
+  );
+}
+
+function hasImportWarnings(item: AdminPublishedMappingImportResponse) {
+  return (
+    parserWarningCount(item) > 0 ||
+    (item.duplicate_report_summary?.group_count ?? 0) > 0 ||
+    item.state === "import_failed" ||
+    item.state === "may_be_stale" ||
+    item.state === "review_required"
+  );
+}
+
+function ImportProgress({
+  item,
+  repositories,
+}: {
+  item: AdminPublishedMappingImportResponse;
+  repositories: readonly AdminRepositoryResponse[];
+}) {
+  const progress = importProgress(item);
+  const primarySide = item.repository_sides[0];
+  return (
+    <div className="grid min-w-0 gap-2 rounded-lg border bg-card p-4">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <div className="grid min-w-0 gap-1">
+          <span className="font-semibold [overflow-wrap:anywhere]">
+            {primarySide
+              ? repositoryLabel(primarySide.repository_id, repositories)
+              : "Published mapping"}
+          </span>
+          {primarySide ? (
+            <span className="font-mono text-sm [overflow-wrap:anywhere]">
+              {primarySide.source_branch}
+            </span>
+          ) : null}
+        </div>
+        <Badge variant="outline">{STATUS_LABELS[item.state]}</Badge>
+      </div>
+      <div
+        role="progressbar"
+        aria-label={`Import progress for mapping ${item.mapping_id}`}
+        aria-valuemin={0}
+        aria-valuemax={3}
+        aria-valuenow={progress.step}
+        aria-valuetext={progress.label}
+        className="h-2 overflow-hidden rounded-full bg-muted"
+      >
+        <div
+          aria-hidden="true"
+          className="h-full rounded-full bg-primary transition-[width] duration-300 motion-reduce:transition-none"
+          style={{ width: `${(progress.step / 3) * 100}%` }}
+        />
+      </div>
+      <p className="text-sm text-muted-foreground">{progress.label}</p>
+    </div>
+  );
 }
 
 function preserveNewerImport(
@@ -827,6 +916,13 @@ export function PublishedMappingImports({
       }),
     [items, pollingSnapshots, productId],
   );
+  const visibleImportRecords = visibleItems.map((item) => item.importRecord);
+  const warningItems = visibleImportRecords.filter(hasImportWarnings);
+  const importedMappingCount = visibleImportRecords.filter(
+    (item) =>
+      item.active_baseline != null &&
+      (item.dataset_status === "active" || item.dataset_status === "retained"),
+  ).length;
 
   useEffect(() => {
     for (const { importRecord } of visibleItems) {
@@ -1089,6 +1185,126 @@ export function PublishedMappingImports({
               registerRefresh={registerRefresh}
             />
           ))}
+
+          <Tabs defaultValue="progress" className="min-w-0 max-w-full">
+            <TabsList
+              aria-label="Import views"
+              className="h-auto w-full flex-wrap justify-start"
+            >
+              <TabsTrigger value="progress">Import progress</TabsTrigger>
+              <TabsTrigger value="warnings">
+                Warnings ({warningItems.length})
+              </TabsTrigger>
+              <TabsTrigger value="strings">Imported strings</TabsTrigger>
+            </TabsList>
+            <TabsContent value="progress" className="mt-3">
+              <div className="grid gap-3 lg:grid-cols-2">
+                {visibleImportRecords.map((item) => (
+                  <ImportProgress
+                    key={item.mapping_id}
+                    item={item}
+                    repositories={repositories}
+                  />
+                ))}
+              </div>
+            </TabsContent>
+            <TabsContent value="warnings" className="mt-3">
+              {warningItems.length === 0 ? (
+                <div role="status" className="rounded-lg border bg-card p-4">
+                  No import warnings detected.
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {warningItems.map((item) => {
+                    const parserWarnings = parserWarningCount(item);
+                    const duplicates = item.duplicate_report_summary;
+                    const primarySide = item.repository_sides[0];
+                    return (
+                      <article
+                        key={item.mapping_id}
+                        className="grid min-w-0 gap-3 rounded-lg border bg-card p-4"
+                      >
+                        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                          <div className="grid min-w-0 gap-1">
+                            <h3 className="font-semibold [overflow-wrap:anywhere]">
+                              {primarySide
+                                ? repositoryLabel(
+                                    primarySide.repository_id,
+                                    repositories,
+                                  )
+                                : "Published mapping"}
+                            </h3>
+                            {primarySide ? (
+                              <span className="font-mono text-sm [overflow-wrap:anywhere]">
+                                {primarySide.source_branch}
+                              </span>
+                            ) : null}
+                          </div>
+                          <Badge variant="outline">
+                            {STATUS_LABELS[item.state]}
+                          </Badge>
+                        </div>
+                        {duplicates && duplicates.group_count > 0 ? (
+                          <p>
+                            {duplicates.group_count} duplicate key groups ·{" "}
+                            {duplicates.repeated_occurrences} repeated
+                            occurrences
+                          </p>
+                        ) : null}
+                        {parserWarnings > 0 ? (
+                          <div className="grid gap-2">
+                            <p>
+                              {parserWarnings} parser warning
+                              {parserWarnings === 1 ? "" : "s"}
+                            </p>
+                            <ParserIssues item={item} productId={productId} />
+                          </div>
+                        ) : null}
+                        {item.id !== null &&
+                        item.execution_number !== null &&
+                        duplicates !== null &&
+                        duplicates !== undefined &&
+                        duplicates.group_count > 0 ? (
+                          <AdminDuplicateAction
+                            accessToken={accessToken}
+                            productId={productId}
+                            item={item}
+                          />
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
+            <TabsContent value="strings" className="mt-3">
+              <div className="grid gap-3 rounded-lg border bg-card p-4">
+                {importedMappingCount > 0 ? (
+                  <>
+                    <p>
+                      Imported strings from {importedMappingCount} published{" "}
+                      {importedMappingCount === 1
+                        ? "mapping is"
+                        : "mappings are"}{" "}
+                      available.
+                    </p>
+                    <Button asChild className="w-fit">
+                      <Link
+                        to={`/translations?product_id=${encodeURIComponent(productId)}`}
+                      >
+                        View imported strings
+                      </Link>
+                    </Button>
+                  </>
+                ) : (
+                  <p role="status">
+                    No imported strings yet. Start an import and this view will
+                    update automatically.
+                  </p>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
 
           <div className="hidden max-w-full overflow-x-auto md:block">
             <Table aria-label="Published mapping imports">
