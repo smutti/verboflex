@@ -20,6 +20,7 @@ interface TranslationResultListProps {
   onRetryLoadMore: () => Promise<void>;
   initialMeasurements?: VirtualItem[];
   initialOffset?: number;
+  detailsBasePath?: string;
   onOpenDetails?: (
     translationGroupId: string,
     measurements: VirtualItem[],
@@ -69,6 +70,7 @@ export function TranslationResultList({
   onOpenDetails,
   initialMeasurements,
   initialOffset,
+  detailsBasePath = "/translations",
 }: TranslationResultListProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
@@ -342,7 +344,7 @@ export function TranslationResultList({
                   className="h-auto min-h-[44px] min-w-[44px] max-w-full px-0 text-body whitespace-normal"
                 >
                   <Link
-                    to={`/translations/${encodeURIComponent(item.id)}`}
+                    to={`${detailsBasePath}/${encodeURIComponent(item.id)}`}
                     aria-label={detailsLabel}
                     data-translation-group-id={item.id}
                     onClick={() =>

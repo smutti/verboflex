@@ -130,17 +130,26 @@ function tree(
   user = principal,
   token = "token",
   initialEntry = "/translations",
+  lockedProduct?: { id: string; name: string },
 ) {
   return (
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route
-          path="/translations"
+          path={lockedProduct ? "/products/:productId" : "/translations"}
           element={
-            <TranslationsWorkspace principal={user} accessToken={token} />
+            <TranslationsWorkspace
+              principal={user}
+              accessToken={token}
+              lockedProduct={lockedProduct}
+            />
           }
         >
-          <Route index element={<TranslationSearchPage />} />
+          <Route
+            index={!lockedProduct}
+            path={lockedProduct ? "strings" : undefined}
+            element={<TranslationSearchPage />}
+          />
           <Route path=":id" element={<Detail />} />
         </Route>
       </Routes>
@@ -189,6 +198,30 @@ afterEach(() => {
 });
 
 describe("TranslationSearchPage", () => {
+  it("locks product-scoped search and retains the product when filters are cleared", async () => {
+    render(
+      tree(principal, "token", "/products/alpha/strings", {
+        id: "alpha",
+        name: "Alpha",
+      }),
+    );
+    await flush();
+
+    expect(screen.queryByRole("combobox", { name: "Product" })).toBeNull();
+    expect(screen.getByText("Searching only in Alpha")).toBeVisible();
+    expect(
+      vi.mocked(searchTranslations).mock.lastCall?.[0]?.query,
+    ).toMatchObject({ product_id: "alpha" });
+
+    await choose("Language", "Italian (it)");
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    await flush();
+
+    expect(
+      vi.mocked(searchTranslations).mock.lastCall?.[0]?.query,
+    ).toMatchObject({ product_id: "alpha", language: null });
+  });
+
   it("automatically applies a valid product filter from the imported-strings URL", async () => {
     preference("beta", null);
 

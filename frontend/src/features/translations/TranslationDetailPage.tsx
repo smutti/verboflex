@@ -435,6 +435,7 @@ function DetailRequest({
   id: string;
   accessToken: string;
 }) {
+  const context = useOutletContext<TranslationsWorkspaceContext>();
   const [attempt, setAttempt] = useState(0);
   const [load, setLoad] = useState<{
     attempt: number;
@@ -490,10 +491,12 @@ function DetailRequest({
   return (
     <div className="grid min-w-0 gap-(--space-xl)">
       <Link
-        to="/translations"
+        to={context.searchPath}
         className="inline-flex min-h-[44px] items-center underline"
       >
-        Back to translations
+        {context.lockedProduct
+          ? `Back to ${context.lockedProduct.name} strings`
+          : "Back to translations"}
       </Link>
       <h1 ref={heading} tabIndex={-1} className="text-display font-semibold">
         Translation details

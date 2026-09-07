@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  PackageSearch,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -14,6 +15,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import { Link, useInRouterContext, useLocation } from "react-router-dom";
@@ -32,6 +34,7 @@ import {
   TooltipTrigger,
 } from "../ui/tooltip";
 import { WorkspaceOverviewPage } from "../../features/workspace/WorkspaceOverviewPage";
+import { productIdentity } from "../../features/products/productIdentity";
 
 export interface AppShellProps {
   accessToken: string;
@@ -49,6 +52,7 @@ interface WorkspaceNavigationProps {
 interface NavigationDestination {
   icon: LucideIcon;
   label: string;
+  productFocus?: boolean;
   to: string;
 }
 
@@ -58,14 +62,21 @@ const WORKSPACE_DESTINATION: NavigationDestination = {
   to: "/",
 };
 
+const PRODUCTS_DESTINATION: NavigationDestination = {
+  icon: PackageSearch,
+  label: "Product workspace",
+  productFocus: true,
+  to: "/products",
+};
+
 const TRANSLATIONS_DESTINATION: NavigationDestination = {
   icon: Languages,
-  label: "Translations",
+  label: "All translations",
   to: "/translations",
 };
 
 const ADMINISTRATION_DESTINATIONS: NavigationDestination[] = [
-  { icon: Boxes, label: "Products", to: "/admin/products" },
+  { icon: Boxes, label: "Product configuration", to: "/admin/products" },
   { icon: Users, label: "Users", to: "/admin/users" },
   { icon: Cloud, label: "Bitbucket", to: "/admin/bitbucket" },
 ];
@@ -124,12 +135,31 @@ function RoutedDestination({
       ? location.pathname === "/"
       : location.pathname === destination.to ||
         location.pathname.startsWith(`${destination.to}/`);
+  const productIdMatch = destination.productFocus
+    ? location.pathname.match(/^\/products\/([^/]+)/)
+    : null;
+  let productStyle: CSSProperties | undefined;
+  if (isCurrent && productIdMatch) {
+    let productId = productIdMatch[1];
+    try {
+      productId = decodeURIComponent(productId);
+    } catch {
+      // Keep the raw route segment; the workspace will render it unavailable.
+    }
+    const identity = productIdentity(productId, "Product");
+    productStyle = {
+      backgroundColor: identity.soft,
+      borderLeftColor: identity.accent,
+      color: identity.ink,
+    };
+  }
 
   return (
     <Button
       type="button"
       variant="ghost"
       className={`h-auto min-h-[44px] w-full min-w-0 max-w-full justify-start whitespace-normal ${isCurrent ? "bg-muted font-semibold text-foreground border-l-4 border-l-primary" : "text-foreground"}`}
+      style={productStyle}
       asChild
     >
       <Link
@@ -185,6 +215,10 @@ function WorkspaceNavigation({
       <div>
         <DestinationLink
           destination={WORKSPACE_DESTINATION}
+          onNavigate={onNavigate}
+        />
+        <DestinationLink
+          destination={PRODUCTS_DESTINATION}
           onNavigate={onNavigate}
         />
         <DestinationLink

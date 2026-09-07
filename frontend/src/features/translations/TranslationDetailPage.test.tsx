@@ -121,6 +121,38 @@ function mount(role: RoleName = "viewer", id = "opaque-group") {
     </MemoryRouter>,
   );
 }
+function mountProduct(id = "opaque-group") {
+  return render(
+    <MemoryRouter initialEntries={[`/products/product/strings/${id}`]}>
+      <Routes>
+        <Route
+          path="/products/:productId"
+          element={
+            <TranslationsWorkspace
+              accessToken="token"
+              principal={{
+                id: "person",
+                email: "person@example.com",
+                display_name: "Person",
+                roles: ["viewer"],
+                must_change_password: false,
+              }}
+              lockedProduct={{ id: "product", name: "Mobile" }}
+              detailsBasePath="/products/product/strings"
+              searchPath="/products/product/strings"
+            />
+          }
+        >
+          <Route
+            path="strings/:translationGroupId"
+            element={<TranslationDetailPage />}
+          />
+          <Route path="strings" element={<h2>Product search restored</h2>} />
+        </Route>
+      </Routes>
+    </MemoryRouter>,
+  );
+}
 beforeEach(() => {
   vi.stubGlobal(
     "ResizeObserver",
@@ -451,6 +483,17 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
     expect(
       vi.mocked(getTranslationGroup).mock.calls[0][0].signal?.aborted,
     ).toBe(true);
+  });
+  it("returns from details to the focused product search", async () => {
+    mountProduct();
+
+    await screen.findByText("Translation content");
+    const back = screen.getByRole("link", {
+      name: "Back to Mobile strings",
+    });
+    expect(back).toHaveAttribute("href", "/products/product/strings");
+    await userEvent.click(back);
+    expect(await screen.findByText("Product search restored")).toBeVisible();
   });
   it("focuses only the current explicit retry failure while retaining the route heading", async () => {
     vi.mocked(getTranslationGroup)

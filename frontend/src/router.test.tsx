@@ -248,6 +248,48 @@ describe("session routes", () => {
     },
   );
 
+  it.each<RoleName>([
+    "admin",
+    "product_manager_reviewer",
+    "translator",
+    "viewer",
+  ])("opens a visually focused product workspace for %s", async (role) => {
+    restorePrincipal(role);
+    const user = userEvent.setup();
+    renderApplication("/products");
+
+    expect(
+      await screen.findByRole("heading", { name: "Choose a product" }),
+    ).toBeVisible();
+    const productLink = await screen.findByRole("link", {
+      name: /Open Product A workspace/,
+    });
+    expect(productLink).toHaveAttribute("href", "/products/product-a/strings");
+
+    await user.click(productLink);
+
+    const focus = await screen.findByTestId("product-focus");
+    expect(focus).toHaveTextContent("Product A");
+    expect(focus).toHaveAttribute("data-product-id", "product-a");
+    expect(focus.style.getPropertyValue("--product-accent")).toMatch(
+      /^#[0-9a-f]{6}$/,
+    );
+    expect(
+      screen.getByRole("link", { name: "Product workspace", current: "page" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("combobox", { name: "Product" })).toBeNull();
+    await waitFor(() =>
+      expect(searchTranslations).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: expect.objectContaining({ product_id: "product-a" }),
+        }),
+      ),
+    );
+    expect(screen.getByTestId("current-route")).toHaveTextContent(
+      "/products/product-a/strings",
+    );
+  });
+
   it("restores direct translation search from only the server principal's authorized preferences", async () => {
     let resolveOptions!: (value: {
       data: TranslationOptionsResponse;

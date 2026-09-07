@@ -16,6 +16,7 @@ interface TranslationFiltersProps {
   filters: TranslationSearchFilters;
   options: TranslationOptionsResponse;
   disabled?: boolean;
+  hideProduct?: boolean;
   onChange: (filters: TranslationSearchFilters) => void;
   onClear: () => void;
 }
@@ -24,6 +25,7 @@ export function TranslationFilters({
   filters,
   options,
   disabled,
+  hideProduct = false,
   onChange,
   onClear,
 }: TranslationFiltersProps) {
@@ -74,40 +76,44 @@ export function TranslationFilters({
   ] as const;
   return (
     <div className="space-y-(--space-md) rounded-lg bg-secondary p-(--space-md)">
-      <div className="grid min-w-0 grid-cols-1 gap-(--space-md) md:grid-cols-2 xl:grid-cols-5">
-        {controls.map(({ key, label, choices }) => (
-          <div key={key} className="min-w-0 space-y-(--space-sm)">
-            <Label htmlFor={`${id}-${key}`}>{label}</Label>
-            <Select
-              disabled={disabled}
-              value={filters[key] ?? "all"}
-              onValueChange={(value) =>
-                onChange({
-                  ...filters,
-                  [key]: value === "all" && key !== "deleted" ? null : value,
-                })
-              }
-            >
-              <SelectTrigger
-                id={`${id}-${key}`}
-                className="h-auto min-h-[44px] w-full min-w-0 whitespace-normal text-left [&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:wrap-anywhere"
+      <div
+        className={`grid min-w-0 grid-cols-1 gap-(--space-md) md:grid-cols-2 ${hideProduct ? "xl:grid-cols-4" : "xl:grid-cols-5"}`}
+      >
+        {controls
+          .filter(({ key }) => !hideProduct || key !== "productId")
+          .map(({ key, label, choices }) => (
+            <div key={key} className="min-w-0 space-y-(--space-sm)">
+              <Label htmlFor={`${id}-${key}`}>{label}</Label>
+              <Select
+                disabled={disabled}
+                value={filters[key] ?? "all"}
+                onValueChange={(value) =>
+                  onChange({
+                    ...filters,
+                    [key]: value === "all" && key !== "deleted" ? null : value,
+                  })
+                }
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {choices.map(([value, text]) => (
-                  <SelectItem
-                    key={value}
-                    value={value}
-                    className="min-h-[44px] whitespace-normal wrap-anywhere"
-                  >
-                    {text}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ))}
+                <SelectTrigger
+                  id={`${id}-${key}`}
+                  className="h-auto min-h-[44px] w-full min-w-0 whitespace-normal text-left [&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:wrap-anywhere"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {choices.map(([value, text]) => (
+                    <SelectItem
+                      key={value}
+                      value={value}
+                      className="min-h-[44px] whitespace-normal wrap-anywhere"
+                    >
+                      {text}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ))}
       </div>
       <Button
         data-clear-translation-filters

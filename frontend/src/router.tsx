@@ -29,6 +29,10 @@ import { TranslationSearchPage } from "./features/translations/TranslationSearch
 import { TranslationDetailPage } from "./features/translations/TranslationDetailPage";
 import { TranslationsWorkspace } from "./features/translations/TranslationsWorkspace";
 import {
+  ProductFocusWorkspace,
+  ProductWorkspaceIndex,
+} from "./features/products/ProductWorkspace";
+import {
   SessionProvider,
   useSession,
   type SessionState,
@@ -45,6 +49,7 @@ export interface SessionRoutesProps {
   changePasswordElement: ReactNode;
   ordinaryElement: ReactNode;
   translationsElement?: ReactNode;
+  productsElement?: ReactNode;
   adminElement?: ReactNode;
   adminRouteState?: AdminRouteState;
   accessDeniedElement?: ReactNode;
@@ -97,6 +102,7 @@ export function SessionRoutes({
   changePasswordElement,
   ordinaryElement,
   translationsElement,
+  productsElement,
   adminElement,
   adminRouteState = { status: "ready" },
   accessDeniedElement,
@@ -152,8 +158,43 @@ export function SessionRoutes({
         <Route index element={<TranslationSearchPage />} />
         <Route path=":translationGroupId" element={<TranslationDetailPage />} />
       </Route>
+      <Route path="/products/*" element={productsElement ?? ordinaryElement} />
       <Route path="/admin/*" element={guardedAdminElement} />
       <Route path="*" element={<Navigate replace to="/" />} />
+    </Routes>
+  );
+}
+
+export function ProductApplicationRoutes({
+  accessToken,
+  principal,
+}: {
+  accessToken: string;
+  principal: Extract<SessionState, { status: "authenticated" }>["principal"];
+}) {
+  return (
+    <Routes>
+      <Route
+        index
+        element={<ProductWorkspaceIndex accessToken={accessToken} />}
+      />
+      <Route
+        path=":productId"
+        element={
+          <ProductFocusWorkspace
+            accessToken={accessToken}
+            principal={principal}
+          />
+        }
+      >
+        <Route index element={<Navigate replace to="strings" />} />
+        <Route path="strings" element={<TranslationSearchPage />} />
+        <Route
+          path="strings/:translationGroupId"
+          element={<TranslationDetailPage />}
+        />
+        <Route path="*" element={<Navigate replace to="strings" />} />
+      </Route>
     </Routes>
   );
 }
@@ -252,6 +293,16 @@ export function AppRouter() {
         authenticatedShellProps === null ? null : (
           <AppShell {...authenticatedShellProps}>
             <TranslationsWorkspace
+              accessToken={authenticatedShellProps.accessToken}
+              principal={authenticatedShellProps.principal}
+            />
+          </AppShell>
+        )
+      }
+      productsElement={
+        authenticatedShellProps === null ? null : (
+          <AppShell {...authenticatedShellProps}>
+            <ProductApplicationRoutes
               accessToken={authenticatedShellProps.accessToken}
               principal={authenticatedShellProps.principal}
             />

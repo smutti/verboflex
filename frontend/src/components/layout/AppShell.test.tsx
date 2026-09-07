@@ -546,7 +546,14 @@ describe("authenticated application shell", () => {
       within(navigation)
         .getAllByRole("link")
         .map((link) => link.textContent?.trim()),
-    ).toEqual(["Workspace", "Translations", "Products", "Users", "Bitbucket"]);
+    ).toEqual([
+      "Workspace",
+      "Product workspace",
+      "All translations",
+      "Product configuration",
+      "Users",
+      "Bitbucket",
+    ]);
 
     await user.click(within(navigation).getByRole("link", { name: "Users" }));
 
@@ -594,7 +601,7 @@ describe("authenticated application shell", () => {
     );
 
     await user.click(
-      within(navigation).getByRole("link", { name: "Products" }),
+      within(navigation).getByRole("link", { name: "Product configuration" }),
     );
 
     expect(screen.getByTestId("shell-current-route")).toHaveTextContent(
@@ -623,7 +630,9 @@ describe("authenticated application shell", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Open navigation" }));
     const sheet = await screen.findByRole("dialog", { name: "Navigation" });
-    const productsLink = within(sheet).getByRole("link", { name: "Products" });
+    const productsLink = within(sheet).getByRole("link", {
+      name: "Product configuration",
+    });
     await user.click(productsLink);
 
     expect(
@@ -646,10 +655,12 @@ describe("authenticated application shell", () => {
 
   it.each([
     ["/", "Workspace"],
-    ["/translations", "Translations"],
-    ["/translations/group-123", "Translations"],
-    ["/admin/products", "Products"],
-    ["/admin/products/product-123/preview", "Products"],
+    ["/products", "Product workspace"],
+    ["/products/product-123/strings", "Product workspace"],
+    ["/translations", "All translations"],
+    ["/translations/group-123", "All translations"],
+    ["/admin/products", "Product configuration"],
+    ["/admin/products/product-123/preview", "Product configuration"],
     ["/admin/users", "Users"],
     ["/admin/bitbucket", "Bitbucket"],
   ])("marks only %s as the current primary destination", (path, label) => {
@@ -673,6 +684,28 @@ describe("authenticated application shell", () => {
     });
     expect(currentLinks).toHaveLength(1);
     expect(currentLinks[0]).toHaveAccessibleName(label);
+  });
+
+  it("carries the selected product color into the primary navigation", () => {
+    render(
+      <MemoryRouter initialEntries={["/products/product-123/strings"]}>
+        <AppShell
+          accessToken="ordinary-server-token"
+          onLogout={vi.fn()}
+          principal={ordinaryPrincipal}
+        >
+          <h1>Product strings</h1>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const link = screen.getByRole("link", {
+      name: "Product workspace",
+      current: "page",
+    });
+    expect(link.style.backgroundColor).not.toBe("");
+    expect(link.style.borderLeftColor).not.toBe("");
+    expect(link.style.color).not.toBe("");
   });
 
   it("closes mobile navigation and focuses the Workspace heading after selection", async () => {
@@ -771,12 +804,18 @@ describe("authenticated application shell", () => {
     ).toHaveLength(1);
     expect(
       within(navigation).getByRole("link", {
-        name: "Products",
+        name: "Product configuration",
         current: "page",
       }),
     ).toBeVisible();
 
-    for (const name of ["Translations", "Products", "Users", "Bitbucket"]) {
+    for (const name of [
+      "Product workspace",
+      "All translations",
+      "Product configuration",
+      "Users",
+      "Bitbucket",
+    ]) {
       expect(screen.getByRole("link", { name })).toHaveClass(
         "min-w-0",
         "max-w-full",
@@ -812,7 +851,7 @@ describe("authenticated application shell", () => {
     "translator",
     "viewer",
   ])(
-    "places an accessible Translations destination after Workspace for %s",
+    "places accessible product and translation destinations after Workspace for %s",
     async (role) => {
       const user = userEvent.setup();
       render(
@@ -829,11 +868,11 @@ describe("authenticated application shell", () => {
         name: "Primary navigation",
       });
       const links = within(navigation).getAllByRole("link");
-      expect(links.slice(0, 2).map((link) => link.textContent?.trim())).toEqual(
-        ["Workspace", "Translations"],
+      expect(links.slice(0, 3).map((link) => link.textContent?.trim())).toEqual(
+        ["Workspace", "Product workspace", "All translations"],
       );
       const translations = within(navigation).getByRole("link", {
-        name: "Translations",
+        name: "All translations",
       });
       expect(translations).toHaveAttribute("href", "/translations");
       expect(translations).not.toHaveAttribute("aria-current");
@@ -850,6 +889,10 @@ describe("authenticated application shell", () => {
       );
       links[0].focus();
       await user.tab();
+      expect(
+        within(navigation).getByRole("link", { name: "Product workspace" }),
+      ).toHaveFocus();
+      await user.tab();
       expect(translations).toHaveFocus();
       await user.keyboard("{Enter}");
       expect(screen.getByTestId("shell-current-route")).toHaveTextContent(
@@ -860,7 +903,7 @@ describe("authenticated application shell", () => {
   );
 
   it.each([320, 768, 1024])(
-    "selects Translations from the collapsed Sheet at %ipx and restores trigger focus",
+    "selects All translations from the collapsed Sheet at %ipx and restores trigger focus",
     async (width) => {
       setViewportWidth(width);
       const user = userEvent.setup();
@@ -884,9 +927,9 @@ describe("authenticated application shell", () => {
         within(navigation)
           .getAllByRole("link")
           .map((link) => link.textContent?.trim()),
-      ).toEqual(["Workspace", "Translations"]);
+      ).toEqual(["Workspace", "Product workspace", "All translations"]);
       const translations = within(navigation).getByRole("link", {
-        name: "Translations",
+        name: "All translations",
       });
       translations.focus();
       await user.keyboard("{Enter}");
@@ -901,14 +944,14 @@ describe("authenticated application shell", () => {
       });
       expect(
         within(reopened).getByRole("link", {
-          name: "Translations",
+          name: "All translations",
           current: "page",
         }),
       ).toBeVisible();
     },
   );
 
-  it("does not mark a similarly prefixed route as Translations", () => {
+  it("does not mark a similarly prefixed route as All translations", () => {
     render(
       <MemoryRouter initialEntries={["/translations-other"]}>
         <AppShell
@@ -919,7 +962,7 @@ describe("authenticated application shell", () => {
       </MemoryRouter>,
     );
     expect(
-      screen.getByRole("link", { name: "Translations" }),
+      screen.getByRole("link", { name: "All translations" }),
     ).not.toHaveAttribute("aria-current");
   });
 });

@@ -101,6 +101,7 @@ function ResolvedSearch({
   onRestart: (seed: Seed) => void;
 }) {
   const { options, seed } = ready;
+  const lockedProduct = context.lockedProduct;
   const search = useTranslationSearch({
     accessToken: context.accessToken,
     initialQuery: seed.query,
@@ -129,6 +130,7 @@ function ResolvedSearch({
   ]);
 
   useEffect(() => {
+    if (lockedProduct) return;
     try {
       saveTranslationPreferences(
         localStorage,
@@ -139,7 +141,7 @@ function ResolvedSearch({
     } catch {
       /* Storage can be disabled; search stays usable in memory. */
     }
-  }, [context.principal.id, options, search.filters]);
+  }, [context.principal.id, lockedProduct, options, search.filters]);
 
   useEffect(() => {
     if (
@@ -223,24 +225,39 @@ function ResolvedSearch({
 
   const clearAll = () => {
     context.setSnapshot(null);
-    onRestart({ query: "", filters: DEFAULT_FILTERS, focusControl: "clear" });
+    onRestart({
+      query: "",
+      filters: {
+        ...DEFAULT_FILTERS,
+        productId: lockedProduct?.id ?? null,
+      },
+      focusControl: "clear",
+    });
   };
   const changeFilters = (filters: TranslationSearchFilters) => {
     explicitAction.current = true;
-    if (filters.productId !== search.filters.productId) {
-      onRestart({ query: search.query, filters, focusControl: "productId" });
-    } else search.setFilters(filters);
+    const nextFilters = lockedProduct
+      ? { ...filters, productId: lockedProduct.id }
+      : filters;
+    if (nextFilters.productId !== search.filters.productId) {
+      onRestart({
+        query: search.query,
+        filters: nextFilters,
+        focusControl: "productId",
+      });
+    } else search.setFilters(nextFilters);
   };
   const filtered =
     search.query !== "" ||
-    search.filters.productId !== null ||
+    (!lockedProduct && search.filters.productId !== null) ||
     search.filters.language !== null ||
     search.filters.state != null ||
     search.filters.violation != null ||
     search.filters.deleted !== "active";
   const criteria = [
     search.query && `Search: ${search.query}`,
-    search.filters.productId &&
+    !lockedProduct &&
+      search.filters.productId &&
       `Product: ${options.products.find((item) => item.id === search.filters.productId)?.name}`,
     search.filters.language && `Language: ${search.filters.language}`,
     search.filters.state &&
@@ -297,6 +314,7 @@ function ResolvedSearch({
       <TranslationFilters
         filters={search.filters}
         options={options}
+        hideProduct={Boolean(lockedProduct)}
         onChange={changeFilters}
         onClear={clearAll}
       />
@@ -362,6 +380,7 @@ function ResolvedSearch({
                 viewportWidth: window.innerWidth,
               })
             }
+            detailsBasePath={context.detailsBasePath}
           />
         )}
       </section>
@@ -418,6 +437,7 @@ function SearchOptions({
   }, [failed]);
   const principalId = context.principal.id;
   const accessToken = context.accessToken;
+  const lockedProduct = context.lockedProduct;
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
@@ -442,6 +462,13 @@ function SearchOptions({
           } catch {
             preferences = { productId: null, language: null };
           }
+        }
+        if (lockedProduct) {
+          const authorized = choices.products.some(
+            (product) => product.id === lockedProduct.id,
+          );
+          if (!authorized) throw new Error("Product unavailable");
+          preferences = { ...preferences, productId: lockedProduct.id };
         }
         if (preferences.productId !== null) {
           const scoped = await listTranslationOptions({
@@ -482,7 +509,7 @@ function SearchOptions({
       }
     })();
     return () => controller.abort();
-  }, [accessToken, principalId, request, seed]);
+  }, [accessToken, lockedProduct, principalId, request, seed]);
   const restart = useCallback((next: Seed) => {
     retryAction.current = false;
     queryRef.current = next.query;
@@ -493,10 +520,15 @@ function SearchOptions({
   return (
     <div className="grid min-w-0 gap-(--space-xl)">
       <header className="space-y-(--space-sm)">
-        <h1 className="text-display font-semibold">Translations</h1>
+        {lockedProduct ? (
+          <h2 className="text-display font-semibold">Strings</h2>
+        ) : (
+          <h1 className="text-display font-semibold">Translations</h1>
+        )}
         <p className="text-muted-foreground">
-          Find imported localization keys, text, review state, and length
-          constraints across your authorized products.
+          {lockedProduct
+            ? `Searching only in ${lockedProduct.name}`
+            : "Find imported localization keys, text, review state, and length constraints across your authorized products."}
         </p>
       </header>
       {ready ? (
@@ -534,11 +566,25 @@ function SearchOptions({
             </p>
           </div>
           <TranslationFilters
-            filters={seed?.filters ?? DEFAULT_FILTERS}
+            filters={
+              seed?.filters ?? {
+                ...DEFAULT_FILTERS,
+                productId: lockedProduct?.id ?? null,
+              }
+            }
             options={load.ready?.options ?? EMPTY_OPTIONS}
             disabled
+            hideProduct={Boolean(lockedProduct)}
             onChange={() => {}}
-            onClear={() => restart({ query: "", filters: DEFAULT_FILTERS })}
+            onClear={() =>
+              restart({
+                query: "",
+                filters: {
+                  ...DEFAULT_FILTERS,
+                  productId: lockedProduct?.id ?? null,
+                },
+              })
+            }
           />
           {failed ? (
             <SearchError
@@ -560,7 +606,10 @@ function SearchOptions({
 export function TranslationSearchPage() {
   const context = useOutletContext<TranslationsWorkspaceContext>();
   const [searchParams] = useSearchParams();
-  const requestedProductId = searchParams.get("product_id")?.trim() || null;
+  const requestedProductId =
+    context.lockedProduct?.id ??
+    (searchParams.get("product_id")?.trim() || null) ??
+    null;
   return (
     <SearchOptions
       key={`${context.accessToken}:${requestedProductId ?? ""}`}
