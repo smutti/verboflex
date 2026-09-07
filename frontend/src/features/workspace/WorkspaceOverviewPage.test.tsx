@@ -143,7 +143,6 @@ describe("role-aware Workspace overview", () => {
         screen.getByRole("heading", { name: "Workspace", level: 1 }),
       ).toBeVisible();
       expect(screen.getByText(principal.display_name)).toBeVisible();
-      expect(screen.getByText(ROLE_LABELS[role])).toBeVisible();
       const alert = await screen.findByRole("alert");
       expect(alert).toHaveTextContent(
         "We could not reach the API. Check that the backend is running, then retry the connection.",
@@ -291,7 +290,7 @@ describe("role-aware Workspace overview", () => {
   });
 
   it("puts a semantic service-health dashboard first for administrators", async () => {
-    const principal = authenticateAs("admin");
+    authenticateAs("admin");
     readSystemStatusMock.mockResolvedValue({
       data: {
         api: "online",
@@ -311,8 +310,8 @@ describe("role-aware Workspace overview", () => {
     renderWorkspace();
 
     const dashboard = await screen.findByTestId("admin-service-status");
-    const identityHeading = screen.getByRole("heading", {
-      name: "Signed-in identity",
+    const administrationHeading = screen.getByRole("heading", {
+      name: "Administration summary",
     });
 
     expect(dashboard).toHaveAttribute("data-service-state", "unavailable");
@@ -324,7 +323,7 @@ describe("role-aware Workspace overview", () => {
       "One or more services need administrator attention.",
     );
     expect(
-      dashboard.compareDocumentPosition(identityHeading) &
+      dashboard.compareDocumentPosition(administrationHeading) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
@@ -334,10 +333,12 @@ describe("role-aware Workspace overview", () => {
     expect(api).toHaveClass("border-success/40", "text-success");
     expect(redis).toHaveClass("border-destructive/40", "text-destructive");
     expect(worker).toHaveClass("border-warning/40", "text-warning");
-    expect(screen.getByText(principal.display_name)).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Signed-in identity" }),
+    ).toBeNull();
   });
 
-  it("keeps identity visible while ordinary and administrator reads are loading", () => {
+  it("keeps the workspace and service state visible while administrator reads are loading", () => {
     authenticateAs("admin");
     readSystemStatusMock.mockReturnValue(new Promise<never>(() => undefined));
     listAdminProductsMock.mockReturnValue(new Promise<never>(() => undefined));
@@ -348,7 +349,10 @@ describe("role-aware Workspace overview", () => {
 
     renderWorkspace();
 
-    expect(screen.getByText("Administrator Example")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Workspace" })).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Signed-in identity" }),
+    ).toBeNull();
     expect(screen.getByText("Checking service status")).toBeVisible();
     expect(screen.getByText("Loading administrator summaries")).toBeVisible();
   });
@@ -380,7 +384,7 @@ describe("role-aware Workspace overview", () => {
 
     renderWorkspace();
 
-    expect(screen.getByText("Administrator Example")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Workspace" })).toBeVisible();
     const alert = await screen.findByRole("alert", {
       name: "Administrator summaries unavailable",
     });

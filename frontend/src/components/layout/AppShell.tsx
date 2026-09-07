@@ -1,12 +1,14 @@
 import type { CurrentUserResponse } from "../../api/client";
 import {
   Boxes,
+  ChevronDown,
   Cloud,
   Languages,
   LayoutDashboard,
   LogOut,
   Menu,
   PackageSearch,
+  UserRound,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -20,6 +22,15 @@ import {
 } from "react";
 import { Link, useInRouterContext, useLocation } from "react-router-dom";
 import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 import {
   Sheet,
   SheetContent,
@@ -35,6 +46,7 @@ import {
 } from "../ui/tooltip";
 import { WorkspaceOverviewPage } from "../../features/workspace/WorkspaceOverviewPage";
 import { productIdentity } from "../../features/products/productIdentity";
+import { ROLE_LABELS } from "../../features/auth/roleLabels";
 
 export interface AppShellProps {
   accessToken: string;
@@ -339,22 +351,79 @@ export function AppShell({
             VerboFlex
           </strong>
         </div>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
+        <div className="flex items-center gap-1 sm:gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <Button
                 type="button"
                 variant="ghost"
-                aria-label="Sign out of VerboFlex"
-                onClick={() => void onLogout()}
+                aria-label={`Open user menu for ${principal.display_name}`}
+                className="max-w-[14rem]"
               >
-                <LogOut aria-hidden="true" />
-                <span className="hidden sm:inline">Sign out of VerboFlex</span>
+                <UserRound aria-hidden="true" />
+                <span className="hidden truncate sm:inline">
+                  {principal.display_name}
+                </span>
+                <ChevronDown aria-hidden="true" className="hidden sm:block" />
               </Button>
-            </TooltipTrigger>
-            <TooltipContent>Sign out of VerboFlex</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="w-72 max-w-[calc(100vw-2rem)]"
+            >
+              <DropdownMenuLabel className="grid gap-2 py-2">
+                <span className="truncate font-semibold">
+                  {principal.display_name}
+                </span>
+                <span className="break-words font-normal text-muted-foreground [overflow-wrap:anywhere]">
+                  {principal.email}
+                </span>
+                <span
+                  className="flex flex-wrap gap-1.5"
+                  aria-label="Assigned roles"
+                >
+                  {principal.roles.map((role) => (
+                    <Badge key={role} variant="outline" className="rounded-md">
+                      {ROLE_LABELS[role]}
+                    </Badge>
+                  ))}
+                </span>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                {isWithinRouter ? (
+                  <Link to="/profile">
+                    <UserRound aria-hidden="true" />
+                    Profile
+                  </Link>
+                ) : (
+                  <a href="/profile">
+                    <UserRound aria-hidden="true" />
+                    Profile
+                  </a>
+                )}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  aria-label="Sign out of VerboFlex"
+                  onClick={() => void onLogout()}
+                >
+                  <LogOut aria-hidden="true" />
+                  <span className="hidden sm:inline">
+                    Sign out of VerboFlex
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Sign out of VerboFlex</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       </header>
       <div className="min-w-0 max-w-full lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
         <aside

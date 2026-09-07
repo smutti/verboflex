@@ -25,6 +25,7 @@ import { ProductRepositoriesPage } from "./features/admin/repositories/ProductRe
 import { UsersPage } from "./features/admin/users/UsersPage";
 import { ChangePasswordPage } from "./features/auth/ChangePasswordPage";
 import { LoginPage } from "./features/auth/LoginPage";
+import { ProfilePage } from "./features/auth/ProfilePage";
 import { TranslationSearchPage } from "./features/translations/TranslationSearchPage";
 import { TranslationDetailPage } from "./features/translations/TranslationDetailPage";
 import { TranslationsWorkspace } from "./features/translations/TranslationsWorkspace";
@@ -47,6 +48,7 @@ export interface SessionRoutesProps {
   state: SessionState;
   loginElement: ReactNode;
   changePasswordElement: ReactNode;
+  profileElement?: ReactNode;
   ordinaryElement: ReactNode;
   translationsElement?: ReactNode;
   productsElement?: ReactNode;
@@ -100,6 +102,7 @@ export function SessionRoutes({
   state,
   loginElement,
   changePasswordElement,
+  profileElement,
   ordinaryElement,
   translationsElement,
   productsElement,
@@ -154,6 +157,7 @@ export function SessionRoutes({
   return (
     <Routes>
       <Route path="/" element={ordinaryElement} />
+      <Route path="/profile" element={profileElement ?? ordinaryElement} />
       <Route path="/translations" element={translationsElement}>
         <Route index element={<TranslationSearchPage />} />
         <Route path=":translationGroupId" element={<TranslationDetailPage />} />
@@ -288,6 +292,13 @@ export function AppRouter() {
       state={state}
       loginElement={<LoginPage />}
       changePasswordElement={<ChangePasswordPage />}
+      profileElement={
+        authenticatedShellProps === null ? null : (
+          <AppShell {...authenticatedShellProps}>
+            <ProfilePage principal={authenticatedShellProps.principal} />
+          </AppShell>
+        )
+      }
       ordinaryElement={<App />}
       translationsElement={
         authenticatedShellProps === null ? null : (

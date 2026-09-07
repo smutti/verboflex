@@ -149,7 +149,7 @@ beforeEach(() => {
 });
 
 describe("authenticated application shell", () => {
-  it("shows server identity, human role labels, and the approved role-aware workspace copy", async () => {
+  it("moves server identity and roles into a user menu beside logout", async () => {
     const user = userEvent.setup();
     render(
       <AppShell
@@ -162,12 +162,10 @@ describe("authenticated application shell", () => {
     expect(
       screen.getByRole("heading", { name: "Workspace", level: 1 }),
     ).toBeVisible();
-    expect(screen.getByText("Person Example")).toBeVisible();
-    expect(screen.getByText("person@example.com")).toBeVisible();
-    expect(screen.getByText("Administrator")).toBeVisible();
-    expect(screen.getByText("Product manager / reviewer")).toBeVisible();
-    expect(screen.getByText("Translator")).toBeVisible();
-    expect(screen.getByText("Viewer")).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Signed-in identity" }),
+    ).toBeNull();
+    expect(screen.queryByText("person@example.com")).toBeNull();
     expect(
       screen.getByText(
         "Review your authenticated identity and the current VerboFlex service status.",
@@ -176,7 +174,29 @@ describe("authenticated application shell", () => {
     expect(
       screen.getByRole("heading", { name: "Administration summary" }),
     ).toBeVisible();
-    await user.click(screen.getByRole("link", { name: "Workspace" }));
+    const userMenuTrigger = screen.getByRole("button", {
+      name: "Open user menu for Person Example",
+    });
+    const logout = screen.getByRole("button", {
+      name: "Sign out of VerboFlex",
+    });
+    expect(
+      userMenuTrigger.compareDocumentPosition(logout) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    await user.click(userMenuTrigger);
+
+    const menu = screen.getByRole("menu");
+    expect(within(menu).getByText("Person Example")).toBeVisible();
+    expect(within(menu).getByText("person@example.com")).toBeVisible();
+    expect(within(menu).getByText("Administrator")).toBeVisible();
+    expect(within(menu).getByText("Product manager / reviewer")).toBeVisible();
+    expect(within(menu).getByText("Translator")).toBeVisible();
+    expect(within(menu).getByText("Viewer")).toBeVisible();
+    expect(
+      within(menu).getByRole("menuitem", { name: "Profile" }),
+    ).toHaveAttribute("href", "/profile");
   });
 
   it("announces a bounded loading state while generated service status is pending", () => {

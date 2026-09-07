@@ -150,13 +150,17 @@ export function SessionProvider({
   }
 
   async function changePassword(passwords: PasswordChange) {
-    if (state.status !== "password_change_required") {
+    if (
+      state.status !== "password_change_required" &&
+      state.status !== "authenticated"
+    ) {
       return;
     }
+    const accessToken = state.accessToken;
     const operation = Symbol();
     activeOperation.current = operation;
     const result = await generatedChangePassword({
-      auth: state.accessToken,
+      auth: accessToken,
       body: {
         current_password: passwords.currentPassword,
         new_password: passwords.newPassword,

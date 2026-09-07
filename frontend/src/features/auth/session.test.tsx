@@ -313,6 +313,46 @@ describe("session transitions", () => {
     expect(result.current.state).toEqual({ status: "signed_out" });
   });
 
+  it("changes an authenticated password with the current access authority and signs out", async () => {
+    issueTokenMock.mockResolvedValue({
+      data: {
+        access_token: "ordinary-memory-token",
+        expires_in: 900,
+        must_change_password: false,
+        token_type: "bearer",
+      },
+      error: undefined,
+    });
+    readCurrentUserMock.mockResolvedValue({
+      data: principal,
+      error: undefined,
+    });
+    changePasswordMock.mockResolvedValue({ data: undefined, error: undefined });
+    const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
+    await act(async () => {
+      await result.current.login({
+        email: "person@example.com",
+        password: "current password phrase!",
+      });
+    });
+
+    await act(async () => {
+      await result.current.changePassword({
+        currentPassword: "current password phrase!",
+        newPassword: "replacement password phrase!",
+      });
+    });
+
+    expect(changePasswordMock).toHaveBeenCalledWith({
+      auth: "ordinary-memory-token",
+      body: {
+        current_password: "current password phrase!",
+        new_password: "replacement password phrase!",
+      },
+    });
+    expect(result.current.state).toEqual({ status: "signed_out" });
+  });
+
   it("does not send a password change without restricted authority", async () => {
     const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
 

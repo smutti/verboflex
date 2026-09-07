@@ -137,6 +137,7 @@ function renderRoutes(
     state,
     loginElement: <h1>Login route</h1>,
     changePasswordElement: <h1>Password change route</h1>,
+    profileElement: <h1>Profile route</h1>,
     ordinaryElement: <h1>Ordinary route</h1>,
     adminElement: <AdminRouteProbe />,
     adminRouteState,
@@ -560,6 +561,70 @@ describe("session routes", () => {
       screen.getByRole("heading", { name: "Ordinary route" }),
     ).toBeVisible();
     expect(screen.getByTestId("current-route")).toHaveTextContent("/");
+  });
+
+  it.each<RoleName>([
+    "admin",
+    "product_manager_reviewer",
+    "translator",
+    "viewer",
+  ])("opens the authenticated profile route for %s", (role) => {
+    renderRoutes(
+      {
+        status: "authenticated",
+        accessToken: `${role}-server-token`,
+        principal: { ...ordinaryPrincipal, roles: [role] },
+      },
+      "/profile",
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Profile route" }),
+    ).toBeVisible();
+    expect(screen.getByTestId("current-route")).toHaveTextContent("/profile");
+  });
+
+  it("changes an authenticated password from Profile and returns to sign in", async () => {
+    restorePrincipal("viewer");
+    changePasswordMock.mockResolvedValue({ data: undefined, error: undefined });
+    const user = userEvent.setup();
+    renderApplication("/profile");
+
+    expect(
+      await screen.findByRole("heading", { name: "Profile", level: 1 }),
+    ).toBeVisible();
+    const profileContent = within(screen.getByTestId("app-shell-content"));
+    expect(profileContent.getByText("Person")).toBeVisible();
+    expect(profileContent.getByText("person@example.com")).toBeVisible();
+    expect(profileContent.getByText("Viewer")).toBeVisible();
+
+    await user.type(
+      screen.getByLabelText("Current password"),
+      "current password phrase!",
+    );
+    await user.type(
+      screen.getByLabelText("New password"),
+      "replacement password phrase!",
+    );
+    await user.type(
+      screen.getByLabelText("Confirm new password"),
+      "replacement password phrase!",
+    );
+    await user.click(screen.getByRole("button", { name: "Change password" }));
+
+    await waitFor(() =>
+      expect(changePasswordMock).toHaveBeenCalledWith({
+        auth: "translation-session-token",
+        body: {
+          current_password: "current password phrase!",
+          new_password: "replacement password phrase!",
+        },
+      }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Sign in to VerboFlex" }),
+    ).toBeVisible();
+    expect(screen.getByTestId("current-route")).toHaveTextContent("/login");
   });
 
   it.each(["/login", "/change-password", "/private-route"])(

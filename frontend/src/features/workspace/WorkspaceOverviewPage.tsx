@@ -7,10 +7,8 @@ import {
   listAdminUsers,
   type AdminBitbucketStatusResponse,
   type CurrentUserResponse,
-  type RoleName,
 } from "../../api/client";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
-import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { ServiceStatus } from "../../components/layout/ServiceStatus";
 
@@ -18,13 +16,6 @@ export interface WorkspaceOverviewPageProps {
   accessToken: string;
   principal: CurrentUserResponse;
 }
-
-const ROLE_LABELS: Record<RoleName, string> = {
-  admin: "Administrator",
-  product_manager_reviewer: "Product manager / reviewer",
-  translator: "Translator",
-  viewer: "Viewer",
-};
 
 interface AdminSummaries {
   bitbucketStatus: AdminBitbucketStatusResponse["status"];
@@ -272,21 +263,6 @@ export function WorkspaceOverviewPage({
       {isAdministrator ? (
         <ServiceStatus accessToken={accessToken} prominent />
       ) : null}
-
-      <section className="grid gap-2 rounded-lg border bg-secondary p-6">
-        <h2 className="text-heading font-semibold">Signed-in identity</h2>
-        <p className="font-semibold">{principal.display_name}</p>
-        <p className="break-words text-muted-foreground [overflow-wrap:anywhere]">
-          {principal.email}
-        </p>
-        <div className="flex flex-wrap gap-2" aria-label="Assigned roles">
-          {principal.roles.map((role) => (
-            <Badge key={role} variant="outline" className="rounded-md">
-              {ROLE_LABELS[role]}
-            </Badge>
-          ))}
-        </div>
-      </section>
 
       {!isAdministrator ? <ServiceStatus accessToken={accessToken} /> : null}
 
