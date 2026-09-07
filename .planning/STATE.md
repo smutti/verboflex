@@ -4,10 +4,10 @@ current_phase: 04
 current_phase_name: Localization Import, Search, and Constraints
 status: executing
 stopped_at: Plan 04-20 automated closeout passed; four human checks pending in 04-UAT.md
-last_updated: "2026-09-07T20:11:43Z"
+last_updated: "2026-09-07T21:47:57Z"
 last_activity: 2026-09-07
-last_activity_desc: Quick 260907-uir moved signed-in identity into the header user menu and added authenticated profile password management
-state_head: 155774c
+last_activity_desc: Fixed automatic Bitbucket client-credentials renewal for status and repository work, including transient retry safety
+state_head: 59de492
 progress:
   total_phases: 8
   completed_phases: 3
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
 Plan: 26 of 27
 Status: Human verification pending — 04-VERIFICATION.md is human_needed; run $gsd-verify-work 4
-Last activity: 2026-09-07 — Quick 260907-uir moved signed-in identity into the header user menu and added authenticated profile password management; local Docker frontend is healthy.
+Last activity: 2026-09-07 — Automatic Bitbucket client-credentials renewal is verified by tests and against the live local connection; backend, worker, and frontend are healthy.
 
 Progress: [████████░░░░░░░░░░░░] 3/8 phases ([████░░░░░░] 38%)
 
