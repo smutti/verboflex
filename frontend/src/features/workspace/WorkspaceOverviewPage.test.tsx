@@ -156,6 +156,7 @@ describe("role-aware Workspace overview", () => {
       );
 
       expect(await screen.findByText("Redis pending")).toBeVisible();
+      expect(screen.queryByTestId("admin-service-status")).toBeNull();
       expect(readSystemStatusMock).toHaveBeenNthCalledWith(1, {
         auth: `${role}-server-token`,
       });
@@ -250,6 +251,11 @@ describe("role-aware Workspace overview", () => {
     renderWorkspace();
 
     expect(screen.getByText(principal.display_name)).toBeVisible();
+    expect(
+      await screen.findByRole("heading", {
+        name: "All services operational",
+      }),
+    ).toBeVisible();
     expect(await screen.findByText("2 loaded products")).toBeVisible();
     expect(screen.getByText("1 loaded draft")).toBeVisible();
     expect(screen.getByText("2 loaded users")).toBeVisible();
@@ -282,6 +288,53 @@ describe("role-aware Workspace overview", () => {
     expect(getAdminBitbucketStatusMock).toHaveBeenCalledWith({
       auth: "admin-server-token",
     });
+  });
+
+  it("puts a semantic service-health dashboard first for administrators", async () => {
+    const principal = authenticateAs("admin");
+    readSystemStatusMock.mockResolvedValue({
+      data: {
+        api: "online",
+        checked_at: "2026-09-07T19:45:00Z",
+        database: "online",
+        redis: "unavailable",
+        worker: "pending",
+      },
+      error: undefined,
+    });
+    listAdminProductsMock.mockReturnValue(new Promise<never>(() => undefined));
+    listAdminUsersMock.mockReturnValue(new Promise<never>(() => undefined));
+    getAdminBitbucketStatusMock.mockReturnValue(
+      new Promise<never>(() => undefined),
+    );
+
+    renderWorkspace();
+
+    const dashboard = await screen.findByTestId("admin-service-status");
+    const identityHeading = screen.getByRole("heading", {
+      name: "Signed-in identity",
+    });
+
+    expect(dashboard).toHaveAttribute("data-service-state", "unavailable");
+    expect(dashboard).toHaveClass("border-destructive/40", "bg-destructive/10");
+    expect(
+      screen.getByRole("heading", { name: "Attention required" }),
+    ).toBeVisible();
+    expect(dashboard).toHaveTextContent(
+      "One or more services need administrator attention.",
+    );
+    expect(
+      dashboard.compareDocumentPosition(identityHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    const api = screen.getByText("API online").closest("li");
+    const redis = screen.getByText("Redis unavailable").closest("li");
+    const worker = screen.getByText("Worker pending").closest("li");
+    expect(api).toHaveClass("border-success/40", "text-success");
+    expect(redis).toHaveClass("border-destructive/40", "text-destructive");
+    expect(worker).toHaveClass("border-warning/40", "text-warning");
+    expect(screen.getByText(principal.display_name)).toBeVisible();
   });
 
   it("keeps identity visible while ordinary and administrator reads are loading", () => {

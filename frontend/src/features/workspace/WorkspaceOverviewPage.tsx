@@ -253,7 +253,7 @@ export function WorkspaceOverviewPage({
 
   return (
     <div className="grid min-w-0 max-w-full gap-8">
-      <section aria-labelledby="workspace-title" className="grid gap-4">
+      <section aria-labelledby="workspace-title" className="grid gap-2">
         <div className="grid gap-2">
           <h1
             id="workspace-title"
@@ -267,23 +267,28 @@ export function WorkspaceOverviewPage({
             status.
           </p>
         </div>
-        <div className="grid gap-2 rounded-lg border bg-secondary p-6">
-          <h2 className="text-heading font-semibold">Signed-in identity</h2>
-          <p className="font-semibold">{principal.display_name}</p>
-          <p className="break-words text-muted-foreground [overflow-wrap:anywhere]">
-            {principal.email}
-          </p>
-          <div className="flex flex-wrap gap-2" aria-label="Assigned roles">
-            {principal.roles.map((role) => (
-              <Badge key={role} variant="outline" className="rounded-md">
-                {ROLE_LABELS[role]}
-              </Badge>
-            ))}
-          </div>
+      </section>
+
+      {isAdministrator ? (
+        <ServiceStatus accessToken={accessToken} prominent />
+      ) : null}
+
+      <section className="grid gap-2 rounded-lg border bg-secondary p-6">
+        <h2 className="text-heading font-semibold">Signed-in identity</h2>
+        <p className="font-semibold">{principal.display_name}</p>
+        <p className="break-words text-muted-foreground [overflow-wrap:anywhere]">
+          {principal.email}
+        </p>
+        <div className="flex flex-wrap gap-2" aria-label="Assigned roles">
+          {principal.roles.map((role) => (
+            <Badge key={role} variant="outline" className="rounded-md">
+              {ROLE_LABELS[role]}
+            </Badge>
+          ))}
         </div>
       </section>
 
-      <ServiceStatus accessToken={accessToken} />
+      {!isAdministrator ? <ServiceStatus accessToken={accessToken} /> : null}
 
       {isAdministrator ? (
         <AdministratorSummaries
