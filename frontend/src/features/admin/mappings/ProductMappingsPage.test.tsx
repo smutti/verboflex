@@ -626,6 +626,119 @@ describe("administrator mapping cursor collections", () => {
     expect(getAdminRepositoryBranchMock).toHaveBeenCalledOnce();
   });
 
+  it("searches every branch page without moving focus from the source search", async () => {
+    const firstHundred = Array.from({ length: 100 }, (_, index) => ({
+      name: `release/provider-${String(index + 1).padStart(3, "0")}`,
+      commit_hash: String(index + 1).padStart(40, "0"),
+    }));
+    listAdminCandidateMappingsMock.mockResolvedValueOnce(
+      ok({ items: [], next_cursor: null }),
+    );
+    listAdminRepositoryBranchesMock
+      .mockResolvedValueOnce(
+        ok({ items: firstHundred, next_cursor: "opaque-branch-page-2" }),
+      )
+      .mockResolvedValueOnce(
+        ok({
+          items: [
+            {
+              name: "feature/kinder-accessibility",
+              commit_hash: "f".repeat(40),
+            },
+          ],
+          next_cursor: null,
+        }),
+      );
+    renderMappings();
+    const user = userEvent.setup();
+
+    await user.click(
+      await screen.findByRole("combobox", { name: "Repository" }),
+    );
+    await user.click(
+      screen.getByRole("option", { name: /Application source/ }),
+    );
+    const search = await screen.findByRole("searchbox", {
+      name: "Search Source branch",
+    });
+    await user.type(search, "kinder");
+
+    await waitFor(() =>
+      expect(listAdminRepositoryBranchesMock).toHaveBeenCalledTimes(2),
+    );
+    expect(search).toHaveFocus();
+    expect(search).toHaveValue("kinder");
+    expect(listAdminRepositoryBranchesMock).toHaveBeenNthCalledWith(2, {
+      auth: "memory-only-admin-bearer",
+      path: { repository_id: repository.id },
+      query: { cursor: "opaque-branch-page-2", limit: 100 },
+      signal: expect.any(AbortSignal),
+    });
+    await user.click(screen.getByRole("combobox", { name: "Source branch" }));
+    const kinderBranch = screen.getByRole("option", {
+      name: "feature/kinder-accessibility",
+    });
+    expect(kinderBranch).toBeVisible();
+    expect(
+      screen.queryByRole("option", { name: "release/provider-001" }),
+    ).not.toBeInTheDocument();
+    await user.click(kinderBranch);
+  });
+
+  it("makes the first allowed target the default without a second selection", async () => {
+    const saved = {
+      ...mapping(12),
+      allowed_target_branches: ["release/kinder"],
+      default_target_branch: "release/kinder",
+    };
+    listAdminCandidateMappingsMock.mockResolvedValueOnce(
+      ok({ items: [], next_cursor: null }),
+    );
+    listAdminRepositoryBranchesMock.mockResolvedValue(
+      ok({
+        items: [
+          { name: "main", commit_hash: "a".repeat(40) },
+          { name: "release/kinder", commit_hash: "b".repeat(40) },
+        ],
+        next_cursor: null,
+      }),
+    );
+    createAdminCandidateMappingMock.mockResolvedValueOnce(ok(saved));
+    renderMappings();
+    const user = userEvent.setup();
+
+    await user.click(
+      await screen.findByRole("combobox", { name: "Repository" }),
+    );
+    await user.click(
+      screen.getByRole("option", { name: /Application source/ }),
+    );
+    await user.click(screen.getByRole("combobox", { name: "Source branch" }));
+    await user.click(screen.getByRole("option", { name: "main" }));
+    await user.click(
+      screen.getByRole("checkbox", { name: "Allow target release/kinder" }),
+    );
+
+    expect(
+      screen.getByText("release/kinder is the default target"),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("combobox", { name: "Default target" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save mapping" }));
+    await waitFor(() =>
+      expect(createAdminCandidateMappingMock).toHaveBeenCalledOnce(),
+    );
+    expect(createAdminCandidateMappingMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({
+          allowed_target_branches: ["release/kinder"],
+          default_target_branch: "release/kinder",
+        }),
+      }),
+    );
+  });
+
   it("fails closed on missing collection and version payloads, then retries all authorities", async () => {
     listAdminRepositoriesMock
       .mockResolvedValueOnce(ok(undefined as never))
@@ -783,10 +896,6 @@ describe("administrator mapping cursor collections", () => {
     await userEvent.click(
       screen.getByRole("checkbox", { name: "Allow target release/2026" }),
     );
-    await userEvent.click(
-      screen.getByRole("combobox", { name: "Default target" }),
-    );
-    await userEvent.click(screen.getByRole("option", { name: "release/2026" }));
     await userEvent.click(screen.getByRole("button", { name: "Save mapping" }));
     await waitFor(() =>
       expect(createAdminCandidateMappingMock).toHaveBeenCalledOnce(),
@@ -965,15 +1074,19 @@ describe("administrator mapping cursor collections", () => {
     );
     await user.click(screen.getByLabelText("Allow target main"));
     await user.click(screen.getByLabelText("Allow target main"));
-    await user.click(screen.getByRole("combobox", { name: "Default target" }));
-    await user.click(screen.getByRole("option", { name: "main" }));
+    await user.click(
+      screen.getByRole("button", { name: "Make main the default target" }),
+    );
     await user.click(screen.getByRole("link", { name: "Users destination" }));
     expect(
       screen.queryByRole("alertdialog", { name: "Leave without saving?" }),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("combobox", { name: "Default target" }));
-    await user.click(screen.getByRole("option", { name: "release/2026" }));
+    await user.click(
+      screen.getByRole("button", {
+        name: "Make release/2026 the default target",
+      }),
+    );
     await user.click(screen.getByRole("link", { name: "Users destination" }));
     const dialog = await screen.findByRole("alertdialog", {
       name: "Leave without saving?",
@@ -982,11 +1095,12 @@ describe("administrator mapping cursor collections", () => {
       within(dialog).getByRole("button", { name: "Keep editing" }),
     );
     expect(
-      screen.getByRole("combobox", { name: "Default target" }),
-    ).toHaveTextContent("release/2026");
+      screen.getByText("release/2026 is the default target"),
+    ).toBeVisible();
 
-    await user.click(screen.getByRole("combobox", { name: "Default target" }));
-    await user.click(screen.getByRole("option", { name: "main" }));
+    await user.click(
+      screen.getByRole("button", { name: "Make main the default target" }),
+    );
     await user.click(screen.getByRole("link", { name: "Users destination" }));
     expect(
       screen.queryByRole("alertdialog", { name: "Leave without saving?" }),
@@ -1086,8 +1200,6 @@ describe("administrator mapping cursor collections", () => {
     );
     await user.click(screen.getByRole("option", { name: "translations/main" }));
     await user.click(screen.getByLabelText("Allow target release/2026"));
-    await user.click(screen.getByRole("combobox", { name: "Default target" }));
-    await user.click(screen.getByRole("option", { name: "release/2026" }));
 
     await user.click(screen.getByRole("button", { name: "Save mapping" }));
     expect(await screen.findByText("Mapping not saved")).toBeVisible();

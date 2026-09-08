@@ -168,6 +168,12 @@ function repositoryLabel(repository: AdminRepositoryResponse) {
     : `${repository.descriptive_name} — ${providerIdentity}`;
 }
 
+function branchMatchesQuery(branchName: string, query: string) {
+  return branchName
+    .toLocaleLowerCase()
+    .includes(query.trim().toLocaleLowerCase());
+}
+
 function responseStatus(result: { response?: Response }) {
   return result.response?.status;
 }
@@ -376,6 +382,7 @@ export function ProductMappingsPage({
   const directId = useId();
   const separateId = useId();
   const defaultTargetId = useId();
+  const targetSearchId = useId();
   const versionControllerRef = useRef<AbortController | null>(null);
   const versionGenerationRef = useRef(0);
   const submitPendingRef = useRef(false);
@@ -404,6 +411,7 @@ export function ProductMappingsPage({
     [],
   );
   const [defaultTargetBranch, setDefaultTargetBranch] = useState("");
+  const [targetBranchQuery, setTargetBranchQuery] = useState("");
   const [configuredDirectBranches, setConfiguredDirectBranches] = useState<
     string[]
   >([]);
@@ -619,6 +627,7 @@ export function ProductMappingsPage({
       setDirectSourceBranch("");
       setAllowedTargetBranches([]);
       setDefaultTargetBranch("");
+      setTargetBranchQuery("");
       setConfiguredDirectBranches([]);
     } else if (side === "keys") {
       setKeysRepositoryId(repositoryId);
@@ -629,6 +638,7 @@ export function ProductMappingsPage({
       setTranslationsSourceBranch("");
       setAllowedTargetBranches([]);
       setDefaultTargetBranch("");
+      setTargetBranchQuery("");
       setConfiguredTranslationsBranches([]);
     }
   }
@@ -644,6 +654,7 @@ export function ProductMappingsPage({
     setTranslationsSourceBranch("");
     setAllowedTargetBranches([]);
     setDefaultTargetBranch("");
+    setTargetBranchQuery("");
     setConfiguredDirectBranches([]);
     setConfiguredKeysBranches([]);
     setConfiguredTranslationsBranches([]);
@@ -661,15 +672,13 @@ export function ProductMappingsPage({
 
   function toggleAllowedTarget(branch: string, checked: boolean) {
     setFormError(null);
-    setAllowedTargetBranches((current) => {
-      const next = checked
-        ? [...current, branch]
-        : current.filter((item) => item !== branch);
-      if (!next.includes(defaultTargetBranch)) {
-        setDefaultTargetBranch("");
-      }
-      return next;
-    });
+    const next = checked
+      ? Array.from(new Set([...allowedTargetBranches, branch]))
+      : allowedTargetBranches.filter((item) => item !== branch);
+    setAllowedTargetBranches(next);
+    setDefaultTargetBranch((current) =>
+      next.includes(current) ? current : (next[0] ?? ""),
+    );
   }
 
   function beginEdit(mapping: AdminMappingResponse) {
@@ -680,6 +689,7 @@ export function ProductMappingsPage({
     setCurrentCandidateVersion(mapping.candidate_version);
     setAllowedTargetBranches(mapping.allowed_target_branches);
     setDefaultTargetBranch(mapping.default_target_branch);
+    setTargetBranchQuery("");
     setFormError(null);
     if (mapping.topology === "direct") {
       setDirectRepositoryId(mapping.primary_repository_id);
@@ -845,6 +855,36 @@ export function ProductMappingsPage({
     topology === "direct" ? directBranches : translationsBranches;
   const targetBranchItems =
     topology === "direct" ? directBranchItems : translationsBranchItems;
+  const filteredTargetBranchItems = targetBranchItems.filter((branch) =>
+    branchMatchesQuery(branch.name, targetBranchQuery),
+  );
+  const targetSearchActive = targetBranchQuery.trim().length > 0;
+  const {
+    isPartial: targetBranchesPartial,
+    loadMore: loadMoreTargetBranches,
+    loadMoreError: targetBranchesLoadMoreError,
+    loadingMore: loadingMoreTargetBranches,
+    status: targetBranchesStatus,
+  } = targetBranchCollection;
+
+  useEffect(() => {
+    if (
+      targetSearchActive &&
+      targetBranchesStatus === "ready" &&
+      targetBranchesPartial &&
+      !loadingMoreTargetBranches &&
+      !targetBranchesLoadMoreError
+    ) {
+      void loadMoreTargetBranches();
+    }
+  }, [
+    loadMoreTargetBranches,
+    loadingMoreTargetBranches,
+    targetSearchActive,
+    targetBranchesLoadMoreError,
+    targetBranchesPartial,
+    targetBranchesStatus,
+  ]);
   const Heading = embedded ? "h2" : "h1";
 
   function retryPage() {
@@ -1093,10 +1133,11 @@ export function ProductMappingsPage({
                 onValueChange={(value) => chooseRepository("direct", value)}
               />
               <BranchSelect
+                key={`direct-source:${directRepositoryId}`}
                 label="Source branch"
                 branchItems={directBranchItems}
                 collection={directBranches}
-                repositorySelected={directRepositoryId.length > 0}
+                repositoryId={directRepositoryId}
                 value={directSourceBranch}
                 onValueChange={(value) => {
                   setDirectSourceBranch(value);
@@ -1117,10 +1158,11 @@ export function ProductMappingsPage({
                   onValueChange={(value) => chooseRepository("keys", value)}
                 />
                 <BranchSelect
+                  key={`keys-source:${keysRepositoryId}`}
                   label="Keys source branch"
                   branchItems={keysBranchItems}
                   collection={keysBranches}
-                  repositorySelected={keysRepositoryId.length > 0}
+                  repositoryId={keysRepositoryId}
                   value={keysSourceBranch}
                   onValueChange={(value) => {
                     setKeysSourceBranch(value);
@@ -1141,10 +1183,11 @@ export function ProductMappingsPage({
                   }
                 />
                 <BranchSelect
+                  key={`translations-source:${translationsRepositoryId}`}
                   label="Translations source branch"
                   branchItems={translationsBranchItems}
                   collection={translationsBranches}
-                  repositorySelected={translationsRepositoryId.length > 0}
+                  repositoryId={translationsRepositoryId}
                   value={translationsSourceBranch}
                   onValueChange={(value) => {
                     setTranslationsSourceBranch(value);
@@ -1157,6 +1200,33 @@ export function ProductMappingsPage({
 
           <fieldset className="grid gap-3">
             <legend className="text-sm font-semibold">Allowed targets</legend>
+            <p className="text-sm text-muted-foreground">
+              Select one or more branches. The first target becomes the default
+              automatically.
+            </p>
+            <div className="grid gap-2">
+              <Label htmlFor={targetSearchId}>Search target branches</Label>
+              <Input
+                id={targetSearchId}
+                type="search"
+                autoComplete="off"
+                value={targetBranchQuery}
+                disabled={
+                  topology === "direct"
+                    ? directRepositoryId.length === 0
+                    : translationsRepositoryId.length === 0
+                }
+                placeholder="Type part of a branch name"
+                onChange={(event) => setTargetBranchQuery(event.target.value)}
+              />
+              {targetSearchActive ? (
+                <p className="text-sm text-muted-foreground" aria-live="polite">
+                  {targetBranchCollection.loadingMore
+                    ? `Searching ${targetBranchCollection.items.length} branches and loading more…`
+                    : `${filteredTargetBranchItems.length} matching ${filteredTargetBranchItems.length === 1 ? "branch" : "branches"}`}
+                </p>
+              ) : null}
+            </div>
             {targetBranchCollection.status === "loading" ? (
               <p role="status">Loading live branches</p>
             ) : null}
@@ -1171,16 +1241,17 @@ export function ProductMappingsPage({
             ) : null}
             {targetBranchCollection.status === "ready" ? (
               <div className="grid gap-2">
-                {targetBranchItems.map((branch) => {
+                {filteredTargetBranchItems.map((branch) => {
                   const checkboxId = `${defaultTargetId}-${branch.name}`;
+                  const selected = allowedTargetBranches.includes(branch.name);
                   return (
                     <div
                       key={branch.name}
-                      className="flex min-h-11 min-w-0 items-center gap-3"
+                      className="flex min-h-11 min-w-0 flex-wrap items-center gap-3 rounded-md border bg-background px-3 py-2"
                     >
                       <Checkbox
                         id={checkboxId}
-                        checked={allowedTargetBranches.includes(branch.name)}
+                        checked={selected}
                         aria-label={`Allow target ${branch.name}`}
                         onCheckedChange={(checked) =>
                           toggleAllowedTarget(branch.name, checked === true)
@@ -1192,37 +1263,46 @@ export function ProductMappingsPage({
                       >
                         {branch.name}
                       </Label>
+                      {selected && defaultTargetBranch === branch.name ? (
+                        <span className="ml-auto rounded-full bg-success/15 px-2 py-1 text-xs font-semibold text-success">
+                          Default
+                        </span>
+                      ) : selected ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="ml-auto"
+                          aria-label={`Make ${branch.name} the default target`}
+                          onClick={() => {
+                            setDefaultTargetBranch(branch.name);
+                            setFormError(null);
+                          }}
+                        >
+                          Make default
+                        </Button>
+                      ) : null}
                     </div>
                   );
                 })}
+                {targetSearchActive &&
+                filteredTargetBranchItems.length === 0 &&
+                !targetBranchCollection.loadingMore ? (
+                  <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                    No live branches match “{targetBranchQuery.trim()}”.
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </fieldset>
 
-          <div className="grid gap-2">
-            <Label htmlFor={defaultTargetId}>Default target</Label>
-            <Select
-              value={defaultTargetBranch}
-              disabled={allowedTargetBranches.length === 0}
-              onValueChange={(value) => {
-                if (allowedTargetBranches.includes(value)) {
-                  setDefaultTargetBranch(value);
-                  setFormError(null);
-                }
-              }}
+          {allowedTargetBranches.length > 0 ? (
+            <p
+              className="rounded-md border border-success/40 bg-success/10 px-4 py-3 font-mono text-sm text-success"
+              aria-live="polite"
             >
-              <SelectTrigger id={defaultTargetId} className="w-full">
-                <SelectValue placeholder="Select an allowed target" />
-              </SelectTrigger>
-              <SelectContent>
-                {allowedTargetBranches.map((branch) => (
-                  <SelectItem key={branch} value={branch}>
-                    {branch}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              {defaultTargetBranch} is the default target
+            </p>
+          ) : null}
 
           {formError !== null ? (
             <Alert variant="destructive" tabIndex={-1}>
@@ -1373,20 +1453,68 @@ function BranchSelect({
   collection,
   label,
   onValueChange,
-  repositorySelected,
+  repositoryId,
   value,
 }: {
   branchItems: readonly AdminBranchResponse[];
   collection: CursorCollectionState<AdminBranchResponse>;
   label: string;
   onValueChange: (value: string) => void;
-  repositorySelected: boolean;
+  repositoryId: string;
   value: string;
 }) {
   const id = useId();
+  const searchId = useId();
+  const [query, setQuery] = useState("");
+  const repositorySelected = repositoryId.length > 0;
+  const searchActive = query.trim().length > 0;
+  const filteredBranches = branchItems.filter((branch) =>
+    branchMatchesQuery(branch.name, query),
+  );
+  const {
+    isPartial: branchesPartial,
+    loadMore: loadMoreBranches,
+    loadMoreError: branchesLoadMoreError,
+    loadingMore: loadingMoreBranches,
+    status: branchesStatus,
+  } = collection;
+
+  useEffect(() => {
+    if (
+      searchActive &&
+      branchesStatus === "ready" &&
+      branchesPartial &&
+      !loadingMoreBranches &&
+      !branchesLoadMoreError
+    ) {
+      void loadMoreBranches();
+    }
+  }, [
+    branchesLoadMoreError,
+    branchesPartial,
+    branchesStatus,
+    loadMoreBranches,
+    loadingMoreBranches,
+    searchActive,
+  ]);
+
   return (
     <div className="grid min-w-0 gap-2">
       <Label htmlFor={id}>{label}</Label>
+      <div className="grid gap-2">
+        <Label htmlFor={searchId} className="text-xs text-muted-foreground">
+          Search {label}
+        </Label>
+        <Input
+          id={searchId}
+          type="search"
+          autoComplete="off"
+          value={query}
+          disabled={!repositorySelected || collection.status === "error"}
+          placeholder="Type part of a branch name"
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </div>
       <Select
         key={`${value}:${branchItems.some((branch) => branch.name === value) ? "live" : "missing"}`}
         value={value}
@@ -1408,13 +1536,27 @@ function BranchSelect({
           </SelectValue>
         </SelectTrigger>
         <SelectContent>
-          {branchItems.map((branch) => (
+          {filteredBranches.map((branch) => (
             <SelectItem key={branch.name} value={branch.name}>
               {branch.name}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
+      {searchActive ? (
+        <p className="text-sm text-muted-foreground" aria-live="polite">
+          {collection.loadingMore
+            ? `Searching ${collection.items.length} branches and loading more…`
+            : `${filteredBranches.length} matching ${filteredBranches.length === 1 ? "branch" : "branches"}`}
+        </p>
+      ) : null}
+      {searchActive &&
+      filteredBranches.length === 0 &&
+      !collection.loadingMore ? (
+        <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+          No live branches match “{query.trim()}”.
+        </p>
+      ) : null}
       {repositorySelected ? (
         <CursorCollectionControls
           collection={collection}

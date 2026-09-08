@@ -2789,22 +2789,19 @@ describe("administrator product configuration tracer", () => {
     ).toBeVisible();
     await userEvent.click(screen.getByRole("option", { name: "main" }));
 
-    const defaultTarget = screen.getByRole("combobox", {
-      name: "Default target",
-    });
-    expect(defaultTarget).toBeDisabled();
+    expect(
+      screen.queryByRole("combobox", { name: "Default target" }),
+    ).not.toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("checkbox", {
         name: "Allow target release/2026-with-a-very-long-opaque-provider-branch-name",
       }),
     );
-    expect(defaultTarget).toBeEnabled();
-    await userEvent.click(defaultTarget);
-    await userEvent.click(
-      screen.getByRole("option", {
-        name: "release/2026-with-a-very-long-opaque-provider-branch-name",
-      }),
-    );
+    expect(
+      screen.getByText(
+        "release/2026-with-a-very-long-opaque-provider-branch-name is the default target",
+      ),
+    ).toBeVisible();
 
     expect(
       screen.queryByRole("button", { name: /delete mapping/i }),
@@ -2890,12 +2887,6 @@ describe("administrator product configuration tracer", () => {
       name: "Allow target release/2026-with-a-very-long-opaque-provider-branch-name",
     });
     await user.click(target);
-    await user.click(screen.getByRole("combobox", { name: "Default target" }));
-    await user.click(
-      screen.getByRole("option", {
-        name: "release/2026-with-a-very-long-opaque-provider-branch-name",
-      }),
-    );
     await user.click(screen.getByRole("button", { name: "Save mapping" }));
 
     expect(createAdminCandidateMappingMock).toHaveBeenNthCalledWith(1, {
@@ -2922,10 +2913,10 @@ describe("administrator product configuration tracer", () => {
     );
     expect(target).toBeChecked();
     expect(
-      screen.getByRole("combobox", { name: "Default target" }),
-    ).toHaveTextContent(
-      "release/2026-with-a-very-long-opaque-provider-branch-name",
-    );
+      screen.getByText(
+        "release/2026-with-a-very-long-opaque-provider-branch-name is the default target",
+      ),
+    ).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Save mapping" }));
     expect(toastSuccessMock).toHaveBeenCalledWith("Draft saved");
