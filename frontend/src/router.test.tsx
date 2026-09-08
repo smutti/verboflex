@@ -481,6 +481,7 @@ describe("session routes", () => {
       auth: "memory-only-admin-bearer",
       path: { product_id: productId, revision_id: candidateId },
       query: { cursor: null, limit: 50 },
+      signal: expect.any(AbortSignal),
     });
   });
 

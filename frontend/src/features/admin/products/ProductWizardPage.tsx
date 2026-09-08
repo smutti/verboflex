@@ -13,10 +13,7 @@ import { toast } from "sonner";
 import {
   createAdminProduct,
   getAdminProduct,
-  listAdminRevisionMappings,
-  type AdminMappingListResponse,
   updateAdminProductCandidate,
-  type AdminMappingResponse,
   type AdminProductResponse,
 } from "../../../api/client";
 import {
@@ -40,6 +37,7 @@ import { Skeleton } from "../../../components/ui/skeleton";
 import { Textarea } from "../../../components/ui/textarea";
 import { ProductMappingsPage } from "../mappings/ProductMappingsPage";
 import { ProductRepositoriesPage } from "../repositories/ProductRepositoriesPage";
+import { loadMappedRepositoryIds } from "../repositories/product-repository-usage";
 import { useDirtyFormNavigationGuard } from "../../../components/navigation/DirtyFormNavigationGuard";
 
 export interface ProductWizardPageProps {
@@ -65,8 +63,6 @@ interface EditableProductLoad {
   product: AdminProductResponse;
 }
 
-const MAX_REVISION_MAPPING_PAGES = 50;
-
 export interface MobileWizardNavigation {
   backDisabled: boolean;
   nextDisabled: boolean;
@@ -91,18 +87,6 @@ export function mobileWizardNavigation(
   };
 }
 
-function mappedRepositoryIds(mappings: readonly AdminMappingResponse[]) {
-  return Array.from(
-    new Set(
-      mappings.flatMap((mapping) =>
-        mapping.translations_repository_id === null
-          ? [mapping.primary_repository_id]
-          : [mapping.primary_repository_id, mapping.translations_repository_id],
-      ),
-    ),
-  );
-}
-
 // Exported for route-level generated-client contract tests.
 // eslint-disable-next-line react-refresh/only-export-components
 export async function loadEditableProduct(
@@ -125,54 +109,14 @@ export async function loadEditableProduct(
     return { mappedRepositoryIds: [], product };
   }
 
-  const mappings: AdminMappingResponse[] = [];
-  const mappingIds = new Set<string>();
-  const consumedCursors = new Set<string>();
-  let cursor: string | null = null;
-  let pageCount = 0;
-  do {
-    if (signal.aborted) {
-      throw new DOMException("The operation was aborted", "AbortError");
-    }
-    if (pageCount >= MAX_REVISION_MAPPING_PAGES) {
-      throw new Error("product mappings exceeded page limit");
-    }
-    const mappingsResult: { data?: AdminMappingListResponse } =
-      await listAdminRevisionMappings({
-        auth: accessToken,
-        path: {
-          product_id: productId,
-          revision_id: editableRevision.id,
-        },
-        query: { cursor, limit: 50 },
-      });
-    if (signal.aborted) {
-      throw new DOMException("The operation was aborted", "AbortError");
-    }
-    if (mappingsResult.data === undefined) {
-      throw new Error("product mappings unavailable");
-    }
-    for (const mapping of mappingsResult.data.items) {
-      if (!mappingIds.has(mapping.id)) {
-        mappingIds.add(mapping.id);
-        mappings.push(mapping);
-      }
-    }
-    cursor = mappingsResult.data.next_cursor;
-    pageCount += 1;
-    if (cursor !== null) {
-      if (consumedCursors.has(cursor)) {
-        throw new Error("product mappings repeated cursor");
-      }
-      consumedCursors.add(cursor);
-    }
-  } while (cursor !== null);
-
-  if (signal.aborted) {
-    throw new DOMException("The operation was aborted", "AbortError");
-  }
+  const repositoryIds = await loadMappedRepositoryIds({
+    accessToken,
+    productId,
+    revisionId: editableRevision.id,
+    signal,
+  });
   return {
-    mappedRepositoryIds: mappedRepositoryIds(mappings),
+    mappedRepositoryIds: repositoryIds,
     product,
   };
 }

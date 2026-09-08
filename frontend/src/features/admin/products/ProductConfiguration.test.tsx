@@ -1134,6 +1134,7 @@ describe("administrator product configuration tracer", () => {
         revision_id: activeProduct.candidate_revision!.id,
       },
       query: { cursor: null, limit: 50 },
+      signal: expect.any(AbortSignal),
     });
     expect(listAdminRevisionMappingsMock).toHaveBeenNthCalledWith(2, {
       auth: "memory-only-admin-bearer",
@@ -1142,6 +1143,7 @@ describe("administrator product configuration tracer", () => {
         revision_id: activeProduct.candidate_revision!.id,
       },
       query: { cursor: "opaque-revision-page-2", limit: 50 },
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1412,7 +1414,7 @@ describe("administrator product configuration tracer", () => {
       screen.getByRole("button", { name: "Next: Repositories" }),
     );
     expect(
-      await screen.findByRole("heading", { name: "Repositories" }),
+      await screen.findByRole("heading", { name: "Repository catalogue" }),
     ).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByRole("textbox", { name: "Name" })).toBeVisible();
@@ -2578,7 +2580,9 @@ describe("administrator product configuration tracer", () => {
     ).toBeVisible();
     await userEvent.click(screen.getByRole("link", { name: "Repositories" }));
     expect(
-      await screen.findByRole("heading", { name: "Repositories" }),
+      await screen.findByRole("heading", {
+        name: "Repositories used by this product",
+      }),
     ).toBeVisible();
     const detailLayout = screen.getByTestId("product-detail-layout");
     expect(detailLayout).toHaveAttribute("aria-label", "Product configuration");
@@ -2639,7 +2643,38 @@ describe("administrator product configuration tracer", () => {
     expect(listAdminCandidateMappingsMock).not.toHaveBeenCalled();
   });
 
-  it("reuses or registers credential-free repositories with responsive API ordering", async () => {
+  it("routes the product repository tab to mapping-derived repository usage", async () => {
+    exposeTask2Repositories();
+    render(
+      <MemoryRouter
+        initialEntries={[`/admin/products/${activeProduct.id}/repositories`]}
+      >
+        <AppRouter />
+      </MemoryRouter>,
+    );
+
+    const list = await screen.findByRole("list", {
+      name: "Repositories used by this product",
+    });
+    expect(within(list).getByText("Mobile application source")).toBeVisible();
+    expect(
+      within(list).queryByText("localization-team/mobile-translations"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Register repository" }),
+    ).not.toBeInTheDocument();
+    expect(listAdminRevisionMappingsMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: {
+        product_id: activeProduct.id,
+        revision_id: activeProduct.candidate_revision!.id,
+      },
+      query: { cursor: null, limit: 50 },
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it("reuses or registers credential-free repositories in the embedded global catalogue", async () => {
     exposeTask2Repositories();
     const registeredRepository: AdminRepositoryResponse = {
       id: "00000000-0000-4000-8000-000000000303",
@@ -2650,13 +2685,8 @@ describe("administrator product configuration tracer", () => {
     createAdminRepositoryMock.mockResolvedValueOnce(
       ok(registeredRepository, 201),
     );
-    render(
-      <MemoryRouter
-        initialEntries={[`/admin/products/${activeProduct.id}/repositories`]}
-      >
-        <AppRouter />
-      </MemoryRouter>,
-    );
+    renderWizard(activeProduct);
+    await userEvent.click(screen.getByRole("button", { name: "Repositories" }));
 
     const table = await screen.findByRole("table", { name: "Repositories" });
     expect(listAdminRepositoriesMock).toHaveBeenCalledWith({

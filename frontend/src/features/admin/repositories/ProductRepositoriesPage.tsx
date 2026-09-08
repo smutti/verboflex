@@ -23,11 +23,13 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { useCursorCollection } from "../useCursorCollection";
+import { MappedProductRepositories } from "./MappedProductRepositories";
 
 export interface ProductRepositoriesPageProps {
   accessToken: string;
   embedded?: boolean;
   onRepositorySelected?: (repository: AdminRepositoryResponse) => void;
+  productId?: string;
   selectedRepositoryIds?: readonly string[];
 }
 
@@ -56,8 +58,33 @@ export function ProductRepositoriesPage({
   accessToken,
   embedded = false,
   onRepositorySelected,
+  productId,
   selectedRepositoryIds = [],
 }: ProductRepositoriesPageProps) {
+  if (productId !== undefined) {
+    return (
+      <MappedProductRepositories
+        accessToken={accessToken}
+        productId={productId}
+      />
+    );
+  }
+  return (
+    <RepositoryCatalogue
+      accessToken={accessToken}
+      embedded={embedded}
+      onRepositorySelected={onRepositorySelected}
+      selectedRepositoryIds={selectedRepositoryIds}
+    />
+  );
+}
+
+function RepositoryCatalogue({
+  accessToken,
+  embedded = false,
+  onRepositorySelected,
+  selectedRepositoryIds = [],
+}: Omit<ProductRepositoriesPageProps, "productId">) {
   const workspaceId = useId();
   const slugId = useId();
   const descriptiveNameId = useId();
@@ -163,13 +190,26 @@ export function ProductRepositoriesPage({
               : "text-display font-semibold"
           }
         >
-          Repositories
+          Repository catalogue
         </Heading>
         <p className="text-muted-foreground">
-          Reuse a registered Bitbucket repository or register its provider
-          identity without storing credentials here.
+          Choose a reusable Bitbucket repository or register its provider
+          identity. Credentials remain in the organization-wide connection.
         </p>
       </div>
+
+      {embedded ? (
+        <aside
+          role="note"
+          className="border-primary/25 bg-primary/5 grid gap-1 rounded-xl border p-5"
+        >
+          <strong>Repository selection prepares the mapping</strong>
+          <p className="text-sm text-muted-foreground">
+            The product association is saved only when you save a mapping in the
+            next step.
+          </p>
+        </aside>
+      ) : null}
 
       {repositoryCollection.status === "loading" ? (
         <section className="grid gap-3" role="status" aria-live="polite">
@@ -330,6 +370,8 @@ export function ProductRepositoriesPage({
 
       <form
         className="grid gap-6 rounded-lg border bg-secondary p-6"
+        aria-label="Register a Bitbucket repository"
+        noValidate
         onSubmit={(event) => void registerRepository(event)}
       >
         <div className="grid gap-2">
@@ -347,12 +389,24 @@ export function ProductRepositoriesPage({
               id={workspaceId}
               value={workspace}
               aria-invalid={workspaceError}
+              aria-describedby={
+                workspaceError ? `${workspaceId}-error` : undefined
+              }
+              required
               onChange={(event) => {
                 setWorkspace(event.target.value);
                 setWorkspaceError(false);
                 setRegisterError(false);
               }}
             />
+            {workspaceError ? (
+              <p
+                id={`${workspaceId}-error`}
+                className="text-sm text-destructive"
+              >
+                Enter the Bitbucket workspace.
+              </p>
+            ) : null}
           </div>
           <div className="grid gap-2">
             <Label htmlFor={slugId}>Repository slug</Label>
@@ -360,12 +414,19 @@ export function ProductRepositoriesPage({
               id={slugId}
               value={repositorySlug}
               aria-invalid={slugError}
+              aria-describedby={slugError ? `${slugId}-error` : undefined}
+              required
               onChange={(event) => {
                 setRepositorySlug(event.target.value);
                 setSlugError(false);
                 setRegisterError(false);
               }}
             />
+            {slugError ? (
+              <p id={`${slugId}-error`} className="text-sm text-destructive">
+                Enter the repository slug.
+              </p>
+            ) : null}
           </div>
         </div>
         <div className="grid gap-2">
@@ -395,7 +456,7 @@ export function ProductRepositoriesPage({
           disabled={registerPending}
           aria-busy={registerPending}
         >
-          Register repository
+          {registerPending ? "Registering repository" : "Register repository"}
         </Button>
       </form>
     </section>

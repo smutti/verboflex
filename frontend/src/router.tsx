@@ -212,6 +212,18 @@ function ProductMappingsRoute({ accessToken }: { accessToken: string }) {
   );
 }
 
+function ProductRepositoriesRoute({ accessToken }: { accessToken: string }) {
+  const productId = useParams<"productId">().productId ?? "";
+  return (
+    <ProductDetailLayout hideTitle>
+      <ProductRepositoriesPage
+        accessToken={accessToken}
+        productId={productId}
+      />
+    </ProductDetailLayout>
+  );
+}
+
 export function AdminApplicationRoutes({
   accessToken,
   currentUserId,
@@ -239,11 +251,7 @@ export function AdminApplicationRoutes({
       />
       <Route
         path="products/:productId/repositories"
-        element={
-          <ProductDetailLayout hideTitle>
-            <ProductRepositoriesPage accessToken={accessToken} />
-          </ProductDetailLayout>
-        }
+        element={<ProductRepositoriesRoute accessToken={accessToken} />}
       />
       <Route
         path="products/:productId/mappings"
