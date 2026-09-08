@@ -257,6 +257,33 @@ def test_qt_identity_accepts_ts_20_and_normalizes_languages() -> None:
     ]
 
 
+def test_qt_import_accepts_standard_doctype_and_legacy_utf8_message_attribute() -> None:
+    _, qt = _modules()
+    content = (
+        b'<?xml version="1.0" encoding="UTF-8"?>\n'
+        b"<!DOCTYPE TS>\n"
+        b'<TS version="2.0" language="en_US"><context><name>Main</name>'
+        b'<message utf8="true"><location filename="../main.cpp" line="12"/>'
+        b'<source>Hello</source><translation type="unfinished">Hello</translation>'
+        b"</message></context></TS>"
+    )
+
+    result = qt.parse_qt_ts(
+        _input(
+            content,
+            path="resources/translationsLangs/maxi_en.ts",
+            layout_identity="qt-ts:resources/translationsLangs/maxi_{locale}.ts",
+        )
+    )
+
+    assert result.issues == ()
+    assert len(result.values) == 1
+    assert result.values[0].language == "en-US"
+    assert _node_fields(result.values[0], "qt_ts:message") == [
+        {"identity_kind": "source", "numerus": False, "utf8": True}
+    ]
+
+
 def _invalid_case_content(case: dict[str, object]) -> bytes:
     content = case.get("content")
     if isinstance(content, str):

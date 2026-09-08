@@ -88,6 +88,41 @@ def test_qt_accepts_utf8_bom_and_case_insensitive_utf8_declaration() -> None:
     assert result.candidates[0].samples[0].translation == "Zdravo"
 
 
+def test_qt_accepts_real_ts_20_doctype_locations_and_legacy_utf8_attribute() -> None:
+    def document(language: str, translation: str) -> bytes:
+        return (
+            b'<?xml version="1.0" encoding="utf-8"?>\n'
+            b"<!DOCTYPE TS>\n"
+            + f'<TS version="2.0" language="{language}">'.encode()
+            + b"<context><name>MainWindow</name>"
+            + b'<message utf8="true"><location filename="../main.cpp" line="12"/>'
+            + b"<source>Hello</source>"
+            + f'<translation type="unfinished">{translation}</translation>'.encode()
+            + b"</message></context><context><name>Secondary</name>"
+            + b"<message><source>Hello</source><translation></translation></message>"
+            + b"</context></TS>"
+        )
+
+    detector = _detector_module()
+    result = detector.detect_qt_ts_layouts(
+        (
+            _source("resources/translationsLangs/maxi_de.ts", document("de_DE", "Hallo")),
+            _source("resources/translationsLangs/maxi_en.ts", document("en_US", "Hello")),
+        ),
+        repository_side="direct",
+    )
+
+    assert len(result.candidates) == 1
+    candidate = result.candidates[0]
+    assert candidate.layout_identity == ("qt-ts:resources/translationsLangs/maxi_{locale}.ts")
+    assert candidate.files == (
+        "resources/translationsLangs/maxi_de.ts",
+        "resources/translationsLangs/maxi_en.ts",
+    )
+    assert candidate.languages == ("de-DE", "en-US")
+    assert candidate.keys == ("Hello",)
+
+
 @pytest.mark.parametrize(
     "content",
     (
@@ -131,16 +166,6 @@ def test_qt_unsupported_encodings_never_confirm(content: bytes) -> None:
         ),
         (
             b"<TS version='2.1' language='en'><context><name>Main</name><message>"
-            b"<source>Hello</source><translation type='unfinished'>Hello</translation>"
-            b"</message></context></TS>"
-        ),
-        (
-            b"<TS version='2.1' language='en'><context><name>Main</name><message>"
-            b"<source>Hello</source><translation type='obsolete'>Hello</translation>"
-            b"</message></context></TS>"
-        ),
-        (
-            b"<TS version='2.1' language='en'><context><name>Main</name><message>"
             b"<source>Hello</source><translation variants='yes'>Hello</translation>"
             b"</message></context></TS>"
         ),
@@ -172,8 +197,6 @@ def test_qt_unsupported_encodings_never_confirm(content: bytes) -> None:
         "empty-ts",
         "empty-context",
         "numerus",
-        "unfinished",
-        "obsolete",
         "variants-attribute",
         "lengthvariant",
         "byte-node",
@@ -266,12 +289,6 @@ def test_qt_arbitrary_bytes_are_always_bounded_and_never_raise(content: bytes) -
             b"<TS version='2.1' language='en'><other><name>Main</name>"
             b"<message><source>Hello</source><translation>Hello</translation></message>"
             b"</other></TS>"
-        ),
-        (
-            b"<TS version='2.1' language='en'><context><name>One</name>"
-            b"<message><source>Hello</source><translation>One</translation></message>"
-            b"</context><context><name>Two</name><message><source>Hello</source>"
-            b"<translation>Two</translation></message></context></TS>"
         ),
     ),
 )

@@ -20,6 +20,7 @@ from verboflex.localization.preview.core import (
     extract_preview_locale_path,
     normalize_preview_locale,
 )
+from verboflex.localization.qt_doctype import mask_standard_qt_doctype
 from verboflex.services.repository_discovery import (
     SOURCE_DISCOVERY_BUDGET,
     RepositorySourceFile,
@@ -59,7 +60,7 @@ def _decode_xml(content: bytes) -> str:
         encoding = declaration.group("encoding")
         if encoding is not None and encoding.casefold() != "utf-8":
             raise ValueError("unsupported Qt TS declaration")
-    return text
+    return mask_standard_qt_doctype(text)
 
 
 def _plain_text(element: Element) -> str:
@@ -91,14 +92,39 @@ def _message_values(context: Element) -> dict[str, str]:
 
 
 def _plain_message(message: Element) -> tuple[str, str]:
-    if message.tag != "message" or message.attrib:
+    if message.tag != "message" or not set(message.attrib).issubset({"id", "numerus", "utf8"}):
+        raise ValueError("unsupported Qt TS")
+    if message.attrib.get("numerus", "no") != "no":
+        raise ValueError("unsupported Qt TS")
+    if (utf8 := message.attrib.get("utf8")) is not None and utf8 not in {"true", "false"}:
         raise ValueError("unsupported Qt TS")
     if (message.text or "").strip() or (message.tail or "").strip():
         raise ValueError("unsupported Qt TS")
     children = list(message)
-    if [child.tag for child in children] != ["source", "translation"]:
+    index = 0
+    while index < len(children) and children[index].tag == "location":
+        location = children[index]
+        if (
+            location.attrib.keys() - {"filename", "line"}
+            or len(location)
+            or (location.text or "").strip()
+            or (location.tail or "").strip()
+        ):
+            raise ValueError("unsupported Qt TS")
+        index += 1
+    if [child.tag for child in children[index:]] != ["source", "translation"]:
         raise ValueError("unsupported Qt TS")
-    return _plain_text(children[0]), _plain_text(children[1])
+    source = _plain_text(children[index])
+    translation = children[index + 1]
+    if (
+        not set(translation.attrib).issubset({"type"})
+        or translation.attrib.get("type", "active")
+        not in {"active", "unfinished", "obsolete", "vanished"}
+        or len(translation)
+        or (translation.tail or "").strip()
+    ):
+        raise ValueError("unsupported Qt TS")
+    return source, translation.text or ""
 
 
 def _qt_root(text: str) -> Element:
@@ -111,9 +137,19 @@ def _qt_root(text: str) -> Element:
         )
     except (DefusedXmlException, ElementTree.ParseError) as error:
         raise ValueError("unsupported Qt TS") from error
-    if root.tag != "TS" or set(root.attrib) != {"version", "language"}:
+    if (
+        root.tag != "TS"
+        or "version" not in root.attrib
+        or "language" not in root.attrib
+        or not set(root.attrib).issubset({"version", "language", "sourcelanguage"})
+    ):
         raise ValueError("unsupported Qt TS")
-    if root.attrib["version"] != "2.1" or (root.text or "").strip() or not len(root):
+    if root.attrib["version"] not in {"2.0", "2.1"} or (root.text or "").strip() or not len(root):
+        raise ValueError("unsupported Qt TS")
+    if normalize_preview_locale(root.attrib["language"]) is None:
+        raise ValueError("unsupported Qt TS")
+    source_language = root.attrib.get("sourcelanguage")
+    if source_language is not None and normalize_preview_locale(source_language) is None:
         raise ValueError("unsupported Qt TS")
     return cast(Element, root)
 
@@ -125,6 +161,12 @@ def _qt_layout_identity(path: str, *, language: str) -> str:
         allow_prefixed_stem=True,
         expected_locale=language,
     )
+    if path_layout is None:
+        path_layout = extract_preview_locale_path(
+            path,
+            suffix=".ts",
+            allow_prefixed_stem=True,
+        )
     return f"qt-ts:{path_layout[1]}" if path_layout is not None else f"qt-ts:{path}"
 
 
@@ -139,9 +181,12 @@ def _parse_qt_file(file: RepositorySourceFile) -> _QtFile:
         if context.tag != "context" or (context.tail or "").strip():
             raise ValueError("unsupported Qt TS")
         context_values = _message_values(context)
-        if set(values).intersection(context_values):
-            raise ValueError("unsupported Qt TS")
-        values.update(context_values)
+        # Qt source text is only unique together with its context. Preview samples
+        # intentionally expose the human-readable source key, so keep the first
+        # deterministic sample here; the canonical importer retains the context in
+        # each selector and therefore does not collapse distinct translation units.
+        for source, translation in context_values.items():
+            values.setdefault(source, translation)
     return _QtFile(
         path=file.path,
         layout_identity=_qt_layout_identity(file.path, language=language),

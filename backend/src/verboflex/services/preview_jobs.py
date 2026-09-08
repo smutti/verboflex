@@ -30,7 +30,7 @@ from verboflex.services.bitbucket_oauth import PULLREQUEST_WRITE_SCOPE
 
 PREVIEW_TASK_NAME = "verboflex.preview.run"
 PREVIEW_DETECTOR_VERSION = "preview-skeleton-v1"
-PREVIEW_LAYOUT_IDENTITY = "automatic-layout-discovery-v1"
+PREVIEW_LAYOUT_IDENTITY = "automatic-layout-discovery-v2"
 PREVIEW_WATCHDOG_BATCH_SIZE = 100
 MAX_RESULT_BYTES = 1_048_576
 

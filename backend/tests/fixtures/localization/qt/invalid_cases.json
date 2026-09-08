@@ -1,7 +1,7 @@
 [
   {
-    "id": "dtd",
-    "content": "<!DOCTYPE TS><TS version='2.1' language='it'/>",
+    "id": "nonstandard-dtd",
+    "content": "<!DOCTYPE TS EXTRA><TS version='2.1' language='it'/>",
     "expected_code": "malformed_file"
   },
   {

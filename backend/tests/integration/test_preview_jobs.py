@@ -1015,7 +1015,7 @@ def test_succeeded_result_remains_inspectable_but_is_not_current_after_revision_
         ("candidate_revision_version", 5),
         ("connection_generation", 8),
         ("detector_version", "preview-skeleton-v2"),
-        ("layout_identity", "automatic-layout-discovery-v2"),
+        ("layout_identity", "automatic-layout-discovery-v3"),
     ],
 )
 def test_terminal_write_requires_the_complete_started_identity(

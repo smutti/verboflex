@@ -33,6 +33,7 @@ from verboflex.localization.preview.core import (
     extract_preview_locale_path,
     normalize_preview_locale,
 )
+from verboflex.localization.qt_doctype import mask_standard_qt_doctype
 
 MAX_CANONICAL_FILE_BYTES = 1_048_576
 MAX_QT_AGGREGATE_BYTES = 20_971_520
@@ -54,7 +55,7 @@ _XML_DECLARATION = re.compile(
 _LOCATION_LINE = re.compile(r"(?:[1-9][0-9]*|[+-][1-9][0-9]*)\Z")
 _POSITIVE_INTEGER = re.compile(r"[1-9][0-9]*\Z")
 _ROOT_ATTRIBUTES = {"version", "language", "sourcelanguage"}
-_MESSAGE_ATTRIBUTES = {"id", "numerus"}
+_MESSAGE_ATTRIBUTES = {"id", "numerus", "utf8"}
 _MESSAGE_METADATA = (
     "oldsource",
     "comment",
@@ -265,7 +266,7 @@ def _decode_xml(content: bytes) -> str:
             raise _MalformedQtTs
     if "\ufeff" in text or _contains_forbidden_control(text):
         raise _MalformedQtTs
-    return text
+    return mask_standard_qt_doctype(text)
 
 
 def _parse_root(content: bytes) -> Element:
@@ -328,6 +329,12 @@ def _qt_layout_identity(path: str, *, language: str) -> str:
         allow_prefixed_stem=True,
         expected_locale=language,
     )
+    if path_layout is None:
+        path_layout = extract_preview_locale_path(
+            path,
+            suffix=".ts",
+            allow_prefixed_stem=True,
+        )
     return f"qt-ts:{path_layout[1]}" if path_layout is not None else f"qt-ts:{path}"
 
 
@@ -509,6 +516,9 @@ def _message_values(
     if numerus_raw not in {"yes", "no"}:
         raise _UnsupportedQtTs
     is_numerus = numerus_raw == "yes"
+    utf8_raw = message.attrib.get("utf8")
+    if utf8_raw is not None and utf8_raw not in {"true", "false"}:
+        raise _UnsupportedQtTs
 
     children = list(message)
     index = 0
@@ -558,6 +568,8 @@ def _message_values(
     ]
     if identifier is not None:
         message_fields.insert(1, ("id", identifier))
+    if utf8_raw is not None:
+        message_fields.append(("utf8", utf8_raw == "true"))
     message_prefix = (
         prefix
         + (CanonicalStructureNode(kind="qt_ts:message", fields=tuple(message_fields)),)
