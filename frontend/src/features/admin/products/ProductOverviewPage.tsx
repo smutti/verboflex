@@ -48,9 +48,11 @@ type ReadyProductLoadState = Extract<ProductLoadState, { status: "ready" }>;
 function RevisionSummary({
   label,
   revision,
+  status,
 }: {
   label: string;
   revision: AdminProductRevisionSummary | null;
+  status: "published" | "draft";
 }) {
   return (
     <section
@@ -59,10 +61,15 @@ function RevisionSummary({
     >
       <h2 className="text-heading font-semibold">{label}</h2>
       {revision === null ? (
-        <p className="text-muted-foreground">Not configured</p>
+        <Badge variant="warning" className="w-fit rounded-md">
+          Not configured
+        </Badge>
       ) : (
         <>
-          <Badge variant="outline" className="w-fit rounded-md">
+          <Badge
+            variant={status === "published" ? "success" : "warning"}
+            className="w-fit rounded-md"
+          >
             Version {revision.version}
           </Badge>
           <p className="break-words [overflow-wrap:anywhere]">
@@ -231,7 +238,10 @@ export function ProductOverviewPage({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="grid min-w-0 gap-2">
             <span className="text-heading font-semibold">Lifecycle status</span>
-            <Badge variant="outline" className="w-fit rounded-md">
+            <Badge
+              variant={product.is_active ? "success" : "warning"}
+              className="w-fit rounded-md"
+            >
               {product.is_active ? "Active" : "Inactive"}
             </Badge>
           </div>
@@ -304,12 +314,14 @@ export function ProductOverviewPage({
             <RevisionSummary
               label="Published configuration"
               revision={product.active_revision}
+              status="published"
             />
           </TabsContent>
           <TabsContent value="draft" forceMount>
             <RevisionSummary
               label="Draft configuration"
               revision={product.candidate_revision}
+              status="draft"
             />
           </TabsContent>
         </Tabs>

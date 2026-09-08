@@ -803,12 +803,17 @@ describe("administrator product configuration tracer", () => {
     expect(
       within(table).getByRole("link", { name: activeProduct.name }),
     ).toHaveAttribute("href", `/admin/products/${activeProduct.id}/overview`);
-    expect(
-      within(table).getAllByText("Active", { selector: "[data-slot=badge]" }),
-    ).toHaveLength(1);
-    expect(
-      within(table).getAllByText("Inactive", { selector: "[data-slot=badge]" }),
-    ).toHaveLength(2);
+    const [activeBadge] = within(table).getAllByText("Active", {
+      selector: "[data-slot=badge]",
+    });
+    expect(activeBadge).toHaveAttribute("data-variant", "success");
+    const inactiveBadges = within(table).getAllByText("Inactive", {
+      selector: "[data-slot=badge]",
+    });
+    expect(inactiveBadges).toHaveLength(2);
+    for (const inactiveBadge of inactiveBadges) {
+      expect(inactiveBadge).toHaveAttribute("data-variant", "warning");
+    }
     expect(
       within(mobileList).getByRole("link", { name: activeProduct.name }),
     ).toHaveAttribute("href", `/admin/products/${activeProduct.id}/overview`);
@@ -1952,14 +1957,23 @@ describe("administrator product configuration tracer", () => {
     const candidate = screen.getByRole("region", {
       name: "Draft configuration",
     });
-    expect(within(published).getByText("Version 4")).toBeVisible();
+    expect(within(published).getByText("Version 4")).toHaveAttribute(
+      "data-variant",
+      "success",
+    );
     expect(
       within(published).getByText("Published mobile strings"),
     ).toBeVisible();
-    expect(within(candidate).getByText("Version 5")).toBeVisible();
+    expect(within(candidate).getByText("Version 5")).toHaveAttribute(
+      "data-variant",
+      "warning",
+    );
     expect(
       within(candidate).getByText("Candidate mobile strings"),
     ).toBeVisible();
+    expect(
+      screen.getByText("Active", { selector: "[data-slot=badge]" }),
+    ).toHaveAttribute("data-variant", "success");
     expect(getAdminProductMock).toHaveBeenCalledWith({
       auth: "memory-only-admin-bearer",
       path: { product_id: activeProduct.id },

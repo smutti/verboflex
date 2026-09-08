@@ -41,7 +41,10 @@ function normalizeSearch(value: string) {
 
 function ProductStatus({ product }: { product: AdminProductResponse }) {
   return (
-    <Badge variant="outline" className="rounded-md">
+    <Badge
+      variant={product.is_active ? "success" : "warning"}
+      className="rounded-md"
+    >
       {product.is_active ? "Active" : "Inactive"}
     </Badge>
   );
