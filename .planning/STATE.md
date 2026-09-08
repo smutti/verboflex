@@ -514,6 +514,7 @@ None yet.
 | 260907-u04 | Make administrator service status prominent with semantic colors and accessible visual hierarchy | 2026-09-07 | 268f77d | [260907-u04-make-administrator-service-status-promin](./quick/260907-u04-make-administrator-service-status-promin/) |
 | 260907-uir | Move signed-in identity into a user menu beside logout and add a profile page with password change | 2026-09-07 | 155774c | [260907-uir-move-signed-in-identity-into-a-user-menu](./quick/260907-uir-move-signed-in-identity-into-a-user-menu/) |
 | 260908-kwo | Make the admin product catalogue searchable with status chips, 50-item infinite scroll, and centered empty states | 2026-09-08 | 73c70f9 | [260908-kwo-make-admin-products-user-friendly-with-n](./quick/260908-kwo-make-admin-products-user-friendly-with-n/) |
+| 260908-rfq | Apply semantic green, yellow, and red badges to product lifecycle states | 2026-09-08 | 351c47e | [260908-rfq-apply-semantic-green-yellow-red-badges-t](./quick/260908-rfq-apply-semantic-green-yellow-red-badges-t/) |
 
 ### Roadmap Evolution
 
