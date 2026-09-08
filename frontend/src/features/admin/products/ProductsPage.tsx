@@ -84,6 +84,7 @@ function ProductFields({ product }: { product: AdminProductResponse }) {
 export function ProductsPage({ accessToken }: ProductsPageProps) {
   const currentLocation = useLocation();
   const loadGeneration = useRef(0);
+  const loadedAuthorityRef = useRef<string | null>(null);
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null);
   // Stryker disable next-line BooleanLiteral: append controls are absent until the first response, whose finally block resets this internal gate.
   const loadingMoreRef = useRef(false);
@@ -94,6 +95,8 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
   const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>("all");
   const [searchInput, setSearchInput] = useState("");
   const [nameFilter, setNameFilter] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   // Stryker disable next-line BooleanLiteral: pagination is absent until the first response also normalizes this flag.
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -107,10 +110,15 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
       if (append && loadingMoreRef.current) {
         return;
       }
+      const preserveCurrentCollection =
+        !append && loadedAuthorityRef.current === accessToken;
       loadingMoreRef.current = append;
       const generation = ++loadGeneration.current;
+      setRefreshError(false);
       if (append) {
         setLoadingMore(true);
+      } else if (preserveCurrentCollection) {
+        setRefreshing(true);
       } else {
         setLoadState("loading");
       }
@@ -134,17 +142,23 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
         setProducts((current) =>
           append ? [...current, ...result.data.items] : result.data.items,
         );
+        loadedAuthorityRef.current = accessToken;
         setNextCursor(result.data.next_cursor);
         setLoadState("ready");
       } catch {
         if (generation === loadGeneration.current) {
-          setLoadState("error");
+          if (preserveCurrentCollection) {
+            setRefreshError(true);
+          } else {
+            setLoadState("error");
+          }
         }
       } finally {
         // Stryker disable next-line ConditionalExpression: a stale finally can only reset append-only state while the replacement collection request hides pagination.
         if (generation === loadGeneration.current) {
           loadingMoreRef.current = false;
           setLoadingMore(false);
+          setRefreshing(false);
         }
       }
     },
@@ -306,6 +320,35 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
               ))}
             </div>
           </div>
+
+          {refreshing ? (
+            <div
+              role="status"
+              aria-live="polite"
+              className="text-muted-foreground flex items-center gap-2 text-sm"
+            >
+              <span className="border-primary size-4 animate-spin rounded-full border-2 border-r-transparent" />
+              Updating products
+            </div>
+          ) : null}
+
+          {refreshError ? (
+            <Alert variant="destructive">
+              <AlertTitle>Products could not be updated</AlertTitle>
+              <AlertDescription>
+                <p>Your current results are still available.</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    void loadProducts(null, false, statusFilter, nameFilter)
+                  }
+                >
+                  Retry updating products
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
           {products.length === 0 ? (
             <section className="grid min-h-[42vh] place-items-center rounded-xl border border-dashed bg-secondary/40 p-8 text-center">

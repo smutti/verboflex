@@ -716,6 +716,52 @@ describe("administrator product configuration tracer", () => {
     });
   });
 
+  it("keeps the search mounted and focused while filtered results refresh", async () => {
+    let resolveSearch:
+      | ((
+          value: ReturnType<
+            typeof ok<{
+              items: AdminProductResponse[];
+              next_cursor: string | null;
+            }>
+          >,
+        ) => void)
+      | undefined;
+    const pendingSearch = new Promise<
+      ReturnType<
+        typeof ok<{
+          items: AdminProductResponse[];
+          next_cursor: string | null;
+        }>
+      >
+    >((resolve) => {
+      resolveSearch = resolve;
+    });
+    listAdminProductsMock
+      .mockResolvedValueOnce(ok({ items: [activeProduct], next_cursor: null }))
+      .mockReturnValueOnce(pendingSearch);
+    renderProducts();
+
+    await screen.findByRole("table", { name: "Products" });
+    const search = screen.getByRole("textbox", { name: "Search products" });
+    await userEvent.type(search, "Zulu");
+    await waitFor(() => expect(listAdminProductsMock).toHaveBeenCalledTimes(2));
+
+    expect(search.isConnected).toBe(true);
+    expect(screen.getByRole("textbox", { name: "Search products" })).toBe(
+      search,
+    );
+    expect(search).toHaveFocus();
+    expect(screen.getByRole("status")).toHaveTextContent("Updating products");
+    expect(screen.getByRole("table", { name: "Products" })).toBeVisible();
+
+    await act(async () => {
+      resolveSearch?.(ok({ items: [activeProduct], next_cursor: null }));
+    });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(search).toHaveFocus();
+  });
+
   it("uses a semantic table at 768px and an ordered stacked list below it without page overflow", async () => {
     listAdminProductsMock.mockResolvedValueOnce(
       ok({
@@ -820,11 +866,11 @@ describe("administrator product configuration tracer", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Active" }));
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "Loading products",
+      "Updating products",
     );
     expect(
       screen.getByRole("link", { name: "Create product" }),
-    ).toHaveAttribute("aria-disabled", "true");
+    ).toHaveAttribute("aria-disabled", "false");
   });
 
   it("fails closed on generated no-data responses and ignores superseded product pages", async () => {
