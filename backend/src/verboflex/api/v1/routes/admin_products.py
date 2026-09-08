@@ -188,6 +188,7 @@ async def list_admin_product_collection(
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     cursor: str | None = None,
     status_filter: Annotated[AdminProductStatus | None, Query(alias="status")] = None,
+    name: Annotated[str | None, Query(max_length=120)] = None,
 ) -> AdminProductListResponse:
     """List products in stable server-owned identity order."""
     try:
@@ -196,11 +197,17 @@ async def list_admin_product_collection(
             limit=limit,
             cursor=cursor,
             status=status_filter,
+            name=name,
         )
     except InvalidProductCursor as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Invalid cursor",
+        ) from error
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid name filter",
         ) from error
     return AdminProductListResponse(
         items=[_response(record) for record in page.items],

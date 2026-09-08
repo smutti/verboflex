@@ -47,6 +47,7 @@ class InvalidProductCursor(ValueError):
 DEFAULT_PRODUCT_PAGE_SIZE = 50
 MAX_PRODUCT_PAGE_SIZE = 100
 _CURSOR_VERSION = 1
+_FILTERED_CURSOR_VERSION = 2
 _STATUS_VALUES = frozenset({"active", "inactive"})
 
 
@@ -86,6 +87,7 @@ class _CursorPosition:
     name_key: str
     product_id: UUID
     status: str | None
+    name_filter: str | None
 
 
 def normalize_product_name(raw_name: str) -> tuple[str, str]:
@@ -99,6 +101,20 @@ def normalize_product_name(raw_name: str) -> tuple[str, str]:
     if "\x00" in display_name or not display_name.isprintable():
         raise ValueError("product name contains unsupported characters")
     return display_name, display_name.casefold()
+
+
+def normalize_product_search(raw_name: str | None) -> str | None:
+    """Return a canonical optional substring without treating wildcards specially."""
+    if raw_name is None:
+        return None
+    if not isinstance(raw_name, str):
+        raise ValueError("product search must be a string")
+    normalized = " ".join(unicodedata.normalize("NFKC", raw_name).split())
+    if not normalized:
+        return None
+    if len(normalized) > 120 or "\x00" in normalized or not normalized.isprintable():
+        raise ValueError("product search contains unsupported characters")
+    return normalized.casefold()
 
 
 def create_product(
@@ -413,13 +429,17 @@ def get_product(session: Session, *, product_id: UUID) -> ProductRecord:
 
 
 def _encode_cursor(position: _CursorPosition) -> str:
+    payload_data: dict[str, str | int | None] = {
+        "id": str(position.product_id),
+        "name_key": position.name_key,
+        "status": position.status,
+        "version": _CURSOR_VERSION,
+    }
+    if position.name_filter is not None:
+        payload_data["name"] = position.name_filter
+        payload_data["version"] = _FILTERED_CURSOR_VERSION
     payload = json.dumps(
-        {
-            "id": str(position.product_id),
-            "name_key": position.name_key,
-            "status": position.status,
-            "version": _CURSOR_VERSION,
-        },
+        payload_data,
         ensure_ascii=True,
         separators=(",", ":"),
         sort_keys=True,
@@ -427,31 +447,38 @@ def _encode_cursor(position: _CursorPosition) -> str:
     return base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
 
 
-def _decode_cursor(cursor: str, *, status: str | None) -> _CursorPosition:
+def _decode_cursor(
+    cursor: str,
+    *,
+    status: str | None,
+    name_filter: str | None,
+) -> _CursorPosition:
     if not cursor or len(cursor) > 1024:
         raise InvalidProductCursor("invalid cursor")
     try:
         padding = "=" * (-len(cursor) % 4)
         raw = base64.b64decode(cursor + padding, altchars=b"-_", validate=True)
         payload = json.loads(raw)
-        if not isinstance(payload, dict) or set(payload) != {
-            "id",
-            "name_key",
-            "status",
-            "version",
-        }:
+        expected_keys = {"id", "name_key", "status", "version"}
+        expected_version = _CURSOR_VERSION
+        if name_filter is not None:
+            expected_keys.add("name")
+            expected_version = _FILTERED_CURSOR_VERSION
+        if not isinstance(payload, dict) or set(payload) != expected_keys:
             raise ValueError
         if (
-            payload["version"] != _CURSOR_VERSION
+            payload["version"] != expected_version
             or not isinstance(payload["name_key"], str)
             or payload["status"] not in {None, "active", "inactive"}
             or payload["status"] != status
+            or payload.get("name") != name_filter
         ):
             raise ValueError
         position = _CursorPosition(
             name_key=payload["name_key"],
             product_id=UUID(payload["id"]),
             status=payload["status"],
+            name_filter=name_filter,
         )
     except (
         binascii.Error,
@@ -472,18 +499,26 @@ def list_products(
     limit: int = DEFAULT_PRODUCT_PAGE_SIZE,
     cursor: str | None = None,
     status: str | None = None,
+    name: str | None = None,
 ) -> ProductPage:
     """Return products in database-owned name-key and UUID order."""
     if not 1 <= limit <= MAX_PRODUCT_PAGE_SIZE:
         raise ValueError("invalid page size")
     if status is not None and status not in _STATUS_VALUES:
         raise ValueError("invalid status")
-    position = _decode_cursor(cursor, status=status) if cursor is not None else None
+    name_filter = normalize_product_search(name)
+    position = (
+        _decode_cursor(cursor, status=status, name_filter=name_filter)
+        if cursor is not None
+        else None
+    )
     with session.begin():
         statement = _product_projection_statement()
         statement = statement.where(Product.deleted_at.is_(None))
         if status is not None:
             statement = statement.where(Product.is_active.is_(status == "active"))
+        if name_filter is not None:
+            statement = statement.where(Product.name_key.contains(name_filter, autoescape=True))
         if position is not None:
             statement = statement.where(
                 or_(
@@ -511,6 +546,7 @@ def list_products(
                     name_key=page_rows[-1][0].name_key,
                     product_id=page_rows[-1][0].id,
                     status=status,
+                    name_filter=name_filter,
                 )
             )
             if len(rows) > limit and page_rows

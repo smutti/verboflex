@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { PackageOpen, Search } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
 import {
@@ -12,13 +13,7 @@ import {
 } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../../components/ui/select";
+import { Input } from "../../../components/ui/input";
 import { Skeleton } from "../../../components/ui/skeleton";
 import {
   Table,
@@ -35,7 +30,14 @@ export interface ProductsPageProps {
 
 type LoadState = "loading" | "ready" | "error";
 type ProductStatusFilter = "all" | "active" | "inactive";
-type ProductPageSize = 50 | 100;
+
+const PRODUCT_PAGE_SIZE = 50;
+const SEARCH_DEBOUNCE_MS = 300;
+
+function normalizeSearch(value: string) {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  return normalized.length > 0 ? normalized : null;
+}
 
 function ProductStatus({ product }: { product: AdminProductResponse }) {
   return (
@@ -82,6 +84,7 @@ function ProductFields({ product }: { product: AdminProductResponse }) {
 export function ProductsPage({ accessToken }: ProductsPageProps) {
   const currentLocation = useLocation();
   const loadGeneration = useRef(0);
+  const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null);
   // Stryker disable next-line BooleanLiteral: append controls are absent until the first response, whose finally block resets this internal gate.
   const loadingMoreRef = useRef(false);
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -89,7 +92,8 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
   const [products, setProducts] = useState<AdminProductResponse[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>("all");
-  const [pageSize, setPageSize] = useState<ProductPageSize>(50);
+  const [searchInput, setSearchInput] = useState("");
+  const [nameFilter, setNameFilter] = useState<string | null>(null);
   // Stryker disable next-line BooleanLiteral: pagination is absent until the first response also normalizes this flag.
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -98,7 +102,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
       cursor: string | null,
       append: boolean,
       status: ProductStatusFilter,
-      limit: ProductPageSize,
+      name: string | null,
     ) => {
       if (append && loadingMoreRef.current) {
         return;
@@ -116,7 +120,8 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
           auth: accessToken,
           query: {
             cursor,
-            limit,
+            limit: PRODUCT_PAGE_SIZE,
+            name,
             status: status === "all" ? null : status,
           },
         });
@@ -147,19 +152,56 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
   );
 
   useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setNameFilter(normalizeSearch(searchInput));
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timeout);
+  }, [searchInput]);
+
+  useEffect(() => {
     let active = true;
     queueMicrotask(() => {
       if (active) {
-        void loadProducts(null, false, statusFilter, pageSize);
+        void loadProducts(null, false, statusFilter, nameFilter);
       }
     });
     return () => {
       active = false;
       loadGeneration.current += 1;
     };
-  }, [loadProducts, pageSize, statusFilter]);
+  }, [loadProducts, nameFilter, statusFilter]);
 
   const collectionReady = loadState === "ready";
+  const filtersActive = statusFilter !== "all" || nameFilter !== null;
+
+  useEffect(() => {
+    const target = loadMoreTriggerRef.current;
+    if (
+      loadState !== "ready" ||
+      target === null ||
+      nextCursor === null ||
+      loadingMore
+    ) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void loadProducts(nextCursor, true, statusFilter, nameFilter);
+        }
+      },
+      { rootMargin: "320px 0px" },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [
+    loadProducts,
+    loadState,
+    loadingMore,
+    nameFilter,
+    nextCursor,
+    statusFilter,
+  ]);
 
   return (
     <section
@@ -206,7 +248,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
               type="button"
               variant="outline"
               onClick={() =>
-                void loadProducts(null, false, statusFilter, pageSize)
+                void loadProducts(null, false, statusFilter, nameFilter)
               }
             >
               Retry loading page
@@ -217,63 +259,84 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
 
       {loadState === "ready" ? (
         <div className="grid min-w-0 max-w-full gap-6">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid items-end gap-4 lg:grid-cols-[minmax(16rem,1fr)_auto]">
             <div className="grid gap-2">
               <label
-                htmlFor="product-status-filter"
+                htmlFor="product-name-filter"
                 className="text-sm font-medium"
               >
-                Product status
+                Search by product name
               </label>
-              <Select
-                value={statusFilter}
-                onValueChange={(value) =>
-                  setStatusFilter(value as ProductStatusFilter)
-                }
-              >
-                <SelectTrigger id="product-status-filter" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="relative">
+                <Search
+                  aria-hidden="true"
+                  className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+                />
+                <Input
+                  id="product-name-filter"
+                  aria-label="Search products"
+                  className="pl-9"
+                  placeholder="Search products…"
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                />
+              </div>
             </div>
-            <div className="grid gap-2">
-              <label
-                htmlFor="products-page-size"
-                className="text-sm font-medium"
-              >
-                Products per page
-              </label>
-              <Select
-                value={String(pageSize)}
-                onValueChange={(value) =>
-                  setPageSize(Number(value) as ProductPageSize)
-                }
-              >
-                <SelectTrigger id="products-page-size" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="50">50</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
-                </SelectContent>
-              </Select>
+            <div
+              className="flex flex-wrap gap-2"
+              role="group"
+              aria-label="Product status"
+            >
+              {(["all", "active", "inactive"] as const).map((status) => (
+                <Button
+                  key={status}
+                  type="button"
+                  size="sm"
+                  variant={statusFilter === status ? "default" : "outline"}
+                  className="rounded-full px-4"
+                  aria-pressed={statusFilter === status}
+                  onClick={() => setStatusFilter(status)}
+                >
+                  {status === "all"
+                    ? "All"
+                    : status === "active"
+                      ? "Active"
+                      : "Inactive"}
+                </Button>
+              ))}
             </div>
           </div>
 
           {products.length === 0 ? (
-            <section className="grid gap-2 rounded-lg border bg-secondary p-6">
-              <h2 className="text-heading font-semibold">
-                No products configured
-              </h2>
-              <p className="text-muted-foreground">
-                Create a product to connect repositories and validate a
-                localization layout.
-              </p>
+            <section className="grid min-h-[42vh] place-items-center rounded-xl border border-dashed bg-secondary/40 p-8 text-center">
+              <div className="grid max-w-md justify-items-center gap-4">
+                <span className="bg-background text-muted-foreground grid size-16 place-items-center rounded-full border shadow-sm">
+                  <PackageOpen
+                    data-testid="products-empty-icon"
+                    aria-hidden="true"
+                    className="size-8"
+                  />
+                </span>
+                <div className="grid gap-2">
+                  <h2 className="text-heading font-semibold">
+                    {filtersActive
+                      ? "No products found"
+                      : "No products configured"}
+                  </h2>
+                  <p className="text-muted-foreground">
+                    {filtersActive
+                      ? "Try a different name or status filter."
+                      : "Create a product to connect repositories and validate a localization layout."}
+                  </p>
+                </div>
+                {!filtersActive ? (
+                  <Button asChild>
+                    <Link to="/admin/products/new">
+                      Create your first product
+                    </Link>
+                  </Button>
+                ) : null}
+              </div>
             </section>
           ) : (
             <>
@@ -287,8 +350,8 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {products.map((product, index) => (
-                      <TableRow key={index}>
+                    {products.map((product) => (
+                      <TableRow key={product.id}>
                         <TableCell className="min-w-0 whitespace-normal">
                           <div className="grid min-w-0 gap-1">
                             <Link
@@ -318,9 +381,9 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
                 className="grid min-w-0 max-w-full gap-4 md:hidden"
                 aria-label="Products mobile list"
               >
-                {products.map((product, index) => (
+                {products.map((product) => (
                   <article
-                    key={index}
+                    key={product.id}
                     className="grid min-w-0 max-w-full gap-3 border-b pb-4"
                   >
                     <ProductFields product={product} />
@@ -331,18 +394,22 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
           )}
 
           {nextCursor !== null ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="justify-self-start"
-              disabled={loadingMore}
-              aria-busy={loadingMore}
-              onClick={() =>
-                void loadProducts(nextCursor, true, statusFilter, pageSize)
-              }
+            <div
+              ref={loadMoreTriggerRef}
+              className="grid min-h-16 place-items-center"
+              aria-hidden={!loadingMore}
             >
-              Load more products
-            </Button>
+              {loadingMore ? (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="flex items-center gap-3 text-sm text-muted-foreground"
+                >
+                  <span className="border-primary size-5 animate-spin rounded-full border-2 border-r-transparent" />
+                  Loading more products
+                </div>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}

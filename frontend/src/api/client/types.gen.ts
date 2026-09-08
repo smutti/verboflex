@@ -2856,6 +2856,10 @@ export type ListAdminProductsData = {
          * Status
          */
         status?: 'active' | 'inactive' | null;
+        /**
+         * Name
+         */
+        name?: string | null;
     };
     url: '/api/v1/admin/products';
 };

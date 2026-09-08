@@ -57,7 +57,60 @@ class TestResizeObserver implements ResizeObserver {
   unobserve() {}
 }
 
+const intersectionObservers: TestIntersectionObserver[] = [];
+
+class TestIntersectionObserver implements IntersectionObserver {
+  readonly root = null;
+  readonly rootMargin = "0px";
+  readonly scrollMargin = "0px";
+  readonly thresholds = [0];
+  private target: Element | null = null;
+
+  constructor(private readonly callback: IntersectionObserverCallback) {
+    intersectionObservers.push(this);
+  }
+
+  disconnect() {
+    this.target = null;
+  }
+
+  observe(target: Element) {
+    this.target = target;
+  }
+
+  takeRecords() {
+    return [];
+  }
+
+  unobserve(target: Element) {
+    if (this.target === target) {
+      this.target = null;
+    }
+  }
+
+  intersect() {
+    if (this.target === null) {
+      return;
+    }
+    this.callback(
+      [
+        {
+          boundingClientRect: this.target.getBoundingClientRect(),
+          intersectionRatio: 1,
+          intersectionRect: this.target.getBoundingClientRect(),
+          isIntersecting: true,
+          rootBounds: null,
+          target: this.target,
+          time: 0,
+        },
+      ],
+      this,
+    );
+  }
+}
+
 vi.stubGlobal("ResizeObserver", TestResizeObserver);
+vi.stubGlobal("IntersectionObserver", TestIntersectionObserver);
 Object.defineProperties(HTMLElement.prototype, {
   hasPointerCapture: {
     configurable: true,
@@ -423,6 +476,7 @@ function renderOverview() {
 
 describe("administrator product configuration tracer", () => {
   beforeEach(() => {
+    intersectionObservers.splice(0);
     createAdminCandidateMappingMock.mockReset();
     createAdminProductMock.mockReset();
     createAdminRepositoryMock.mockReset();
@@ -510,7 +564,7 @@ describe("administrator product configuration tracer", () => {
     expect(screen.getByRole("heading", { name: "Products" })).toBeVisible();
     expect(screen.getByRole("status")).toHaveTextContent("Loading products");
     expect(
-      screen.queryByRole("combobox", { name: "Product status" }),
+      screen.queryByRole("textbox", { name: "Search products" }),
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Create product" }),
@@ -551,6 +605,12 @@ describe("administrator product configuration tracer", () => {
     expect(
       await screen.findByRole("heading", { name: "No products configured" }),
     ).toBeVisible();
+    expect(screen.getByTestId("products-empty-icon")).toBeVisible();
+    expect(
+      screen
+        .getByRole("heading", { name: "No products configured" })
+        .closest("section"),
+    ).toHaveClass("place-items-center", "text-center");
     expect(
       screen.queryByRole("button", { name: "Load more products" }),
     ).not.toBeInTheDocument();
@@ -570,7 +630,7 @@ describe("administrator product configuration tracer", () => {
     ).toHaveAttribute("href", "/admin/products/new");
   });
 
-  it("keeps status, page size, cursor, and API row order server-owned", async () => {
+  it("keeps name, status, fixed pages, cursor, and API row order server-owned", async () => {
     listAdminProductsMock
       .mockResolvedValueOnce(
         ok({
@@ -600,22 +660,29 @@ describe("administrator product configuration tracer", () => {
     ]);
     expect(listAdminProductsMock).toHaveBeenNthCalledWith(1, {
       auth: "memory-only-admin-bearer",
-      query: { cursor: null, limit: 50, status: null },
+      query: { cursor: null, limit: 50, name: null, status: null },
     });
     expect(
-      screen.getByRole("button", { name: "Load more products" }),
-    ).toBeEnabled();
-    expect(
-      screen.getByRole("button", { name: "Load more products" }),
-    ).toHaveAttribute("aria-busy", "false");
-
-    await userEvent.click(
-      screen.getByRole("button", { name: "Load more products" }),
+      screen.queryByRole("combobox", { name: "Products per page" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Product status" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
     );
+    await waitFor(() =>
+      expect(intersectionObservers.length).toBeGreaterThan(0),
+    );
+    act(() => intersectionObservers.at(-1)?.intersect());
     await waitFor(() => {
       expect(listAdminProductsMock).toHaveBeenNthCalledWith(2, {
         auth: "memory-only-admin-bearer",
-        query: { cursor: "next-products", limit: 50, status: null },
+        query: {
+          cursor: "next-products",
+          limit: 50,
+          name: null,
+          status: null,
+        },
       });
     });
     expect(
@@ -629,25 +696,22 @@ describe("administrator product configuration tracer", () => {
       expect.stringContaining("Zulu Mobile"),
     ]);
 
-    await userEvent.click(
-      screen.getByRole("combobox", { name: "Product status" }),
-    );
-    await userEvent.click(screen.getByRole("option", { name: "Inactive" }));
+    await userEvent.click(screen.getByRole("button", { name: "Inactive" }));
     await waitFor(() => {
       expect(listAdminProductsMock).toHaveBeenNthCalledWith(3, {
         auth: "memory-only-admin-bearer",
-        query: { cursor: null, limit: 50, status: "inactive" },
+        query: { cursor: null, limit: 50, name: null, status: "inactive" },
       });
     });
 
-    await userEvent.click(
-      screen.getByRole("combobox", { name: "Products per page" }),
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Search products" }),
+      "  Alpha  ",
     );
-    await userEvent.click(screen.getByRole("option", { name: "100" }));
     await waitFor(() => {
       expect(listAdminProductsMock).toHaveBeenNthCalledWith(4, {
         auth: "memory-only-admin-bearer",
-        query: { cursor: null, limit: 100, status: "inactive" },
+        query: { cursor: null, limit: 50, name: "Alpha", status: "inactive" },
       });
     });
   });
@@ -732,16 +796,18 @@ describe("administrator product configuration tracer", () => {
       .mockReturnValueOnce(pendingMore)
       .mockReturnValueOnce(new Promise<never>(() => undefined));
     renderProducts();
-    const loadMore = await screen.findByRole("button", {
-      name: "Load more products",
-    });
+    await screen.findByRole("table", { name: "Products" });
+    await waitFor(() =>
+      expect(intersectionObservers.length).toBeGreaterThan(0),
+    );
     act(() => {
-      loadMore.click();
-      loadMore.click();
+      intersectionObservers.at(-1)?.intersect();
+      intersectionObservers.at(-1)?.intersect();
     });
     expect(listAdminProductsMock).toHaveBeenCalledTimes(2);
-    expect(loadMore).toBeDisabled();
-    expect(loadMore).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading more products",
+    );
     await act(async () => {
       resolveMore?.(
         ok({
@@ -750,17 +816,9 @@ describe("administrator product configuration tracer", () => {
         }),
       );
     });
-    expect(
-      screen.getByRole("button", { name: "Load more products" }),
-    ).toBeEnabled();
-    expect(
-      screen.getByRole("button", { name: "Load more products" }),
-    ).toHaveAttribute("aria-busy", "false");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
-    await userEvent.click(
-      screen.getByRole("combobox", { name: "Product status" }),
-    );
-    await userEvent.click(screen.getByRole("option", { name: "Active" }));
+    await userEvent.click(screen.getByRole("button", { name: "Active" }));
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Loading products",
     );
