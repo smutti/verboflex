@@ -160,7 +160,7 @@ describe("authenticated application shell", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "Workspace", level: 1 }),
+      screen.getByRole("heading", { name: "Home", level: 1 }),
     ).toBeVisible();
     expect(
       screen.queryByRole("heading", { name: "Signed-in identity" }),
@@ -168,11 +168,11 @@ describe("authenticated application shell", () => {
     expect(screen.queryByText("person@example.com")).toBeNull();
     expect(
       screen.getByText(
-        "Review your authenticated identity and the current VerboFlex service status.",
+        "Monitor VerboFlex services and review the current project portfolio.",
       ),
     ).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "Administration summary" }),
+      screen.getByRole("heading", { name: "Project statistics" }),
     ).toBeVisible();
     const userMenuTrigger = screen.getByRole("button", {
       name: "Open user menu for Person Example",
@@ -462,7 +462,7 @@ describe("authenticated application shell", () => {
 
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: "Workspace" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Home" })).toBeVisible();
     expect(screen.getByText("Person Example")).toBeVisible();
     expect(readSystemStatusMock).toHaveBeenCalledWith({
       auth: "ordinary-server-token",
@@ -484,7 +484,7 @@ describe("authenticated application shell", () => {
       name: "Primary navigation",
     });
     expect(navigation).toBeVisible();
-    expect(screen.getByRole("link", { name: "Workspace" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute(
       "aria-current",
       "page",
     );
@@ -521,9 +521,10 @@ describe("authenticated application shell", () => {
     expect(
       within(sheet).getByRole("navigation", { name: "Primary navigation" }),
     ).toBeVisible();
-    expect(
-      within(sheet).getByRole("link", { name: "Workspace" }),
-    ).toHaveAttribute("aria-current", "page");
+    expect(within(sheet).getByRole("link", { name: "Home" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
 
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
@@ -567,7 +568,7 @@ describe("authenticated application shell", () => {
         .getAllByRole("link")
         .map((link) => link.textContent?.trim()),
     ).toEqual([
-      "Workspace",
+      "Home",
       "Product workspace",
       "All translations",
       "Product configuration",
@@ -674,7 +675,7 @@ describe("authenticated application shell", () => {
   });
 
   it.each([
-    ["/", "Workspace"],
+    ["/", "Home"],
     ["/products", "Product workspace"],
     ["/products/product-123/strings", "Product workspace"],
     ["/translations", "All translations"],
@@ -728,7 +729,7 @@ describe("authenticated application shell", () => {
     expect(link.style.color).not.toBe("");
   });
 
-  it("closes mobile navigation and focuses the Workspace heading after selection", async () => {
+  it("closes mobile navigation and focuses the Home heading after selection", async () => {
     setViewportWidth(320);
     const user = userEvent.setup();
 
@@ -771,13 +772,13 @@ describe("authenticated application shell", () => {
       within(sheet).getByRole("link", { name: "Users", current: "page" }),
     ).toBeVisible();
 
-    await user.click(within(sheet).getByRole("link", { name: "Workspace" }));
+    await user.click(within(sheet).getByRole("link", { name: "Home" }));
 
     expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
     expect(screen.getByTestId("shell-current-route")).toHaveTextContent("/");
     await waitFor(() => {
       expect(
-        screen.getByRole("heading", { name: "Workspace", level: 1 }),
+        screen.getByRole("heading", { name: "Home", level: 1 }),
       ).toHaveFocus();
     });
   });
@@ -889,7 +890,7 @@ describe("authenticated application shell", () => {
       });
       const links = within(navigation).getAllByRole("link");
       expect(links.slice(0, 3).map((link) => link.textContent?.trim())).toEqual(
-        ["Workspace", "Product workspace", "All translations"],
+        ["Home", "Product workspace", "All translations"],
       );
       const translations = within(navigation).getByRole("link", {
         name: "All translations",
@@ -947,7 +948,7 @@ describe("authenticated application shell", () => {
         within(navigation)
           .getAllByRole("link")
           .map((link) => link.textContent?.trim()),
-      ).toEqual(["Workspace", "Product workspace", "All translations"]);
+      ).toEqual(["Home", "Product workspace", "All translations"]);
       const translations = within(navigation).getByRole("link", {
         name: "All translations",
       });

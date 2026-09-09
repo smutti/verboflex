@@ -393,7 +393,7 @@ describe("session routes", () => {
     restorePrincipal();
     renderApplication("/translations/unknown/unsupported");
     expect(
-      await screen.findByRole("heading", { name: "Workspace", level: 1 }),
+      await screen.findByRole("heading", { name: "Home", level: 1 }),
     ).toBeVisible();
     expect(screen.getByTestId("current-route")).toHaveTextContent(/^\/$/);
     expect(listTranslationOptions).not.toHaveBeenCalled();
@@ -919,9 +919,7 @@ describe("session routes", () => {
       screen.getByRole("button", { name: "Sign in to VerboFlex" }),
     );
 
-    expect(
-      await screen.findByRole("heading", { name: "Workspace" }),
-    ).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeVisible();
     await user.click(screen.getByRole("link", { name: "Users" }));
     expect(
       await screen.findByRole("heading", { name: "Users", level: 1 }),

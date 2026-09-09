@@ -140,7 +140,7 @@ describe("role-aware Workspace overview", () => {
       renderWorkspace();
 
       expect(
-        screen.getByRole("heading", { name: "Workspace", level: 1 }),
+        screen.getByRole("heading", { name: "Home", level: 1 }),
       ).toBeVisible();
       expect(screen.getByText(principal.display_name)).toBeVisible();
       const alert = await screen.findByRole("alert");
@@ -249,6 +249,9 @@ describe("role-aware Workspace overview", () => {
 
     renderWorkspace();
 
+    expect(
+      screen.getByRole("heading", { name: "Home", level: 1 }),
+    ).toBeVisible();
     expect(screen.getByText(principal.display_name)).toBeVisible();
     expect(
       await screen.findByRole("heading", {
@@ -256,11 +259,13 @@ describe("role-aware Workspace overview", () => {
       }),
     ).toBeVisible();
     expect(await screen.findByText("2 loaded products")).toBeVisible();
+    expect(screen.getByText("1 published product")).toBeVisible();
     expect(screen.getByText("1 loaded draft")).toBeVisible();
+    expect(screen.getByText("1 inactive product")).toBeVisible();
     expect(screen.getByText("2 loaded users")).toBeVisible();
     expect(screen.getByText("Connected", { exact: true })).toBeVisible();
     expect(
-      screen.getByText("Loaded summaries cover the first bounded page."),
+      screen.getByText("Project statistics cover the first bounded page."),
     ).toBeVisible();
     expect(screen.getByRole("link", { name: "Open Products" })).toHaveAttribute(
       "href",
@@ -311,7 +316,7 @@ describe("role-aware Workspace overview", () => {
 
     const dashboard = await screen.findByTestId("admin-service-status");
     const administrationHeading = screen.getByRole("heading", {
-      name: "Administration summary",
+      name: "Project statistics",
     });
 
     expect(dashboard).toHaveAttribute("data-service-state", "unavailable");
@@ -349,7 +354,7 @@ describe("role-aware Workspace overview", () => {
 
     renderWorkspace();
 
-    expect(screen.getByRole("heading", { name: "Workspace" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Home" })).toBeVisible();
     expect(
       screen.queryByRole("heading", { name: "Signed-in identity" }),
     ).toBeNull();
@@ -384,7 +389,7 @@ describe("role-aware Workspace overview", () => {
 
     renderWorkspace();
 
-    expect(screen.getByRole("heading", { name: "Workspace" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Home" })).toBeVisible();
     const alert = await screen.findByRole("alert", {
       name: "Administrator summaries unavailable",
     });

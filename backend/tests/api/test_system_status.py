@@ -188,7 +188,7 @@ def test_default_status_service_obtains_worker_state_through_bounded_probe(
 
     assert snapshot.worker == "online"
     assert captured == {
-        "timeout_seconds": 0.25,
+        "timeout_seconds": 0.125,
     }
 
 

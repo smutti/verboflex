@@ -20,7 +20,9 @@ export interface WorkspaceOverviewPageProps {
 interface AdminSummaries {
   bitbucketStatus: AdminBitbucketStatusResponse["status"];
   draftCount: number;
+  inactiveCount: number;
   productCount: number;
+  publishedCount: number;
   userCount: number;
 }
 
@@ -31,6 +33,10 @@ type AdminLoadState =
 
 function loadedCount(count: number, singular: string, plural = `${singular}s`) {
   return `${count} loaded ${count === 1 ? singular : plural}`;
+}
+
+function countLabel(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
 function AdminDestinationLink({
@@ -103,7 +109,13 @@ function AdministratorSummaries({
           draftCount: productsResult.data.items.filter(
             (product) => product.candidate_revision !== null,
           ).length,
+          inactiveCount: productsResult.data.items.filter(
+            (product) => !product.is_active,
+          ).length,
           productCount: productsResult.data.items.length,
+          publishedCount: productsResult.data.items.filter(
+            (product) => product.active_revision !== null,
+          ).length,
           userCount: usersResult.data.items.length,
         },
       });
@@ -142,7 +154,7 @@ function AdministratorSummaries({
           id="administrator-summaries-title"
           className="text-heading font-semibold"
         >
-          Administration summary
+          Project statistics
         </h2>
         <p role="status" aria-live="polite" className="text-muted-foreground">
           Loading administrator summaries
@@ -183,50 +195,82 @@ function AdministratorSummaries({
   return (
     <section
       aria-labelledby="administrator-summaries-title"
-      className="grid gap-4 rounded-lg border bg-secondary p-6"
+      className="grid gap-5 rounded-lg border bg-secondary p-6"
     >
       <div className="grid gap-1">
         <h2
           id="administrator-summaries-title"
           className="text-heading font-semibold"
         >
-          Administration summary
+          Project statistics
         </h2>
         <p className="text-muted-foreground">
-          Loaded summaries cover the first bounded page.
+          Project statistics cover the first bounded page.
         </p>
       </div>
-      <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="grid gap-1">
-          <dt className="text-muted-foreground">Products</dt>
-          <dd className="font-semibold">
+      <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-2 rounded-lg border bg-background p-4 shadow-sm">
+          <dt className="text-label font-semibold uppercase tracking-wide text-muted-foreground">
+            Configured products
+          </dt>
+          <dd className="text-heading font-semibold">
             {loadedCount(summaries.productCount, "product")}
           </dd>
           <AdminDestinationLink to="/admin/products">
             Open Products
           </AdminDestinationLink>
         </div>
-        <div className="grid gap-1">
-          <dt className="text-muted-foreground">Draft configurations</dt>
-          <dd className="font-semibold">
+        <div className="grid gap-2 rounded-lg border bg-background p-4 shadow-sm">
+          <dt className="text-label font-semibold uppercase tracking-wide text-muted-foreground">
+            Published products
+          </dt>
+          <dd className="text-heading font-semibold">
+            {countLabel(summaries.publishedCount, "published product")}
+          </dd>
+          <AdminDestinationLink to="/admin/products">
+            View published products
+          </AdminDestinationLink>
+        </div>
+        <div className="grid gap-2 rounded-lg border bg-background p-4 shadow-sm">
+          <dt className="text-label font-semibold uppercase tracking-wide text-muted-foreground">
+            Draft configurations
+          </dt>
+          <dd className="text-heading font-semibold">
             {loadedCount(summaries.draftCount, "draft")}
           </dd>
           <AdminDestinationLink to="/admin/products">
             Review drafts
           </AdminDestinationLink>
         </div>
-        <div className="grid gap-1">
-          <dt className="text-muted-foreground">Internal users</dt>
-          <dd className="font-semibold">
+        <div className="grid gap-2 rounded-lg border bg-background p-4 shadow-sm">
+          <dt className="text-label font-semibold uppercase tracking-wide text-muted-foreground">
+            Inactive products
+          </dt>
+          <dd className="text-heading font-semibold">
+            {countLabel(summaries.inactiveCount, "inactive product")}
+          </dd>
+          <AdminDestinationLink to="/admin/products">
+            Review inactive products
+          </AdminDestinationLink>
+        </div>
+        <div className="grid gap-2 rounded-lg border bg-background p-4 shadow-sm">
+          <dt className="text-label font-semibold uppercase tracking-wide text-muted-foreground">
+            Internal users
+          </dt>
+          <dd className="text-heading font-semibold">
             {loadedCount(summaries.userCount, "user")}
           </dd>
           <AdminDestinationLink to="/admin/users">
             Open Users
           </AdminDestinationLink>
         </div>
-        <div className="grid gap-1">
-          <dt className="text-muted-foreground">Bitbucket connection</dt>
-          <dd className="font-semibold">{summaries.bitbucketStatus}</dd>
+        <div className="grid gap-2 rounded-lg border bg-background p-4 shadow-sm">
+          <dt className="text-label font-semibold uppercase tracking-wide text-muted-foreground">
+            Bitbucket connection
+          </dt>
+          <dd className="text-heading font-semibold">
+            {summaries.bitbucketStatus}
+          </dd>
           <AdminDestinationLink to="/admin/bitbucket">
             Open Bitbucket
           </AdminDestinationLink>
@@ -251,11 +295,10 @@ export function WorkspaceOverviewPage({
             tabIndex={-1}
             className="text-display font-semibold focus:outline-none"
           >
-            Workspace
+            Home
           </h1>
           <p className="max-w-3xl text-muted-foreground">
-            Review your authenticated identity and the current VerboFlex service
-            status.
+            Monitor VerboFlex services and review the current project portfolio.
           </p>
         </div>
       </section>
@@ -280,7 +323,7 @@ export function WorkspaceOverviewPage({
             id="workspace-access-title"
             className="text-heading font-semibold"
           >
-            Workspace access
+            Home access
           </h2>
           <p className="max-w-3xl text-muted-foreground">
             No administrator summaries are available for your role. Your

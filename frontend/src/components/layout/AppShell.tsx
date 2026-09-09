@@ -70,7 +70,7 @@ interface NavigationDestination {
 
 const WORKSPACE_DESTINATION: NavigationDestination = {
   icon: LayoutDashboard,
-  label: "Workspace",
+  label: "Home",
   to: "/",
 };
 

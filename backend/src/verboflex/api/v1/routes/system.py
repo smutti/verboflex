@@ -41,7 +41,10 @@ def get_system_status_service(
         database_probe=database_probe,
         redis_probe=redis_probe,
         worker_probe=lambda: probe_default_worker(
-            timeout_seconds=settings.service_probe_timeout_seconds,
+            # Celery's inspect timeout is followed by a small protocol cleanup
+            # cost. Keep it comfortably inside the public bounded probe so a
+            # healthy worker is not projected as unavailable at the deadline.
+            timeout_seconds=settings.service_probe_timeout_seconds / 2,
         ),
         timeout_seconds=settings.service_probe_timeout_seconds,
     )
