@@ -25,6 +25,20 @@ from verboflex.services.import_jobs import finish_import_execution
 __all__ = ["activation_session_factory", "clean_activation_database"]
 
 
+def test_xliff_pipeline_contract_is_closed_end_to_end() -> None:
+    from verboflex.models.translation import _FORMAT_CHECK
+    from verboflex.schemas.previews import AdminPreviewLayoutCandidateResponse
+    from verboflex.schemas.translations import TranslationProvenanceResponse
+    from verboflex.services.repository_discovery import _CANDIDATE_SUFFIXES
+
+    assert _CANDIDATE_SUFFIXES[-2:] == (".xlf", ".xliff")
+    assert "'xliff'" in _FORMAT_CHECK
+    preview_format = AdminPreviewLayoutCandidateResponse.model_json_schema()["properties"]["format"]
+    provenance_format = TranslationProvenanceResponse.model_json_schema()["properties"]["format"]
+    assert "xliff" in preview_format["enum"]
+    assert "xliff" in provenance_format["enum"]
+
+
 @pytest.mark.parametrize("format", ["android_xml", "qt_ts", "ios_strings"])
 def test_large_valid_structure_survives_activation_and_authenticated_detail(
     activation_session_factory, format
