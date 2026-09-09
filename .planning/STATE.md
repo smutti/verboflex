@@ -4,10 +4,10 @@ current_phase: 04
 current_phase_name: Localization Import, Search, and Constraints
 status: executing
 stopped_at: Plan 04-20 automated closeout passed; four human checks pending in 04-UAT.md
-last_updated: "2026-09-07T21:47:57Z"
-last_activity: 2026-09-07
-last_activity_desc: Fixed automatic Bitbucket client-credentials renewal for status and repository work, including transient retry safety
-state_head: 59de492
+last_updated: "2026-09-09T12:45:00.000Z"
+last_activity: 2026-09-09
+last_activity_desc: Committed resilient repository imports, durable preview recovery, duplicate quarantine, and the updated Home service status
+state_head: 95f687dc0a25aa231cacdb87e798fe07a73be963
 progress:
   total_phases: 8
   completed_phases: 3
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-03)
 Phase: 04 (Localization Import, Search, and Constraints) — EXECUTING
 Plan: 26 of 27
 Status: Human verification pending — 04-VERIFICATION.md is human_needed; run $gsd-verify-work 4
-Last activity: 2026-09-07 — Automatic Bitbucket client-credentials renewal is verified by tests and against the live local connection; backend, worker, and frontend are healthy.
+Last activity: 2026-09-09 — Resilient repository imports, durable preview recovery, duplicate quarantine, and the updated Home service status are committed and verified.
 
 Progress: [████████░░░░░░░░░░░░] 3/8 phases ([████░░░░░░] 38%)
 
@@ -517,6 +517,7 @@ None yet.
 | 260908-rfq | Apply semantic green, yellow, and red badges to product lifecycle states | 2026-09-08 | 351c47e | [260908-rfq-apply-semantic-green-yellow-red-badges-t](./quick/260908-rfq-apply-semantic-green-yellow-red-badges-t/) |
 | 260908-sa7 | Make product repositories mapping-driven and improve the page accessibility | 2026-09-08 | de2342e | [260908-sa7-make-product-repositories-mapping-driven](./quick/260908-sa7-make-product-repositories-mapping-driven/) |
 | 260908-utu | Make source and target branch selection searchable and remove redundant default-target selection | 2026-09-08 | 5eb9556 | [260908-utu-migliorare-selezione-branch-con-ricerca-](./quick/260908-utu-migliorare-selezione-branch-con-ricerca-/) |
+| 260909-kcd | Commit all remaining meaningful source, test, generated client, and planning changes; exclude runtime caches and local-only tool state | 2026-09-09 | 71ee286, 9d4f6d9 | [260909-kcd-commit-all-remaining-meaningful-source-t](./quick/260909-kcd-commit-all-remaining-meaningful-source-t/) |
 
 ### Roadmap Evolution
 
@@ -525,6 +526,7 @@ None yet.
 - Phase 3 edited: narrowed to import-grade capability validation, durable source references, and errors
 - Phase 2 edited: expanded admin scope with organizational OAuth, read-only discovery, and preview
 - Phases 4 and 5 merged: combined parsing, canonical import, search, detail, and maximum-length constraints; old Phases 6–9 renumbered to 5–8
+- Phase 5 edited: added structured mentions and per-user in-app notification requirements, exact comment deep links, and three implementation plans
 
 ## Deferred Items
 

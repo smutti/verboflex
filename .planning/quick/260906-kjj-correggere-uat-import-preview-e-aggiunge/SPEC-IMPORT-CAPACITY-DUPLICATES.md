@@ -100,3 +100,13 @@ No automatic source edits, first/last-wins deduplication, inferred base language
 
 - 2026-09-06 proposal: incorporates the new request for larger imports and visible duplicate keys; explicit aggregate/output capacity and diagnostic-mode semantics await approval. Earlier S1/S2 implementation and earlier approvals remain unchanged.
 - 2026-09-06 approval: user approved this exact addendum, including the 50,000-value capacity and read-only diagnostics with duplicate keys remaining blocking. Proceed with implementation; no further policy approval is required for these scenarios.
+- 2026-09-08 replacement policy: the user clarified that import must continue and expose duplicate keys instead of failing, then explicitly confirmed the deterministic quarantine policy below. This newer decision supersedes the blocking and no-partial-activation statements in C3, C5, C6, and “Must NOT”; all capacity, provenance, security, and bounded-diagnostic requirements remain unchanged.
+
+## 2026-09-08 confirmed duplicate quarantine policy
+
+- Import and preview continue with every identity that occurs exactly once. Every occurrence of an identity occurring more than once is excluded; there is no first-wins, last-wins, text merge, or source rewrite.
+- A first import may activate the unambiguous subset and stores a complete warning report for the quarantined identities.
+- On refresh, an identity that becomes duplicated retains its last valid active value, review state, constraint state, locator, and provenance. It is neither overwritten by an ambiguous occurrence nor tombstoned as absent.
+- Other unambiguous additions, changes, and genuine deletions reconcile normally in the same execution.
+- Preview and import UI show duplicates as a warning, keep the supported layout/string results usable, and retain the admin-only read-only detail view.
+- Malformed, unsupported, over-budget, or incomplete diagnostic inputs still fail closed and cannot authorize a partial dataset.

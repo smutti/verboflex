@@ -94,6 +94,15 @@
 - [ ] **COMM-03**: System stores comment author and timestamp.
 - [ ] **COMM-04**: Translation search results show whether a translation has comments.
 - [ ] **COMM-05**: Comments remain available after imports, edits, review state changes, and PR submission.
+- [ ] **COMM-06**: Comment authors can mention active users through a structured `@` autocomplete that stores immutable user identity rather than display text alone.
+
+### In-App Notifications
+
+- [ ] **NOTF-01**: Creating a comment produces exactly one notification for every distinct mentioned user other than the comment author.
+- [ ] **NOTF-02**: Each authenticated user can view only their own notifications and distinguish unread notifications from read notifications.
+- [ ] **NOTF-03**: A user can mark each of their notifications as read without changing another user's notification state.
+- [ ] **NOTF-04**: A mention notification links directly to the originating translation comment and the UI scrolls to, focuses, and visually highlights that exact comment.
+- [ ] **NOTF-05**: The authenticated application shell shows a notification bell with the user's unread count and provides access to a dedicated notification center.
 
 ### Change Sets and Pull Requests
 
@@ -235,6 +244,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COMM-03 | Phase 5 | Pending |
 | COMM-04 | Phase 5 | Pending |
 | COMM-05 | Phase 5 | Pending |
+| COMM-06 | Phase 5 | Pending |
+| NOTF-01 | Phase 5 | Pending |
+| NOTF-02 | Phase 5 | Pending |
+| NOTF-03 | Phase 5 | Pending |
+| NOTF-04 | Phase 5 | Pending |
+| NOTF-05 | Phase 5 | Pending |
 | PR-01 | Phase 7 | Pending |
 | PR-02 | Phase 7 | Pending |
 | PR-03 | Phase 7 | Pending |
@@ -253,10 +268,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 **Coverage:**
 
-- v1 requirements: 77 total
-- Mapped to phases: 77
+- v1 requirements: 83 total
+- Mapped to phases: 83
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-04*
-*Last updated: 2026-08-26 after Phase 2–4 boundary reconciliation*
+*Last updated: 2026-09-08 after adding Phase 5 mentions and in-app notifications*

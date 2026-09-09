@@ -15,7 +15,7 @@ VerboFlex v1 builds the repository-backed localization workflow from the foundat
 - [x] **Phase 2: Admin Configuration** - Build the admin control plane, organizational Bitbucket OAuth connection, live repository discovery, and read-only localization preview. (completed 2026-09-01)
 - [x] **Phase 3: Bitbucket Import Integration** - Harden Bitbucket access for imports with capability validation, durable source references, resilience, and actionable errors. (completed 2026-09-03)
 - [ ] **Phase 4: Localization Import, Search, and Constraints** - Parse supported files into canonical records, import and refresh them safely, expose search/detail workflows, and calculate max-length violations.
-- [ ] **Phase 5: Review Workspace and Comments** - Deliver the task-focused translation review UI with editing, state changes, comments, and pending-change visibility.
+- [ ] **Phase 5: Review Workspace and Comments** - Deliver the task-focused translation review UI with editing, state changes, comments, structured mentions, personal notifications, and pending-change visibility.
 - [ ] **Phase 6: Format-Safe Write-Back** - Prove file-location metadata, stale-source detection, and format-preserving writer behavior before PR automation.
 - [ ] **Phase 7: Change Sets and Pull Requests** - Submit grouped changes through Celery jobs that create Bitbucket branches, commits, and pull requests.
 - [ ] **Phase 8: Verification and Hardening** - Audit role enforcement, mutation audit metadata, UI permissions, error handling, and end-to-end readiness.
@@ -426,29 +426,34 @@ Plans:
 
 ### Phase 5: Review Workspace and Comments
 
-**Goal**: Provide the core review workspace where authorized users edit, comment, and move translations through simple states.
+**Goal**: Provide the core review workspace where authorized users edit, comment, mention collaborators, receive personal in-app notifications, and move translations through simple states.
 **Depends on**: Phase 4
-**Requirements**: [REVW-01, REVW-02, REVW-03, REVW-04, REVW-05, REVW-06, REVW-07, REVW-08, COMM-01, COMM-02, COMM-03, COMM-04, COMM-05, UI-02]
+**Requirements**: [REVW-01, REVW-02, REVW-03, REVW-04, REVW-05, REVW-06, REVW-07, REVW-08, COMM-01, COMM-02, COMM-03, COMM-04, COMM-05, COMM-06, NOTF-01, NOTF-02, NOTF-03, NOTF-04, NOTF-05, UI-02]
 **UI hint**: yes
 **Success Criteria** (what must be TRUE):
 
   1. Authorized user can edit translation text and see it as a pending unsent change.
   2. Authorized user can mark translations draft, approved, or rejected.
   3. System records review state-change history with actor and timestamp.
-  4. Authorized user can add and view per-translation comments that persist across workflow actions.
-  5. Viewer-only user cannot edit translations or change review state.
-  6. Phase quality gate passes with tests, code review, and deploy/build smoke verification.
+  4. Authorized user can add and view persistent per-translation comments and mention active users through structured identity selection.
+  5. Each mentioned user receives one private in-app notification, can mark it as read, and can follow it directly to the exact highlighted comment.
+  6. The application shell exposes a notification bell with the signed-in user's unread count and a dedicated notification center.
+  7. Viewer-only user cannot edit translations or change review state, and no user can read or mutate another user's notifications.
+  8. Phase quality gate passes with tests, code review, and deploy/build smoke verification.
 
-**Plans**: 6 plans
+**Plans**: 9 plans
 
 Plans:
 
 - [ ] 05-01: Pending translation changes and edit workflow
 - [ ] 05-02: Draft/approved/rejected state transitions and audit history
 - [ ] 05-03: Translation comments model, API, and persistence
-- [ ] 05-04: Permission-aware review workspace actions
-- [ ] 05-05: Dense shadcn/ui review workspace polish
-- [ ] 05-06: Phase quality gate - tests, code review, and deploy/build verification
+- [ ] 05-04: Comment UI and structured active-user mentions
+- [ ] 05-05: Per-user mention notification model, API, unread/read transitions, and authorization
+- [ ] 05-06: Notification bell, unread badge, notification center, and exact-comment deep linking
+- [ ] 05-07: Permission-aware review workspace actions
+- [ ] 05-08: Dense shadcn/ui review workspace polish
+- [ ] 05-09: Phase quality gate - tests, code review, and deploy/build verification
 
 ### Phase 6: Format-Safe Write-Back
 
@@ -537,7 +542,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 2. Admin Configuration | 46/46 | Complete    | 2026-09-01 |
 | 3. Bitbucket Import Integration | 16/16 | Complete    | 2026-09-03 |
 | 4. Localization Import, Search, and Constraints | 26/27 | In Progress|  |
-| 5. Review Workspace and Comments | 0/6 | Not started | - |
+| 5. Review Workspace and Comments | 0/9 | Not started | - |
 | 6. Format-Safe Write-Back | 0/5 | Not started | - |
 | 7. Change Sets and Pull Requests | 0/6 | Not started | - |
 | 8. Verification and Hardening | 0/5 | Not started | - |

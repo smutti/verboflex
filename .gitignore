@@ -21,3 +21,10 @@ frontend/coverage/
 *.env.*
 !.env.example
 !*.env.example
+
+# Local orchestration, planning locks, and generated analysis caches
+.gsd/
+.planning/agent-history.json
+.planning/milestone.lock
+.planning/research/.cache/
+graphify-out/

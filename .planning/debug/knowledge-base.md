@@ -4,6 +4,28 @@ Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypothe
 
 ---
 
+## real-repository-format-imports — preview discovery diverged from canonical parsers
+- **Date:** 2026-09-09
+- **Error patterns:** Real Android, nested JSON, Qt TS, or iOS Base layouts return `No supported layout`; repositories with more than 32 languages are rejected.
+- **Root cause(s):** Preview detectors duplicated stricter grammars, Android unrelated XML invalidated the whole resource root, regional/Base locale paths were incomplete, and preview/API contracts imposed a separate 32-language cap.
+- **Fix:** Reuse canonical Android/Qt parsing for preview semantics, support nested JSON and regional/Base locales, prefer an explicit base-language `.lproj` over `Base.lproj`, and remove the dedicated language cap while retaining file/byte/sample budgets.
+- **Files changed:** Localization preview/import adapters, preview schema/job confirmation boundary, generated OpenAPI client artifacts, and focused regression tests.
+- **Why not caught:** Earlier tests covered detection or parsing in isolation, not real repository trees and the complete preview-to-duplicate-quarantine chain.
+- **Recurrence guard:** Multi-format regressions plus live public-repository probes, including 52-language Qt input and Base/en iOS peers.
+
+---
+
+## babel-no-supported-layout — complete duplicate groups incorrectly suppressed a valid MOKO layout
+- **Date:** 2026-09-08
+- **Error patterns:** Babel preview succeeds but returns zero candidates; UI says `No supported layout`; complete duplicate report exists
+- **Root cause(s):** Preview cleared candidates on any duplicate group and canonical import converted the report to a blocking parser issue under a superseded contract.
+- **Fix:** Quarantine every occurrence of duplicate identities, import unique values, preserve last valid values on refresh, and render duplicate diagnostics as warnings.
+- **Files changed:** canonical registry/diagnostics, MOKO preview worker, import/reconciliation services, duplicate-report persistence/migration, preview and diagnostic UI.
+- **Why not caught:** Earlier tests enforced whole-mapping blocking and did not cover a valid large MOKO layout containing both unique and duplicated identities.
+- **Recurrence guard:** Live Babel evidence plus parser, preview-worker, activation-retention, migration, and frontend warning tests.
+
+---
+
 ## admin-sidebar-spacing — CSS Grid stretches navigation tracks through a tall flex sidebar
 - **Date:** 2026-08-28
 - **Error patterns:** Desktop sidebar destinations spread vertically across the viewport; main page layout remains normal; no runtime error
@@ -72,4 +94,14 @@ Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypothe
 - **Files changed:** backend/tests/architecture/test_phase3_gauntlet.py, frontend/src/features/admin/imports/PublishedMappingImports.tsx, frontend/src/features/admin/imports/PublishedMappingImports.test.tsx, frontend/src/features/admin/imports/RewrittenBaselineDialog.tsx, frontend/src/features/admin/imports/RewrittenBaselineDialog.test.tsx, frontend/src/features/admin/imports/mutationAuthority.ts, frontend/src/features/admin/imports/mutationAuthority.test.ts, tools/phase3_gauntlet.sh
 - **Why not caught:** Existing unmount tests proved aborted signals and suppressed callbacks, toasts, close, focus, and refresh effects, but did not directly observe async-finally state synchronization. React can ignore a post-unmount setter, and the mutation registry owned no exact controller-lifecycle predicate.
 - **Recurrence guard:** The two component suites directly assert false post-unmount and true live-boundary finalization decisions; `mutationAuthority.test.ts` covers controller/token/identity/commit truth-table neighbors; the architecture contract and gauntlet retain exactly five semantic markers and require 52/52 owned frontend mutants killed inside the canonical 14-layer gate.
+---
+
+## xliff-real-world-imports — strict adapter misclassified real XLIFF metadata and inline semantics
+- **Date:** 2026-09-09
+- **Error patterns:** `No supported localization layout was found`, valid XLIFF schemaLocation or skeleton rejected, invalid XLIFF inline/order documents accepted, `.xlf` and `.xliff` reconciliation fails
+- **Root cause(s):** The strict XLIFF adapter implemented a namespace-free structural subset and tag-vocabulary checks but omitted explicitly allowed XML/XSI attributes, the core 2.1 skeleton, group/target-order/inline relationship validation; the import rewrite suffix tuple was not extended when XLIFF was registered; the local Docker image still exposed the pre-XLIFF enum.
+- **Fix:** Added bounded XML/XSI namespace rules, skeleton href/content alternatives, inherited xml:space and language validation, target-order uniqueness, sc/ec pairing and copy semantics, canReorder sequence/hierarchy checks, and `.xlf`/`.xliff` at every rewrite-validation boundary; rebuilt backend/worker images and upgraded the local database.
+- **Files changed:** backend/src/verboflex/localization/importing/xliff.py, backend/src/verboflex/services/import_jobs.py, backend/tests/unit/localization/importing/test_xliff.py, backend/tests/integration/test_import_jobs.py, backend/alembic/versions/0026_duplicate_quarantine_layout.py
+- **Why not caught:** Earlier parser tests used simplified fixtures and no registry contract covered every rewrite-validation boundary; source-level tests also could not detect the stale Docker image.
+- **Recurrence guard:** Regression coverage in `backend/tests/unit/localization/importing/test_xliff.py` and `backend/tests/integration/test_import_jobs.py`, plus the public-corpus probe rejecting all 122 Microsoft core-invalid fixtures and the Docker runtime/migration smoke.
 ---
