@@ -160,7 +160,7 @@ def test_unsupported_string_content_keeps_all_duplicate_source_positions():
                 b'<unit id="same"><segment><source>One</source><target>Uno</target>'
                 b'</segment></unit><unit id="safe"><segment><source>OK</source>'
                 b'<target>OK</target></segment></unit><unit id="same"><segment>'
-                b'<source>Two</source><target>Due</target></segment></unit></file></xliff>'
+                b"<source>Two</source><target>Due</target></segment></unit></file></xliff>"
             ),
             layout_identity="xliff:translations/app_{locale}.xliff",
             layout_version=1,

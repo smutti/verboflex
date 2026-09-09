@@ -322,7 +322,7 @@ def test_logical_product_deletion_downgrade_fails_after_live_name_reuse(
         assert connection.execute(text("SELECT count(*) FROM products")).scalar_one() == 2
         assert (
             connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-            == "0025_preview_diagnostics"
+            == "0027_xliff_format"
         )
 
 

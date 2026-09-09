@@ -81,6 +81,18 @@ _FORMAT_CATEGORIES = {
         "unsupported",
         "concurrency",
     },
+    "xliff": {
+        "valid",
+        "empty",
+        "malformed",
+        "escaped",
+        "unicode",
+        "markup",
+        "duplicate",
+        "encoding",
+        "boundary",
+        "concurrency",
+    },
 }
 _CONSTRUCTS = {
     format_name: {
@@ -119,6 +131,13 @@ def _input(format_name: str, *, content: bytes | None = None, **overrides: objec
             "path": "mobile/it_IT.lproj/Localizable.strings",
             "content": (_FIXTURES / "ios" / "valid.strings").read_bytes(),
             "layout_identity": "ios-strings:mobile/{locale}.lproj/Localizable.strings",
+            "base_language": "en",
+        },
+        "xliff": {
+            "repository_side": "direct",
+            "path": "translations/app_fr-FR.xliff",
+            "content": (_FIXTURES / "xliff" / "valid_20.xliff").read_bytes(),
+            "layout_identity": "xliff:translations/app_{locale}.xliff",
             "base_language": "en",
         },
     }
@@ -306,6 +325,7 @@ def test_shared_exact_resource_limits_match_every_adapter_manifest() -> None:
         android_xml,
         ios_strings,
         qt_ts,
+        xliff,
     )
     from verboflex.localization.importing import (
         json as json_adapter,
@@ -320,7 +340,7 @@ def test_shared_exact_resource_limits_match_every_adapter_manifest() -> None:
     assert _LIMITS["issue_message"] == core.MAX_CANONICAL_ISSUE_MESSAGE_LENGTH
     assert _LIMITS["path"] == core.MAX_CANONICAL_PATH_LENGTH
     assert _LIMITS["coordinate"] == core.MAX_CANONICAL_COORDINATE
-    for adapter in (android_xml, qt_ts, json_adapter, ios_strings):
+    for adapter in (android_xml, qt_ts, json_adapter, ios_strings, xliff):
         assert adapter.MAX_CANONICAL_FILE_BYTES == core.MAX_CANONICAL_FILE_BYTES
     for format_name in get_args(core.CanonicalFormat):
         manifest = json.loads(

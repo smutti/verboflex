@@ -1,6 +1,30 @@
 {
+  "format": "xliff",
+  "categories": [
+    "valid",
+    "empty",
+    "malformed",
+    "escaped",
+    "unicode",
+    "markup",
+    "duplicate",
+    "encoding",
+    "boundary",
+    "concurrency"
+  ],
   "supported": ["valid_12.xlf", "valid_20.xliff", "valid_21.xliff"],
   "versions": ["1.2", "2.0", "2.1"],
   "suffixes": [".xlf", ".xliff"],
-  "safety": "defusedxml, exact namespace/version, bounded canonical output"
+  "safety": "defusedxml, exact namespace/version, bounded canonical output",
+  "limits": {
+    "file_bytes": 1048576,
+    "aggregate_bytes": 20971520,
+    "files": 500,
+    "values": 5000,
+    "depth": 12,
+    "issues": 5,
+    "issue_message": 256,
+    "path": 4096,
+    "coordinate": 2147483647
+  }
 }

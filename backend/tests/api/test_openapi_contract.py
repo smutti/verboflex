@@ -1448,6 +1448,7 @@ def test_translation_schemas_are_closed_bounded_and_non_leaking() -> None:
         "qt_ts",
         "json",
         "ios_strings",
+        "xliff",
     ]
     assert provenance["properties"]["branch"]["maxLength"] == 255
     assert provenance["properties"]["path"]["maxLength"] == 4096

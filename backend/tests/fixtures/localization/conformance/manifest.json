@@ -189,6 +189,39 @@
         "escape.invalid",
         "escape.unpaired-surrogate"
       ]
+    },
+    "xliff": {
+      "categories": [
+        "boundary",
+        "concurrency",
+        "duplicate",
+        "empty",
+        "encoding",
+        "escaped",
+        "malformed",
+        "markup",
+        "unicode",
+        "valid"
+      ],
+      "supported_constructs": [
+        "document.xliff-1.2",
+        "document.xliff-2.0",
+        "document.xliff-2.1",
+        "inline.core",
+        "metadata.ordered",
+        "unit.bilingual"
+      ],
+      "rejected_constructs": [
+        "document.dtd",
+        "document.entity",
+        "document.external-reference",
+        "document.namespace-extension",
+        "document.processing-instruction",
+        "document.unsupported-version",
+        "inline.unknown",
+        "unit.duplicate-identity",
+        "unit.missing-source-target"
+      ]
     }
   },
   "limits": {
