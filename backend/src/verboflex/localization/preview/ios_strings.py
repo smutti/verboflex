@@ -224,14 +224,20 @@ def _lproj_locale_components(components: list[str]) -> list[tuple[int, str]] | N
     for index, component in enumerate(components[:-1]):
         if not component.endswith(".lproj"):
             continue
-        locale = normalize_preview_locale(component[: -len(".lproj")])
+        raw_locale = component[: -len(".lproj")]
+        locale = (
+            "default"
+            if raw_locale.casefold() == "base"
+            else normalize_preview_locale(raw_locale)
+        )
         if locale is None:
             return None
         locale_components.append((index, locale))
     return locale_components
 
 
-def _ios_layout_path(path: str) -> tuple[str, str] | None:
+def ios_layout_path(path: str) -> tuple[str, str] | None:
+    """Return the canonical locale token and exact iOS path layout."""
     components = _ios_path_components(path)
     if components is None:
         return None
@@ -247,7 +253,7 @@ def _ios_layout_path(path: str) -> tuple[str, str] | None:
 
 
 def _parse_ios_file(file: RepositorySourceFile) -> _IosFile:
-    path_layout = _ios_layout_path(file.path)
+    path_layout = ios_layout_path(file.path)
     if path_layout is None:
         raise ValueError("ambiguous iOS strings path locale")
     entries = parse_ios_strings(file.content)
@@ -269,7 +275,7 @@ def _collect_ios_files(
     for file in sorted(files, key=lambda item: item.path):
         if not file.path.endswith(".strings"):
             continue
-        path_layout = _ios_layout_path(file.path)
+        path_layout = ios_layout_path(file.path)
         hinted_identity = path_layout[1] if path_layout is not None else None
         total_bytes += len(file.content)
         if (

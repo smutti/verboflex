@@ -375,13 +375,14 @@ def _require_input_authority(parser_input: CanonicalParserInput) -> tuple[str, s
         or not _is_safe_relative_path(parser_input.layout_identity)
     ):
         raise _AmbiguousIosLayout
-    path_layout = preview_ios._ios_layout_path(parser_input.path)
+    path_layout = preview_ios.ios_layout_path(parser_input.path)
     if path_layout is None or parser_input.layout_identity != path_layout[1]:
         raise _AmbiguousIosLayout
     base_language = normalize_preview_locale(parser_input.base_language)
     if base_language is None:
         raise _BaseLanguageRequired
-    return path_layout[0], base_language
+    language = base_language if path_layout[0] == "default" else path_layout[0]
+    return language, base_language
 
 
 def _decode_document(content: bytes) -> _DecodedDocument:

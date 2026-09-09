@@ -20,6 +20,8 @@ import {
   createAdminPreviewJob,
   getAdminRepositoryBranch,
   getAdminActiveRevisionRevalidationJob,
+  getAdminLatestActiveRevisionRevalidationJob,
+  getAdminLatestCandidatePreviewJob,
   getAdminPreviewJob,
   getAdminProduct,
   getAdminProductReactivationEligibility,
@@ -52,6 +54,8 @@ vi.mock("../../../api/client", async (importOriginal) => {
     createAdminPreviewJob: vi.fn(),
     getAdminRepositoryBranch: vi.fn(),
     getAdminActiveRevisionRevalidationJob: vi.fn(),
+    getAdminLatestActiveRevisionRevalidationJob: vi.fn(),
+    getAdminLatestCandidatePreviewJob: vi.fn(),
     getAdminPreviewJob: vi.fn(),
     getAdminProduct: vi.fn(),
     getAdminProductReactivationEligibility: vi.fn(),
@@ -75,6 +79,12 @@ const createJobMock = vi.mocked(createAdminPreviewJob);
 const getBranchMock = vi.mocked(getAdminRepositoryBranch);
 const getActiveRevalidationMock = vi.mocked(
   getAdminActiveRevisionRevalidationJob,
+);
+const getLatestActiveRevalidationMock = vi.mocked(
+  getAdminLatestActiveRevisionRevalidationJob,
+);
+const getLatestCandidatePreviewMock = vi.mocked(
+  getAdminLatestCandidatePreviewJob,
 );
 const getJobMock = vi.mocked(getAdminPreviewJob);
 const getProductMock = vi.mocked(getAdminProduct);
@@ -431,6 +441,7 @@ describe("administrator product preview and publication page", () => {
     expect(toastSuccessMock).not.toHaveBeenCalled();
   });
   beforeEach(() => {
+    window.sessionStorage.clear();
     confirmActiveRevalidationMock.mockReset();
     confirmMock.mockReset();
     createActiveRevalidationMock.mockReset();
@@ -441,6 +452,14 @@ describe("administrator product preview and publication page", () => {
       ok({ commit_hash: "b".repeat(40), name: "main" }),
     );
     getActiveRevalidationMock.mockReset();
+    getLatestActiveRevalidationMock.mockReset();
+    getLatestActiveRevalidationMock.mockResolvedValue(
+      failure({ detail: "Active revision revalidation unavailable" }, 404),
+    );
+    getLatestCandidatePreviewMock.mockReset();
+    getLatestCandidatePreviewMock.mockResolvedValue(
+      failure({ detail: "Preview unavailable" }, 404),
+    );
     getJobMock.mockReset();
     getProductMock.mockReset();
     getProductMock.mockResolvedValue(ok(product));
@@ -476,6 +495,233 @@ describe("administrator product preview and publication page", () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  it("restores the latest candidate validation after remount", async () => {
+    const createdAt = new Date().toISOString();
+    const queuedJob = previewJob({
+      created_at: createdAt,
+      finished_at: null,
+      result: null,
+      started_at: null,
+      state: "queued",
+    });
+    createJobMock.mockResolvedValueOnce(ok(queuedJob, 202));
+    const firstVisit = renderPage();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Run validation" }),
+    );
+    expect(
+      await screen.findByText("Queued", {
+        exact: true,
+        selector: "[data-slot='badge']",
+      }),
+    ).toBeVisible();
+    firstVisit.unmount();
+
+    getLatestCandidatePreviewMock.mockResolvedValueOnce(
+      ok(previewJob({ created_at: createdAt, id: queuedJob.id })),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByText("Succeeded", {
+        exact: true,
+        selector: "[data-slot='badge']",
+      }),
+    ).toBeVisible();
+    expect(getLatestCandidatePreviewMock).toHaveBeenLastCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: { mapping_id: mapping.id, product_id: product.id },
+    });
+    expect(createJobMock).toHaveBeenCalledOnce();
+  });
+
+  it("rediscovers a candidate validation when browser storage is empty", async () => {
+    const recoveredJob = previewJob();
+    getLatestCandidatePreviewMock.mockResolvedValueOnce(ok(recoveredJob));
+
+    renderPage();
+
+    expect(
+      await screen.findByText("Succeeded", {
+        exact: true,
+        selector: "[data-slot='badge']",
+      }),
+    ).toBeVisible();
+    expect(getLatestCandidatePreviewMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: { mapping_id: mapping.id, product_id: product.id },
+    });
+    expect(getJobMock).not.toHaveBeenCalled();
+  });
+
+  it("restores an active-revision validation after remount", async () => {
+    const createdAt = new Date().toISOString();
+    const queuedJob = activeRevalidationJob({
+      created_at: createdAt,
+      finished_at: null,
+      result: null,
+      started_at: null,
+      state: "queued",
+    });
+    getProductMock.mockResolvedValue(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValue(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+    getReactivationEligibilityMock.mockResolvedValue(
+      ok(reactivationEligibility(false)),
+    );
+    createActiveRevalidationMock.mockResolvedValueOnce(ok(queuedJob, 202));
+    const firstVisit = renderPage(inactiveActiveOnlyProduct.id);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Run validation again" }),
+    );
+    expect(
+      await screen.findByText("Queued", {
+        exact: true,
+        selector: "[data-slot='badge']",
+      }),
+    ).toBeVisible();
+    firstVisit.unmount();
+
+    getLatestActiveRevalidationMock.mockResolvedValueOnce(
+      ok(activeRevalidationJob({ created_at: createdAt, id: queuedJob.id })),
+    );
+    renderPage(inactiveActiveOnlyProduct.id);
+
+    expect(
+      await screen.findByText("Succeeded", {
+        exact: true,
+        selector: "[data-slot='badge']",
+      }),
+    ).toBeVisible();
+    expect(getLatestActiveRevalidationMock).toHaveBeenLastCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: {
+        mapping_id: confirmedActiveMapping.id,
+        product_id: inactiveActiveOnlyProduct.id,
+        revision_id: inactiveActiveOnlyProduct.active_revision!.id,
+      },
+    });
+    expect(createActiveRevalidationMock).toHaveBeenCalledOnce();
+  });
+
+  it("rediscovers an active validation when browser storage is empty", async () => {
+    const recoveredJob = activeRevalidationJob();
+    getProductMock.mockResolvedValue(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValue(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+    getReactivationEligibilityMock.mockResolvedValue(
+      ok(reactivationEligibility(false)),
+    );
+    getLatestActiveRevalidationMock.mockResolvedValueOnce(ok(recoveredJob));
+
+    renderPage(inactiveActiveOnlyProduct.id);
+
+    expect(
+      await screen.findByText("Succeeded", {
+        exact: true,
+        selector: "[data-slot='badge']",
+      }),
+    ).toBeVisible();
+    expect(getLatestActiveRevalidationMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: {
+        mapping_id: confirmedActiveMapping.id,
+        product_id: inactiveActiveOnlyProduct.id,
+        revision_id: inactiveActiveOnlyProduct.active_revision!.id,
+      },
+    });
+    expect(getActiveRevalidationMock).not.toHaveBeenCalled();
+  });
+
+  it("recovers a candidate validation accepted after the page was left", async () => {
+    const createdAt = new Date().toISOString();
+    const queuedJob = previewJob({
+      created_at: createdAt,
+      finished_at: null,
+      result: null,
+      started_at: null,
+      state: "queued",
+    });
+    let acceptValidation!: (
+      value: ReturnType<typeof ok<AdminPreviewJobResponse>>,
+    ) => void;
+    createJobMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        acceptValidation = resolve;
+      }) as never,
+    );
+
+    const firstVisit = renderPage();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Run validation" }),
+    );
+    await waitFor(() => expect(createJobMock).toHaveBeenCalledOnce());
+    firstVisit.unmount();
+    await act(async () => acceptValidation(ok(queuedJob, 202)));
+
+    getLatestCandidatePreviewMock.mockResolvedValueOnce(
+      ok(previewJob({ id: queuedJob.id })),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByText("Succeeded", {
+        exact: true,
+        selector: "[data-slot='badge']",
+      }),
+    ).toBeVisible();
+  });
+
+  it("recovers an active validation accepted after the page was left", async () => {
+    const createdAt = new Date().toISOString();
+    const queuedJob = activeRevalidationJob({
+      created_at: createdAt,
+      finished_at: null,
+      result: null,
+      started_at: null,
+      state: "queued",
+    });
+    let acceptValidation!: (
+      value: ReturnType<typeof ok<AdminActiveRevisionRevalidationJobResponse>>,
+    ) => void;
+    getProductMock.mockResolvedValue(ok(inactiveActiveOnlyProduct));
+    listRevisionMappingsMock.mockResolvedValue(
+      ok({ items: [confirmedActiveMapping], next_cursor: null }),
+    );
+    getReactivationEligibilityMock.mockResolvedValue(
+      ok(reactivationEligibility(false)),
+    );
+    createActiveRevalidationMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        acceptValidation = resolve;
+      }) as never,
+    );
+
+    const firstVisit = renderPage(inactiveActiveOnlyProduct.id);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Run validation again" }),
+    );
+    await waitFor(() =>
+      expect(createActiveRevalidationMock).toHaveBeenCalledOnce(),
+    );
+    firstVisit.unmount();
+    await act(async () => acceptValidation(ok(queuedJob, 202)));
+
+    getLatestActiveRevalidationMock.mockResolvedValueOnce(
+      ok(activeRevalidationJob({ id: queuedJob.id })),
+    );
+    renderPage(inactiveActiveOnlyProduct.id);
+
+    expect(
+      await screen.findByText("Succeeded", {
+        exact: true,
+        selector: "[data-slot='badge']",
+      }),
+    ).toBeVisible();
   });
 
   it.each([
@@ -536,7 +782,7 @@ describe("administrator product preview and publication page", () => {
           result: {
             detector_version: "detector-v1",
             digest: "c".repeat(64),
-            layout_candidates: [],
+            layout_candidates: [candidates[0]],
           },
         }),
         202,
@@ -547,6 +793,16 @@ describe("administrator product preview and publication page", () => {
     expect(
       screen.getByRole("button", { name: "View duplicate keys" }),
     ).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Duplicate keys detected",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "2 duplicate groups and 2 repeated occurrences",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Unique strings remain available",
+    );
+    expect(screen.queryByText("No supported layout")).not.toBeInTheDocument();
   });
 
   it("renders approved loading, bounded error, and not-run states", async () => {

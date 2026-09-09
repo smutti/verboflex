@@ -21,6 +21,12 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
 from verboflex.integrations.bitbucket.client import BitbucketFileDelta
+from verboflex.localization.duplicate_diagnostics import (
+    DuplicateGroup,
+    DuplicateOccurrence,
+    DuplicateReport,
+    duplicate_identity_digest,
+)
 from verboflex.localization.importing.core import (
     CanonicalIssue,
     CanonicalParseResult,
@@ -55,6 +61,7 @@ from verboflex.models.translation_constraint import TranslationConstraint
 from verboflex.models.user import User
 from verboflex.services import import_jobs
 from verboflex.services.bitbucket_oauth import PULLREQUEST_WRITE_SCOPE
+from verboflex.services.duplicate_reports import store_report
 from verboflex.services.import_jobs import ImportSourceReferenceRecord
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -1130,6 +1137,120 @@ def test_refresh_complete_absence_tombstones_without_losing_context(
     assert key.is_deleted is True and key.deleted_at is not None
     assert locator is not None and locator.value_id == original_locator_id
     assert revision_count == original_revision_count + 1
+
+
+def test_refresh_quarantines_duplicates_and_retains_last_valid_values(
+    activation_session_factory: sessionmaker[Session],
+) -> None:
+    identity, repository_id = _seed_running_direct_import(activation_session_factory)
+    initial = parse_canonical_mapping(
+        (
+            CanonicalParserInput(
+                format="json",
+                repository_side="direct",
+                path="locales.json",
+                content=(
+                    b'{"en":{"welcome":"Hello","safe":"Before"},'
+                    b'"it":{"welcome":"Ciao","safe":"Prima"}}'
+                ),
+                layout_identity="json:locale-rooted:locales.json",
+                layout_version=1,
+                base_language="en",
+            ),
+        )
+    )
+    _reconcile_staged_result(
+        activation_session_factory,
+        identity=identity,
+        repository_id=repository_id,
+        result=initial,
+    )
+    with activation_session_factory() as session:
+        scope = session.scalar(select(LocalizationScope))
+        assert scope is not None
+        retained = {
+            value.language: value
+            for value in session.scalars(
+                select(TranslationValue)
+                .join(TranslationKey)
+                .where(
+                    TranslationKey.scope_id == scope.id,
+                    TranslationKey.raw_key == "welcome",
+                )
+            )
+        }
+        retained_state = {
+            language: (value.id, value.display_text, len(value.revisions))
+            for language, value in retained.items()
+        }
+
+    successor = _start_refresh_execution(activation_session_factory, identity)
+    refreshed = parse_canonical_mapping(
+        (
+            CanonicalParserInput(
+                format="json",
+                repository_side="direct",
+                path="locales.json",
+                content=b'{"en":{"safe":"After"},"it":{"safe":"Dopo"}}',
+                layout_identity="json:locale-rooted:locales.json",
+                layout_version=1,
+                base_language="en",
+            ),
+        )
+    )
+    layout = "json:locale-rooted:locales.json"
+    groups = tuple(
+        DuplicateGroup(
+            id=duplicate_identity_digest(
+                "direct", layout, language, "welcome", value.selector_digest
+            ),
+            repository_side="direct",
+            layout_identity=layout,
+            language=language,
+            key_preview="welcome",
+            key_length=7,
+            occurrences=(
+                DuplicateOccurrence("locales.json", 0),
+                DuplicateOccurrence("locales.json", 1),
+            ),
+        )
+        for language, value in retained.items()
+    )
+    with activation_session_factory.begin() as session:
+        store_report(
+            session,
+            report=DuplicateReport(groups=groups),
+            sources=[],
+            execution_id=successor.execution_id,
+        )
+    _reconcile_staged_result(
+        activation_session_factory,
+        identity=successor,
+        repository_id=repository_id,
+        result=refreshed,
+        commit_hash="c" * 40,
+    )
+
+    with activation_session_factory() as session:
+        scope = session.scalar(select(LocalizationScope))
+        assert scope is not None
+        for language, (value_id, text_before, revision_count) in retained_state.items():
+            value = _value_for(
+                session,
+                scope_id=scope.id,
+                raw_key="welcome",
+                language=language,
+            )
+            assert value.id == value_id
+            assert value.display_text == text_before
+            assert not value.is_deleted
+            assert len(value.revisions) == revision_count
+        assert _value_for(
+            session, scope_id=scope.id, raw_key="safe", language="en"
+        ).display_text == "After"
+        assert _value_for(
+            session, scope_id=scope.id, raw_key="safe", language="it"
+        ).display_text == "Dopo"
 
 
 def test_refresh_qt_deleted_row_tombstones_without_erasing_review_state(

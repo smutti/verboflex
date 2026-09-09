@@ -4,6 +4,7 @@ import hashlib
 import json
 from collections import defaultdict
 from dataclasses import dataclass
+from typing import Protocol
 
 from verboflex.integrations.bitbucket.urls import validate_repository_relative_path
 from verboflex.localization.importing.core import (
@@ -11,9 +12,13 @@ from verboflex.localization.importing.core import (
     MAX_CANONICAL_FILES,
     MAX_CANONICAL_MAPPING_VALUES,
     CanonicalParserInput,
+    CanonicalSelector,
     canonical_selector_digest,
 )
-from verboflex.localization.importing.registry import inspect_duplicate_snapshot
+from verboflex.localization.importing.registry import (
+    inspect_duplicate_snapshot,
+    prefer_explicit_ios_base_inputs,
+)
 from verboflex.localization.moko_layout import moko_layout
 
 MAX_DIAGNOSTIC_BYTES = 16 * 1_048_576
@@ -29,6 +34,7 @@ class DuplicateOccurrence:
 class DuplicateGroup:
     id: str
     repository_side: str
+    layout_identity: str
     language: str
     key_preview: str
     key_length: int
@@ -46,6 +52,17 @@ class DuplicateReport:
         return sum(len(group.occurrences) - 1 for group in self.groups)
 
 
+class DuplicateIdentityValue(Protocol):
+    @property
+    def language(self) -> str: ...
+
+    @property
+    def logical_key(self) -> str: ...
+
+    @property
+    def selector(self) -> CanonicalSelector: ...
+
+
 def inspect_duplicate_keys(inputs: tuple[CanonicalParserInput, ...]) -> DuplicateReport:
     if type(inputs) is not tuple or not inputs or len(inputs) > MAX_CANONICAL_FILES:
         return DuplicateReport(complete=False, issue_codes=("unsupported_structure",))
@@ -61,7 +78,8 @@ def inspect_duplicate_keys(inputs: tuple[CanonicalParserInput, ...]) -> Duplicat
     count = 0
     size = 0
     seen_paths: set[tuple[str, str]] = set()
-    for source in sorted(inputs, key=lambda item: (item.repository_side, item.path)):
+    effective_inputs = prefer_explicit_ios_base_inputs(inputs)
+    for source in sorted(effective_inputs, key=lambda item: (item.repository_side, item.path)):
         path_identity = (source.repository_side, source.path)
         if path_identity in seen_paths:
             issues.add("malformed_file")
@@ -76,16 +94,7 @@ def inspect_duplicate_keys(inputs: tuple[CanonicalParserInput, ...]) -> Duplicat
         diagnostic_values, snapshot_issues = inspect_duplicate_snapshot(source)
         issues.update(issue.code for issue in snapshot_issues)
         for value in diagnostic_values:
-            identity = (
-                source.repository_side,
-                source.layout_identity,
-                "default"
-                if source.base_language == "und"
-                and moko_layout(source.path) == (source.layout_identity, "default")
-                else value.language,
-                value.logical_key,
-                canonical_selector_digest(value.selector),
-            )
+            identity = duplicate_value_identity(source, value)
             count += 1
             # Count full key/identity bytes before retaining them, including
             # nonduplicate entries needed to detect later cross-file repeats.
@@ -99,8 +108,9 @@ def inspect_duplicate_keys(inputs: tuple[CanonicalParserInput, ...]) -> Duplicat
             occurrences[identity].append(DuplicateOccurrence(source.path, value.locator.position))
     groups = tuple(
         DuplicateGroup(
-            id=hashlib.sha256(json.dumps(identity, ensure_ascii=True).encode()).hexdigest(),
+            id=duplicate_identity_digest(*identity),
             repository_side=identity[0],
+            layout_identity=identity[1],
             language=identity[2],
             key_preview=identity[3][:512],
             key_length=len(identity[3]),
@@ -110,3 +120,37 @@ def inspect_duplicate_keys(inputs: tuple[CanonicalParserInput, ...]) -> Duplicat
         if len(members) > 1
     )
     return DuplicateReport(groups=groups, complete=not issues, issue_codes=tuple(sorted(issues)))
+
+
+def duplicate_value_identity(
+    source: CanonicalParserInput, value: DuplicateIdentityValue
+) -> tuple[str, str, str, str, str]:
+    """Return the stable diagnostic identity shared by reports and quarantine."""
+    return (
+        source.repository_side,
+        source.layout_identity,
+        "default"
+        if source.base_language == "und"
+        and moko_layout(source.path) == (source.layout_identity, "default")
+        else value.language,
+        value.logical_key,
+        canonical_selector_digest(value.selector),
+    )
+
+
+def duplicate_identity_digest(
+    repository_side: str,
+    layout_identity: str,
+    language: str,
+    logical_key: str,
+    selector_digest: str,
+) -> str:
+    """Hash an identity without persisting or exposing its complete raw key."""
+    identity = (
+        repository_side,
+        layout_identity,
+        language,
+        logical_key,
+        selector_digest,
+    )
+    return hashlib.sha256(json.dumps(identity, ensure_ascii=True).encode()).hexdigest()

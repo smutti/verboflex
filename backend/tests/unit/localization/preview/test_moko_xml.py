@@ -30,6 +30,27 @@ def test_moko_preview_uses_default_marker_and_complete_paths():
     assert candidate.files == tuple(file.path for file in sources())
 
 
+def test_moko_preview_quarantines_duplicate_keys_but_keeps_unique_values():
+    result = detect_preview_layouts(
+        (
+            RepositorySourceFile(
+                "module/moko-resources/base/strings.xml",
+                b'<resources><string name="duplicate">First</string>'
+                b'<string name="safe">Visible</string>'
+                b'<string name="duplicate">Second</string></resources>',
+            ),
+        ),
+        repository_side="direct",
+    )
+
+    assert len(result.candidates) == 1
+    candidate = result.candidates[0]
+    assert candidate.languages == ("default",)
+    assert [sample.to_mapping() for sample in candidate.samples] == [
+        {"language": "default", "key": "safe", "translation": "Visible"}
+    ]
+
+
 def test_moko_canonical_preserves_markup_metadata_and_explicit_base():
     result = parse_canonical_mapping(
         tuple(

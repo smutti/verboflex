@@ -102,5 +102,5 @@ def test_import_worker_keeps_uuid_only_transport_and_parses_before_finalization(
         for node in ast.walk(process_tree)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
     }
-    assert "parse_canonical_mapping" in called_names
+    assert "parse_canonical_mapping_quarantining_duplicates" in called_names
     assert "stage_translation_parse" in called_names

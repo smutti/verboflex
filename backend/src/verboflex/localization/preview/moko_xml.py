@@ -4,7 +4,9 @@ from collections import defaultdict
 from collections.abc import Iterable
 
 from verboflex.localization.importing.core import CanonicalParserInput
-from verboflex.localization.importing.registry import parse_canonical_mapping
+from verboflex.localization.importing.registry import (
+    parse_canonical_mapping_quarantining_duplicates,
+)
 from verboflex.localization.moko_layout import moko_layout, moko_resource_root
 from verboflex.localization.preview.core import (
     PreviewDetectionResult,
@@ -32,7 +34,7 @@ def detect_moko_layouts(
             continue
         # "und" is an internal validation placeholder, never published as the
         # inferred base language. Preview exposes the established default marker.
-        parsed = parse_canonical_mapping(
+        parsed = parse_canonical_mapping_quarantining_duplicates(
             tuple(
                 CanonicalParserInput(
                     format="android_xml",

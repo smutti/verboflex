@@ -12,6 +12,11 @@ from verboflex.localization.importing.core import (
     CanonicalIssue,
     CanonicalParserInput,
 )
+from verboflex.localization.importing.registry import (
+    parse_canonical_mapping_quarantining_duplicates,
+)
+from verboflex.localization.preview.registry import detect_preview_layouts
+from verboflex.services.repository_discovery import RepositorySourceFile
 
 
 def inspect(inputs):
@@ -55,6 +60,76 @@ def test_reports_every_occurrence_without_first_or_last_wins():
     assert [occurrence.position for occurrence in group.occurrences] == [0, 2, 3]
     assert all(occurrence.path == "res/values/strings.xml" for occurrence in group.occurrences)
     assert "One" not in repr(report) and "Two" not in repr(report)
+
+
+def test_quarantine_parser_imports_unique_values_without_choosing_a_duplicate():
+    result = parse_canonical_mapping_quarantining_duplicates(
+        (
+            source(
+                '<string name="same">One</string><string name="safe">OK</string>'
+                '<string name="same">Two</string>'
+            ),
+        )
+    )
+
+    assert result.issues == ()
+    assert [(value.logical_key, value.display_text) for value in result.values] == [("safe", "OK")]
+
+
+def test_ios_base_lproj_falls_back_only_when_an_explicit_base_locale_peer_is_absent():
+    contents = {
+        "mobile/Base.lproj/Localizable.strings": b'"welcome" = "Base fallback";',
+        "mobile/en.lproj/Localizable.strings": b'"welcome" = "Explicit English";',
+    }
+    snapshot = tuple(
+        RepositorySourceFile(path=path, content=content) for path, content in contents.items()
+    )
+    preview = detect_preview_layouts(snapshot, repository_side="direct")
+    assert len(preview.candidates) == 1
+    candidate = preview.candidates[0]
+    parser_inputs = tuple(
+        CanonicalParserInput(
+            format=candidate.format,
+            repository_side="direct",
+            path=path,
+            content=contents[path],
+            layout_identity=candidate.layout_identity,
+            layout_version=candidate.version,
+            base_language="en",
+        )
+        for path in candidate.files
+    )
+
+    result = parse_canonical_mapping_quarantining_duplicates(parser_inputs)
+    reversed_result = parse_canonical_mapping_quarantining_duplicates(
+        tuple(reversed(parser_inputs))
+    )
+
+    assert result.issues == ()
+    assert inspect(parser_inputs).groups == ()
+    assert reversed_result == result
+    assert [
+        (value.language, value.display_text, value.locator.path) for value in result.values
+    ] == [("en", "Explicit English", "mobile/en.lproj/Localizable.strings")]
+
+
+def test_ios_base_lproj_remains_the_base_language_when_no_explicit_peer_exists():
+    parser_input = CanonicalParserInput(
+        format="ios_strings",
+        repository_side="direct",
+        path="mobile/Base.lproj/Localizable.strings",
+        content=b'"welcome" = "Base fallback";',
+        layout_identity="ios-strings:mobile/{locale}.lproj/Localizable.strings",
+        layout_version=1,
+        base_language="en",
+    )
+
+    result = parse_canonical_mapping_quarantining_duplicates((parser_input,))
+
+    assert result.issues == ()
+    assert [
+        (value.language, value.display_text, value.locator.path) for value in result.values
+    ] == [("en", "Base fallback", "mobile/Base.lproj/Localizable.strings")]
 
 
 def test_cross_file_duplicates_are_grouped_but_other_languages_are_not():

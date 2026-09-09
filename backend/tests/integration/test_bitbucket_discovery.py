@@ -522,6 +522,7 @@ def test_resolves_commit_then_streams_exact_bounded_source_candidates() -> None:
                 request=request,
             )
         if path.endswith(f"/src/{commit_hash}/") and request.url.params.get("after") is None:
+            assert request.url.params.get("max_depth") == "12"
             payload = {
                 "values": [
                     {"path": "locales", "type": "commit_directory"},
@@ -539,6 +540,11 @@ def test_resolves_commit_then_streams_exact_bounded_source_candidates() -> None:
             payload = {
                 "values": [
                     {"path": "README.md", "type": "commit_file", "size": 7},
+                    {
+                        "path": "locales/en.json",
+                        "type": "commit_file",
+                        "size": 18,
+                    },
                 ]
             }
             return httpx.Response(

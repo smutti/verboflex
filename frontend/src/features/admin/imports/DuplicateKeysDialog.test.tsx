@@ -61,7 +61,8 @@ it("opens read-only duplicate diagnostics with source authority and escaped keys
   expect(screen.getByText("<b>duplicate</b>").tagName).not.toBe("B");
   expect(screen.getByText(/Resource position 7/)).toBeVisible();
   expect(screen.getByText(/source\/main/)).toBeVisible();
-  expect(screen.getByText(/remain blocked/)).toBeVisible();
+  expect(screen.getByText(/continue to import/)).toBeVisible();
+  expect(screen.getByText(/stay quarantined/)).toBeVisible();
   await userEvent.click(
     screen.getByRole("button", { name: "Close diagnostics" }),
   );

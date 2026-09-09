@@ -12,7 +12,6 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 RepositorySide = Literal["direct", "keys", "translations"]
 PreviewFormat = Literal["android_xml", "qt_ts", "json", "ios_strings", "xliff"]
 
-MAX_PREVIEW_LANGUAGES = 32
 MAX_SAMPLES_PER_LANGUAGE = 10
 MAX_TOTAL_SAMPLES = 100
 MAX_LAYOUT_FILES = 500
@@ -282,7 +281,6 @@ def build_layout_candidate(
     _require_candidate(len(set(ordered_files)) == len(ordered_files))
     _require_candidate(len(ordered_files) <= MAX_LAYOUT_FILES)
     _require_candidate(bool(ordered_languages))
-    _require_candidate(len(ordered_languages) <= MAX_PREVIEW_LANGUAGES)
     samples = _build_samples(values=values, ordered_languages=ordered_languages)
     keys = tuple(sorted({sample.key for sample in samples}))
     return PreviewLayoutCandidate(
@@ -366,14 +364,15 @@ def _candidate_header(raw: Mapping[object, object]) -> _CandidateHeader:
 def _ordered_unique_strings(
     raw: object,
     *,
-    max_count: int,
+    max_count: int | None,
     max_length: int,
 ) -> tuple[str, ...]:
     _require_candidate(isinstance(raw, list))
     items = cast(list[object], raw)
     values = tuple(_required_string(value, max_length=max_length) for value in items)
     _require_candidate(bool(values))
-    _require_candidate(len(values) <= max_count)
+    if max_count is not None:
+        _require_candidate(len(values) <= max_count)
     _require_candidate(values == tuple(sorted(set(values))))
     return values
 
@@ -436,9 +435,7 @@ def layout_candidate_from_mapping(raw: object) -> PreviewLayoutCandidate:
         raise ValueError("preview candidate rejected")
     header = _candidate_header(raw)
     files = _ordered_unique_strings(raw["files"], max_count=MAX_LAYOUT_FILES, max_length=4096)
-    languages = _ordered_unique_strings(
-        raw["languages"], max_count=MAX_PREVIEW_LANGUAGES, max_length=64
-    )
+    languages = _ordered_unique_strings(raw["languages"], max_count=None, max_length=64)
     keys = _ordered_unique_strings(raw["keys"], max_count=MAX_TOTAL_SAMPLES, max_length=1_048_576)
     samples = _validated_samples(raw["samples"])
     _validate_candidate_links(

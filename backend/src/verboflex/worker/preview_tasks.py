@@ -87,8 +87,9 @@ async def _process_preview(
         )
     if diagnostic_inputs:
         report = inspect_duplicate_keys(tuple(diagnostic_inputs))
-        if report.groups or not report.complete:
-            # A diagnostic result never authorizes a clean subset of a mapping.
+        if not report.complete:
+            # Complete duplicate identities are quarantined by the preview
+            # parser; incomplete diagnostics still fail closed.
             candidates.clear()
         with factory.begin() as session:
             owner = session.scalar(

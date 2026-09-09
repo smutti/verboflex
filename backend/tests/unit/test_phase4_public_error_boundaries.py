@@ -21,6 +21,7 @@ def test_persisted_candidate_languages_cannot_assume_valid_json_shape(languages)
     with pytest.raises(previews.PreviewBaseLanguageRequired, match="^base_language_required$"):
         previews._candidate_languages({"languages": languages})
     assert previews._candidate_languages({"languages": ["en", "it"]}) == ("en", "it")
+    assert previews._candidate_languages({"languages": ["default", "en"]}) == ("en",)
 
 
 def test_candidate_base_language_must_be_an_exact_detected_member():
@@ -241,3 +242,61 @@ async def test_worker_rejects_execution_lost_between_parse_and_staging(monkeypat
         "Ciao",
     }
     assert stage.call_args.kwargs["identity"] is identity
+
+
+@pytest.mark.anyio
+async def test_worker_stages_unique_values_when_duplicate_keys_are_quarantined(monkeypatch):
+    identity = SimpleNamespace(
+        execution_id=uuid4(),
+        import_id=uuid4(),
+        sequence=1,
+        repository_sides=(
+            SimpleNamespace(
+                role="direct",
+                repository_id=uuid4(),
+                workspace="workspace",
+                repository_slug="app",
+                source_branch="main",
+                localization_root=None,
+            ),
+        ),
+    )
+    content = b'{"en":{"dup":"One","safe":"Safe","dup":"Two"}}'
+    discovered = SimpleNamespace(
+        commit_hash="a" * 40,
+        files=(SimpleNamespace(path="locales.json", content=content),),
+    )
+    parser_input = CanonicalParserInput(
+        format="json",
+        repository_side="direct",
+        path="locales.json",
+        content=content,
+        layout_identity="json:locale-rooted:locales.json",
+        layout_version=1,
+        base_language="en",
+    )
+    monkeypatch.setattr(
+        imports, "discover_repository_sources_for_record", AsyncMock(return_value=discovered)
+    )
+    monkeypatch.setattr(imports, "_canonical_import_enabled", Mock(return_value=True))
+    monkeypatch.setattr(
+        imports, "_confirmed_parser_inputs", Mock(return_value=(parser_input,))
+    )
+    stage = Mock(return_value=SimpleNamespace(digest="manifest"))
+    monkeypatch.setattr(imports, "stage_translation_parse", stage)
+    factory = Mock()
+    factory.return_value.__enter__ = Mock(return_value=Mock())
+    factory.return_value.__exit__ = Mock(return_value=False)
+    diagnostic_session = Mock()
+    diagnostic_session.scalar.return_value = None
+    factory.begin.return_value.__enter__ = Mock(return_value=diagnostic_session)
+    factory.begin.return_value.__exit__ = Mock(return_value=False)
+
+    processed = await imports._process_import(identity, factory=factory, adapter=Mock())
+
+    parsed = stage.call_args.kwargs["result"]
+    assert parsed.issues == ()
+    assert [(value.logical_key, value.display_text) for value in parsed.values] == [
+        ("safe", "Safe")
+    ]
+    assert processed.canonical_manifest_digest == "manifest"

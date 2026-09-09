@@ -56,6 +56,7 @@ from verboflex.models.role import Role
 from verboflex.models.user import User
 from verboflex.services.bitbucket_oauth import PULLREQUEST_WRITE_SCOPE
 from verboflex.services.preview_jobs import (
+    PREVIEW_DETECTOR_VERSION,
     PreviewJobConflict,
     PreviewJobIdentity,
     PreviewJobNotFound,
@@ -314,9 +315,11 @@ class ReadOnlyAndroidSourceAdapter:
         commit_hash: str,
         directory_path: str | None,
         next_url: str | None = None,
+        max_depth: int | None = None,
     ) -> BitbucketSourcePage:
         assert directory_path is None
         assert next_url is None
+        assert max_depth == 12
         self.events.append(("list", f"{workspace}/{repository_slug}@{commit_hash}"))
         return BitbucketSourcePage(
             entries=tuple(
@@ -493,7 +496,8 @@ def test_moko_duplicate_report_is_stored_paginated_and_admin_only(
             "moko-resources/base/strings.xml": (
                 b'<resources><string name="dup">secret body</string>'
                 b'<string name="dup">another body</string><string name="second">x</string>'
-                b'<string name="second">y</string></resources>'
+                b'<string name="second">y</string>'
+                b'<string name="safe">visible</string></resources>'
             )
         }
     )
@@ -562,7 +566,11 @@ def test_moko_duplicate_report_is_stored_paginated_and_admin_only(
     job = asyncio.run(
         _request("GET", f"/api/v1/admin/preview-jobs/{job_id}", access_token=admin)
     ).json()
-    assert job["result"]["layout_candidates"] == []
+    candidates = job["result"]["layout_candidates"]
+    assert len(candidates) == 1
+    assert candidates[0]["samples"] == [
+        {"language": "default", "key": "safe", "translation": "visible"}
+    ]
 
 
 def test_android_preview_completes_read_only(
@@ -865,6 +873,7 @@ def test_admin_job_runs_api_to_distinct_worker_and_persists_terminal_state(
             "layout_candidates": [],
         },
     )
+
     test_celery = Celery(
         "verboflex-preview-integration",
         broker="memory://",
@@ -907,7 +916,7 @@ def test_admin_job_runs_api_to_distinct_worker_and_persists_terminal_state(
     assert complete_digest != created_body["input_digest"]
     assert len(complete_digest) == 64
     assert status_body["result"] == {
-        "detector_version": "preview-skeleton-v1",
+        "detector_version": PREVIEW_DETECTOR_VERSION,
         "digest": complete_digest,
         "layout_candidates": [],
     }
@@ -964,6 +973,94 @@ def test_admin_job_runs_api_to_distinct_worker_and_persists_terminal_state(
         assert session.scalar(text("SELECT count(*) FROM preview_jobs")) == 1
 
 
+def test_latest_candidate_preview_job_is_rediscovered_from_durable_mapping_authority(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """A fresh browser session can recover the newest exact candidate job."""
+    _configure_dependencies(preview_session_factory)
+    admin_token = _create_authority(preview_session_factory, role_name="admin")
+    product_id, _active_id, candidate_id, mapping_id = _seed_preview_graph(preview_session_factory)
+    app.state.preview_job_enqueuer = PersistedUuidEnqueuer(preview_session_factory)
+    create_path = (
+        f"/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs"
+    )
+    latest_path = f"{create_path}/latest"
+
+    missing = asyncio.run(_request("GET", latest_path, access_token=admin_token))
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "Preview unavailable"}
+
+    first = asyncio.run(
+        _request(
+            "POST",
+            create_path,
+            access_token=admin_token,
+            json={
+                "expected_candidate_version": 4,
+                "commits": [{"role": "direct", "commit_hash": COMMIT_HASH}],
+            },
+        )
+    )
+    second = asyncio.run(
+        _request(
+            "POST",
+            create_path,
+            access_token=admin_token,
+            json={
+                "expected_candidate_version": 4,
+                "commits": [{"role": "direct", "commit_hash": "b" * 40}],
+            },
+        )
+    )
+    assert first.status_code == second.status_code == 202
+
+    recovered = asyncio.run(_request("GET", latest_path, access_token=admin_token))
+    assert recovered.status_code == 200
+    assert recovered.json()["id"] == second.json()["id"]
+    assert recovered.json()["candidate_revision_id"] == str(candidate_id)
+    assert recovered.json()["mapping_id"] == str(mapping_id)
+
+
+def test_latest_active_revalidation_job_is_rediscovered_from_durable_mapping_authority(
+    preview_session_factory: sessionmaker[Session],
+) -> None:
+    """Published recovery survives navigation without a browser-owned job pointer."""
+    _configure_dependencies(preview_session_factory)
+    admin_token = _create_authority(preview_session_factory, role_name="admin")
+    product_id, revision_id, mapping_id, _actor_id, _selected_layout_id = (
+        _seed_active_revalidation_authority(preview_session_factory)
+    )
+    app.state.preview_job_enqueuer = PersistedUuidEnqueuer(preview_session_factory)
+    create_path = (
+        f"/api/v1/admin/products/{product_id}/revisions/{revision_id}"
+        f"/mappings/{mapping_id}/revalidation-preview-jobs"
+    )
+    latest_path = f"{create_path}/latest"
+
+    missing = asyncio.run(_request("GET", latest_path, access_token=admin_token))
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "Active revision revalidation unavailable"}
+
+    created = asyncio.run(
+        _request(
+            "POST",
+            create_path,
+            access_token=admin_token,
+            json={
+                "expected_active_revision_version": 4,
+                "commits": [{"role": "direct", "commit_hash": COMMIT_HASH}],
+            },
+        )
+    )
+    assert created.status_code == 202
+
+    recovered = asyncio.run(_request("GET", latest_path, access_token=admin_token))
+    assert recovered.status_code == 200
+    assert recovered.json()["id"] == created.json()["id"]
+    assert recovered.json()["active_revision_id"] == str(revision_id)
+    assert recovered.json()["mapping_id"] == str(mapping_id)
+
+
 def test_succeeded_result_remains_inspectable_but_is_not_current_after_revision_change(
     preview_session_factory: sessionmaker[Session],
 ) -> None:
@@ -991,7 +1088,7 @@ def test_succeeded_result_remains_inspectable_but_is_not_current_after_revision_
     complete_digest = current.result["digest"]
     assert complete_digest != created.input_digest
     assert current.result == {
-        "detector_version": "preview-skeleton-v1",
+        "detector_version": PREVIEW_DETECTOR_VERSION,
         "digest": complete_digest,
         "layout_candidates": [],
     }
@@ -1101,7 +1198,7 @@ def test_processor_output_rejects_forbidden_or_noncanonical_fields_without_persi
     def unsafe_processor(identity: object) -> dict[str, object]:
         assert hasattr(identity, "input_digest")
         return {
-            "detector_version": "preview-skeleton-v1",
+            "detector_version": PREVIEW_DETECTOR_VERSION,
             "digest": created.input_digest,
             "layout_candidates": [],
             forbidden_field: "must-not-persist",
@@ -1261,7 +1358,7 @@ def test_enqueue_failure_is_bounded_current_and_retryable(
         (
             "result",
             {
-                "detector_version": "preview-skeleton-v1",
+        "detector_version": PREVIEW_DETECTOR_VERSION,
                 "digest": COMMIT_HASH,
                 "layout_candidates": [{}],
             },

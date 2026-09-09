@@ -476,14 +476,16 @@ class BitbucketHttpAdapter:
         commit_hash: str,
         directory_path: str | None,
         next_url: str | None = None,
+        max_depth: int | None = None,
     ) -> BitbucketSourcePage:
-        """Read one commit-bound directory page through a validated continuation."""
+        """Read one commit-bound source page through a validated continuation."""
         source_url = repository_source_url(
             workspace=workspace,
             repository_slug=repository_slug,
             commit_hash=commit_hash,
             path=directory_path,
             paginated=True,
+            max_depth=max_depth,
         )
         url = next_url or source_url
         if (

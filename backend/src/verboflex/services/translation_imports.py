@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import insert, select, update
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
+from verboflex.localization.duplicate_diagnostics import duplicate_identity_digest
 from verboflex.localization.graphemes import grapheme_count
 from verboflex.localization.importing.core import (
     MAX_CANONICAL_ISSUES,
@@ -21,6 +22,7 @@ from verboflex.localization.importing.core import (
     canonical_selector_bytes,
     canonical_selector_digest,
 )
+from verboflex.models.duplicate_report import DuplicateGroupRow, DuplicateReportRow
 from verboflex.models.import_job import ImportExecution, ImportJob, ImportSourceReference
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import ProductRepositoryMapping
@@ -379,6 +381,9 @@ def reconcile_canonical_translations(
     key_by_identity = {
         (key.repository_id, key.configured_branch, key.raw_key): key for key in existing_keys
     }
+    quarantined_groups = _complete_duplicate_groups(
+        session, execution_id=identity.execution_id
+    )
     if not existing_keys:
         return _insert_initial_dataset(
             session,
@@ -567,6 +572,15 @@ def reconcile_canonical_translations(
         for value in key.values:
             if value.id in seen_value_ids or value.is_deleted:
                 continue
+            if _is_quarantined_value(
+                key=key,
+                value=value,
+                groups=quarantined_groups,
+            ):
+                # Preserve the last unambiguous content and provenance. The
+                # duplicate source occurrences remain diagnostic-only.
+                seen_key_ids.add(key.id)
+                continue
             reference = _tombstone_reference(
                 reference_by_position,
                 value=value,
@@ -604,6 +618,50 @@ def reconcile_canonical_translations(
         updated_value_ids=tuple(updated_value_ids),
         tombstoned_value_ids=tuple(tombstoned_value_ids),
         affected_value_ids=tuple(sorted(affected_value_ids, key=str)),
+    )
+
+
+def _complete_duplicate_groups(
+    session: Session, *, execution_id: UUID
+) -> tuple[DuplicateGroupRow, ...]:
+    report = session.scalar(
+        select(DuplicateReportRow).where(
+            DuplicateReportRow.execution_id == execution_id,
+            DuplicateReportRow.complete.is_(True),
+        )
+    )
+    if report is None:
+        return ()
+    return tuple(
+        session.scalars(
+            select(DuplicateGroupRow)
+            .where(DuplicateGroupRow.report_id == report.id)
+            .order_by(DuplicateGroupRow.position)
+        )
+    )
+
+
+def _is_quarantined_value(
+    *,
+    key: TranslationKey,
+    value: TranslationValue,
+    groups: tuple[DuplicateGroupRow, ...],
+) -> bool:
+    locator = value.locator
+    if locator is None:
+        return False
+    return any(
+        group.repository_side == locator.repository_side
+        and group.language == value.language
+        and group.identity_digest
+        == duplicate_identity_digest(
+            locator.repository_side,
+            group.layout_identity,
+            value.language,
+            key.raw_key,
+            value.selector_digest,
+        )
+        for group in groups
     )
 
 

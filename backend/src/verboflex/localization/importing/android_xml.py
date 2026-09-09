@@ -50,7 +50,8 @@ _XML_DECLARATION = re.compile(
     re.IGNORECASE,
 )
 _ANDROID_PATH = re.compile(
-    r"\A(?:(?P<prefix>.+)/)?res/values(?:-(?P<language>[A-Za-z]{2,3}))?/"
+    r"\A(?:(?P<prefix>.+)/)?res/values(?:-(?P<language>[A-Za-z]{2,3})"
+    r"(?:-r(?P<region>[A-Za-z]{2}|[0-9]{3}))?)?/"
     r"(?P<filename>[^/]+\.xml)\Z"
 )
 _BOOLEAN_ATTRIBUTES = {"true": True, "false": False}
@@ -298,7 +299,10 @@ def _confirmed_language(parser_input: CanonicalParserInput) -> str:
     if path_language is None:
         language = normalize_preview_locale(parser_input.base_language)
     else:
-        language = normalize_preview_locale(path_language)
+        region = match.group("region")
+        language = normalize_preview_locale(
+            f"{path_language}-{region}" if region is not None else path_language
+        )
     if language is None:
         raise _UnsupportedAndroidXml
     return language

@@ -88,6 +88,29 @@ def test_json_locale_directory_files_form_an_independent_exact_candidate() -> No
     assert tuple(sample.translation for sample in candidate.samples) == ("Hello", "Ciao")
 
 
+def test_json_i18next_nested_objects_form_one_exact_candidate() -> None:
+    detector = _detector_module()
+    result = detector.detect_json_layouts(
+        (
+            _source(
+                "locales/en/translation.json",
+                b'{"description":{"part1":"Start","part2":"Continue"},"title":"Welcome"}',
+            ),
+            _source(
+                "locales/de/translation.json",
+                b'{"description":{"part1":"Starten","part2":"Weiter"},"title":"Willkommen"}',
+            ),
+        ),
+        repository_side="direct",
+    )
+
+    assert len(result.candidates) == 1
+    candidate = result.candidates[0]
+    assert candidate.layout_identity == "json:flat-per-locale:locales/{locale}/translation.json"
+    assert candidate.languages == ("de", "en")
+    assert candidate.keys == ("description.part1", "description.part2", "title")
+
+
 def test_json_locale_rooted_map_forms_one_separate_candidate() -> None:
     detector = _detector_module()
     content = (
@@ -200,9 +223,6 @@ def test_json_duplicate_or_empty_semantic_identities_never_confirm(
         b'{"hello":false}',
         b'{"hello":1}',
         b'{"hello":[]}',
-        b'{"hello":{"nested":"value"}}',
-        b'{"en":{"hello":"Hello"},"metadata":"mixed"}',
-        b'{"en":{"hello":{"nested":"value"}}}',
         b'{"hello":NaN}',
         b'{"hello":Infinity}',
         b'{"hello":-Infinity}',
@@ -220,9 +240,6 @@ def test_json_duplicate_or_empty_semantic_identities_never_confirm(
         "boolean-value",
         "number-value",
         "array-value",
-        "nested-flat",
-        "mixed-root",
-        "nested-rooted",
         "nan",
         "positive-infinity",
         "negative-infinity",
@@ -361,4 +378,8 @@ def test_json_duplicate_language_invalid_peer_and_limits_fail_closed(
     locales = [f"{first}{second}" for first in "abcdef" for second in "ghijkl"][:33]
     rooted = {locale: {"hello": locale} for locale in locales}
     content = __import__("json").dumps(rooted).encode()
-    assert _candidate_count("catalog.json", content) == 0
+    result = detector.detect_json_layouts(
+        (_source("catalog.json", content),), repository_side="direct"
+    )
+    assert len(result.candidates) == 1
+    assert result.candidates[0].languages == tuple(sorted(locales))

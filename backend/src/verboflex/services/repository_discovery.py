@@ -84,6 +84,7 @@ class SourceDiscoveryAdapter(Protocol):
         commit_hash: str,
         directory_path: str | None,
         next_url: str | None = None,
+        max_depth: int | None = None,
     ) -> BitbucketSourcePage: ...
 
     async def read_repository_source_file(
@@ -261,11 +262,7 @@ async def discover_repository_sources_for_record(
     localization_root: str | None = None,
 ) -> RepositorySourceSnapshot:
     """Resolve one branch and read every candidate under the immutable A-03 budget."""
-    root = (
-        validate_localization_root(localization_root)
-        if localization_root is not None
-        else None
-    )
+    root = validate_localization_root(localization_root) if localization_root is not None else None
     resolved = await adapter.resolve_repository_branch(
         session,
         workspace=repository.workspace,
@@ -279,6 +276,7 @@ async def discover_repository_sources_for_record(
     entry_count = 0
     seen_paths: set[str] = set()
     candidate_entries: list[tuple[str, int]] = []
+    recursively_list_root = root is None
     directories: deque[str | None] = deque([root])
     while directories:
         directory_path = directories.popleft()
@@ -293,6 +291,7 @@ async def discover_repository_sources_for_record(
                 commit_hash=resolved.commit_hash,
                 directory_path=directory_path,
                 next_url=next_url,
+                max_depth=(SOURCE_DISCOVERY_BUDGET.max_depth if recursively_list_root else None),
             )
             pages += 1
             for entry in page.entries:
@@ -308,7 +307,8 @@ async def discover_repository_sources_for_record(
                 if len(path.split("/")) > SOURCE_DISCOVERY_BUDGET.max_depth:
                     raise BitbucketProviderReadError(kind="limit_exceeded")
                 if entry.kind == "directory":
-                    directories.append(path)
+                    if not recursively_list_root:
+                        directories.append(path)
                     continue
                 if entry.size is None:
                     raise BitbucketProviderReadError(kind="invalid_source")

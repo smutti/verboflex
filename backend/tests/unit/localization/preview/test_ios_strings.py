@@ -108,6 +108,29 @@ def test_ios_groups_languages_by_one_exact_lproj_path_layout() -> None:
     assert result.candidates[0].languages == ("en", "it")
 
 
+@pytest.mark.parametrize("base_directory", ("Base.lproj", "base.lproj"))
+def test_ios_base_lproj_is_associated_with_the_configured_base_language_sentinel(
+    base_directory: str,
+) -> None:
+    detector = _module()
+    result = detector.detect_ios_strings_layouts(
+        (
+            _source(f"mobile/{base_directory}/Localizable.strings", b'"hello"="Hello";'),
+            _source("mobile/it.lproj/Localizable.strings", b'"hello"="Ciao";'),
+        ),
+        repository_side="direct",
+    )
+
+    assert len(result.candidates) == 1
+    candidate = result.candidates[0]
+    assert candidate.layout_identity == "ios-strings:mobile/{locale}.lproj/Localizable.strings"
+    assert candidate.languages == ("default", "it")
+    assert candidate.files == (
+        f"mobile/{base_directory}/Localizable.strings",
+        "mobile/it.lproj/Localizable.strings",
+    )
+
+
 @pytest.mark.parametrize(
     "content",
     (
@@ -233,7 +256,7 @@ def test_ios_rejects_lone_comment_markers_and_unterminated_lexer_states(content:
     assert _candidate_count(content) == 0
 
 
-def test_ios_duplicate_language_and_collection_limits_fail_closed(
+def test_ios_duplicate_language_and_collection_limits_fail_closed_without_language_cap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     detector = _module()
@@ -281,4 +304,6 @@ def test_ios_duplicate_language_and_collection_limits_fail_closed(
         _source(f"mobile/{locale}.lproj/Localizable.strings", b'"hello"="Hello";')
         for locale in locales
     )
-    assert detector.detect_ios_strings_layouts(files, repository_side="direct").candidates == ()
+    result = detector.detect_ios_strings_layouts(files, repository_side="direct")
+    assert len(result.candidates) == 1
+    assert result.candidates[0].languages == tuple(sorted(locales))

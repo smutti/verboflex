@@ -11,6 +11,8 @@ from xml.etree.ElementTree import Element
 from defusedxml import ElementTree  # type: ignore[import-untyped]
 from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped]
 
+from verboflex.localization.importing.core import CanonicalParserInput
+from verboflex.localization.importing.registry import parse_canonical_snapshot
 from verboflex.localization.preview.core import (
     PreviewDetectionResult,
     PreviewLayoutCandidate,
@@ -30,10 +32,12 @@ _XML_DECLARATION = re.compile(
     re.IGNORECASE,
 )
 _ANDROID_PATH = re.compile(
-    r"\A(?:(?P<prefix>.+)/)?res/values(?:-(?P<language>[A-Za-z]{2,3}))?/"
+    r"\A(?:(?P<prefix>.+)/)?res/values(?:-(?P<language>[A-Za-z]{2,3})"
+    r"(?:-r(?P<region>[A-Za-z]{2}|[0-9]{3}))?)?/"
     r"(?P<filename>[^/]+\.xml)\Z"
 )
 _ANDROID_RESOURCE_XML_PATH = re.compile(r"\A(?:(?P<prefix>.+)/)?res/values[^/]*/[^/]+\.xml\Z")
+_LOCALIZABLE_RESOURCE_TAGS = frozenset({"string", "plurals", "string-array"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,12 +113,39 @@ def _classify(file: RepositorySourceFile) -> _AndroidFile | None:
         return None
     prefix = match.group("prefix")
     layout_identity = f"{prefix}/res" if prefix else "res"
-    language = (match.group("language") or "default").lower()
+    raw_language = match.group("language")
+    region = match.group("region")
+    language = (
+        "default"
+        if raw_language is None
+        else f"{raw_language.lower()}-{region.upper()}"
+        if region is not None
+        else raw_language.lower()
+    )
+    try:
+        values = _plain_strings(file.content)
+    except ValueError:
+        parsed = parse_canonical_snapshot(
+            CanonicalParserInput(
+                format="android_xml",
+                repository_side="direct",
+                path=file.path,
+                content=file.content,
+                layout_identity=layout_identity,
+                layout_version=1,
+                base_language=language if language != "default" else "en",
+            )
+        )
+        if parsed.issues:
+            raise ValueError("unsupported Android XML") from None
+        values = {}
+        for value in parsed.values:
+            values.setdefault(value.logical_key, value.display_text)
     return _AndroidFile(
         path=file.path,
         layout_identity=layout_identity,
         language=language,
-        values=_plain_strings(file.content),
+        values=values,
     )
 
 
@@ -127,21 +158,41 @@ def _classify_bounded_file(
     file: RepositorySourceFile,
     *,
     seen_paths: set[str],
-) -> tuple[str, _AndroidFile | None, int] | None:
+) -> tuple[str, _AndroidFile | None, int, bool] | None:
     resource_match = _ANDROID_RESOURCE_XML_PATH.fullmatch(file.path)
     if resource_match is None:
         return None
     layout_identity = _layout_identity(resource_match)
     byte_count = len(file.content)
     if byte_count > SOURCE_DISCOVERY_BUDGET.max_file_bytes or file.path in seen_paths:
-        return layout_identity, None, byte_count
+        return layout_identity, None, byte_count, False
     seen_paths.add(file.path)
     if _ANDROID_PATH.fullmatch(file.path) is None:
-        return layout_identity, None, byte_count
+        return layout_identity, None, byte_count, False
     try:
-        return layout_identity, _classify(file), byte_count
+        return layout_identity, _classify(file), byte_count, False
     except ValueError:
-        return layout_identity, None, byte_count
+        return layout_identity, None, byte_count, _is_non_localization_resource(file.content)
+
+
+def _is_non_localization_resource(content: bytes) -> bool:
+    """Distinguish unrelated Android resources from malformed localization files."""
+    try:
+        root = ElementTree.fromstring(
+            _decode_xml(content),
+            forbid_dtd=True,
+            forbid_entities=True,
+            forbid_external=True,
+        )
+    except (DefusedXmlException, ElementTree.ParseError, ValueError):
+        return False
+    return (
+        root.tag == "resources"
+        and not any(
+            isinstance(child.tag, str) and child.tag in _LOCALIZABLE_RESOURCE_TAGS
+            for child in root
+        )
+    )
 
 
 def _collect_android_files(
@@ -155,13 +206,13 @@ def _collect_android_files(
         classified = _classify_bounded_file(file, seen_paths=seen_paths)
         if classified is None:
             continue
-        layout_identity, source, byte_count = classified
+        layout_identity, source, byte_count, ignored = classified
         total_bytes += byte_count
         if total_bytes > SOURCE_DISCOVERY_BUDGET.max_total_bytes:
             return None
-        if source is None:
+        if source is None and not ignored:
             invalid_layouts.add(layout_identity)
-        else:
+        elif source is not None:
             grouped[layout_identity].append(source)
     return grouped, invalid_layouts
 

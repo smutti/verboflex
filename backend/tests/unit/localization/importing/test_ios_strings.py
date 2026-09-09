@@ -90,6 +90,25 @@ def test_ios_valid_golden_manifest_emits_complete_scalar_values() -> None:
     )
 
 
+@pytest.mark.parametrize("base_directory", ("Base.lproj", "base.lproj"))
+def test_ios_base_lproj_uses_the_confirmed_base_language(base_directory: str) -> None:
+    _, adapter = _modules()
+    result = adapter.parse_ios_strings(
+        _input(
+            b'"welcome" = "Welcome";',
+            repository_side="direct",
+            path=f"mobile/{base_directory}/Localizable.strings",
+            base_language="en-US",
+        )
+    )
+
+    assert result.issues == ()
+    assert len(result.values) == 1
+    assert result.values[0].language == "en-US"
+    assert result.values[0].source_text == "Welcome"
+    assert result.values[0].translated_text is None
+
+
 @pytest.mark.parametrize(
     ("content", "encoding", "bom"),
     (

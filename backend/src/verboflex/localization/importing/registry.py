@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from types import MappingProxyType
+from typing import cast
 
 from verboflex.localization.importing.android_xml import (
     AndroidDiagnosticKey,
@@ -37,6 +38,7 @@ from verboflex.localization.importing.json import inspect_json_localization, par
 from verboflex.localization.importing.qt_ts import inspect_qt_ts, parse_qt_ts
 from verboflex.localization.importing.xliff import inspect_xliff, parse_xliff
 from verboflex.localization.preview.core import normalize_preview_locale
+from verboflex.localization.preview.ios_strings import ios_layout_path
 
 _ISSUE_MESSAGES: dict[IssueCode, str] = {
     "malformed_file": "Canonical parser input is invalid.",
@@ -159,19 +161,20 @@ def parse_canonical_mapping(
     ) != len(ordered_inputs):
         return _failure(first, code="duplicate_key")
 
-    sides = {parser_input.repository_side for parser_input in ordered_inputs}
+    effective_inputs = prefer_explicit_ios_base_inputs(ordered_inputs)
+    sides = {parser_input.repository_side for parser_input in effective_inputs}
     budget = CanonicalOutputBudget(mapping=True)
     if sides == {"direct"}:
-        return _parse_complete_inputs(ordered_inputs, budget=budget)
+        return _parse_complete_inputs(effective_inputs, budget=budget)
     if sides != {"keys", "translations"}:
         return _failure(first, code="ambiguous_structure")
 
     source_bytes = sum(len(item.content) for item in ordered_inputs)
     keys_result = _parse_complete_inputs(
-        tuple(item for item in ordered_inputs if item.repository_side == "keys"), budget=budget
+        tuple(item for item in effective_inputs if item.repository_side == "keys"), budget=budget
     )
     translations_result = _parse_complete_inputs(
-        tuple(item for item in ordered_inputs if item.repository_side == "translations"),
+        tuple(item for item in effective_inputs if item.repository_side == "translations"),
         budget=budget,
     )
     issues = (*keys_result.issues, *translations_result.issues)
@@ -185,6 +188,128 @@ def parse_canonical_mapping(
         failure_input=first,
         source_bytes=source_bytes,
     )
+
+
+def prefer_explicit_ios_base_inputs(
+    parser_inputs: tuple[CanonicalParserInput, ...],
+) -> tuple[CanonicalParserInput, ...]:
+    """Drop a Base.lproj fallback only when its explicit base-locale peer exists."""
+    explicit_base_layouts: set[tuple[str, str, str]] = set()
+    for parser_input in parser_inputs:
+        if parser_input.format != "ios_strings":
+            continue
+        path_layout = ios_layout_path(parser_input.path)
+        base_language = normalize_preview_locale(parser_input.base_language)
+        if (
+            path_layout is not None
+            and base_language is not None
+            and path_layout[0] == base_language
+        ):
+            explicit_base_layouts.add(
+                (parser_input.repository_side, parser_input.layout_identity, base_language)
+            )
+    return tuple(
+        parser_input
+        for parser_input in parser_inputs
+        if not _is_shadowed_ios_base_fallback(parser_input, explicit_base_layouts)
+    )
+
+
+def _is_shadowed_ios_base_fallback(
+    parser_input: CanonicalParserInput,
+    explicit_base_layouts: set[tuple[str, str, str]],
+) -> bool:
+    if parser_input.format != "ios_strings":
+        return False
+    path_layout = ios_layout_path(parser_input.path)
+    base_language = normalize_preview_locale(parser_input.base_language)
+    return (
+        path_layout is not None
+        and path_layout[0] == "default"
+        and base_language is not None
+        and (parser_input.repository_side, parser_input.layout_identity, base_language)
+        in explicit_base_layouts
+    )
+
+
+def parse_canonical_mapping_quarantining_duplicates(
+    parser_inputs: tuple[CanonicalParserInput, ...],
+) -> CanonicalParseResult:
+    """Parse a mapping while excluding every occurrence of duplicate identities.
+
+    Malformed, ambiguous, incomplete, and unsupported inputs remain fail-closed.
+    This boundary never chooses a first or last duplicate occurrence.
+    """
+    strict = parse_canonical_mapping(parser_inputs)
+    if not strict.issues or any(issue.code != "duplicate_key" for issue in strict.issues):
+        return strict
+
+    # Local import avoids a module cycle: diagnostics dispatches individual
+    # source inspection through this registry.
+    from verboflex.localization.duplicate_diagnostics import (
+        duplicate_identity_digest,
+        duplicate_value_identity,
+        inspect_duplicate_keys,
+    )
+
+    report = inspect_duplicate_keys(parser_inputs)
+    if not report.complete or not report.groups:
+        return strict
+    quarantined = {group.id for group in report.groups}
+    values_by_side: dict[str, list[CanonicalValue]] = {
+        "direct": [],
+        "keys": [],
+        "translations": [],
+    }
+    for parser_input in parser_inputs:
+        inspected, issues = inspect_duplicate_snapshot(parser_input)
+        if issues or any(type(value) is not CanonicalValue for value in inspected):
+            return strict
+        for raw_value in inspected:
+            value = cast(CanonicalValue, raw_value)
+            identity = duplicate_value_identity(parser_input, value)
+            digest = duplicate_identity_digest(*identity)
+            if digest not in quarantined:
+                values_by_side[parser_input.repository_side].append(value)
+
+    budget = CanonicalOutputBudget(mapping=True)
+    sides = {parser_input.repository_side for parser_input in parser_inputs}
+    if sides == {"direct"}:
+        return _canonical_quarantined_values(
+            tuple(values_by_side["direct"]), failure_input=parser_inputs[0], budget=budget
+        )
+    if sides != {"keys", "translations"}:
+        return strict
+    keys_result = _canonical_quarantined_values(
+        tuple(values_by_side["keys"]), failure_input=parser_inputs[0], budget=budget
+    )
+    translations_result = _canonical_quarantined_values(
+        tuple(values_by_side["translations"]), failure_input=parser_inputs[0], budget=budget
+    )
+    if keys_result.issues or translations_result.issues:
+        return strict
+    return _join_separate_results(
+        keys_result=keys_result,
+        translations_result=translations_result,
+        failure_input=parser_inputs[0],
+        source_bytes=sum(len(item.content) for item in parser_inputs),
+    )
+
+
+def _canonical_quarantined_values(
+    values: tuple[CanonicalValue, ...],
+    *,
+    failure_input: CanonicalParserInput,
+    budget: CanonicalOutputBudget,
+) -> CanonicalParseResult:
+    retained = CanonicalValueBuffer(budget)
+    try:
+        retained.extend(values)
+        return CanonicalParseResult(values=tuple(sorted(retained, key=canonical_value_order)))
+    except CanonicalOutputLimitExceeded:
+        return _failure(failure_input, code="unsupported_structure")
+    except ValueError:
+        return _failure(failure_input, code="duplicate_key")
 
 
 def _parse_complete_inputs(

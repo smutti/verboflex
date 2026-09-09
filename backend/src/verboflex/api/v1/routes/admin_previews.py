@@ -38,6 +38,8 @@ from verboflex.services.preview_jobs import (
     create_or_reuse_active_revision_revalidation_job,
     create_or_reuse_preview_job,
     enqueue_preview_job,
+    get_latest_active_revision_revalidation_job,
+    get_latest_candidate_preview_job,
     get_preview_job,
 )
 from verboflex.services.preview_jobs import (
@@ -296,6 +298,30 @@ async def create_admin_preview_job(
 
 
 @router.get(
+    "/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs/latest",
+    operation_id="get_admin_latest_candidate_preview_job",
+    response_model=AdminPreviewJobResponse,
+    responses=RESPONSES,
+)
+async def get_admin_latest_candidate_preview_job(
+    product_id: UUID,
+    mapping_id: UUID,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+) -> AdminPreviewJobResponse:
+    """Recover the newest durable job for one exact current candidate mapping."""
+    try:
+        record = get_latest_candidate_preview_job(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+        )
+    except PreviewJobNotFound as error:
+        _raise_preview_error(error)
+    return _response(record, session=session)
+
+
+@router.get(
     "/admin/preview-jobs/{job_id}",
     operation_id="get_admin_preview_job",
     response_model=AdminPreviewJobResponse,
@@ -385,6 +411,35 @@ async def create_admin_active_revision_revalidation_job(
             enqueuer=enqueuer,
         )
     except (PreviewJobNotFound, PreviewJobConflict, PreviewConnectionUnavailable) as error:
+        _raise_active_revalidation_error(error)
+    return _active_response(record, session=session)
+
+
+@router.get(
+    (
+        "/admin/products/{product_id}/revisions/{revision_id}/mappings/{mapping_id}"
+        "/revalidation-preview-jobs/latest"
+    ),
+    operation_id="get_admin_latest_active_revision_revalidation_job",
+    response_model=AdminActiveRevisionRevalidationJobResponse,
+    responses=RESPONSES,
+)
+async def get_admin_latest_active_revision_revalidation_job(
+    product_id: UUID,
+    revision_id: UUID,
+    mapping_id: UUID,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+) -> AdminActiveRevisionRevalidationJobResponse:
+    """Recover the newest durable job for one exact inactive published mapping."""
+    try:
+        record = get_latest_active_revision_revalidation_job(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            mapping_id=mapping_id,
+        )
+    except PreviewJobNotFound as error:
         _raise_active_revalidation_error(error)
     return _active_response(record, session=session)
 

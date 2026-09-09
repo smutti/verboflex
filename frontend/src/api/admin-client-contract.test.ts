@@ -339,6 +339,10 @@ const phaseThreeAdminOperationIds = new Map([
     "create_admin_preview_job",
   ],
   [
+    "GET /api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs/latest",
+    "get_admin_latest_candidate_preview_job",
+  ],
+  [
     "GET /api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings",
     "list_admin_revision_mappings",
   ],
@@ -349,6 +353,10 @@ const phaseThreeAdminOperationIds = new Map([
   [
     "POST /api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings/{mapping_id}/revalidation-preview-jobs",
     "create_admin_active_revision_revalidation_job",
+  ],
+  [
+    "GET /api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings/{mapping_id}/revalidation-preview-jobs/latest",
+    "get_admin_latest_active_revision_revalidation_job",
   ],
   [
     "POST /api/v1/admin/products/{product_id}/deactivate",

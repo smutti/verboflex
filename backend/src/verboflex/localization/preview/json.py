@@ -70,29 +70,40 @@ def _load_json(content: bytes) -> dict[str, object]:
     return cast(dict[str, object], value)
 
 
-def _nonempty_string_map(value: object) -> dict[str, str]:
+def _nonempty_string_map(
+    value: object,
+    *,
+    parents: tuple[str, ...] = (),
+) -> dict[str, str]:
     if not isinstance(value, dict) or not value:
         raise ValueError("unsupported JSON shape")
     result: dict[str, str] = {}
     for key, translation in value.items():
-        if (
-            not isinstance(key, str)
-            or not key
-            or "\x00" in key
-            or not isinstance(translation, str)
-            or "\x00" in translation
-        ):
+        if not isinstance(key, str) or not key or "\x00" in key:
             raise ValueError("unsupported JSON shape")
-        result[key] = translation
+        path = (*parents, key)
+        if isinstance(translation, dict):
+            nested = _nonempty_string_map(translation, parents=path)
+            if set(result).intersection(nested):
+                raise ValueError("unsupported JSON shape")
+            result.update(nested)
+            continue
+        if not isinstance(translation, str) or "\x00" in translation:
+            raise ValueError("unsupported JSON shape")
+        preview_key = ".".join(path)
+        if preview_key in result:
+            raise ValueError("unsupported JSON shape")
+        result[preview_key] = translation
     return result
 
 
 def _classify_json_file(file: RepositorySourceFile) -> _JsonFile:
     value = _load_json(file.content)
-    if all(isinstance(item, str) for item in value.values()):
-        path_layout = extract_preview_locale_path(file.path, suffix=".json")
-        if path_layout is None:
-            raise ValueError("ambiguous JSON path locale")
+    path_layout = extract_preview_locale_path(file.path, suffix=".json")
+    rooted_shape = all(isinstance(item, dict) for item in value.values()) and all(
+        normalize_preview_locale(raw_locale) is not None for raw_locale in value
+    )
+    if path_layout is not None and not rooted_shape:
         translations = _nonempty_string_map(value)
         return _JsonFile(
             path=file.path,

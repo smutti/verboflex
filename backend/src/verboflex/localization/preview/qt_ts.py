@@ -12,6 +12,8 @@ from xml.etree.ElementTree import Element
 from defusedxml import ElementTree  # type: ignore[import-untyped]
 from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped]
 
+from verboflex.localization.importing.core import CanonicalParserInput
+from verboflex.localization.importing.registry import parse_canonical_snapshot
 from verboflex.localization.preview.core import (
     PreviewDetectionResult,
     PreviewLayoutCandidate,
@@ -176,20 +178,28 @@ def _parse_qt_file(file: RepositorySourceFile) -> _QtFile:
     if language is None:
         raise ValueError("unsupported Qt TS locale")
 
+    layout_identity = _qt_layout_identity(file.path, language=language)
+    parsed = parse_canonical_snapshot(
+        CanonicalParserInput(
+            format="qt_ts",
+            repository_side="direct",
+            path=file.path,
+            content=file.content,
+            layout_identity=layout_identity,
+            layout_version=1,
+            base_language=language,
+        )
+    )
+    if parsed.issues:
+        raise ValueError("unsupported Qt TS")
     values: dict[str, str] = {}
-    for context in root:
-        if context.tag != "context" or (context.tail or "").strip():
-            raise ValueError("unsupported Qt TS")
-        context_values = _message_values(context)
-        # Qt source text is only unique together with its context. Preview samples
-        # intentionally expose the human-readable source key, so keep the first
-        # deterministic sample here; the canonical importer retains the context in
-        # each selector and therefore does not collapse distinct translation units.
-        for source, translation in context_values.items():
-            values.setdefault(source, translation)
+    # Preview samples intentionally expose only the human-readable source key.
+    # The canonical importer retains context, plural, and variant selectors.
+    for value in parsed.values:
+        values.setdefault(value.logical_key, value.display_text)
     return _QtFile(
         path=file.path,
-        layout_identity=_qt_layout_identity(file.path, language=language),
+        layout_identity=layout_identity,
         language=language,
         values=values,
     )
@@ -203,9 +213,9 @@ def _candidate_for_layout(
 ) -> PreviewLayoutCandidate | None:
     values: dict[str, dict[str, str]] = {}
     for source in sources:
-        if source.language in values:
-            return None
-        values[source.language] = source.values
+        language_values = values.setdefault(source.language, {})
+        for key, translation in source.values.items():
+            language_values.setdefault(key, translation)
     try:
         return build_layout_candidate(
             repository_side=repository_side,

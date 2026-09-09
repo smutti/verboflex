@@ -29,7 +29,7 @@ from verboflex.models.product_mapping import ProductRepositoryMapping
 from verboflex.services.bitbucket_oauth import PULLREQUEST_WRITE_SCOPE
 
 PREVIEW_TASK_NAME = "verboflex.preview.run"
-PREVIEW_DETECTOR_VERSION = "preview-skeleton-v1"
+PREVIEW_DETECTOR_VERSION = "preview-canonical-quarantine-v2"
 PREVIEW_LAYOUT_IDENTITY = "automatic-layout-discovery-v2"
 PREVIEW_WATCHDOG_BATCH_SIZE = 100
 MAX_RESULT_BYTES = 1_048_576
@@ -864,6 +864,56 @@ def get_preview_job(session: Session, *, job_id: UUID) -> PreviewJobRecord:
         )
 
 
+def get_latest_candidate_preview_job(
+    session: Session,
+    *,
+    product_id: UUID,
+    mapping_id: UUID,
+) -> PreviewJobRecord:
+    """Rediscover the newest job for one exact current candidate mapping."""
+    with session.begin():
+        product = session.execute(
+            select(Product).where(Product.id == product_id, Product.deleted_at.is_(None))
+        ).scalar_one_or_none()
+        if product is None or product.candidate_revision_id is None:
+            raise PreviewJobNotFound("preview candidate unavailable")
+        revision = session.execute(
+            select(ProductRevision).where(
+                ProductRevision.id == product.candidate_revision_id,
+                ProductRevision.product_id == product_id,
+                ProductRevision.is_published.is_(False),
+            )
+        ).scalar_one_or_none()
+        if revision is None:
+            raise PreviewJobNotFound("preview candidate unavailable")
+        mapping_exists = session.scalar(
+            select(ProductRepositoryMapping.id).where(
+                ProductRepositoryMapping.id == mapping_id,
+                ProductRepositoryMapping.revision_id == revision.id,
+            )
+        )
+        if mapping_exists is None:
+            raise PreviewJobNotFound("preview mapping unavailable")
+        row = session.execute(
+            select(PreviewJob)
+            .where(
+                PreviewJob.product_id == product_id,
+                PreviewJob.candidate_revision_id == revision.id,
+                PreviewJob.candidate_revision_version == revision.version,
+                PreviewJob.mapping_id == mapping_id,
+                PreviewJob.revision_scope == "candidate",
+            )
+            .order_by(PreviewJob.created_at.desc(), PreviewJob.attempt.desc(), PreviewJob.id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if row is None:
+            raise PreviewJobNotFound("preview job unavailable")
+        return _record(
+            row,
+            is_current=_current_failure_code(session, row, for_update=False) is None,
+        )
+
+
 def get_active_revision_revalidation_job(
     session: Session,
     *,
@@ -876,6 +926,62 @@ def get_active_revision_revalidation_job(
             raise PreviewJobNotFound("active revalidation job unavailable")
         product = session.get(Product, row.product_id)
         if product is None or product.deleted_at is not None:
+            raise PreviewJobNotFound("active revalidation job unavailable")
+        return _record(
+            row,
+            is_current=_current_failure_code(session, row, for_update=False) is None,
+        )
+
+
+def get_latest_active_revision_revalidation_job(
+    session: Session,
+    *,
+    product_id: UUID,
+    active_revision_id: UUID,
+    mapping_id: UUID,
+) -> PreviewJobRecord:
+    """Rediscover the newest job for one exact inactive published mapping."""
+    with session.begin():
+        product = session.execute(
+            select(Product).where(Product.id == product_id, Product.deleted_at.is_(None))
+        ).scalar_one_or_none()
+        if (
+            product is None
+            or product.is_active
+            or product.active_revision_id != active_revision_id
+            or product.candidate_revision_id is not None
+        ):
+            raise PreviewJobNotFound("active revision revalidation unavailable")
+        revision = session.execute(
+            select(ProductRevision).where(
+                ProductRevision.id == active_revision_id,
+                ProductRevision.product_id == product_id,
+                ProductRevision.is_published.is_(True),
+            )
+        ).scalar_one_or_none()
+        if revision is None:
+            raise PreviewJobNotFound("active revision revalidation unavailable")
+        mapping_exists = session.scalar(
+            select(ProductRepositoryMapping.id).where(
+                ProductRepositoryMapping.id == mapping_id,
+                ProductRepositoryMapping.revision_id == revision.id,
+            )
+        )
+        if mapping_exists is None:
+            raise PreviewJobNotFound("active revision mapping unavailable")
+        row = session.execute(
+            select(PreviewJob)
+            .where(
+                PreviewJob.product_id == product_id,
+                PreviewJob.candidate_revision_id == revision.id,
+                PreviewJob.candidate_revision_version == revision.version,
+                PreviewJob.mapping_id == mapping_id,
+                PreviewJob.revision_scope == "active_revalidation",
+            )
+            .order_by(PreviewJob.created_at.desc(), PreviewJob.attempt.desc(), PreviewJob.id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if row is None:
             raise PreviewJobNotFound("active revalidation job unavailable")
         return _record(
             row,
@@ -904,11 +1010,15 @@ def _require_selected_layout_candidate(
 
 
 def _candidate_languages(candidate: dict[str, object]) -> tuple[str, ...]:
-    """Return canonical detected languages, rejecting sentinel or malformed values."""
+    """Return selectable canonical languages while retaining a default-layout sentinel."""
     raw_languages = candidate.get("languages")
     if not isinstance(raw_languages, list) or not raw_languages:
         raise PreviewBaseLanguageRequired("base_language_required")
-    languages = tuple(cast(list[object], raw_languages))
+    languages = tuple(
+        language for language in cast(list[object], raw_languages) if language != "default"
+    )
+    if not languages:
+        raise PreviewBaseLanguageRequired("base_language_required")
     if any(
         not isinstance(language, str) or normalize_preview_locale(language) != language
         for language in languages

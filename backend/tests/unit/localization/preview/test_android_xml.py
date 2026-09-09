@@ -149,7 +149,6 @@ def test_android_unsupported_encodings_never_confirm(content: bytes) -> None:
             b"<resources><string name='hello'>Hello</string>"
             b"<string name='hello'>Again</string></resources>"
         ),
-        b"<resources><string name='hello'><b>Hello</b></string></resources>",
         b"<resources><plurals name='count'/></resources>",
         b"<resources><string-array name='items'/></resources>",
         b"<wrapper><resources><string name='hello'>Hello</string></resources></wrapper>",
@@ -159,7 +158,6 @@ def test_android_unsupported_encodings_never_confirm(content: bytes) -> None:
     ids=(
         "dtd-entity",
         "duplicate-name",
-        "child-markup",
         "plurals",
         "string-array",
         "content-outside-root",
@@ -171,6 +169,23 @@ def test_android_unsupported_grammar_never_confirms(content: bytes) -> None:
     assert _candidate_count(_source("res/values/strings.xml", content)) == 0
 
 
+def test_android_preview_accepts_canonical_formatting_plurals_and_arrays() -> None:
+    content = (
+        b"<resources><string name='hello'><b>Hello</b></string>"
+        b"<plurals name='count'><item quantity='one'>One</item>"
+        b"<item quantity='other'>Many</item></plurals>"
+        b"<string-array name='items'><item>First</item><item>Second</item>"
+        b"</string-array></resources>"
+    )
+
+    result = _detector_module().detect_android_layouts(
+        (_source("res/values/strings.xml", content),), repository_side="direct"
+    )
+
+    assert len(result.candidates) == 1
+    assert result.candidates[0].keys == ("count", "hello", "items")
+
+
 def test_android_empty_names_and_unrelated_files_never_confirm_or_interfere() -> None:
     empty_name = b"<resources><string name=''>Hello</string></resources>"
     unrelated = _source("docs/example.xml", b"not Android XML")
@@ -179,18 +194,42 @@ def test_android_empty_names_and_unrelated_files_never_confirm_or_interfere() ->
     assert _candidate_count(unrelated, _source("res/values/strings.xml", _plain_xml())) == 1
 
 
-def test_android_duplicate_source_paths_and_unsupported_qualifiers_block_layout() -> None:
+def test_android_duplicate_source_paths_block_layout() -> None:
     duplicate_path = (
         _source("res/values/first.xml", _plain_xml(key="first")),
         _source("res/values/first.xml", _plain_xml(key="second")),
     )
-    unsupported_qualifier = (
-        _source("res/values/strings.xml", _plain_xml()),
-        _source("res/values-en-rUS/strings.xml", _plain_xml()),
-    )
 
     assert _candidate_count(*duplicate_path) == 0
-    assert _candidate_count(*unsupported_qualifier) == 0
+
+
+def test_android_ignores_non_localization_xml_and_accepts_regional_qualifiers() -> None:
+    detector = _detector_module()
+    files = (
+        _source("app/src/main/res/values/strings.xml", _plain_xml()),
+        _source(
+            "app/src/main/res/values-en-rUS/strings.xml",
+            _plain_xml(translation="Howdy"),
+        ),
+        _source(
+            "app/src/main/res/values/themes.xml",
+            b'<resources><style name="AppTheme" parent="Theme.Material3.DayNight"/></resources>',
+        ),
+        _source(
+            "app/src/main/res/values/colors.xml",
+            b'<resources><color name="primary">#ffffff</color></resources>',
+        ),
+    )
+
+    result = detector.detect_android_layouts(files, repository_side="direct")
+
+    assert len(result.candidates) == 1
+    candidate = result.candidates[0]
+    assert candidate.languages == ("default", "en-US")
+    assert candidate.files == (
+        "app/src/main/res/values-en-rUS/strings.xml",
+        "app/src/main/res/values/strings.xml",
+    )
 
 
 def test_android_case_folded_language_duplicates_block_the_layout() -> None:
@@ -231,21 +270,25 @@ def test_android_total_byte_limit_accepts_exact_boundary_and_rejects_one_byte_mo
     )
 
 
-def test_android_language_limit_accepts_32_and_rejects_33_without_truncation() -> None:
+def test_android_has_no_dedicated_language_limit_and_does_not_truncate() -> None:
     languages = tuple(
         first + second for first, second in product("abcdefghijklmnopqrstuvwxyz", repeat=2)
     )[:33]
 
-    accepted = tuple(
-        _source(f"res/values-{language}/strings.xml", _plain_xml()) for language in languages[:32]
+    files = tuple(
+        _source(f"res/values-{language}/strings.xml", _plain_xml()) for language in languages
     )
-    rejected = accepted + (_source(f"res/values-{languages[32]}/strings.xml", _plain_xml()),)
 
     detector = _detector_module()
-    result = detector.detect_android_layouts(accepted, repository_side="direct")
+    result = detector.detect_android_layouts(files, repository_side="direct")
     assert len(result.candidates) == 1
-    assert result.candidates[0].languages == tuple(sorted(languages[:32]))
-    assert _candidate_count(*rejected) == 0
+    candidate = result.candidates[0]
+    assert candidate.languages == tuple(sorted(languages))
+    assert len(candidate.files) == 33
+
+    core = importlib.import_module("verboflex.localization.preview.core")
+    restored = core.layout_candidate_from_mapping(candidate.to_mapping())
+    assert restored == candidate
 
 
 def test_android_samples_are_capped_per_language_and_globally_in_code_point_order() -> None:

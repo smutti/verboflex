@@ -222,6 +222,14 @@ EXPECTED_OPERATIONS = {
         {"202", "401", "403", "404", "409", "422", "503"},
         True,
     ),
+    (
+        "/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs/latest",
+        "get",
+    ): (
+        "get_admin_latest_candidate_preview_job",
+        {"200", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
     ("/api/v1/admin/preview-jobs/{job_id}", "get"): (
         "get_admin_preview_job",
         {"200", "401", "403", "404", "409", "422", "503"},
@@ -290,6 +298,15 @@ EXPECTED_OPERATIONS = {
     ): (
         "create_admin_active_revision_revalidation_job",
         {"202", "401", "403", "404", "409", "422", "503"},
+        True,
+    ),
+    (
+        "/api/v1/admin/products/{product_id}/revisions/{revision_id}"
+        "/mappings/{mapping_id}/revalidation-preview-jobs/latest",
+        "get",
+    ): (
+        "get_admin_latest_active_revision_revalidation_job",
+        {"200", "401", "403", "404", "409", "422", "503"},
         True,
     ),
     ("/api/v1/admin/users", "get"): (
@@ -1829,6 +1846,16 @@ def test_admin_preview_openapi_is_closed_current_and_source_free() -> None:
     preview_sample = schemas["AdminPreviewSampleResponse"]
     confirmation_request = schemas["AdminPreviewConfirmationRequest"]
     confirmation_response = schemas["AdminPreviewConfirmationResponse"]
+    latest_path = (
+        "/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs/latest"
+    )
+
+    assert schema["paths"][latest_path]["get"]["operationId"] == (
+        "get_admin_latest_candidate_preview_job"
+    )
+    assert schema["paths"][latest_path]["get"]["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ] == {"$ref": "#/components/schemas/AdminPreviewJobResponse"}
 
     assert create_request["additionalProperties"] is False
     assert set(create_request["properties"]) == {"expected_candidate_version", "commits"}
@@ -1871,7 +1898,7 @@ def test_admin_preview_openapi_is_closed_current_and_source_free() -> None:
         "samples",
         "samples_are_partial",
     }
-    assert layout_candidate["properties"]["languages"]["maxItems"] == 32
+    assert "maxItems" not in layout_candidate["properties"]["languages"]
     assert layout_candidate["properties"]["keys"]["maxItems"] == 100
     assert layout_candidate["properties"]["samples"]["maxItems"] == 100
     assert layout_candidate["properties"]["samples_are_partial"]["const"] is True
@@ -1940,17 +1967,20 @@ def test_active_revision_revalidation_openapi_is_exact_bounded_and_source_free()
         "/api/v1/admin/products/{product_id}/revisions/{revision_id}"
         "/mappings/{mapping_id}/revalidation-preview-jobs"
     )
+    latest_path = f"{create_path}/latest"
     job_path = "/api/v1/admin/active-revision-revalidation-jobs/{job_id}"
     confirmation_path = f"{job_path}/confirmation"
     operation_ids = {
         schema["paths"][eligibility_path]["get"]["operationId"],
         schema["paths"][create_path]["post"]["operationId"],
+        schema["paths"][latest_path]["get"]["operationId"],
         schema["paths"][job_path]["get"]["operationId"],
         schema["paths"][confirmation_path]["post"]["operationId"],
     }
     assert operation_ids == {
         "get_admin_product_reactivation_eligibility",
         "create_admin_active_revision_revalidation_job",
+        "get_admin_latest_active_revision_revalidation_job",
         "get_admin_active_revision_revalidation_job",
         "confirm_admin_active_revision_revalidation",
     }
@@ -2164,6 +2194,10 @@ def test_admin_product_openapi_is_closed_to_exact_lifecycle_operations() -> None
         (
             "/api/v1/admin/products/{product_id}/revisions/{revision_id}"
             "/mappings/{mapping_id}/revalidation-preview-jobs"
+        ),
+        (
+            "/api/v1/admin/products/{product_id}/revisions/{revision_id}"
+            "/mappings/{mapping_id}/revalidation-preview-jobs/latest"
         ),
     }
     assert set(

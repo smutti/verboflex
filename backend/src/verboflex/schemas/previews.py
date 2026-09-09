@@ -99,7 +99,7 @@ class AdminPreviewLayoutCandidateResponse(BaseModel):
     layout_identity: Annotated[str, Field(min_length=1, max_length=4096)]
     confidence: Annotated[float, Field(ge=1.0, le=1.0)]
     files: Annotated[list[str], Field(min_length=1, max_length=500)]
-    languages: Annotated[list[str], Field(min_length=1, max_length=32)]
+    languages: Annotated[list[str], Field(min_length=1)]
     keys: Annotated[list[str], Field(min_length=1, max_length=100)]
     samples: Annotated[list[AdminPreviewSampleResponse], Field(min_length=1, max_length=100)]
     samples_are_partial: Literal[True]

@@ -123,6 +123,30 @@ def test_qt_accepts_real_ts_20_doctype_locations_and_legacy_utf8_attribute() -> 
     assert candidate.keys == ("Hello",)
 
 
+def test_qt_preview_accepts_the_same_real_world_metadata_as_the_canonical_parser() -> None:
+    content = (
+        b'<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE TS>\n'
+        b'<TS version="2.1" language="pt_BR"><context><name>MainWindow</name>'
+        b'<comment>Window messages</comment><message numerus="yes">'
+        b'<location filename="../main.cpp" line="12"/><source>%n file(s)</source>'
+        b'<oldsource>%n files</oldsource><extracomment>Shown after import</extracomment>'
+        b'<translation type="unfinished"><numerusform>%n arquivo</numerusform>'
+        b'<numerusform>%n arquivos</numerusform></translation></message></context></TS>'
+    )
+
+    detector = _detector_module()
+    result = detector.detect_qt_ts_layouts(
+        (_source("translations/language_pt_BR.ts", content),),
+        repository_side="direct",
+    )
+
+    assert len(result.candidates) == 1
+    candidate = result.candidates[0]
+    assert candidate.layout_identity == "qt-ts:translations/language_{locale}.ts"
+    assert candidate.languages == ("pt-BR",)
+    assert candidate.keys == ("%n file(s)",)
+
+
 @pytest.mark.parametrize(
     "content",
     (
@@ -296,7 +320,7 @@ def test_qt_rejects_every_structural_escape_from_the_minimal_tree(content: bytes
     assert _candidate_count(_source("translations/app_en.ts", content)) == 0
 
 
-def test_qt_duplicate_canonical_language_and_invalid_peer_block_the_layout() -> None:
+def test_qt_duplicate_canonical_language_is_deferred_but_invalid_peer_blocks_layout() -> None:
     detector = _detector_module()
     duplicate_language = detector.detect_qt_ts_layouts(
         (
@@ -313,11 +337,16 @@ def test_qt_duplicate_canonical_language_and_invalid_peer_block_the_layout() -> 
         repository_side="direct",
     )
 
-    assert duplicate_language.candidates == ()
+    assert len(duplicate_language.candidates) == 1
+    assert duplicate_language.candidates[0].languages == ("en",)
+    assert duplicate_language.candidates[0].files == (
+        "translations/product_EN.ts",
+        "translations/product_en.ts",
+    )
     assert invalid_peer.candidates == ()
 
 
-def test_qt_collection_limits_and_candidate_language_limit_fail_closed(
+def test_qt_collection_limits_remain_bounded_without_a_language_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     detector = _detector_module()
@@ -358,4 +387,6 @@ def test_qt_collection_limits_and_candidate_language_limit_fail_closed(
         )
         for locale in locales
     )
-    assert detector.detect_qt_ts_layouts(files, repository_side="direct").candidates == ()
+    result = detector.detect_qt_ts_layouts(files, repository_side="direct")
+    assert len(result.candidates) == 1
+    assert result.candidates[0].languages == tuple(sorted(locales))

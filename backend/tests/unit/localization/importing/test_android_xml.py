@@ -92,10 +92,18 @@ def test_android_scalar_snapshot_is_canonical_and_immutable() -> None:
         position=0,
         structural_address=("resources", "string", 0),
     )
-
     with pytest.raises(AttributeError):
         value.language = "it"
 
+
+def test_android_regional_resource_qualifier_is_imported_as_canonical_locale() -> None:
+    _, registry = _canonical_modules()
+    result = registry.parse_canonical_snapshot(
+        _input(path="app/src/main/res/values-en-rUS/strings.xml")
+    )
+
+    assert result.issues == ()
+    assert {value.language for value in result.values} == {"en-US"}
 
 @pytest.mark.parametrize(
     ("content", "expected_code"),

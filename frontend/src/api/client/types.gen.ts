@@ -3284,6 +3284,60 @@ export type CreateAdminPreviewJobResponses = {
 
 export type CreateAdminPreviewJobResponse = CreateAdminPreviewJobResponses[keyof CreateAdminPreviewJobResponses];
 
+export type GetAdminLatestCandidatePreviewJobData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Mapping Id
+         */
+        mapping_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs/latest';
+};
+
+export type GetAdminLatestCandidatePreviewJobErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetAdminLatestCandidatePreviewJobError = GetAdminLatestCandidatePreviewJobErrors[keyof GetAdminLatestCandidatePreviewJobErrors];
+
+export type GetAdminLatestCandidatePreviewJobResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPreviewJobResponse;
+};
+
+export type GetAdminLatestCandidatePreviewJobResponse = GetAdminLatestCandidatePreviewJobResponses[keyof GetAdminLatestCandidatePreviewJobResponses];
+
 export type DeactivateAdminProductData = {
     body?: never;
     path: {
@@ -3888,6 +3942,64 @@ export type CreateAdminActiveRevisionRevalidationJobResponses = {
 };
 
 export type CreateAdminActiveRevisionRevalidationJobResponse = CreateAdminActiveRevisionRevalidationJobResponses[keyof CreateAdminActiveRevisionRevalidationJobResponses];
+
+export type GetAdminLatestActiveRevisionRevalidationJobData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Revision Id
+         */
+        revision_id: string;
+        /**
+         * Mapping Id
+         */
+        mapping_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings/{mapping_id}/revalidation-preview-jobs/latest';
+};
+
+export type GetAdminLatestActiveRevisionRevalidationJobErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetAdminLatestActiveRevisionRevalidationJobError = GetAdminLatestActiveRevisionRevalidationJobErrors[keyof GetAdminLatestActiveRevisionRevalidationJobErrors];
+
+export type GetAdminLatestActiveRevisionRevalidationJobResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminActiveRevisionRevalidationJobResponse;
+};
+
+export type GetAdminLatestActiveRevisionRevalidationJobResponse = GetAdminLatestActiveRevisionRevalidationJobResponses[keyof GetAdminLatestActiveRevisionRevalidationJobResponses];
 
 export type GetAdminProductReactivationEligibilityData = {
     body?: never;

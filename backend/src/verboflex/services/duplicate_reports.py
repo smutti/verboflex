@@ -68,6 +68,7 @@ def store_report(
                 position=position,
                 identity_digest=group.id,
                 repository_side=group.repository_side,
+                layout_identity=group.layout_identity,
                 language=group.language,
                 key_preview=group.key_preview,
                 key_length=group.key_length,

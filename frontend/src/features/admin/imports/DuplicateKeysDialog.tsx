@@ -118,9 +118,9 @@ function DiagnosticView({
         <DialogHeader>
           <DialogTitle>Duplicate keys</DialogTitle>
           <DialogDescription>
-            Read-only diagnostics. Duplicate keys remain blocked for the entire
-            mapping. Correct them in Bitbucket, then run validation again.
-            Existing active translations are unchanged.
+            Read-only diagnostics. Unique strings continue to import while
+            duplicate identities stay quarantined. Correct them in Bitbucket,
+            then import again. Existing valid translations are unchanged.
           </DialogDescription>
         </DialogHeader>
         <p>Only duplicate keys</p>

@@ -39,6 +39,7 @@ class DuplicateGroupRow(Base):
     position: Mapped[int] = mapped_column(Integer, primary_key=True)
     identity_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     repository_side: Mapped[str] = mapped_column(String(16), nullable=False)
+    layout_identity: Mapped[str] = mapped_column(String(4096), nullable=False)
     language: Mapped[str] = mapped_column(String(64), nullable=False)
     key_preview: Mapped[str] = mapped_column(String(512), nullable=False)
     key_length: Mapped[int] = mapped_column(Integer, nullable=False)

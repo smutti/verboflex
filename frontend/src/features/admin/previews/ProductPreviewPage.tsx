@@ -15,6 +15,8 @@ import {
   createAdminPreviewJob,
   getAdminRepositoryBranch,
   getAdminActiveRevisionRevalidationJob,
+  getAdminLatestActiveRevisionRevalidationJob,
+  getAdminLatestCandidatePreviewJob,
   getAdminProduct,
   getAdminProductReactivationEligibility,
   listAdminRevisionMappings,
@@ -338,15 +340,53 @@ async function resolveCommits(
 function PreviewAlert({
   children,
   title,
+  tone = "error",
 }: {
   children: ReactNode;
   title: string;
+  tone?: "error" | "warning";
 }) {
   return (
-    <Alert variant="destructive">
+    <Alert
+      variant={tone === "error" ? "destructive" : "default"}
+      className={
+        tone === "warning"
+          ? "border-amber-500/50 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100"
+          : undefined
+      }
+    >
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription>{children}</AlertDescription>
     </Alert>
+  );
+}
+
+type DuplicateReportSummary = NonNullable<
+  AdminPreviewJobResponse["duplicate_report_summary"]
+>;
+
+function DuplicateValidationAlert({
+  summary,
+}: {
+  summary: DuplicateReportSummary;
+}) {
+  const groupLabel = summary.group_count === 1 ? "group" : "groups";
+  const occurrenceLabel =
+    summary.repeated_occurrences === 1 ? "occurrence" : "occurrences";
+  return summary.group_count > 0 ? (
+    <PreviewAlert title="Duplicate keys detected" tone="warning">
+      {summary.group_count} duplicate {groupLabel} and{" "}
+      {summary.repeated_occurrences} repeated {occurrenceLabel} were found in
+      this mapping. Unique strings remain available while duplicate identities
+      are quarantined. Open “View duplicate keys” to inspect them and correct
+      the source in Bitbucket.
+    </PreviewAlert>
+  ) : (
+    <PreviewAlert title="Duplicate-key scan incomplete">
+      Duplicate-key validation could not inspect the complete mapping. Review
+      the diagnostic details, correct the source in Bitbucket, then run
+      validation again.
+    </PreviewAlert>
   );
 }
 
@@ -546,6 +586,8 @@ function PreviewJobView({
 
   const result = job.result;
   const candidates = result?.layout_candidates ?? [];
+  const duplicateSummary = job.duplicate_report_summary;
+  const duplicateReportActionable = hasActionableDuplicateReport(job);
   const candidatesAreExact =
     candidates.length > 0 && candidates.every(isExactCandidate);
   const hasMissingBaseLanguage = candidates.some(
@@ -690,7 +732,7 @@ function PreviewJobView({
       </div>
 
       {(job.state === "succeeded" || job.state === "failed") &&
-      hasActionableDuplicateReport(job) ? (
+      duplicateReportActionable ? (
         <DuplicateKeysDialog
           key={previewJobIdentity(job)}
           accessToken={accessToken}
@@ -738,7 +780,16 @@ function PreviewJobView({
 
       {job.state === "succeeded" &&
       job.is_current &&
-      candidates.length === 0 ? (
+      duplicateReportActionable &&
+      duplicateSummary !== null &&
+      duplicateSummary !== undefined ? (
+        <DuplicateValidationAlert summary={duplicateSummary} />
+      ) : null}
+
+      {job.state === "succeeded" &&
+      job.is_current &&
+      candidates.length === 0 &&
+      !duplicateReportActionable ? (
         <PreviewAlert title="No supported layout">
           No supported localization layout was found in this source branch.
         </PreviewAlert>
@@ -867,6 +918,8 @@ function MappingPreview({
   mapping,
   onConfirmed,
   productId,
+  revisionId,
+  revisionVersion,
 }: {
   accessToken: string;
   collectionReady: boolean;
@@ -874,22 +927,65 @@ function MappingPreview({
   mapping: AdminMappingResponse;
   onConfirmed: (mappingId: string, confirmed: boolean) => void;
   productId: string;
+  revisionId: string;
+  revisionVersion: number;
 }) {
   const runGenerationRef = useRef(0);
   const runPendingRef = useRef(false);
+  const restoreGenerationRef = useRef(0);
   const [runPending, setRunPending] = useState(false);
   const [runError, setRunError] = useState(false);
+  const [restorePending, setRestorePending] = useState(true);
   const [job, setJob] = useState<AdminPreviewJobResponse | null>(null);
-
   useEffect(
     () => () => {
       runGenerationRef.current += 1;
+      restoreGenerationRef.current += 1;
     },
     [],
   );
 
+  useEffect(() => {
+    const generation = ++restoreGenerationRef.current;
+    queueMicrotask(() => {
+      if (generation !== restoreGenerationRef.current) {
+        return;
+      }
+      setJob(null);
+      setRestorePending(true);
+      void (async () => {
+        try {
+          const response = await getAdminLatestCandidatePreviewJob({
+            auth: accessToken,
+            path: { mapping_id: mapping.id, product_id: productId },
+          });
+          if (generation !== restoreGenerationRef.current) {
+            return;
+          }
+          const restored = response.data;
+          if (
+            restored === undefined ||
+            restored.product_id !== productId ||
+            restored.candidate_revision_id !== revisionId ||
+            restored.candidate_revision_version !== revisionVersion ||
+            restored.mapping_id !== mapping.id
+          ) {
+            return;
+          }
+          setJob(restored);
+        } catch {
+          // A later visit retries the durable server-side discovery.
+        } finally {
+          if (generation === restoreGenerationRef.current) {
+            setRestorePending(false);
+          }
+        }
+      })();
+    });
+  }, [accessToken, mapping.id, productId, revisionId, revisionVersion]);
+
   async function runValidation() {
-    if (runPendingRef.current || !collectionReady) {
+    if (runPendingRef.current || restorePending || !collectionReady) {
       return;
     }
     const generation = ++runGenerationRef.current;
@@ -907,14 +1003,21 @@ function MappingPreview({
         },
         path: { mapping_id: mapping.id, product_id: productId },
       });
+      const created = response.data;
+      const matchesRequestedAuthority =
+        created !== undefined &&
+        created.product_id === productId &&
+        created.candidate_revision_id === revisionId &&
+        created.candidate_revision_version === revisionVersion &&
+        created.mapping_id === mapping.id;
       if (generation !== runGenerationRef.current) {
         return;
       }
-      if (response.data === undefined) {
+      if (created === undefined || !matchesRequestedAuthority) {
         setRunError(true);
         return;
       }
-      setJob(response.data);
+      setJob(created);
     } catch {
       if (generation === runGenerationRef.current) {
         setRunError(true);
@@ -947,7 +1050,7 @@ function MappingPreview({
         </div>
         <Button
           type="button"
-          disabled={runPending || !collectionReady}
+          disabled={runPending || restorePending || !collectionReady}
           aria-busy={runPending}
           onClick={() => void runValidation()}
         >
@@ -961,7 +1064,16 @@ function MappingPreview({
         </PreviewAlert>
       ) : null}
 
-      {job === null ? (
+      {restorePending ? (
+        <div className="grid gap-2" role="status" aria-live="polite">
+          <h3 className="text-heading font-semibold">
+            Restoring validation status
+          </h3>
+          <p className="text-muted-foreground">
+            Checking the most recent background validation for this mapping.
+          </p>
+        </div>
+      ) : job === null ? (
         <div className="grid gap-2">
           <h3 className="text-heading font-semibold">Validation has not run</h3>
           <p className="text-muted-foreground">
@@ -1006,6 +1118,7 @@ function PublishedMappingRecovery({
   const runButtonRef = useRef<HTMLButtonElement>(null);
   const runGenerationRef = useRef(0);
   const runPendingRef = useRef(false);
+  const restoreGenerationRef = useRef(0);
   const [announcement, setAnnouncement] = useState("");
   const confirmationErrorRef = useRef<HTMLDivElement>(null);
   const confirmGenerationRef = useRef(0);
@@ -1022,17 +1135,68 @@ function PublishedMappingRecovery({
   const [pollingError, setPollingError] = useState(false);
   const [runError, setRunError] = useState(false);
   const [runPending, setRunPending] = useState(false);
+  const [restorePending, setRestorePending] = useState(true);
   const [selectedCandidateId, setSelectedCandidateId] = useState("");
   const [selectedBaseLanguage, setSelectedBaseLanguage] = useState("");
-
   useEffect(
     () => () => {
       runGenerationRef.current += 1;
+      restoreGenerationRef.current += 1;
       confirmGenerationRef.current += 1;
       confirmPendingRef.current = false;
     },
     [],
   );
+
+  useEffect(() => {
+    const generation = ++restoreGenerationRef.current;
+    queueMicrotask(() => {
+      if (generation !== restoreGenerationRef.current) {
+        return;
+      }
+      setJob(null);
+      setRestorePending(true);
+      void (async () => {
+        try {
+          const response = await getAdminLatestActiveRevisionRevalidationJob({
+            auth: accessToken,
+            path: {
+              mapping_id: mapping.id,
+              product_id: productId,
+              revision_id: revisionId,
+            },
+          });
+          if (generation !== restoreGenerationRef.current) {
+            return;
+          }
+          const restored = response.data;
+          if (
+            restored === undefined ||
+            restored.product_id !== productId ||
+            restored.active_revision_id !== revisionId ||
+            restored.active_revision_version !== revisionVersion ||
+            restored.mapping_id !== mapping.id
+          ) {
+            return;
+          }
+          setJob(restored);
+          const pollingExhausted = activeRevalidationPollingExhausted(restored);
+          setPollingError(pollingExhausted);
+          setAnnouncement(
+            pollingExhausted
+              ? "Automatic updates paused. Try again."
+              : JOB_LABELS[restored.state],
+          );
+        } catch {
+          // A later visit retries the durable server-side discovery.
+        } finally {
+          if (generation === restoreGenerationRef.current) {
+            setRestorePending(false);
+          }
+        }
+      })();
+    });
+  }, [accessToken, mapping.id, productId, revisionId, revisionVersion]);
 
   const result = job?.result ?? null;
   const candidates = result?.layout_candidates ?? [];
@@ -1146,7 +1310,7 @@ function PublishedMappingRecovery({
   }, [accessToken, focusRecoveryControl, job]);
 
   async function runValidationAgain() {
-    if (runPendingRef.current) {
+    if (runPendingRef.current || restorePending) {
       return;
     }
     const generation = ++runGenerationRef.current;
@@ -1171,25 +1335,30 @@ function PublishedMappingRecovery({
           revision_id: revisionId,
         },
       });
+      const created = response.data;
+      const matchesRequestedAuthority =
+        created !== undefined &&
+        created.product_id === productId &&
+        created.active_revision_id === revisionId &&
+        created.active_revision_version === revisionVersion &&
+        created.mapping_id === mapping.id;
       if (generation !== runGenerationRef.current) {
         return;
       }
-      if (response.data === undefined) {
+      if (created === undefined || !matchesRequestedAuthority) {
         setAnnouncement("Validation did not complete. Try again.");
         setRunError(true);
         focusRecoveryControl();
         return;
       }
-      const pollingExhausted = activeRevalidationPollingExhausted(
-        response.data,
-      );
+      const pollingExhausted = activeRevalidationPollingExhausted(created);
       setPollingError(pollingExhausted);
       setAnnouncement(
         pollingExhausted
           ? "Automatic updates paused. Try again."
-          : JOB_LABELS[response.data.state],
+          : JOB_LABELS[created.state],
       );
-      setJob(response.data);
+      setJob(created);
       if (pollingExhausted) {
         focusRecoveryControl();
       }
@@ -1323,7 +1492,7 @@ function PublishedMappingRecovery({
           <Button
             ref={runButtonRef}
             type="button"
-            disabled={runPending}
+            disabled={runPending || restorePending}
             aria-busy={runPending}
             onClick={() => void runValidationAgain()}
           >
@@ -1351,7 +1520,16 @@ function PublishedMappingRecovery({
         </PreviewAlert>
       ) : null}
 
-      {job === null || isCurrent ? null : (
+      {restorePending && !isCurrent ? (
+        <div className="grid gap-2" role="status" aria-live="polite">
+          <h3 className="text-heading font-semibold">
+            Restoring validation status
+          </h3>
+          <p className="text-muted-foreground">
+            Checking the background validation started during this session.
+          </p>
+        </div>
+      ) : job === null || isCurrent ? null : (
         <div className="grid gap-6">
           <Badge variant="outline" className="w-fit rounded-md">
             {JOB_LABELS[job.state]}
@@ -1953,6 +2131,8 @@ export function ProductPreviewPage({
               mapping={mapping}
               onConfirmed={updateConfirmation}
               productId={readyState.productId}
+              revisionId={readyState.revisionId}
+              revisionVersion={readyState.revisionVersion}
             />
           ),
         )

@@ -265,6 +265,7 @@ def repository_source_url(
     commit_hash: str,
     path: str | None = None,
     paginated: bool = False,
+    max_depth: int | None = None,
 ) -> str:
     """Build one commit-bound source tree or raw-file endpoint."""
     validate_provider_commit_hash(commit_hash)
@@ -275,7 +276,14 @@ def repository_source_url(
             quote(part, safe="") for part in validate_repository_relative_path(path).split("/")
         )
         url = f"{url}{encoded_path}"
+    if max_depth is not None and (
+        not paginated or isinstance(max_depth, bool) or not 1 <= max_depth <= 100
+    ):
+        raise ValueError(BITBUCKET_URL_REJECTED_MESSAGE)
     if paginated:
-        url = f"{url}?{urlencode({'pagelen': 100})}"
+        query: dict[str, int] = {"pagelen": 100}
+        if max_depth is not None:
+            query["max_depth"] = max_depth
+        url = f"{url}?{urlencode(query)}"
     operation = BitbucketOperation.SOURCE_TREE if paginated else BitbucketOperation.SOURCE_FILE
     return validate_bitbucket_api_url(url, operation=operation)
