@@ -150,8 +150,24 @@ def test_unsupported_string_content_keeps_all_duplicate_source_positions():
             layout_version=1,
             base_language="en",
         ),
+        CanonicalParserInput(
+            format="xliff",
+            repository_side="direct",
+            path="translations/app_it.xliff",
+            content=(
+                b'<xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" '
+                b'version="2.0" srcLang="en" trgLang="it"><file id="app">'
+                b'<unit id="same"><segment><source>One</source><target>Uno</target>'
+                b'</segment></unit><unit id="safe"><segment><source>OK</source>'
+                b'<target>OK</target></segment></unit><unit id="same"><segment>'
+                b'<source>Two</source><target>Due</target></segment></unit></file></xliff>'
+            ),
+            layout_identity="xliff:translations/app_{locale}.xliff",
+            layout_version=1,
+            base_language="en",
+        ),
     ),
-    ids=("json", "ios-strings", "qt-ts"),
+    ids=("json", "ios-strings", "qt-ts", "xliff"),
 )
 def test_every_supported_format_reports_duplicate_source_positions(parser_input):
     report = inspect((parser_input,))

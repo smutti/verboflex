@@ -95,7 +95,7 @@ class AdminPreviewLayoutCandidateResponse(BaseModel):
     id: UUID
     version: Literal[1]
     repository_side: Literal["direct", "keys", "translations"]
-    format: Literal["android_xml", "qt_ts", "json", "ios_strings"]
+    format: Literal["android_xml", "qt_ts", "json", "ios_strings", "xliff"]
     layout_identity: Annotated[str, Field(min_length=1, max_length=4096)]
     confidence: Annotated[float, Field(ge=1.0, le=1.0)]
     files: Annotated[list[str], Field(min_length=1, max_length=500)]

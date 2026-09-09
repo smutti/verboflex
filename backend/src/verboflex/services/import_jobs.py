@@ -2922,6 +2922,7 @@ def _path_belongs_to_confirmed_layout(candidate: PreviewLayoutCandidate, path: s
         "json": "json:flat-per-locale:",
         "qt_ts": "qt-ts:",
         "ios_strings": "ios-strings:",
+        "xliff": "xliff:",
     }
     prefix = template_prefixes.get(candidate.format)
     if prefix is None or not layout.startswith(prefix):

@@ -127,6 +127,7 @@ const FORMAT_LABELS: Record<
   ios_strings: "iOS strings",
   json: "JSON",
   qt_ts: "Qt TS",
+  xliff: "XLIFF",
 };
 
 const BLOCKER_LABELS: Record<PublicationBlocker, string> = {

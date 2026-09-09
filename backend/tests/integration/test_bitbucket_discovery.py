@@ -863,3 +863,11 @@ def test_diffstat_contract_is_available_on_the_source_discovery_boundary() -> No
         "compare_repository_ancestry",
         "list_repository_diffstat",
     }
+
+
+def test_source_discovery_includes_only_lowercase_xliff_suffixes() -> None:
+    from verboflex.services.repository_discovery import _CANDIDATE_SUFFIXES
+
+    assert ".xlf" in _CANDIDATE_SUFFIXES
+    assert ".xliff" in _CANDIDATE_SUFFIXES
+    assert ".XLF" not in _CANDIDATE_SUFFIXES

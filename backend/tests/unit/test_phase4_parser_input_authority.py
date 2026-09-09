@@ -107,6 +107,13 @@ def test_worker_builds_exact_direct_or_paired_inputs(monkeypatch, separate):
             ("app/en.lproj/Localizable.strings", "app/fr.lproj/Localizable.strings"),
             "other/fr.lproj/Localizable.strings",
         ),
+        (
+            "xliff",
+            "xliff:translations/{locale}/messages.xliff",
+            "translations/en/messages.xliff",
+            ("translations/en/messages.xliff", "translations/fr/messages.xliff"),
+            "other/fr/messages.xliff",
+        ),
     ],
 )
 def test_current_snapshot_membership_uses_confirmed_layout_not_old_files(

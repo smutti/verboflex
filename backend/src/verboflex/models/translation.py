@@ -77,7 +77,7 @@ def _enum_check(column: str, vocabulary: type[StrEnum]) -> str:
 
 
 _SELECTOR_CHECK = _enum_check("selector_kind", SelectorKind)
-_FORMAT_CHECK = "format IN ('android_xml', 'qt_ts', 'json', 'ios_strings')"
+_FORMAT_CHECK = "format IN ('android_xml', 'qt_ts', 'json', 'ios_strings', 'xliff')"
 _SIDE_CHECK = "repository_side IN ('direct', 'keys', 'translations')"
 _REVIEW_STATE_CHECK = _enum_check("review_state", ReviewState)
 _EFFECTIVE_CONSTRAINT_SOURCE_CHECK = _enum_check(

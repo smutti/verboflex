@@ -40,7 +40,7 @@ SelectorKind = Literal[
     "json_path",
 ]
 RepositorySide = Literal["direct", "keys", "translations"]
-LocalizationFormat = Literal["android_xml", "qt_ts", "json", "ios_strings"]
+LocalizationFormat = Literal["android_xml", "qt_ts", "json", "ios_strings", "xliff"]
 
 
 class TranslationSearchInputError(ValueError):

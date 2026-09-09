@@ -888,7 +888,7 @@ export type AdminPreviewLayoutCandidateResponse = {
     /**
      * Format
      */
-    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings';
+    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'xliff';
     /**
      * Id
      */
@@ -2270,7 +2270,7 @@ export type TranslationProvenanceResponse = {
     /**
      * Format
      */
-    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings';
+    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'xliff';
     /**
      * Line
      */

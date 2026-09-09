@@ -2323,3 +2323,12 @@ def test_duplicate_type_guard_rejects_a_known_bad_declaration() -> None:
     known_bad = "export interface AccessTokenResponse { access_token: string }"
 
     assert _handwritten_api_type_declarations(known_bad) == {"AccessTokenResponse"}
+
+
+def test_openapi_exposes_xliff_in_preview_and_translation_formats() -> None:
+    schemas = app.openapi()["components"]["schemas"]
+    preview = schemas["AdminPreviewLayoutCandidateResponse"]["properties"]["format"]
+    provenance = schemas["TranslationProvenanceResponse"]["properties"]["format"]
+
+    assert preview["enum"] == ["android_xml", "qt_ts", "json", "ios_strings", "xliff"]
+    assert provenance["enum"] == ["android_xml", "qt_ts", "json", "ios_strings", "xliff"]

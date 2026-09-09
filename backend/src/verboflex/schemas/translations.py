@@ -125,7 +125,7 @@ class TranslationProvenanceResponse(ClosedTranslationModel):
     repository_side: Literal["direct", "keys", "translations"]
     branch: Annotated[str, Field(min_length=1, max_length=255)]
     path: Annotated[str, Field(min_length=1, max_length=4096)]
-    format: Literal["android_xml", "qt_ts", "json", "ios_strings"]
+    format: Literal["android_xml", "qt_ts", "json", "ios_strings", "xliff"]
     commit_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
     execution_id: UUID
     line: Annotated[int | None, Field(ge=1, le=2_147_483_647)]

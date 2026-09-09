@@ -3,7 +3,6 @@ from pathlib import Path
 from verboflex.localization.preview.registry import detect_preview_layouts
 from verboflex.services.repository_discovery import RepositorySourceFile
 
-
 FIXTURES = Path(__file__).parents[3] / "fixtures" / "localization" / "xliff"
 
 

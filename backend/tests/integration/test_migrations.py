@@ -334,6 +334,18 @@ def test_declarative_metadata_contains_every_auth_model() -> None:
     assert set(Base.metadata.tables) >= EXPECTED_TABLES
 
 
+def test_xliff_migration_expands_both_persisted_format_constraints() -> None:
+    migration_path = BACKEND_ROOT / "alembic/versions/0027_xliff_format.py"
+    source = migration_path.read_text(encoding="utf-8")
+
+    assert 'revision = "0027_xliff_format"' in source
+    assert 'down_revision = "0026_duplicate_quarantine_layout"' in source
+    assert "staged_translation_values" in source
+    assert "translation_value_locators" in source
+    assert "'xliff'" in source
+    assert "cannot downgrade while XLIFF rows exist" in source
+
+
 def test_translation_search_indexes_require_external_pg_trgm_and_round_trip(
     migrated_database: tuple[Config, Engine],
 ) -> None:

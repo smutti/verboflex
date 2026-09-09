@@ -128,7 +128,7 @@ SOURCE_DISCOVERY_BUDGET = SourceDiscoveryBudget(
     max_file_bytes=1_048_576,
     max_total_bytes=20_971_520,
 )
-_CANDIDATE_SUFFIXES = (".xml", ".ts", ".json", ".strings")
+_CANDIDATE_SUFFIXES = (".xml", ".ts", ".json", ".strings", ".xlf", ".xliff")
 
 
 @dataclass(frozen=True, slots=True)

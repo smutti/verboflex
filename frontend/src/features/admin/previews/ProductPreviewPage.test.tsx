@@ -188,6 +188,7 @@ const formats = [
   ["qt_ts", "Qt TS", "translations/{locale}.ts"],
   ["json", "JSON", "locales/{locale}.json"],
   ["ios_strings", "iOS strings", "App/{locale}.lproj/Localizable.strings"],
+  ["xliff", "XLIFF", "translations/{locale}/messages.xliff"],
 ] as const;
 
 function candidate(
@@ -936,7 +937,7 @@ describe("administrator product preview and publication page", () => {
       },
       path: { mapping_id: mapping.id, product_id: product.id },
     });
-    expect(screen.getAllByRole("radio")).toHaveLength(4);
+    expect(screen.getAllByRole("radio")).toHaveLength(formats.length);
     for (const [, label, identity] of formats) {
       expect(
         screen.getByRole("radio", { name: `${label} — ${identity}` }),
