@@ -10,7 +10,7 @@ from typing import Literal, cast
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 RepositorySide = Literal["direct", "keys", "translations"]
-PreviewFormat = Literal["android_xml", "qt_ts", "json", "ios_strings"]
+PreviewFormat = Literal["android_xml", "qt_ts", "json", "ios_strings", "xliff"]
 
 MAX_PREVIEW_LANGUAGES = 32
 MAX_SAMPLES_PER_LANGUAGE = 10
@@ -33,7 +33,7 @@ _CANDIDATE_FIELDS = {
 }
 _SAMPLE_FIELDS = {"language", "key", "translation"}
 _REPOSITORY_SIDES = {"direct", "keys", "translations"}
-_FORMATS = {"android_xml", "qt_ts", "json", "ios_strings"}
+_FORMATS = {"android_xml", "qt_ts", "json", "ios_strings", "xliff"}
 _PREVIEW_LOCALE = re.compile(
     r"\A(?P<language>[A-Za-z]{2,3})"
     r"(?:[-_](?P<script>[A-Za-z]{4}))?"

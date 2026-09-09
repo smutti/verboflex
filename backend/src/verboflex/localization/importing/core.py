@@ -10,7 +10,7 @@ from typing import Literal, Protocol, TypeGuard, get_args
 
 from verboflex.localization.preview.core import normalize_preview_locale
 
-CanonicalFormat = Literal["android_xml", "qt_ts", "json", "ios_strings"]
+CanonicalFormat = Literal["android_xml", "qt_ts", "json", "ios_strings", "xliff"]
 RepositorySide = Literal["direct", "keys", "translations"]
 SelectorKind = Literal[
     "scalar",
@@ -67,6 +67,21 @@ StructureKind = Literal[
     "ios_strings:key",
     "ios_strings:value",
     "ios_strings:whitespace",
+    "xliff:document",
+    "xliff:file",
+    "xliff:group",
+    "xliff:unit",
+    "xliff:segment",
+    "xliff:source",
+    "xliff:target",
+    "xliff:notes",
+    "xliff:note",
+    "xliff:original_data",
+    "xliff:data",
+    "xliff:metadata",
+    "xliff:inline",
+    "xliff:text",
+    "xliff:tail",
 ]
 type ScalarField = str | int | bool
 type SequenceField = tuple[str, ...] | tuple[int, ...]

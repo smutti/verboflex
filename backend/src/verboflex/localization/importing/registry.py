@@ -35,6 +35,7 @@ from verboflex.localization.importing.core import (
 from verboflex.localization.importing.ios_strings import inspect_ios_strings, parse_ios_strings
 from verboflex.localization.importing.json import inspect_json_localization, parse_json_localization
 from verboflex.localization.importing.qt_ts import inspect_qt_ts, parse_qt_ts
+from verboflex.localization.importing.xliff import inspect_xliff, parse_xliff
 from verboflex.localization.preview.core import normalize_preview_locale
 
 _ISSUE_MESSAGES: dict[IssueCode, str] = {
@@ -52,6 +53,7 @@ _ADAPTERS: MappingProxyType[CanonicalFormat, CanonicalParser] = MappingProxyType
         "qt_ts": parse_qt_ts,
         "json": parse_json_localization,
         "ios_strings": parse_ios_strings,
+        "xliff": parse_xliff,
     }
 )
 _REPOSITORY_SIDE_ORDER = {"direct": 0, "keys": 1, "translations": 2}
@@ -73,6 +75,7 @@ def inspect_duplicate_snapshot(
         "json": inspect_json_localization,
         "ios_strings": inspect_ios_strings,
         "qt_ts": inspect_qt_ts,
+        "xliff": inspect_xliff,
     }
     inspector = inspectors.get(parser_input.format)
     if inspector is None:
