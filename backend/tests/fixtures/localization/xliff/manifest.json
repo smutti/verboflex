@@ -1,0 +1,6 @@
+{
+  "supported": ["valid_12.xlf", "valid_20.xliff", "valid_21.xliff"],
+  "versions": ["1.2", "2.0", "2.1"],
+  "suffixes": [".xlf", ".xliff"],
+  "safety": "defusedxml, exact namespace/version, bounded canonical output"
+}

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fr-FR">
+  <file id="app" original="app.json">
+    <unit id="save" name="actions.save">
+      <segment id="main">
+        <source>Save <ph id="1"/></source>
+        <target>Enregistrer <ph id="1"/></target>
+      </segment>
+    </unit>
+  </file>
+</xliff>
