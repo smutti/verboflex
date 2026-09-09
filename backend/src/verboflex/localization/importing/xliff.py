@@ -37,6 +37,11 @@ from verboflex.localization.preview.core import (
 
 XLIFF_12_NAMESPACE = "urn:oasis:names:tc:xliff:document:1.2"
 XLIFF_20_NAMESPACE = "urn:oasis:names:tc:xliff:document:2.0"
+_XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace"
+_XSI_NAMESPACE = "http://www.w3.org/2001/XMLSchema-instance"
+_XML_LANG = f"{{{_XML_NAMESPACE}}}lang"
+_XML_SPACE = f"{{{_XML_NAMESPACE}}}space"
+_XSI_SCHEMA_LOCATION = f"{{{_XSI_NAMESPACE}}}schemaLocation"
 
 _XML_DECLARATION = re.compile(
     r"\A<\?xml\s+version\s*=\s*(['\"])1\.0\1"
@@ -46,6 +51,7 @@ _XML_DECLARATION = re.compile(
 )
 _INLINE_12 = {"g", "x", "ph", "bx", "ex", "bpt", "ept", "it", "mrk"}
 _INLINE_2X = {"cp", "ph", "pc", "sc", "ec", "mrk", "sm", "em"}
+_CODE_BASE_2X = {"ph", "pc", "sc", "ec"}
 _METADATA_12 = {
     "header",
     "skl",
@@ -86,6 +92,15 @@ class _State:
     allow_duplicates: bool
     position: int = 0
     seen: set[tuple[str, str, str]] = field(default_factory=set)
+
+
+@dataclass(frozen=True, slots=True)
+class _InlineRecord:
+    element: Element
+    local: str
+    identifier: str | None
+    parent_identifier: str | None
+    position: int
 
 
 def parse_xliff(parser_input: CanonicalParserInput) -> CanonicalParseResult:
@@ -205,7 +220,7 @@ def _values_12(
     dialect: str,
     allow_duplicates: bool,
 ) -> tuple[CanonicalValue, ...]:
-    _require_attrs_unqualified(root)
+    _require_attrs_unqualified(root, allow_xsi_schema_location=True)
     files = list(root)
     if not files or any(_local(child, namespace) != "file" for child in files):
         raise _UnsupportedXliff
@@ -374,12 +389,13 @@ def _values_2x(
     dialect: str,
     allow_duplicates: bool,
 ) -> tuple[CanonicalValue, ...]:
-    _require_attrs_unqualified(root)
+    _require_attrs_unqualified(root, allow_xsi_schema_location=True)
     source_language = normalize_preview_locale(root.attrib.get("srcLang", ""))
     target_language = normalize_preview_locale(root.attrib.get("trgLang", ""))
     if source_language is None or target_language is None:
         raise _AmbiguousXliff
     _require_layout(parser_input, target_language)
+    root_xml_space = _effective_xml_space(root, "default")
     files = list(root)
     if not files or any(_local(child, namespace) != "file" for child in files):
         raise _UnsupportedXliff
@@ -390,10 +406,23 @@ def _values_2x(
         file_identity = file_node.attrib.get("id")
         if not file_identity:
             raise _AmbiguousXliff
+        file_xml_space = _effective_xml_space(file_node, root_xml_space)
+        children = list(file_node)
+        skeletons = [child for child in children if _local(child, namespace) == "skeleton"]
+        if (
+            len(skeletons) > 1
+            or (skeletons and children[0] is not skeletons[0])
+            or any(
+                _local(child, namespace) not in {"skeleton", "group", "unit"} for child in children
+            )
+        ):
+            raise _UnsupportedXliff
+        for skeleton in skeletons:
+            _validate_skeleton(skeleton)
         prefix = (
             _node("xliff:document", root, extra=(("dialect", dialect), ("namespace", namespace))),
             _node("xliff:file", file_node, extra=(("file_index", file_index),)),
-        )
+        ) + tuple(_metadata_tree(skeleton, namespace) for skeleton in skeletons)
         output.extend(
             _walk_2x(
                 file_node,
@@ -401,10 +430,13 @@ def _values_2x(
                 namespace,
                 dialect,
                 file_identity,
+                source_language,
                 target_language,
+                file_xml_space,
                 prefix,
                 state,
                 ("xliff", file_index),
+                allow_skeleton=True,
             )
         )
     if not len(output):
@@ -418,15 +450,21 @@ def _walk_2x(
     namespace: str,
     dialect: str,
     file_identity: str,
-    language: str,
+    source_language: str,
+    target_language: str,
+    inherited_xml_space: str,
     prefix: tuple[CanonicalStructureNode, ...],
     state: _State,
     address: tuple[str | int, ...],
+    *,
+    allow_skeleton: bool = False,
 ) -> tuple[CanonicalValue, ...]:
     values = CanonicalValueBuffer(source_bytes=len(parser_input.content))
     for index, child in enumerate(parent):
         local = _local(child, namespace)
         if local == "group":
+            _require_attrs_unqualified(child)
+            group_xml_space = _effective_xml_space(child, inherited_xml_space)
             values.extend(
                 _walk_2x(
                     child,
@@ -434,7 +472,9 @@ def _walk_2x(
                     namespace,
                     dialect,
                     file_identity,
-                    language,
+                    source_language,
+                    target_language,
+                    group_xml_space,
                     prefix + (_node("xliff:group", child),),
                     state,
                     address + ("group", index),
@@ -448,12 +488,16 @@ def _walk_2x(
                     namespace,
                     dialect,
                     file_identity,
-                    language,
+                    source_language,
+                    target_language,
+                    inherited_xml_space,
                     prefix,
                     state,
                     address + ("unit", index),
                 )
             )
+        elif local == "skeleton" and allow_skeleton:
+            continue
         else:
             raise _UnsupportedXliff
     return tuple(values)
@@ -465,7 +509,9 @@ def _unit_2x(
     namespace: str,
     dialect: str,
     file_identity: str,
-    language: str,
+    source_language: str,
+    target_language: str,
+    inherited_xml_space: str,
     prefix: tuple[CanonicalStructureNode, ...],
     state: _State,
     address: tuple[str | int, ...],
@@ -480,6 +526,14 @@ def _unit_2x(
     allowed = {"segment", "notes", "originalData"}
     if not segments or any(_local(child, namespace) not in allowed for child in children):
         raise _UnsupportedXliff
+    unit_xml_space = _effective_xml_space(unit, inherited_xml_space)
+    _validate_2x_unit_semantics(
+        segments,
+        namespace,
+        source_language=source_language,
+        target_language=target_language,
+        inherited_xml_space=unit_xml_space,
+    )
     shared = (
         prefix
         + (_node("xliff:unit", unit),)
@@ -514,7 +568,7 @@ def _unit_2x(
         values.append(
             CanonicalValue(
                 logical_key=logical_key,
-                language=language,
+                language=target_language,
                 selector=selector,
                 source_text=source_text,
                 translated_text=None if parser_input.repository_side == "keys" else target_text,
@@ -541,7 +595,7 @@ def _content_nodes(
 ) -> tuple[tuple[CanonicalStructureNode, ...], str]:
     if _local(element, namespace) != boundary:
         raise _UnsupportedXliff
-    _require_attrs_unqualified(element)
+    _require_attrs_unqualified(element, allow_xml_lang=True)
     nodes: list[CanonicalStructureNode] = [_node(cast(StructureKind, f"xliff:{boundary}"), element)]
     if element.text is not None:
         nodes.append(
@@ -573,6 +627,236 @@ def _content_nodes(
     return tuple(nodes), _visible(element)
 
 
+def _validate_2x_unit_semantics(
+    segments: list[Element],
+    namespace: str,
+    *,
+    source_language: str,
+    target_language: str,
+    inherited_xml_space: str,
+) -> None:
+    """Validate core relationships that XML well-formedness cannot express."""
+    orders: set[int] = set()
+    sources: list[Element] = []
+    targets: list[Element] = []
+    resource_count = len(segments)
+    for resource_index, segment in enumerate(segments, start=1):
+        _require_attrs_unqualified(segment)
+        segment_xml_space = _effective_xml_space(segment, inherited_xml_space)
+        segment_children = list(segment)
+        segment_sources = [
+            child for child in segment_children if _local(child, namespace) == "source"
+        ]
+        segment_targets = [
+            child for child in segment_children if _local(child, namespace) == "target"
+        ]
+        if len(segment_sources) != 1 or len(segment_targets) != 1:
+            raise _AmbiguousXliff
+        source = segment_sources[0]
+        target = segment_targets[0]
+        _require_attrs_unqualified(source, allow_xml_lang=True)
+        _require_attrs_unqualified(target, allow_xml_lang=True)
+        source_override = source.attrib.get(_XML_LANG)
+        target_override = target.attrib.get(_XML_LANG)
+        if (
+            source_override is not None
+            and normalize_preview_locale(source_override) != source_language
+        ) or (
+            target_override is not None
+            and normalize_preview_locale(target_override) != target_language
+        ):
+            raise _UnsupportedXliff
+        if _effective_xml_space(source, segment_xml_space) != _effective_xml_space(
+            target, segment_xml_space
+        ):
+            raise _UnsupportedXliff
+        raw_order = target.attrib.get("order")
+        if raw_order is None:
+            order = resource_index
+        else:
+            if not raw_order.isascii() or not raw_order.isdigit():
+                raise _UnsupportedXliff
+            order = int(raw_order)
+            if order < 1 or order > resource_count:
+                raise _UnsupportedXliff
+        if order in orders:
+            raise _UnsupportedXliff
+        orders.add(order)
+        sources.extend(segment_sources)
+        targets.extend(segment_targets)
+
+    source_records = _inline_records(sources, namespace)
+    target_records = _inline_records(targets, namespace)
+    source_identifiers = {
+        record.identifier for record in source_records if record.identifier is not None
+    }
+    target_identifiers = {
+        record.identifier for record in target_records if record.identifier is not None
+    }
+    _validate_spanning_codes(source_records, reference_identifiers=source_identifiers)
+    _validate_spanning_codes(
+        target_records,
+        reference_identifiers=source_identifiers | target_identifiers,
+    )
+    if _editing_sequences(source_records) != _editing_sequences(target_records):
+        raise _UnsupportedXliff
+
+
+def _validate_skeleton(element: Element) -> None:
+    _require_attrs_unqualified(element)
+    if list(element):
+        raise _UnsupportedXliff
+    href = element.attrib.get("href")
+    content = element.text or ""
+    if href is None:
+        if not content.strip():
+            raise _UnsupportedXliff
+    elif not href.strip() or content.strip():
+        raise _UnsupportedXliff
+
+
+def _effective_xml_space(element: Element, inherited: str) -> str:
+    value = element.attrib.get(_XML_SPACE, inherited)
+    if value not in {"default", "preserve"}:
+        raise _UnsupportedXliff
+    return value
+
+
+def _inline_records(boundaries: list[Element], namespace: str) -> tuple[_InlineRecord, ...]:
+    records: list[_InlineRecord] = []
+    seen: set[str] = set()
+
+    def visit(parent: Element, parent_identifier: str | None) -> None:
+        for child in parent:
+            local = _local(child, namespace)
+            if local not in _INLINE_2X:
+                raise _UnsupportedXliff
+            _require_attrs_unqualified(child)
+            identifier = child.attrib.get("id")
+            if local in {"ph", "pc", "sc"} and not identifier:
+                raise _UnsupportedXliff
+            if identifier is not None:
+                if not identifier or identifier in seen:
+                    raise _UnsupportedXliff
+                seen.add(identifier)
+            records.append(
+                _InlineRecord(
+                    element=child,
+                    local=local,
+                    identifier=identifier,
+                    parent_identifier=parent_identifier,
+                    position=len(records),
+                )
+            )
+            visit(
+                child,
+                identifier
+                if local in _CODE_BASE_2X and identifier is not None
+                else parent_identifier,
+            )
+
+    for boundary in boundaries:
+        visit(boundary, None)
+    return tuple(records)
+
+
+def _code_reorder(record: _InlineRecord) -> str:
+    value = record.element.attrib.get("canReorder", "yes")
+    if value not in {"yes", "no", "firstNo"}:
+        raise _UnsupportedXliff
+    if record.local == "ec" and value == "firstNo":
+        raise _UnsupportedXliff
+    for name in ("canCopy", "canDelete"):
+        flag = record.element.attrib.get(name, "yes")
+        if flag not in {"yes", "no"}:
+            raise _UnsupportedXliff
+        if value != "yes" and flag != "no":
+            raise _UnsupportedXliff
+    return value
+
+
+def _validate_spanning_codes(
+    records: tuple[_InlineRecord, ...], *, reference_identifiers: set[str]
+) -> None:
+    starts: dict[str, _InlineRecord] = {}
+    referenced: set[str] = set()
+    for record in records:
+        if record.local in _CODE_BASE_2X:
+            _code_reorder(record)
+        copy_of = record.element.attrib.get("copyOf")
+        if copy_of is not None and (not copy_of or copy_of not in reference_identifiers):
+            raise _UnsupportedXliff
+        if record.local == "sc":
+            assert record.identifier is not None
+            starts[record.identifier] = record
+        elif record.local == "ec":
+            start_ref = record.element.attrib.get("startRef")
+            isolated = record.element.attrib.get("isolated", "no")
+            if isolated not in {"yes", "no"}:
+                raise _UnsupportedXliff
+            if start_ref is None:
+                if isolated != "yes" or not record.identifier:
+                    raise _UnsupportedXliff
+                continue
+            if isolated == "yes" or start_ref in referenced:
+                raise _UnsupportedXliff
+            start = starts.get(start_ref)
+            if start is None or start.position >= record.position:
+                raise _UnsupportedXliff
+            if start.element.attrib.get("isolated", "no") != "no":
+                raise _UnsupportedXliff
+            if start.element.attrib.get("copyOf") != record.element.attrib.get("copyOf"):
+                raise _UnsupportedXliff
+            for name in ("canCopy", "canDelete"):
+                if start.element.attrib.get(name, "yes") != record.element.attrib.get(name, "yes"):
+                    raise _UnsupportedXliff
+            start_reorder = _code_reorder(start)
+            end_reorder = _code_reorder(record)
+            expected_end_reorder = "yes" if start_reorder == "yes" else "no"
+            if end_reorder != expected_end_reorder:
+                raise _UnsupportedXliff
+            referenced.add(start_ref)
+    if any(
+        identifier not in referenced and start.element.attrib.get("isolated", "no") != "yes"
+        for identifier, start in starts.items()
+    ):
+        raise _UnsupportedXliff
+
+
+def _editing_sequences(
+    records: tuple[_InlineRecord, ...],
+) -> dict[str, tuple[tuple[str, str, str | None], ...]]:
+    sequences: dict[str, tuple[tuple[str, str, str | None], ...]] = {}
+    current: list[_InlineRecord] = []
+
+    def finish() -> None:
+        if len(current) < 2:
+            return
+        first = current[0].identifier
+        if first is None or first in sequences:
+            raise _UnsupportedXliff
+        sequences[first] = tuple(
+            (item.local, cast(str, item.identifier), item.parent_identifier) for item in current
+        )
+
+    for record in records:
+        if record.local not in _CODE_BASE_2X:
+            continue
+        reorder = _code_reorder(record)
+        if reorder == "firstNo":
+            finish()
+            current = [record]
+        elif reorder == "no":
+            if not current:
+                raise _UnsupportedXliff
+            current.append(record)
+        else:
+            finish()
+            current = []
+    finish()
+    return sequences
+
+
 def _metadata_tree(element: Element, namespace: str) -> CanonicalStructureNode:
     local = _local(element, namespace)
     _require_attrs_unqualified(element)
@@ -584,7 +868,7 @@ def _metadata_tree(element: Element, namespace: str) -> CanonicalStructureNode:
         kind = "xliff:original_data"
     elif local == "data":
         kind = "xliff:data"
-    elif local in _METADATA_12:
+    elif local == "skeleton" or local in _METADATA_12:
         kind = "xliff:metadata"
     else:
         raise _UnsupportedXliff
@@ -647,8 +931,23 @@ def _visible(element: Element) -> str:
     return value
 
 
-def _require_attrs_unqualified(element: Element) -> None:
-    if len(element.attrib) > 128 or any("}" in name or not name for name in element.attrib):
+def _require_attrs_unqualified(
+    element: Element,
+    *,
+    allow_xml_lang: bool = False,
+    allow_xsi_schema_location: bool = False,
+) -> None:
+    if len(element.attrib) > 128 or any(not name for name in element.attrib):
+        raise _UnsupportedXliff
+    for name, value in element.attrib.items():
+        if "}" not in name:
+            continue
+        if name == _XML_SPACE and value in {"default", "preserve"}:
+            continue
+        if allow_xml_lang and name == _XML_LANG and normalize_preview_locale(value) is not None:
+            continue
+        if allow_xsi_schema_location and name == _XSI_SCHEMA_LOCATION and value.strip():
+            continue
         raise _UnsupportedXliff
     if any(
         _forbidden_control(name) or _forbidden_control(value)

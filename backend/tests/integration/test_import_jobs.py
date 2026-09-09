@@ -488,9 +488,11 @@ class ProviderResourceSpy:
         commit_hash: str,
         directory_path: str | None,
         next_url: str | None = None,
+        max_depth: int | None = None,
     ) -> BitbucketSourcePage:
         assert directory_path is None
         assert next_url is None
+        assert max_depth == 12
         self.requests.append(
             (
                 "GET",
@@ -659,6 +661,7 @@ def test_duplicate_report_pages_bind_execution_filters_and_occurrence_groups(
             DuplicateGroup(
                 id=f"{i:064x}",
                 repository_side="direct",
+                layout_identity="res",
                 language="en" if i == 0 else "it",
                 key_preview="<script>key</script>",
                 key_length=20,
@@ -2796,6 +2799,80 @@ def test_rewrite_proposal_persists_complete_zero_delta_without_moving_baseline(
             )
             == 0
         )
+
+
+@pytest.mark.parametrize("suffix", (".xlf", ".xliff"))
+def test_rewrite_proposal_accepts_xliff_delta_paths(
+    import_session_factory: sessionmaker[Session], suffix: str
+) -> None:
+    product_id, _revision_id, repository_id, mapping_id = _seed_published_direct_mapping(
+        import_session_factory
+    )
+    old_commit = "1" * 40
+    new_commit = "2" * 40
+    import_id, _baseline_execution_id = _complete_initial_direct_baseline(
+        import_session_factory,
+        product_id=product_id,
+        mapping_id=mapping_id,
+        repository_id=repository_id,
+        commit_hash=old_commit,
+    )
+    import_job_service.start_or_refresh_import(
+        import_session_factory(),
+        product_id=product_id,
+        mapping_id=mapping_id,
+        enqueuer=lambda _import_id: None,
+    )
+    identity = import_job_service.start_import_execution(
+        import_session_factory,
+        import_id=import_id,
+    )
+    assert identity is not None
+    sides = (
+        import_job_service.SourceMovementSideComparison(
+            repository_side="direct",
+            repository_id=repository_id,
+            active_commit_hash=old_commit,
+            proposed_commit_hash=new_commit,
+            relation="diverged",
+        ),
+    )
+
+    assert import_job_service.finish_import_execution(
+        import_session_factory,
+        identity=identity,
+        references=(_successful_reference_at(repository_id, commit_hash=new_commit),),
+        movement=_rewrite_classification(
+            sides=sides,
+            files=(
+                BitbucketFileDelta(
+                    repository_side="direct",
+                    ordinal=0,
+                    change="modified",
+                    path=f"locales/messages{suffix}",
+                ),
+            ),
+        ),
+    )
+
+    with import_session_factory() as session:
+        job = session.get_one(ImportJob, import_id)
+        proposal = session.scalar(
+            select(ImportRewriteProposal).where(
+                ImportRewriteProposal.import_job_id == import_id,
+                ImportRewriteProposal.status == "pending",
+            )
+        )
+        assert job.state == "current"
+        assert proposal is not None
+        deltas = tuple(
+            session.scalars(
+                select(ImportRewriteDelta)
+                .where(ImportRewriteDelta.proposal_id == proposal.id)
+                .order_by(ImportRewriteDelta.position)
+            )
+        )
+        assert [delta.path for delta in deltas] == [f"locales/messages{suffix}"]
 
 
 def test_rewrite_proposal_rejects_incomplete_evidence_and_retains_old_baseline(

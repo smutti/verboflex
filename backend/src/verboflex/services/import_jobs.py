@@ -39,7 +39,9 @@ from verboflex.localization.importing.core import (
     CanonicalParseResult,
     CanonicalParserInput,
 )
-from verboflex.localization.importing.registry import parse_canonical_mapping
+from verboflex.localization.importing.registry import (
+    parse_canonical_mapping_quarantining_duplicates,
+)
 from verboflex.localization.preview.core import (
     PreviewLayoutCandidate,
     layout_candidate_from_mapping,
@@ -556,7 +558,9 @@ def _validated_side_delta(
             file.repository_side != source.repository_side
             or file.change not in {"added", "modified", "removed"}
             or path != file.path
-            or not path.casefold().endswith((".xml", ".ts", ".json", ".strings"))
+            or not path.casefold().endswith(
+                (".xml", ".ts", ".json", ".strings", ".xlf", ".xliff")
+            )
             or path in seen_paths
         ):
             _reject_source_movement(operation=BitbucketOperation.COMMIT_DIFFSTAT)
@@ -1668,7 +1672,9 @@ def _validated_rewrite_candidate(
             or file.ordinal != side_ordinals[role]
             or file.change not in {"added", "modified", "removed"}
             or path != file.path
-            or not path.casefold().endswith((".xml", ".ts", ".json", ".strings"))
+            or not path.casefold().endswith(
+                (".xml", ".ts", ".json", ".strings", ".xlf", ".xliff")
+            )
             or (role, path) in seen_paths
         ):
             raise ValueError("rewrite proposal delta rejected")
@@ -2293,7 +2299,9 @@ def _current_rewrite_authority(
             or role_order[role] < last_role_index
             or change not in {"added", "modified", "removed"}
             or path != row.path
-            or not path.casefold().endswith((".xml", ".ts", ".json", ".strings"))
+            or not path.casefold().endswith(
+                (".xml", ".ts", ".json", ".strings", ".xlf", ".xliff")
+            )
             or (role, path) in seen_paths
         ):
             raise ImportRewriteStale("import rewrite proposal stale")
@@ -2758,17 +2766,15 @@ async def _process_import(
                     sources=source_summaries,
                     execution_id=identity.execution_id,
                 )
-        parse_result = parse_canonical_mapping(parser_inputs)
-        if not parse_result.issues and (report.groups or not report.complete):
+        parse_result = parse_canonical_mapping_quarantining_duplicates(parser_inputs)
+        if not parse_result.issues and not report.complete:
             parse_result = CanonicalParseResult(
                 issues=(
                     CanonicalIssue(
-                        code="duplicate_key" if report.groups else "unsupported_structure",
+                        code="unsupported_structure",
                         repository_side=parser_inputs[0].repository_side,
                         path=parser_inputs[0].path,
-                        message="Duplicate localization key."
-                        if report.groups
-                        else "Diagnostic scan is incomplete.",
+                        message="Diagnostic scan is incomplete.",
                     ),
                 )
             )
