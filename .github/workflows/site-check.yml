@@ -2,18 +2,19 @@ name: Check product website
 
 on:
   pull_request:
-    paths: ["site/**", ".github/workflows/site-*.yml"]
   push:
     branches: [main]
-    paths: ["site/**", ".github/workflows/site-*.yml"]
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    name: Website checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -21,3 +22,12 @@ jobs:
           python-version: "3.13"
       - run: python site/build.py
       - run: python site/check.py
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --prefix frontend
+      - run: npx --prefix frontend playwright install --with-deps chromium
+      - name: Demo, screenshots and responsive browser checks
+        run: node site/tests/browser.mjs

@@ -8,12 +8,12 @@
   </p>
   <ol class="steps-list">
     <li>
-      <strong>Open your product.</strong> Search the product list and compare supported languages and coverage.
-      Open its overview for details.
+      <strong>Open your product.</strong> Search the product list and compare
+      supported languages and coverage. Open its overview for details.
     </li>
     <li>
-      <strong>Open Strings.</strong> Search for a key or text and choose
-      the languages you need.
+      <strong>Open Strings.</strong> Search for a key or text and choose the
+      languages you need.
     </li>
     <li>
       <strong>Save a first draft.</strong> Edit an eligible translation, check
@@ -21,6 +21,7 @@
       submission.
     </li>
   </ol>
+  <!-- screenshot: products -->
   <aside class="callout">
     Just looking around?
     <a href="index.html#demo">Try the interactive demo</a> without an account.
@@ -113,12 +114,22 @@
     The workspace loads results in pages; filters apply to the query, not just
     the rows already on screen.
   </p>
+  <h3 id="filters">Choose a work queue</h3>
+  <p>
+    Open <strong>Filter</strong> and choose <strong>Needs translation</strong>,
+    <strong>Needs review</strong> or <strong>Source changed</strong>. Choose a
+    matching language to focus the result. Other language rows remain visible as
+    context; one language must satisfy all selected filters. Imported state and
+    length filters use repository values, while review filters use drafts.
+  </p>
+  <!-- screenshot: filters -->
   <p>
     Each key shows its product. Only languages supported by that product appear,
     including in All translations. Pending repository changes are highlighted in
     amber; length violations are marked in red.
   </p>
   <h3>Edit and save</h3>
+  <!-- screenshot: multilingual -->
   <ol class="steps-list">
     <li>
       Select an editable translation field. Compare the text with the source and
@@ -137,25 +148,47 @@
       notification links back to the discussion.
     </li>
   </ol>
-  <aside class="callout">
-    <strong>Fill a gap.</strong> Select <strong>Add translation</strong> on a supported
-    language. VerboFlex adds eligible entries to an existing mapped file; it does
-    not create new language files. Unsupported structures remain read-only.
-  </aside>
-  <h3>Add keys and plural forms</h3>
+  <h3 id="missing">Fill a missing translation</h3>
   <p>
-    Use <strong>New key</strong> to choose an existing file and enter a key and text.
-    New entries are saved as drafts for review. Android and Qt support native
-    plural forms; <strong>Add forms</strong> fills missing categories. JSON and
-    Apple <code>.strings</code> support new scalar entries in eligible files.
-    ICU messages, JSON plurals and Apple <code>.stringsdict</code> authoring are not supported.
+    Use <strong>Needs translation</strong>, then select an
+    <strong>Empty translation</strong> field to edit an existing empty value.
+    When the entry itself is absent, select <strong>Add translation</strong>.
+    VerboFlex adds eligible entries to an existing mapped file; it does not
+    create new language files. Unsupported structures remain read-only.
   </p>
-  <h3>Reuse wording</h3>
+  <!-- screenshot: missing -->
+  <h3 id="authoring">Add a key</h3>
   <p>
-    Open <strong>Suggestions</strong> while editing to find exact or similar wording
-    in the same product and language pair. <strong>Use</strong> copies a suggestion
-    into the editor; check it and save. Glossary hints show preferred and forbidden
-    terms. Neither suggestions nor glossary hints approve a translation for you.
+    Use <strong>New key</strong> to choose an existing file and enter a key and
+    text. Select the language, entry type and optional character limit, then
+    save. New entries are drafts for review. Android XML, Qt, JSON and Apple
+    <code>.strings</code> support new scalar entries in eligible files.
+  </p>
+  <!-- screenshot: new-key -->
+  <h3 id="plurals">Keep plural forms together</h3>
+  <p>
+    Open a plural entry to edit its individual forms. Android and Qt support
+    native plurals; <strong>Add forms</strong> fills missing supported
+    categories. Keep placeholders such as <code>%d</code> intact and check each
+    form before review. ICU messages, JSON plurals and Apple
+    <code>.stringsdict</code>
+    authoring are not supported.
+  </p>
+  <!-- screenshot: plurals -->
+  <h3 id="reuse">Reuse wording</h3>
+  <p>
+    Open <strong>Suggestions</strong> while editing to find exact or similar
+    wording in the same product and language pair. <strong>Use</strong> copies a
+    suggestion into the editor; check it and save. Glossary hints show preferred
+    and forbidden terms. Neither suggestions nor glossary hints approve a
+    translation for you.
+  </p>
+  <!-- screenshot: reuse -->
+  <p>
+    The match percentage describes source similarity, not translation quality.
+    Check the suggestion’s origin and adapt placeholders and wording before
+    saving. Use <strong>Glossary</strong> in the product workspace to manage
+    terminology; its hints remain advisory.
   </p>
   <h3>Understand length limits</h3>
   <p>
@@ -195,6 +228,15 @@
   <p>
     Approval is not a merge. A successful submission creates repository changes
     and a pull request; merging remains part of your team’s repository workflow.
+  </p>
+  <h3>Find pending work</h3>
+  <p>
+    Amber marks local changes that have not been sent to the repository. Use
+    <strong>Needs review</strong> in Strings to find proposals requiring
+    attention. In <strong>Change sets → Pending changes</strong>, choose the
+    proposal state and select complete, eligible approved proposals to review
+    together before submission. Red length violations and stale source data must
+    be resolved before approval.
   </p>
   <aside class="callout">
     <strong>GitHub has a different stopping point.</strong> You can edit and
@@ -238,9 +280,9 @@
     submission remains available in its history.
   </p>
   <p>
-    Resolve Git conflicts in the repository, then check status again.
-    Unexpected PR edits require review. If the imported source also changed,
-    refresh the project and reconcile affected proposals before submitting again.
+    Resolve Git conflicts in the repository, then check status again. Unexpected
+    PR edits require review. If the imported source also changed, refresh the
+    project and reconcile affected proposals before submitting again.
   </p>
 </section>
 <section id="dashboard">
@@ -249,7 +291,8 @@
   <p>
     Your dashboard brings together notifications, your recent operations and
     project updates. It shows three recent project updates, with a link to the
-    full list. Your recent activity also shows three items with a link to all activity.
+    full list. Your recent activity also shows three items with a link to all
+    activity.
   </p>
   <p>
     Open a product overview to see source keys, present and missing target
@@ -407,7 +450,10 @@ codex mcp login verboflex-oauth --scopes verboflex:read</code></pre>
     <a href="https://github.com/smutti/verboflex/blob/main/mcp-server/README.md"
       >MCP reference</a
     >. For a live trial, follow the
-    <a href="https://github.com/smutti/verboflex/blob/main/docs/demo-deployment.md">demo deployment guide</a>.
+    <a
+      href="https://github.com/smutti/verboflex/blob/main/docs/demo-deployment.md"
+      >demo deployment guide</a
+    >.
   </p>
 </section>
 <section id="help">

@@ -1,5 +1,7 @@
 # VerboFlex
 
+[![Application checks](https://github.com/smutti/verboflex/actions/workflows/application-check.yml/badge.svg)](https://github.com/smutti/verboflex/actions/workflows/application-check.yml) [![Website checks](https://github.com/smutti/verboflex/actions/workflows/site-check.yml/badge.svg)](https://github.com/smutti/verboflex/actions/workflows/site-check.yml)
+
 **Self-hosted localization review, connected to your repositories.**
 
 [Website and demo](https://smutti.github.io/verboflex/) · [User guide](https://smutti.github.io/verboflex/guide.html) · [Deploy a demo](docs/demo-deployment.md) · [Apache 2.0](LICENSE)
@@ -20,7 +22,7 @@ python3 -m http.server 4174 --bind 127.0.0.1 --directory site/dist
 
 Open [the product website](http://127.0.0.1:4174) or [the user guide](http://127.0.0.1:4174/guide.html). The preview is separate from the VerboFlex application and does not access its database.
 
-Build and publish the website with the included GitHub Pages workflow. See [site maintenance and publication](site/README.md).
+See the [current application screenshots](https://smutti.github.io/verboflex/#screenshots). Site changes on `main` are checked and published automatically through GitHub Pages. See [site maintenance and publication](site/README.md).
 
 For a live portal walkthrough, import [VerboFlex Demo](https://github.com/smutti/verboflex-demo): four synthetic products, four languages and 400 localization values covering missing translations, native plurals, reuse, glossary and character limits. It includes an [installation recipe](https://github.com/smutti/verboflex-demo/blob/main/docs/setup.md) and a [10-minute presenter guide](https://github.com/smutti/verboflex-demo/blob/main/docs/presenter-guide.md). GitHub imports support local review; remote submission still requires Bitbucket Cloud.
 

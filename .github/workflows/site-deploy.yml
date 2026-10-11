@@ -1,7 +1,10 @@
 name: Publish product website
 
-# Manual by design: only the reviewed static website is published.
+# Publish only the static site; application deployment remains separate.
 on:
+  push:
+    branches: [main]
+    paths: ["site/**", ".github/workflows/site-*.yml"]
   workflow_dispatch:
 
 permissions:
@@ -12,9 +15,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    uses: ./.github/workflows/site-check.yml
+
   build:
+    needs: verify
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
       contents: read
       pages: read
@@ -37,7 +45,8 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       pages: write
       id-token: write

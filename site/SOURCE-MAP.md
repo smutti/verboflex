@@ -33,3 +33,15 @@ Checked against application source on 2026-10-11. This file is for maintainers a
 | Missing translations, new keys, native plurals, reuse and glossary | [Authoring reference](../docs/translation-authoring-and-reuse.md) |
 | Apache 2.0 source license | [LICENSE](../LICENSE), [NOTICE](../NOTICE) |
 | Live demo deployment prerequisites and limits | [Demo deployment](../docs/demo-deployment.md) |
+
+## Current application screenshots
+
+Seven captures from the running local portal on 2026-10-11 show synthetic
+Northstar products. The gallery distinguishes real screenshots from the separate
+in-memory demonstration. See [SCREENSHOTS.md](SCREENSHOTS.md) for capture scope,
+file hashes and the update checklist. Product counters are repository coverage;
+match percentages are source similarity, not quality or approval scores.
+
+- Filter shortcuts and same-language matching: `frontend/src/features/translations/TranslationFilters.tsx`.
+- Empty values and missing entries are distinct; new entries require mapped files: `docs/translation-authoring-and-reuse.md`.
+- Pending state filtering and selection before submission: `frontend/src/features/change-sets/ChangeSetReviewPage.tsx`.

@@ -65,6 +65,24 @@ try {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "The right words.In every product.",
   );
+  const captures = page.locator("#screenshots img");
+  await expect(captures).toHaveCount(7);
+  for (const capture of await captures.all()) {
+    await capture.scrollIntoViewIfNeeded();
+    await expect(capture).toBeVisible();
+    await expect
+      .poll(() =>
+        capture.evaluate((img) => img.complete && img.naturalWidth === 1280),
+      )
+      .toBe(true);
+  }
+  await page
+    .getByRole("link", {
+      name: "Open full-size screenshot: Every language, one key",
+    })
+    .click();
+  assert.match(page.url(), /assets\/screenshots\/multilingual\.jpg$/);
+  await page.goBack();
   const field = page.getByRole("textbox", {
     name: "Edit the Italian translation",
   });
@@ -114,6 +132,18 @@ try {
     page.getByText("Coverage by language", { exact: true }),
   ).toBeVisible();
   await page.screenshot({ path: "/tmp/verboflex-site-overview.png" });
+
+  await page.goto(base + "guide.html#reuse");
+  const reuseExample = page.locator("#translate details").last();
+  await reuseExample.locator("summary").click();
+  await expect(reuseExample.locator("img")).toBeVisible();
+  await expect
+    .poll(() =>
+      reuseExample
+        .locator("img")
+        .evaluate((img) => img.complete && img.naturalWidth === 1280),
+    )
+    .toBe(true);
 
   for (const width of [1440, 1024, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });

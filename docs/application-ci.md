@@ -3,6 +3,7 @@
 `Check application` runs on every pull request and push to `main`, and can be
 started manually in GitHub Actions. Require **Application checks** in branch
 protection: it fails if any component fails, is cancelled, or is skipped.
+Also require **Website checks**, which runs on every pull request and main push.
 The workflow does not deploy the application or contact real repositories.
 
 | Check | Coverage |
@@ -63,3 +64,21 @@ to rerun only the disposable browser/container workflow. This deliberately skips
 the aggregate **Application checks** gate; a successful smoke-only run is not a
 complete verification. Skipped jobs use distinct names so they cannot satisfy the
 required full-gate checks. Pushes and pull requests always run all jobs.
+
+## Product website and public repository
+
+**Website checks** builds the allowlisted static artifact, validates local links,
+metadata and screenshot budgets, then runs the interactive demo and responsive
+Chromium checks. The same workflow is reused as a prerequisite for Pages deployment.
+It needs no secrets and publishes no application data.
+
+**Publish product website** runs for site/workflow changes pushed to `main`, or by
+manual dispatch. It validates first, then uploads only `site/dist/` and deploys with
+GitHub Pages OIDC. It never deploys the backend, database or workers. The Pages
+environment accepts only `main`. See [site maintenance](../site/README.md).
+
+Protect `main` with the **Application checks** and **Website checks** status checks,
+require an up-to-date branch and resolved conversations, and disable force pushes
+and branch deletion. Keep the standard administrator recovery bypass. No independent
+reviewer is mandated for the single-maintainer repository. Workflows have read-only
+permissions by default; only the Pages deploy job receives Pages/OIDC write access.

@@ -12,7 +12,7 @@ python3 site/check.py
 python3 -m http.server 4174 --bind 127.0.0.1 --directory site/dist
 ```
 
-Open <http://127.0.0.1:4174>. The build publishes exactly nine allowlisted files into ignored `site/dist/`; it does not copy internal documentation, source code, environment files or application data.
+Open <http://127.0.0.1:4174>. The build publishes exactly sixteen allowlisted files into ignored `site/dist/`; it does not copy internal documentation, source code, environment files or application data.
 
 The browser check reuses the existing frontend Playwright installation. If necessary, install the frontend's locked development dependencies and its Chromium browser first:
 
@@ -50,7 +50,7 @@ python3 site/build.py
 python3 site/check.py
 ```
 
-Use only sample names and invented strings in demonstrations. Label them as illustrative; the demo is not a pixel-for-pixel screenshot of the application. Keep claims aligned with `SOURCE-MAP.md`, including GitHub and XLIFF limitations. Do not imply a hosted signup, automatic machine translation or tested large-scale throughput.
+Use only synthetic products in application captures. See `SCREENSHOTS.md` for the capture checklist. The seven gallery images are real UI screenshots; the separate interactive demo is illustrative and is not a pixel-for-pixel reproduction. Keep claims aligned with `SOURCE-MAP.md`, including GitHub and XLIFF limitations. Do not imply a hosted signup, automatic machine translation or tested large-scale throughput.
 
 ## Publish on GitHub Pages
 
@@ -62,10 +62,12 @@ Publish the reviewed source from `main` in the existing `smutti/verboflex` repos
 3. In **Actions → Publish product website**, run the workflow on `main`.
 4. Open the returned deployment URL; verify the guide, interactive demo and social card.
 
-The workflow is manual: pushing application code does not deploy the site or the
-live portal. It validates and uploads only `site/dist/`. Action versions are pinned,
-and write permissions are confined to the deployment job. **Check product website**
-builds and validates relevant pushes and pull requests without publishing.
+The workflow publishes automatically when `site/**` or a site workflow changes on
+`main`; manual dispatch is also available. Its reusable **Website checks** gate
+checks the artifact and runs Chromium checks before publication. It uploads only
+`site/dist/`. Actions are pinned, and write permissions are confined to the deployment
+job. **Check product website** runs on every pull request and main push so the required
+check is never left pending by a path filter. It never deploys the live portal.
 
 The Pages action supplies the canonical URL during deployment, including a configured custom domain. For a local build with another destination:
 
@@ -82,5 +84,5 @@ References: [GitHub Pages availability and behavior](https://docs.github.com/en/
 - This website is documentation, not the VerboFlex application. It has no login or live backend.
 - The demo saves only to page memory; reloading or resetting clears it. Overview statistics are a separate fixed sample, not live totals for the demo row.
 - Source is licensed under Apache 2.0. The user guide links to the repository and its deployment runbooks.
-- No application screenshots or private customer/project names are published. `SOURCE-MAP.md`, this README, tests and HTML card source are also excluded from the artifact.
-- To update or roll back the site, review the appropriate site commit on `main` and run the manual publication workflow again. No automatic application deployment is involved.
+- The seven allowlisted application captures contain synthetic Northstar products only. Capture notes, `SOURCE-MAP.md`, this README, tests and HTML card source are excluded from the artifact.
+- To update or roll back the site, revert the relevant site commit on `main` or run the manual publication workflow after reviewing the current source. No automatic application deployment is involved.

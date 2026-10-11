@@ -130,7 +130,7 @@ COPY = {
         "closing": "Bring your translations into focus.",
         "closing_text": "Try the sample, explore the source, or run your own workspace.",
         "footer": "Translations, in your team’s workflow.",
-        "footer_note": "Illustrative demo. Features checked against source · October 2026.",
+        "footer_note": "Real app screenshots · sample data · October 2026.",
         "guide_title": "Your guide, from sign-in to review.",
         "guide_description": "The essential steps to work in VerboFlex, connect repositories and use Codex or Claude Code.",
         "guide_label": "PRACTICAL GUIDE",
@@ -150,3 +150,64 @@ COPY = {
         ],
     },
 }
+
+# Explicit public screenshot inventory. Captured from the running application
+# using only the synthetic Northstar products; dimensions preserve layout space.
+SCREENSHOTS = [
+    {
+        "name": "products",
+        "height": 877,
+        "title": "Choose where to work",
+        "text": "Search products and compare source strings, supported languages, missing translations and repository coverage.",
+        "alt": "Product search showing four Northstar demo products with language counts and translation coverage.",
+        "guide": "start",
+    },
+    {
+        "name": "multilingual",
+        "height": 867,
+        "title": "Every language, one key",
+        "text": "Compare English, Arabic, Italian and Vietnamese together. Each key keeps its product name and editing tools in view.",
+        "alt": "The welcome_title key grouped with four language rows and inline editing actions.",
+        "guide": "translate",
+    },
+    {
+        "name": "missing",
+        "height": 888,
+        "title": "Find the gaps",
+        "text": "Needs translation finds empty values while keeping other languages visible for context. Only supported product languages appear.",
+        "alt": "Needs translation results with empty Arabic and Italian values beside the source and Vietnamese translation.",
+        "guide": "missing",
+    },
+    {
+        "name": "new-key",
+        "height": 720,
+        "title": "Add the words you need",
+        "text": "Choose a mapped file, enter a key and translation, and set an optional character limit. Save a draft for review.",
+        "alt": "New key dialog with an Android strings.xml file, Italian text and a 32-character limit.",
+        "guide": "authoring",
+    },
+    {
+        "name": "plurals",
+        "height": 1636,
+        "title": "Edit native plural forms",
+        "text": "Work on individual Android and Qt plural forms. Keep quantity placeholders intact and add missing supported categories.",
+        "alt": "Android plural editor showing separate other, one and many forms for files_selected.",
+        "guide": "plurals",
+    },
+    {
+        "name": "reuse",
+        "height": 1278,
+        "title": "Reuse a good translation",
+        "text": "See exact or similar wording from the same product. Compare the source, copy a suggestion, then adapt it before saving.",
+        "alt": "An empty Italian translation beside a 62-percent match and a Use action in Suggestions.",
+        "guide": "reuse",
+    },
+    {
+        "name": "filters",
+        "height": 720,
+        "title": "Build a focused work queue",
+        "text": "Filter by language, missing translations, review needs or source changes. Searchable selectors make long lists easier to navigate.",
+        "alt": "Filter dialog with Needs translation, Needs review, Source changed and language selectors.",
+        "guide": "filters",
+    },
+]

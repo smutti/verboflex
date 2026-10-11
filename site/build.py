@@ -8,7 +8,7 @@ from html import escape
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from content import COPY
+from content import COPY, SCREENSHOTS
 
 ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "dist"
@@ -126,6 +126,27 @@ def demo() -> str:
 </section>"""
 
 
+def screenshot_figure(shot: dict, *, guide: bool = False) -> str:
+    path = f"assets/screenshots/{shot['name']}.jpg"
+    caption = f"<strong>{escape(shot['title'])}</strong><p>{escape(shot['text'])}</p>"
+    if not guide:
+        caption += f'<a class="text-link" href="guide.html#{shot["guide"]}">How to use it {arrow()}</a>'
+    return f'''<figure class="product-shot{" guide-shot" if guide else ""}">
+      <a class="shot-link" href="{path}" aria-label="Open full-size screenshot: {escape(shot["title"], quote=True)}">
+        <img src="{path}" width="1280" height="{shot["height"]}" loading="lazy" decoding="async" alt="{escape(shot["alt"], quote=True)}">
+        <span>View full size {arrow()}</span>
+      </a><figcaption>{caption}</figcaption></figure>'''
+
+
+def gallery() -> str:
+    shots = "".join(screenshot_figure(shot) for shot in SCREENSHOTS)
+    return f"""<section id="screenshots" class="section container screenshot-section">
+      <div class="section-heading"><p class="eyebrow">INSIDE THE APP</p>
+        <h2>A workspace for<br>the whole translation.</h2>
+        <p>Actual VerboFlex screens with Northstar demo data. Captured October 2026.</p>
+      </div><div class="screenshot-grid">{shots}</div></section>"""
+
+
 def landing() -> str:
     features = "".join(
         f'<article><span class="feature-number">{n}</span><h3>{title}</h3><p>{text}</p></article>'
@@ -145,11 +166,12 @@ def landing() -> str:
     )
     return f"""
 <section class="hero container">
-  <div class="hero-copy"><p class="eyebrow"><span class="live-dot" aria-hidden="true"></span>{C["eyebrow"]}</p><h1>{C["headline"]}</h1><p class="hero-intro">{C["intro"]}</p><div class="hero-actions"><a class="button" href="#demo">{C["primary"]} <span aria-hidden="true">↓</span></a><a class="text-link" href="guide.html#start">{C["secondary"]} {arrow()}</a></div><p class="hero-note">{C["hero_note"]}</p></div>
+  <div class="hero-copy"><p class="eyebrow"><span class="live-dot" aria-hidden="true"></span>{C["eyebrow"]}</p><h1>{C["headline"]}</h1><p class="hero-intro">{C["intro"]}</p><div class="hero-actions"><a class="button" href="#demo">{C["primary"]} <span aria-hidden="true">↓</span></a><a class="text-link" href="#screenshots">See the workspace {arrow()}</a></div><p class="hero-note">{C["hero_note"]}</p></div>
   <div class="word-orbit" aria-hidden="true"><div class="orbit-ring"></div><div class="orbit-center">Aa<span>One shared meaning.</span></div><span class="word word-one">Hello<span>English</span></span><span class="word word-two">Ciao<span>Italiano</span></span><span class="word word-three">こんにちは<span>日本語</span></span><span class="word word-four">Bonjour<span>Français</span></span><span class="orbit-spark">✳</span><span class="orbit-coordinate">Words that travel.</span></div>
 </section>
 {demo()}
 <section id="product" class="section container"><div class="section-heading"><p class="eyebrow">{C["section_label"]}</p><h2>{C["features_title"]}</h2></div><div class="feature-grid">{features}</div></section>
+{gallery()}
 <section id="workflow" class="workflow-section"><div class="container"><div class="section-heading"><p class="eyebrow">{C["workflow_label"]}</p><h2>{C["workflow_title"]}</h2></div><ol class="workflow-grid">{steps}</ol><p class="workflow-note">{C["workflow_note"]}</p><a class="light-link" href="guide.html#connect">Follow the complete workflow {arrow()}</a></div></section>
 <section id="integrations" class="section container"><div class="section-heading"><p class="eyebrow">{C["integrations_label"]}</p><h2>{C["integrations_title"]}</h2><p>{C["integrations_intro"]}</p></div><div class="provider-grid"><article class="provider-card"><div class="provider-top"><span class="provider-symbol" aria-hidden="true">⌘</span><span class="pill">{C["bitbucket_label"]}</span></div><h3>Bitbucket Cloud</h3><p>{C["bitbucket_text"]}</p><a class="text-link" href="guide.html#connect">Connect a repository {arrow()}</a></article><article class="provider-card"><div class="provider-top"><span class="provider-symbol" aria-hidden="true">⌥</span><span class="pill neutral">{C["github_label"]}</span></div><h3>GitHub</h3><p>{C["github_text"]}</p><a class="text-link" href="guide.html#connect">Explore the supported workflow {arrow()}</a></article></div><div class="format-strip"><h3>{C["formats"]}</h3><div><span>Android XML</span><span>Qt .ts</span><span>JSON</span><span>Apple .strings</span><span>{C["xliff"]}</span></div><p>{C["format_note"]}</p></div></section>
 <section class="people-section"><div class="container"><p class="eyebrow">{C["people_label"]}</p><h2>{C["people_title"]}</h2><div class="roles-grid">{roles}</div></div></section>
@@ -162,7 +184,13 @@ def guide_body() -> str:
     toc = "".join(
         f'<a href="#{anchor}">{title}</a>' for anchor, title in C["guide_sections"]
     )
-    return f'''<div class="container guide-hero"><p class="eyebrow">{C["guide_label"]}</p><h1>{C["guide_title"]}</h1><p>{C["guide_description"]}</p></div><div class="container guide-layout"><aside class="guide-toc"><nav aria-label="{C["guide_toc"]}"><h2>{C["guide_toc"]}</h2>{toc}</nav></aside><article class="guide-content">{(ROOT / "guide.html").read_text()}</article></div>'''
+    body = (ROOT / "guide.html").read_text()
+    for shot in SCREENSHOTS:
+        body = body.replace(
+            f"<!-- screenshot: {shot['name']} -->",
+            f'<details class="guide-screenshot"><summary>See it in the app</summary>{screenshot_figure(shot, guide=True)}</details>',
+        )
+    return f'''<div class="container guide-hero"><p class="eyebrow">{C["guide_label"]}</p><h1>{C["guide_title"]}</h1><p>{C["guide_description"]}</p></div><div class="container guide-layout"><aside class="guide-toc"><nav aria-label="{C["guide_toc"]}"><h2>{C["guide_toc"]}</h2>{toc}</nav></aside><article class="guide-content">{body}</article></div>'''
 
 
 def build(base_url: str) -> None:
@@ -190,6 +218,13 @@ def build(base_url: str) -> None:
     (OUT / "assets").mkdir()
     for name in ("site.css", "site.js", "favicon.svg", "social.png"):
         shutil.copyfile(ROOT / "assets" / name, OUT / "assets" / name)
+    (OUT / "assets" / "screenshots").mkdir()
+    for shot in SCREENSHOTS:
+        name = shot["name"] + ".jpg"
+        shutil.copyfile(
+            ROOT / "assets" / "screenshots" / name,
+            OUT / "assets" / "screenshots" / name,
+        )
     (OUT / "index.html").write_text(document(landing(), guide=False, base_url=base_url))
     (OUT / "guide.html").write_text(
         document(guide_body(), guide=True, base_url=base_url)

@@ -6,6 +6,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+from content import SCREENSHOTS
+
 ROOT = Path(__file__).resolve().parent / "dist"
 EXPECTED = {
     "index.html",
@@ -18,6 +20,7 @@ EXPECTED = {
     "robots.txt",
     "sitemap.xml",
 }
+EXPECTED.update(f"assets/screenshots/{shot['name']}.jpg" for shot in SCREENSHOTS)
 
 
 class Document(HTMLParser):
@@ -50,6 +53,11 @@ class Document(HTMLParser):
             assert attr.get("src") == "assets/site.js", (
                 "Only the local site script may ship"
             )
+        if tag == "img" and attr.get("src", "").startswith("assets/screenshots/"):
+            assert attr.get("alt") and attr.get("width") and attr.get("height"), (
+                "Screenshot needs alt text and dimensions"
+            )
+            assert attr.get("loading") == "lazy", "Load gallery images only when needed"
         if tag in {"script", "link", "img", "iframe"}:
             source = attr.get("src", "")
             assert not source.startswith(("http:", "https:", "//")), (
@@ -111,8 +119,14 @@ def check():
     )
     ET.parse(ROOT / "sitemap.xml")
     ET.parse(ROOT / "assets/favicon.svg")
+    for shot in SCREENSHOTS:
+        data = (ROOT / "assets" / "screenshots" / (shot["name"] + ".jpg")).read_bytes()
+        assert data.startswith(b"\xff\xd8\xff") and data.endswith(b"\xff\xd9"), (
+            "Invalid screenshot JPEG"
+        )
+        assert len(data) < 250_000, "Screenshot exceeds its size budget"
     size = sum((ROOT / name).stat().st_size for name in EXPECTED)
-    assert size < 400_000, f"Unexpected artifact growth: {size} bytes"
+    assert size < 1_500_000, f"Unexpected artifact growth: {size} bytes"
     print(
         f"PASS: {len(EXPECTED)} allowlisted files, valid local links/anchors, English metadata, social card, no external runtime assets ({size:,} bytes)."
     )
