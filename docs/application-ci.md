@@ -90,3 +90,16 @@ enforcement starts once that file is on `main`. Required approval applies even
 before that. GitHub prevents self-approval: a pull request opened with `smutti`'s
 credentials cannot be approved by `smutti`. Use a separate authorized author for
 automation-created pull requests instead of granting an approval bypass.
+
+### Automatic code review
+
+The **Automatic code review** repository ruleset requests GitHub Copilot review on
+ready pull requests targeting the default branch and on subsequent pushes. Draft
+pull requests are excluded. Reviews depend on the author's Copilot code review
+access and available quota; the rule does not guarantee that a review will run.
+It grants no merge bypass and does not replace owner approval or either CI check.
+
+Copilot follows `.github/copilot-instructions.md`; repository review priorities are
+also recorded in `AGENTS.md` for Codex. Codex automatic review is a separate account
+integration and is not enabled by these files. See GitHub's
+[automatic review configuration](https://docs.github.com/en/copilot/how-tos/copilot-on-github/set-up-copilot/configure-code-review).
