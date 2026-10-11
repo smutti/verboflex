@@ -151,6 +151,10 @@ jobs:
       - run: uv sync --project backend --locked
       - run: npm ci --prefix frontend
       - run: npx --prefix frontend playwright install --with-deps chromium
+      - name: Backup runtime regression tests
+        run: python3 -m unittest discover -s tests/ops -v
+      - name: Build optional backup image
+        run: docker build -f docker/backup.Dockerfile -t verboflex-backup:ci .
       - name: Isolated TLS stack and repository workflow
         env:
           PHASE7_EVIDENCE_DIR: ${{ runner.temp }}/smoke-evidence
