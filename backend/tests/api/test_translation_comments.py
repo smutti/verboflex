@@ -25,6 +25,7 @@ from verboflex.models.review import (
     TranslationCommentMention,
     TranslationCommentVersion,
 )
+from verboflex.models.role import Role
 from verboflex.models.user import User
 
 
@@ -202,6 +203,7 @@ def test_comment_contract_is_closed_bounded_and_registered() -> None:
 def test_mention_search_is_active_minimal_deterministic_and_author_only(
     comment_api_session_factory: sessionmaker[Session],
 ) -> None:
+    _seed_group(comment_api_session_factory, name="Mention directory")
     tokens = {
         role: SUPPORT.SUPPORT._create_authority(comment_api_session_factory, role_names=(role,))
         for role in ("admin", "product_manager_reviewer", "translator", "viewer")
@@ -215,6 +217,7 @@ def test_mention_search_is_active_minimal_deterministic_and_author_only(
                     hashed_password=hash_password(f"candidate password {index}!"),
                     is_active=index != 3,
                     must_change_password=False,
+                    roles=list(session.scalars(select(Role).where(Role.name == "viewer"))),
                 )
             )
     SUPPORT.SUPPORT._configure_dependencies(comment_api_session_factory)
@@ -258,6 +261,7 @@ def test_structured_mentions_persist_but_plain_at_text_has_no_identity(
                 hashed_password=hash_password("candidate password phrase!"),
                 is_active=True,
                 must_change_password=False,
+                roles=list(session.scalars(select(Role).where(Role.name == "viewer"))),
             )
         )
     SUPPORT.SUPPORT._configure_dependencies(comment_api_session_factory)
@@ -369,6 +373,7 @@ def test_create_and_edit_notify_only_new_distinct_non_author_mentions(
                     hashed_password=hash_password(f"{display_name} candidate password!"),
                     is_active=True,
                     must_change_password=False,
+                    roles=list(session.scalars(select(Role).where(Role.name == "viewer"))),
                 )
             )
     SUPPORT.SUPPORT._configure_dependencies(comment_api_session_factory)

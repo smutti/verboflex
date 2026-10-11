@@ -350,9 +350,9 @@ def validate_boundaries(sources=None):
         if route and not all(
             name in route
             for name in (
-                "require_roles",
-                "RoleName.ADMIN",
-                "RoleName.PRODUCT_MANAGER_REVIEWER",
+                "resolve_translation_group_access",
+                "TranslationGroupAccessMode.REVIEW",
+                "principal=principal",
                 "ConstraintPrincipal",
             )
         ):

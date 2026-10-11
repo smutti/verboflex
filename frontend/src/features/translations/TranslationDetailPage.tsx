@@ -1,3 +1,4 @@
+import { rolesForProduct } from "../auth/productRoles";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Link,
@@ -332,7 +333,7 @@ function LoadedDetail({
     [pending],
   );
   const canPropose =
-    context.principal.roles.some(
+    rolesForProduct(context.principal, detail.product_id).some(
       (role) =>
         role === "admin" ||
         role === "product_manager_reviewer" ||
@@ -354,7 +355,7 @@ function LoadedDetail({
         )
       : detail.review_eligible;
   const canReview =
-    context.principal.roles.some(
+    rolesForProduct(context.principal, detail.product_id).some(
       (role) => role === "admin" || role === "product_manager_reviewer",
     ) &&
     reviewEligible &&
@@ -373,7 +374,7 @@ function LoadedDetail({
       (value) => pendingById.get(value.id)?.submission_eligible === true,
     );
   const canMutate =
-    context.principal.roles.some(
+    rolesForProduct(context.principal, detail.product_id).some(
       (role) => role === "admin" || role === "product_manager_reviewer",
     ) &&
     detail.base_language !== null &&
@@ -573,7 +574,7 @@ function LoadedDetail({
               language={detail.language}
               principal={{
                 id: context.principal.id,
-                roles: context.principal.roles,
+                roles: rolesForProduct(context.principal, detail.product_id),
               }}
             />
           )}
@@ -701,7 +702,7 @@ function LoadedDetail({
         <MaximumLengthDialog
           accessToken={context.accessToken}
           detail={detail}
-          roles={context.principal.roles}
+          roles={rolesForProduct(context.principal, detail.product_id)}
           mode={dialog.mode}
           triggerElement={dialog.trigger}
           fallbackElement={dialog.fallback}

@@ -54,7 +54,7 @@ Git history does not need the original development commits.
 
 A green check verifies the current automated baseline. It does not certify a
 production host, off-site backups, alert delivery, native assistive technology,
-multi-tenant isolation, or performance with tens of millions of strings. The
+separate-organization isolation, or performance with tens of millions of strings. The
 historical phase-specific Playwright suites are not all included here; their
 remaining release-level reconciliation is separate work. See the
 [authorization and audit model](authorization-and-audit.md) for the Phase 8 scope.

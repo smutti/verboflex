@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import cast
+from unittest.mock import Mock
 from uuid import UUID
 
 import httpx
@@ -80,6 +81,9 @@ class ProbeCounter:
 def clear_dependency_overrides() -> Iterator[None]:
     """Keep limiter state and dependency substitutions isolated by scenario."""
     app.dependency_overrides.clear()
+    session = Mock()
+    session.scalars.return_value = []
+    app.dependency_overrides[get_db_session] = lambda: session
     yield
     app.dependency_overrides.clear()
 

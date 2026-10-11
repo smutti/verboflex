@@ -1,7 +1,10 @@
 # Authorization and audit
 
-VerboFlex uses installation-wide internal roles. Product membership and isolation
-between customer organizations are not part of this access model. The API decides
+VerboFlex uses installation-wide administrators and explicit product memberships.
+Viewer, Translator, Reviewer and Product Owner authority is scoped to a product.
+Separate customer organizations and per-language permissions are not implemented.
+See [product teams and temporary credentials](product-membership.md) for setup and migration.
+The API decides
 whether an operation is permitted; hiding a button is only a UI convenience.
 
 ## Roles
@@ -17,7 +20,10 @@ whether an operation is permitted; hiding a button is only a UI convenience.
 | Configure products, repositories, imports and users | No | No | No | Yes |
 | Read/mark notifications and manage MCP connections | Own only | Own only | Own only | Own only |
 
-Roles can be combined. Resource state, optimistic versions, current imports,
+The table describes authority within an assigned product. Product Owners have
+Reviewer capabilities and can provision collaborators with temporary credentials
+and manage operational memberships; only administrators
+appoint or remove owners. Resource state, optimistic versions, current imports,
 source validity and provider capabilities can further restrict an allowed role.
 Submission retries also verify the original actor and frozen authority;
 reconciliation follows its separate recovery policy. Public GitHub imports remain
@@ -25,7 +31,7 @@ read-only at the provider: they allow local review, not GitHub pull requests.
 
 The executable inventory is
 [`mutation_policy.json`](../backend/tests/architecture/mutation_policy.json).
-It lists all 46 versioned HTTP write operations, their policy boundaries and the
+It lists the versioned HTTP write operations, their policy boundaries and the
 owner of their durable evidence. A regression test fails when an operation is
 added or removed without updating the inventory. Direct HTTP tests exercise
 anonymous requests, revoked sessions and insufficient roles, checking that denied

@@ -22,6 +22,7 @@ from tests.integration.test_translation_import_activation import (
     _stage_direct_manifest,
     _start_refresh_execution,
 )
+from tests.legacy_product_fixtures import shared_product_fixture
 from verboflex.integrations.bitbucket.client import BitbucketFileDelta
 from verboflex.models.bitbucket_connection import BitbucketConnection
 from verboflex.models.import_job import ImportExecution, ImportJob
@@ -51,6 +52,7 @@ def maintenance_factory() -> Iterator[sessionmaker[Session]]:
             patch.setenv("VERBOFLEX_DATABASE_URL", url)
             command.upgrade(config, "head")
         factory = sessionmaker(engine, expire_on_commit=False)
+        shared_product_fixture(factory)
         with factory.begin() as session:
             connection = session.get_one(BitbucketConnection, 1)
             connection.generation = 9

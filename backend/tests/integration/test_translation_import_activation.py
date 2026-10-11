@@ -20,6 +20,7 @@ from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
+from tests.legacy_product_fixtures import shared_product_fixture
 from verboflex.integrations.bitbucket.client import BitbucketFileDelta
 from verboflex.localization.duplicate_diagnostics import (
     DuplicateGroup,
@@ -87,6 +88,7 @@ def activation_session_factory() -> Iterator[sessionmaker[Session]]:
     engine = create_engine(sqlalchemy_url)
     command.upgrade(config, "head")
     factory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
+    shared_product_fixture(factory)
     try:
         yield factory
     finally:

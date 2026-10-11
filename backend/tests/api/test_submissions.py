@@ -18,6 +18,7 @@ from tests.integration.test_preview_jobs import (
 )
 from tests.integration.test_submission_review_jobs import create, get
 from tests.integration.test_writeback_authority import PreparedSource
+from tests.legacy_product_fixtures import mirror_fixture_role
 from verboflex.services.submission_reviews import execute_submission_review
 
 
@@ -173,6 +174,7 @@ def test_recovery_routes_enforce_product_roles_and_strict_attempt(ready_api):
         session.get(User, seed.actor_id).roles = [
             session.scalar(select(Role).where(Role.name == "viewer"))
         ]
+        mirror_fixture_role(session, session.get(User, seed.actor_id).id)
     for action in ("retry", "reconcile", "finalize"):
         assert client.post(base + "/" + action, json={"expected_attempt": 1}).status_code == 403
     assert not client.get(base).json()["can_retry"]
@@ -252,6 +254,7 @@ def test_intake_role_loss_denies_but_accepted_read_remains_authorized(ready_api)
         session.get(User, seed.actor_id).roles = [
             session.scalar(select(Role).where(Role.name == "viewer"))
         ]
+        mirror_fixture_role(session, session.get(User, seed.actor_id).id)
     assert submit(ready_api).status_code == 403
     base = f"/api/v1/products/{seed.product_id}"
     recovered = client.get(f"{base}/submission-batches/by-key/{body['request_key']}").json()

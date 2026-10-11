@@ -21,6 +21,7 @@ from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
+from tests.legacy_product_fixtures import shared_product_fixture
 from verboflex.localization.importing.core import CanonicalParserInput
 from verboflex.localization.importing.registry import parse_canonical_mapping
 from verboflex.models.bitbucket_connection import BitbucketConnection
@@ -59,6 +60,7 @@ def constraint_session_factory() -> Iterator[sessionmaker[Session]]:
     engine = create_engine(sqlalchemy_url)
     command.upgrade(config, "head")
     factory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
+    shared_product_fixture(factory)
     try:
         yield factory
     finally:

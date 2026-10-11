@@ -89,7 +89,7 @@
       "admin",
       "product_manager_reviewer"
     ],
-    "boundary": "role_dependency",
+    "boundary": "current_product_membership",
     "audit": "AuditEntry"
   },
   "deleteTranslationConstraint": {
@@ -99,7 +99,7 @@
       "admin",
       "product_manager_reviewer"
     ],
-    "boundary": "role_dependency",
+    "boundary": "current_product_membership",
     "audit": "AuditEntry"
   },
   "saveTranslationProposal": {
@@ -524,5 +524,35 @@
     ],
     "boundary": "active_resource_and_recovery_policy",
     "audit": "Read-only live-content check; no mutation"
+  },
+  "setProductMember": {
+    "method": "PUT",
+    "path": "/api/v1/products/{product_id}/team/members",
+    "roles": [
+      "admin",
+      "product_owner"
+    ],
+    "boundary": "current_product_membership",
+    "audit": "ProductTeamEvent with actor, product, subject and role transition"
+  },
+  "removeProductMember": {
+    "method": "DELETE",
+    "path": "/api/v1/products/{product_id}/team/members/{user_id}",
+    "roles": [
+      "admin",
+      "product_owner"
+    ],
+    "boundary": "current_product_membership",
+    "audit": "ProductTeamEvent with actor, product, subject and role transition"
+  },
+  "addProductMember": {
+    "method": "POST",
+    "path": "/api/v1/products/{product_id}/team/members",
+    "roles": [
+      "admin",
+      "product_owner"
+    ],
+    "boundary": "current_product_membership",
+    "audit": "ProductTeamEvent and user.created audit event; never credentials"
   }
 }

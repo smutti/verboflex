@@ -29,6 +29,24 @@ export type AccessTokenResponse = {
 };
 
 /**
+ * AddMemberInput
+ */
+export type AddMemberInput = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Role
+     */
+    role: 'viewer' | 'translator' | 'product_manager_reviewer';
+};
+
+/**
  * AdminActiveRevisionRevalidationConfirmationRequest
  *
  * Complete caller compare identity for one active-revision confirmation.
@@ -2640,9 +2658,19 @@ export type CurrentUserResponse = {
      */
     id: string;
     /**
+     * Managed Product Ids
+     */
+    managed_product_ids?: Array<string>;
+    /**
      * Must Change Password
      */
     must_change_password: boolean;
+    /**
+     * Product Roles
+     */
+    product_roles?: {
+        [key: string]: Array<RoleName>;
+    };
     /**
      * Roles
      */
@@ -3306,6 +3334,46 @@ export type McpConsentDecision = {
 };
 
 /**
+ * MemberAdded
+ */
+export type MemberAdded = {
+    /**
+     * Account Created
+     */
+    account_created: boolean;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Temporary Password
+     */
+    temporary_password?: string | null;
+    /**
+     * User Id
+     */
+    user_id: string;
+};
+
+/**
+ * MemberInput
+ */
+export type MemberInput = {
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Expected Version
+     */
+    expected_version?: string | null;
+    /**
+     * Role
+     */
+    role: 'viewer' | 'translator' | 'product_manager_reviewer' | 'product_owner';
+};
+
+/**
  * MentionInput
  *
  * One immutable-user selection expressed in browser UTF-16 coordinates.
@@ -3583,6 +3651,24 @@ export type PluralFormsResponse = {
      * Profile
      */
     profile: string;
+};
+
+/**
+ * ProductAccess
+ */
+export type ProductAccess = {
+    /**
+     * Can Manage Team
+     */
+    can_manage_team: boolean;
+    /**
+     * Role
+     */
+    role: string | null;
+    /**
+     * Roles
+     */
+    roles: Array<string>;
 };
 
 /**
@@ -4512,6 +4598,51 @@ export type SystemStatusResponse = {
      * Worker
      */
     worker: 'online' | 'unavailable' | 'pending';
+};
+
+/**
+ * TeamMember
+ */
+export type TeamMember = {
+    /**
+     * Account Active
+     */
+    account_active: boolean;
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Role
+     */
+    role: 'viewer' | 'translator' | 'product_manager_reviewer' | 'product_owner';
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Version
+     */
+    version: string;
+};
+
+/**
+ * TeamResponse
+ */
+export type TeamResponse = {
+    access: ProductAccess;
+    /**
+     * Has Active Owner
+     */
+    has_active_owner: boolean;
+    /**
+     * Members
+     */
+    members: Array<TeamMember>;
 };
 
 /**
@@ -9076,6 +9207,56 @@ export type ListProductWorkspacesResponses = {
 
 export type ListProductWorkspacesResponse = ListProductWorkspacesResponses[keyof ListProductWorkspacesResponses];
 
+export type GetProductAccessData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/access';
+};
+
+export type GetProductAccessErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetProductAccessError = GetProductAccessErrors[keyof GetProductAccessErrors];
+
+export type GetProductAccessResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProductAccess;
+};
+
+export type GetProductAccessResponse = GetProductAccessResponses[keyof GetProductAccessResponses];
+
 export type ListAuthoringRequestsData = {
     body?: never;
     path: {
@@ -10519,6 +10700,215 @@ export type GetSubmissionReviewValuesResponses = {
 
 export type GetSubmissionReviewValuesResponse = GetSubmissionReviewValuesResponses[keyof GetSubmissionReviewValuesResponses];
 
+export type GetProductTeamData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/team';
+};
+
+export type GetProductTeamErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetProductTeamError = GetProductTeamErrors[keyof GetProductTeamErrors];
+
+export type GetProductTeamResponses = {
+    /**
+     * Successful Response
+     */
+    200: TeamResponse;
+};
+
+export type GetProductTeamResponse = GetProductTeamResponses[keyof GetProductTeamResponses];
+
+export type AddProductMemberData = {
+    body: AddMemberInput;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/team/members';
+};
+
+export type AddProductMemberErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type AddProductMemberError = AddProductMemberErrors[keyof AddProductMemberErrors];
+
+export type AddProductMemberResponses = {
+    /**
+     * Successful Response
+     */
+    201: MemberAdded;
+};
+
+export type AddProductMemberResponse = AddProductMemberResponses[keyof AddProductMemberResponses];
+
+export type SetProductMemberData = {
+    body: MemberInput;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/team/members';
+};
+
+export type SetProductMemberErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type SetProductMemberError = SetProductMemberErrors[keyof SetProductMemberErrors];
+
+export type SetProductMemberResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type SetProductMemberResponse = SetProductMemberResponses[keyof SetProductMemberResponses];
+
+export type RemoveProductMemberData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query: {
+        /**
+         * Expected Version
+         */
+        expected_version: string;
+    };
+    url: '/api/v1/products/{product_id}/team/members/{user_id}';
+};
+
+export type RemoveProductMemberErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type RemoveProductMemberError = RemoveProductMemberErrors[keyof RemoveProductMemberErrors];
+
+export type RemoveProductMemberResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type RemoveProductMemberResponse = RemoveProductMemberResponses[keyof RemoveProductMemberResponses];
+
 export type ReadSystemStatusData = {
     body?: never;
     path?: never;
@@ -11401,6 +11791,10 @@ export type SearchMentionUsersData = {
          * Q
          */
         q: string;
+        /**
+         * Translation Group Id
+         */
+        translation_group_id?: string | null;
     };
     url: '/api/v1/users/mentions';
 };

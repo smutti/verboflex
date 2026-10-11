@@ -11,12 +11,15 @@ from verboflex.main import app
 
 def main(output: Path | None = None) -> None:
     """Serialize the live application contract deterministically."""
-    document = json.dumps(
-        app.openapi(),
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ) + "\n"
+    document = (
+        json.dumps(
+            app.openapi(),
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n"
+    )
     if output is None:
         sys.stdout.write(document)
         return

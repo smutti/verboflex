@@ -773,6 +773,25 @@ def test_admin_preview_base_language_openapi_is_exact_bounded_and_authorized() -
     _assert_admin_preview_base_language_contract(app.openapi())
 
 
+TEAM_OPERATIONS = (
+    ("/products/{product_id}/access", "get", "getProductAccess", "200", True),
+    ("/products/{product_id}/team", "get", "getProductTeam", "200", True),
+    ("/products/{product_id}/team/members", "put", "setProductMember", "204", True),
+    ("/products/{product_id}/team/members/{user_id}", "delete", "removeProductMember", "204", True),
+    ("/products/{product_id}/team/members", "post", "addProductMember", "201", True),
+)
+EXPECTED_OPERATIONS.update(
+    {
+        ("/api/v1" + path, method): (
+            operation,
+            {success, "401", "403", "404", "409", "422", "503"},
+            bearer,
+        )
+        for path, method, operation, success, bearer in TEAM_OPERATIONS
+    }
+)
+
+
 def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
     """Freeze every approved method, operation id, response, and bearer boundary."""
     schema = app.openapi()
@@ -1591,6 +1610,15 @@ def test_phase_five_review_comment_and_mention_contract_is_exact() -> None:
     mention = operations[("/api/v1/users/mentions", "get")]
     assert "requestBody" not in mention
     assert _parameters_by_name(mention) == {
+        "translation_group_id": {
+            "name": "translation_group_id",
+            "in": "query",
+            "required": False,
+            "schema": {
+                "anyOf": [{"type": "string", "format": "uuid"}, {"type": "null"}],
+                "title": "Translation Group Id",
+            },
+        },
         "q": {
             "name": "q",
             "in": "query",
@@ -1601,7 +1629,7 @@ def test_phase_five_review_comment_and_mention_contract_is_exact() -> None:
                 "maxLength": 200,
                 "title": "Q",
             },
-        }
+        },
     }
     assert mention["responses"]["200"]["content"]["application/json"]["schema"] == {
         "type": "array",

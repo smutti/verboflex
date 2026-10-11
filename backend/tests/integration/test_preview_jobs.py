@@ -27,6 +27,7 @@ from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
+from tests.legacy_product_fixtures import shared_product_fixture
 from verboflex.auth.access_tokens import issue_access_token
 from verboflex.auth.passwords import hash_password
 from verboflex.core.config import Settings, get_settings
@@ -107,6 +108,7 @@ def preview_session_factory() -> Iterator[sessionmaker[Session]]:
     engine = create_engine(sqlalchemy_url)
     command.upgrade(config, "head")
     factory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
+    shared_product_fixture(factory)
 
     try:
         yield factory

@@ -8,6 +8,7 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from verboflex.api.v1.routes.auth import OptionalBearerToken
@@ -16,9 +17,11 @@ from verboflex.auth.access_tokens import (
     PasswordChangeRequired,
     decode_access_token,
 )
+from verboflex.auth.product_access import operational_roles
 from verboflex.core.config import Settings, get_settings
 from verboflex.db.session import get_db_session
 from verboflex.models.auth_session import AuthSession
+from verboflex.models.product_member import ProductMember
 from verboflex.models.user import User
 from verboflex.schemas.users import RoleName
 
@@ -93,6 +96,10 @@ def load_principal(
         roles = tuple(sorted(RoleName(role.name) for role in user.roles))
     except ValueError as error:
         raise InvalidPrincipal(INVALID_ROLE_STATE_MESSAGE) from error
+    local_roles = session.scalars(
+        select(ProductMember.role).where(ProductMember.user_id == user.id, ProductMember.active)
+    )
+    roles = tuple(sorted(set(roles) | {r for role in local_roles for r in operational_roles(role)}))
     return Principal(
         user_id=user.id,
         email=user.email,
@@ -126,6 +133,8 @@ def get_current_principal(
             detail=INVALID_ACCESS_TOKEN_DETAIL,
             headers=BEARER_CHALLENGE,
         ) from error
+    except SQLAlchemyError as error:
+        raise HTTPException(503, "Authentication temporarily unavailable") from error
     finally:
         # Principal is an immutable value, with roles already materialized.
         # Release this read-only lease before a route opens its own transaction;

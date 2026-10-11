@@ -1,3 +1,4 @@
+import { rolesForProduct } from "../auth/productRoles";
 import { Glossary } from "./Glossary";
 import {
   TranslationAuthoring,
@@ -449,7 +450,7 @@ function ResolvedSearch({
         !key ||
         !slot?.editable ||
         slot.is_deleted ||
-        !context.principal.roles.some((role) =>
+        !rolesForProduct(context.principal, key.product_id).some((role) =>
           ["admin", "translator", "product_manager_reviewer"].includes(role),
         )
       )
@@ -753,12 +754,18 @@ function ResolvedSearch({
               (authoringSelection?.item.product_id ?? search.filters.productId)!
             }
             accessToken={context.accessToken}
-            canWrite={context.principal.roles.some((role) =>
+            canWrite={rolesForProduct(
+              context.principal,
+              search.filters.productId,
+            ).some((role) =>
               ["admin", "product_manager_reviewer", "translator"].includes(
                 role,
               ),
             )}
-            canReview={context.principal.roles.some((role) =>
+            canReview={rolesForProduct(
+              context.principal,
+              search.filters.productId,
+            ).some((role) =>
               ["admin", "product_manager_reviewer"].includes(role),
             )}
             selection={authoringSelection}
@@ -777,7 +784,10 @@ function ResolvedSearch({
             accessToken={context.accessToken}
             productId={search.filters.productId}
             languages={options.languages}
-            canManage={context.principal.roles.some((role) =>
+            canManage={rolesForProduct(
+              context.principal,
+              search.filters.productId,
+            ).some((role) =>
               ["admin", "product_manager_reviewer"].includes(role),
             )}
           />
@@ -937,6 +947,13 @@ function ResolvedSearch({
                 })
               }
               detailsBasePath={context.detailsBasePath}
+              canEditProduct={(productId) =>
+                rolesForProduct(context.principal, productId).some((role) =>
+                  ["admin", "product_manager_reviewer", "translator"].includes(
+                    role,
+                  ),
+                )
+              }
               canEdit={context.principal.roles.some(
                 (role) =>
                   role === "admin" ||

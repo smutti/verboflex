@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session, selectinload, sessionmaker
 from sqlalchemy.sql import Executable
 
 from alembic import command
+from tests.legacy_product_fixtures import shared_product_fixture
 from verboflex.api.v1.routes import admin_products as admin_product_routes
 from verboflex.auth.access_tokens import issue_access_token
 from verboflex.auth.passwords import hash_password
@@ -71,6 +72,7 @@ def product_session_factory() -> Iterator[sessionmaker[Session]]:
     engine = create_engine(sqlalchemy_url)
     command.upgrade(config, "head")
     factory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
+    shared_product_fixture(factory)
 
     try:
         yield factory

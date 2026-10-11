@@ -11,7 +11,9 @@ from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import TextClause
 
+from verboflex.auth.product_access import visible_product_sql
 from verboflex.localization.graphemes import grapheme_count
 from verboflex.services.product_summary import _WHITESPACE
 from verboflex.services.signed_cursor import InvalidSignedCursor, SignedCursorCodec
@@ -24,7 +26,8 @@ MAX_OPTION_COUNT = 500
 MAX_GROUP_VALUE_COUNT = 10_000
 _ZERO_UUID = UUID(int=0)
 _AUTHORIZED_ACTIVE_PRODUCTS_SQL = (
-    "SELECT id, display_name, name_key FROM products WHERE is_active AND deleted_at IS NULL"
+    "SELECT id, display_name, name_key FROM products "
+    "WHERE is_active AND deleted_at IS NULL /* product_access */"
 )
 
 DeletedMode = Literal["active", "deleted", "all"]
@@ -312,6 +315,14 @@ def _canonical_filter(filters: TranslationSearchFilters) -> dict[str, object]:
     return result
 
 
+def _scoped(statement: TextClause, principal_id: UUID) -> TextClause:
+    return text(
+        statement.text.replace(
+            "/* product_access */", "AND " + visible_product_sql("products.id", ":access_actor")
+        )
+    ).bindparams(access_actor=principal_id)
+
+
 def _scope_digest(
     session: Session,
     *,
@@ -319,14 +330,17 @@ def _scope_digest(
     filters: TranslationSearchFilters | None = None,
 ) -> str:
     rows = session.execute(
-        text(
-            "SELECT product.id AS product_id, scope.id AS scope_id, "
-            "scope.active_execution_id, scope.dataset_version "
-            f"FROM ({_AUTHORIZED_ACTIVE_PRODUCTS_SQL}) AS product "
-            "JOIN localization_scopes AS scope ON scope.product_id = product.id "
-            "WHERE scope.active_execution_id IS NOT NULL "
-            "ORDER BY product.id, scope.id "
-            "FOR SHARE OF product, scope"
+        _scoped(
+            text(
+                "SELECT product.id AS product_id, scope.id AS scope_id, "
+                "scope.active_execution_id, scope.dataset_version "
+                f"FROM ({_AUTHORIZED_ACTIVE_PRODUCTS_SQL}) AS product "
+                "JOIN localization_scopes AS scope ON scope.product_id = product.id "
+                "WHERE scope.active_execution_id IS NOT NULL "
+                "ORDER BY product.id, scope.id "
+                "FOR SHARE OF product, scope"
+            ),
+            principal_id,
         )
     ).mappings()
     authority = {
@@ -343,7 +357,8 @@ def _scope_digest(
     }
     if filters is not None and filters.work_status is not None:
         proposals = session.execute(
-            text(f"""
+            _scoped(
+                text(f"""
             SELECT proposal.id, proposal.version, proposal.state, proposal.reconciliation_required
             FROM ({_AUTHORIZED_ACTIVE_PRODUCTS_SQL}) AS product
             JOIN localization_scopes AS scope ON scope.product_id = product.id
@@ -354,6 +369,8 @@ def _scope_digest(
               AND (CAST(:language AS text) IS NULL OR proposal.language = :language)
             ORDER BY proposal.id
         """),
+                principal_id,
+            ),
             {"product_id": filters.product_id, "language": filters.language},
         ).all()
         authority["proposals"] = [list(map(str, row)) for row in proposals]
@@ -1013,10 +1030,14 @@ def _state_summary(states: tuple[StateFilter, ...]) -> StateSummary:
 
 
 def get_translation_options(
-    session: Session, *, product_id: UUID | None = None
+    session: Session, *, principal_id: UUID, product_id: UUID | None = None
 ) -> TranslationOptions:
     """Return current active product and language choices in server order."""
-    rows = session.execute(_OPTIONS_SQL, {"product_id": product_id}).mappings().all()
+    rows = (
+        session.execute(_scoped(_OPTIONS_SQL, principal_id), {"product_id": product_id})
+        .mappings()
+        .all()
+    )
     products: list[TranslationProductOption] = []
     seen_products: set[UUID] = set()
     language_codes: set[str] = set()
@@ -1339,7 +1360,7 @@ def search_translations(
     escaped_query = escape_like_literal(filters.query or "")
     rows = (
         session.execute(
-            _SEARCH_SQL,
+            _scoped(_SEARCH_SQL, principal_id),
             {
                 "deleted": filters.deleted,
                 "has_cursor": position is not None,

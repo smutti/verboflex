@@ -1,3 +1,4 @@
+import { rolesForProduct } from "../auth/productRoles";
 import { useEffect, useRef, useState } from "react";
 import {
   transitionTranslationProposal,
@@ -106,7 +107,7 @@ function ReviewController({
       membersComplete &&
       pending.every((value) => value.approval_eligible)
     : detail.review_eligible;
-  const authorized = principal.roles.some(
+  const authorized = rolesForProduct(principal, detail.product_id).some(
     (role) => role === "admin" || role === "product_manager_reviewer",
   );
   const blocked = pending.some(

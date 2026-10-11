@@ -23,6 +23,15 @@ def access_module() -> ModuleType:
     return importlib.import_module("verboflex.auth.translation_access")
 
 
+@pytest.fixture(autouse=True)
+def durable_product_roles(access_module, monkeypatch, request):
+    """The matrix now comes from the durable product grant, not JWT role hints."""
+    role = getattr(request.node, "callspec", SimpleNamespace(params={})).params.get(
+        "role", RoleName.VIEWER
+    )
+    monkeypatch.setattr(access_module, "product_roles", Mock(return_value=(role,)))
+
+
 @pytest.fixture
 def product_id() -> UUID:
     return uuid4()

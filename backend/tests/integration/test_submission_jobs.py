@@ -14,6 +14,7 @@ from tests.integration.test_preview_jobs import (
 )
 from tests.integration.test_submission_review_jobs import create, get
 from tests.integration.test_writeback_authority import PreparedSource, seed_writeback_authority
+from tests.legacy_product_fixtures import mirror_fixture_role
 from verboflex.integrations.bitbucket.writes import (
     BranchReceipt,
     CommitReceipt,
@@ -171,6 +172,7 @@ def test_current_authority_loss_before_first_send_stops_all_effects(
             actor.is_active = False
         elif mutation == "roles":
             actor.roles = [session.scalar(select(Role).where(Role.name == "viewer"))]
+            mirror_fixture_role(session, actor.id)
         elif mutation == "token":
             actor.token_version += 1
         elif mutation == "password":

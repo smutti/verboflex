@@ -10,6 +10,7 @@ from alembic.config import Config
 from sqlalchemy import event, text
 
 from alembic import command
+from tests.legacy_product_fixtures import shared_reader
 from verboflex.schemas.product_workspace import ProductWorkspaceQuery
 from verboflex.services.product_workspace import list_product_workspaces
 
@@ -139,6 +140,7 @@ def test_card_read_is_one_snapshot_query_and_no_translation_scan(factory):
     ids = SUMMARY.seed_two_keys(factory)
     refresh(factory, ids)
     statements = []
+    principal_id = shared_reader(factory)
     with factory() as session:
         connection = session.connection()
 
@@ -146,7 +148,9 @@ def test_card_read_is_one_snapshot_query_and_no_translation_scan(factory):
             statements.append(statement)
 
         event.listen(connection, "before_cursor_execute", record)
-        page = list_product_workspaces(session, query=ProductWorkspaceQuery())
+        page = list_product_workspaces(
+            session, query=ProductWorkspaceQuery(), principal_id=principal_id
+        )
     assert page.items[0].coverage.missing_count == 1
     assert len(statements) == 1
     assert "translation_values" not in statements[0]

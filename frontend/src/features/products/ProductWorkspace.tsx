@@ -1,3 +1,4 @@
+import { principalForProduct } from "../auth/productRoles";
 import { Languages, PackageOpen, RefreshCw } from "lucide-react";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, Outlet, useLocation, useParams } from "react-router-dom";
@@ -151,6 +152,7 @@ export function ProductFocusWorkspace({
   const stringsPath = `/products/${encodeURIComponent(product.id)}/strings`;
   const changesPath = `/products/${encodeURIComponent(product.id)}/change-sets`;
   const changesActive = location.pathname.startsWith(changesPath);
+  const teamActive = location.pathname.endsWith("/team");
   return (
     <div
       data-testid="product-focus"
@@ -200,10 +202,10 @@ export function ProductFocusWorkspace({
         >
           <Link
             to={stringsPath}
-            aria-current={changesActive ? undefined : "page"}
+            aria-current={changesActive || teamActive ? undefined : "page"}
             className="inline-flex min-h-[44px] items-center gap-(--space-sm) rounded-md px-(--space-md) font-semibold no-underline"
             style={
-              changesActive
+              changesActive || teamActive
                 ? undefined
                 : { backgroundColor: identity.accent, color: "#ffffff" }
             }
@@ -223,14 +225,24 @@ export function ProductFocusWorkspace({
           >
             Change sets
           </Link>
+          {(principal.roles.includes("admin") ||
+            principal.managed_product_ids?.includes(product.id)) && (
+            <Link
+              to={`/products/${encodeURIComponent(product.id)}/team`}
+              aria-current={teamActive ? "page" : undefined}
+              className="inline-flex min-h-[44px] items-center rounded-md px-4 font-semibold"
+            >
+              Team
+            </Link>
+          )}
         </nav>
       </header>
-      {changesActive ? (
+      {changesActive || teamActive ? (
         <Outlet />
       ) : (
         <TranslationsWorkspace
           accessToken={accessToken}
-          principal={principal}
+          principal={principalForProduct(principal, product.id)}
           lockedProduct={product}
           detailsBasePath={stringsPath}
           searchPath={stringsPath}

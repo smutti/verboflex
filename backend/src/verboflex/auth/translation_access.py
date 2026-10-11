@@ -10,6 +10,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from verboflex.auth.principal import Principal
+from verboflex.auth.product_access import product_roles
 from verboflex.schemas.users import RoleName
 from verboflex.services.translation_search import (
     TranslationGroupDetail,
@@ -103,7 +104,10 @@ def resolve_translation_group_access(
 
     if not isinstance(mode, TranslationGroupAccessMode):
         raise TranslationGroupActionDenied(TRANSLATION_ACTION_DENIED_MESSAGE)
-    if _ALLOWED_ROLES[mode].isdisjoint(principal.roles):
+    roles = product_roles(session, principal.user_id, group.product_id)
+    if not roles:
+        raise TranslationGroupAccessUnavailable(TRANSLATION_UNAVAILABLE_MESSAGE)
+    if _ALLOWED_ROLES[mode].isdisjoint(roles):
         raise TranslationGroupActionDenied(TRANSLATION_ACTION_DENIED_MESSAGE)
 
     return TranslationGroupAccess(group=group, product_id=group.product_id)

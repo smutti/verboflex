@@ -231,7 +231,9 @@ def list_translation_options(
 ) -> TranslationOptionsResponse:
     """List exact active products and languages available to the principal."""
     try:
-        options = get_translation_options(session, product_id=product_id)
+        options = get_translation_options(
+            session, product_id=product_id, principal_id=_principal.user_id
+        )
     except Exception as error:
         _service_unavailable(error)
     return TranslationOptionsResponse(

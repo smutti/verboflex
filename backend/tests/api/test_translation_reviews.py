@@ -21,6 +21,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
+from tests.legacy_product_fixtures import shared_product_fixture
 from verboflex.auth.access_tokens import decode_access_token
 from verboflex.main import app
 from verboflex.models.import_job import ImportJob
@@ -87,6 +88,7 @@ def _review_database() -> Iterator[sessionmaker[Session]]:
     engine = create_engine(sqlalchemy_url)
     command.upgrade(config, "head")
     factory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
+    shared_product_fixture(factory)
     try:
         yield factory
     finally:

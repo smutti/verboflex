@@ -11,6 +11,7 @@ from tests.integration.test_preview_jobs import (
     preview_session_factory,  # noqa: F401
 )
 from tests.integration.test_writeback_authority import seed_writeback_authority
+from tests.legacy_product_fixtures import mirror_fixture_role
 from verboflex.localization.importing.registry import parse_canonical_snapshot
 from verboflex.localization.writing.core import SourceFileSnapshot, WritebackRejected
 from verboflex.localization.writing.registry import render_file
@@ -244,6 +245,7 @@ def test_viewer_cannot_save_and_translator_cannot_approve(preview_session_factor
         session.get(User, seed.actor_id).roles = [
             session.scalar(select(Role).where(Role.name == "viewer"))
         ]
+        mirror_fixture_role(session, session.get(User, seed.actor_id).id)
     with factory.begin() as session, pytest.raises(authoring.AuthoringError) as error:
         authoring.save(session, **common, data=data)
     assert error.value.status == 403
@@ -251,6 +253,7 @@ def test_viewer_cannot_save_and_translator_cannot_approve(preview_session_factor
         session.get(User, seed.actor_id).roles = [
             session.scalar(select(Role).where(Role.name == "translator"))
         ]
+        mirror_fixture_role(session, session.get(User, seed.actor_id).id)
     with factory.begin() as session:
         assert authoring.save(session, **common, data=data).state == "draft"
     with factory.begin() as session, pytest.raises(authoring.AuthoringError) as error:

@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from alembic import command
+from tests.legacy_product_fixtures import shared_product_fixture
 from verboflex.auth.passwords import hash_password
 from verboflex.localization.preview.core import build_layout_candidate
 from verboflex.models.bitbucket_connection import BitbucketConnection
@@ -71,6 +72,7 @@ def publication_session_factory() -> Iterator[sessionmaker[Session]]:
     engine = create_engine(sqlalchemy_url)
     command.upgrade(config, "head")
     factory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
+    shared_product_fixture(factory)
 
     try:
         yield factory

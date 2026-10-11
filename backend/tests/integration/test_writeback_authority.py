@@ -23,6 +23,7 @@ from tests.integration.test_preview_jobs import (
     clean_preview_database,  # noqa: F401
     preview_session_factory,  # noqa: F401
 )
+from tests.legacy_product_fixtures import mirror_fixture_role
 from verboflex.auth.principal import Principal
 from verboflex.core.config import Settings
 from verboflex.integrations.bitbucket.client import BitbucketBranch, BitbucketSourceMetadata
@@ -391,6 +392,7 @@ def test_foreign_or_deleted_authority_is_rejected(preview_session_factory, monke
             session.get(User, seed.actor_id).is_active = False
         elif mutation == "roles":
             session.get(User, seed.actor_id).roles = []
+            mirror_fixture_role(session, session.get(User, seed.actor_id).id)
         elif mutation == "password":
             session.get(User, seed.actor_id).must_change_password = True
         elif mutation == "connection":
@@ -722,6 +724,7 @@ def test_race_actor_or_connection_change_invalidates_prepared(
                 session.get(User, seed.actor_id).token_version += 1
             elif mutation == "roles":
                 session.get(User, seed.actor_id).roles = []
+                mirror_fixture_role(session, session.get(User, seed.actor_id).id)
             elif mutation == "connection":
                 session.get(BitbucketConnection, 1).access_token_ciphertext = None
             elif mutation == "generation":

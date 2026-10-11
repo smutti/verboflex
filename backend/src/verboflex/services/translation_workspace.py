@@ -14,6 +14,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from verboflex.auth.product_access import visible_product_sql
 from verboflex.schemas.translation_workspace import (
     TranslationKeyPageResponse,
     TranslationKeySearchQuery,
@@ -32,7 +33,7 @@ from verboflex.services.translation_search import (
     normalize_search_query,
 )
 
-_CURRENT = """
+_CURRENT = f"""
     SELECT scope.id AS scope_id, product.id AS product_id, product.display_name AS product_name,
            scope.current_revision_id, scope.active_execution_id, scope.dataset_version,
            scope.read_version, scope.language_counts,
@@ -43,7 +44,7 @@ _CURRENT = """
         AND scope.active_execution_id IS NOT NULL
     JOIN product_repository_mappings AS mapping ON mapping.id = scope.current_mapping_id
         AND mapping.revision_id = scope.current_revision_id
-    WHERE product.is_active AND product.deleted_at IS NULL
+    WHERE {visible_product_sql()} AND product.is_active AND product.deleted_at IS NULL
       AND (CAST(:product_id AS uuid) IS NULL OR product.id = :product_id)
 """
 
@@ -442,7 +443,11 @@ def search_translation_keys(
     # Compilation dominates these short indexed reads; do not alter pooled or
     # server defaults. PostgreSQL restores this setting on commit and rollback.
     session.execute(text("SET LOCAL jit = off"))
-    metadata = session.execute(_METADATA, {"product_id": query.product_id}).mappings().one()
+    metadata = (
+        session.execute(_METADATA, {"product_id": query.product_id, "principal_id": principal_id})
+        .mappings()
+        .one()
+    )
     available = metadata["languages"]
     languages = query.visible_languages if query.visible_languages is not None else available[:20]
     normalized = normalize_search_query(query.q)
@@ -474,6 +479,7 @@ def search_translation_keys(
             raise InvalidTranslationCursor("invalid translation cursor") from error
     literal = escape_like_literal(normalized or "")
     parameters = {
+        "principal_id": principal_id,
         **query.model_dump(exclude={"cursor", "visible_languages", "q", "page_size"}),
         "languages": languages,
         "query": normalized or "",

@@ -142,6 +142,8 @@ def test_current_identity_returns_only_the_safe_provider_independent_projection(
         "display_name": "Person Example",
         "roles": ["admin", "translator"],
         "must_change_password": False,
+        "product_roles": {},
+        "managed_product_ids": [],
     }
 
 

@@ -12,6 +12,7 @@ export interface ProductDetailLayoutProps {
 
 const PRODUCT_SECTIONS = [
   { label: "Overview", slug: "overview" },
+  { label: "Team", slug: "team" },
   { label: "Repositories", slug: "repositories" },
   { label: "Translation sources", slug: "mappings" },
   { label: "Preview and import", slug: "preview" },

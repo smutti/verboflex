@@ -72,6 +72,7 @@ def seed_extra(spec: dict) -> dict:
     from verboflex.auth.passwords import hash_password
     from verboflex.db.session import SessionFactory
     from verboflex.models.product import Product, ProductRevision
+    from verboflex.models.product_member import ProductMember
     from verboflex.models.product_mapping import (
         ProductMappingAllowedTarget,
         ProductMappingRepositorySide,
@@ -90,10 +91,11 @@ def seed_extra(spec: dict) -> dict:
         "email": f"phase7-viewer-{uuid4().hex}@example.com",
         "password": f"Smoke {uuid4().hex}!",
     }
+    viewer_id = uuid4()
     with SessionFactory.begin() as session:
         session.add(
             User(
-                id=uuid4(),
+                id=viewer_id,
                 email=viewer["email"],
                 display_name="Smoke viewer",
                 hashed_password=hash_password(viewer["password"]),
@@ -117,6 +119,7 @@ def seed_extra(spec: dict) -> dict:
             )
             session.add(product)
             session.flush()
+            session.add(ProductMember(product_id=product_id, user_id=viewer_id, role="viewer"))
             session.add(
                 ProductRevision(
                     id=revision_id,

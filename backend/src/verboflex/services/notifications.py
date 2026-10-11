@@ -275,10 +275,12 @@ def _binding(
     )
 
 
-def _validate_product_filter(session: Session, *, product_id: UUID | None) -> None:
+def _validate_product_filter(
+    session: Session, *, product_id: UUID | None, principal_id: UUID
+) -> None:
     if product_id is None:
         return
-    options = get_translation_options(session)
+    options = get_translation_options(session, principal_id=principal_id)
     if all(option.id != product_id for option in options.products):
         raise NotificationUnavailable("notification unavailable")
 
@@ -390,7 +392,7 @@ def list_notifications(
     cursor_secret: str,
 ) -> NotificationPage:
     """Return one private 25-item page in stable newest-first order."""
-    _validate_product_filter(session, product_id=product_id)
+    _validate_product_filter(session, product_id=product_id, principal_id=principal.user_id)
     binding = _binding(
         principal=principal,
         view=view,

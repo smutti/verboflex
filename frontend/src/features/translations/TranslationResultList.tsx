@@ -65,6 +65,7 @@ export interface TranslationResultListProps {
     measurements: VirtualItem[],
   ) => void;
   canEdit?: boolean;
+  canEditProduct?: (productId: string) => boolean;
   onEditTranslation?: (
     translationGroupId: string,
     trigger: HTMLElement,
@@ -120,6 +121,7 @@ export function TranslationResultList({
   initialOffset,
   detailsBasePath = "/translations",
   canEdit = false,
+  canEditProduct,
   onEditTranslation,
   onAddTranslation,
   activeEditorGroupId,
@@ -324,6 +326,9 @@ export function TranslationResultList({
         >
           {virtualRows.map((virtualRow) => {
             const item = items[virtualRow.index];
+            const mayEdit = canEditProduct
+              ? canEditProduct(item.product_id)
+              : canEdit;
             const identity = showProductIdentity
               ? productIdentity(item.product_id, item.product_name)
               : null;
@@ -408,7 +413,7 @@ export function TranslationResultList({
                       slot.pending_change?.state ??
                       (slot.states.length > 1 ? "mixed" : slot.states[0]);
                     const editable =
-                      canEdit &&
+                      mayEdit &&
                       slot.kind === "imported" &&
                       slot.editable &&
                       !slot.is_deleted &&
@@ -477,7 +482,7 @@ export function TranslationResultList({
                               {slot.language}
                             </span>
                           )}
-                          {canEdit &&
+                          {mayEdit &&
                             onAddTranslation &&
                             slot.kind === "imported" &&
                             slot.selector_kinds.some(
@@ -512,7 +517,7 @@ export function TranslationResultList({
                               {editor}
                             </div>
                           ) : slot.kind === "absent" &&
-                            canEdit &&
+                            mayEdit &&
                             onAddTranslation ? (
                             <Button
                               variant="outline"

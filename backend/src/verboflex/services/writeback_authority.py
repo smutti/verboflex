@@ -13,6 +13,7 @@ from sqlalchemy import Text, func, select
 from sqlalchemy.orm import Session, load_only, selectinload
 from sqlalchemy.sql import Select
 
+from verboflex.auth.product_access import membership_stamp, product_roles
 from verboflex.integrations.bitbucket.client import BitbucketSourceMetadata
 from verboflex.localization.graphemes import grapheme_count
 from verboflex.localization.importing.core import (
@@ -172,6 +173,7 @@ class CapturedWritebackAuthority:
     proposals: tuple[CapturedProposal, ...]
     mappings: tuple[CapturedMapping, ...]
     files: tuple[CapturedFile, ...]
+    memberships: tuple[tuple[UUID, str], ...] = ()
 
 
 def _stale() -> WritebackRejected:
@@ -456,13 +458,20 @@ def _capture(
     )
     if actor is None or not actor.is_active or actor.must_change_password or not actor.roles:
         raise WritebackRejected(WritebackReason.AUTHORITY_UNAVAILABLE)
-    try:
-        roles = tuple(RoleName(role.name) for role in actor.roles)
-    except ValueError:
-        raise WritebackRejected(WritebackReason.AUTHORITY_UNAVAILABLE) from None
-    # READ permits every known role. Actor validity and that closed role set are
-    # checked above; do not build the UI group projection (history/structure/text)
-    # just to repeat that policy. Phase 7 applies its separate submission policy.
+    roles_set = {
+        RoleName.ADMIN,
+        RoleName.PRODUCT_MANAGER_REVIEWER,
+        RoleName.TRANSLATOR,
+        RoleName.VIEWER,
+    }
+    stamps = []
+    for product_id in sorted(product_ids, key=str):
+        local_roles = product_roles(session, actor.id, product_id)
+        if not local_roles:
+            raise WritebackRejected(WritebackReason.AUTHORITY_UNAVAILABLE)
+        roles_set.intersection_update(local_roles)
+        stamps.append((product_id, membership_stamp(session, actor.id, product_id)))
+    roles = tuple(sorted(roles_set))
     mappings = {}
     candidates = {}
     reference_budget = MAX_CANONICAL_FILES
@@ -788,6 +797,7 @@ def _capture(
                 captured_files, key=lambda pair: (pair[0], pair[1].source_reference_position)
             )
         ),
+        tuple(stamps),
     )
 
 

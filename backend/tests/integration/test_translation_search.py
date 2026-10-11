@@ -19,6 +19,7 @@ from sqlalchemy import create_engine, event, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
+from tests.legacy_product_fixtures import shared_product_fixture, shared_reader
 from verboflex.models.import_job import ImportExecution, ImportJob, ImportSourceReference
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
@@ -75,6 +76,7 @@ def search_session_factory() -> Iterator[sessionmaker[Session]]:
     engine = create_engine(sqlalchemy_url)
     command.upgrade(config, "head")
     factory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
+    shared_product_fixture(factory)
     try:
         yield factory
     finally:
@@ -342,6 +344,7 @@ def _search(
     filters: TranslationSearchFilters | None = None,
     cursor: str | None = None,
 ):
+    shared_reader(factory, principal_id)
     with factory() as session:
         return search_translations(
             session,
@@ -523,7 +526,7 @@ def test_search_projects_canonical_row_metadata_without_per_group_queries(
         event.listen(connection, "before_cursor_execute", record_statement)
         result = search_translations(
             session,
-            principal_id=uuid4(),
+            principal_id=shared_reader(search_session_factory),
             filters=TranslationSearchFilters(deleted="all"),
             cursor=None,
             cursor_secret=CURSOR_SECRET,
@@ -617,7 +620,7 @@ def test_search_projects_pending_summary_and_comments_without_n_plus_one(
         event.listen(connection, "before_cursor_execute", record_statement)
         page = search_translations(
             session,
-            principal_id=uuid4(),
+            principal_id=shared_reader(search_session_factory),
             filters=TranslationSearchFilters(),
             cursor=None,
             cursor_secret=CURSOR_SECRET,
@@ -858,7 +861,7 @@ def test_keyset_cursor_is_bounded_tamper_proof_scope_bound_and_stale_safe(
     with pytest.raises(InvalidTranslationCursor):
         _search(
             search_session_factory,
-            principal_id=uuid4(),
+            principal_id=shared_reader(search_session_factory),
             cursor=first.next_cursor,
         )
     with pytest.raises(InvalidTranslationCursor):
