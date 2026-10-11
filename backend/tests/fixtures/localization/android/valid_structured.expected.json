@@ -1,0 +1,309 @@
+{
+  "issues": [],
+  "values": [
+    {
+      "display_text": "It's \"quoted\" \\ path\nnext\tcol ☺ %1$d",
+      "language": "it",
+      "locator": {
+        "column": null,
+        "format": "android_xml",
+        "line": null,
+        "path": "app/src/main/res/values-it/strings.xml",
+        "position": 0,
+        "repository_side": "direct",
+        "structural_address": ["resources", "string", 0]
+      },
+      "logical_key": "escaped",
+      "selector": {"fields": {}, "kind": "scalar", "version": 1},
+      "source_text": null,
+      "structure": [
+        {
+          "fields": [{"name": "formatted", "value": false}],
+          "kind": "android_xml:string",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "value", "value": "It\\'s \\\"quoted\\\" \\\\ path\\nnext\\tcol \\u263A %1$d"}],
+          "kind": "android_xml:text",
+          "version": 1
+        }
+      ],
+      "translated_text": "It's \"quoted\" \\ path\nnext\tcol ☺ %1$d"
+    },
+    {
+      "display_text": "Hello <literal>bold and italic tail %1$d!",
+      "language": "it",
+      "locator": {
+        "column": null,
+        "format": "android_xml",
+        "line": null,
+        "path": "app/src/main/res/values-it/strings.xml",
+        "position": 1,
+        "repository_side": "direct",
+        "structural_address": ["resources", "string", 1]
+      },
+      "logical_key": "markup",
+      "selector": {"fields": {}, "kind": "scalar", "version": 1},
+      "source_text": null,
+      "structure": [
+        {
+          "fields": [{"name": "formatted", "value": true}],
+          "kind": "android_xml:string",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "value", "value": "Hello "}],
+          "kind": "android_xml:text",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "value", "value": "<literal>"}, {"name": "ordinal", "value": 0}],
+          "kind": "android_xml:cdata",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "value", "value": " translator note "}],
+          "kind": "android_xml:comment",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "event", "value": "start"}, {"name": "name", "value": "b"}],
+          "kind": "android_xml:inline",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "value", "value": "bold "}],
+          "kind": "android_xml:text",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "event", "value": "start"}, {"name": "name", "value": "i"}],
+          "kind": "android_xml:inline",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "value", "value": "and italic"}],
+          "kind": "android_xml:text",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "event", "value": "end"}, {"name": "name", "value": "i"}],
+          "kind": "android_xml:inline",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "event", "value": "end"}, {"name": "name", "value": "b"}],
+          "kind": "android_xml:inline",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "value", "value": " tail "}],
+          "kind": "android_xml:tail",
+          "version": 1
+        },
+        {
+          "fields": [
+            {"name": "event", "value": "start"},
+            {"name": "name", "value": "g"},
+            {"name": "namespace", "value": "urn:oasis:names:tc:xliff:document:1.2"},
+            {"name": "id", "value": "count"},
+            {"name": "example", "value": "2"}
+          ],
+          "kind": "android_xml:inline",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "value", "value": "%1$d"}],
+          "kind": "android_xml:text",
+          "version": 1
+        },
+        {
+          "fields": [
+            {"name": "event", "value": "end"},
+            {"name": "name", "value": "g"},
+            {"name": "namespace", "value": "urn:oasis:names:tc:xliff:document:1.2"}
+          ],
+          "kind": "android_xml:inline",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "value", "value": "!"}],
+          "kind": "android_xml:tail",
+          "version": 1
+        }
+      ],
+      "translated_text": "Hello <literal>bold and italic tail %1$d!"
+    },
+    {
+      "display_text": "One file",
+      "language": "it",
+      "locator": {
+        "column": null,
+        "format": "android_xml",
+        "line": null,
+        "path": "app/src/main/res/values-it/strings.xml",
+        "position": 2,
+        "repository_side": "direct",
+        "structural_address": ["resources", "plurals", 2, "item", 0]
+      },
+      "logical_key": "files",
+      "selector": {"fields": {"quantity": "one"}, "kind": "android_quantity", "version": 1},
+      "source_text": null,
+      "structure": [
+        {
+          "fields": [{"name": "translatable", "value": false}],
+          "kind": "android_xml:plurals",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "quantity", "value": "one"}],
+          "kind": "android_xml:item",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "value", "value": ""}],
+          "kind": "android_xml:text",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "event", "value": "start"}, {"name": "name", "value": "b"}],
+          "kind": "android_xml:inline",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "value", "value": "One"}],
+          "kind": "android_xml:text",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "event", "value": "end"}, {"name": "name", "value": "b"}],
+          "kind": "android_xml:inline",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "value", "value": " file"}],
+          "kind": "android_xml:tail",
+          "version": 1
+        }
+      ],
+      "translated_text": "One file"
+    },
+    {
+      "display_text": "%d files",
+      "language": "it",
+      "locator": {
+        "column": null,
+        "format": "android_xml",
+        "line": null,
+        "path": "app/src/main/res/values-it/strings.xml",
+        "position": 2,
+        "repository_side": "direct",
+        "structural_address": ["resources", "plurals", 2, "item", 1]
+      },
+      "logical_key": "files",
+      "selector": {"fields": {"quantity": "other"}, "kind": "android_quantity", "version": 1},
+      "source_text": null,
+      "structure": [
+        {
+          "fields": [{"name": "translatable", "value": false}],
+          "kind": "android_xml:plurals",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "quantity", "value": "other"}],
+          "kind": "android_xml:item",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "value", "value": "%d files"}],
+          "kind": "android_xml:text",
+          "version": 1
+        }
+      ],
+      "translated_text": "%d files"
+    },
+    {
+      "display_text": "First",
+      "language": "it",
+      "locator": {
+        "column": null,
+        "format": "android_xml",
+        "line": null,
+        "path": "app/src/main/res/values-it/strings.xml",
+        "position": 3,
+        "repository_side": "direct",
+        "structural_address": ["resources", "string-array", 3, "item", 0]
+      },
+      "logical_key": "steps",
+      "selector": {"fields": {"index": 0}, "kind": "android_array_item", "version": 1},
+      "source_text": null,
+      "structure": [
+        {
+          "fields": [{"name": "translatable", "value": true}],
+          "kind": "android_xml:string_array",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "index", "value": 0}],
+          "kind": "android_xml:item",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "value", "value": "First"}],
+          "kind": "android_xml:text",
+          "version": 1
+        }
+      ],
+      "translated_text": "First"
+    },
+    {
+      "display_text": "Tap Next",
+      "language": "it",
+      "locator": {
+        "column": null,
+        "format": "android_xml",
+        "line": null,
+        "path": "app/src/main/res/values-it/strings.xml",
+        "position": 3,
+        "repository_side": "direct",
+        "structural_address": ["resources", "string-array", 3, "item", 1]
+      },
+      "logical_key": "steps",
+      "selector": {"fields": {"index": 1}, "kind": "android_array_item", "version": 1},
+      "source_text": null,
+      "structure": [
+        {
+          "fields": [{"name": "translatable", "value": true}],
+          "kind": "android_xml:string_array",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "index", "value": 1}],
+          "kind": "android_xml:item",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "value", "value": "Tap "}],
+          "kind": "android_xml:text",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "event", "value": "start"}, {"name": "name", "value": "u"}],
+          "kind": "android_xml:inline",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "value", "value": "Next"}],
+          "kind": "android_xml:text",
+          "version": 1
+        },
+        {
+          "fields": [{"name": "event", "value": "end"}, {"name": "name", "value": "u"}],
+          "kind": "android_xml:inline",
+          "version": 1
+        }
+      ],
+      "translated_text": "Tap Next"
+    }
+  ]
+}

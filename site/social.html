@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>VerboFlex social card source</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        width: 1200px;
+        height: 630px;
+        background: #f8f9f5;
+        color: #172e29;
+        font-family: Arial, Helvetica, sans-serif;
+        padding: 65px 75px;
+        position: relative;
+        overflow: hidden;
+      }
+      .brand {
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: -1.7px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .brand svg {
+        width: 39px;
+        height: 40px;
+      }
+      .eyebrow {
+        font: 12px monospace;
+        letter-spacing: 2px;
+        color: #1e604d;
+        margin-top: 61px;
+      }
+      h1 {
+        font-size: 77px;
+        letter-spacing: -5px;
+        line-height: 1.07;
+        font-weight: 600;
+        margin: 20px 0 25px;
+      }
+      em {
+        font-family: Georgia, serif;
+        font-weight: 400;
+        color: #1e604d;
+      }
+      p {
+        font-size: 20px;
+        color: #576963;
+        line-height: 1.6;
+        max-width: 620px;
+      }
+      .tile {
+        position: absolute;
+        width: 240px;
+        height: 110px;
+        border: 1px solid #d9e1db;
+        background: #fff;
+        border-radius: 10px;
+        right: 85px;
+        padding: 24px 30px;
+        box-shadow: 0 8px 22px #133e3508;
+        font-size: 29px;
+        font-weight: 600;
+      }
+      .tile small {
+        display: block;
+        font-size: 13px;
+        font-weight: 400;
+        color: #576963;
+        margin-top: 6px;
+      }
+      .hello {
+        top: 168px;
+        transform: rotate(-7deg);
+      }
+      .ciao {
+        top: 292px;
+        right: 52px;
+        transform: rotate(6deg);
+        background: #d9efaa;
+        border-color: #bed29a;
+      }
+      .bonjour {
+        top: 421px;
+        transform: rotate(-4deg);
+      }
+      .footer {
+        position: absolute;
+        bottom: 39px;
+        left: 75px;
+        font: 12px monospace;
+        letter-spacing: 1px;
+        color: #576963;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <g fill="#1e604d" transform="translate(6 3) skewX(-14)">
+          <rect width="6" height="25" />
+          <rect x="9" y="7" width="6" height="18" />
+          <rect x="18" y="14" width="6" height="11" />
+        </g></svg
+      >VerboFlex.
+    </div>
+    <div class="eyebrow">LOCALIZATION, TOGETHER</div>
+    <h1>The right words.<br /><em>In every product.</em></h1>
+    <p>
+      Search, translate and approve your product strings.<br />Connected to your
+      team. Connected to your repositories.
+    </p>
+    <div class="tile hello">Hello<small>English</small></div>
+    <div class="tile ciao">Ciao<small>Italiano</small></div>
+    <div class="tile bonjour">Bonjour<small>Français</small></div>
+    <span class="footer">PRODUCT & USER GUIDE</span>
+  </body>
+</html>

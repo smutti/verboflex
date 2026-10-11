@@ -1,0 +1,4138 @@
+{
+  "add_comment": {
+    "bindings": {
+      "translation_group_id": "path"
+    },
+    "description": "Post a translation comment. Explicit mentions notify selected users; use search_mention_users for IDs and UTF-16 offsets.",
+    "input_schema": {
+      "$defs": {
+        "CreateTranslationCommentRequest": {
+          "additionalProperties": false,
+          "properties": {
+            "body": {
+              "maxLength": 65536,
+              "minLength": 1,
+              "title": "Body",
+              "type": "string"
+            },
+            "mentions": {
+              "items": {
+                "$ref": "#/$defs/MentionInput"
+              },
+              "maxItems": 32768,
+              "title": "Mentions",
+              "type": "array"
+            }
+          },
+          "required": [
+            "body"
+          ],
+          "title": "CreateTranslationCommentRequest",
+          "type": "object"
+        },
+        "MentionInput": {
+          "additionalProperties": false,
+          "description": "One immutable-user selection expressed in browser UTF-16 coordinates.",
+          "properties": {
+            "display_text": {
+              "maxLength": 201,
+              "minLength": 2,
+              "title": "Display Text",
+              "type": "string"
+            },
+            "end_utf16": {
+              "title": "End Utf16",
+              "type": "integer"
+            },
+            "start_utf16": {
+              "title": "Start Utf16",
+              "type": "integer"
+            },
+            "user_id": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "user_id",
+            "start_utf16",
+            "end_utf16",
+            "display_text"
+          ],
+          "title": "MentionInput",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/CreateTranslationCommentRequest"
+        },
+        "translation_group_id": {
+          "format": "uuid",
+          "title": "Translation Group Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "translation_group_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "createTranslationComment",
+    "path": "/translations/{translation_group_id}/comments",
+    "read_only": false
+  },
+  "confirm_mapping_preview": {
+    "bindings": {
+      "job_id": "path"
+    },
+    "description": "Admin: confirm the exact preview result after inspecting it.",
+    "input_schema": {
+      "$defs": {
+        "AdminPreviewConfirmationRequest": {
+          "additionalProperties": false,
+          "description": "Exact compare values for one explicit current layout assignment.",
+          "properties": {
+            "base_language": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Base Language"
+            },
+            "layout_candidate_id": {
+              "format": "uuid",
+              "title": "Layout Candidate Id",
+              "type": "string"
+            },
+            "layout_candidate_version": {
+              "const": 1,
+              "title": "Layout Candidate Version",
+              "type": "integer"
+            },
+            "preview_digest": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Preview Digest",
+              "type": "string"
+            }
+          },
+          "required": [
+            "preview_digest",
+            "layout_candidate_id",
+            "layout_candidate_version",
+            "base_language"
+          ],
+          "title": "AdminPreviewConfirmationRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "format": "uuid",
+          "title": "Job Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/AdminPreviewConfirmationRequest"
+        }
+      },
+      "required": [
+        "job_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "confirm_admin_preview_job",
+    "path": "/admin/preview-jobs/{job_id}/confirmation",
+    "read_only": false
+  },
+  "confirm_rebase": {
+    "bindings": {
+      "import_id": "path",
+      "mapping_id": "path",
+      "product_id": "path"
+    },
+    "description": "Admin: accept the exact inspected history rewrite. Affected proposals require reconciliation; source deletions are applied.",
+    "input_schema": {
+      "$defs": {
+        "AdminImportRewriteConfirmationRequest": {
+          "additionalProperties": false,
+          "description": "Expected immutable proposal identity supplied by an untrusted browser.",
+          "properties": {
+            "proposal_digest": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Proposal Digest",
+              "type": "string"
+            },
+            "proposal_id": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            },
+            "proposed_execution_id": {
+              "format": "uuid",
+              "title": "Proposed Execution Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "proposal_id",
+            "proposed_execution_id",
+            "proposal_digest"
+          ],
+          "title": "AdminImportRewriteConfirmationRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "import_id": {
+          "format": "uuid",
+          "title": "Import Id",
+          "type": "string"
+        },
+        "mapping_id": {
+          "format": "uuid",
+          "title": "Mapping Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/AdminImportRewriteConfirmationRequest"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "mapping_id",
+        "import_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "confirm_admin_import_rewrite_baseline",
+    "path": "/admin/products/{product_id}/published/mappings/{mapping_id}/imports/{import_id}/rewrite-confirmation",
+    "read_only": false
+  },
+  "create_mapping": {
+    "bindings": {
+      "product_id": "path"
+    },
+    "description": "Admin: add a repository mapping to a project draft.",
+    "input_schema": {
+      "$defs": {
+        "AdminDirectMappingWriteRequest": {
+          "additionalProperties": false,
+          "description": "Create or replace one direct mapping under candidate-version authority.",
+          "properties": {
+            "allowed_target_branches": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "title": "Allowed Target Branches",
+              "type": "array"
+            },
+            "default_target_branch": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Default Target Branch",
+              "type": "string"
+            },
+            "expected_candidate_version": {
+              "minimum": 1.0,
+              "title": "Expected Candidate Version",
+              "type": "integer"
+            },
+            "localization_root": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Localization Root"
+            },
+            "repository_id": {
+              "format": "uuid",
+              "title": "Repository Id",
+              "type": "string"
+            },
+            "source_branch": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Source Branch",
+              "type": "string"
+            },
+            "topology": {
+              "const": "direct",
+              "title": "Topology",
+              "type": "string"
+            }
+          },
+          "required": [
+            "topology",
+            "repository_id",
+            "source_branch",
+            "allowed_target_branches",
+            "default_target_branch",
+            "expected_candidate_version"
+          ],
+          "title": "AdminDirectMappingWriteRequest",
+          "type": "object"
+        },
+        "AdminSeparateMappingSideWriteRequest": {
+          "additionalProperties": false,
+          "description": "One closed explicit side of a separate mapping.",
+          "properties": {
+            "localization_root": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Localization Root"
+            },
+            "repository_id": {
+              "format": "uuid",
+              "title": "Repository Id",
+              "type": "string"
+            },
+            "role": {
+              "enum": [
+                "keys",
+                "translations"
+              ],
+              "title": "Role",
+              "type": "string"
+            },
+            "source_branch": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Source Branch",
+              "type": "string"
+            }
+          },
+          "required": [
+            "role",
+            "repository_id",
+            "source_branch"
+          ],
+          "title": "AdminSeparateMappingSideWriteRequest",
+          "type": "object"
+        },
+        "AdminSeparateMappingWriteRequest": {
+          "additionalProperties": false,
+          "description": "Create or replace one mapping with exact Keys and Translations sides.",
+          "properties": {
+            "allowed_target_branches": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "title": "Allowed Target Branches",
+              "type": "array"
+            },
+            "default_target_branch": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Default Target Branch",
+              "type": "string"
+            },
+            "expected_candidate_version": {
+              "minimum": 1.0,
+              "title": "Expected Candidate Version",
+              "type": "integer"
+            },
+            "sides": {
+              "items": {
+                "$ref": "#/$defs/AdminSeparateMappingSideWriteRequest"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "title": "Sides",
+              "type": "array"
+            },
+            "topology": {
+              "const": "separate",
+              "title": "Topology",
+              "type": "string"
+            }
+          },
+          "required": [
+            "topology",
+            "sides",
+            "allowed_target_branches",
+            "default_target_branch",
+            "expected_candidate_version"
+          ],
+          "title": "AdminSeparateMappingWriteRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "discriminator": {
+            "mapping": {
+              "direct": "#/components/schemas/AdminDirectMappingWriteRequest",
+              "separate": "#/components/schemas/AdminSeparateMappingWriteRequest"
+            },
+            "propertyName": "topology"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/AdminDirectMappingWriteRequest"
+            },
+            {
+              "$ref": "#/$defs/AdminSeparateMappingWriteRequest"
+            }
+          ],
+          "title": "Payload"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "create_admin_candidate_mapping",
+    "path": "/admin/products/{product_id}/candidate/mappings",
+    "read_only": false
+  },
+  "create_project": {
+    "bindings": {},
+    "description": "Admin: create a project configuration draft.",
+    "input_schema": {
+      "$defs": {
+        "AdminProductCreateRequest": {
+          "additionalProperties": false,
+          "description": "Create one stable product identity and its initial candidate revision.",
+          "properties": {
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Description"
+            },
+            "name": {
+              "maxLength": 1000,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "title": "AdminProductCreateRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/AdminProductCreateRequest"
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "create_admin_product",
+    "path": "/admin/products",
+    "read_only": false
+  },
+  "delete_comment": {
+    "bindings": {
+      "comment_id": "path",
+      "translation_group_id": "path"
+    },
+    "description": "Remove a comment using its current version and existing permissions.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "comment_id": {
+          "format": "uuid",
+          "title": "Comment Id",
+          "type": "string"
+        },
+        "translation_group_id": {
+          "format": "uuid",
+          "title": "Translation Group Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "translation_group_id",
+        "comment_id"
+      ],
+      "type": "object"
+    },
+    "method": "DELETE",
+    "operation_id": "deleteTranslationComment",
+    "path": "/translations/{translation_group_id}/comments/{comment_id}",
+    "read_only": false
+  },
+  "delete_glossary_term": {
+    "bindings": {
+      "entry_id": "path",
+      "expected_version": "query",
+      "product_id": "path"
+    },
+    "description": "Reviewer: delete a term using its current version.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "entry_id": {
+          "format": "uuid",
+          "title": "Entry Id",
+          "type": "string"
+        },
+        "expected_version": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Expected Version",
+          "type": "integer"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "entry_id",
+        "expected_version"
+      ],
+      "type": "object"
+    },
+    "method": "DELETE",
+    "operation_id": "deleteGlossaryTerm",
+    "path": "/products/{product_id}/glossary/{entry_id}",
+    "read_only": false
+  },
+  "delete_new_entry": {
+    "bindings": {
+      "expected_version": "query",
+      "product_id": "path",
+      "request_id": "path"
+    },
+    "description": "Delete a pending new entry using its exact version.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_version": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Expected Version",
+          "type": "integer"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "request_id": {
+          "format": "uuid",
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "request_id",
+        "expected_version"
+      ],
+      "type": "object"
+    },
+    "method": "DELETE",
+    "operation_id": "discardAuthoringRequest",
+    "path": "/products/{product_id}/authoring/{request_id}",
+    "read_only": false
+  },
+  "discover_repository_sources": {
+    "bindings": {
+      "branch": "query",
+      "repository_id": "path"
+    },
+    "description": "Admin: discover supported localization sources in a repository branch.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "branch": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Branch",
+          "type": "string"
+        },
+        "repository_id": {
+          "format": "uuid",
+          "title": "Repository Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository_id",
+        "branch"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "discover_admin_repository_sources",
+    "path": "/admin/repositories/{repository_id}/sources",
+    "read_only": true
+  },
+  "edit_comment": {
+    "bindings": {
+      "comment_id": "path",
+      "translation_group_id": "path"
+    },
+    "description": "Edit your comment using its expected_version. Mentions can notify users.",
+    "input_schema": {
+      "$defs": {
+        "MentionInput": {
+          "additionalProperties": false,
+          "description": "One immutable-user selection expressed in browser UTF-16 coordinates.",
+          "properties": {
+            "display_text": {
+              "maxLength": 201,
+              "minLength": 2,
+              "title": "Display Text",
+              "type": "string"
+            },
+            "end_utf16": {
+              "title": "End Utf16",
+              "type": "integer"
+            },
+            "start_utf16": {
+              "title": "Start Utf16",
+              "type": "integer"
+            },
+            "user_id": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "user_id",
+            "start_utf16",
+            "end_utf16",
+            "display_text"
+          ],
+          "title": "MentionInput",
+          "type": "object"
+        },
+        "UpdateTranslationCommentRequest": {
+          "additionalProperties": false,
+          "properties": {
+            "body": {
+              "maxLength": 65536,
+              "minLength": 1,
+              "title": "Body",
+              "type": "string"
+            },
+            "expected_version": {
+              "maximum": 9007199254740991.0,
+              "minimum": 1.0,
+              "title": "Expected Version",
+              "type": "integer"
+            },
+            "mentions": {
+              "items": {
+                "$ref": "#/$defs/MentionInput"
+              },
+              "maxItems": 32768,
+              "title": "Mentions",
+              "type": "array"
+            }
+          },
+          "required": [
+            "body",
+            "expected_version"
+          ],
+          "title": "UpdateTranslationCommentRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "comment_id": {
+          "format": "uuid",
+          "title": "Comment Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/UpdateTranslationCommentRequest"
+        },
+        "translation_group_id": {
+          "format": "uuid",
+          "title": "Translation Group Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "translation_group_id",
+        "comment_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "PUT",
+    "operation_id": "updateTranslationComment",
+    "path": "/translations/{translation_group_id}/comments/{comment_id}",
+    "read_only": false
+  },
+  "finalize_change_set": {
+    "bindings": {
+      "change_set_id": "path",
+      "product_id": "path"
+    },
+    "description": "Finalize an inspected change set according to the current API state.",
+    "input_schema": {
+      "$defs": {
+        "SubmissionActionRequest": {
+          "additionalProperties": false,
+          "properties": {
+            "expected_attempt": {
+              "maximum": 9007199254740991.0,
+              "minimum": 1.0,
+              "title": "Expected Attempt",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "expected_attempt"
+          ],
+          "title": "SubmissionActionRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "change_set_id": {
+          "format": "uuid",
+          "title": "Change Set Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/SubmissionActionRequest"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "change_set_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "finalizeChangeSet",
+    "path": "/products/{product_id}/change-sets/{change_set_id}/finalize",
+    "read_only": false
+  },
+  "get_change_set": {
+    "bindings": {
+      "change_set_id": "path",
+      "product_id": "path"
+    },
+    "description": "Read a submitted change set, conflicts, outcomes and pull request URL.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "change_set_id": {
+          "format": "uuid",
+          "title": "Change Set Id",
+          "type": "string"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "change_set_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getChangeSet",
+    "path": "/products/{product_id}/change-sets/{change_set_id}",
+    "read_only": true
+  },
+  "get_dashboard": {
+    "bindings": {},
+    "description": "Read your dashboard and recent work.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getPersonalDashboard",
+    "path": "/dashboard",
+    "read_only": true
+  },
+  "get_import": {
+    "bindings": {
+      "import_id": "path",
+      "product_id": "path"
+    },
+    "description": "Admin: poll a background import job; no blocking wait.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "import_id": {
+          "format": "uuid",
+          "title": "Import Id",
+          "type": "string"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "import_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "get_admin_import",
+    "path": "/admin/products/{product_id}/imports/{import_id}",
+    "read_only": true
+  },
+  "get_mapping_preview": {
+    "bindings": {
+      "job_id": "path"
+    },
+    "description": "Admin: read a mapping preview job.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "format": "uuid",
+          "title": "Job Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "get_admin_preview_job",
+    "path": "/admin/preview-jobs/{job_id}",
+    "read_only": true
+  },
+  "get_plural_forms": {
+    "bindings": {
+      "format": "query",
+      "language": "query",
+      "product_id": "path"
+    },
+    "description": "Read required forms for the chosen language and runtime format.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "maxLength": 24,
+          "title": "Format",
+          "type": "string"
+        },
+        "language": {
+          "maxLength": 32,
+          "title": "Language",
+          "type": "string"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "format",
+        "language"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getAuthoringPluralForms",
+    "path": "/products/{product_id}/authoring/plural-forms",
+    "read_only": true
+  },
+  "get_project": {
+    "bindings": {
+      "product_id": "path"
+    },
+    "description": "Admin: read project configuration and revision IDs.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "get_admin_product",
+    "path": "/admin/products/{product_id}",
+    "read_only": true
+  },
+  "get_project_summary": {
+    "bindings": {
+      "product_id": "path"
+    },
+    "description": "Admin: read string counts, translation coverage and languages with missing translations.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "get_admin_product_summary",
+    "path": "/admin/products/{product_id}/summary",
+    "read_only": true
+  },
+  "get_rebase_comparison": {
+    "bindings": {
+      "import_id": "path",
+      "mapping_id": "path",
+      "product_id": "path"
+    },
+    "description": "Admin: inspect the pending source-history rewrite before deciding whether to accept it.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "import_id": {
+          "format": "uuid",
+          "title": "Import Id",
+          "type": "string"
+        },
+        "mapping_id": {
+          "format": "uuid",
+          "title": "Mapping Id",
+          "type": "string"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "mapping_id",
+        "import_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "get_admin_import_rewrite_comparison",
+    "path": "/admin/products/{product_id}/published/mappings/{mapping_id}/imports/{import_id}/rewrite-comparison",
+    "read_only": true
+  },
+  "get_submission": {
+    "bindings": {
+      "batch_id": "path",
+      "product_id": "path"
+    },
+    "description": "Poll background submission batch status.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_id": {
+          "format": "uuid",
+          "title": "Batch Id",
+          "type": "string"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "batch_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getSubmissionBatch",
+    "path": "/products/{product_id}/submission-batches/{batch_id}",
+    "read_only": true
+  },
+  "get_submission_by_key": {
+    "bindings": {
+      "product_id": "path",
+      "request_key": "path"
+    },
+    "description": "Recover submission status by its original idempotency request_key.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "request_key": {
+          "format": "uuid",
+          "title": "Request Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "request_key"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getSubmissionBatchByKey",
+    "path": "/products/{product_id}/submission-batches/by-key/{request_key}",
+    "read_only": true
+  },
+  "get_submission_review": {
+    "bindings": {
+      "product_id": "path",
+      "review_id": "path"
+    },
+    "description": "Read a prepared submission and blockers.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "review_id": {
+          "format": "uuid",
+          "title": "Review Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "review_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getSubmissionReview",
+    "path": "/products/{product_id}/submission-reviews/{review_id}",
+    "read_only": true
+  },
+  "get_translation": {
+    "bindings": {
+      "translation_group_id": "path"
+    },
+    "description": "Read a key-language group, selector IDs, current revision digests, proposal version, constraints and allowed actions. Read before editing.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "translation_group_id": {
+          "format": "uuid",
+          "title": "Translation Group Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "translation_group_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getTranslationGroup",
+    "path": "/translations/{translation_group_id}",
+    "read_only": true
+  },
+  "get_translation_suggestions": {
+    "bindings": {
+      "product_id": "path"
+    },
+    "description": "Find exact and fuzzy current translations for a source and language pair. Read-only; does not save or approve.",
+    "input_schema": {
+      "$defs": {
+        "ReuseQuery": {
+          "additionalProperties": false,
+          "properties": {
+            "exclude_value_id": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Exclude Value Id"
+            },
+            "format": {
+              "enum": [
+                "android_xml",
+                "qt_ts",
+                "json",
+                "ios_strings"
+              ],
+              "title": "Format",
+              "type": "string"
+            },
+            "fuzzy": {
+              "default": true,
+              "title": "Fuzzy",
+              "type": "boolean"
+            },
+            "selector_form": {
+              "anyOf": [
+                {
+                  "maxLength": 16,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Selector Form"
+            },
+            "selector_kind": {
+              "enum": [
+                "scalar",
+                "android_quantity",
+                "android_array_item",
+                "qt_numerus",
+                "json_path"
+              ],
+              "title": "Selector Kind",
+              "type": "string"
+            },
+            "source_language": {
+              "maxLength": 32,
+              "minLength": 2,
+              "title": "Source Language",
+              "type": "string"
+            },
+            "source_text": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "title": "Source Text",
+              "type": "string"
+            },
+            "target_language": {
+              "maxLength": 32,
+              "minLength": 2,
+              "title": "Target Language",
+              "type": "string"
+            }
+          },
+          "required": [
+            "source_text",
+            "source_language",
+            "target_language",
+            "format",
+            "selector_kind"
+          ],
+          "title": "ReuseQuery",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/ReuseQuery"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "getTranslationSuggestions",
+    "path": "/products/{product_id}/reuse/suggestions",
+    "read_only": true
+  },
+  "get_unread_count": {
+    "bindings": {},
+    "description": "Count your unread notifications.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getUnreadNotificationCount",
+    "path": "/notifications/unread-count",
+    "read_only": true
+  },
+  "list_admin_projects": {
+    "bindings": {
+      "cursor": "query",
+      "limit": "query",
+      "name": "query",
+      "status": "query"
+    },
+    "description": "Admin: page project configurations, including unpublished projects.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "limit": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Name"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "active",
+                "inactive"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Status"
+        }
+      },
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "list_admin_products",
+    "path": "/admin/products",
+    "read_only": true
+  },
+  "list_authoring_files": {
+    "bindings": {
+      "product_id": "path"
+    },
+    "description": "List confirmed files and languages for new keys or missing translations.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getAuthoringDestinations",
+    "path": "/products/{product_id}/authoring/destinations",
+    "read_only": true
+  },
+  "list_change_set_activity": {
+    "bindings": {
+      "change_set_id": "path",
+      "cursor": "query",
+      "product_id": "path"
+    },
+    "description": "Page submission activity and errors.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "change_set_id": {
+          "format": "uuid",
+          "title": "Change Set Id",
+          "type": "string"
+        },
+        "cursor": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "change_set_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getChangeSetActivity",
+    "path": "/products/{product_id}/change-sets/{change_set_id}/activity",
+    "read_only": true
+  },
+  "list_change_set_files": {
+    "bindings": {
+      "change_set_id": "path",
+      "cursor": "query",
+      "product_id": "path"
+    },
+    "description": "Page files in a change set.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "change_set_id": {
+          "format": "uuid",
+          "title": "Change Set Id",
+          "type": "string"
+        },
+        "cursor": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "change_set_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getChangeSetFiles",
+    "path": "/products/{product_id}/change-sets/{change_set_id}/files",
+    "read_only": true
+  },
+  "list_change_set_items": {
+    "bindings": {
+      "change_set_id": "path",
+      "cursor": "query",
+      "product_id": "path"
+    },
+    "description": "Page items in a change set.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "change_set_id": {
+          "format": "uuid",
+          "title": "Change Set Id",
+          "type": "string"
+        },
+        "cursor": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "change_set_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getChangeSetItems",
+    "path": "/products/{product_id}/change-sets/{change_set_id}/items",
+    "read_only": true
+  },
+  "list_change_set_values": {
+    "bindings": {
+      "change_set_id": "path",
+      "cursor": "query",
+      "product_id": "path"
+    },
+    "description": "Page translations in a change set.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "change_set_id": {
+          "format": "uuid",
+          "title": "Change Set Id",
+          "type": "string"
+        },
+        "cursor": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "change_set_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getChangeSetValues",
+    "path": "/products/{product_id}/change-sets/{change_set_id}/values",
+    "read_only": true
+  },
+  "list_change_sets": {
+    "bindings": {
+      "cursor": "query",
+      "key_id": "query",
+      "product_id": "path"
+    },
+    "description": "Page submitted change sets and PR status for a project.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "key_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Key Id"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "listChangeSets",
+    "path": "/products/{product_id}/change-sets",
+    "read_only": true
+  },
+  "list_comments": {
+    "bindings": {
+      "cursor": "query",
+      "translation_group_id": "path"
+    },
+    "description": "Read comments; use older_cursor to continue.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "translation_group_id": {
+          "format": "uuid",
+          "title": "Translation Group Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "translation_group_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "listTranslationComments",
+    "path": "/translations/{translation_group_id}/comments",
+    "read_only": true
+  },
+  "list_draft_mappings": {
+    "bindings": {
+      "cursor": "query",
+      "limit": "query",
+      "product_id": "path"
+    },
+    "description": "Admin: list draft repository mappings for a project.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "limit": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "list_admin_candidate_mappings",
+    "path": "/admin/products/{product_id}/candidate/mappings",
+    "read_only": true
+  },
+  "list_glossary_terms": {
+    "bindings": {
+      "after": "query",
+      "product_id": "path",
+      "q": "query"
+    },
+    "description": "Page current project terminology.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "After"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "q": {
+          "default": "",
+          "maxLength": 256,
+          "title": "Q",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "listGlossaryTerms",
+    "path": "/products/{product_id}/glossary",
+    "read_only": true
+  },
+  "list_imports": {
+    "bindings": {
+      "cursor": "query",
+      "limit": "query",
+      "product_id": "path",
+      "status": "query"
+    },
+    "description": "Admin: read latest import status for each published mapping.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "limit": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "status": {
+          "default": "all",
+          "enum": [
+            "all",
+            "attention"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "list_admin_published_mapping_imports",
+    "path": "/admin/products/{product_id}/published/mapping-imports",
+    "read_only": true
+  },
+  "list_new_entries": {
+    "bindings": {
+      "after": "query",
+      "product_id": "path",
+      "q": "query"
+    },
+    "description": "Page pending new keys and missing translations.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "After"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "q": {
+          "default": "",
+          "maxLength": 256,
+          "title": "Q",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "listAuthoringRequests",
+    "path": "/products/{product_id}/authoring",
+    "read_only": true
+  },
+  "list_notifications": {
+    "bindings": {
+      "cursor": "query",
+      "product_id": "query",
+      "view": "query"
+    },
+    "description": "Page your personal notifications.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "product_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Product Id"
+        },
+        "view": {
+          "default": "all",
+          "enum": [
+            "all",
+            "unread"
+          ],
+          "title": "View",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "listNotifications",
+    "path": "/notifications",
+    "read_only": true
+  },
+  "list_project_updates": {
+    "bindings": {
+      "cursor": "query"
+    },
+    "description": "Page project updates using next_cursor.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        }
+      },
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "listProjectUpdates",
+    "path": "/dashboard/project-updates",
+    "read_only": true
+  },
+  "list_projects_and_languages": {
+    "bindings": {
+      "product_id": "query"
+    },
+    "description": "List accessible projects and languages; optionally restrict to a product.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "product_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Product Id"
+        }
+      },
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "listTranslationOptions",
+    "path": "/translations/options",
+    "read_only": true
+  },
+  "list_repositories": {
+    "bindings": {
+      "cursor": "query",
+      "limit": "query"
+    },
+    "description": "Admin: page repositories already connected to VerboFlex.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "limit": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "list_admin_repositories",
+    "path": "/admin/repositories",
+    "read_only": true
+  },
+  "list_repository_branches": {
+    "bindings": {
+      "cursor": "query",
+      "limit": "query",
+      "repository_id": "path"
+    },
+    "description": "Admin: page branches in a connected repository.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "limit": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "repository_id": {
+          "format": "uuid",
+          "title": "Repository Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "list_admin_repository_branches",
+    "path": "/admin/repositories/{repository_id}/branches",
+    "read_only": true
+  },
+  "list_revision_mappings": {
+    "bindings": {
+      "cursor": "query",
+      "limit": "query",
+      "product_id": "path",
+      "revision_id": "path"
+    },
+    "description": "Admin: list mappings in a published project revision.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "limit": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "revision_id": {
+          "format": "uuid",
+          "title": "Revision Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "revision_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "list_admin_revision_mappings",
+    "path": "/admin/products/{product_id}/revisions/{revision_id}/mappings",
+    "read_only": true
+  },
+  "list_submission_candidates": {
+    "bindings": {
+      "after": "query",
+      "language": "query",
+      "product_id": "path",
+      "query": "query",
+      "state": "query",
+      "translation_group_id": "query"
+    },
+    "description": "List approved changes eligible for submission, grouped by repository/branch.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "After"
+        },
+        "language": {
+          "default": "",
+          "maxLength": 64,
+          "title": "Language",
+          "type": "string"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "query": {
+          "default": "",
+          "maxLength": 256,
+          "title": "Query",
+          "type": "string"
+        },
+        "state": {
+          "default": "approved",
+          "enum": [
+            "approved",
+            "draft",
+            "rejected",
+            "all"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "translation_group_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Translation Group Id"
+        }
+      },
+      "required": [
+        "product_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getChangeSetCandidates",
+    "path": "/products/{product_id}/change-set-candidates",
+    "read_only": true
+  },
+  "list_submission_files": {
+    "bindings": {
+      "after": "query",
+      "product_id": "path",
+      "review_id": "path"
+    },
+    "description": "Page the exact files in a submission review.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "default": 0,
+          "maximum": 500,
+          "minimum": 0,
+          "title": "After",
+          "type": "integer"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "review_id": {
+          "format": "uuid",
+          "title": "Review Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "review_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getSubmissionReviewFiles",
+    "path": "/products/{product_id}/submission-reviews/{review_id}/files",
+    "read_only": true
+  },
+  "list_submission_values": {
+    "bindings": {
+      "after": "query",
+      "product_id": "path",
+      "review_id": "path"
+    },
+    "description": "Page the exact translations in a submission review.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "default": 0,
+          "maximum": 5000,
+          "minimum": 0,
+          "title": "After",
+          "type": "integer"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "review_id": {
+          "format": "uuid",
+          "title": "Review Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "review_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getSubmissionReviewValues",
+    "path": "/products/{product_id}/submission-reviews/{review_id}/values",
+    "read_only": true
+  },
+  "list_translation_activity": {
+    "bindings": {
+      "cursor": "query",
+      "translation_group_id": "path"
+    },
+    "description": "Page translation edit and review history.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "translation_group_id": {
+          "format": "uuid",
+          "title": "Translation Group Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "translation_group_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "listTranslationReviewActivity",
+    "path": "/translations/{translation_group_id}/activity",
+    "read_only": true
+  },
+  "mark_notification_read": {
+    "bindings": {
+      "notification_id": "path"
+    },
+    "description": "Mark one of your notifications as read.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "notification_id": {
+          "format": "uuid",
+          "title": "Notification Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "notification_id"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "markNotificationRead",
+    "path": "/notifications/{notification_id}/read",
+    "read_only": false
+  },
+  "match_glossary_terms": {
+    "bindings": {
+      "product_id": "path"
+    },
+    "description": "Find preferred and forbidden terms in source text. Read-only.",
+    "input_schema": {
+      "$defs": {
+        "GlossaryMatchQuery": {
+          "additionalProperties": false,
+          "properties": {
+            "source_language": {
+              "maxLength": 32,
+              "minLength": 2,
+              "title": "Source Language",
+              "type": "string"
+            },
+            "source_text": {
+              "maxLength": 4096,
+              "title": "Source Text",
+              "type": "string"
+            },
+            "target_language": {
+              "maxLength": 32,
+              "minLength": 2,
+              "title": "Target Language",
+              "type": "string"
+            }
+          },
+          "required": [
+            "source_language",
+            "target_language",
+            "source_text"
+          ],
+          "title": "GlossaryMatchQuery",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/GlossaryMatchQuery"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "matchGlossaryTerms",
+    "path": "/products/{product_id}/glossary/matches",
+    "read_only": true
+  },
+  "prepare_submission": {
+    "bindings": {
+      "product_id": "path"
+    },
+    "description": "Prepare a durable submission review without publishing a Git commit or PR. Inspect files/values before submit_changes.",
+    "input_schema": {
+      "$defs": {
+        "CreateSubmissionReviewRequest": {
+          "additionalProperties": false,
+          "properties": {
+            "proposals": {
+              "items": {
+                "$ref": "#/$defs/SelectedProposal"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "title": "Proposals",
+              "type": "array"
+            },
+            "targets": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/MappingTarget"
+              },
+              "maxItems": 100,
+              "title": "Targets",
+              "type": "array"
+            }
+          },
+          "required": [
+            "proposals"
+          ],
+          "title": "CreateSubmissionReviewRequest",
+          "type": "object"
+        },
+        "MappingTarget": {
+          "additionalProperties": false,
+          "properties": {
+            "mapping_id": {
+              "format": "uuid",
+              "title": "Mapping Id",
+              "type": "string"
+            },
+            "target_branch": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Target Branch",
+              "type": "string"
+            }
+          },
+          "required": [
+            "mapping_id",
+            "target_branch"
+          ],
+          "title": "MappingTarget",
+          "type": "object"
+        },
+        "SelectedProposal": {
+          "additionalProperties": false,
+          "properties": {
+            "expected_version": {
+              "maximum": 9007199254740991.0,
+              "minimum": 1.0,
+              "title": "Expected Version",
+              "type": "integer"
+            },
+            "proposal_id": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "proposal_id",
+            "expected_version"
+          ],
+          "title": "SelectedProposal",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/CreateSubmissionReviewRequest"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "createSubmissionReview",
+    "path": "/products/{product_id}/submission-reviews",
+    "read_only": false
+  },
+  "publish_project": {
+    "bindings": {
+      "product_id": "path"
+    },
+    "description": "Admin: publish a validated project configuration. Preview confirmations are required by the API.",
+    "input_schema": {
+      "$defs": {
+        "AdminProductPublishRequest": {
+          "additionalProperties": false,
+          "description": "Publish one exact candidate under optimistic version authority.",
+          "properties": {
+            "candidate_revision_id": {
+              "format": "uuid",
+              "title": "Candidate Revision Id",
+              "type": "string"
+            },
+            "expected_candidate_version": {
+              "minimum": 1.0,
+              "title": "Expected Candidate Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "candidate_revision_id",
+            "expected_candidate_version"
+          ],
+          "title": "AdminProductPublishRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/AdminProductPublishRequest"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "publish_admin_product_candidate",
+    "path": "/admin/products/{product_id}/publish",
+    "read_only": false
+  },
+  "reconcile_change_set": {
+    "bindings": {
+      "change_set_id": "path",
+      "product_id": "path"
+    },
+    "description": "Reconcile an uncertain Git/PR submission outcome with the provider.",
+    "input_schema": {
+      "$defs": {
+        "SubmissionActionRequest": {
+          "additionalProperties": false,
+          "properties": {
+            "expected_attempt": {
+              "maximum": 9007199254740991.0,
+              "minimum": 1.0,
+              "title": "Expected Attempt",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "expected_attempt"
+          ],
+          "title": "SubmissionActionRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "change_set_id": {
+          "format": "uuid",
+          "title": "Change Set Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/SubmissionActionRequest"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "change_set_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "reconcileChangeSet",
+    "path": "/products/{product_id}/change-sets/{change_set_id}/reconcile",
+    "read_only": false
+  },
+  "remove_translation_limit": {
+    "bindings": {
+      "language": "path",
+      "translation_group_id": "path"
+    },
+    "description": "Remove a character limit using its exact current version.",
+    "input_schema": {
+      "$defs": {
+        "DeleteTranslationConstraintRequest": {
+          "additionalProperties": false,
+          "description": "Remove one explicit rule under exact optimistic authority.",
+          "properties": {
+            "expected_version": {
+              "minimum": 0.0,
+              "title": "Expected Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "expected_version"
+          ],
+          "title": "DeleteTranslationConstraintRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "language": {
+          "maxLength": 64,
+          "minLength": 2,
+          "pattern": "^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$",
+          "title": "Language",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/DeleteTranslationConstraintRequest"
+        },
+        "translation_group_id": {
+          "format": "uuid",
+          "title": "Translation Group Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "translation_group_id",
+        "language",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "DELETE",
+    "operation_id": "deleteTranslationConstraint",
+    "path": "/translations/{translation_group_id}/constraints/{language}",
+    "read_only": false
+  },
+  "resolve_translation_suggestion": {
+    "bindings": {
+      "product_id": "path"
+    },
+    "description": "Recheck a suggestion's live content and version before copying it to a draft. Read-only; never saves a translation.",
+    "input_schema": {
+      "$defs": {
+        "ReuseQuery": {
+          "additionalProperties": false,
+          "properties": {
+            "exclude_value_id": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Exclude Value Id"
+            },
+            "format": {
+              "enum": [
+                "android_xml",
+                "qt_ts",
+                "json",
+                "ios_strings"
+              ],
+              "title": "Format",
+              "type": "string"
+            },
+            "fuzzy": {
+              "default": true,
+              "title": "Fuzzy",
+              "type": "boolean"
+            },
+            "selector_form": {
+              "anyOf": [
+                {
+                  "maxLength": 16,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Selector Form"
+            },
+            "selector_kind": {
+              "enum": [
+                "scalar",
+                "android_quantity",
+                "android_array_item",
+                "qt_numerus",
+                "json_path"
+              ],
+              "title": "Selector Kind",
+              "type": "string"
+            },
+            "source_language": {
+              "maxLength": 32,
+              "minLength": 2,
+              "title": "Source Language",
+              "type": "string"
+            },
+            "source_text": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "title": "Source Text",
+              "type": "string"
+            },
+            "target_language": {
+              "maxLength": 32,
+              "minLength": 2,
+              "title": "Target Language",
+              "type": "string"
+            }
+          },
+          "required": [
+            "source_text",
+            "source_language",
+            "target_language",
+            "format",
+            "selector_kind"
+          ],
+          "title": "ReuseQuery",
+          "type": "object"
+        },
+        "ReuseResolve": {
+          "additionalProperties": false,
+          "properties": {
+            "expected_digest": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Expected Digest",
+              "type": "string"
+            },
+            "query": {
+              "$ref": "#/$defs/ReuseQuery"
+            },
+            "source_value_id": {
+              "format": "uuid",
+              "title": "Source Value Id",
+              "type": "string"
+            },
+            "target_value_id": {
+              "format": "uuid",
+              "title": "Target Value Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "query",
+            "source_value_id",
+            "target_value_id",
+            "expected_digest"
+          ],
+          "title": "ReuseResolve",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/ReuseResolve"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "resolveTranslationSuggestion",
+    "path": "/products/{product_id}/reuse/resolve",
+    "read_only": true
+  },
+  "retry_change_set": {
+    "bindings": {
+      "change_set_id": "path",
+      "product_id": "path"
+    },
+    "description": "Retry an eligible failed Git/PR job after inspecting its current state.",
+    "input_schema": {
+      "$defs": {
+        "SubmissionActionRequest": {
+          "additionalProperties": false,
+          "properties": {
+            "expected_attempt": {
+              "maximum": 9007199254740991.0,
+              "minimum": 1.0,
+              "title": "Expected Attempt",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "expected_attempt"
+          ],
+          "title": "SubmissionActionRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "change_set_id": {
+          "format": "uuid",
+          "title": "Change Set Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/SubmissionActionRequest"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "change_set_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "retryChangeSet",
+    "path": "/products/{product_id}/change-sets/{change_set_id}/retry",
+    "read_only": false
+  },
+  "review_new_entry": {
+    "bindings": {
+      "product_id": "path",
+      "request_id": "path"
+    },
+    "description": "Approve, reject or reopen a structural draft with its exact version.",
+    "input_schema": {
+      "$defs": {
+        "AuthoringReview": {
+          "additionalProperties": false,
+          "properties": {
+            "expected_version": {
+              "maximum": 9007199254740991.0,
+              "minimum": 0.0,
+              "title": "Expected Version",
+              "type": "integer"
+            },
+            "state": {
+              "enum": [
+                "draft",
+                "approved",
+                "rejected"
+              ],
+              "title": "State",
+              "type": "string"
+            }
+          },
+          "required": [
+            "expected_version",
+            "state"
+          ],
+          "title": "AuthoringReview",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/AuthoringReview"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "request_id": {
+          "format": "uuid",
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "request_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "reviewAuthoringRequest",
+    "path": "/products/{product_id}/authoring/{request_id}/review",
+    "read_only": false
+  },
+  "review_translation": {
+    "bindings": {
+      "translation_group_id": "path"
+    },
+    "description": "Approve, reject or reopen a proposal using its exact current version. Review permissions, length limits and source reconciliation are enforced by VerboFlex.",
+    "input_schema": {
+      "$defs": {
+        "ReviewTransitionRequest": {
+          "additionalProperties": false,
+          "description": "Request one exact closed state transition under optimistic authority.",
+          "properties": {
+            "expected_version": {
+              "maximum": 9007199254740991.0,
+              "minimum": 1.0,
+              "title": "Expected Version",
+              "type": "integer"
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reason"
+            },
+            "target_state": {
+              "enum": [
+                "draft",
+                "approved",
+                "rejected"
+              ],
+              "title": "Target State",
+              "type": "string"
+            }
+          },
+          "required": [
+            "target_state",
+            "expected_version"
+          ],
+          "title": "ReviewTransitionRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/ReviewTransitionRequest"
+        },
+        "translation_group_id": {
+          "format": "uuid",
+          "title": "Translation Group Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "translation_group_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "transitionTranslationProposal",
+    "path": "/translations/{translation_group_id}/proposal/state",
+    "read_only": false
+  },
+  "save_glossary_term": {
+    "bindings": {
+      "entry_id": "path",
+      "product_id": "path"
+    },
+    "description": "Reviewer: save project terminology using its current version.",
+    "input_schema": {
+      "$defs": {
+        "GlossaryInput": {
+          "additionalProperties": false,
+          "properties": {
+            "case_sensitive": {
+              "default": false,
+              "title": "Case Sensitive",
+              "type": "boolean"
+            },
+            "expected_version": {
+              "default": 0,
+              "maximum": 9007199254740991.0,
+              "minimum": 0.0,
+              "title": "Expected Version",
+              "type": "integer"
+            },
+            "forbidden": {
+              "default": false,
+              "title": "Forbidden",
+              "type": "boolean"
+            },
+            "note": {
+              "default": "",
+              "maxLength": 1000,
+              "title": "Note",
+              "type": "string"
+            },
+            "source_language": {
+              "maxLength": 32,
+              "minLength": 2,
+              "title": "Source Language",
+              "type": "string"
+            },
+            "source_term": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Source Term",
+              "type": "string"
+            },
+            "target_language": {
+              "maxLength": 32,
+              "minLength": 2,
+              "title": "Target Language",
+              "type": "string"
+            },
+            "target_term": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Target Term",
+              "type": "string"
+            }
+          },
+          "required": [
+            "source_language",
+            "target_language",
+            "source_term",
+            "target_term"
+          ],
+          "title": "GlossaryInput",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "entry_id": {
+          "format": "uuid",
+          "title": "Entry Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/GlossaryInput"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "entry_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "PUT",
+    "operation_id": "saveGlossaryTerm",
+    "path": "/products/{product_id}/glossary/{entry_id}",
+    "read_only": false
+  },
+  "save_new_entry": {
+    "bindings": {
+      "product_id": "path",
+      "request_id": "path"
+    },
+    "description": "Save a new key, missing language or plural form as a draft. Use confirmed file authority and expected_version. Does not write to Git.",
+    "input_schema": {
+      "$defs": {
+        "AuthoringForm": {
+          "additionalProperties": false,
+          "properties": {
+            "form": {
+              "default": "other",
+              "maxLength": 16,
+              "title": "Form",
+              "type": "string"
+            },
+            "text": {
+              "maxLength": 65536,
+              "title": "Text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "title": "AuthoringForm",
+          "type": "object"
+        },
+        "AuthoringInput": {
+          "additionalProperties": false,
+          "properties": {
+            "context": {
+              "default": "",
+              "maxLength": 4096,
+              "title": "Context",
+              "type": "string"
+            },
+            "disambiguation": {
+              "default": "",
+              "maxLength": 4096,
+              "title": "Disambiguation",
+              "type": "string"
+            },
+            "execution_id": {
+              "format": "uuid",
+              "title": "Execution Id",
+              "type": "string"
+            },
+            "expected_version": {
+              "default": 0,
+              "maximum": 9007199254740991.0,
+              "minimum": 0.0,
+              "title": "Expected Version",
+              "type": "integer"
+            },
+            "file_position": {
+              "maximum": 2147483647.0,
+              "minimum": 0.0,
+              "title": "File Position",
+              "type": "integer"
+            },
+            "forms": {
+              "items": {
+                "$ref": "#/$defs/AuthoringForm"
+              },
+              "maxItems": 6,
+              "minItems": 1,
+              "title": "Forms",
+              "type": "array"
+            },
+            "identity_kind": {
+              "default": "id",
+              "enum": [
+                "id",
+                "source"
+              ],
+              "title": "Identity Kind",
+              "type": "string"
+            },
+            "key": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "title": "Key",
+              "type": "string"
+            },
+            "kind": {
+              "default": "text",
+              "enum": [
+                "text",
+                "plural"
+              ],
+              "title": "Kind",
+              "type": "string"
+            },
+            "language": {
+              "maxLength": 32,
+              "minLength": 2,
+              "title": "Language",
+              "type": "string"
+            },
+            "max_chars": {
+              "anyOf": [
+                {
+                  "maximum": 1048576.0,
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Max Chars"
+            },
+            "parent_key_id": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Key Id"
+            },
+            "parents": {
+              "default": [],
+              "items": {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 10,
+              "title": "Parents",
+              "type": "array"
+            },
+            "scope_id": {
+              "format": "uuid",
+              "title": "Scope Id",
+              "type": "string"
+            },
+            "source_text": {
+              "default": "",
+              "maxLength": 65536,
+              "title": "Source Text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "scope_id",
+            "execution_id",
+            "file_position",
+            "key",
+            "language",
+            "forms"
+          ],
+          "title": "AuthoringInput",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/AuthoringInput"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "request_id": {
+          "format": "uuid",
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "request_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "PUT",
+    "operation_id": "saveAuthoringRequest",
+    "path": "/products/{product_id}/authoring/{request_id}",
+    "read_only": false
+  },
+  "save_translation": {
+    "bindings": {
+      "translation_group_id": "path"
+    },
+    "description": "Save the complete selector set as a draft. Use IDs/digests and expected_version from get_translation (0 for no proposal). Does not write to Git. On 409 re-read and explicitly reconcile; never silently overwrite.",
+    "input_schema": {
+      "$defs": {
+        "SaveTranslationProposalRequest": {
+          "additionalProperties": false,
+          "description": "Replace the complete key-language selector set under one version.",
+          "properties": {
+            "expected_version": {
+              "maximum": 9007199254740991.0,
+              "minimum": 0.0,
+              "title": "Expected Version",
+              "type": "integer"
+            },
+            "values": {
+              "items": {
+                "$ref": "#/$defs/SaveTranslationProposalValueRequest"
+              },
+              "maxItems": 10000,
+              "minItems": 1,
+              "title": "Values",
+              "type": "array"
+            }
+          },
+          "required": [
+            "values",
+            "expected_version"
+          ],
+          "title": "SaveTranslationProposalRequest",
+          "type": "object"
+        },
+        "SaveTranslationProposalValueRequest": {
+          "additionalProperties": false,
+          "description": "One exact selector member and its imported edit basis.",
+          "properties": {
+            "basis_digest": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Basis Digest",
+              "type": "string"
+            },
+            "basis_revision_number": {
+              "maximum": 9007199254740991.0,
+              "minimum": 1.0,
+              "title": "Basis Revision Number",
+              "type": "integer"
+            },
+            "proposed_text": {
+              "maxLength": 1048576,
+              "title": "Proposed Text",
+              "type": "string"
+            },
+            "selector_digest": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Selector Digest",
+              "type": "string"
+            },
+            "selector_version": {
+              "const": 1,
+              "title": "Selector Version",
+              "type": "integer"
+            },
+            "translation_value_id": {
+              "format": "uuid",
+              "title": "Translation Value Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "translation_value_id",
+            "selector_version",
+            "selector_digest",
+            "basis_revision_number",
+            "basis_digest",
+            "proposed_text"
+          ],
+          "title": "SaveTranslationProposalValueRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/SaveTranslationProposalRequest"
+        },
+        "translation_group_id": {
+          "format": "uuid",
+          "title": "Translation Group Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "translation_group_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "PUT",
+    "operation_id": "saveTranslationProposal",
+    "path": "/translations/{translation_group_id}/proposal",
+    "read_only": false
+  },
+  "search_mention_users": {
+    "bindings": {
+      "q": "query"
+    },
+    "description": "Find users available for an explicitly requested comment mention.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "q": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Q",
+          "type": "string"
+        }
+      },
+      "required": [
+        "q"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "searchMentionUsers",
+    "path": "/users/mentions",
+    "read_only": true
+  },
+  "search_translation_keys": {
+    "bindings": {
+      "cursor": "query",
+      "deleted": "query",
+      "language": "query",
+      "page_size": "query",
+      "product_id": "query",
+      "q": "query",
+      "state": "query",
+      "violation": "query",
+      "visible_languages": "query",
+      "work_status": "query"
+    },
+    "description": "Search 50 keys per page with their selected language rows. Prefer product_id and a small visible_languages selection; pass next_cursor to continue.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "deleted": {
+          "default": "active",
+          "enum": [
+            "active",
+            "deleted",
+            "all"
+          ],
+          "title": "Deleted",
+          "type": "string"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 2,
+              "pattern": "^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Language"
+        },
+        "page_size": {
+          "const": 50,
+          "default": 50,
+          "title": "Page Size",
+          "type": "integer"
+        },
+        "product_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Product Id"
+        },
+        "q": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Q"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "enum": [
+                "draft",
+                "approved",
+                "rejected"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "State"
+        },
+        "violation": {
+          "anyOf": [
+            {
+              "enum": [
+                "over_limit",
+                "within_limit",
+                "no_max"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Violation"
+        },
+        "visible_languages": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$",
+                "type": "string"
+              },
+              "maxItems": 20,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Visible Languages"
+        },
+        "work_status": {
+          "anyOf": [
+            {
+              "enum": [
+                "needs_translation",
+                "needs_review",
+                "source_changed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Work Status"
+        }
+      },
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "searchTranslationKeys",
+    "path": "/translations/keys",
+    "read_only": true
+  },
+  "search_translations": {
+    "bindings": {
+      "cursor": "query",
+      "deleted": "query",
+      "language": "query",
+      "page_size": "query",
+      "product_id": "query",
+      "q": "query",
+      "state": "query",
+      "violation": "query",
+      "work_status": "query"
+    },
+    "description": "Search 50 key-language groups per page. Filter by product, language, text, review state or work status. Use next_cursor to continue.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "deleted": {
+          "default": "active",
+          "enum": [
+            "active",
+            "deleted",
+            "all"
+          ],
+          "title": "Deleted",
+          "type": "string"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 2,
+              "pattern": "^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Language"
+        },
+        "page_size": {
+          "const": 50,
+          "default": 50,
+          "title": "Page Size",
+          "type": "integer"
+        },
+        "product_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Product Id"
+        },
+        "q": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Q"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "enum": [
+                "draft",
+                "approved",
+                "rejected"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "State"
+        },
+        "violation": {
+          "anyOf": [
+            {
+              "enum": [
+                "over_limit",
+                "within_limit",
+                "no_max"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Violation"
+        },
+        "work_status": {
+          "anyOf": [
+            {
+              "enum": [
+                "needs_translation",
+                "needs_review",
+                "source_changed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Work Status"
+        }
+      },
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "searchTranslations",
+    "path": "/translations",
+    "read_only": true
+  },
+  "set_translation_limit": {
+    "bindings": {
+      "language": "path",
+      "translation_group_id": "path"
+    },
+    "description": "Set a maximum character length using the current constraint version.",
+    "input_schema": {
+      "$defs": {
+        "PutTranslationConstraintRequest": {
+          "additionalProperties": false,
+          "description": "Create or replace one exact language-bound maximum.",
+          "properties": {
+            "expected_version": {
+              "minimum": 0.0,
+              "title": "Expected Version",
+              "type": "integer"
+            },
+            "max_chars": {
+              "description": "Maximum number of visible characters allowed.",
+              "maximum": 1048576.0,
+              "minimum": 0.0,
+              "title": "Max Chars",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "max_chars",
+            "expected_version"
+          ],
+          "title": "PutTranslationConstraintRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "language": {
+          "maxLength": 64,
+          "minLength": 2,
+          "pattern": "^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$",
+          "title": "Language",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/PutTranslationConstraintRequest"
+        },
+        "translation_group_id": {
+          "format": "uuid",
+          "title": "Translation Group Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "translation_group_id",
+        "language",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "PUT",
+    "operation_id": "putTranslationConstraint",
+    "path": "/translations/{translation_group_id}/constraints/{language}",
+    "read_only": false
+  },
+  "start_import": {
+    "bindings": {
+      "mapping_id": "path",
+      "product_id": "path"
+    },
+    "description": "Admin: queue a source refresh. Removed repository strings are physically deleted from VerboFlex after activation. History rewrites require separate confirmation.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "mapping_id": {
+          "format": "uuid",
+          "title": "Mapping Id",
+          "type": "string"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "mapping_id"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "start_admin_published_mapping_import",
+    "path": "/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+    "read_only": false
+  },
+  "start_mapping_preview": {
+    "bindings": {
+      "mapping_id": "path",
+      "product_id": "path"
+    },
+    "description": "Admin: queue mapping validation in a background worker; poll get_mapping_preview.",
+    "input_schema": {
+      "$defs": {
+        "AdminPreviewCommitRequest": {
+          "additionalProperties": false,
+          "description": "One resolved commit associated with a server-owned mapping role.",
+          "properties": {
+            "commit_hash": {
+              "pattern": "^[0-9A-Fa-f]{40}$",
+              "title": "Commit Hash",
+              "type": "string"
+            },
+            "role": {
+              "enum": [
+                "direct",
+                "keys",
+                "translations"
+              ],
+              "title": "Role",
+              "type": "string"
+            }
+          },
+          "required": [
+            "role",
+            "commit_hash"
+          ],
+          "title": "AdminPreviewCommitRequest",
+          "type": "object"
+        },
+        "AdminPreviewJobCreateRequest": {
+          "additionalProperties": false,
+          "description": "Candidate compare value plus exact resolved commits, with no source bytes.",
+          "properties": {
+            "commits": {
+              "items": {
+                "$ref": "#/$defs/AdminPreviewCommitRequest"
+              },
+              "maxItems": 2,
+              "minItems": 1,
+              "title": "Commits",
+              "type": "array"
+            },
+            "expected_candidate_version": {
+              "minimum": 1.0,
+              "title": "Expected Candidate Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "expected_candidate_version",
+            "commits"
+          ],
+          "title": "AdminPreviewJobCreateRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "mapping_id": {
+          "format": "uuid",
+          "title": "Mapping Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/AdminPreviewJobCreateRequest"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "mapping_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "create_admin_preview_job",
+    "path": "/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs",
+    "read_only": false
+  },
+  "submit_changes": {
+    "bindings": {
+      "product_id": "path"
+    },
+    "description": "Publish approved changes through the background Git/PR workflow, using the exact prepared review and a unique request_key. This writes to the repository. Use get_submission_by_key after uncertain outcomes; do not create a new key to retry.",
+    "input_schema": {
+      "$defs": {
+        "CreateSubmissionBatchRequest": {
+          "additionalProperties": false,
+          "properties": {
+            "expected_content_digest": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Expected Content Digest",
+              "type": "string"
+            },
+            "expected_review_attempt": {
+              "maximum": 9007199254740991.0,
+              "minimum": 1.0,
+              "title": "Expected Review Attempt",
+              "type": "integer"
+            },
+            "request_key": {
+              "format": "uuid",
+              "title": "Request Key",
+              "type": "string"
+            },
+            "review_id": {
+              "format": "uuid",
+              "title": "Review Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "review_id",
+            "expected_review_attempt",
+            "expected_content_digest",
+            "request_key"
+          ],
+          "title": "CreateSubmissionBatchRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/CreateSubmissionBatchRequest"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "POST",
+    "operation_id": "createSubmissionBatch",
+    "path": "/products/{product_id}/submission-batches",
+    "read_only": false
+  },
+  "update_mapping": {
+    "bindings": {
+      "mapping_id": "path",
+      "product_id": "path"
+    },
+    "description": "Admin: edit a draft repository mapping.",
+    "input_schema": {
+      "$defs": {
+        "AdminDirectMappingWriteRequest": {
+          "additionalProperties": false,
+          "description": "Create or replace one direct mapping under candidate-version authority.",
+          "properties": {
+            "allowed_target_branches": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "title": "Allowed Target Branches",
+              "type": "array"
+            },
+            "default_target_branch": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Default Target Branch",
+              "type": "string"
+            },
+            "expected_candidate_version": {
+              "minimum": 1.0,
+              "title": "Expected Candidate Version",
+              "type": "integer"
+            },
+            "localization_root": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Localization Root"
+            },
+            "repository_id": {
+              "format": "uuid",
+              "title": "Repository Id",
+              "type": "string"
+            },
+            "source_branch": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Source Branch",
+              "type": "string"
+            },
+            "topology": {
+              "const": "direct",
+              "title": "Topology",
+              "type": "string"
+            }
+          },
+          "required": [
+            "topology",
+            "repository_id",
+            "source_branch",
+            "allowed_target_branches",
+            "default_target_branch",
+            "expected_candidate_version"
+          ],
+          "title": "AdminDirectMappingWriteRequest",
+          "type": "object"
+        },
+        "AdminSeparateMappingSideWriteRequest": {
+          "additionalProperties": false,
+          "description": "One closed explicit side of a separate mapping.",
+          "properties": {
+            "localization_root": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Localization Root"
+            },
+            "repository_id": {
+              "format": "uuid",
+              "title": "Repository Id",
+              "type": "string"
+            },
+            "role": {
+              "enum": [
+                "keys",
+                "translations"
+              ],
+              "title": "Role",
+              "type": "string"
+            },
+            "source_branch": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Source Branch",
+              "type": "string"
+            }
+          },
+          "required": [
+            "role",
+            "repository_id",
+            "source_branch"
+          ],
+          "title": "AdminSeparateMappingSideWriteRequest",
+          "type": "object"
+        },
+        "AdminSeparateMappingWriteRequest": {
+          "additionalProperties": false,
+          "description": "Create or replace one mapping with exact Keys and Translations sides.",
+          "properties": {
+            "allowed_target_branches": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "title": "Allowed Target Branches",
+              "type": "array"
+            },
+            "default_target_branch": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Default Target Branch",
+              "type": "string"
+            },
+            "expected_candidate_version": {
+              "minimum": 1.0,
+              "title": "Expected Candidate Version",
+              "type": "integer"
+            },
+            "sides": {
+              "items": {
+                "$ref": "#/$defs/AdminSeparateMappingSideWriteRequest"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "title": "Sides",
+              "type": "array"
+            },
+            "topology": {
+              "const": "separate",
+              "title": "Topology",
+              "type": "string"
+            }
+          },
+          "required": [
+            "topology",
+            "sides",
+            "allowed_target_branches",
+            "default_target_branch",
+            "expected_candidate_version"
+          ],
+          "title": "AdminSeparateMappingWriteRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "mapping_id": {
+          "format": "uuid",
+          "title": "Mapping Id",
+          "type": "string"
+        },
+        "payload": {
+          "discriminator": {
+            "mapping": {
+              "direct": "#/components/schemas/AdminDirectMappingWriteRequest",
+              "separate": "#/components/schemas/AdminSeparateMappingWriteRequest"
+            },
+            "propertyName": "topology"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/AdminDirectMappingWriteRequest"
+            },
+            {
+              "$ref": "#/$defs/AdminSeparateMappingWriteRequest"
+            }
+          ],
+          "title": "Payload"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "mapping_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "PATCH",
+    "operation_id": "update_admin_candidate_mapping",
+    "path": "/admin/products/{product_id}/candidate/mappings/{mapping_id}",
+    "read_only": false
+  },
+  "update_project": {
+    "bindings": {
+      "product_id": "path"
+    },
+    "description": "Admin: update project configuration draft.",
+    "input_schema": {
+      "$defs": {
+        "AdminProductUpdateRequest": {
+          "additionalProperties": false,
+          "description": "Compare and save the current candidate configuration.",
+          "properties": {
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Description"
+            },
+            "expected_candidate_version": {
+              "minimum": 1.0,
+              "title": "Expected Candidate Version",
+              "type": "integer"
+            },
+            "name": {
+              "maxLength": 1000,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "expected_candidate_version"
+          ],
+          "title": "AdminProductUpdateRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/AdminProductUpdateRequest"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "method": "PATCH",
+    "operation_id": "update_admin_product_candidate",
+    "path": "/admin/products/{product_id}",
+    "read_only": false
+  },
+  "whoami": {
+    "bindings": {},
+    "description": "Read the signed-in user and current roles.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "read_current_user",
+    "path": "/users/me",
+    "read_only": true
+  }
+}

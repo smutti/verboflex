@@ -1,0 +1,16 @@
+{
+  "recorded_at": "2026-10-11",
+  "gsd_version": "1.11.0",
+  "command": "gsd-tools check api-coverage.verify-pre 04 --raw",
+  "plans_sha256": "1edb68e46462d8e169b51e081a3ecb080bf28f9466e93bd0747cf295e3948722",
+  "plan_count": 27,
+  "detector_sha256": "6c7fecbc85a1866199dedf890bb4c3885f73caef794c432dd022f53bcf5b1bfb",
+  "report": {
+    "detected": false,
+    "passed": true,
+    "block": false,
+    "coverage_present": false
+  },
+  "refresh": "Rerun the GSD detector against these plans and review scope changes before replacing this receipt. CI rejects any changed or added plan and any new coverage declaration.",
+  "publication_note": "Developer-specific execution-context paths normalized; GSD detector rerun and reviewed on 2026-10-11."
+}

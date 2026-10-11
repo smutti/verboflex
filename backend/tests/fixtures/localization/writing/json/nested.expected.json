@@ -1,0 +1,10 @@
+{
+  "it_IT": {
+    "checkout": {"title": "Pay \"now\" 😀", "keep": "\u00e8"},
+    "profile": {"title": "Profilo"},
+    "literal.dot[0]/~": "Line\r\nnext",
+    "escaped\u002ekey": "é",
+    "empty": ""
+  },
+  "en": {"checkout": {"title": "Checkout"}, "empty": ""}
+}

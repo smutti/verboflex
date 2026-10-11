@@ -1,0 +1,33 @@
+{
+  "categories": [
+    "valid",
+    "empty",
+    "malformed",
+    "escaped",
+    "unicode",
+    "comments",
+    "duplicate",
+    "encoding",
+    "boundary",
+    "unsupported",
+    "concurrency"
+  ],
+  "fixtures": {
+    "golden": "valid.strings",
+    "golden_expected": "valid.expected.json",
+    "hostile": "invalid_cases.json"
+  },
+  "limits": {
+    "file_bytes": 1048576,
+    "aggregate_bytes": 20971520,
+    "files": 500,
+    "assignments": 5000,
+    "comments": 4096,
+    "tokens": 20000,
+    "escapes_per_token": 4096,
+    "issues": 5,
+    "issue_message": 256,
+    "path": 4096,
+    "coordinate": 2147483647
+  }
+}

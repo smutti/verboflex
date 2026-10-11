@@ -1,0 +1,7 @@
+/* Catalog 😀 heading */
+"welcome\U002Etitle" /* key */ = /* equals */ "Say \"ciao\" \\ path\nnext\rend\t😀" /* value */;
+// Literal and escaped nonselected values
+"emoji" = "\UD83D\UDE00";
+"empty" = "Filled é";
+"stable" = "caf\U00E9";
+/* Trailing catalog comment */

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+  <string name="escaped" formatted="false">Short</string>
+  <string name="markup" formatted="true">Hello <![CDATA[<literal>]]><!-- translator note --><b>bold <i>and italic</i></b> tail <xliff:g id="count" example="2">%1$d</xliff:g>!</string>
+  <plurals name="files" translatable="false">
+    <item quantity="one"><b>One</b> file</item>
+    <item quantity="other">%d new files</item>
+  </plurals>
+  <string-array name="steps" translatable="true">
+    <item>Last</item>
+    <item>Tap <u>Next</u></item>
+  </string-array>
+</resources>

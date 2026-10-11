@@ -1,0 +1,44 @@
+# Opt-in daily backups, independent of API/worker releases. See docs/backup-restore.md.
+services:
+  backup:
+    build:
+      context: .
+      dockerfile: docker/backup.Dockerfile
+    image: verboflex-backup:${VERBOFLEX_IMAGE_TAG:-local}
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: verboflex
+      PGDATABASE: ${VERBOFLEX_POSTGRES_DB:-verboflex}
+      PGPASSWORD: ${VERBOFLEX_POSTGRES_PASSWORD:-}
+      BACKUP_HOUR_UTC: ${VERBOFLEX_BACKUP_HOUR_UTC:-3}
+      BACKUP_KEEP_COUNT: ${VERBOFLEX_BACKUP_KEEP_COUNT:-14}
+      BACKUP_COMMAND_TIMEOUT_SECONDS: ${VERBOFLEX_BACKUP_COMMAND_TIMEOUT_SECONDS:-1800}
+    volumes:
+      - type: bind
+        source: ${VERBOFLEX_BACKUP_DIRECTORY:-./.env.docker-backups/daily}
+        target: /backups
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ${VERBOFLEX_BACKUP_CONFIG_FILE:-./.env.docker}
+        target: /run/backup/deployment.env
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "/opt/verboflex/database_backup.py", "health"]
+      interval: 60s
+      timeout: 10s
+      retries: 2
+      start_period: 15m

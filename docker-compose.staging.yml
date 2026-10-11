@@ -1,0 +1,48 @@
+x-deployment-environment: &deployment-environment
+  VERBOFLEX_APP_ENV: staging
+  VERBOFLEX_DATABASE_URL: postgresql+psycopg://verboflex:${VERBOFLEX_POSTGRES_PASSWORD:-}@postgres:5432/${VERBOFLEX_POSTGRES_DB:-verboflex}
+  VERBOFLEX_REDIS_URL: redis://redis:6379/${VERBOFLEX_REDIS_DB:-0}
+  VERBOFLEX_JWT_SECRET_KEY: ${VERBOFLEX_JWT_SECRET_KEY:-replace-me-with-at-least-32-random-bytes}
+  VERBOFLEX_MCP_PUBLIC_URL: ${VERBOFLEX_MCP_PUBLIC_URL:-}
+  VERBOFLEX_JWT_ALGORITHM: HS256
+  VERBOFLEX_CORS_ORIGINS: '${VERBOFLEX_CORS_ORIGINS:-["https://staging.replace-me.invalid"]}'
+  VERBOFLEX_ACCESS_TOKEN_EXPIRE_MINUTES: "15"
+  VERBOFLEX_PASSWORD_CHANGE_TOKEN_EXPIRE_MINUTES: "5"
+  VERBOFLEX_REFRESH_TOKEN_EXPIRE_DAYS: "7"
+  VERBOFLEX_SERVICE_PROBE_TIMEOUT_SECONDS: "2"
+  VERBOFLEX_REFRESH_COOKIE_SECURE: ${VERBOFLEX_REFRESH_COOKIE_SECURE:-true}
+  VERBOFLEX_MAINTENANCE_ENABLED: ${VERBOFLEX_MAINTENANCE_ENABLED:-true}
+  VERBOFLEX_MAINTENANCE_TEMPORARY_RETENTION_DAYS: ${VERBOFLEX_MAINTENANCE_TEMPORARY_RETENTION_DAYS:-7}
+  VERBOFLEX_MAINTENANCE_DELETED_PRODUCT_RETENTION_DAYS:
+  VERBOFLEX_MAINTENANCE_BATCH_ROWS: ${VERBOFLEX_MAINTENANCE_BATCH_ROWS:-1000}
+  VERBOFLEX_MAINTENANCE_MAX_ROWS_PER_RUN: ${VERBOFLEX_MAINTENANCE_MAX_ROWS_PER_RUN:-10000}
+  VERBOFLEX_MAINTENANCE_MAX_RUN_SECONDS: ${VERBOFLEX_MAINTENANCE_MAX_RUN_SECONDS:-45}
+  VERBOFLEX_MAINTENANCE_LOCK_TIMEOUT_MS: ${VERBOFLEX_MAINTENANCE_LOCK_TIMEOUT_MS:-1000}
+  VERBOFLEX_MAINTENANCE_STATEMENT_TIMEOUT_MS: ${VERBOFLEX_MAINTENANCE_STATEMENT_TIMEOUT_MS:-5000}
+
+services:
+  postgres:
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_PASSWORD: ${VERBOFLEX_POSTGRES_PASSWORD:-}
+  redis:
+    restart: unless-stopped
+  backend:
+    image: verboflex-backend:${VERBOFLEX_IMAGE_TAG:-staging}
+    environment: *deployment-environment
+    restart: unless-stopped
+  worker:
+    image: verboflex-backend:${VERBOFLEX_IMAGE_TAG:-staging}
+    environment: *deployment-environment
+    restart: unless-stopped
+  scheduler:
+    image: verboflex-backend:${VERBOFLEX_IMAGE_TAG:-staging}
+    environment: *deployment-environment
+    restart: unless-stopped
+  frontend:
+    image: verboflex-frontend:${VERBOFLEX_IMAGE_TAG:-staging}
+    build:
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://api.staging.replace-me.invalid}
+    restart: unless-stopped

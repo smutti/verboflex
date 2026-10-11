@@ -1,0 +1,420 @@
+---
+phase: 2
+slug: admin-configuration
+status: approved
+shadcn_initialized: true
+preset: official-new-york-v4-radix
+created: 2026-08-26
+reviewed_at: 2026-08-26
+---
+
+# Phase 2 — UI Design Contract
+
+## User-requested amendment — 2026-09-13
+
+The user's mapping/preview UX review supersedes the five-step wizard and the old Mappings/Preview labels below. Setup now has four steps: **Product details → Repositories → Translation sources → Preview and publish**. The last step embeds the real preview and publication surface; no placeholder or separate dead-end publish step remains. Existing `/mappings` and `/preview` URLs stay stable.
+
+Show saved sources before the optional add-source editor. Explain same versus separate repositories before selecting source branches; keep optional folder scope expandable. Published imports belong outside the embedded draft editor. Show partial translation samples before expandable technical source metadata. For active products without a candidate, render a successful published state and next actions instead of a candidate-preview error. Keep layout/base-language confirmation and server-authoritative final publication.
+
+See `02-UI-REVIEW.md` and quick task `260913-o86` for scoped evidence and remaining human review. All other API, security, palette and component constraints remain in force.
+
+### Follow-up amendment — product details and repository selection
+
+User request on 2026-09-13, quick `260913-ps5`, supersedes the old manual registration/catalogue UI below. Product details has one forward action: the footer **Next: Repositories** saves and advances; no duplicate **Save and continue**. The repository step heading is exactly **Collega a repository bitbucket**, without the former mapping-preparation callout or global **Use repository** table.
+
+The administrator sets one workspace in the Bitbucket connection page. The product picker displays that workspace and searches live Bitbucket repositories by name or slug, with 20 results per request, explicit continuation and a scroll area capped at 320px. Show only the chosen repositories in the selection summary; reuse their existing IDs. Once selected, those repositories populate the following mapping editor. Existing mappings and their referenced repositories remain accessible. Preserve visible recovery for missing workspace, provider failure, empty search and unsuccessful selection; ignore obsolete search responses. Selecting a repository registers/reuses its provider identity locally; product association is persisted when its source mapping is saved. Existing standalone mapping endpoints remain compatible.
+
+### Follow-up amendment — translation sources and Next
+
+User request on 2026-09-13, quick `260913-qv0`, supersedes the earlier topology-before-fields layout and embedded Save mapping action. Omit the No mappings configured card on the source page. Default to Same repository and place the topology controls in collapsed Advanced repository settings; expose them when editing a separate source. Keep existing saved sources and add/edit behavior.
+
+Use the full content width, aligned repository/branch labels and selectors in two desktop columns, and one column on mobile. Put optional branch search in Find a branch below its selector. Preserve pagination, long names and bounded errors.
+
+In the wizard, Next validates/saves the source and proceeds to Preview and publish only after success. Unchanged saved sources require no mutation. Disable repeated submission and step navigation while saving; preserve entered values and focus the error on failure. The embedded form has no Save mapping button; native form submission uses the same forward action. The standalone source route retains Save mapping because it has no wizard footer. Palette, components, API validation and publication authority remain unchanged.
+
+### Follow-up amendment — target branch search
+
+User request on 2026-09-13, quick `260913-slb`, supersedes the always-visible target branch list. In Where should future translation changes go?, show unselected branches only when Search target branches contains a non-whitespace query. Filter immediately and case-insensitively by name in the selected source repository (or translations repository for separate mappings). Keep search results in a scroll area capped at 256px, and selected targets in a separate scroll area capped at 192px. Clearing or changing the query never changes selections or the default branch.
+
+Keep selected targets removable and expose Make default there. Return focus to the search after adding/removing a selection. Preserve all-page discovery, pending status and retry; do not report no matches while later pages are pending or have failed. Position checkbox rows locally so invisible form inputs cannot extend the page beyond the scroll area. Next retains its existing validation and save behavior.
+
+### Follow-up amendment — source branch search
+
+User request on 2026-09-13, quick `260913-svc`, applies progressive search to Source branch, Keys source branch and Translations source branch. Replace their select plus Find a branch disclosure with one searchable combobox aligned with the repository control. Do not list branches on focus or empty/whitespace input. Show matching options while typing in a scroll area capped at 256px; display the selected live branch independently below the input. Filtering, clearing and Escape preserve that selection.
+
+Support ArrowDown/ArrowUp result navigation, Enter selection and Escape dismissal. Keep DOM focus in the input and expose the active option through aria-activedescendant. A pending or unmatched search must not submit the form via Enter. Retain exact configured-branch reads and all-page discovery, with retry for failed initial/continuation reads and no premature no-match state. Source repository changes reset the corresponding search via its existing component key. Next/save and target selection retain their current semantics.
+
+> Visual and interaction contract for the administrator control plane. Generated by gsd-ui-researcher for verification by gsd-ui-checker.
+
+---
+
+## Scope and Provenance
+
+Phase 2 extends the authenticated Phase 1 shell with administrator-only configuration surfaces for:
+
+- Internal users, fixed additive roles, lifecycle actions, and one-time temporary credentials.
+- Products, immutable active revisions, editable candidate revisions, and explicit atomic publication.
+- Reusable Bitbucket Cloud repositories and product-specific direct or separate mappings.
+- The single organization-wide, read-only Bitbucket OAuth connection.
+- Live branch selection and asynchronous, read-only localization preview for Android XML, Qt `.ts`, JSON, and iOS `.strings`.
+
+This contract preserves `02-CONTEXT.md` decisions D-01 through D-23, Requirements 1–12 and prohibitions from `02-SPEC.md`, operational bounds from `02-RESEARCH.md`, and the established Phase 1 shell and theme. Canonical imports, translation review, source writes, commits, and pull requests must not appear as working Phase 2 controls.
+
+### Product language
+
+All user-facing copy remains English because every existing Phase 1 screen and shell action uses English. Do not introduce mixed Italian/English copy in this phase. Internationalization and RTL support are not Phase 2 deliverables, but layouts must wrap safely and must not encode meaning through word length or color alone.
+
+---
+
+## Design System
+
+| Property | Value |
+|----------|-------|
+| Tool | shadcn/ui, project-owned source |
+| Preset | Official `new-york-v4` Radix source resolved by project-local `shadcn@4.19.0` |
+| Component library | Unified `radix-ui` primitives through official shadcn/ui components |
+| Icon library | `lucide-react`; icons supplement visible labels and never replace them for primary or destructive actions |
+| Font | Existing system stack: `Inter`, `ui-sans-serif`, `system-ui`, `sans-serif`; use the system monospace stack at Body size only for temporary credentials, commit identifiers, branch names, and file paths |
+
+The existing `frontend/components.json`, `frontend/src/index.css`, `AppShell`, responsive Sidebar/Sheet pattern, generated client, and in-memory session authority are canonical. Do not add a theme provider, dark mode, a third-party component registry, a new state library, or a second token system.
+
+---
+
+## Information Architecture
+
+| Screen / Surface | Route | Purpose | Primary elements |
+|------------------|-------|---------|------------------|
+| Products | `/admin/products` | List products and expose candidate/active state. | Page title, status filters, paginated rows, `Create product` CTA. |
+| New Product Wizard | `/admin/products/new` | Create and validate one candidate configuration. | Five-step progress, forms, validation summary, publish action. |
+| Product Overview | `/admin/products/:productId/overview` | Show active versus candidate revision and lifecycle state. | Status banner, revision summaries, publication blockers, lifecycle actions. |
+| Product Repositories | `/admin/products/:productId/repositories` | Reuse or register repositories for the candidate. | Repository picker, register dialog, repository-side assignments. |
+| Product Mappings | `/admin/products/:productId/mappings` | Configure direct/separate topology and branch rules. | Mapping list, topology form, branch controls, layout state. |
+| Product Preview | `/admin/products/:productId/preview` | Run, inspect, choose, and explicitly confirm one detected layout per mapping. | Job status, candidate selector, detected files/languages, partial samples, confirmation controls. |
+| Users | `/admin/users` | Manage users, roles, lifecycle, and password authority. | Paginated user list, `Add user`, row actions, one-time credential dialog. |
+| Bitbucket Connection | `/admin/bitbucket` | Connect, reconnect, revoke, and inspect bounded connection status. | Status panel, exact read-only scope label, connect/reconnect/revoke actions. |
+| Access Denied | Any `/admin/*` route for a non-admin | Deny access without exposing admin data. | `Administrator access required`, explanation, `Return to workspace`. |
+
+### Navigation
+
+- Add one `Administration` group to the existing desktop Sidebar and mobile Sheet with `Products`, `Users`, and `Bitbucket` destinations.
+- Render this group only when the server-loaded principal includes `admin`; this is presentation only and never replaces backend authorization.
+- A non-admin direct navigation to `/admin/*` renders Access Denied and makes no admin collection or mutation request.
+- Product detail uses URL-backed local navigation in this exact order: `Overview`, `Repositories`, `Mappings`, `Preview`. The active item uses `aria-current="page"` and the accent indicator.
+- Desktop Sidebar behavior remains fixed at `>=1024px`; below `1024px`, reuse the existing Sheet navigation and close it after destination selection.
+
+---
+
+## Visual and Layout Contract
+
+### Focal hierarchy
+
+1. Page title and the one primary action for the current page.
+2. Active/candidate, connection, or preview status and any publication blocker.
+3. The task form or deterministic resource list.
+4. Secondary metadata, bounded timestamps, counts, and help text.
+
+### Layout rules
+
+- Preserve the existing full-width application shell; do not create a marketing hero or centered dashboard card grid.
+- Main admin pages use `24px` horizontal padding below `768px` and `32px` at or above `768px`, with `32px` between page sections.
+- Forms use one column below `768px` and at most two related fields per row at or above `768px`. Long descriptions remain in a single full-width field.
+- Constrain form reading width to `768px`; lists and preview tables use the full available main column.
+- Use flat bordered sections on the white Secondary surface. Do not nest cards or exceed the existing `8px` panel radius.
+- At `>=768px`, users/products/mappings use semantic tables. Below `768px`, render the same ordered data as border-separated stacked list items; do not force a desktop-width table into the viewport.
+- File/sample tables may scroll horizontally inside their own region with a visible keyboard-focusable overflow container and a minimum content width; the page itself must not scroll horizontally at `320px`.
+- Page-level actions wrap without overlap. The primary action precedes secondary actions in DOM order and moves to a full-width row on narrow screens.
+
+### Status presentation
+
+- Every status combines a text label, icon where useful, and semantic tone. Color alone never communicates state.
+- Use green only for confirmed/connected/published success, amber only for unconfirmed/stale/reauthorization warnings, and red only for blocking failure or destructive authority changes.
+- Do not show percentage progress for preview because the backend supplies no trustworthy percentage. Use the exact job state label plus elapsed-state copy.
+
+---
+
+## Spacing Scale
+
+Declared values reuse `frontend/src/index.css` and must not be redefined locally:
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| xs | 4px | Icon gaps, tight metadata separation |
+| sm | 8px | Label/help gaps, badges, compact row actions |
+| md | 16px | Default control and list-item spacing |
+| lg | 24px | Form/panel padding and narrow-screen gutters |
+| xl | 32px | Page gutters and section gaps |
+| 2xl | 48px | Wizard phase separation and major breaks |
+| 3xl | 64px | Maximum page-level spacing on wide screens |
+
+Exceptions: interactive targets are at least `44px × 44px` on coarse-pointer/mobile layouts. This is an accessibility minimum, not a new general spacing token.
+
+---
+
+## Typography
+
+Use exactly the four existing sizes and two existing weights.
+
+| Role | Size | Weight | Line Height |
+|------|------|--------|-------------|
+| Label | 12px | 600 | 1.3 |
+| Body | 14px | 400 | 1.5 |
+| Heading | 20px | 600 | 1.25 |
+| Display | 28px | 600 | 1.15 |
+
+Rules:
+
+- Use Display only for page titles, never inside dialogs, tables, or status panels.
+- Use Heading for section and dialog titles, Body for forms/tables/copy, and Label for compact metadata.
+- Letter spacing remains `0`; do not add viewport-scaled type or another weight.
+- Temporary passwords, commit identifiers, branch names, and file paths may use a system monospace family at `14px/400/1.5`; this changes family only, not the type scale.
+
+---
+
+## Color
+
+Reuse the existing CSS variables exactly.
+
+| Role | Value | Usage |
+|------|-------|-------|
+| Dominant (60%) | `#F8FAFC` | Page background and broad shell surfaces |
+| Secondary (30%) | `#FFFFFF` | Navigation, forms, tables, dialogs, and status sections |
+| Accent (10%) | `#0F766E` | Primary page CTA, active navigation/subnavigation, selected preview candidate, focus ring, and inline links |
+| Destructive | `#DC2626` | Deactivate user/product, reset password authority, revoke Bitbucket, and discard-unsaved confirmation only |
+
+Accent reserved for: the single primary CTA on a page, active navigation/subnavigation, selected preview candidate, focus-visible ring, and inline links. It must not color every button, icon, badge, or hover state.
+
+Supporting colors remain `#111827` primary text, `#4B5563` secondary text, `#6B7280` muted text, `#E5E7EB` border, `#15803D` success, and `#B45309` warning.
+
+---
+
+## Component Inventory
+
+| Component | Source | Phase 2 usage |
+|-----------|--------|---------------|
+| Alert | Existing official | Blocking validation, connection, stale revision, and page-load errors |
+| Badge | Existing official | Roles, lifecycle, revision, connection, format, and job states |
+| Button | Existing official | Specific verb-and-object actions and pagination |
+| Dropdown Menu | Existing official | Row actions when more than two are available; no hidden primary action |
+| Form, Input, Label | Existing official | User, product, repository, and mapping fields |
+| Sheet, Sidebar | Existing official | Existing responsive shell navigation only |
+| Skeleton | Existing official | Initial page/list/detail loading with stable geometry |
+| Sonner | Existing official | Backend-confirmed, non-secret success only; never errors or credential contents |
+| Tooltip | Existing official | Icon-only controls and disabled self-admin explanation |
+| Alert Dialog | Add from official registry | Reset, deactivate, reactivate, revoke, discard-unsaved, and publication confirmations |
+| Checkbox | Add from official registry | Additive roles and allowed target-branch set |
+| Dialog | Add from official registry | Create/edit forms and one-time temporary-password display |
+| Radio Group | Add from official registry | Direct/separate topology and one detected layout selection |
+| Select | Add from official registry | Source branch, default target branch, status filter |
+| Table | Add from official registry | Desktop user/product/mapping and preview data |
+| Tabs | Add from official registry | Product detail section bar controlled by the URL; triggers remain deep-linkable links |
+| Textarea | Add from official registry | Product and optional repository descriptions |
+
+Do not add a data grid, command palette, chart, carousel, rich-text editor, or third-party block. Native overflow regions and the listed controls are sufficient for Phase 2.
+
+---
+
+## Interaction Contracts
+
+### Users and one-time credentials
+
+- The user list sorts and paginates exactly as the API returns it; the client must not silently re-sort or merge rows.
+- `Add user` opens a form with immutable corporate email, display name, and at least one checked role. Role labels remain `Administrator`, `Product manager / reviewer`, `Translator`, and `Viewer`.
+- Edit exposes display name and roles only. Email is visible read-only with the explanation `Email cannot be changed. Create a new account to correct it.`
+- The current administrator's own Administrator checkbox is checked and disabled with the explanation `You cannot remove your own administrator role.`
+- Create, reset, and reactivate success opens a modal titled `Temporary password created`. Render the secret once in a selectable monospace region with `Copy temporary password` and the explicit final action `I saved the password`.
+- The one-time dialog cannot close via outside click or Escape. On `I saved the password`, remove the plaintext from component state before closing. Never put it in a toast, URL, cache, browser storage, log, analytics event, or later list/detail query.
+- Copying is user-initiated only. After Clipboard API success, announce `Temporary password copied` without echoing the value.
+- Reset, deactivate, and reactivate require named confirmations. While a mutation is pending, disable only the submitted action, set `aria-busy`, and prevent duplicate submission.
+- A `409` last-admin or stale-authority response stays in the owning dialog, preserves entries, focuses the alert, and does not optimistically alter the row.
+
+### Product wizard and candidate revisions
+
+- The new-product wizard has exactly five steps: `Product details`, `Repositories`, `Mappings`, `Preview`, `Review and publish`.
+- At desktop widths show all step labels and current/completed semantics; below `768px` show `Step {n} of 5` plus only the current label. Completed styling is not proof of backend validity.
+- Step 1 creates the stable product and candidate revision. Later `Save and continue` actions persist only the candidate and never mutate an active revision.
+- Product name validation applies before submit and maps normalized duplicate conflict back to the Name field. Description may be empty.
+- Repositories can be selected from the reusable registry or registered by exact `Workspace` and `Repository slug`; no credential field exists.
+- A mapping form selects `Direct` or `Separate`. Direct exposes one repository side. Separate exposes explicit `Keys repository` and `Translations repository` sides. Hide irrelevant sides and remove their unsaved values when topology changes only after a named confirmation.
+- Source and target branch values come from live provider results and remain exact opaque strings. Allowed targets use checkboxes; `Default target` is enabled only when at least one allowed target exists and must be a member of that set.
+- Do not expose globs, path templates, manual file lists, locale templates, or a free-form format selector. The format/layout becomes selectable only from successful detected preview candidates.
+- Leaving a dirty form triggers `Leave without saving?`; `Keep editing` retains values and focus, while `Discard changes` is destructive.
+- Active products show a persistent neutral banner: `Published configuration remains active while you edit this draft.` Candidate saves never show the active view as changed.
+- Successful save uses a short `Draft saved` toast only after the server response. Save failure stays inline and preserves every attempted value.
+
+### Bitbucket OAuth connection
+
+- The status surface exposes only `Disconnected`, `Connected`, `Reauthorization required`, or `Unavailable`, plus bounded timestamps and `Read-only repository access`. Never render token values, client secret, refresh state internals, provider error bodies, or provider URLs containing query data.
+- `Connect Bitbucket` and `Reconnect Bitbucket` use same-tab top-level navigation to the backend OAuth start route. The backend callback returns to `/admin/bitbucket`; the SPA does not receive or parse provider credentials.
+- Connected state shows the exact Phase 2 scope as visible text: `Read-only repository access`. Do not advertise write or pull-request capabilities.
+- `Revoke connection` uses a destructive named confirmation and changes UI state only after backend success. Revocation never marks an active product inactive, but it blocks new branch reads, previews, confirmation, and publication.
+- When the wizard is blocked by connection state, keep the candidate saved and show `Open Bitbucket settings`; after callback, provide `Return to product` when a safe product identifier is present in server-owned state.
+
+### Preview, confirmation, and publication
+
+- Preview is always asynchronous. `Run validation` creates/reuses a job, then shows `Queued`, `Running`, `Succeeded`, `Failed`, or `Timed out` exactly as returned.
+- Poll every 2 seconds through 30 seconds, then every 5 seconds through 90 seconds. Stop automatically at 90 seconds and show `Automatic updates paused` with `Refresh status`. Navigation away must not cancel the durable job.
+- Do not use optimistic success or an invented progress percentage. Announce state transitions in one `aria-live="polite"` region without repeating on every unchanged poll.
+- A successful response renders each detected format/layout as a separate radio candidate. One mapping can select exactly one candidate. Overlapping claims, unsupported content, empty results, confidence below `1.0`, or multiple interpretations render a blocking Alert and no confirmable selection.
+- The selected candidate shows source repository side, exact branch, abbreviated commit with full value available to copy, format/layout, detected files, languages, and deterministic sample rows.
+- Every sample region visibly states `Preview samples are partial: up to 10 per language and 100 total.` Never label preview output as imported translations or a complete inventory.
+- `Confirm preview` is enabled only for the current successful job and selected candidate. Confirmation is explicit even when exactly one candidate exists.
+- Candidate edits, branch/commit changes, OAuth reconnect generation, or detector-version changes replace `Confirmed` with `Preview out of date` and show `Run validation again`. Stale results remain inspectable but cannot be selected or published.
+- The final step lists every mapping with `Confirmed` or one exact blocker. `Publish product` for a new product and `Publish changes` for an existing product remain disabled until the backend reports every mapping current and confirmed; the blocker list contains links to the affected mapping/preview.
+- Publication uses an Alert Dialog summarizing product name and mapping count. Only a backend-confirmed result changes the active-revision banner and emits `Product published`.
+- `Reactivate product` is available only when every mapping again has a current confirmed preview and the Bitbucket connection is usable. Otherwise the same linked blocker list explains why reactivation is unavailable.
+- On version conflict, show `This draft changed in another session. Your entries are still here.` Keep local values visible. `Reload latest draft` requires confirmation because it discards them.
+
+### Error and pending behavior
+
+- Page-load failures replace the content region, not the global shell, with a bounded Alert and `Retry loading page` action.
+- Form validation errors render below the owning control, set `aria-invalid`, connect through `aria-describedby`, and focus the first invalid field after submission.
+- Backend errors map from stable error codes to approved copy. Do not display exception text, raw provider bodies, stack traces, token details, or full OAuth URLs.
+- Mutation errors remain in the dialog/form that initiated them. Success toasts never substitute for a durable visible status after navigation.
+- No destructive action is optimistic. Lists may show a row-level pending state, but existing status remains until the server confirms the transition.
+
+---
+
+## Copywriting Contract
+
+### Core page and state copy
+
+| Element | Copy |
+|---------|------|
+| Primary CTA | `Create product` |
+| Products empty heading | `No products configured` |
+| Products empty body | `Create a product to connect repositories and validate a localization layout.` |
+| Users filter empty heading | `No users match these filters` |
+| Users filter empty body | `Clear the filters to see the full user list.` |
+| Repositories empty heading | `No repositories added` |
+| Repositories empty body | `Add or reuse a Bitbucket repository before configuring a mapping.` |
+| Mappings empty heading | `No mappings configured` |
+| Mappings empty body | `Add a mapping that represents one localization format and layout.` |
+| Preview not-run heading | `Validation has not run` |
+| Preview not-run body | `Run validation to detect files, languages, and partial translation samples.` |
+| Page error | `We could not load this page. Retry without leaving the administration area.` |
+| Save error | `We could not save this draft. Your entries are still here. Review the error and try again.` |
+| Validation error | `Validation did not complete. Review the reason, then retry.` |
+| Access denied heading | `Administrator access required` |
+| Access denied body | `Your account does not have permission to open administration.` |
+| Access denied action | `Return to workspace` |
+
+### Stable integration and preview errors
+
+| Condition | Copy | Next action |
+|-----------|------|-------------|
+| Bitbucket disconnected | `Bitbucket is not connected. Connect the organizational account to browse branches and validate mappings.` | `Connect Bitbucket` |
+| Reauthorization required | `Bitbucket read access is no longer valid. Reconnect before running validation or publishing.` | `Reconnect Bitbucket` |
+| Repository/branch unavailable | `The repository or branch is no longer available. Refresh branches and update this mapping.` | `Refresh branches` |
+| Preview timed out | `Validation timed out before the repository could be checked safely.` | `Retry validation` |
+| Preview limit exceeded | `This repository exceeds the safe preview limits. Review its localization layout before retrying.` | Link to the affected mapping; do not offer a bypass |
+| Unsupported/empty | `No supported localization layout was found in this source branch.` | Review the selected repository and branch, then `Run validation` |
+| Ambiguous | `The detected files match more than one layout. This preview cannot be confirmed.` | Review the candidate diagnostics; do not offer automatic selection |
+| Stale preview | `This preview no longer matches the current draft. Run validation again.` | `Run validation` |
+
+### Exact action labels
+
+| Context | Primary / specific action |
+|---------|---------------------------|
+| Page load | `Retry loading page` |
+| User creation | `Create user` |
+| User edit | `Save user` |
+| Credential reveal | `Copy temporary password`, `I saved the password` |
+| Product wizard | `Save and continue`, `Back`, `Review and publish` |
+| Repository registry | `Register repository`, `Use repository` |
+| Mapping | `Add mapping`, `Save mapping`, `Refresh branches` |
+| Bitbucket | `Connect Bitbucket`, `Reconnect Bitbucket`, `Revoke connection` |
+| Preview | `Run validation`, `Refresh status`, `Retry validation`, `Confirm preview` |
+| Publication | `Publish product` or `Publish changes`, never generic `Submit` |
+
+### Destructive and authority confirmations
+
+| Action | Title | Body | Confirm label |
+|--------|-------|------|---------------|
+| Reset password | `Reset password for {display name}?` | `Their current password and sessions will stop working. A new temporary password will be shown once.` | `Reset password` |
+| Deactivate user | `Deactivate {display name}?` | `They will immediately lose access. You can reactivate them later with a new temporary password.` | `Deactivate user` |
+| Reactivate user | `Reactivate {display name}?` | `A new temporary password will be created and all earlier credentials will remain invalid.` | `Reactivate user` |
+| Deactivate product | `Deactivate {product name}?` | `Its mappings will stop operating, but its published configuration will be kept.` | `Deactivate product` |
+| Reactivate product | `Reactivate {product name}?` | `Its confirmed published mappings will resume operating.` | `Reactivate product` |
+| Revoke Bitbucket | `Revoke the Bitbucket connection?` | `New branch reads, previews, confirmations, and publications will be blocked until an administrator reconnects.` | `Revoke connection` |
+| Discard form | `Leave without saving?` | `Your unsaved entries on this page will be lost.` | `Discard changes` |
+| Publish | `Publish {product name}?` | `The validated draft will atomically replace the current configuration for {mapping count} mappings.` | `Publish product` or `Publish changes` |
+
+There is no delete-user, delete-product, delete-repository, or delete-mapping action in the approved Phase 2 lifecycle. Do not invent one.
+
+---
+
+## UI Considerations
+
+> Shape-rooted state coverage for the finite UI-consideration probe. Empty/error copy references the Copywriting Contract instead of duplicating it.
+
+The approved probe classified six UI surfaces with explicit element-kind overrides and produced 36 applicable element/category pairs. All 36 are explicitly resolved; the table below collapses those resolutions into the eight closed taxonomy categories without weakening any per-surface contract.
+
+Applicable state considerations: 36 resolved explicitly, 0 backstop, 0 unresolved.
+
+| Category | Element(s) | Status | Resolution / Reason |
+|----------|------------|--------|---------------------|
+| empty | User/product/repository/mapping lists; preview | ✅ covered | Each collection and not-run preview renders its named empty-state heading/body; the user invariant means an unexpected zero-user response is treated as an error, not a valid setup state. |
+| loading | Admin navigation destinations, lists, forms, branches, preview control | ✅ covered | Initial reads use geometry-matched Skeletons; submitting controls use `aria-busy`; preview uses its durable text state without an invented percentage. |
+| error | Lists, forms, OAuth, branch reads, preview jobs, publication | ✅ covered | Failure stays in the owning content/form region, preserves recoverable values, provides the approved next action, and never exposes raw backend/provider detail. |
+| populated | User/product/repository/mapping lists and preview results | ✅ covered | Typical content uses deterministic API order, text-first status, one page CTA, and desktop table/mobile stacked-list variants. |
+| partial | Candidate revisions, incomplete mappings, bounded preview samples | ✅ covered | Candidate state is visibly separate from active state; incomplete mappings list blockers; preview always carries the explicit partial-sample label. |
+| overflow | Lists, product subnavigation, branch/path/sample data | ✅ covered | Page actions wrap; mobile uses stacked lists; file/sample regions scroll locally; no page-level horizontal overflow at 320px. |
+| zero-one-many | All resource collections and detected candidates | ✅ covered | Zero uses named empty copy, one avoids plural-count grammar, many paginate at the API bound; one mapping still requires explicit preview confirmation. |
+| long-text | Product names/descriptions, emails, branches, paths, keys, translations, actions | ✅ covered | Names and prose wrap; opaque identifiers use `overflow-wrap:anywhere` with full copy access; action labels never truncate; navigation labels may ellipsize only when a tooltip exposes the full text. |
+
+### Open-axis considerations
+
+- Offline/network loss uses the same bounded page/form error path and preserves in-memory form values; Phase 2 has no offline mutation queue.
+- Preview is polling-based; no WebSocket, optimistic completion, or real-time collaboration indicator is introduced.
+- Respect `prefers-reduced-motion`; loading and status changes remain understandable with animation disabled.
+- Printing, gestures, voice interaction, RTL mirroring, and localization infrastructure are outside this phase.
+
+---
+
+## Accessibility Contract
+
+- Maintain one `h1` per route and hierarchical `h2` section titles. Dialog titles and descriptions must be programmatically associated.
+- Every input has a visible label. Required state, help, and validation are programmatically connected and never communicated by placeholder text alone.
+- On submit error, focus the first invalid field; on dialog error, focus the Alert; on dialog close, restore focus to the invoking control.
+- Tables have captions or an `aria-labelledby` heading and semantic headers. Mobile stacked lists preserve the same accessible names and action order.
+- Status badges include readable text. Success, warning, error, selected, disabled, and stale states remain distinguishable without color.
+- The preview live region announces only transitions. Polling must not repeatedly announce unchanged state or move focus.
+- Radio and checkbox groups use fieldset/legend semantics or equivalent accessible shadcn labeling.
+- Icon-only buttons require an accessible label and Tooltip. Primary, destructive, and wizard navigation actions always retain visible text.
+- The one-time password warning is announced without announcing the secret automatically. The secret remains keyboard-selectable and its copy result is announced separately.
+- Focus-visible uses the existing `2px` accent outline. Keyboard order follows visual order, including mobile Sheet navigation and local overflow regions.
+- Touch targets are at least `44px × 44px` on mobile/coarse pointer. Controls do not depend on hover.
+
+---
+
+## Registry Safety
+
+| Registry | Blocks used | Safety Gate |
+|----------|-------------|-------------|
+| shadcn official `new-york-v4` Radix | Existing: alert, badge, button, dropdown-menu, form, input, label, separator, sheet, sidebar, skeleton, sonner, tooltip. Add only: alert-dialog, checkbox, dialog, radio-group, select, table, tabs, textarea. | `frontend/components.json` has `registries: {}` and `npm exec shadcn -- info` resolved only `@shadcn`; inspected 2026-08-26. |
+| Third-party registries | none | Not applicable — no third-party registry or block declared; confirmed 2026-08-26. |
+
+The executor may install only the exact official additions listed above through the project-local pinned CLI. Any additional registry block or third-party registry requires a new reviewed contract and the third-party `shadcn view` safety gate before inclusion.
+
+---
+
+## Verification Hooks
+
+- Component tests cover admin route projection/direct denial, every list state, field focus/announcement, one-time credential erasure, dirty-form preservation, disabled publication reasons, preview polling cutoff, and stale conflict behavior.
+- Playwright covers desktop Sidebar and mobile Sheet navigation, the five-step wizard, user lifecycle secret dialog, OAuth status callback projection, multiple preview candidates, partial-sample label, confirmation, and publish blockers.
+- Tests assert provider tokens and temporary credentials never enter URLs, toasts, generated schemas, browser storage, or later list/detail state.
+- Visual checks run at `320px`, `768px`, `1024px`, and a wide desktop viewport with long product names, emails, branch names, paths, keys, and translations.
+- Tests disable animation/reduce motion and prove status, focus, and copy remain complete.
+
+---
+
+## Checker Sign-Off
+
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
+
+**Approval:** approved 2026-08-26

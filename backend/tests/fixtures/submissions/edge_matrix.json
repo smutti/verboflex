@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "execution_note": "This static contract maps executable coverage references. Measured verdicts bound to the current source digest belong in .planning/phases/07-change-sets-and-pull-requests/07-GATE.json; this matrix does not assert execution or PASS. Python selectors use pytest; frontend selectors use Vitest -t with the exact title.",
+  "smoke_command": "bash tools/phase7_smoke.sh",
+  "edges": [
+    {
+      "id": "PR-01-unclassified", "requirement_id": "PR-01", "category": "unclassified",
+      "contract": "Only current complete Approved aggregates from an authorized reviewer enter a review; Draft, Rejected, partial and foreign selections fail.",
+      "test_nodes": [
+        "backend/tests/integration/test_submission_review_jobs.py::test_non_complete_approved_selection_never_creates_intent",
+        "backend/tests/api/test_submission_reviews.py::test_read_only_roles_can_read_but_cannot_request_review",
+        "backend/tests/api/test_submission_reviews.py::test_foreign_product_is_unavailable_before_action_denial"
+      ],
+      "smoke": {"label": "approved-complete-selection", "status": "requires_current_gate"}
+    },
+    {
+      "id": "PR-02-concurrency", "requirement_id": "PR-02", "category": "concurrency",
+      "contract": "Partition by exact repository and target before render; enforce cumulative budgets and one active physical-file claim across independent reviewed proposals.",
+      "test_nodes": [
+        "backend/tests/unit/services/test_submission_selection.py::test_different_targets_same_path_keep_edits_isolated",
+        "backend/tests/unit/services/test_submission_selection.py::test_group_partition_keeps_batch_byte_limit",
+        "backend/tests/unit/services/test_submission_selection.py::test_group_partition_keeps_cumulative_output_expansion_limit",
+        "backend/tests/api/test_submission_edge_cases.py::test_independent_ready_reviews_competing_for_same_file_have_one_claim_owner"
+      ],
+      "smoke": {"label": "group-partition-and-concurrent-intake", "status": "requires_current_gate"}
+    },
+    {
+      "id": "PR-03-unclassified", "requirement_id": "PR-03", "category": "unclassified",
+      "contract": "Each mapping must independently allow the exact chosen target; combining mappings cannot broaden authority.",
+      "test_nodes": [
+        "backend/tests/unit/services/test_submission_selection.py::test_per_mapping_target_authority_is_not_a_union",
+        "backend/tests/integration/test_submission_review_jobs.py::test_forbidden_target_never_creates_review"
+      ],
+      "smoke": {"label": "configured-target-selection", "status": "requires_current_gate"}
+    },
+    {
+      "id": "PR-05-adjacency", "requirement_id": "PR-05", "category": "adjacency",
+      "contract": "An owned branch at the exact expected head is adopted; a foreign head conflicts, and missing branches after unknown commit never authorize recreation.",
+      "test_nodes": [
+        "backend/tests/integration/test_bitbucket_write_adapter.py::test_branch_collision_never_posts_or_overwrites",
+        "backend/tests/integration/test_bitbucket_write_adapter.py::test_commit_lost_reply_is_read_only_reconciled_and_never_recreated_when_missing"
+      ],
+      "smoke": {"label": "branch-collision-and-missing-unknown-commit", "status": "requires_current_gate"}
+    },
+    {
+      "id": "PR-05-empty", "requirement_id": "PR-05", "category": "empty",
+      "contract": "Missing, null and empty proposal arrays reject before enqueue; a single complete aggregate is accepted for read-only preparation.",
+      "test_nodes": [
+        "backend/tests/api/test_submission_edge_cases.py::test_null_missing_or_empty_selection_rejects_before_enqueue",
+        "backend/tests/api/test_submission_reviews.py::test_complete_approved_review_is_durable_202_and_queue_contains_only_uuid"
+      ],
+      "smoke": {"label": "empty-and-single-selection", "status": "requires_current_gate"}
+    },
+    {
+      "id": "PR-05-ordering", "requirement_id": "PR-05", "category": "ordering",
+      "contract": "Equivalent permutations preserve the canonical content digest. Explicit fresh reviews receive new review IDs and new reserved group IDs; acceptance/recovery of one reserved review retains its original durable identities.",
+      "test_nodes": [
+        "backend/tests/integration/test_submission_review_jobs.py::test_multiple_complete_proposals_share_one_target_review",
+        "backend/tests/api/test_submissions.py::test_intake_adopts_review_group_reservations_and_recovers_same_key"
+      ],
+      "smoke": {"label": "canonical-review-and-intake-identity", "status": "requires_current_gate"}
+    },
+    {
+      "id": "PR-06-concurrency", "requirement_id": "PR-06", "category": "concurrency",
+      "contract": "A target head may differ from imported source only with exact selected-file bytes; repeat authority/head checks and CAS prevent overwriting target or generated-branch movement.",
+      "test_nodes": [
+        "backend/tests/integration/test_submission_review_jobs.py::test_target_head_may_differ_only_with_exact_file_bytes",
+        "backend/tests/integration/test_submission_jobs.py::test_selected_target_movement_blocks_later_effects_but_keeps_receipts",
+        "backend/tests/integration/test_bitbucket_write_adapter.py::test_commit_refuses_foreign_or_modified_result"
+      ],
+      "smoke": {"label": "different-head-equal-bytes-and-stale-fences", "status": "requires_current_gate"}
+    },
+    {
+      "id": "PR-07-unclassified", "requirement_id": "PR-07", "category": "unclassified",
+      "contract": "Empty 201 is verified through exact commit marker, parent, file bytes, metadata and complete diffstat; partial evidence remains unresolved.",
+      "test_nodes": [
+        "backend/tests/integration/test_bitbucket_write_adapter.py::test_commit_empty_or_json_201_is_verified_from_exact_remote_files",
+        "backend/tests/integration/test_bitbucket_write_adapter.py::test_commit_verifies_every_page_up_to_exact_file_limit",
+        "backend/tests/integration/test_bitbucket_write_adapter.py::test_commit_diffstat_advertised_missing_files_cannot_verify_receipt"
+      ],
+      "smoke": {"label": "empty-201-exact-golden-commit", "status": "requires_current_gate"}
+    },
+    {
+      "id": "PR-08-concurrency", "requirement_id": "PR-08", "category": "concurrency",
+      "contract": "PR uncertainty triggers all-state bounded read-only reconciliation; zero, duplicate or incomplete matches never permit another POST.",
+      "test_nodes": [
+        "backend/tests/integration/test_bitbucket_pr_adapter.py::test_reconcile_lost_or_late_original_send_never_creates_a_second_pr",
+        "backend/tests/integration/test_bitbucket_pr_adapter.py::test_reconcile_all_states_adopts_exact_receipt_even_when_source_branch_deleted",
+        "backend/tests/integration/test_bitbucket_pr_adapter.py::test_reconcile_zero_or_multiple_matches_never_grants_resend",
+        "backend/tests/integration/test_bitbucket_pr_adapter.py::test_reconcile_cannot_skip_page_containing_second_matching_pr"
+      ],
+      "smoke": {"label": "lost-delayed-pr-and-all-state-reconcile", "status": "requires_current_gate"}
+    },
+    {
+      "id": "PR-09-concurrency", "requirement_id": "PR-09", "category": "concurrency",
+      "contract": "A late receipt cannot replace frozen accepted data or clear a newer proposal saved after submission.",
+      "test_nodes": [
+        "backend/tests/integration/test_submission_jobs.py::test_newer_proposal_after_pr_response_survives_old_completion",
+        "backend/tests/integration/test_submission_schema.py::test_later_proposal_edits_cannot_rewrite_accepted_bytes_or_frozen_members",
+        "backend/tests/api/test_submission_history.py::test_history_preserves_frozen_values_and_reports_newer_pending_version"
+      ],
+      "smoke": {"label": "newer-proposal-retains-old-receipt", "status": "requires_current_gate"}
+    },
+    {
+      "id": "PR-10-unclassified", "requirement_id": "PR-10", "category": "unclassified",
+      "contract": "Job failure, read failure and unknown outcome have distinct controls; successful siblings survive failure and unauthorized content is purged.",
+      "test_nodes": [
+        "frontend/src/features/change-sets/ChangeSetDetailPage.test.tsx::reloads frozen detail, retains successful sibling, and retries only failed group once",
+        "frontend/src/features/change-sets/ChangeSetDetailPage.test.tsx::unknown outcomes expose Check status only and never POST a retry",
+        "frontend/src/features/change-sets/ChangeSetDetailPage.test.tsx::purges detail on lost read authority from a paged projection",
+        "frontend/src/features/change-sets/useSubmissionPolling.test.ts::polls transitions without stealing focus and preserves last status on error"
+      ],
+      "smoke": {"label": "partial-outcomes-and-permitted-recovery", "status": "requires_current_gate"}
+    },
+    {
+      "id": "PR-11-adjacency", "requirement_id": "PR-11", "category": "adjacency",
+      "contract": "Same request key and exact payload return original IDs; changed payload conflicts. Only verified terminal or positively known pre-PR finalization releases the file for a fresh later Approved version; the original exact version remains claimed.",
+      "test_nodes": [
+        "backend/tests/api/test_submissions.py::test_same_key_changed_payload_conflicts_without_second_dispatch",
+        "backend/tests/integration/test_submission_recovery.py::test_fresh_later_approved_version_admits_after_resolution_but_old_version_stays_claimed",
+        "backend/tests/integration/test_submission_recovery.py::test_verified_commit_pr_never_sent_can_finalize_for_new_version",
+        "backend/tests/integration/test_submission_recovery.py::test_unknown_or_inflight_effect_never_releases_claim"
+      ],
+      "smoke": {"label": "intake-recovery-and-fresh-later-version", "status": "requires_current_gate"}
+    },
+    {
+      "id": "PR-11-empty", "requirement_id": "PR-11", "category": "empty",
+      "contract": "Retry of missing, foreign, succeeded or unknown-effect groups never enqueues a write; unknown outcomes expose reconciliation only.",
+      "test_nodes": [
+        "backend/tests/api/test_submission_edge_cases.py::test_retry_missing_and_succeeded_group_never_enqueues",
+        "backend/tests/api/test_submissions.py::test_recovery_routes_enforce_product_roles_and_strict_attempt",
+        "backend/tests/api/test_submissions.py::test_unknown_outcome_exposes_only_readonly_reconciliation"
+      ],
+      "smoke": {"label": "retry-denials-and-read-only-reconcile", "status": "requires_current_gate"}
+    },
+    {
+      "id": "PR-11-ordering", "requirement_id": "PR-11", "category": "ordering",
+      "contract": "Stale owners cannot advance current state; broker gaps retain IDs. Explicit renewal appends a fresh proof with identical frozen content; unknown sends remain read-only and changed target authority refuses renewal.",
+      "test_nodes": [
+        "backend/tests/integration/test_submission_concurrency.py::test_expired_inflight_send_recovers_read_only_and_late_receipt_cannot_advance_new_owner",
+        "backend/tests/integration/test_submission_concurrency.py::test_crash_after_positive_read_recovery_cannot_dispatch_a_new_write",
+        "backend/tests/integration/test_submission_concurrency.py::test_queued_delivery_gap_redispatches_same_group_identity",
+        "backend/tests/integration/test_submission_recovery.py::test_generation_renewal_after_commit_reauthorizes_same_group",
+        "backend/tests/integration/test_submission_recovery.py::test_renewal_never_replaces_frozen_bytes_or_changed_authority",
+        "backend/tests/integration/test_submission_recovery.py::test_renewal_with_unknown_effect_is_read_only"
+      ],
+      "smoke": {"label": "broker-worker-death-and-generation-renewal", "status": "requires_current_gate"}
+    },
+    {
+      "id": "UI-04-unclassified", "requirement_id": "UI-04", "category": "unclassified",
+      "contract": "Polling follows 2s/5s/90s bounds, ignores stale scope/attempt and terminal regressions, and preserves focus. Native 200% and 320px visual backstops require current source-bound built browser evidence.",
+      "test_nodes": [
+        "frontend/src/features/change-sets/useSubmissionPolling.test.ts::uses two then five seconds and stops at ninety seconds",
+        "frontend/src/features/change-sets/useSubmissionPolling.test.ts::discards late principal responses and refuses same-attempt terminal regression",
+        "frontend/src/features/change-sets/ChangeSetDetailPage.test.tsx::restores the exact second-page history invoker after detail unmount and return"
+      ],
+      "smoke": {"label": "native-zoom-320px-and-five-ui-backstops", "status": "requires_current_gate"}
+    }
+  ]
+}

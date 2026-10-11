@@ -1,0 +1,467 @@
+<section id="start">
+  <p class="eyebrow">01 / GET ORIENTED</p>
+  <h2>Start with your team’s workspace.</h2>
+  <p>
+    Your administrator provides your VerboFlex address and account. Sign in,
+    change your password if prompted, then open a product.
+    <strong>This website is a guide, not a sign-in page.</strong>
+  </p>
+  <ol class="steps-list">
+    <li>
+      <strong>Open your product.</strong> Search the product list and compare supported languages and coverage.
+      Open its overview for details.
+    </li>
+    <li>
+      <strong>Open Strings.</strong> Search for a key or text and choose
+      the languages you need.
+    </li>
+    <li>
+      <strong>Save a first draft.</strong> Edit an eligible translation, check
+      its character limit and save. Your repository is unchanged until a later
+      submission.
+    </li>
+  </ol>
+  <aside class="callout">
+    Just looking around?
+    <a href="index.html#demo">Try the interactive demo</a> without an account.
+    It uses sample data and does not connect to a repository.
+  </aside>
+</section>
+<section id="connect">
+  <p class="eyebrow">02 / FOR ADMINISTRATORS</p>
+  <h2>Connect a product to its source.</h2>
+  <p>
+    A product groups its repositories, branches and translation sources.
+    Configure these in the product setup before inviting the team to translate.
+  </p>
+  <ol class="steps-list">
+    <li>
+      <strong>Choose the provider.</strong> For Bitbucket Cloud, configure the
+      organization’s connection and choose a repository. For public GitHub,
+      enter the owner/repository or its URL.
+    </li>
+    <li>
+      <strong>Define translation sources.</strong> Select the branch and folder
+      for each source. Keys and translations can come from the same repository
+      or from separately configured sources.
+    </li>
+    <li>
+      <strong>Check the preview.</strong> Confirm the detected format, base
+      language and file mapping. Resolve unsupported or ambiguous layouts before
+      proceeding.
+    </li>
+    <li>
+      <strong>Publish the configuration and import.</strong> Follow the import
+      status. Once it succeeds, open the product’s overview and translations.
+    </li>
+  </ol>
+  <h3>What each provider supports</h3>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Capability</th>
+          <th scope="col">Bitbucket Cloud</th>
+          <th scope="col">Public GitHub</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Import and refresh</th>
+          <td>Yes</td>
+          <td>Yes</td>
+        </tr>
+        <tr>
+          <th scope="row">Local editing and review</th>
+          <td>Eligible formats</td>
+          <td>Eligible formats</td>
+        </tr>
+        <tr>
+          <th scope="row">Submit a pull request</th>
+          <td>Yes</td>
+          <td>Not supported</td>
+        </tr>
+        <tr>
+          <th scope="row">Private repositories</th>
+          <td>With provider access</td>
+          <td>Not supported</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Formats and editing</h3>
+  <p>
+    Android XML, Qt <code>.ts</code>, JSON and Apple
+    <code>.strings</code> support import and eligible edits. XLIFF supports
+    import and reading; XLIFF editing and write-back are not available.
+    Structure matters: a recognized extension alone does not guarantee that
+    every file construct can be edited.
+  </p>
+</section>
+<section id="translate">
+  <p class="eyebrow">03 / FOR TRANSLATORS</p>
+  <h2>Keep the original in view.</h2>
+  <p>
+    Use the multilingual view to compare language rows under each key, or the
+    bilingual view to focus on a source and target. Choose up to 20 visible
+    languages in the multilingual view.
+  </p>
+  <h3>Find the next string</h3>
+  <p>
+    Search by text or key, then narrow the results by product, language, work
+    state or length violation. Type into searchable dropdowns to find an option.
+    The workspace loads results in pages; filters apply to the query, not just
+    the rows already on screen.
+  </p>
+  <p>
+    Each key shows its product. Only languages supported by that product appear,
+    including in All translations. Pending repository changes are highlighted in
+    amber; length violations are marked in red.
+  </p>
+  <h3>Edit and save</h3>
+  <ol class="steps-list">
+    <li>
+      Select an editable translation field. Compare the text with the source and
+      the other visible languages.
+    </li>
+    <li>
+      Enter the new text. If a maximum length is set, watch the counter.
+      Over-limit values stay visibly marked even outside the focused editor.
+    </li>
+    <li>
+      Select <strong>Save</strong>. The proposal is stored as
+      <strong>Draft</strong>; it does not change a repository file.
+    </li>
+    <li>
+      Use comments to explain wording or mention a teammate. Their in-app
+      notification links back to the discussion.
+    </li>
+  </ol>
+  <aside class="callout">
+    <strong>Fill a gap.</strong> Select <strong>Add translation</strong> on a supported
+    language. VerboFlex adds eligible entries to an existing mapped file; it does
+    not create new language files. Unsupported structures remain read-only.
+  </aside>
+  <h3>Add keys and plural forms</h3>
+  <p>
+    Use <strong>New key</strong> to choose an existing file and enter a key and text.
+    New entries are saved as drafts for review. Android and Qt support native
+    plural forms; <strong>Add forms</strong> fills missing categories. JSON and
+    Apple <code>.strings</code> support new scalar entries in eligible files.
+    ICU messages, JSON plurals and Apple <code>.stringsdict</code> authoring are not supported.
+  </p>
+  <h3>Reuse wording</h3>
+  <p>
+    Open <strong>Suggestions</strong> while editing to find exact or similar wording
+    in the same product and language pair. <strong>Use</strong> copies a suggestion
+    into the editor; check it and save. Glossary hints show preferred and forbidden
+    terms. Neither suggestions nor glossary hints approve a translation for you.
+  </p>
+  <h3>Understand length limits</h3>
+  <p>
+    VerboFlex counts user-perceived characters, including combined characters. A
+    value over its configured maximum can be kept as a draft, but cannot be
+    approved until it satisfies the limit. Use the length filter to find these
+    strings again.
+  </p>
+</section>
+<section id="review">
+  <p class="eyebrow">04 / FOR REVIEWERS</p>
+  <h2>Approve first. Submit when ready.</h2>
+  <div class="state-flow" aria-label="Review workflow">
+    <span>Draft</span><span aria-hidden="true">→</span
+    ><span>Approved / Rejected</span><span aria-hidden="true">→</span
+    ><span>Bitbucket pull request</span>
+  </div>
+  <ol class="steps-list">
+    <li>
+      <strong>Compare the proposal.</strong> Review the current text, proposed
+      text, comments and length constraints.
+    </li>
+    <li>
+      <strong>Make a decision.</strong> A reviewer or administrator can approve
+      or reject. Resolve stale source data and exceeded limits before approval.
+    </li>
+    <li>
+      <strong>Prepare a change set.</strong> Select eligible approved changes
+      and review the prepared file changes, repository and target branch.
+    </li>
+    <li>
+      <strong>Submit to Bitbucket.</strong> Confirm the submission and follow
+      the background job. Open the resulting pull request for the repository’s
+      normal review and merge process.
+    </li>
+  </ol>
+  <p>
+    Approval is not a merge. A successful submission creates repository changes
+    and a pull request; merging remains part of your team’s repository workflow.
+  </p>
+  <aside class="callout">
+    <strong>GitHub has a different stopping point.</strong> You can edit and
+    review eligible imported strings locally. VerboFlex does not push commits or
+    create pull requests on GitHub.
+  </aside>
+</section>
+<section id="refresh">
+  <p class="eyebrow">05 / WHEN SOURCE FILES CHANGE</p>
+  <h2>Refresh, then resolve what changed.</h2>
+  <p>
+    Refresh imports the latest configured source state in the background. A
+    branch update or rebase can change the source behind a proposal. VerboFlex
+    checks that relationship before allowing review or submission to continue.
+  </p>
+  <ul>
+    <li>
+      <strong>Unchanged source:</strong> continue working on the current
+      proposal.
+    </li>
+    <li>
+      <strong>Changed source or stale proposal:</strong> open the affected item,
+      compare the current source with the proposed text and reconcile it before
+      retrying review or submission.
+    </li>
+    <li>
+      <strong>Deleted translation:</strong> the translation and its associated
+      local data are removed. Do not rely on VerboFlex to archive strings
+      deleted from the repository.
+    </li>
+    <li>
+      <strong>Failed import:</strong> inspect the reported issue and fix the
+      source configuration or file. A failed import does not activate a partial
+      replacement catalog.
+    </li>
+  </ul>
+  <p>
+    After rebasing an existing Bitbucket pull request, open its change set and
+    select <strong>Check status</strong>. VerboFlex checks the current commits,
+    Git conflicts and preservation of the submitted changes. The original
+    submission remains available in its history.
+  </p>
+  <p>
+    Resolve Git conflicts in the repository, then check status again.
+    Unexpected PR edits require review. If the imported source also changed,
+    refresh the project and reconcile affected proposals before submitting again.
+  </p>
+</section>
+<section id="dashboard">
+  <p class="eyebrow">06 / YOUR DAILY STARTING POINT</p>
+  <h2>Pick up where your team left off.</h2>
+  <p>
+    Your dashboard brings together notifications, your recent operations and
+    project updates. It shows three recent project updates, with a link to the
+    full list. Your recent activity also shows three items with a link to all activity.
+  </p>
+  <p>
+    Open a product overview to see source keys, present and missing target
+    translations, and coverage by language.
+    <strong>Coverage measures available translations, not approval.</strong> A
+    fully populated language may still need review.
+  </p>
+</section>
+<section id="roles">
+  <p class="eyebrow">07 / ACCESS</p>
+  <h2>Permissions follow the person.</h2>
+  <p>
+    Users have internal accounts and can hold multiple roles. The API enforces
+    permissions for both the web application and MCP clients.
+  </p>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Role</th>
+          <th scope="col">Typical work</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Viewer</th>
+          <td>Read translations and their context.</td>
+        </tr>
+        <tr>
+          <th scope="row">Translator</th>
+          <td>Read, propose eligible edits and comment.</td>
+        </tr>
+        <tr>
+          <th scope="row">Product manager / reviewer</th>
+          <td>
+            Propose edits, comment, approve or reject, and manage eligible
+            submissions.
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Administrator</th>
+          <td>
+            Manage users, products and connections, with translation and review
+            access.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+<section id="mcp">
+  <p class="eyebrow">08 / CONNECT YOUR ASSISTANT</p>
+  <h2>Use Codex or Claude Code with OAuth.</h2>
+  <p>
+    Ask your administrator for the installation’s MCP URL. The examples below
+    use <code>https://verboflex.example/mcp</code>:
+    <strong>replace that placeholder with your actual URL.</strong>
+  </p>
+  <h3>Codex CLI</h3>
+  <p>
+    Register the HTTP server and authenticate in the browser. Start with
+    read-only access:
+  </p>
+  <pre><code>codex mcp add verboflex-oauth --url https://verboflex.example/mcp
+codex mcp login verboflex-oauth --scopes verboflex:read</code></pre>
+  <p>
+    To allow edits, authenticate with both scopes and explicitly grant write
+    access in the consent screen:
+  </p>
+  <pre><code>codex mcp login verboflex-oauth --scopes verboflex:read,verboflex:write</code></pre>
+  <h3>Claude Code</h3>
+  <pre><code>claude mcp add --transport http --scope user verboflex-oauth https://verboflex.example/mcp</code></pre>
+  <p>
+    Open <code>/mcp</code> in Claude Code and authenticate. For changes, the
+    client must request <code>verboflex:write</code> as well as
+    <code>verboflex:read</code>, and you must grant it in the browser. Read-only
+    clients cannot modify data.
+  </p>
+  <h3>Try a focused request</h3>
+  <ul>
+    <li>
+      “Show the languages with the most missing translations in this product.”
+    </li>
+    <li>“Find Italian translations that exceed their character limit.”</li>
+    <li>“Prepare a draft for this string and explain the change.”</li>
+  </ul>
+  <p>
+    MCP keeps the same roles and workflow. A saved proposal is still a draft;
+    approval and repository submission remain separate actions. VerboFlex does
+    not automatically translate your catalog when you connect a client.
+  </p>
+  <h3>Disconnect access</h3>
+  <p>
+    In VerboFlex, open the user menu → <strong>Connected apps</strong> →
+    <strong>Revoke access</strong>. This revokes the server-side connection.
+    Signing out of the web app alone leaves connected apps active.
+  </p>
+  <aside class="callout">
+    <strong>Remote clients need a reachable server.</strong> Local development
+    can use <code>http://localhost:8080/mcp</code>. Claude web cannot reach your
+    computer’s localhost; it requires public HTTPS. Codex CLI and the official
+    MCP SDK have been tested locally. Claude web still needs deployment-specific
+    end-to-end verification.
+  </aside>
+</section>
+<section id="operations">
+  <p class="eyebrow">09 / FOR INSTALLATION OWNERS</p>
+  <h2>Run the application separately from this site.</h2>
+  <p>
+    GitHub Pages hosts this static website and guide. VerboFlex itself needs a
+    backend, database and background workers. There is no hosted account signup
+    on this site.
+  </p>
+  <dl class="definition-list">
+    <dt>Application services</dt>
+    <dd>
+      React frontend, FastAPI backend, PostgreSQL, Redis and Celery
+      workers/scheduler. Docker Compose definitions are provided in the
+      application repository.
+    </dd>
+    <dt>Before the first login</dt>
+    <dd>
+      Configure deployment secrets, encrypted provider-token storage, database
+      migrations and the initial administrator account. Serve the app over HTTPS
+      for secure session cookies.
+    </dd>
+    <dt>Enable MCP</dt>
+    <dd>
+      Set <code>VERBOFLEX_MCP_PUBLIC_URL</code> to the full canonical URL ending
+      in <code>/mcp</code>. Leave it empty to disable HTTP MCP. Use the supplied
+      proxy configuration and the repository’s MCP deployment instructions.
+    </dd>
+    <dt>Backups</dt>
+    <dd>
+      The optional backup Compose service runs daily by default, verifies a
+      restore and keeps 14 verified backups. It must be configured and started
+      by the operator. Keep the matching encryption keyring with the backup on
+      private storage; the backup program does not encrypt files.
+    </dd>
+    <dt>Restore</dt>
+    <dd>
+      Restore into a new database, verify it, then perform an explicit cutover.
+      Follow the repository’s restore runbook; this is an operator procedure,
+      not a user-facing undo button.
+    </dd>
+  </dl>
+  <p>
+    VerboFlex is licensed under Apache 2.0. Use the
+    <a href="https://github.com/smutti/verboflex">application repository</a>,
+    <a
+      href="https://github.com/smutti/verboflex/blob/main/docs/backup-restore.md"
+      >backup and restore runbook</a
+    >
+    and
+    <a href="https://github.com/smutti/verboflex/blob/main/mcp-server/README.md"
+      >MCP reference</a
+    >. For a live trial, follow the
+    <a href="https://github.com/smutti/verboflex/blob/main/docs/demo-deployment.md">demo deployment guide</a>.
+  </p>
+</section>
+<section id="help">
+  <p class="eyebrow">10 / WHEN SOMETHING NEEDS ATTENTION</p>
+  <h2>Find the next useful step.</h2>
+  <details>
+    <summary>I cannot edit a field.</summary>
+    <p>
+      Check your role, whether the target record exists and whether the imported
+      structure supports editing. Source-key repositories, unsupported
+      constructs and XLIFF can be read-only. Ask an administrator to check the
+      mapping.
+    </p>
+  </details>
+  <details>
+    <summary>My draft is not in the repository.</summary>
+    <p>
+      Saving is local. A reviewer must approve eligible changes, then an
+      authorized user must prepare and submit them to Bitbucket. GitHub remote
+      writes are not supported.
+    </p>
+  </details>
+  <details>
+    <summary>Approval is blocked.</summary>
+    <p>
+      Check the character limit and whether the proposal is based on the current
+      source. Shorten the text or reconcile the source change, save, then review
+      again.
+    </p>
+  </details>
+  <details>
+    <summary>A language is missing from the table.</summary>
+    <p>
+      Check the visible language selection and active filters. The multilingual
+      view shows up to 20 languages together. If the language was never
+      imported, ask an administrator to check the source files and mapping.
+    </p>
+  </details>
+  <details>
+    <summary>An import or submission failed.</summary>
+    <p>
+      Open its status and read the reported issue. Check provider access, the
+      configured branch and the preview or source changes. Avoid resubmitting
+      blindly; verify whether a remote branch or pull request was already
+      created.
+    </p>
+  </details>
+  <details>
+    <summary>How do I report a problem?</summary>
+    <p>
+      Contact your installation administrator with the product, key, language,
+      action and visible error. A screenshot without credentials can help. Do
+      not include passwords, access tokens or private repository content in a
+      public report.
+    </p>
+  </details>
+</section>

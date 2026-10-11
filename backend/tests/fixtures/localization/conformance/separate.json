@@ -1,0 +1,240 @@
+{
+  "format": "json",
+  "cases": [
+    {
+      "id": "exact-join",
+      "inputs": [
+        {
+          "repository_side": "keys",
+          "path": "keys/en/messages.json",
+          "content": "{\"empty\":\"\",\"welcome\":\"Hello\"}",
+          "layout_identity": "json:flat-per-locale:keys/{locale}/messages.json",
+          "layout_version": 1,
+          "base_language": "en"
+        },
+        {
+          "repository_side": "translations",
+          "path": "translations/it/messages.json",
+          "content": "{\"empty\":\"\",\"welcome\":\"Ciao\"}",
+          "layout_identity": "json:flat-per-locale:translations/{locale}/messages.json",
+          "layout_version": 1,
+          "base_language": "en"
+        }
+      ],
+      "expected": [
+        {
+          "repository_side": "keys",
+          "logical_key": "empty",
+          "language": "en",
+          "source_text": "",
+          "translated_text": null
+        },
+        {
+          "repository_side": "keys",
+          "logical_key": "welcome",
+          "language": "en",
+          "source_text": "Hello",
+          "translated_text": null
+        },
+        {
+          "repository_side": "translations",
+          "logical_key": "empty",
+          "language": "it",
+          "source_text": "",
+          "translated_text": ""
+        },
+        {
+          "repository_side": "translations",
+          "logical_key": "welcome",
+          "language": "it",
+          "source_text": "Hello",
+          "translated_text": "Ciao"
+        }
+      ]
+    },
+    {
+      "id": "translation-only",
+      "inputs": [
+        {
+          "repository_side": "keys",
+          "path": "keys/en/messages.json",
+          "content": "{\"known\":\"Known\"}",
+          "layout_identity": "json:flat-per-locale:keys/{locale}/messages.json",
+          "layout_version": 1,
+          "base_language": "en"
+        },
+        {
+          "repository_side": "translations",
+          "path": "translations/it/messages.json",
+          "content": "{\"known\":\"Noto\",\"orphan\":\"Orfano\"}",
+          "layout_identity": "json:flat-per-locale:translations/{locale}/messages.json",
+          "layout_version": 1,
+          "base_language": "en"
+        }
+      ],
+      "expected": [
+        {
+          "repository_side": "keys",
+          "logical_key": "known",
+          "language": "en",
+          "source_text": "Known",
+          "translated_text": null
+        },
+        {
+          "repository_side": "translations",
+          "logical_key": "known",
+          "language": "it",
+          "source_text": "Known",
+          "translated_text": "Noto"
+        },
+        {
+          "repository_side": "translations",
+          "logical_key": "orphan",
+          "language": "it",
+          "source_text": null,
+          "translated_text": "Orfano"
+        }
+      ]
+    },
+    {
+      "id": "key-only",
+      "inputs": [
+        {
+          "repository_side": "keys",
+          "path": "keys/en/messages.json",
+          "content": "{\"known\":\"Known\",\"source_only\":\"Source only\"}",
+          "layout_identity": "json:flat-per-locale:keys/{locale}/messages.json",
+          "layout_version": 1,
+          "base_language": "en"
+        },
+        {
+          "repository_side": "translations",
+          "path": "translations/it/messages.json",
+          "content": "{\"known\":\"Noto\"}",
+          "layout_identity": "json:flat-per-locale:translations/{locale}/messages.json",
+          "layout_version": 1,
+          "base_language": "en"
+        }
+      ],
+      "expected": [
+        {
+          "repository_side": "keys",
+          "logical_key": "known",
+          "language": "en",
+          "source_text": "Known",
+          "translated_text": null
+        },
+        {
+          "repository_side": "keys",
+          "logical_key": "source_only",
+          "language": "en",
+          "source_text": "Source only",
+          "translated_text": null
+        },
+        {
+          "repository_side": "translations",
+          "logical_key": "known",
+          "language": "it",
+          "source_text": "Known",
+          "translated_text": "Noto"
+        }
+      ]
+    },
+    {
+      "id": "duplicate-path",
+      "expected_issue": "duplicate_key",
+      "inputs": [
+        {
+          "repository_side": "keys",
+          "path": "keys/en/messages.json",
+          "content": "{\"first\":\"First\"}",
+          "layout_identity": "json:flat-per-locale:keys/{locale}/messages.json",
+          "layout_version": 1,
+          "base_language": "en"
+        },
+        {
+          "repository_side": "keys",
+          "path": "keys/en/messages.json",
+          "content": "{\"second\":\"Second\"}",
+          "layout_identity": "json:flat-per-locale:keys/{locale}/messages.json",
+          "layout_version": 1,
+          "base_language": "en"
+        },
+        {
+          "repository_side": "translations",
+          "path": "translations/it/messages.json",
+          "content": "{\"first\":\"Primo\"}",
+          "layout_identity": "json:flat-per-locale:translations/{locale}/messages.json",
+          "layout_version": 1,
+          "base_language": "en"
+        }
+      ]
+    },
+    {
+      "id": "incompatible-selector",
+      "expected_issue": "unsupported_structure",
+      "inputs": [
+        {
+          "repository_side": "keys",
+          "path": "keys/en/messages.json",
+          "content": "{\"profile\":{\"title\":\"Profile\"}}",
+          "layout_identity": "json:flat-per-locale:keys/{locale}/messages.json",
+          "layout_version": 1,
+          "base_language": "en"
+        },
+        {
+          "repository_side": "translations",
+          "path": "translations/it/messages.json",
+          "content": "{\"checkout\":{\"title\":\"Titolo\"}}",
+          "layout_identity": "json:flat-per-locale:translations/{locale}/messages.json",
+          "layout_version": 1,
+          "base_language": "en"
+        }
+      ]
+    },
+    {
+      "id": "one-side-failure",
+      "expected_issue": "malformed_file",
+      "inputs": [
+        {
+          "repository_side": "keys",
+          "path": "keys/en/messages.json",
+          "content": "{\"known\":\"Known\"}",
+          "layout_identity": "json:flat-per-locale:keys/{locale}/messages.json",
+          "layout_version": 1,
+          "base_language": "en"
+        },
+        {
+          "repository_side": "translations",
+          "path": "translations/it/messages.json",
+          "content": "{",
+          "layout_identity": "json:flat-per-locale:translations/{locale}/messages.json",
+          "layout_version": 1,
+          "base_language": "en"
+        }
+      ]
+    },
+    {
+      "id": "ambiguous-language",
+      "expected_issue": "ambiguous_structure",
+      "inputs": [
+        {
+          "repository_side": "keys",
+          "path": "keys/en/messages.json",
+          "content": "{\"known\":\"Known\"}",
+          "layout_identity": "json:flat-per-locale:keys/{locale}/messages.json",
+          "layout_version": 1,
+          "base_language": "en"
+        },
+        {
+          "repository_side": "translations",
+          "path": "translations/it/messages.json",
+          "content": "{\"known\":\"Noto\"}",
+          "layout_identity": "json:flat-per-locale:translations/{locale}/messages.json",
+          "layout_version": 1,
+          "base_language": "fr"
+        }
+      ]
+    }
+  ]
+}

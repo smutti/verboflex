@@ -1,0 +1,29 @@
+# Apply after docker-compose.yml and docker-compose.prod.yml on a dedicated host.
+services:
+  postgres:
+    restart: unless-stopped
+  redis:
+    restart: unless-stopped
+  frontend:
+    build:
+      args:
+        VITE_API_BASE_URL: "/"
+  gateway:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      VERBOFLEX_DEMO_HOST: ${VERBOFLEX_DEMO_HOST:?Set the demo hostname}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/demo.Caddyfile:/etc/caddy/Caddyfile:ro
+      - demo_caddy_data:/data
+      - demo_caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+
+volumes:
+  demo_caddy_data:
+  demo_caddy_config:

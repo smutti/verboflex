@@ -1,0 +1,10 @@
+{$VERBOFLEX_DEMO_HOST} {
+    encode zstd gzip
+    @api path /api/* /mcp /oauth/* /.well-known/*
+    handle @api {
+        reverse_proxy backend:8000
+    }
+    handle {
+        reverse_proxy frontend:80
+    }
+}

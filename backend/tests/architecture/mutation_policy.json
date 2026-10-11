@@ -1,0 +1,528 @@
+{
+  "createSubmissionReview": {
+    "method": "POST",
+    "path": "/api/v1/products/{product_id}/submission-reviews",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "SubmissionReview/SubmissionBatch actor and ChangeSetEvent"
+  },
+  "createSubmissionBatch": {
+    "method": "POST",
+    "path": "/api/v1/products/{product_id}/submission-batches",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "SubmissionReview/SubmissionBatch actor and ChangeSetEvent"
+  },
+  "retryChangeSet": {
+    "method": "POST",
+    "path": "/api/v1/products/{product_id}/change-sets/{change_set_id}/retry",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "SubmissionReview/SubmissionBatch actor and ChangeSetEvent"
+  },
+  "reconcileChangeSet": {
+    "method": "POST",
+    "path": "/api/v1/products/{product_id}/change-sets/{change_set_id}/reconcile",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "SubmissionReview/SubmissionBatch actor and ChangeSetEvent"
+  },
+  "finalizeChangeSet": {
+    "method": "POST",
+    "path": "/api/v1/products/{product_id}/change-sets/{change_set_id}/finalize",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "SubmissionReview/SubmissionBatch actor and ChangeSetEvent"
+  },
+  "issue_token": {
+    "method": "POST",
+    "path": "/api/v1/auth/token",
+    "roles": [],
+    "boundary": "credential_protocol",
+    "audit": "AuthSession issuance/rotation/revocation"
+  },
+  "refresh_access_token": {
+    "method": "POST",
+    "path": "/api/v1/auth/refresh",
+    "roles": [],
+    "boundary": "credential_protocol",
+    "audit": "AuthSession issuance/rotation/revocation"
+  },
+  "logout": {
+    "method": "POST",
+    "path": "/api/v1/auth/logout",
+    "roles": [],
+    "boundary": "credential_protocol",
+    "audit": "AuthSession issuance/rotation/revocation"
+  },
+  "change_password": {
+    "method": "POST",
+    "path": "/api/v1/auth/change-password",
+    "roles": [
+      "admin",
+      "product_manager_reviewer",
+      "translator",
+      "viewer"
+    ],
+    "boundary": "self",
+    "audit": "AuditEntry user.password_changed; AuthSession revocation and User token_version"
+  },
+  "putTranslationConstraint": {
+    "method": "PUT",
+    "path": "/api/v1/translations/{translation_group_id}/constraints/{language}",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry"
+  },
+  "deleteTranslationConstraint": {
+    "method": "DELETE",
+    "path": "/api/v1/translations/{translation_group_id}/constraints/{language}",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry"
+  },
+  "saveTranslationProposal": {
+    "method": "PUT",
+    "path": "/api/v1/translations/{translation_group_id}/proposal",
+    "roles": [
+      "admin",
+      "product_manager_reviewer",
+      "translator"
+    ],
+    "boundary": "active_resource",
+    "audit": "ReviewActivity"
+  },
+  "transitionTranslationProposal": {
+    "method": "POST",
+    "path": "/api/v1/translations/{translation_group_id}/proposal/state",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_resource",
+    "audit": "ReviewActivity"
+  },
+  "createTranslationComment": {
+    "method": "POST",
+    "path": "/api/v1/translations/{translation_group_id}/comments",
+    "roles": [
+      "admin",
+      "product_manager_reviewer",
+      "translator"
+    ],
+    "boundary": "active_resource",
+    "audit": "ReviewActivity and TranslationCommentVersion"
+  },
+  "updateTranslationComment": {
+    "method": "PUT",
+    "path": "/api/v1/translations/{translation_group_id}/comments/{comment_id}",
+    "roles": [
+      "admin",
+      "product_manager_reviewer",
+      "translator"
+    ],
+    "boundary": "author",
+    "audit": "ReviewActivity and TranslationCommentVersion"
+  },
+  "deleteTranslationComment": {
+    "method": "DELETE",
+    "path": "/api/v1/translations/{translation_group_id}/comments/{comment_id}",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "active_resource",
+    "audit": "ReviewActivity and TranslationCommentVersion"
+  },
+  "markNotificationReadByComment": {
+    "method": "POST",
+    "path": "/api/v1/notifications/by-comment/{comment_id}/read",
+    "roles": [
+      "admin",
+      "product_manager_reviewer",
+      "translator",
+      "viewer"
+    ],
+    "boundary": "owner",
+    "audit": "Notification read_at"
+  },
+  "markNotificationRead": {
+    "method": "POST",
+    "path": "/api/v1/notifications/{notification_id}/read",
+    "roles": [
+      "admin",
+      "product_manager_reviewer",
+      "translator",
+      "viewer"
+    ],
+    "boundary": "owner",
+    "audit": "Notification read_at"
+  },
+  "connect_admin_bitbucket_oauth": {
+    "method": "POST",
+    "path": "/api/v1/admin/bitbucket/connect",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "reconnect_admin_bitbucket_oauth": {
+    "method": "POST",
+    "path": "/api/v1/admin/bitbucket/reconnect",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "revoke_admin_bitbucket_connection_locally": {
+    "method": "POST",
+    "path": "/api/v1/admin/bitbucket/revoke",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "connect_admin_github_repository": {
+    "method": "POST",
+    "path": "/api/v1/admin/github/repositories",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "update_admin_bitbucket_workspace": {
+    "method": "PUT",
+    "path": "/api/v1/admin/bitbucket/workspace",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "select_admin_bitbucket_repository": {
+    "method": "PUT",
+    "path": "/api/v1/admin/bitbucket/repositories/{repository_slug}",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "start_admin_published_mapping_import": {
+    "method": "POST",
+    "path": "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "confirm_admin_import_rewrite_baseline": {
+    "method": "POST",
+    "path": "/api/v1/admin/products/{product_id}/published/mappings/{mapping_id}/imports/{import_id}/rewrite-confirmation",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "create_admin_candidate_mapping": {
+    "method": "POST",
+    "path": "/api/v1/admin/products/{product_id}/candidate/mappings",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "update_admin_candidate_mapping": {
+    "method": "PATCH",
+    "path": "/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "create_admin_preview_job": {
+    "method": "POST",
+    "path": "/api/v1/admin/products/{product_id}/candidate/mappings/{mapping_id}/preview-jobs",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "confirm_admin_preview_job": {
+    "method": "POST",
+    "path": "/api/v1/admin/preview-jobs/{job_id}/confirmation",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "create_admin_active_revision_revalidation_job": {
+    "method": "POST",
+    "path": "/api/v1/admin/products/{product_id}/revisions/{revision_id}/mappings/{mapping_id}/revalidation-preview-jobs",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "confirm_admin_active_revision_revalidation": {
+    "method": "POST",
+    "path": "/api/v1/admin/active-revision-revalidation-jobs/{job_id}/confirmation",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "create_admin_user": {
+    "method": "POST",
+    "path": "/api/v1/admin/users",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "update_admin_user": {
+    "method": "PATCH",
+    "path": "/api/v1/admin/users/{user_id}",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "reset_admin_user_password": {
+    "method": "POST",
+    "path": "/api/v1/admin/users/{user_id}/reset-password",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "deactivate_admin_user": {
+    "method": "POST",
+    "path": "/api/v1/admin/users/{user_id}/deactivate",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "reactivate_admin_user": {
+    "method": "POST",
+    "path": "/api/v1/admin/users/{user_id}/reactivate",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "create_admin_product": {
+    "method": "POST",
+    "path": "/api/v1/admin/products",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "update_admin_product_candidate": {
+    "method": "PATCH",
+    "path": "/api/v1/admin/products/{product_id}",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "delete_admin_product": {
+    "method": "DELETE",
+    "path": "/api/v1/admin/products/{product_id}",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "publish_admin_product_candidate": {
+    "method": "POST",
+    "path": "/api/v1/admin/products/{product_id}/publish",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "deactivate_admin_product": {
+    "method": "POST",
+    "path": "/api/v1/admin/products/{product_id}/deactivate",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "reactivate_admin_product": {
+    "method": "POST",
+    "path": "/api/v1/admin/products/{product_id}/reactivate",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "create_admin_repository": {
+    "method": "POST",
+    "path": "/api/v1/admin/repositories",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "post_consent_api_v1_mcp_authorization__request_id__post": {
+    "method": "POST",
+    "path": "/api/v1/mcp/authorization/{request_id}",
+    "roles": [
+      "admin",
+      "product_manager_reviewer",
+      "translator",
+      "viewer"
+    ],
+    "boundary": "owner_and_scopes",
+    "audit": "McpGrant user_id/created_at/revoked_at"
+  },
+  "disconnect_api_v1_mcp_connections__grant_id__delete": {
+    "method": "DELETE",
+    "path": "/api/v1/mcp/connections/{grant_id}",
+    "roles": [
+      "admin",
+      "product_manager_reviewer",
+      "translator",
+      "viewer"
+    ],
+    "boundary": "owner_and_scopes",
+    "audit": "McpGrant user_id/created_at/revoked_at"
+  },
+  "saveAuthoringRequest": {
+    "method": "PUT",
+    "path": "/api/v1/products/{product_id}/authoring/{request_id}",
+    "roles": [
+      "admin",
+      "product_manager_reviewer",
+      "translator"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "AuditEvent authoring.saved"
+  },
+  "reviewAuthoringRequest": {
+    "method": "POST",
+    "path": "/api/v1/products/{product_id}/authoring/{request_id}/review",
+    "roles": [
+      "admin",
+      "product_manager_reviewer",
+      "translator"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "AuditEvent authoring.approved/rejected/reopened; translators may reopen only"
+  },
+  "discardAuthoringRequest": {
+    "method": "DELETE",
+    "path": "/api/v1/products/{product_id}/authoring/{request_id}",
+    "roles": [
+      "admin",
+      "product_manager_reviewer",
+      "translator"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "AuditEvent authoring.deleted"
+  },
+  "saveGlossaryTerm": {
+    "method": "PUT",
+    "path": "/api/v1/products/{product_id}/glossary/{entry_id}",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "AuditEvent glossary.saved"
+  },
+  "deleteGlossaryTerm": {
+    "method": "DELETE",
+    "path": "/api/v1/products/{product_id}/glossary/{entry_id}",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "AuditEvent glossary.deleted"
+  },
+  "matchGlossaryTerms": {
+    "method": "POST",
+    "path": "/api/v1/products/{product_id}/glossary/matches",
+    "roles": [
+      "admin",
+      "product_manager_reviewer",
+      "translator",
+      "viewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "Read-only bounded query; no mutation"
+  },
+  "getTranslationSuggestions": {
+    "method": "POST",
+    "path": "/api/v1/products/{product_id}/reuse/suggestions",
+    "roles": [
+      "admin",
+      "product_manager_reviewer",
+      "translator",
+      "viewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "Read-only bounded query; no mutation"
+  },
+  "resolveTranslationSuggestion": {
+    "method": "POST",
+    "path": "/api/v1/products/{product_id}/reuse/resolve",
+    "roles": [
+      "admin",
+      "product_manager_reviewer",
+      "translator",
+      "viewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "Read-only live-content check; no mutation"
+  }
+}

@@ -1,0 +1,207 @@
+[
+  {
+    "id": "nonstandard-dtd",
+    "content": "<!DOCTYPE TS EXTRA><TS version='2.1' language='it'/>",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "entity",
+    "content": "<!DOCTYPE TS [<!ENTITY x 'secret'>]><TS version='2.1' language='it'><context><name>Main</name><message id='x'><source>x</source><translation>&x;</translation></message></context></TS>",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "external-reference",
+    "content": "<!DOCTYPE TS SYSTEM 'https://invalid.example/hostile.dtd'><TS version='2.1' language='it'/>",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "processing-instruction",
+    "content": "<TS version='2.1' language='it'><?unsafe value?></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "xml-comment-node",
+    "content": "<TS version='2.1' language='it'><!--not a typed TS field--></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "actual-source-markup",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><source><b>Hello</b></source><translation>Ciao</translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "byte-node",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><source>Hello</source><translation><byte value='x41'/></translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "unknown-root",
+    "content": "<Other version='2.1' language='it'/>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "unknown-root-attribute",
+    "content": "<TS version='2.1' language='it' extra='x'/>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "invalid-version",
+    "content": "<TS version='2.2' language='it'/>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "missing-language",
+    "content": "<TS version='2.1'/>",
+    "expected_code": "ambiguous_structure"
+  },
+  {
+    "id": "ambiguous-language",
+    "content": "<TS version='2.1' language='en-US-POSIX'/>",
+    "expected_code": "ambiguous_structure"
+  },
+  {
+    "id": "invalid-source-language",
+    "content": "<TS version='2.1' language='it' sourcelanguage='12'/>",
+    "expected_code": "ambiguous_structure"
+  },
+  {
+    "id": "duplicate-attribute",
+    "content": "<TS version='2.1' language='it' language='en'/>",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "unknown-context-attribute",
+    "content": "<TS version='2.1' language='it'><context extra='x'><name>Main</name></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "missing-context-name",
+    "content": "<TS version='2.1' language='it'><context><message><source>x</source><translation>x</translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "context-mixed-text",
+    "content": "<TS version='2.1' language='it'><context>text<name>Main</name></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "context-comment-after-message",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><source>x</source><translation>x</translation></message><comment>late</comment></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "unknown-message-attribute",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message extra='x'><source>x</source><translation>x</translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "invalid-numerus-attribute",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message numerus='true'><source>x</source><translation>x</translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "missing-source",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><translation>x</translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "message-child-order",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><translation>x</translation><source>x</source></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "duplicate-message-metadata",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><source>x</source><comment>a</comment><comment>b</comment><translation>x</translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "location-child",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><location filename='a'><x/></location><source>x</source><translation>x</translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "location-unknown-attribute",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><location filename='a' extra='x'/><source>x</source><translation>x</translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "location-empty-filename",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><location filename=''/><source>x</source><translation>x</translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "location-without-prior-filename",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><location line='+1'/><source>x</source><translation>x</translation></message></context></TS>",
+    "expected_code": "ambiguous_structure"
+  },
+  {
+    "id": "invalid-location-line",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><location filename='a' line='0'/><source>x</source><translation>x</translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "translation-unknown-attribute",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><source>x</source><translation extra='x'>x</translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "unknown-status",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><source>x</source><translation type='finished'>x</translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "numerus-plain-mismatch",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message numerus='yes'><source>x</source><translation>x</translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "plain-numerus-mismatch",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><source>x</source><translation><numerusform>x</numerusform></translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "variants-plain-mismatch",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><source>x</source><translation variants='yes'>x</translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "lengthvariant-missing-flag",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><source>x</source><translation><lengthvariant priority='1'>x</lengthvariant></translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "lengthvariant-invalid-priority",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><source>x</source><translation variants='yes'><lengthvariant priority='0'>x</lengthvariant></translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "duplicate-priority",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><source>x</source><translation variants='yes'><lengthvariant priority='1'>a</lengthvariant><lengthvariant priority='1'>b</lengthvariant></translation></message></context></TS>",
+    "expected_code": "duplicate_key"
+  },
+  {
+    "id": "numerus-mixed-shapes",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message numerus='yes'><source>x</source><translation><numerusform>a</numerusform><numerusform variants='yes'><lengthvariant priority='1'>b</lengthvariant></numerusform></translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "translation-mixed-text",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><source>x</source><translation variants='yes'>mixed<lengthvariant priority='1'>x</lengthvariant></translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "unknown-message-child",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><source>x</source><unknown>x</unknown><translation>x</translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "control-entity",
+    "content": "<TS version='2.1' language='it'><context><name>Main</name><message><source>x</source><translation>before&#x85;after</translation></message></context></TS>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "malformed",
+    "content": "<TS version='2.1' language='it'><context>",
+    "expected_code": "malformed_file"
+  }
+]

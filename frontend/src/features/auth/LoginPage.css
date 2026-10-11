@@ -1,0 +1,96 @@
+.login-page {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  min-height: 100svh;
+  place-items: center;
+  padding: 3rem 1.5rem;
+  background: #082f35;
+}
+
+.login-backdrop {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  background:
+    radial-gradient(ellipse at 12% 12%, #16796e80, transparent 55%),
+    radial-gradient(ellipse at 95% 90%, #237c8170, transparent 50%),
+    linear-gradient(135deg, #082f35, #06242c 65%, #103e42);
+}
+
+.login-globe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 1000px);
+  height: auto;
+  color: #7cd1bf;
+  opacity: 0.17;
+  transform: translate(-50%, -50%) rotate(-18deg);
+}
+
+.login-language {
+  position: absolute;
+  padding: 0.7rem 1.3rem;
+  border: 1px solid #b2eadd24;
+  border-radius: 1rem 1rem 1rem 0.2rem;
+  background: #b2eadd08;
+  color: #c3e7df;
+  font-size: clamp(1rem, 1.8vw, 1.5rem);
+  letter-spacing: 0.02em;
+}
+
+.login-language-hello {
+  top: 15%;
+  left: 12%;
+  transform: rotate(-8deg);
+}
+
+.login-language-ciao {
+  top: 22%;
+  right: 17%;
+  transform: rotate(8deg);
+}
+
+.login-language-bonjour {
+  top: 49%;
+  left: 7%;
+  transform: rotate(-5deg);
+}
+
+.login-language-japanese {
+  top: 52%;
+  right: 6%;
+  transform: rotate(6deg);
+}
+
+.login-language-arabic {
+  bottom: 17%;
+  left: 19%;
+  transform: rotate(5deg);
+}
+
+.login-language-vietnamese {
+  right: 14%;
+  bottom: 15%;
+  transform: rotate(-7deg);
+}
+
+.login-card {
+  box-shadow:
+    0 32px 90px #00000038,
+    0 0 0 6px #ffffff08;
+}
+
+@media (max-width: 760px) {
+  .login-language {
+    display: none;
+  }
+
+  .login-globe {
+    opacity: 0.12;
+  }
+}

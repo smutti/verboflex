@@ -1,0 +1,158 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "./styles/shadcn.css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-system: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --type-label-size: 12px;
+  --type-label-line-height: 1.3;
+  --type-body-size: 14px;
+  --type-body-line-height: 1.5;
+  --type-heading-size: 20px;
+  --type-heading-line-height: 1.25;
+  --type-display-size: 28px;
+  --type-display-line-height: 1.15;
+  --weight-regular: 400;
+  --weight-semibold: 600;
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+
+  --dominant: #f8fafc;
+  --secondary: #ffffff;
+  --accent: #0f766e;
+  --destructive: #dc2626;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #6b7280;
+  --border: #e5e7eb;
+  --success: #15803d;
+  --warning: #b45309;
+  --panel-radius: 8px;
+
+  --background: var(--dominant);
+  --foreground: var(--text-primary);
+  --card: var(--secondary);
+  --card-foreground: var(--text-primary);
+  --popover: var(--secondary);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--accent);
+  --primary-foreground: var(--secondary);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--dominant);
+  --muted-foreground: var(--text-muted);
+  --accent-foreground: var(--text-primary);
+  --input: var(--border);
+  --ring: var(--accent);
+  --radius: var(--panel-radius);
+
+  --sidebar: var(--secondary);
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: var(--secondary);
+  --sidebar-accent: var(--dominant);
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--accent);
+}
+
+@theme inline {
+  --font-sans: var(--font-system);
+  --text-label: var(--type-label-size);
+  --text-label--line-height: var(--type-label-line-height);
+  --text-body: var(--type-body-size);
+  --text-body--line-height: var(--type-body-line-height);
+  --text-heading: var(--type-heading-size);
+  --text-heading--line-height: var(--type-heading-line-height);
+  --text-display: var(--type-display-size);
+  --text-display--line-height: var(--type-display-line-height);
+  --font-weight-regular: var(--weight-regular);
+  --font-weight-semibold: var(--weight-semibold);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: var(--panel-radius);
+  --radius-xl: var(--panel-radius);
+  --radius-2xl: var(--panel-radius);
+  --radius-3xl: var(--panel-radius);
+  --radius-4xl: var(--panel-radius);
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    @apply border-border;
+  }
+
+  html {
+    background: var(--dominant);
+    color: var(--text-primary);
+    font-family: var(--font-system);
+    font-size: var(--type-body-size);
+    font-weight: var(--weight-regular);
+    letter-spacing: 0;
+    line-height: var(--type-body-line-height);
+  }
+
+  body {
+    min-width: 320px;
+    min-height: 100vh;
+    margin: 0;
+    background: var(--dominant);
+    color: var(--text-primary);
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  a {
+    color: var(--accent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}

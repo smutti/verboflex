@@ -1,0 +1,82 @@
+[
+  {
+    "id": "dtd",
+    "content": "<!DOCTYPE resources><resources><string name='x'>x</string></resources>",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "entity",
+    "content": "<!DOCTYPE resources [<!ENTITY x 'secret'>]><resources><string name='x'>&x;</string></resources>",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "external-reference",
+    "content": "<!DOCTYPE resources SYSTEM 'https://invalid.example/hostile.dtd'><resources/>",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "processing-instruction",
+    "content": "<resources><?unsafe value?><string name='x'>x</string></resources>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "unknown-resource",
+    "content": "<resources><color name='x'>red</color></resources>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "unknown-namespace",
+    "content": "<resources xmlns:x='urn:hostile'><string name='x'>x</string></resources>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "duplicate-attribute",
+    "content": "<resources><string name='x' name='y'>x</string></resources>",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "invalid-declaration",
+    "content": "<?xml version='1.1'?><resources/>",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "invalid-bom",
+    "content_hex": "efbbbfefbbbf3c7265736f75726365732f3e",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "nul",
+    "content_hex": "3c7265736f75726365733e003c2f7265736f75726365733e",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "control",
+    "content": "<resources><string name='x'>beforeafter</string></resources>",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "control-entity",
+    "content": "<resources><string name='x'>before&#x85;after</string></resources>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "malformed",
+    "content": "<resources><string name='x'>x</resources>",
+    "expected_code": "malformed_file"
+  },
+  {
+    "id": "duplicate-decoded-name",
+    "content": "<resources><string name='a&#98;'>one</string><string name='ab'>two</string></resources>",
+    "expected_code": "duplicate_key"
+  },
+  {
+    "id": "invalid-android-escape",
+    "content": "<resources><string name='x'>bad\\q</string></resources>",
+    "expected_code": "unsupported_structure"
+  },
+  {
+    "id": "unpaired-android-surrogate",
+    "content": "<resources><string name='x'>bad\\uD800</string></resources>",
+    "expected_code": "unsupported_structure"
+  }
+]

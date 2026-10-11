@@ -1,0 +1,7 @@
+/* Catalog 😀 heading */
+"welcome\U002Etitle" /* key */ = /* equals */ "Benvenuto" /* value */;
+// Literal and escaped nonselected values
+"emoji" = "\UD83D\UDE00";
+"empty" = "";
+"stable" = "caf\U00E9";
+/* Trailing catalog comment */

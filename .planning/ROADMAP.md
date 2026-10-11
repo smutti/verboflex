@@ -1,0 +1,597 @@
+# Roadmap: VerboFlex
+
+## Overview
+
+VerboFlex v1 builds the repository-backed localization workflow from the foundation upward: first the separated frontend/backend platform and data model, then admin configuration with read-only Bitbucket discovery, import-grade Bitbucket integration, canonical parser/import support, search and review workflows, safe write-back, pull request automation, and final hardening. The roadmap keeps Bitbucket Cloud as the source of truth while giving product managers a dense shadcn/ui-based portal for finding, reviewing, commenting on, approving, and submitting translation changes. Every phase closes with a quality gate covering targeted tests, code review, and deploy/build smoke verification for the current app slice.
+
+## Phases
+
+**Phase Numbering:**
+
+- Integer phases (1, 2, 3): Planned milestone work
+- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+
+- [x] **Phase 1: Platform Foundation** - Establish separated frontend/backend apps, OAuth2 base, Postgres/Alembic schema, Redis/Celery, and shadcn/ui. (completed 2026-08-26)
+- [x] **Phase 2: Admin Configuration** - Build the admin control plane, organizational Bitbucket OAuth connection, live repository discovery, and read-only localization preview. (completed 2026-09-01)
+- [x] **Phase 3: Bitbucket Import Integration** - Harden Bitbucket access for imports with capability validation, durable source references, resilience, and actionable errors. (completed 2026-09-03)
+- [ ] **Phase 4: Localization Import, Search, and Constraints** - Parse supported files into canonical records, import and refresh them safely, expose search/detail workflows, and calculate max-length violations.
+- [ ] **Phase 5: Review Workspace and Comments** - Deliver the task-focused translation review UI with editing, state changes, comments, structured mentions, personal notifications, and pending-change visibility.
+- [x] **Phase 6: Format-Safe Write-Back** - Prove file-location metadata, stale-source detection, and format-preserving writer behavior before PR automation. (completed 2026-10-01)
+- [x] **Phase 7: Change Sets and Pull Requests** - Submit grouped changes through Celery jobs that create Bitbucket branches, commits, and pull requests. (completed 2026-10-01)
+- [x] **Phase 8: Verification and Hardening** - Audit role enforcement, mutation audit metadata, UI permissions, error handling, and end-to-end readiness. (completed 2026-10-04)
+
+## Per-Phase Quality Gate
+
+Every phase must complete these checks before it can be marked complete:
+
+1. **Tests added or updated:** Unit, integration, parser fixture, API, frontend, or E2E tests appropriate to the phase scope.
+2. **Code review completed:** Review changed backend, frontend, worker, migration, and test code for correctness, security, maintainability, and missing coverage.
+3. **Deploy/build verification completed:** Verify the current app slice builds and starts in the closest available deployment-like path, such as Docker Compose, local production build, or staging deployment.
+4. **Smoke check documented:** Record the commands/results or manual smoke checks used to verify the phase.
+5. **Blocking findings resolved:** Fix critical review, test, security, or deploy failures before moving to the next phase.
+6. **Fresh closeout authority:** Keep the phase incomplete until its newest code review records zero unresolved Critical findings and its newest independent verifier frontmatter is exactly `status: passed`; both must bind to the same post-gauntlet source digest.
+
+## Phase Details
+
+### Phase 1: Platform Foundation
+
+**Goal**: Establish the separated application architecture and base infrastructure for all later work.
+**Depends on**: Nothing (first phase)
+**Requirements**: [PLAT-01, PLAT-02, PLAT-03, PLAT-04, PLAT-05, PLAT-06, AUTH-01, AUTH-04, UI-01]
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+
+  1. Developer can run separate `frontend` and `backend` applications locally.
+  2. Backend exposes FastAPI health scaffolding, internal email/password OAuth2 authentication, first-admin CLI bootstrap, and PostgreSQL connectivity through SQLAlchemy.
+  3. Alembic can create and upgrade the initial schema.
+  4. Redis and Celery can execute a sample background job.
+  5. Frontend uses React/Vite/TypeScript with shadcn/ui primitives available.
+  6. Phase quality gate passes with tests, code review, and deploy/build smoke verification.
+
+**Plans**: 15/15 plans executed
+
+Plans:
+
+- [x] 01-01-PLAN.md — Blocking backend/frontend package-legitimacy approvals
+- [x] 01-02-PLAN.md — Locked FastAPI scaffold, callable endpoint stubs, and health
+- [x] 01-03-PLAN.md — Locked Vite scaffold and generated health tracer
+- [x] 01-04-PLAN.md — Secure settings and local/staging/production-oriented Docker baseline
+- [x] 01-05-PLAN.md — Reversible auth schema, exact roles, and first-admin/reset CLI
+- [x] 01-06-PLAN.md — OAuth2 login, access tokens, current identity, and backend roles
+- [x] 01-07-PLAN.md — Refresh rotation/replay, logout, password change, and revocation
+- [x] 01-08-PLAN.md — Rate limits, bounded service status, and Celery/Redis execution
+- [x] 01-09-PLAN.md — Full generated OpenAPI contract and memory-only session state
+- [x] 01-10-PLAN.md — Enumerated approved shadcn owned components
+- [x] 01-11-PLAN.md — Exact Phase 1 theme tokens and drift test
+- [x] 01-12-PLAN.md — Login/change-password routing and forms through TDD
+- [x] 01-13-PLAN.md — Neutral dashboard, service status, responsive shell, and E2E
+- [x] 01-14-PLAN.md — Fail-closed gauntlet/smoke plus fresh-context code and ASVS L1 review gate
+- [x] 01-15-PLAN.md — Final immutable-source gauntlet, evidence, and independent-verifier handoff
+
+### Phase 2: Admin Configuration
+
+**Goal**: Deliver an administrator-only control plane for internal users, versioned products, reusable repositories, one-format mappings, a single organizational Bitbucket OAuth connection, and live read-only validation previews.
+**Depends on**: Phase 1
+**Requirements**: [AUTH-02, AUTH-03, PROD-01, PROD-02, PROD-03, PROD-04, PROD-05, PROD-06, PROD-07, PROD-08, PROD-09, BITB-01, BITB-03, BITB-04, UI-03]
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+
+  1. Admin can manage the complete reversible internal-user lifecycle with multiple roles, one-time temporary credentials, and last-active-admin invariants.
+  2. Admin can create products whose candidate configuration remains isolated from the active revision until explicit atomic publication.
+  3. Admin can reuse globally unique Bitbucket Cloud repositories while keeping product-specific branches, mappings, and preview state isolated.
+  4. One organization-wide Bitbucket OAuth connection uses read-only `repository` scope to list branches and read source content for configuration preview.
+  5. Each direct or separate mapping represents exactly one detected format/layout, one source branch, allowed targets, a default target, and the fixed repository+target PR grouping rule.
+  6. Preview detects Android XML, Qt `.ts`, JSON, and iOS `.strings`, surfaces bounded samples, and fails closed on empty, invalid, ambiguous, stale, or disconnected state.
+  7. Guided shadcn admin screens provide actionable user, repository, mapping, OAuth, validation, and background-job states.
+  8. Phase quality gate passes with RED→GREEN TDD evidence, code review, and backend/frontend/worker/deploy smoke verification.
+
+**Plans**: 46/46 plans executed (20 original plans, 23/26 gap-closure plans executed)
+
+Plans:
+**Wave 1**
+
+- [x] 02-01-PLAN.md — Internal-user and additive-role administration
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 02-02-PLAN.md — Product identity, immutable revisions, and candidate APIs
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 02-03-PLAN.md — Global reusable repository registry and APIs
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 02-04-PLAN.md — Encrypted organizational OAuth connection foundation
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 02-05-PLAN.md — OAuth refresh, reconnect, local revoke, and API lifecycle
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 02-06-PLAN.md — Generation-bound read-only Bitbucket HTTP adapter
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [x] 02-07-PLAN.md — Live branch, commit, tree, and raw-source discovery
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [x] 02-08-PLAN.md — Direct revision-owned mapping persistence and APIs
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [x] 02-09-PLAN.md — Separate topology and fixed repository-target grouping
+
+**Wave 10** *(blocked on Wave 9 completion)*
+
+- [x] 02-10-PLAN.md — Atomic product publication lifecycle
+
+**Wave 11** *(blocked on Wave 10 completion)*
+
+- [x] 02-11-PLAN.md — Durable PostgreSQL/Celery preview-job boundary
+
+**Wave 12** *(blocked on Wave 11 completion)*
+
+- [x] 02-12-PLAN.md — Strict Android XML preview detector
+
+**Wave 13** *(blocked on Wave 12 completion)*
+
+- [x] 02-13-PLAN.md — Strict Qt TS, JSON, and iOS strings detectors
+
+**Wave 14** *(blocked on Wave 13 completion)*
+
+- [x] 02-14-PLAN.md — Stale-safe confirmation and publication integration
+
+**Wave 15** *(blocked on Wave 14 completion)*
+
+- [x] 02-15-PLAN.md — Canonical generated TypeScript admin client
+
+**Wave 16** *(blocked on Wave 15 completion)*
+
+- [x] 02-16-PLAN.md — Responsive guarded administrator routing and shell
+
+**Wave 17** *(blocked on Wave 16 completion)*
+
+- [x] 02-17-PLAN.md — Secret-safe internal-user administration UI
+
+**Wave 18** *(blocked on Wave 17 completion)*
+
+- [x] 02-18-PLAN.md — Product, repository, and mapping administration UI
+
+**Wave 19** *(blocked on Wave 18 completion)*
+
+- [x] 02-19-PLAN.md — OAuth, preview, publication, and responsive E2E UI
+
+**Wave 20** *(blocked on Wave 19 completion)*
+
+- [x] 02-20-PLAN.md — Phase quality gate, review, mutations, and deploy smoke
+
+**Wave 21** *(gap closure; blocked on Wave 20 completion)*
+
+- [x] 02-21-PLAN.md — Access-only credential migration, production client-credentials grant, expiry recovery, and bounded API status
+- [x] 02-23-PLAN.md — CLI last-active-admin authority and role-identity invariant
+
+**Wave 22** *(gap closure; blocked on Wave 21 completion)*
+
+- [x] 02-22-PLAN.md — Generated OAuth client and secret-free administrator recovery UI
+- [x] 02-24-PLAN.md — Product graph ownership and published-child database immutability
+- [x] 02-35-PLAN.md — Repository-scoped live-provider smoke and lossless API coverage reconciliation
+
+**Wave 23** *(gap closure; blocked on Wave 22 completion)*
+
+- [x] 02-25-PLAN.md — Complete active-to-candidate clone and atomic identity publication
+- [x] 02-26-PLAN.md — Revision-scoped mapping reads and exact query-encoded branch resolution
+- [x] 02-36-PLAN.md — Preview watchdog state/started-at index migration and query-plan proof
+
+**Wave 24** *(gap closure; blocked on Wave 23 completion)*
+
+- [x] 02-29-PLAN.md — Bounded durable preview worker-loss and hard-timeout recovery using PreviewJob.id
+- [x] 02-31-PLAN.md — Canonical OpenAPI and generated-client contracts for revision mappings and exact branches
+
+**Wave 25** *(gap closure; blocked on Wave 24 completion)*
+
+- [x] 02-27-PLAN.md — Routed published-product editing and complete five-step mobile wizard
+
+**Wave 26** *(gap closure; blocked on Wave 25 completion)*
+
+- [x] 02-28-PLAN.md — Dependency-free repository, mapping, and exact-branch cursor accumulation
+- [x] 02-32-PLAN.md — Exact unchanged-active-revision product reactivation
+
+**Wave 27** *(gap closure; blocked on Wave 26 completion)*
+
+- [x] 02-33-PLAN.md — Role-aware Workspace overview with zero non-admin administrator requests
+
+**Wave 28** *(gap closure; blocked on Wave 27 completion)*
+
+- [x] 02-34-PLAN.md — Complete preview pagination and mapping-51 lifecycle gating
+
+**Wave 29** *(gap closure traceability; blocked on Waves 21-28 completion)*
+
+- [x] 02-30-PLAN.md — Literal multi-source semantic traceability and deterministic coverage-audit contracts
+
+**Wave 30** *(gap closure runtime gate; blocked on Wave 29 completion)*
+
+- [x] 02-37-PLAN.md — Full architecture, E2E, Compose, worker-loss, security, and unchanged-source gauntlet expansion
+
+**Wave 31** *(gap closure scheduler deployment; blocked on Wave 30 completion)*
+
+- [x] 02-39-PLAN.md — Staging/production scheduler authority and dual-overlay worker-loss recovery
+
+**Wave 32** *(gap closure active-revision revalidation core; blocked on Wave 31 completion)*
+
+- [x] 02-40-PLAN.md — Immutable active-revision revalidation and reconfirmation authority
+
+**Wave 33** *(gap closure revalidation API/client; blocked on Wave 32 completion)*
+
+- [x] 02-41-PLAN.md — Exact active-revision recovery API and generated TypeScript client
+
+**Wave 34** *(gap closure revalidation UI/E2E; blocked on Wave 33 completion)*
+
+- [x] 02-42-PLAN.md — Inactive-product revalidation UI and real reconnect-to-reactivate E2E recovery
+
+**Wave 35** *(gap closure browser anti-framing; blocked on Wave 34 completion)*
+
+- [x] 02-43-PLAN.md — Runtime Nginx CSP and frame-embedding denial
+
+**Wave 36** *(gap closure final authority; blocked on every Plan 02-21 through 02-43)*
+
+- [x] 02-38-PLAN.md — Fresh critical-zero ASVS L1 review and independent `status: passed` verifier closeout
+
+**Wave 37** *(post-review gap closure; blocked on Wave 36 completion)*
+
+- [x] 02-44-PLAN.md — Exact configured-branch detail for candidate and active-revision previews
+
+**Wave 38** *(post-review gap closure; blocked on Wave 37 completion)*
+
+- [x] 02-45-PLAN.md — Router-native dirty product and mapping navigation protection
+
+**Wave 39** *(post-review closeout; blocked on Wave 38 completion)*
+
+- [x] 02-46-PLAN.md — Structured semantic audit, fresh review, and independent verifier closeout
+
+### Phase 3: Bitbucket Import Integration
+
+**Goal**: Turn the Phase 2 read-only Bitbucket boundary into an import-grade integration with capability validation, durable source references, resilient reads, and actionable operational errors.
+**Depends on**: Phase 2
+**Requirements**: [BITB-02, BITB-05, BITB-06]
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+
+  1. System validates the capabilities required by configured read/import operations and reports the later write/PR capability profile without silently expanding OAuth scopes.
+  2. Import-oriented reads use bounded retry, pagination, rate-limit, and provider-error handling on top of the Phase 2 OAuth/source boundary.
+  3. System stores the exact source commit hash and file reference used by each import attempt.
+  4. Admin receives actionable, sanitized connection, permission, rate-limit, missing-source, and import errors with safe retry guidance.
+  5. Phase quality gate passes with integration tests, code review, and backend/worker/deploy smoke verification.
+
+**Plans**: 16/16 plans executed
+
+Plans:
+**Wave 1**
+
+- [x] 03-01-PLAN.md — Production direct-import tracer through browser, API, PostgreSQL, Celery, and commit-bound reads
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 03-02-PLAN.md — Reversible import schema, immutable provenance, and negative contract hardening
+- [x] 03-03-PLAN.md — Exact expanded OAuth capability acquisition and closed backend projection
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 03-04-PLAN.md — Generated capability client and approved administrator readiness UI
+- [x] 03-05-PLAN.md — One-attempt provider resilience and application-owned GET operation boundary
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 03-06-PLAN.md — Useful sanitized structured provider diagnostics and leakage proof
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 03-07-PLAN.md — Stable logical import state machine, atomic separate baselines, retry, and watchdog
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 03-08-PLAN.md — Exact ancestry, fast-forward classification, and complete bounded rewrite delta
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [x] 03-09-PLAN.md — Durable rewrite proposals and atomic current-baseline confirmation
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [x] 03-10-PLAN.md — Five-operation import API and product-local affected-mapping aggregation
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [x] 03-11-PLAN.md — Canonical OpenAPI and complete generated TypeScript client
+
+**Wave 10** *(blocked on Wave 9 completion)*
+
+- [x] 03-12-PLAN.md — Cursor-complete import collection, bounded polling, and responsive mapping UI
+
+**Wave 11** *(blocked on Wave 10 completion)*
+
+- [x] 03-13-PLAN.md — Rewrite dialog, product freshness, browser journeys, and 26 UI consideration identities
+
+**Wave 12** *(blocked on Wave 11 completion)*
+
+- [x] 03-14-PLAN.md — Deployment mock smoke and pre-digest supplemental live-read implementation
+
+**Wave 13** *(blocked on Wave 12 completion)*
+
+- [x] 03-15-PLAN.md — Exact source/UI/API scope audit, mutation proof, manifest, and final gauntlet
+
+**Wave 14** *(blocked on Wave 13 completion)*
+
+- [x] 03-16-PLAN.md — Digest-bound ASVS L1 review and independent exact-passed verifier closeout
+
+### Phase 4: Localization Import, Search, and Constraints
+
+**Goal**: Convert supported localization files into stable canonical translation records, import and refresh them without losing review context, and expose searchable translations with maximum-length constraints.
+**Depends on**: Phase 3
+**Requirements**: [FMT-01, FMT-02, FMT-03, FMT-04, FMT-06, FMT-07, FMT-08, SRCH-01, SRCH-02, SRCH-03, SRCH-04, SRCH-05, SRCH-06, SRCH-07, SRCH-08, CONS-01, CONS-02, CONS-03, CONS-04, CONS-05]
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+
+  1. System parses Android XML, Qt `.ts`, JSON, and iOS `.strings` files into one canonical translation contract.
+  2. Canonical records include product, repository, branch, file path, format, stable key identity, language, text, state, and locator metadata.
+  3. Complete golden fixtures cover valid, empty, malformed, escaped, Unicode, and format-specific boundary cases for every supported parser.
+  4. Celery import jobs upsert and refresh canonical translations from the published Bitbucket mapping without losing stable review context.
+  5. Product managers can search and filter translations by product, language, key/text, approval state, and violation status.
+  6. User can open a translation detail view with repository, file, branch, and source context.
+  7. Authorized user can create, edit, and remove maximum-length constraints, and the system recalculates violations after imports and later edits.
+  8. The parser checkpoint and final phase quality gate pass with targeted tests, code review, and deploy/build smoke verification.
+
+**Plans**: 26/27 plans executed
+
+Plans:
+**Wave 1**
+
+- [x] 04-01-PLAN.md — Canonical parser contract and Android scalar end-to-end tracer
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 04-02-PLAN.md — Full Android scalar, plural, and array parsing
+- [x] 04-03-PLAN.md — Full Qt `.ts` scalar, numerus, and length-variant parsing
+- [x] 04-04-PLAN.md — Full canonical JSON leaf parsing
+- [x] 04-05-PLAN.md — Full iOS `.strings` lexer and serializer-safe parsing
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 04-06-PLAN.md — Cross-format conformance, direct/separate mapping join, and golden fixtures
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 04-07-PLAN.md — Intermediate parser checkpoint and blocking package-legitimacy approvals
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 04-08-PLAN.md — Migration-safe persisted mapping base-language authority
+- [x] 04-14-PLAN.md — Approved exact-pinned Unicode grapheme authority
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 04-26-PLAN.md — Base-language confirmation, currentness, active revalidation, and administrator API
+- [x] 04-10-PLAN.md — Canonical translation, history, staging, and constraint schema
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [x] 04-27-PLAN.md — Exact base-language candidate cloning and publication propagation
+- [x] 04-09-PLAN.md — Generated base-language client and Preview publication gating
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [x] 04-11-PLAN.md — Atomic import staging, reconciliation, refresh, and activation
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [x] 04-12-PLAN.md — Bounded admin parser-outcome API contract
+- [x] 04-13-PLAN.md — Authorization-scoped indexed search, stable cursors, and complete detail API
+- [x] 04-21-PLAN.md — Transaction-safe constraint inheritance, mutations, and recomputation service
+
+**Wave 10** *(blocked on Wave 9 completion)*
+
+- [x] 04-25-PLAN.md — Strict role-gated maximum-length mutation API
+
+**Wave 11** *(blocked on Wave 10 completion)*
+
+- [x] 04-15-PLAN.md — Final OpenAPI inventory and generated translation browser client
+
+**Wave 12** *(blocked on Wave 11 completion)*
+
+- [x] 04-16-PLAN.md — Principal-scoped preferences and race-safe infinite-search state machine
+- [x] 04-17-PLAN.md — Exact window-virtualized grouped result list and six-part row anatomy
+- [x] 04-22-PLAN.md — Published-mapping parser failure, retained-baseline, and retry UI
+
+**Wave 13** *(blocked on Wave 12 completion)*
+
+- [x] 04-23-PLAN.md — Exact five-filter translation search page composition
+
+**Wave 14** *(blocked on Wave 13 completion)*
+
+- [x] 04-24-PLAN.md — Protected translation search route and primary navigation
+
+**Wave 15** *(blocked on Wave 14 completion)*
+
+- [x] 04-18-PLAN.md — Wired grouped-detail route, constraint dialogs, and browser journeys
+
+**Wave 16** *(blocked on Wave 15 completion)*
+
+- [x] 04-19-PLAN.md — Exact source/scope manifest, fail-closed closeout gate, adversarial gauntlet, and smoke
+
+**Wave 17** *(blocked on Wave 16 completion)*
+
+- [ ] 04-20-PLAN.md — Fresh code/security review and fail-closed independent goal verification
+
+### Phase 5: Review Workspace and Comments
+
+**Goal**: Provide the core review workspace where authorized users edit, comment, mention collaborators, receive personal in-app notifications, and move translations through simple states.
+**Depends on**: Phase 4
+**Requirements**: [REVW-01, REVW-02, REVW-03, REVW-04, REVW-05, REVW-06, REVW-07, REVW-08, COMM-01, COMM-02, COMM-03, COMM-04, COMM-05, COMM-06, NOTF-01, NOTF-02, NOTF-03, NOTF-04, NOTF-05, UI-02]
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+
+  1. Authorized user can edit translation text and see it as a pending unsent change.
+  2. Authorized user can mark translations draft, approved, or rejected.
+  3. System records review state-change history with actor and timestamp.
+  4. Authorized user can add and view persistent per-translation comments and mention active users through structured identity selection.
+  5. Each mentioned user receives one private in-app notification, can mark it as read, and can follow it directly to the exact highlighted comment.
+  6. The application shell exposes a notification bell with the signed-in user's unread count and a dedicated notification center.
+  7. Viewer-only user cannot edit translations or change review state, and no user can read or mutate another user's notifications.
+  8. Phase quality gate passes with tests, code review, and deploy/build smoke verification.
+
+**Plans**: 17/18 plans executed
+
+Plans:
+
+**Wave 1**
+
+- [x] 05-01-PLAN.md — Review/comment/mention/notification schema and isolated Alembic round-trip
+- [x] 05-13-PLAN.md — Shared signed HMAC keyset cursor and translation-search migration
+- [x] 05-18-PLAN.md — Central principal-authorized translation-group/product access resolver
+
+**Wave 2**
+
+- [x] 05-12-PLAN.md — Scalar browser-to-database proposal tracer through the generated client
+
+**Wave 3**
+
+- [x] 05-02-PLAN.md — Versioned proposal aggregate, first-save-wins concurrency, and search/detail projection
+- [x] 05-04-PLAN.md — Stable discussions, comment history/tombstones, and bounded anchor API
+
+**Wave 4**
+
+- [x] 05-03-PLAN.md — Role-aware review transitions and append-only activity history
+- [x] 05-05-PLAN.md — UTF-16 structured mentions and exactly-once notification creation
+
+**Wave 5**
+
+- [x] 05-06-PLAN.md — Closed private notification contract, reads, count, origin-read, and SSE invalidation
+
+**Wave 6**
+
+- [x] 05-07-PLAN.md — Exact OpenAPI inventory and deterministic generated TypeScript client
+
+**Wave 7**
+
+- [x] 05-08-PLAN.md — Inline/detail proposal editing, role controls, conflicts, and activity UI
+- [x] 05-10-PLAN.md — Authenticated notification stream, bell, and recent panel
+- [x] 05-14-PLAN.md — Protected notification center with stable generated-schema pagination
+
+**Wave 8**
+
+- [x] 05-09-PLAN.md — Discussion, live history, structured mention, and comment-indicator UI
+
+**Wave 9**
+
+- [x] 05-15-PLAN.md — Bounded exact-comment deep link, focus/highlight, and read-after-focus
+
+**Wave 10**
+
+- [x] 05-11-PLAN.md — Exact source ledger and fail-first security/privacy mutation evidence
+
+**Wave 11**
+
+- [x] 05-16-PLAN.md — Real-browser journeys and isolated production-shaped Compose smoke
+
+**Wave 12**
+
+- [ ] 05-17-PLAN.md — Full gauntlet, High-or-Critical review gate, and same-digest human verification
+
+### Phase 6: Format-Safe Write-Back
+
+**Goal**: Make file write-back safe enough to trust before creating Bitbucket pull requests.
+**Depends on**: Phase 5
+**Requirements**: [FMT-05, PR-04]
+**UI hint**: no
+**Success Criteria** (what must be TRUE):
+
+  1. System preserves file location metadata needed to write changed translations back to original files.
+  2. Writer fixtures extend the Phase 4 parser corpus to verify format-preserving edits for Android XML, Qt `.ts`, JSON, and iOS `.strings`.
+  3. System detects source branch or file changes since import before writing.
+  4. Writer output avoids broad unrelated diffs for simple translation edits.
+  5. Stale source state blocks write-back with an actionable error.
+  6. Phase quality gate passes with writer tests, code review, and deploy/build smoke verification.
+
+**Plans**: 7/7 plans complete
+
+Plans:
+
+- [x] 06-01-PLAN.md — Immutable snapshots and bounded byte-edit kernel
+- [x] 06-02-PLAN.md — Safe Android/MOKO writing and XML spans
+- [x] 06-03-PLAN.md — Qt scalar, plural and length-variant writing
+- [x] 06-04-PLAN.md — JSON and original-codec iOS writing
+- [x] 06-05-PLAN.md — Verified file metadata and local source authority
+- [x] 06-06-PLAN.md — Read-only preparation, freshness checks and races
+- [x] 06-07-PLAN.md — Built-stack smoke, independent review and source-bound verification
+
+### Phase 7: Change Sets and Pull Requests
+
+**Goal**: Submit reviewed translation changes through Bitbucket Cloud branches, commits, and pull requests.
+**Depends on**: Phase 6
+**Requirements**: [PR-01, PR-02, PR-03, PR-05, PR-06, PR-07, PR-08, PR-09, PR-10, PR-11, UI-04]
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+
+  1. Authorized user can select pending translation changes for submission.
+  2. System groups changes according to product PR configuration and selected target branch rules.
+  3. Celery job creates or updates a Bitbucket branch, writes files, creates a commit, and opens a pull request.
+  4. User can see PR URL, id, branch, commit hash, included translations, status, and errors.
+  5. Failed PR submission jobs can be retried without duplicate change sets.
+  6. Phase quality gate passes with tests, code review, and deploy/build smoke verification.
+
+**Plans**: 9/9 plans complete checked, execution pending
+
+Plans:
+
+- [x] 07-01-PLAN.md — Read-only review tracer
+- [x] 07-02-PLAN.md — Complete selection, grouping and target authority
+- [x] 07-03-PLAN.md — Conditional Bitbucket branch and commit adapter
+- [x] 07-04-PLAN.md — Pull requests and result reconciliation
+- [x] 07-05-PLAN.md — Atomic submission intake and worker execution
+- [x] 07-06-PLAN.md — Durable recovery, claims and current authorization
+- [x] 07-07-PLAN.md — History, progress, partial outcomes and safe recovery UI
+- [x] 07-08-PLAN.md — Built TLS-provider E2E and keyboard verification
+- [x] 07-09-PLAN.md — Independent review and immutable-source phase gate
+
+### Phase 8: Verification and Hardening
+
+**Goal**: Verify the whole v1 workflow and close security, audit, authorization, and operational gaps.
+**Depends on**: Phase 7
+**Requirements**: [PLAT-07, AUTH-05, AUTH-06]
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+
+  1. System records audit metadata for key mutations across configuration, review, comments, and PR submission.
+  2. Backend enforces role-based authorization on all mutating APIs.
+  3. Frontend hides or disables unauthorized actions consistently.
+  4. End-to-end flow works from product setup through import, review, comment, approval, change set, and Bitbucket PR.
+  5. Common permission, stale-source, parser, and Bitbucket failure cases are covered by tests or manual verification notes.
+  6. Final quality gate confirms code review, tests, and deploy verification for the full v1 app.
+
+**Plans**: 5 plans
+
+Plans:
+
+- [x] 08-01: Audit metadata completion
+- [x] 08-02: Backend authorization audit and security tests
+- [x] 08-03: Frontend permission and UX hardening
+- [x] 08-04: End-to-end verification and release readiness
+- [x] 08-05: Final quality gate - code review, tests, and deploy verification
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. Platform Foundation | 15/15 | Complete    | 2026-08-26 |
+| 2. Admin Configuration | 46/46 | Complete    | 2026-09-01 |
+| 3. Bitbucket Import Integration | 16/16 | Complete    | 2026-09-03 |
+| 4. Localization Import, Search, and Constraints | 26/27 | In Progress|  |
+| 5. Review Workspace and Comments | 17/18 | In Progress|  |
+| 6. Format-Safe Write-Back | 7/7 | Complete    | 2026-10-01 |
+| 7. Change Sets and Pull Requests | 9/9 | Complete    | 2026-10-01 |
+| 8. Verification and Hardening | 5/5 | Complete    | 2026-10-04 |

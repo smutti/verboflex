@@ -1,0 +1,37 @@
+{
+  "format": "qt_ts",
+  "categories": {
+    "valid": ["ts-2.0", "ts-2.1", "id", "source-fallback", "context", "disambiguation", "locations", "metadata"],
+    "empty": ["empty-document", "empty-context", "empty-translation"],
+    "malformed": ["malformed", "dtd", "entity", "external-reference"],
+    "escaped": ["xml-entity-literal-markup"],
+    "unicode": ["normalized-language", "canonical-distinct-keys"],
+    "markup": ["actual-child-rejected", "byte-rejected", "processing-instruction-rejected"],
+    "numerus": ["plain-forms", "nested-length-variants"],
+    "variant": ["top-level-priorities", "nested-priorities"],
+    "status": ["active", "unfinished", "obsolete", "vanished", "never-approved"],
+    "duplicate": ["message-id", "canonical-source-selector", "variant-priority"],
+    "encoding": ["utf8", "utf8-bom", "invalid-utf8", "utf16-rejected", "nul-rejected"],
+    "boundary": ["file-bytes", "aggregate-bytes", "files", "messages", "values", "depth", "locations", "variants", "issues"],
+    "concurrency": ["same-input", "failure-isolation"]
+  },
+  "limits": {
+    "file_bytes": 1048576,
+    "aggregate_bytes": 20971520,
+    "files": 500,
+    "messages": 5000,
+    "values": 5000,
+    "depth": 6,
+    "locations_per_message": 256,
+    "variants_per_message": 256,
+    "issues": 5,
+    "issue_message": 256,
+    "path": 4096,
+    "coordinate": 2147483647
+  },
+  "fixtures": {
+    "structured": "valid_structured.ts",
+    "structured_expected": "valid_structured.expected.json",
+    "invalid": "invalid_cases.json"
+  }
+}

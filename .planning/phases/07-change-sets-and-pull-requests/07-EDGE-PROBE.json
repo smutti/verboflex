@@ -1,0 +1,148 @@
+{
+  "items": [
+    {
+      "requirement_id": "PR-01",
+      "category": "unclassified",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "07-01/02/07: only complete current Approved aggregates selected by admin/reviewer; foreign, Draft, Rejected and partial selections fail. Planned tests: backend/tests/unit/services/test_submission_selection.py::test_complete_approved_role_scope; backend/tests/api/test_submission_reviews.py.",
+      "reason": null,
+      "probe": "unclassified — review manually"
+    },
+    {
+      "requirement_id": "PR-02",
+      "category": "concurrency",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "07-02/05/06: partition by repository UUID+exact target BEFORE Phase 6 prepare/render, keep edits isolated for same repo/path across different targets, and enforce cumulative batch budgets. Atomic intake/unique claims permit one concurrent owner. Planned tests: backend/tests/integration/test_submission_review_jobs.py::test_different_targets_same_path_keep_edits_isolated; backend/tests/unit/services/test_submission_selection.py::test_group_partition_keeps_batch_byte_limit; backend/tests/integration/test_submission_concurrency.py::test_same_version_different_keys_claim_once.",
+      "reason": null,
+      "probe": "If interrupted or run in parallel, what is guaranteed?"
+    },
+    {
+      "requirement_id": "PR-03",
+      "category": "unclassified",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "07-02: each mapping allows the exact target; default is visible, no union broadens authority; changed choice invalidates review. Planned test: backend/tests/unit/services/test_submission_selection.py::test_target_authority_per_mapping.",
+      "reason": null,
+      "probe": "unclassified — review manually"
+    },
+    {
+      "requirement_id": "PR-05",
+      "category": "adjacency",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "07-03/06: exact generated branch collision adopts only recorded owned name+expected head; foreign head blocks without reset. Missing branch during unknown commit recovery never recreates effects. Planned test: backend/tests/integration/test_bitbucket_write_adapter.py::test_owned_branch_collision.",
+      "reason": null,
+      "probe": "When two things are exactly equal or just touch, do they merge, collide, or separate?"
+    },
+    {
+      "requirement_id": "PR-05",
+      "category": "empty",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "07-01/02: empty/null/partial selection rejects before enqueue or provider mutation; one complete proposal is the real review tracer. Planned test: backend/tests/unit/services/test_submission_selection.py::test_empty_selection_rejected.",
+      "reason": null,
+      "probe": "What is the result for empty, single-element, or null input?"
+    },
+    {
+      "requirement_id": "PR-05",
+      "category": "ordering",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "07-02: sort canonical IDs/versions/targets and repository UUID+target groups; equivalent input permutations retain review digest and generated durable identity. Planned test: backend/tests/unit/services/test_submission_selection.py::test_group_digest_stable_for_input_permutations.",
+      "reason": null,
+      "probe": "When elements compare equal, is output order specified and stable?"
+    },
+    {
+      "requirement_id": "PR-06",
+      "category": "concurrency",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "07-03/05/06: revalidate all imported source sides and destination bytes; conditional branch+parents refuses external advance; never overwrite unrelated files. Planned test: backend/tests/integration/test_submission_recovery.py::test_destination_and_generated_branch_movement.",
+      "reason": null,
+      "probe": "If interrupted or run in parallel, what is guaranteed?"
+    },
+    {
+      "requirement_id": "PR-07",
+      "category": "unclassified",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "07-03: 201 may be empty; verify exact marker,parent,output hashes and changed-file scope through bounded reads. Missing branch or malformed receipt remains unresolved. Planned test: backend/tests/integration/test_bitbucket_write_adapter.py::test_empty_201_verified_by_exact_commit.",
+      "reason": null,
+      "probe": "unclassified — review manually"
+    },
+    {
+      "requirement_id": "PR-08",
+      "category": "concurrency",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "07-04/06: persist send identity before PR POST; duplicate workers reconcile all states/pages. Unknown send with zero/multiple/incomplete matches never blindly reposts. Planned test: backend/tests/integration/test_bitbucket_pr_adapter.py::test_unknown_pr_send_never_reposts.",
+      "reason": null,
+      "probe": "If interrupted or run in parallel, what is guaranteed?"
+    },
+    {
+      "requirement_id": "PR-09",
+      "category": "concurrency",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "07-05/06: immutable item/file snapshots and append-only remote receipts survive stale attempt and newer proposal saves; old completion never clears newer text. Planned test: backend/tests/integration/test_submission_recovery.py::test_late_receipt_keeps_newer_proposal.",
+      "reason": null,
+      "probe": "If interrupted or run in parallel, what is guaranteed?"
+    },
+    {
+      "requirement_id": "PR-10",
+      "category": "unclassified",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "07-07: safe generated status separates job failure from polling failure and unknown outcome; partial successes preserve links, unauthorized content is removed. Planned tests: frontend/src/features/change-sets/ChangeSetDetailPage.test.tsx; frontend/src/features/change-sets/useSubmissionPolling.test.ts.",
+      "reason": null,
+      "probe": "unclassified — review manually"
+    },
+    {
+      "requirement_id": "PR-11",
+      "category": "adjacency",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "07-05/06: same client key+same digest returns original reserved group identities; changed digest conflicts; new key cannot duplicate claimed proposal/version/target. Later Approved versions proceed after terminal PR or positively known fenced pre-PR finalization plus current bases. Planned tests: backend/tests/integration/test_submission_recovery.py::test_new_version_after_resolved_pr_and_refresh; backend/tests/integration/test_submission_recovery.py::test_never_sent_terminal_releases_claim_and_fences_worker; backend/tests/integration/test_submission_recovery.py::test_verified_commit_pr_never_sent_can_finalize_for_new_version; backend/tests/integration/test_submission_recovery.py::test_unknown_or_inflight_effect_never_releases_claim.",
+      "reason": null,
+      "probe": "When two things are exactly equal or just touch, do they merge, collide, or separate?"
+    },
+    {
+      "requirement_id": "PR-11",
+      "category": "empty",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "07-06: retry absent/foreign/ineligible group is denied; success is idempotent/read-only; unknown outcome offers only reconciliation. Planned test: backend/tests/api/test_submissions.py::test_retry_missing_success_and_unknown_outcome.",
+      "reason": null,
+      "probe": "What is the result for empty, single-element, or null input?"
+    },
+    {
+      "requirement_id": "PR-11",
+      "category": "ordering",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "07-06: delivery/receipt ordering cannot regress state or let stale owner advance; broker gaps redispatch same ID. Credential renewal requires explicit fresh read-only proof with identical frozen content and target authority, append-only new proof digest and conditional owner; unknown sends remain reads only. Planned tests: backend/tests/integration/test_submission_concurrency.py::test_late_attempt_cannot_advance_current_state; backend/tests/integration/test_submission_recovery.py::test_generation_renewal_after_commit_reauthorizes_same_group; backend/tests/integration/test_submission_recovery.py::test_renewal_never_replaces_frozen_bytes; backend/tests/integration/test_submission_recovery.py::test_renewal_with_unknown_effect_is_read_only; backend/tests/integration/test_submission_recovery.py::test_renewal_changed_target_blocks_reauthorization.",
+      "reason": null,
+      "probe": "When elements compare equal, is output order specified and stable?"
+    },
+    {
+      "requirement_id": "UI-04",
+      "category": "unclassified",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "07-07/08: bounded 2s/5s/90s polling ignores stale scope/attempt responses and never moves focus; five formal UI visual backstops run at native200%/320px. Planned tests: frontend/src/features/change-sets/useSubmissionPolling.test.ts; frontend/e2e/change-sets.spec.ts; tools/phase7_smoke_browser.mjs.",
+      "reason": null,
+      "probe": "unclassified — review manually"
+    }
+  ],
+  "coverage": {
+    "applicable": 15,
+    "resolved": 15,
+    "unresolved": 0,
+    "byVerification": {
+      "explicit": 15,
+      "backstop": 0
+    }
+  }
+}

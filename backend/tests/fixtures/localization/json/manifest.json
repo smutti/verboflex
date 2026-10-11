@@ -1,0 +1,33 @@
+{
+  "format": "json",
+  "categories": {
+    "valid": ["flat-per-locale", "locale-rooted", "nested-string-leaves"],
+    "empty": ["empty-object", "empty-string"],
+    "malformed": ["syntax", "trailing-data", "unpaired-surrogate", "control"],
+    "escaped": ["escaped-key", "escaped-text", "punctuation-key"],
+    "unicode": ["astral-surrogate-pair", "non-ascii-key-and-text"],
+    "nested": ["repeated-leaf-name", "ordered-parent-path"],
+    "duplicate": ["root-member", "nested-member", "normalized-locale"],
+    "encoding": ["utf8", "bom-rejected", "invalid-utf8"],
+    "boundary": ["file-bytes", "aggregate-bytes", "files", "members", "values", "depth", "issues"],
+    "non_string": ["array", "number", "boolean", "null", "non-finite"],
+    "concurrency": ["same-input", "failure-isolation", "arbitrary-bytes"]
+  },
+  "limits": {
+    "file_bytes": 1048576,
+    "aggregate_bytes": 20971520,
+    "files": 500,
+    "members": 5000,
+    "values": 5000,
+    "depth": 12,
+    "issues": 5,
+    "issue_message": 256,
+    "path": 4096,
+    "coordinate": 2147483647
+  },
+  "fixtures": {
+    "nested": "valid_nested.json",
+    "nested_expected": "valid_nested.expected.json",
+    "invalid": "invalid_cases.json"
+  }
+}

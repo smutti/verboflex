@@ -1,0 +1,70 @@
+{
+  "entries": [
+    {
+      "bom": "none",
+      "comments": ["/* Catalog heading */"],
+      "display_text": "Benvenuto",
+      "encoding": "utf-8",
+      "language": "it-IT",
+      "logical_key": "welcome.title",
+      "position": 0,
+      "raw_key": "\"welcome\\U002Etitle\"",
+      "raw_value": "\"Benvenuto\"",
+      "source_text": null,
+      "translated_text": "Benvenuto"
+    },
+    {
+      "bom": "none",
+      "comments": ["// Escape coverage"],
+      "display_text": "Say \"ciao\" \\ path\nnext\tend",
+      "encoding": "utf-8",
+      "language": "it-IT",
+      "logical_key": "escaped",
+      "position": 1,
+      "raw_key": "\"escaped\"",
+      "raw_value": "\"Say \\\"ciao\\\" \\\\ path\\nnext\\tend\"",
+      "source_text": null,
+      "translated_text": "Say \"ciao\" \\ path\nnext\tend"
+    },
+    {
+      "bom": "none",
+      "comments": [],
+      "display_text": "café",
+      "encoding": "utf-8",
+      "language": "it-IT",
+      "logical_key": "accent",
+      "position": 2,
+      "raw_key": "\"accent\"",
+      "raw_value": "\"caf\\U00E9\"",
+      "source_text": null,
+      "translated_text": "café"
+    },
+    {
+      "bom": "none",
+      "comments": [],
+      "display_text": "😀",
+      "encoding": "utf-8",
+      "language": "it-IT",
+      "logical_key": "emoji",
+      "position": 3,
+      "raw_key": "\"emoji\"",
+      "raw_value": "\"\\UD83D\\UDE00\"",
+      "source_text": null,
+      "translated_text": "😀"
+    },
+    {
+      "bom": "none",
+      "comments": [],
+      "display_text": "",
+      "encoding": "utf-8",
+      "language": "it-IT",
+      "logical_key": "empty",
+      "position": 4,
+      "raw_key": "\"empty\"",
+      "raw_value": "\"\"",
+      "source_text": null,
+      "translated_text": ""
+    }
+  ],
+  "format": "ios_strings"
+}

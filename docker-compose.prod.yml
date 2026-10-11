@@ -1,0 +1,38 @@
+x-deployment-environment: &deployment-environment
+  VERBOFLEX_APP_ENV: production
+  VERBOFLEX_DATABASE_URL: postgresql+psycopg://verboflex:${VERBOFLEX_POSTGRES_PASSWORD:-}@postgres:5432/${VERBOFLEX_POSTGRES_DB:-verboflex}
+  VERBOFLEX_REDIS_URL: redis://redis:6379/${VERBOFLEX_REDIS_DB:-0}
+  VERBOFLEX_JWT_SECRET_KEY: ${VERBOFLEX_JWT_SECRET_KEY:-replace-me-with-at-least-32-random-bytes}
+  VERBOFLEX_JWT_ALGORITHM: HS256
+  VERBOFLEX_CORS_ORIGINS: '${VERBOFLEX_CORS_ORIGINS:-["https://replace-me.invalid"]}'
+  VERBOFLEX_ACCESS_TOKEN_EXPIRE_MINUTES: "15"
+  VERBOFLEX_PASSWORD_CHANGE_TOKEN_EXPIRE_MINUTES: "5"
+  VERBOFLEX_REFRESH_TOKEN_EXPIRE_DAYS: "7"
+  VERBOFLEX_SERVICE_PROBE_TIMEOUT_SECONDS: "2"
+  VERBOFLEX_REFRESH_COOKIE_SECURE: ${VERBOFLEX_REFRESH_COOKIE_SECURE:-true}
+  VERBOFLEX_IMPORT_SOFT_TIME_LIMIT_SECONDS: ${VERBOFLEX_IMPORT_SOFT_TIME_LIMIT_SECONDS:-180}
+  VERBOFLEX_IMPORT_HARD_TIME_LIMIT_SECONDS: ${VERBOFLEX_IMPORT_HARD_TIME_LIMIT_SECONDS:-240}
+
+services:
+  postgres:
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_PASSWORD: ${VERBOFLEX_POSTGRES_PASSWORD:-}
+  backend:
+    image: verboflex-backend:${VERBOFLEX_IMAGE_TAG:-production}
+    environment: *deployment-environment
+    restart: unless-stopped
+  worker:
+    image: verboflex-backend:${VERBOFLEX_IMAGE_TAG:-production}
+    environment: *deployment-environment
+    restart: unless-stopped
+  scheduler:
+    image: verboflex-backend:${VERBOFLEX_IMAGE_TAG:-production}
+    environment: *deployment-environment
+    restart: unless-stopped
+  frontend:
+    image: verboflex-frontend:${VERBOFLEX_IMAGE_TAG:-production}
+    build:
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://api.replace-me.invalid}
+    restart: unless-stopped

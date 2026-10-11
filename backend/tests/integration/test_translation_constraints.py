@@ -1,0 +1,1445 @@
+"""Transactional maximum-length inheritance and mutation contracts."""
+
+from __future__ import annotations
+
+import hashlib
+import importlib
+import importlib.util
+import os
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from threading import Barrier
+from typing import Any
+from uuid import UUID, uuid4
+
+import pytest
+from alembic.config import Config
+from psycopg import connect, sql
+from sqlalchemy import create_engine, select, text
+from sqlalchemy.orm import Session, sessionmaker
+
+from alembic import command
+from verboflex.localization.importing.core import CanonicalParserInput
+from verboflex.localization.importing.registry import parse_canonical_mapping
+from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.models.product import Product, ProductRevision
+from verboflex.models.product_mapping import (
+    ProductMappingAllowedTarget,
+    ProductMappingRepositorySide,
+    ProductRepositoryMapping,
+)
+from verboflex.models.repository import Repository
+from verboflex.models.translation import LocalizationScope, TranslationKey, TranslationValue
+from verboflex.models.translation_constraint import TranslationConstraint
+from verboflex.models.user import User
+from verboflex.services import import_jobs
+from verboflex.services.bitbucket_oauth import PULLREQUEST_WRITE_SCOPE
+from verboflex.services.import_jobs import ImportSourceReferenceRecord
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+ADMIN_DATABASE_URL = os.environ.get(
+    "VERBOFLEX_TEST_POSTGRES_ADMIN_URL",
+    "postgresql://postgres@127.0.0.1:55432/postgres",
+)
+
+
+@pytest.fixture(scope="module")
+def constraint_session_factory() -> Iterator[sessionmaker[Session]]:
+    database_name = f"verboflex_translation_constraints_{uuid4().hex}"
+    with connect(ADMIN_DATABASE_URL, autocommit=True) as admin_connection:
+        admin_connection.execute(
+            sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database_name))
+        )
+    database_url = ADMIN_DATABASE_URL.rsplit("/", 1)[0] + f"/{database_name}"
+    sqlalchemy_url = database_url.replace("postgresql://", "postgresql+psycopg://")
+    config = Config(BACKEND_ROOT / "alembic.ini")
+    config.set_main_option("sqlalchemy.url", sqlalchemy_url)
+    engine = create_engine(sqlalchemy_url)
+    command.upgrade(config, "head")
+    factory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
+    try:
+        yield factory
+    finally:
+        engine.dispose()
+        with connect(ADMIN_DATABASE_URL, autocommit=True) as admin_connection:
+            admin_connection.execute(
+                sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database_name))
+            )
+
+
+@pytest.fixture(autouse=True)
+def clean_constraint_database(
+    constraint_session_factory: sessionmaker[Session],
+) -> Iterator[None]:
+    with constraint_session_factory.begin() as session:
+        session.execute(text("TRUNCATE products, repositories CASCADE"))
+        connection = session.get_one(BitbucketConnection, 1)
+        connection.generation = 9
+        connection.access_token_ciphertext = "encrypted-access"
+        connection.refresh_token_ciphertext = None
+        connection.scope_profile = PULLREQUEST_WRITE_SCOPE
+        connection.provider_expires_at = datetime.now(UTC) + timedelta(hours=1)
+        connection.connected_at = datetime.now(UTC)
+        connection.revoked_at = None
+    yield
+
+
+def _translation_constraints() -> Any:
+    assert importlib.util.find_spec("verboflex.services.translation_constraints") is not None
+    return importlib.import_module("verboflex.services.translation_constraints")
+
+
+def _translation_imports() -> Any:
+    return importlib.import_module("verboflex.services.translation_imports")
+
+
+@pytest.mark.parametrize("stale_action", ["put", "delete"])
+def test_recreated_constraint_rejects_old_incarnation_version(
+    constraint_session_factory, stale_action
+):
+    service = _translation_constraints()
+    factory = constraint_session_factory
+    ids = _seed_constraint_dataset(factory)
+    common = {"translation_group_id": ids["target_value"], "language": "it"}
+    with factory.begin() as session:
+        first = service.put_translation_constraint(
+            session, **common, max_chars=2, expected_version=0, actor_id=ids["actor"]
+        )
+    with factory.begin() as session:
+        service.delete_translation_constraint(
+            session, **common, expected_version=first.version, actor_id=None
+        )
+    with factory.begin() as session:
+        recreated = service.put_translation_constraint(
+            session, **common, max_chars=8, expected_version=0, actor_id=ids["actor"]
+        )
+    with pytest.raises(service.ConstraintVersionConflict), factory.begin() as session:
+        if stale_action == "put":
+            service.put_translation_constraint(
+                session,
+                **common,
+                max_chars=1,
+                expected_version=first.version,
+                actor_id=ids["actor"],
+            )
+        else:
+            service.delete_translation_constraint(
+                session, **common, expected_version=first.version, actor_id=None
+            )
+    assert recreated.version > first.version
+    with factory() as session:
+        rule = session.scalar(
+            select(TranslationConstraint).where(
+                TranslationConstraint.translation_key_id == ids["target_key"],
+                TranslationConstraint.language == "it",
+            )
+        )
+        assert rule.max_chars == 8 and rule.version == recreated.version
+        assert session.get_one(TranslationValue, ids["target_value"]).effective_max_chars == 8
+
+
+def test_ambiguous_base_constraints_fail_without_reprojecting_values(constraint_session_factory):
+    factory = constraint_session_factory
+    ids = _seed_constraint_dataset(factory)
+    with factory.begin() as session:
+        session.add_all(
+            [
+                _explicit_constraint(ids=ids, key="base_key", language="en", maximum=2),
+                _explicit_constraint(ids=ids, key="target_key", language="en", maximum=8),
+            ]
+        )
+    with (
+        factory.begin() as session,
+        pytest.raises(_translation_constraints().ConstraintAuthorityUnavailable, match="ambiguous"),
+    ):
+        _translation_constraints().recompute_translation_constraints(session, scope_id=ids["scope"])
+    with factory() as session:
+        value = session.get_one(TranslationValue, ids["target_value"])
+        assert value.effective_max_chars is None and not value.is_over_limit
+
+
+def test_missing_rule_cannot_be_updated_with_nonzero_version(constraint_session_factory):
+    factory = constraint_session_factory
+    ids = _seed_constraint_dataset(factory)
+    with factory.begin() as session:
+        with pytest.raises(_translation_constraints().ConstraintVersionConflict):
+            _translation_constraints().put_translation_constraint(
+                session,
+                translation_group_id=ids["target_value"],
+                language="it",
+                max_chars=2,
+                expected_version=1,
+                actor_id=ids["actor"],
+            )
+        assert session.scalar(select(TranslationConstraint.id)) is None
+    with factory() as session:
+        assert tuple(session.scalars(select(TranslationConstraint))) == ()
+
+
+def test_tombstoned_key_never_accepts_constraint_even_with_retained_value(
+    constraint_session_factory,
+):
+    factory = constraint_session_factory
+    ids = _seed_constraint_dataset(factory)
+    with factory.begin() as session:
+        key = session.get_one(TranslationKey, ids["target_key"])
+        key.is_deleted, key.deleted_at = True, datetime.now(UTC)
+    with factory.begin() as session:
+        with pytest.raises(_translation_constraints().ConstraintAuthorityUnavailable):
+            _translation_constraints().put_translation_constraint(
+                session,
+                translation_group_id=ids["target_value"],
+                language="it",
+                max_chars=2,
+                expected_version=0,
+                actor_id=ids["actor"],
+            )
+        assert session.scalar(select(TranslationConstraint.id)) is None
+    with factory() as session:
+        assert tuple(session.scalars(select(TranslationConstraint))) == ()
+        assert session.get_one(TranslationValue, ids["target_value"]).display_text == "Ciao"
+
+
+def test_nonleading_structured_value_cannot_impersonate_the_translation_group(
+    constraint_session_factory,
+):
+    factory = constraint_session_factory
+    ids = _seed_constraint_dataset(factory)
+    with factory.begin() as session:
+        session.add(
+            TranslationValue(
+                id=uuid4(),
+                scope_id=ids["scope"],
+                translation_key_id=ids["target_key"],
+                language="it",
+                selector_version=1,
+                selector_kind="android_quantity",
+                selector_bytes=b'{"quantity":"other"}',
+                selector_digest=_selector_digest(b'{"quantity":"other"}'),
+                source_text=None,
+                translated_text="Altri",
+                display_text="Altri",
+                structure=[],
+                review_state="draft",
+            )
+        )
+    with factory.begin() as session:
+        group_values = tuple(
+            session.scalars(
+                select(TranslationValue)
+                .where(TranslationValue.translation_key_id == ids["target_key"])
+                .order_by(TranslationValue.id)
+            )
+        )
+        with pytest.raises(_translation_constraints().ConstraintAuthorityUnavailable):
+            _translation_constraints().put_translation_constraint(
+                session,
+                translation_group_id=group_values[-1].id,
+                language="it",
+                max_chars=2,
+                expected_version=0,
+                actor_id=ids["actor"],
+            )
+        accepted = _translation_constraints().put_translation_constraint(
+            session,
+            translation_group_id=group_values[0].id,
+            language="it",
+            max_chars=2,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+        targets = tuple(value for value in accepted.values if value.language == "it")
+        assert len(targets) == 2 and all(value.maximum == 2 for value in targets)
+
+
+def test_edit_recomputation_rejects_an_unsaved_value_without_projecting_it(
+    constraint_session_factory,
+):
+    factory = constraint_session_factory
+    ids = _seed_constraint_dataset(factory)
+    unsaved_id = uuid4()
+    with factory.begin() as session:
+        unsaved = TranslationValue(
+            id=unsaved_id, scope_id=ids["scope"], translation_key_id=ids["target_key"]
+        )
+        with pytest.raises(_translation_constraints().ConstraintAuthorityUnavailable):
+            _translation_constraints().recompute_after_translation_edit(session, value=unsaved)
+        assert session.get(TranslationValue, unsaved_id) is None
+        assert session.get_one(TranslationValue, ids["target_value"]).display_text == "Ciao"
+
+
+def _selector_digest(selector_bytes: bytes) -> str:
+    return hashlib.sha256(selector_bytes).hexdigest()
+
+
+def _seed_constraint_dataset(
+    factory: sessionmaker[Session],
+    *,
+    base_language: str | None = "en",
+    target_text: str = "Ciao",
+) -> dict[str, UUID]:
+    ids = {
+        "actor": uuid4(),
+        "base_key": uuid4(),
+        "base_repository": uuid4(),
+        "base_value": uuid4(),
+        "mapping": uuid4(),
+        "product": uuid4(),
+        "revision": uuid4(),
+        "scope": uuid4(),
+        "target_key": uuid4(),
+        "target_repository": uuid4(),
+        "target_value": uuid4(),
+    }
+    base_selector = b'{"kind":"scalar","schema_version":1}'
+    target_selector = b'{"kind":"scalar","schema_version":1}'
+    with factory.begin() as session:
+        product = Product(
+            id=ids["product"],
+            display_name=f"Constraint product {ids['product']}",
+            name_key=f"constraint product {ids['product']}",
+            is_active=True,
+        )
+        session.add(product)
+        session.flush()
+        session.add_all(
+            [
+                ProductRevision(
+                    id=ids["revision"],
+                    product_id=ids["product"],
+                    description="published constraints",
+                    version=1,
+                    is_published=False,
+                ),
+                Repository(
+                    id=ids["base_repository"],
+                    workspace="constraint-team",
+                    repository_slug=f"keys-{ids['base_repository'].hex}",
+                    descriptive_name="Constraint keys",
+                    descriptive_name_key="constraint keys",
+                ),
+                Repository(
+                    id=ids["target_repository"],
+                    workspace="constraint-team",
+                    repository_slug=f"translations-{ids['target_repository'].hex}",
+                    descriptive_name="Constraint translations",
+                    descriptive_name_key="constraint translations",
+                ),
+                User(
+                    id=ids["actor"],
+                    email=f"constraint-{ids['actor']}@example.com",
+                    display_name="Constraint reviewer",
+                    hashed_password="not-used-by-constraint-tests",
+                    is_active=True,
+                    must_change_password=False,
+                ),
+            ]
+        )
+        session.flush()
+        mapping = ProductRepositoryMapping(
+            id=ids["mapping"],
+            revision_id=ids["revision"],
+            topology="separate",
+            identity_key=(
+                f'[["keys","{ids["base_repository"]}","main"],'
+                f'["translations","{ids["target_repository"]}","main"]]'
+            ),
+            base_language=base_language,
+            sides=[
+                ProductMappingRepositorySide(
+                    role="keys",
+                    repository_id=ids["base_repository"],
+                    source_branch="main",
+                ),
+                ProductMappingRepositorySide(
+                    role="translations",
+                    repository_id=ids["target_repository"],
+                    source_branch="main",
+                ),
+            ],
+            allowed_targets=[ProductMappingAllowedTarget(branch="main", is_default=True)],
+        )
+        session.add(mapping)
+        session.flush()
+        revision = session.get_one(ProductRevision, ids["revision"])
+        revision.is_published = True
+        revision.published_at = datetime.now(UTC)
+        session.flush()
+        product.active_revision_id = ids["revision"]
+        session.flush()
+        scope = LocalizationScope(
+            id=ids["scope"],
+            product_id=ids["product"],
+            mapping_identity_key=mapping.identity_key,
+            current_revision_id=ids["revision"],
+            current_mapping_id=ids["mapping"],
+        )
+        session.add(scope)
+        session.flush()
+        session.add_all(
+            [
+                TranslationKey(
+                    id=ids["base_key"],
+                    scope_id=ids["scope"],
+                    product_id=ids["product"],
+                    repository_id=ids["base_repository"],
+                    configured_branch="main",
+                    raw_key="welcome",
+                ),
+                TranslationKey(
+                    id=ids["target_key"],
+                    scope_id=ids["scope"],
+                    product_id=ids["product"],
+                    repository_id=ids["target_repository"],
+                    configured_branch="main",
+                    raw_key="welcome",
+                ),
+            ]
+        )
+        session.flush()
+        session.add_all(
+            [
+                TranslationValue(
+                    id=ids["base_value"],
+                    scope_id=ids["scope"],
+                    translation_key_id=ids["base_key"],
+                    language="en",
+                    selector_version=1,
+                    selector_kind="scalar",
+                    selector_bytes=base_selector,
+                    selector_digest=_selector_digest(base_selector),
+                    source_text="Hello",
+                    translated_text="Hello",
+                    display_text="Hello",
+                    structure=[],
+                    review_state="draft",
+                ),
+                TranslationValue(
+                    id=ids["target_value"],
+                    scope_id=ids["scope"],
+                    translation_key_id=ids["target_key"],
+                    language="it",
+                    selector_version=1,
+                    selector_kind="scalar",
+                    selector_bytes=target_selector,
+                    selector_digest=_selector_digest(target_selector),
+                    source_text=None,
+                    translated_text=target_text,
+                    display_text=target_text,
+                    structure=[],
+                    review_state="draft",
+                ),
+            ]
+        )
+    return ids
+
+
+def _explicit_constraint(
+    *,
+    ids: dict[str, UUID],
+    key: str,
+    language: str,
+    maximum: int,
+) -> TranslationConstraint:
+    return TranslationConstraint(
+        scope_id=ids["scope"],
+        translation_key_id=ids[key],
+        language=language,
+        max_chars=maximum,
+        created_by=ids["actor"],
+        updated_by=ids["actor"],
+    )
+
+
+def test_inheritance_projection_labels_default_inherited_override_and_none() -> None:
+    service = _translation_constraints()
+    base_default = TranslationConstraint(language="en", max_chars=5)
+    override = TranslationConstraint(language="it", max_chars=3)
+
+    default = service.project_effective_constraint(
+        language="en",
+        base_language="en",
+        explicit_constraint=base_default,
+        base_constraint=base_default,
+    )
+    inherited = service.project_effective_constraint(
+        language="it",
+        base_language="en",
+        explicit_constraint=None,
+        base_constraint=base_default,
+    )
+    overridden = service.project_effective_constraint(
+        language="it",
+        base_language="en",
+        explicit_constraint=override,
+        base_constraint=base_default,
+    )
+    absent = service.project_effective_constraint(
+        language="it",
+        base_language="en",
+        explicit_constraint=None,
+        base_constraint=None,
+    )
+
+    assert (default.maximum, default.source, default.label) == (5, "base_default", "default")
+    assert (inherited.maximum, inherited.source, inherited.label) == (
+        5,
+        "base_default",
+        "inherited",
+    )
+    assert (overridden.maximum, overridden.source, overridden.label) == (
+        3,
+        "language_override",
+        "override",
+    )
+    assert (absent.maximum, absent.source, absent.label) == (None, "none", "none")
+
+
+def test_recompute_fans_dynamic_base_default_across_repository_keys(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with constraint_session_factory.begin() as session:
+        base_default = _explicit_constraint(
+            ids=ids,
+            key="base_key",
+            language="en",
+            maximum=4,
+        )
+        session.add(base_default)
+        service.recompute_translation_constraints(
+            session,
+            scope_id=ids["scope"],
+        )
+        target = session.get_one(TranslationValue, ids["target_value"])
+        assert (target.effective_max_chars, target.effective_constraint_source) == (
+            4,
+            "base_default",
+        )
+        assert target.is_over_limit is False
+
+        base_default.max_chars = 3
+        base_default.version += 1
+        service.recompute_translation_constraints(
+            session,
+            scope_id=ids["scope"],
+            raw_key="welcome",
+        )
+        assert target.effective_max_chars == 3
+        assert target.is_over_limit is True
+
+
+def test_recompute_preserves_independent_target_override_on_base_change(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with constraint_session_factory.begin() as session:
+        base_default = _explicit_constraint(
+            ids=ids,
+            key="base_key",
+            language="en",
+            maximum=2,
+        )
+        override = _explicit_constraint(
+            ids=ids,
+            key="target_key",
+            language="it",
+            maximum=10,
+        )
+        session.add_all([base_default, override])
+        service.recompute_translation_constraints(session, scope_id=ids["scope"])
+        base_default.max_chars = 1
+        base_default.version += 1
+        service.recompute_translation_constraints(session, scope_id=ids["scope"])
+        target = session.get_one(TranslationValue, ids["target_value"])
+
+    assert (target.effective_max_chars, target.effective_constraint_source) == (
+        10,
+        "language_override",
+    )
+    assert target.is_over_limit is False
+
+
+def test_grapheme_recompute_counts_visible_text_without_normalizing_it(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    visible_text = "e\u0301👨‍👩‍👧‍👦"
+    ids = _seed_constraint_dataset(
+        constraint_session_factory,
+        target_text=visible_text,
+    )
+    with constraint_session_factory.begin() as session:
+        session.add(
+            _explicit_constraint(
+                ids=ids,
+                key="base_key",
+                language="en",
+                maximum=1,
+            )
+        )
+        projections = service.recompute_translation_constraints(
+            session,
+            scope_id=ids["scope"],
+        )
+        target = session.get_one(TranslationValue, ids["target_value"])
+        target_projection = next(item for item in projections if item.value_id == target.id)
+
+    assert target.display_text == visible_text
+    assert target.grapheme_count == 2
+    assert target.is_over_limit is True
+    assert target.review_state == "draft"
+    assert target_projection.approval_eligible is False
+    assert target_projection.submission_eligible is False
+
+
+def test_recompute_empty_scope_is_a_valid_noop_and_missing_base_is_rejected(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with constraint_session_factory.begin() as session:
+        session.execute(
+            text("DELETE FROM translation_values WHERE scope_id = :scope_id"),
+            {"scope_id": ids["scope"]},
+        )
+        assert (
+            service.recompute_translation_constraints(
+                session,
+                scope_id=ids["scope"],
+            )
+            == ()
+        )
+
+    missing_base_ids = _seed_constraint_dataset(
+        constraint_session_factory,
+        base_language=None,
+    )
+    with (
+        constraint_session_factory.begin() as session,
+        pytest.raises(service.ConstraintAuthorityUnavailable),
+    ):
+        service.recompute_translation_constraints(
+            session,
+            scope_id=missing_base_ids["scope"],
+        )
+
+
+def test_recompute_tombstone_retains_exact_authoritative_projection(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory, target_text="Ciao")
+    with constraint_session_factory.begin() as session:
+        session.add(
+            _explicit_constraint(
+                ids=ids,
+                key="base_key",
+                language="en",
+                maximum=3,
+            )
+        )
+        target = session.get_one(TranslationValue, ids["target_value"])
+        target.is_deleted = True
+        target.deleted_at = datetime.now(UTC)
+        projections = service.recompute_translation_constraints(
+            session,
+            scope_id=ids["scope"],
+        )
+        target_projection = next(item for item in projections if item.value_id == target.id)
+
+    assert (target.grapheme_count, target.effective_max_chars, target.is_over_limit) == (
+        4,
+        3,
+        True,
+    )
+    assert target_projection.approval_eligible is False
+    assert target_projection.submission_eligible is False
+
+
+def test_recompute_after_translation_edit_uses_the_same_grapheme_authority(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    edited_text = "👩🏽‍💻e\u0301"
+    with constraint_session_factory.begin() as session:
+        session.add(
+            _explicit_constraint(
+                ids=ids,
+                key="base_key",
+                language="en",
+                maximum=1,
+            )
+        )
+        target = session.get_one(TranslationValue, ids["target_value"])
+        target.display_text = edited_text
+        target.translated_text = edited_text
+        projection = service.recompute_after_translation_edit(session, value=target)
+
+    assert target.display_text == edited_text
+    assert (projection.actual, projection.maximum, projection.source) == (
+        2,
+        1,
+        "base_default",
+    )
+    assert projection.is_over_limit is True
+
+
+def _seed_running_direct_import(
+    factory: sessionmaker[Session],
+) -> tuple[import_jobs.ImportExecutionIdentity, UUID]:
+    product_id = uuid4()
+    revision_id = uuid4()
+    repository_id = uuid4()
+    mapping_id = uuid4()
+    now = datetime.now(UTC)
+    with factory.begin() as session:
+        product = Product(
+            id=product_id,
+            display_name=f"Constraint import {product_id}",
+            name_key=f"constraint import {product_id}",
+            is_active=True,
+        )
+        session.add(product)
+        session.flush()
+        session.add_all(
+            [
+                ProductRevision(
+                    id=revision_id,
+                    product_id=product_id,
+                    description="published constraint import",
+                    version=1,
+                    is_published=False,
+                ),
+                Repository(
+                    id=repository_id,
+                    workspace="constraint-team",
+                    repository_slug=f"constraint-{repository_id.hex}",
+                    descriptive_name="Constraint import source",
+                    descriptive_name_key="constraint import source",
+                ),
+            ]
+        )
+        session.flush()
+        session.add(
+            ProductRepositoryMapping(
+                id=mapping_id,
+                revision_id=revision_id,
+                topology="direct",
+                identity_key=f'[["direct","{repository_id}","main"]]',
+                base_language="en",
+                sides=[
+                    ProductMappingRepositorySide(
+                        role="direct",
+                        repository_id=repository_id,
+                        source_branch="main",
+                    )
+                ],
+                allowed_targets=[ProductMappingAllowedTarget(branch="main", is_default=True)],
+            )
+        )
+        session.flush()
+        revision = session.get_one(ProductRevision, revision_id)
+        revision.is_published = True
+        revision.published_at = now
+        session.flush()
+        product.active_revision_id = revision_id
+    with factory() as session:
+        record = import_jobs.start_or_refresh_import(
+            session,
+            product_id=product_id,
+            mapping_id=mapping_id,
+            enqueuer=lambda _import_id: None,
+            actor_id=None,
+        )
+    assert record.id is not None
+    identity = import_jobs.start_import_execution(factory, import_id=record.id)
+    assert identity is not None
+    return identity, repository_id
+
+
+def _activate_json_import(
+    factory: sessionmaker[Session],
+    *,
+    identity: import_jobs.ImportExecutionIdentity,
+    repository_id: UUID,
+    translated: str,
+    commit_hash: str,
+) -> None:
+    result = parse_canonical_mapping(
+        (
+            CanonicalParserInput(
+                format="json",
+                repository_side="direct",
+                path="locales.json",
+                content=(
+                    '{"en":{"welcome":"Hello"},"it":{"welcome":"' + translated + '"}}'
+                ).encode(),
+                layout_identity="json:locale-rooted:locales.json",
+                layout_version=1,
+                base_language="en",
+            ),
+        )
+    )
+    references = (
+        ImportSourceReferenceRecord(
+            position=0,
+            repository_side="direct",
+            repository_id=repository_id,
+            source_branch="main",
+            commit_hash=commit_hash,
+            path="locales.json",
+            size_bytes=64,
+            sha256="b" * 64,
+        ),
+    )
+    manifest = _translation_imports().stage_translation_parse(
+        factory,
+        identity=identity,
+        references=references,
+        result=result,
+    )
+    assert manifest is not None
+    assert import_jobs.finish_import_execution(
+        factory,
+        identity=identity,
+        references=references,
+        canonical_manifest_digest=manifest.digest,
+    )
+
+
+def test_constraint_changes_advance_active_dataset_epoch_but_noop_and_rollback_do_not(
+    constraint_session_factory,
+):
+    factory = constraint_session_factory
+    service = _translation_constraints()
+    identity, repository_id = _seed_running_direct_import(factory)
+    _activate_json_import(
+        factory,
+        identity=identity,
+        repository_id=repository_id,
+        translated="Ciao",
+        commit_hash="a" * 40,
+    )
+    actor_id = uuid4()
+    with factory.begin() as session:
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        scope_id = scope.id
+        original_epoch = scope.dataset_version
+        value = session.scalar(
+            select(TranslationValue).where(
+                TranslationValue.scope_id == scope_id, TranslationValue.language == "it"
+            )
+        )
+        group_id = value.id
+        session.add(
+            User(
+                id=actor_id,
+                email=f"epoch-{actor_id}@example.com",
+                display_name="Epoch reviewer",
+                hashed_password="unused",
+                is_active=True,
+                must_change_password=False,
+            )
+        )
+    common = {"translation_group_id": group_id, "language": "it"}
+    with factory.begin() as session:
+        created = service.put_translation_constraint(
+            session, **common, max_chars=2, expected_version=0, actor_id=actor_id
+        )
+        assert session.get_one(LocalizationScope, scope_id).dataset_version == original_epoch + 1
+    with factory.begin() as session:
+        unchanged = service.put_translation_constraint(
+            session, **common, max_chars=2, expected_version=created.version, actor_id=actor_id
+        )
+        assert unchanged.version == created.version
+        assert session.get_one(LocalizationScope, scope_id).dataset_version == original_epoch + 1
+    with factory() as session:
+        service.put_translation_constraint(
+            session, **common, max_chars=9, expected_version=created.version, actor_id=actor_id
+        )
+        assert session.get_one(LocalizationScope, scope_id).dataset_version == original_epoch + 2
+        session.rollback()
+    with factory.begin() as session:
+        assert session.get_one(LocalizationScope, scope_id).dataset_version == original_epoch + 1
+        removed = service.delete_translation_constraint(
+            session,
+            **common,
+            expected_version=created.version,
+            actor_id=None,
+        )
+        assert removed.explicit_maximum is None
+        assert session.get_one(LocalizationScope, scope_id).dataset_version == original_epoch + 2
+        assert (
+            session.get_one(LocalizationScope, scope_id).active_execution_id
+            == identity.execution_id
+        )
+
+
+def test_import_activation_recomputes_violation_and_eligibility_in_one_transaction(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    identity, repository_id = _seed_running_direct_import(constraint_session_factory)
+    _activate_json_import(
+        constraint_session_factory,
+        identity=identity,
+        repository_id=repository_id,
+        translated="Ciao",
+        commit_hash="a" * 40,
+    )
+    with constraint_session_factory.begin() as session:
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        assert scope is not None
+        base_key = session.execute(
+            select(TranslationKey)
+            .join(TranslationValue)
+            .where(
+                TranslationKey.scope_id == scope.id,
+                TranslationKey.raw_key == "welcome",
+                TranslationValue.language == "en",
+            )
+        ).scalar_one()
+        actor_id = uuid4()
+        session.add(
+            User(
+                id=actor_id,
+                email=f"import-constraint-{actor_id}@example.com",
+                display_name="Import constraint reviewer",
+                hashed_password="not-used-by-constraint-tests",
+                is_active=True,
+                must_change_password=False,
+            )
+        )
+        session.add(
+            TranslationConstraint(
+                scope_id=scope.id,
+                translation_key_id=base_key.id,
+                language="en",
+                max_chars=3,
+                created_by=actor_id,
+                updated_by=actor_id,
+            )
+        )
+    with constraint_session_factory.begin() as session:
+        execution = session.get_one(
+            import_jobs.ImportExecution,
+            identity.execution_id,
+        )
+        job = session.get_one(import_jobs.ImportJob, identity.import_id)
+        execution.state = "succeeded"
+        execution.finished_at = execution.finished_at or datetime.now(UTC)
+        job.state = "current"
+        job.active_baseline_execution_id = execution.id
+    with constraint_session_factory() as session:
+        import_jobs.start_or_refresh_import(
+            session,
+            product_id=identity.product_id,
+            mapping_id=identity.mapping_id,
+            enqueuer=lambda _import_id: None,
+            actor_id=None,
+        )
+    successor = import_jobs.start_import_execution(
+        constraint_session_factory,
+        import_id=identity.import_id,
+    )
+    assert successor is not None
+    _activate_json_import(
+        constraint_session_factory,
+        identity=successor,
+        repository_id=repository_id,
+        translated="👩🏽‍💻Ciao",
+        commit_hash="c" * 40,
+    )
+
+    with constraint_session_factory() as session:
+        target = session.execute(
+            select(TranslationValue)
+            .join(TranslationKey)
+            .where(
+                TranslationKey.scope_id
+                == select(LocalizationScope.id)
+                .where(LocalizationScope.product_id == identity.product_id)
+                .scalar_subquery(),
+                TranslationKey.raw_key == "welcome",
+                TranslationValue.language == "it",
+            )
+        ).scalar_one()
+    assert target.display_text == "👩🏽‍💻Ciao"
+    assert target.grapheme_count == 5
+    assert target.effective_max_chars == 3
+    assert target.effective_constraint_source == "base_default"
+    assert target.is_over_limit is True
+    assert target.review_state == "draft"
+
+
+@pytest.mark.parametrize("maximum", [0, 1_048_576])
+def test_put_accepts_exact_inclusive_maximum_bounds(
+    constraint_session_factory: sessionmaker[Session],
+    maximum: int,
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with constraint_session_factory.begin() as session:
+        result = service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=maximum,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+        rule = session.scalar(
+            select(TranslationConstraint).where(
+                TranslationConstraint.translation_key_id == ids["target_key"],
+                TranslationConstraint.language == "it",
+            )
+        )
+
+    assert rule is not None
+    assert (rule.max_chars, rule.version) == (maximum, 1)
+    assert (result.explicit_maximum, result.version) == (maximum, 1)
+    assert all(type(item.actual) is int for item in result.values)
+
+
+@pytest.mark.parametrize("maximum", [-1, 1_048_577, None, True, 1.0, "1"])
+def test_put_rejects_out_of_bound_null_and_coerced_maximum_without_mutation(
+    constraint_session_factory: sessionmaker[Session],
+    maximum: object,
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with (
+        constraint_session_factory.begin() as session,
+        pytest.raises(service.ConstraintInputInvalid),
+    ):
+        service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=maximum,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+    with constraint_session_factory() as session:
+        assert session.scalar(select(text("count(*)")).select_from(TranslationConstraint)) == 0
+        target = session.get_one(TranslationValue, ids["target_value"])
+    assert (target.effective_max_chars, target.effective_constraint_source) == (None, "none")
+
+
+@pytest.mark.parametrize("expected_version", [-1, None, True, 1.0, "0"])
+def test_put_rejects_inexact_expected_version_without_mutation(
+    constraint_session_factory: sessionmaker[Session],
+    expected_version: object,
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with (
+        constraint_session_factory.begin() as session,
+        pytest.raises(service.ConstraintInputInvalid),
+    ):
+        service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=5,
+            expected_version=expected_version,
+            actor_id=ids["actor"],
+        )
+    with constraint_session_factory() as session:
+        assert session.scalar(select(text("count(*)")).select_from(TranslationConstraint)) == 0
+
+
+def test_identical_put_is_idempotent_and_keeps_server_owned_version(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with constraint_session_factory.begin() as session:
+        created = service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=4,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+    with constraint_session_factory() as session:
+        original = session.scalar(
+            select(TranslationConstraint).where(
+                TranslationConstraint.translation_key_id == ids["target_key"]
+            )
+        )
+        assert original is not None
+        original_updated_at = original.updated_at
+
+    for _attempt in range(2):
+        with constraint_session_factory.begin() as session:
+            repeated = service.put_translation_constraint(
+                session,
+                translation_group_id=ids["target_value"],
+                language="it",
+                max_chars=4,
+                expected_version=1,
+                actor_id=ids["actor"],
+            )
+            assert repeated.version == 1
+
+    with constraint_session_factory() as session:
+        current = session.scalar(
+            select(TranslationConstraint).where(
+                TranslationConstraint.translation_key_id == ids["target_key"]
+            )
+        )
+        assert current is not None
+    assert created.version == 1
+    assert current.version == 1
+    assert current.updated_at == original_updated_at
+
+
+def test_changed_put_increments_version_once_and_returns_fresh_projection(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with constraint_session_factory.begin() as session:
+        created = service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=4,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+        changed = service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=3,
+            expected_version=created.version,
+            actor_id=ids["actor"],
+        )
+
+    target = next(item for item in changed.values if item.value_id == ids["target_value"])
+    assert (changed.explicit_maximum, changed.version) == (3, 2)
+    assert (target.actual, target.maximum, target.is_over_limit) == (4, 3, True)
+
+
+def test_delete_target_override_restores_dynamic_base_inheritance(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with constraint_session_factory.begin() as session:
+        base = service.put_translation_constraint(
+            session,
+            translation_group_id=ids["base_value"],
+            language="en",
+            max_chars=8,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+        override = service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=2,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+        removed = service.delete_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            expected_version=override.version,
+            actor_id=None,
+        )
+
+    assert base.version == 1
+    assert removed.explicit_maximum is None
+    assert removed.version is None
+    target = next(item for item in removed.values if item.value_id == ids["target_value"])
+    assert (target.maximum, target.source, target.label) == (
+        8,
+        "base_default",
+        "inherited",
+    )
+
+
+def test_delete_target_override_without_base_restores_explicit_no_limit(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with constraint_session_factory.begin() as session:
+        override = service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=0,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+        removed = service.delete_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            expected_version=override.version,
+            actor_id=None,
+        )
+
+    target = next(item for item in removed.values if item.value_id == ids["target_value"])
+    assert (target.maximum, target.source, target.label, target.is_over_limit) == (
+        None,
+        "none",
+        "none",
+        False,
+    )
+
+
+@pytest.mark.parametrize("expected_version", [-1, None, True, 1.0, "1"])
+def test_delete_rejects_inexact_expected_version_without_mutation(
+    constraint_session_factory: sessionmaker[Session],
+    expected_version: object,
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with constraint_session_factory.begin() as session:
+        service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=3,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+    with (
+        constraint_session_factory.begin() as session,
+        pytest.raises(service.ConstraintInputInvalid),
+    ):
+        service.delete_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            expected_version=expected_version,
+            actor_id=None,
+        )
+    with constraint_session_factory() as session:
+        rule = session.scalar(select(TranslationConstraint))
+    assert rule is not None and (rule.max_chars, rule.version) == (3, 1)
+
+
+def test_delete_absent_target_is_bounded_and_never_removes_base_default(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with constraint_session_factory.begin() as session:
+        service.put_translation_constraint(
+            session,
+            translation_group_id=ids["base_value"],
+            language="en",
+            max_chars=8,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+    with (
+        constraint_session_factory.begin() as session,
+        pytest.raises(service.ConstraintNotFound),
+    ):
+        service.delete_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            expected_version=0,
+            actor_id=None,
+        )
+
+    with constraint_session_factory() as session:
+        constraints = tuple(
+            session.scalars(select(TranslationConstraint).order_by(TranslationConstraint.language))
+        )
+        target = session.get_one(TranslationValue, ids["target_value"])
+    assert [(rule.language, rule.max_chars, rule.version) for rule in constraints] == [("en", 8, 1)]
+    assert (target.effective_max_chars, target.effective_constraint_source) == (
+        8,
+        "base_default",
+    )
+
+
+def test_delete_base_default_preserves_independent_target_override(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with constraint_session_factory.begin() as session:
+        base = service.put_translation_constraint(
+            session,
+            translation_group_id=ids["base_value"],
+            language="en",
+            max_chars=8,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+        service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=2,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+        removed = service.delete_translation_constraint(
+            session,
+            translation_group_id=ids["base_value"],
+            language="en",
+            expected_version=base.version,
+            actor_id=None,
+        )
+
+    base_value = next(item for item in removed.values if item.value_id == ids["base_value"])
+    target = next(item for item in removed.values if item.value_id == ids["target_value"])
+    assert (base_value.maximum, base_value.source, base_value.label) == (None, "none", "none")
+    assert (target.maximum, target.source, target.label) == (
+        2,
+        "language_override",
+        "override",
+    )
+
+
+def test_put_and_delete_preserve_text_normalization_and_selector_identity(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    display_text = "e\u0301"
+    ids = _seed_constraint_dataset(
+        constraint_session_factory,
+        target_text=display_text,
+    )
+    with constraint_session_factory.begin() as session:
+        target = session.get_one(TranslationValue, ids["target_value"])
+        before = (
+            target.selector_version,
+            target.selector_kind,
+            target.selector_bytes,
+            target.selector_digest,
+            target.source_text,
+            target.translated_text,
+            target.display_text,
+            target.structure,
+        )
+        created = service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=0,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+        service.delete_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            expected_version=created.version,
+            actor_id=None,
+        )
+        after = (
+            target.selector_version,
+            target.selector_kind,
+            target.selector_bytes,
+            target.selector_digest,
+            target.source_text,
+            target.translated_text,
+            target.display_text,
+            target.structure,
+        )
+
+    assert after == before
+    assert target.display_text == display_text
+
+
+def test_stale_put_and_delete_leave_rule_and_projection_unchanged(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    with constraint_session_factory.begin() as session:
+        service.put_translation_constraint(
+            session,
+            translation_group_id=ids["target_value"],
+            language="it",
+            max_chars=3,
+            expected_version=0,
+            actor_id=ids["actor"],
+        )
+    for operation in ("put", "delete"):
+        with (
+            constraint_session_factory.begin() as session,
+            pytest.raises(service.ConstraintVersionConflict),
+        ):
+            if operation == "put":
+                service.put_translation_constraint(
+                    session,
+                    translation_group_id=ids["target_value"],
+                    language="it",
+                    max_chars=9,
+                    expected_version=0,
+                    actor_id=ids["actor"],
+                )
+            else:
+                service.delete_translation_constraint(
+                    session,
+                    translation_group_id=ids["target_value"],
+                    language="it",
+                    expected_version=0,
+                    actor_id=None,
+                )
+    with constraint_session_factory() as session:
+        rule = session.scalar(select(TranslationConstraint))
+        target = session.get_one(TranslationValue, ids["target_value"])
+    assert rule is not None and (rule.max_chars, rule.version) == (3, 1)
+    assert (target.effective_max_chars, target.is_over_limit) == (3, True)
+
+
+def test_concurrent_put_has_one_winner_and_one_typed_stale_conflict(
+    constraint_session_factory: sessionmaker[Session],
+) -> None:
+    service = _translation_constraints()
+    ids = _seed_constraint_dataset(constraint_session_factory)
+    barrier = Barrier(2)
+
+    def write(maximum: int) -> tuple[str, int]:
+        try:
+            with constraint_session_factory.begin() as session:
+                barrier.wait(timeout=5)
+                result = service.put_translation_constraint(
+                    session,
+                    translation_group_id=ids["target_value"],
+                    language="it",
+                    max_chars=maximum,
+                    expected_version=0,
+                    actor_id=ids["actor"],
+                )
+                return "winner", result.explicit_maximum
+        except service.ConstraintVersionConflict:
+            return "stale", maximum
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = tuple(executor.map(write, (2, 9)))
+
+    assert sorted(kind for kind, _maximum in outcomes) == ["stale", "winner"]
+    winner_maximum = next(maximum for kind, maximum in outcomes if kind == "winner")
+    with constraint_session_factory() as session:
+        rules = tuple(session.scalars(select(TranslationConstraint)))
+        target = session.get_one(TranslationValue, ids["target_value"])
+    assert len(rules) == 1
+    assert (rules[0].max_chars, rules[0].version) == (winner_maximum, 1)
+    assert target.effective_max_chars == winner_maximum

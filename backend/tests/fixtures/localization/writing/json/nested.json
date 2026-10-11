@@ -1,0 +1,10 @@
+{
+  "it_IT": {
+    "checkout": {"title": "Pagamento", "keep": "\u00e8"},
+    "profile": {"title": "Profilo"},
+    "literal.dot[0]/~": "Punteggiatura",
+    "escaped\u002ekey": "Old",
+    "empty": ""
+  },
+  "en": {"checkout": {"title": "Checkout"}, "empty": ""}
+}

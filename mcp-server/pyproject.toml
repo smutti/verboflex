@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "verboflex-mcp"
+version = "0.1.0"
+description = "Authenticated MCP connector for VerboFlex"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+dependencies = ["mcp==2.3.0", "httpx==0.28.1", "filelock>=3.20,<4", "jsonschema>=4.25,<5"]
+
+[project.scripts]
+verboflex-mcp = "verboflex_mcp.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=9,<10", "ruff>=0.16,<0.17", "mypy>=2.3,<3", "types-jsonschema>=4.25"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-config --strict-markers"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["verboflex_mcp"]

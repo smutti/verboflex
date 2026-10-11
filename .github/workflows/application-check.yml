@@ -1,0 +1,185 @@
+name: Check application
+run-name: Application checks · ${{ inputs.scope || 'all' }}
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: Run the complete gate or only the isolated smoke
+        type: choice
+        default: all
+        options: [all, smoke]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: application-${{ github.workflow }}-${{ github.ref }}-${{ inputs.scope || 'all' }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    if: github.event_name != 'workflow_dispatch' || inputs.scope != 'smoke'
+    name: ${{ inputs.scope == 'smoke' && 'Not run in smoke-only mode · Backend' || 'Backend' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # Architecture checks parse and execute frontend ownership contracts.
+      - run: npm ci --prefix frontend
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14.7"
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.11.12"
+          python-version: "3.14.7"
+      - run: uv sync --project backend --locked
+      - name: Lint and types
+        working-directory: backend
+        run: |
+          uv run --locked ruff check src tests
+          uv run --locked mypy src
+      - name: Complete suite with disposable database, broker and worker
+        run: backend/.venv/bin/python tools/ci_backend.py --artifacts "$RUNNER_TEMP/backend-evidence"
+      - name: Test evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: backend-tests
+          path: ${{ runner.temp }}/backend-evidence
+          retention-days: 7
+
+  frontend:
+    if: github.event_name != 'workflow_dispatch' || inputs.scope != 'smoke'
+    name: ${{ inputs.scope == 'smoke' && 'Not run in smoke-only mode · Frontend and API contracts' || 'Frontend and API contracts' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14.7"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.11.12"
+          python-version: "3.14.7"
+      - run: uv sync --project ../backend --locked
+      - run: npm ci
+      # Generation replaces the client directory: finish it before starting Vitest.
+      - name: Generated API and MCP contracts
+        run: |
+          npm run api:check
+          ../backend/.venv/bin/python ../mcp-server/generate_contract.py --check
+      - run: npm run lint
+      - run: npm run build
+      - name: Complete frontend suite
+        run: npm test -- --run --reporter=default --reporter=junit --outputFile.junit="$RUNNER_TEMP/frontend-tests.xml"
+      - name: Test evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: frontend-tests
+          path: ${{ runner.temp }}/frontend-tests.xml
+          retention-days: 7
+
+  mcp:
+    if: github.event_name != 'workflow_dispatch' || inputs.scope != 'smoke'
+    name: ${{ inputs.scope == 'smoke' && 'Not run in smoke-only mode · MCP connector' || 'MCP connector' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: mcp-server
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14.7"
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.11.12"
+          python-version: "3.12"
+      # The contract test needs the real backend environment; do not skip it.
+      - run: uv sync --project ../backend --python 3.14.7 --locked
+      - run: uv sync --locked
+      - run: uv run --locked ruff check .
+      - run: uv run --locked mypy
+      - run: uv run --locked pytest --junitxml="$RUNNER_TEMP/mcp-tests.xml"
+      - name: Test evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: mcp-tests
+          path: ${{ runner.temp }}/mcp-tests.xml
+          retention-days: 7
+
+  smoke:
+    name: Built application smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14.7"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.11.12"
+          python-version: "3.14.7"
+      - run: uv sync --project backend --locked
+      - run: npm ci --prefix frontend
+      - run: npx --prefix frontend playwright install --with-deps chromium
+      - name: Isolated TLS stack and repository workflow
+        env:
+          PHASE7_EVIDENCE_DIR: ${{ runner.temp }}/smoke-evidence
+          PHASE8_HTTP_SETUP: "1"
+        run: bash tools/phase7_smoke.sh
+      - name: Browser evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: smoke-browser
+          path: ${{ runner.temp }}/smoke-evidence
+          retention-days: 7
+
+  application:
+    name: ${{ inputs.scope == 'smoke' && 'Not run in smoke-only mode · Application checks' || 'Application checks' }}
+    if: always() && (github.event_name != 'workflow_dispatch' || inputs.scope != 'smoke')
+    needs: [backend, frontend, mcp, smoke]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every application job
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          results = json.loads(os.environ["RESULTS"])
+          failed = [name for name, job in results.items() if job["result"] != "success"]
+          if failed:
+              raise SystemExit("Application checks failed: " + ", ".join(failed))
+          print("All application checks passed.")
+          PY

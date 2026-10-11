@@ -1,0 +1,238 @@
+{
+  "schema_version": 1,
+  "roadmap_categories": [
+    "valid",
+    "empty",
+    "malformed",
+    "escaped",
+    "unicode",
+    "boundary"
+  ],
+  "formats": {
+    "android_xml": {
+      "categories": [
+        "valid",
+        "empty",
+        "malformed",
+        "escaped",
+        "unicode",
+        "markup",
+        "plural",
+        "array",
+        "boundary"
+      ],
+      "supported_constructs": [
+        "attribute.collection.name",
+        "attribute.collection.translatable",
+        "attribute.inline.xliff.example",
+        "attribute.inline.xliff.id",
+        "attribute.item.quantity",
+        "attribute.string.formatted",
+        "attribute.string.name",
+        "attribute.string.translatable",
+        "document.resources",
+        "inline.b",
+        "inline.i",
+        "inline.u",
+        "inline.xliff-g-1.2",
+        "node.cdata",
+        "node.comment",
+        "node.tail",
+        "node.text",
+        "resource.plurals",
+        "resource.string",
+        "resource.string-array"
+      ],
+      "rejected_constructs": [
+        "attribute.duplicate",
+        "attribute.inline.unknown",
+        "attribute.namespace-substitution",
+        "attribute.resource.unknown",
+        "document.dtd",
+        "document.entity",
+        "document.external-reference",
+        "document.processing-instruction",
+        "inline.namespace-substitution",
+        "inline.unknown",
+        "node.unknown",
+        "resource.unknown"
+      ]
+    },
+    "qt_ts": {
+      "categories": [
+        "valid",
+        "empty",
+        "malformed",
+        "escaped",
+        "unicode",
+        "markup",
+        "numerus",
+        "variant",
+        "status",
+        "duplicate",
+        "encoding",
+        "boundary",
+        "concurrency"
+      ],
+      "supported_constructs": [
+        "message.context",
+        "message.disambiguation",
+        "message.id",
+        "message.location",
+        "message.metadata",
+        "message.source-fallback",
+        "numerus.form",
+        "numerus.form-with-length-variants",
+        "root.defaultcodec",
+        "root.dependencies",
+        "root.ts-2.0",
+        "root.ts-2.1",
+        "status.active",
+        "status.obsolete",
+        "status.unfinished",
+        "status.vanished",
+        "translation.empty",
+        "translation.plain",
+        "variant.nested-priority",
+        "variant.top-level-priority"
+      ],
+      "rejected_constructs": [
+        "message.actual-child-markup",
+        "message.byte-node",
+        "message.duplicate-canonical-identity",
+        "message.unknown-attribute",
+        "message.unknown-child",
+        "numerus.mixed-direct-text",
+        "root.dtd",
+        "root.entity",
+        "root.external-reference",
+        "root.processing-instruction",
+        "status.unknown",
+        "translation.unknown-shape",
+        "variant.duplicate-priority",
+        "variant.unknown-shape"
+      ]
+    },
+    "json": {
+      "categories": [
+        "valid",
+        "empty",
+        "malformed",
+        "escaped",
+        "unicode",
+        "nested",
+        "duplicate",
+        "encoding",
+        "boundary",
+        "non_string",
+        "concurrency"
+      ],
+      "supported_constructs": [
+        "document.flat-per-locale",
+        "document.locale-rooted",
+        "node.empty-object",
+        "node.empty-string",
+        "node.nested-object",
+        "node.string"
+      ],
+      "rejected_constructs": [
+        "document.ambiguous-locale-root",
+        "document.trailing-data",
+        "member.duplicate",
+        "node.array",
+        "node.boolean",
+        "node.non-finite",
+        "node.null",
+        "node.number"
+      ]
+    },
+    "ios_strings": {
+      "categories": [
+        "valid",
+        "empty",
+        "malformed",
+        "escaped",
+        "unicode",
+        "comments",
+        "duplicate",
+        "encoding",
+        "boundary",
+        "unsupported",
+        "concurrency"
+      ],
+      "supported_constructs": [
+        "assignment.equals",
+        "assignment.quoted-key",
+        "assignment.quoted-value",
+        "assignment.semicolon",
+        "comment.block",
+        "comment.line",
+        "document.whitespace",
+        "encoding.utf-16-be-bom",
+        "encoding.utf-16-le-bom",
+        "encoding.utf-8",
+        "encoding.utf-8-bom",
+        "escape.simple",
+        "escape.unicode",
+        "escape.unicode-surrogate-pair"
+      ],
+      "rejected_constructs": [
+        "assignment.duplicate-decoded-key",
+        "assignment.missing-equals",
+        "assignment.missing-semicolon",
+        "assignment.unquoted-key",
+        "assignment.unquoted-value",
+        "comment.unterminated",
+        "document.stringsdict",
+        "document.trailing-junk",
+        "encoding.heuristic-utf-16",
+        "escape.invalid",
+        "escape.unpaired-surrogate"
+      ]
+    },
+    "xliff": {
+      "categories": [
+        "boundary",
+        "concurrency",
+        "duplicate",
+        "empty",
+        "encoding",
+        "escaped",
+        "malformed",
+        "markup",
+        "unicode",
+        "valid"
+      ],
+      "supported_constructs": [
+        "document.xliff-1.2",
+        "document.xliff-2.0",
+        "document.xliff-2.1",
+        "inline.core",
+        "metadata.ordered",
+        "unit.bilingual"
+      ],
+      "rejected_constructs": [
+        "document.dtd",
+        "document.entity",
+        "document.external-reference",
+        "document.namespace-extension",
+        "document.processing-instruction",
+        "document.unsupported-version",
+        "inline.unknown",
+        "unit.duplicate-identity",
+        "unit.missing-source-target"
+      ]
+    }
+  },
+  "limits": {
+    "file_bytes": 1048576,
+    "aggregate_bytes": 20971520,
+    "files": 500,
+    "values": 5000,
+    "depth": 12,
+    "issues": 5,
+    "issue_message": 256,
+    "path": 4096,
+    "coordinate": 2147483647
+  }
+}

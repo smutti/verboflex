@@ -1,0 +1,7 @@
+[
+  {"name":"doctype","issue":"malformed_file"},
+  {"name":"wrong_namespace","issue":"unsupported_structure"},
+  {"name":"unsupported_version","issue":"unsupported_structure"},
+  {"name":"missing_target_language","issue":"ambiguous_structure"},
+  {"name":"duplicate_unit","issue":"duplicate_key"}
+]

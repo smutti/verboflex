@@ -1,0 +1,481 @@
+"""Administrator-only product identity and candidate revision routes."""
+
+from typing import Annotated, Any, NoReturn, cast
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse, Response
+from sqlalchemy.orm import Session
+
+from verboflex.auth.principal import Principal, require_roles
+from verboflex.db.session import get_db_session
+from verboflex.schemas.admin_products import (
+    AdminProductConflictResponse,
+    AdminProductCreateRequest,
+    AdminProductDeletionConflictResponse,
+    AdminProductLifecycleConflictResponse,
+    AdminProductListResponse,
+    AdminProductPublishRequest,
+    AdminProductReactivateRequest,
+    AdminProductReactivationBlocker,
+    AdminProductReactivationEligibilityResponse,
+    AdminProductReactivationMappingResponse,
+    AdminProductResponse,
+    AdminProductRevisionSummary,
+    AdminProductStatus,
+    AdminProductSummaryResponse,
+    AdminProductUpdateRequest,
+)
+from verboflex.schemas.system import ErrorResponse
+from verboflex.schemas.users import RoleName
+from verboflex.services.preview_jobs import (
+    PreviewJobConflict,
+    PreviewJobNotFound,
+    get_active_revision_revalidation_eligibility,
+)
+from verboflex.services.product_summary import get_product_summary
+from verboflex.services.products import (
+    InvalidProductCursor,
+    ProductDeletionBlocked,
+    ProductNameConflict,
+    ProductNotFound,
+    ProductRecord,
+    ProductRevisionRecord,
+    ProductVersionConflict,
+    create_product,
+    delete_product,
+    get_product,
+    list_products,
+    save_product_candidate,
+)
+from verboflex.services.publication import (
+    PublicationBlocked,
+    PublicationConflict,
+    PublicationNotFound,
+    deactivate_product,
+    publish_product_candidate,
+    reactivate_product,
+)
+
+router = APIRouter(prefix="/admin/products", tags=["admin-products"])
+AdminPrincipal = Annotated[Principal, Depends(require_roles(RoleName.ADMIN))]
+AdminSession = Annotated[Session, Depends(get_db_session, use_cache=False)]
+
+
+def _revision_response(
+    revision: ProductRevisionRecord | None,
+) -> AdminProductRevisionSummary | None:
+    if revision is None:
+        return None
+    return AdminProductRevisionSummary(
+        id=revision.id,
+        version=revision.version,
+        name=revision.name,
+        description=revision.description,
+        is_published=revision.is_published,
+    )
+
+
+def _response(record: ProductRecord) -> AdminProductResponse:
+    return AdminProductResponse(
+        id=record.id,
+        name=record.name,
+        is_active=record.is_active,
+        affected_mapping_count=record.affected_mapping_count,
+        active_revision=_revision_response(record.active_revision),
+        candidate_revision=_revision_response(record.candidate_revision),
+    )
+
+
+def _name_conflict_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={"detail": "Product name is unavailable", "field": "name"},
+    )
+
+
+def _raise_product_error(error: Exception) -> NoReturn:
+    if isinstance(error, ProductNotFound):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product unavailable",
+        ) from error
+    if isinstance(error, ProductVersionConflict):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Product candidate conflict",
+        ) from error
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail="Invalid product input",
+    ) from error
+
+
+AUTH_RESPONSES: dict[int | str, dict[str, Any]] = {
+    status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
+    status.HTTP_403_FORBIDDEN: {"model": ErrorResponse},
+}
+CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **AUTH_RESPONSES,
+    status.HTTP_409_CONFLICT: {"model": AdminProductConflictResponse},
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
+}
+DETAIL_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **AUTH_RESPONSES,
+    status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
+}
+UPDATE_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **AUTH_RESPONSES,
+    status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    status.HTTP_409_CONFLICT: {"model": AdminProductConflictResponse},
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
+}
+LIFECYCLE_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **AUTH_RESPONSES,
+    status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    status.HTTP_409_CONFLICT: {"model": AdminProductLifecycleConflictResponse},
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
+}
+REACTIVATION_ELIGIBILITY_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **AUTH_RESPONSES,
+    status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    status.HTTP_409_CONFLICT: {"model": ErrorResponse},
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
+    status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
+}
+DELETE_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **AUTH_RESPONSES,
+    status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    status.HTTP_409_CONFLICT: {"model": AdminProductDeletionConflictResponse},
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
+}
+
+
+def _lifecycle_conflict_response(error: Exception) -> JSONResponse:
+    if isinstance(error, PublicationBlocked):
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "Product publication blocked",
+                "blockers": [blocker.value for blocker in error.blockers],
+            },
+        )
+    if isinstance(error, PublicationConflict):
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": "Product lifecycle conflict", "blockers": []},
+        )
+    if isinstance(error, PublicationNotFound):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product unavailable",
+        ) from error
+    raise error
+
+
+@router.get(
+    "",
+    operation_id="list_admin_products",
+    response_model=AdminProductListResponse,
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
+        status.HTTP_403_FORBIDDEN: {"model": ErrorResponse},
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ErrorResponse},
+    },
+)
+async def list_admin_product_collection(
+    _principal: AdminPrincipal,
+    session: AdminSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: str | None = None,
+    status_filter: Annotated[AdminProductStatus | None, Query(alias="status")] = None,
+    name: Annotated[str | None, Query(max_length=120)] = None,
+) -> AdminProductListResponse:
+    """List products in stable server-owned identity order."""
+    try:
+        page = list_products(
+            session,
+            limit=limit,
+            cursor=cursor,
+            status=status_filter,
+            name=name,
+        )
+    except InvalidProductCursor as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid cursor",
+        ) from error
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid name filter",
+        ) from error
+    return AdminProductListResponse(
+        items=[_response(record) for record in page.items],
+        next_cursor=page.next_cursor,
+    )
+
+
+@router.post(
+    "",
+    operation_id="create_admin_product",
+    status_code=status.HTTP_201_CREATED,
+    response_model=AdminProductResponse,
+    responses=CREATE_RESPONSES,
+)
+async def create_admin_product(
+    payload: AdminProductCreateRequest,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+) -> AdminProductResponse | JSONResponse:
+    """Create one stable UUID with an unpublished candidate revision."""
+    try:
+        product = create_product(
+            session,
+            name=payload.name,
+            description=payload.description,
+            actor_id=_principal.user_id,
+        )
+        record = get_product(session, product_id=product.id)
+    except ProductNameConflict:
+        return _name_conflict_response()
+    except (ProductNotFound, ProductVersionConflict, ValueError) as error:
+        _raise_product_error(error)
+    return _response(record)
+
+
+@router.get(
+    "/{product_id}",
+    operation_id="get_admin_product",
+    response_model=AdminProductResponse,
+    responses=DETAIL_RESPONSES,
+)
+async def get_admin_product_detail(
+    product_id: UUID,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+) -> AdminProductResponse:
+    """Return explicitly separate active and candidate summaries."""
+    try:
+        record = get_product(session, product_id=product_id)
+    except ProductNotFound as error:
+        _raise_product_error(error)
+    return _response(record)
+
+
+@router.get(
+    "/{product_id}/summary",
+    operation_id="get_admin_product_summary",
+    response_model=AdminProductSummaryResponse,
+    responses={**DETAIL_RESPONSES, 503: {"model": ErrorResponse}},
+)
+def get_admin_product_summary(
+    product_id: UUID,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+    response: Response,
+) -> AdminProductSummaryResponse:
+    """Read logical source strings and imported target-language coverage."""
+    response.headers["Cache-Control"] = "private, no-store"
+    try:
+        get_product(session, product_id=product_id)
+        return get_product_summary(session, product_id=product_id)
+    except ProductNotFound as error:
+        _raise_product_error(error)
+    except Exception as error:
+        raise HTTPException(status_code=503, detail="Product summary unavailable") from error
+
+
+@router.patch(
+    "/{product_id}",
+    operation_id="update_admin_product_candidate",
+    response_model=AdminProductResponse,
+    responses=UPDATE_RESPONSES,
+)
+async def update_admin_product_candidate(
+    product_id: UUID,
+    payload: AdminProductUpdateRequest,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+) -> AdminProductResponse | JSONResponse:
+    """Compare and save one candidate without exposing publication mechanics."""
+    try:
+        save_product_candidate(
+            session,
+            product_id=product_id,
+            expected_version=payload.expected_candidate_version,
+            name=payload.name,
+            description=payload.description,
+            actor_id=_principal.user_id,
+        )
+        record = get_product(session, product_id=product_id)
+    except ProductNameConflict:
+        return _name_conflict_response()
+    except (ProductNotFound, ProductVersionConflict, ValueError) as error:
+        _raise_product_error(error)
+    return _response(record)
+
+
+@router.delete(
+    "/{product_id}",
+    operation_id="delete_admin_product",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    response_model=None,
+    responses=DELETE_RESPONSES,
+)
+async def delete_admin_product(
+    product_id: UUID,
+    principal: AdminPrincipal,
+    session: AdminSession,
+) -> Response:
+    """Logically delete one idle product while retaining all history."""
+    try:
+        delete_product(
+            session,
+            product_id=product_id,
+            deleted_by=principal.user_id,
+        )
+    except ProductDeletionBlocked:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "Product deletion blocked",
+                "blockers": ["active_work"],
+            },
+        )
+    except ProductNotFound as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product unavailable",
+        ) from error
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/{product_id}/publish",
+    operation_id="publish_admin_product_candidate",
+    response_model=AdminProductResponse,
+    responses=LIFECYCLE_RESPONSES,
+)
+async def publish_admin_product(
+    product_id: UUID,
+    payload: AdminProductPublishRequest,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+) -> AdminProductResponse | JSONResponse:
+    """Publish only a complete and currently confirmed candidate revision."""
+    try:
+        publish_product_candidate(
+            session,
+            product_id=product_id,
+            candidate_revision_id=payload.candidate_revision_id,
+            expected_candidate_version=payload.expected_candidate_version,
+            actor_id=_principal.user_id,
+        )
+        return _response(get_product(session, product_id=product_id))
+    except (PublicationBlocked, PublicationConflict, PublicationNotFound) as error:
+        return _lifecycle_conflict_response(error)
+
+
+@router.post(
+    "/{product_id}/deactivate",
+    operation_id="deactivate_admin_product",
+    response_model=AdminProductResponse,
+    responses={
+        **AUTH_RESPONSES,
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    },
+)
+async def deactivate_admin_product(
+    product_id: UUID,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+) -> AdminProductResponse | JSONResponse:
+    """Suspend operation while retaining active and candidate configuration."""
+    try:
+        deactivate_product(session, product_id=product_id, actor_id=_principal.user_id)
+        return _response(get_product(session, product_id=product_id))
+    except PublicationNotFound as error:
+        return _lifecycle_conflict_response(error)
+
+
+@router.post(
+    "/{product_id}/reactivate",
+    operation_id="reactivate_admin_product",
+    response_model=AdminProductResponse,
+    responses=LIFECYCLE_RESPONSES,
+)
+async def reactivate_admin_product_route(
+    product_id: UUID,
+    payload: AdminProductReactivateRequest,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+) -> AdminProductResponse | JSONResponse:
+    """Resume only a published revision with a current preview confirmation."""
+    try:
+        reactivate_product(
+            session,
+            product_id=product_id,
+            active_revision_id=payload.active_revision_id,
+            expected_active_version=payload.expected_active_version,
+            actor_id=_principal.user_id,
+        )
+        return _response(get_product(session, product_id=product_id))
+    except (PublicationBlocked, PublicationConflict, PublicationNotFound) as error:
+        return _lifecycle_conflict_response(error)
+
+
+@router.get(
+    "/{product_id}/revisions/{revision_id}/reactivation-eligibility",
+    operation_id="get_admin_product_reactivation_eligibility",
+    response_model=AdminProductReactivationEligibilityResponse,
+    responses=REACTIVATION_ELIGIBILITY_RESPONSES,
+)
+async def get_admin_product_reactivation_eligibility(
+    product_id: UUID,
+    revision_id: UUID,
+    _principal: AdminPrincipal,
+    session: AdminSession,
+    expected_active_revision_version: Annotated[int, Query(ge=1)],
+) -> AdminProductReactivationEligibilityResponse:
+    """Project exact published-revision currentness without mutating lifecycle state."""
+    try:
+        eligibility = get_active_revision_revalidation_eligibility(
+            session,
+            product_id=product_id,
+            active_revision_id=revision_id,
+            expected_active_revision_version=expected_active_revision_version,
+        )
+    except PreviewJobNotFound as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Active revision revalidation unavailable",
+        ) from error
+    except PreviewJobConflict as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Active revision revalidation conflict",
+        ) from error
+    return AdminProductReactivationEligibilityResponse(
+        product_id=eligibility.product_id,
+        active_revision_id=eligibility.active_revision_id,
+        active_revision_version=eligibility.active_revision_version,
+        eligible=eligibility.eligible,
+        blocker_codes=cast(
+            list[AdminProductReactivationBlocker],
+            list(eligibility.blocker_codes),
+        ),
+        mappings=[
+            AdminProductReactivationMappingResponse(
+                mapping_id=mapping.mapping_id,
+                is_current=mapping.is_current,
+                blocker_codes=cast(
+                    list[AdminProductReactivationBlocker],
+                    list(mapping.blocker_codes),
+                ),
+            )
+            for mapping in eligibility.mappings
+        ],
+    )
