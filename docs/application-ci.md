@@ -79,6 +79,14 @@ environment accepts only `main`. See [site maintenance](../site/README.md).
 
 Protect `main` with the **Application checks** and **Website checks** status checks,
 require an up-to-date branch and resolved conversations, and disable force pushes
-and branch deletion. Keep the standard administrator recovery bypass. No independent
-reviewer is mandated for the single-maintainer repository. Workflows have read-only
-permissions by default; only the Pages deploy job receives Pages/OIDC write access.
+and branch deletion. Require one approving review and code-owner approval, dismiss
+stale approvals after changes, and enforce these rules for administrators too.
+`.github/CODEOWNERS` assigns every path to **@smutti**. Keep auto-merge disabled.
+Workflows have read-only permissions by default; only the Pages deploy job receives
+Pages/OIDC write access. Actions must not create approving pull request reviews.
+
+GitHub reads `CODEOWNERS` from the pull request's base branch, so owner-specific
+enforcement starts once that file is on `main`. Required approval applies even
+before that. GitHub prevents self-approval: a pull request opened with `smutti`'s
+credentials cannot be approved by `smutti`. Use a separate authorized author for
+automation-created pull requests instead of granting an approval bypass.

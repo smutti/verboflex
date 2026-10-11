@@ -8,6 +8,16 @@ Use Python 3.14.7+, Node 24, uv and Docker. The [application check guide](docs/a
 lists setup, unit/integration tests, contract generation and the built-stack smoke.
 Run the checks relevant to your change and explain their results in the pull request.
 
+Submit changes through a pull request to `main`. Approval from **@smutti**, passing
+**Application checks** and **Website checks**, an up-to-date branch and resolved
+review conversations are required before merging. New changes invalidate earlier
+approvals. Automated review provides feedback; it does not replace the owner's
+approval. Do not merge or enable auto-merge on the owner's behalf.
+
+GitHub does not allow pull request authors to approve their own pull requests.
+Automation that opens pull requests for the owner to approve must use a separate,
+authorized identity. Do not bypass branch protection to work around this rule.
+
 Keep frontend and backend separate. Run repository work in Celery, enforce permissions
 in the API, use Alembic for schema changes and preserve localization file structure.
 Parser and serializer changes need fixtures covering round trips and unsupported input.
