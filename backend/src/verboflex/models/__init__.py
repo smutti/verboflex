@@ -25,6 +25,7 @@ from verboflex.models.product_mapping import (
     ProductMappingRepositorySide,
     ProductRepositoryMapping,
 )
+from verboflex.models.product_member import ProductMember, ProductTeamEvent
 from verboflex.models.repository import Repository
 from verboflex.models.review import (
     Notification,
@@ -64,6 +65,8 @@ from verboflex.models.translation_constraint import TranslationConstraint
 from verboflex.models.user import User
 
 __all__ = [
+    "ProductMember",
+    "ProductTeamEvent",
     "AuthoringRequest",
     "GlossaryEntry",
     "AuditEntry",

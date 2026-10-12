@@ -619,6 +619,7 @@ function CommentArticle({
           {editing && (
             <div className="space-y-(--space-sm)">
               <MentionComposer
+                translationGroupId={translationGroupId}
                 accessToken={accessToken}
                 id={`edit-${comment.id}`}
                 label="Edit comment text"
@@ -1067,6 +1068,7 @@ function DiscussionContent({
           }}
         >
           <MentionComposer
+            translationGroupId={translationGroupId}
             accessToken={accessToken}
             id={`new-comment-${translationGroupId}`}
             label="Add a comment"

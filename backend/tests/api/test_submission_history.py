@@ -11,6 +11,7 @@ from tests.api.test_submissions import ready_api as ready_api
 from tests.api.test_submissions import submit
 from tests.integration.test_preview_jobs import clean_preview_database as clean_preview_database
 from tests.integration.test_preview_jobs import preview_session_factory as preview_session_factory
+from tests.legacy_product_fixtures import mirror_fixture_role
 from verboflex.core.config import Settings, get_settings
 from verboflex.models.submission import ChangeSet
 
@@ -314,6 +315,7 @@ def test_read_authority_and_cursor_binding_survive_role_changes_safely(history_a
         session.get(User, seed.actor_id).roles = [
             session.scalar(select(Role).where(Role.name == "viewer"))
         ]
+        mirror_fixture_role(session, session.get(User, seed.actor_id).id)
     for suffix in ("", "/items", "/values", "/files", "/activity"):
         assert client.get(base + suffix).status_code == 200
         assert (

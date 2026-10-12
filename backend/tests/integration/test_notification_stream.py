@@ -23,6 +23,7 @@ from verboflex.auth.principal import Principal
 from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.review import Notification
+from verboflex.models.role import Role
 from verboflex.models.user import User
 from verboflex.schemas.users import RoleName
 
@@ -350,6 +351,7 @@ def _comment_authority(
                 id=recipient_id,
                 email="stream-recipient@example.com",
                 display_name="Stream Recipient",
+                roles=list(session.scalars(select(Role).where(Role.name == "viewer"))),
                 hashed_password=hash_password("stream recipient password!"),
                 is_active=True,
                 must_change_password=False,

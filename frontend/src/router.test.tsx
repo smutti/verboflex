@@ -969,6 +969,7 @@ describe("session routes", () => {
         .map((link) => link.textContent),
     ).toEqual([
       "Overview",
+      "Team",
       "Repositories",
       "Translation sources",
       "Preview and import",

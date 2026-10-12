@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from verboflex.auth.principal import Principal
+from verboflex.auth.product_access import visible_product_sql
 from verboflex.schemas.dashboard import (
     DashboardEvent,
     DashboardFeed,
@@ -22,7 +23,7 @@ _EVENT_ADAPTER: TypeAdapter[DashboardEvent] = TypeAdapter(DashboardEvent)
 
 # Match translation_search's READ boundary, including retained baselines and
 # deleted-but-readable translation groups. A key UUID is never a group UUID.
-_READABLE_GROUPS = """
+_READABLE_GROUPS = f"""
 SELECT DISTINCT ON (key.id, value.language)
        key.id AS key_id, scope.id AS scope_id, value.language,
        value.id AS group_id, left(key.raw_key, 160) AS key_excerpt,
@@ -34,7 +35,7 @@ JOIN translation_keys AS key
   ON key.scope_id = scope.id AND key.product_id = product.id
 JOIN translation_values AS value
   ON value.translation_key_id = key.id AND value.scope_id = scope.id
-WHERE product.is_active AND product.deleted_at IS NULL
+WHERE product.is_active AND product.deleted_at IS NULL AND {visible_product_sql(actor=":actor_id")}
 ORDER BY key.id, value.language, value.id
 """
 
@@ -98,7 +99,7 @@ WHERE NOT :personal OR version.author_id = :actor_id
 """
 
 # History authorizes the current product, not the immutable batch's revision.
-_SUBMISSION_EVENTS = """
+_SUBMISSION_EVENTS = f"""
 SELECT 'change-set:' || change_set.id::text AS event_id, change_set.created_at AS occurred_at,
        batch.actor_id,
        jsonb_build_object(
@@ -112,12 +113,12 @@ FROM change_sets AS change_set
 JOIN submission_batches AS batch ON batch.id = change_set.batch_id
 JOIN products AS product ON product.id = batch.product_id
 JOIN users AS actor ON actor.id = batch.actor_id
-WHERE product.is_active AND product.deleted_at IS NULL
+WHERE product.is_active AND product.deleted_at IS NULL AND {visible_product_sql(actor=":actor_id")}
   AND product.active_revision_id IS NOT NULL
   AND (NOT :personal OR batch.actor_id = :actor_id)
 """
 
-_IMPORT_EVENTS = """
+_IMPORT_EVENTS = f"""
 SELECT DISTINCT 'import:' || product.id::text || ':' || execution.id::text AS event_id,
        execution.finished_at AS occurred_at, NULL::uuid AS actor_id,
        jsonb_build_object(
@@ -133,7 +134,7 @@ JOIN import_jobs AS job
  AND job.mapping_id = scope.current_mapping_id
 JOIN import_executions AS execution
   ON execution.id = scope.active_execution_id AND execution.import_job_id = job.id
-WHERE product.is_active AND product.deleted_at IS NULL
+WHERE product.is_active AND product.deleted_at IS NULL AND {visible_product_sql(actor=":actor_id")}
   AND execution.state = 'succeeded' AND execution.finished_at IS NOT NULL
   AND NOT :personal
 """

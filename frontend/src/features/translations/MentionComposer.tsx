@@ -31,6 +31,7 @@ interface ActiveToken {
 
 export interface MentionComposerProps {
   accessToken: string;
+  translationGroupId?: string;
   body: string;
   disabled?: boolean;
   id: string;
@@ -124,6 +125,7 @@ function reconcileMentions(
 
 export function MentionComposer({
   accessToken,
+  translationGroupId,
   body,
   disabled = false,
   id,
@@ -179,7 +181,12 @@ export function MentionComposer({
       try {
         const result = await searchMentionUsers({
           auth: accessToken,
-          query: { q: token.query },
+          query: {
+            q: token.query,
+            ...(translationGroupId
+              ? { translation_group_id: translationGroupId }
+              : {}),
+          },
           signal: controller.signal,
         });
         if (
@@ -207,7 +214,7 @@ export function MentionComposer({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [accessToken, disabled, token]);
+  }, [accessToken, translationGroupId, disabled, token]);
 
   useEffect(
     () => () => {

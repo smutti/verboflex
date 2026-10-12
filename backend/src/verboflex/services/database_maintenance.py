@@ -34,6 +34,7 @@ REPORT_OWNER = (
     "LEFT JOIN preview_jobs p ON p.id=d.preview_job_id WHERE d.id=t.report_id)"
 )
 OWNERS = {
+    "product_members": "t.product_id",
     "notifications": "(SELECT k.product_id FROM translation_comments c JOIN translation_keys k "
     "ON k.id=c.translation_key_id WHERE c.id=t.originating_comment_id)",
     "translation_comment_mentions": "(SELECT k.product_id FROM translation_comment_versions v "
@@ -91,6 +92,7 @@ FK_CATALOG_SQL = """SELECT coalesce(jsonb_agg(jsonb_build_array(
 
 # Children precede parents. Only the two documented FK cycles are deleted together.
 DELETE_GROUPS = (
+    ("product_members",),
     ("notifications",),
     ("translation_comment_mentions",),
     ("translation_comment_versions",),

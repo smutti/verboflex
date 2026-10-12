@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from verboflex.audit.ledger import record_audit
+from verboflex.auth.product_access import product_roles
 from verboflex.localization.graphemes import grapheme_count
 from verboflex.localization.importing.android_xml import _confirmed_language
 from verboflex.localization.importing.core import (
@@ -36,7 +37,6 @@ from verboflex.models.translation import (
     TranslationValueLocator,
 )
 from verboflex.models.translation_constraint import TranslationConstraint
-from verboflex.models.user import User
 from verboflex.schemas.authoring import (
     AuthoringDestination,
     AuthoringDestinations,
@@ -58,24 +58,6 @@ class AuthoringError(ValueError):
         self.status = status
 
 
-def _actor(session: Session, actor_id: UUID, action: str) -> None:
-    user = session.get(User, actor_id, populate_existing=True)
-    allowed = {"admin", "product_manager_reviewer", "translator", "viewer"}
-    if action == "write":
-        allowed.remove("viewer")
-    if action == "review":
-        allowed = {"admin", "product_manager_reviewer"}
-    if (
-        user is None
-        or not user.is_active
-        or user.must_change_password
-        or not {r.name for r in user.roles}
-        <= {"admin", "product_manager_reviewer", "translator", "viewer"}
-        or not allowed.intersection(r.name for r in user.roles)
-    ):
-        raise AuthoringError("Authoring action denied", 403)
-
-
 def _product(session: Session, product_id: UUID, actor_id: UUID, action: str) -> Product:
     product = session.scalar(
         select(Product).where(Product.id == product_id).with_for_update(read=action == "read")
@@ -87,7 +69,13 @@ def _product(session: Session, product_id: UUID, actor_id: UUID, action: str) ->
         or product.active_revision_id is None
     ):
         raise AuthoringError("Product unavailable", 404)
-    _actor(session, actor_id, action)
+    allowed = {"admin", "product_manager_reviewer", "translator", "viewer"}
+    if action == "write":
+        allowed.remove("viewer")
+    if action == "review":
+        allowed = {"admin", "product_manager_reviewer"}
+    if not allowed.intersection(product_roles(session, actor_id, product_id)):
+        raise AuthoringError("Authoring action denied", 403)
     return product
 
 

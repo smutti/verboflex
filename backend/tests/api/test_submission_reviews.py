@@ -13,6 +13,7 @@ from tests.integration.test_preview_jobs import (
     preview_session_factory,  # noqa: F401
 )
 from tests.integration.test_writeback_authority import seed_writeback_authority
+from tests.legacy_product_fixtures import mirror_fixture_role
 from verboflex.auth.principal import Principal, get_current_principal
 from verboflex.db.session import get_db_session
 from verboflex.main import app
@@ -82,6 +83,7 @@ def test_read_only_roles_can_read_but_cannot_request_review(review_api, role):
         session.get(User, seed.actor_id).roles = [
             session.scalars(select(Role).where(Role.name == role)).one()
         ]
+        mirror_fixture_role(session, session.get(User, seed.actor_id).id)
     base = f"/api/v1/products/{seed.product_id}"
     assert client.get(f"{base}/change-set-candidates").status_code == 200
     assert client.post(f"{base}/submission-reviews", json=payload(seed)).status_code == 403
@@ -121,6 +123,7 @@ def test_reviewer_union_role_is_authorized_and_http_never_prepares(review_api, m
                 select(Role).where(Role.name.in_(("viewer", "product_manager_reviewer")))
             )
         )
+        mirror_fixture_role(session, session.get(User, seed.actor_id).id)
 
     def forbidden(*args, **kwargs):
         raise AssertionError("HTTP must not prepare or read the provider")

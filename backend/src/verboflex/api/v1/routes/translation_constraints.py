@@ -8,7 +8,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from verboflex.auth.principal import Principal, require_roles
+from verboflex.auth.principal import CurrentPrincipal
+from verboflex.auth.translation_access import (
+    TranslationGroupAccessMode,
+    TranslationGroupAccessUnavailable,
+    TranslationGroupActionDenied,
+    resolve_translation_group_access,
+)
 from verboflex.db.session import get_db_session
 from verboflex.schemas.system import ErrorResponse
 from verboflex.schemas.translation_constraints import (
@@ -22,7 +28,6 @@ from verboflex.schemas.translations import (
     LanguageCode,
     TranslationConstraintProjectionResponse,
 )
-from verboflex.schemas.users import RoleName
 from verboflex.services.translation_constraints import (
     ConstraintAuthorityUnavailable,
     ConstraintInputInvalid,
@@ -44,15 +49,7 @@ from verboflex.services.translation_search import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/translations", tags=["translation-constraints"])
-ConstraintPrincipal = Annotated[
-    Principal,
-    Depends(
-        require_roles(
-            RoleName.ADMIN,
-            RoleName.PRODUCT_MANAGER_REVIEWER,
-        )
-    ),
-]
+ConstraintPrincipal = CurrentPrincipal
 ConstraintSession = Annotated[Session, Depends(get_db_session, use_cache=False)]
 
 AUTH_RESPONSES: dict[int | str, dict[str, Any]] = {
@@ -80,9 +77,16 @@ MUTATION_RESPONSES: dict[int | str, dict[str, Any]] = {
 
 
 def _raise_constraint_error(error: Exception) -> NoReturn:
+    if isinstance(error, TranslationGroupActionDenied):
+        raise HTTPException(403, "Insufficient permissions") from error
     if isinstance(
         error,
-        (ConstraintAuthorityUnavailable, ConstraintNotFound, TranslationGroupUnavailable),
+        (
+            ConstraintAuthorityUnavailable,
+            ConstraintNotFound,
+            TranslationGroupUnavailable,
+            TranslationGroupAccessUnavailable,
+        ),
     ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -168,11 +172,17 @@ def _execute_mutation(
     session: Session,
     *,
     translation_group_id: UUID,
+    principal: CurrentPrincipal,
     operation: Callable[[], ConstraintMutationProjection],
 ) -> TranslationConstraintMutationResponse:
     """Share currentness, rollback, commit, and bounded error handling."""
     try:
-        _require_active_group(session, translation_group_id=translation_group_id)
+        resolve_translation_group_access(
+            session,
+            principal=principal,
+            translation_group_id=translation_group_id,
+            mode=TranslationGroupAccessMode.REVIEW,
+        )
         response = _mutation_response(operation())
         session.commit()
     except Exception as error:
@@ -198,6 +208,7 @@ def put_translation_constraint(
     return _execute_mutation(
         session,
         translation_group_id=translation_group_id,
+        principal=principal,
         operation=lambda: put_translation_constraint_service(
             session,
             translation_group_id=translation_group_id,
@@ -226,6 +237,7 @@ def delete_translation_constraint(
     return _execute_mutation(
         session,
         translation_group_id=translation_group_id,
+        principal=_principal,
         operation=lambda: delete_translation_constraint_service(
             session,
             translation_group_id=translation_group_id,

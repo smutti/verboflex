@@ -12,7 +12,8 @@ below prepares a small, invitation-only installation with synthetic data.
 | Live portal | Separate Docker host + HTTPS hostname | Search, edit, comment and review real application data using individual accounts |
 | Open editing sandbox | Additional application work | Each visitor needs isolated data, quotas, expiry and a reliable reset before anonymous access is offered |
 
-The current portal has internal accounts and shared products. It does not isolate
+The portal has internal accounts and explicit product teams (see
+[product membership](product-membership.md)). It does not isolate
 one visitor's changes from another visitor's changes. Never load customer or
 company repositories into the public demonstration. Do not publish an admin password.
 

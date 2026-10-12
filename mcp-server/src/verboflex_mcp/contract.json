@@ -3281,7 +3281,8 @@
   },
   "search_mention_users": {
     "bindings": {
-      "q": "query"
+      "q": "query",
+      "translation_group_id": "query"
     },
     "description": "Find users available for an explicitly requested comment mention.",
     "input_schema": {
@@ -3292,6 +3293,18 @@
           "minLength": 1,
           "title": "Q",
           "type": "string"
+        },
+        "translation_group_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Translation Group Id"
         }
       },
       "required": [

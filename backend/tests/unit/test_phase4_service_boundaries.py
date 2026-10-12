@@ -176,7 +176,7 @@ def test_oversized_database_projections_are_rejected_before_rendering():
         {"option_kind": 1, "language": str(i)} for i in range(501)
     ]
     with pytest.raises(search.TranslationSearchInputError, match="options exceed"):
-        search.get_translation_options(session)
+        search.get_translation_options(session, principal_id=uuid4())
 
 
 @pytest.mark.parametrize(

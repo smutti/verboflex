@@ -19,6 +19,7 @@ from tests.integration.test_preview_jobs import (
     preview_session_factory,  # noqa: F401
 )
 from tests.integration.test_writeback_authority import PreparedSource, seed_writeback_authority
+from tests.legacy_product_fixtures import mirror_fixture_role
 from verboflex.localization.writing.core import WritebackRejected
 from verboflex.models.import_job import ImportJob
 from verboflex.models.review import TranslationProposal, TranslationProposalValue
@@ -213,6 +214,7 @@ def test_worker_rechecks_current_actor_and_proposal_before_provider(
         user = session.get(User, seed.actor_id)
         if mutation == "role":
             user.roles = [session.scalars(select(Role).where(Role.name == "viewer")).one()]
+            mirror_fixture_role(session, user.id)
         elif mutation == "token":
             user.token_version += 1
         elif mutation == "disabled":
@@ -359,6 +361,7 @@ def test_role_loss_during_provider_io_cannot_publish_ready(preview_session_facto
                 session.get(User, seed.actor_id).roles = [
                     session.scalars(select(Role).where(Role.name == "viewer")).one()
                 ]
+                mirror_fixture_role(session, session.get(User, seed.actor_id).id)
         finally:
             reader.release.set()
         future.result(15)
@@ -526,3 +529,32 @@ def test_complete_32_member_review_pages_without_truncating_scope(
         and v.character_count == 2
         for v in last.items
     )
+
+
+def test_removed_then_regranted_owner_cannot_execute_old_review(
+    preview_session_factory, monkeypatch
+):
+    from uuid import uuid4
+
+    from verboflex.models.product_member import ProductMember
+
+    factory = preview_session_factory
+    seed = seed_writeback_authority(factory, monkeypatch)
+    with factory.begin() as session:
+        session.get_one(User, seed.actor_id).roles = [
+            session.scalar(select(Role).where(Role.name == "viewer"))
+        ]
+        member = session.get_one(ProductMember, (seed.product_id, seed.actor_id))
+        member.role, member.version = "product_owner", uuid4()
+    row = create(factory, seed)
+    with factory.begin() as session:
+        member = session.get_one(ProductMember, (seed.product_id, seed.actor_id))
+        member.active, member.version = False, uuid4()
+        session.flush()
+        member.active, member.version = True, uuid4()
+    reader = PreparedSource(seed)
+    asyncio.run(execute_submission_review(factory, review_id=row.id, adapter=reader))
+    assert reader.sessions == []
+    with factory() as session:
+        stored = session.get_one(SubmissionReview, row.id)
+        assert stored.state == "failed" and stored.prepared_payload is None

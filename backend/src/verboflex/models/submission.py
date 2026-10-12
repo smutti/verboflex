@@ -49,6 +49,7 @@ class SubmissionReview(Base):
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     actor_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     actor_token_version: Mapped[int] = mapped_column(Integer)
+    membership_version: Mapped[str | None] = mapped_column(String(80))
     product_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True))
     revision_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True))
     selection: Mapped[list[dict[str, object]]] = mapped_column(JSONB)

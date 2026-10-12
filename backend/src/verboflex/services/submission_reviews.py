@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from verboflex.auth.product_access import membership_stamp, product_roles
 from verboflex.localization.graphemes import grapheme_count
 from verboflex.localization.writing.core import WritebackReason, WritebackRejected
 from verboflex.models.authoring import AuthoringRequest
@@ -89,7 +90,7 @@ def _product_actor(
         .with_for_update(read=True)
         .execution_options(populate_existing=True)
     )
-    roles = {role.name for role in actor.roles} if actor is not None else set()
+    roles = set(product_roles(session, actor_id, product_id))
     if (
         actor is None
         or not actor.is_active
@@ -157,7 +158,7 @@ def list_change_set_candidates(
 ) -> ChangeSetCandidatesResponse:
     with session.begin():
         product, actor = _product_actor(session, product_id, actor_id, action=False)
-        can_request = not REVIEW_ROLES.isdisjoint(role.name for role in actor.roles)
+        can_request = not REVIEW_ROLES.isdisjoint(product_roles(session, actor_id, product_id))
         statement = (
             select(TranslationProposal, func.substr(TranslationKey.raw_key, 1, 256))
             .join(LocalizationScope, LocalizationScope.id == TranslationProposal.scope_id)
@@ -489,7 +490,13 @@ def create_submission_review(
         ]
         digest = hashlib.sha256(
             json.dumps(
-                [str(product.active_revision_id), str(actor_id), actor.token_version, frozen],
+                [
+                    str(product.active_revision_id),
+                    str(actor_id),
+                    actor.token_version,
+                    membership_stamp(session, actor_id, product_id),
+                    frozen,
+                ],
                 sort_keys=True,
                 separators=(",", ":"),
             ).encode()
@@ -528,6 +535,7 @@ def create_submission_review(
                 id=uuid4(),
                 actor_id=actor_id,
                 actor_token_version=actor.token_version,
+                membership_version=membership_stamp(session, actor_id, product_id),
                 product_id=product_id,
                 revision_id=product.active_revision_id,
                 selection=frozen,
@@ -568,6 +576,7 @@ def _current(session: Session, row: SubmissionReview) -> WritebackSelection:
     product, actor = _product_actor(session, row.product_id, row.actor_id, action=True)
     if (
         actor.token_version != row.actor_token_version
+        or membership_stamp(session, row.actor_id, row.product_id) != row.membership_version
         or product.active_revision_id != row.revision_id
         or datetime.now(UTC) >= row.expires_at
     ):

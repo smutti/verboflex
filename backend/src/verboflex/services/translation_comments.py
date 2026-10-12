@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.orm import Session
 
 from verboflex.auth.principal import Principal
+from verboflex.auth.product_access import product_roles
 from verboflex.auth.translation_access import (
     TranslationGroupAccessMode,
     resolve_translation_group_access,
@@ -127,6 +128,7 @@ class TranslationCommentVersionPage:
 
 @dataclass(frozen=True, slots=True)
 class _Discussion:
+    product_id: UUID
     translation_group_id: UUID
     translation_key_id: UUID
     scope_id: UUID
@@ -178,6 +180,7 @@ def validate_utf16_mentions(
     *,
     body: str,
     mentions: Sequence[MentionInput],
+    product_id: UUID | None = None,
 ) -> tuple[ValidatedMention, ...]:
     """Re-resolve active identities and validate exact non-overlapping browser ranges."""
     validated: list[ValidatedMention] = []
@@ -187,7 +190,11 @@ def validate_utf16_mentions(
             raise TranslationCommentInputInvalid("invalid mention range")
         selected = _utf16_slice(body, mention.start_utf16, mention.end_utf16)
         user = session.get(User, mention.user_id)
-        if user is None or not user.is_active:
+        if (
+            user is None
+            or not user.is_active
+            or (product_id is not None and not product_roles(session, user.id, product_id))
+        ):
             raise TranslationCommentInputInvalid("invalid mention identity")
         expected = f"@{user.display_name}"
         if mention.display_text != expected or selected != expected:
@@ -300,6 +307,7 @@ def _discussion(
     ):
         raise TranslationCommentUnavailable("comment unavailable")
     return _Discussion(
+        product_id=access.product_id,
         translation_group_id=translation_group_id,
         translation_key_id=anchor.translation_key_id,
         scope_id=anchor.scope_id,
@@ -451,7 +459,9 @@ def create_translation_comment(
         mode=TranslationGroupAccessMode.COMMENT,
     )
     exact_body = _require_body(body)
-    exact_mentions = validate_utf16_mentions(session, body=exact_body, mentions=mentions)
+    exact_mentions = validate_utf16_mentions(
+        session, body=exact_body, mentions=mentions, product_id=discussion.product_id
+    )
     now = datetime.now(UTC)
     comment = TranslationComment(
         scope_id=discussion.scope_id,
@@ -639,7 +649,9 @@ def edit_translation_comment(
     if comment.author_id != principal.user_id:
         raise TranslationCommentActionDenied("comment action denied")
     exact_body = _require_body(body)
-    exact_mentions = validate_utf16_mentions(session, body=exact_body, mentions=mentions)
+    exact_mentions = validate_utf16_mentions(
+        session, body=exact_body, mentions=mentions, product_id=discussion.product_id
+    )
     exact_version = _require_version(expected_version)
     if comment.current_version != exact_version:
         raise CommentVersionConflict(

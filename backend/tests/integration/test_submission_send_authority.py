@@ -18,6 +18,7 @@ from tests.integration.test_preview_jobs import (
     preview_session_factory,  # noqa: F401
 )
 from tests.integration.test_submission_jobs import accepted
+from tests.legacy_product_fixtures import mirror_fixture_role
 from verboflex.core.config import Settings
 from verboflex.integrations.bitbucket.client import BitbucketHttpAdapter
 from verboflex.integrations.bitbucket.writes import BitbucketWriteAdapter
@@ -58,6 +59,7 @@ def test_actor_revoked_during_adapter_preflight_never_reaches_provider_post(
                         actor.token_version += 1
                     elif mutation == "role":
                         actor.roles = [session.scalar(select(Role).where(Role.name == "viewer"))]
+                        mirror_fixture_role(session, actor.id)
                     else:
                         session.get(ChangeSet, identity).execution_fence += 1
                 revoked = True

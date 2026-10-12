@@ -173,7 +173,7 @@ def test_schema_upgrade_restores_dashboard_without_changing_existing_data(
             assert session.scalar(text("SELECT to_regclass('change_sets')")) is None
         unavailable = request(token)
         assert unavailable.status_code == 503
-        assert unavailable.json() == {"detail": "Dashboard unavailable"}
+        assert unavailable.json() == {"detail": "Authentication temporarily unavailable"}
 
         command.upgrade(config, "head")
         response = request(token)

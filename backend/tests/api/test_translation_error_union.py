@@ -32,6 +32,7 @@ async def test_translation_422_schema_covers_actual_http_response(monkeypatch, m
         jwt_secret_key=SecretStr("disposable-test-signing-key")
     )
     monkeypatch.setattr(constraints, "get_translation_group", Mock())
+    monkeypatch.setattr(constraints, "resolve_translation_group_access", Mock())
     domain = (
         Mock(side_effect=translations.InvalidTranslationCursor("private diagnostic"))
         if method == "get"

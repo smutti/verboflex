@@ -7,6 +7,7 @@ import {
   useParams,
 } from "react-router-dom";
 
+import { ProductTeamPage } from "./features/team/ProductTeamPage";
 import { McpConsentPage } from "./features/mcp/McpConsentPage";
 import { McpConnectionsPage } from "./features/mcp/McpConnectionsPage";
 
@@ -229,6 +230,10 @@ export function ProductApplicationRoutes({
         <Route index element={<Navigate replace to="strings" />} />
         <Route path="strings" element={<TranslationSearchPage />} />
         <Route
+          path="team"
+          element={<ProductTeamPage accessToken={accessToken} />}
+        />
+        <Route
           path="change-sets"
           element={
             <ChangeSetsLayout
@@ -292,6 +297,14 @@ export function AdminApplicationRoutes({
       <Route
         path="products/new"
         element={<ProductWizardPage accessToken={accessToken} />}
+      />
+      <Route
+        path="products/:productId/team"
+        element={
+          <ProductDetailLayout>
+            <ProductTeamPage accessToken={accessToken} />
+          </ProductDetailLayout>
+        }
       />
       <Route
         path="products/:productId/overview"

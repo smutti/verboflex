@@ -3,7 +3,7 @@
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class RoleName(StrEnum):
@@ -25,6 +25,8 @@ class CurrentUserResponse(BaseModel):
     display_name: str
     roles: list[RoleName]
     must_change_password: bool
+    product_roles: dict[UUID, list[RoleName]] = Field(default_factory=dict)
+    managed_product_ids: list[UUID] = Field(default_factory=list)
 
 
 class MentionUserResponse(BaseModel):

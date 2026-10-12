@@ -19,6 +19,7 @@ from sqlalchemy.orm import sessionmaker
 
 from alembic import command
 from tests.api import test_translation_workspace as workspace_support
+from tests.legacy_product_fixtures import shared_reader
 from verboflex.models.product import Product
 from verboflex.models.translation import TranslationValue
 from verboflex.models.user import User
@@ -74,7 +75,9 @@ def owned_database(*, dump=None, postgres_container=None):
         with pytest.MonkeyPatch.context() as patch:
             patch.setenv("VERBOFLEX_DATABASE_URL", url)
             command.upgrade(config, "head")
-        yield sessionmaker(engine, expire_on_commit=False)
+        factory = sessionmaker(engine, expire_on_commit=False)
+        shared_reader(factory, PRINCIPAL)
+        yield factory
     finally:
         engine.dispose()
         with connect(admin_url, autocommit=True, connect_timeout=5) as admin:
@@ -181,6 +184,7 @@ def seed_historical(factory, count=100_000):
         historical_product.deleted_by = actor.id
     with factory.begin() as session:
         session.execute(text("ANALYZE"))
+    shared_reader(factory, PRINCIPAL)
     return product, scope
 
 
@@ -203,7 +207,7 @@ def explain_metadata(factory, module, product_id):
         session.execute(text("SET LOCAL jit = off"))
         return session.execute(
             text("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + module._METADATA.text),
-            {"product_id": product_id},
+            {"product_id": product_id, "principal_id": PRINCIPAL},
         ).scalar_one()[0]
 
 
@@ -226,7 +230,9 @@ def test_metadata_preserves_languages_without_scanning_values_or_history(histori
     for product_id in (None, product):
         with factory() as session:
             expected = session.execute(baseline._METADATA, {"product_id": product_id}).one()
-            actual = session.execute(current._METADATA, {"product_id": product_id}).one()
+            actual = session.execute(
+                current._METADATA, {"product_id": product_id, "principal_id": PRINCIPAL}
+            ).one()
         assert actual.languages == expected.languages
         plan = explain_metadata(factory, current, product_id)
         scans = [

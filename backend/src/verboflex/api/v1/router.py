@@ -20,6 +20,7 @@ from verboflex.api.v1.routes import (
     glossary,
     health,
     notifications,
+    product_team,
     product_workspace,
     reuse,
     submissions,
@@ -31,6 +32,7 @@ from verboflex.api.v1.routes import (
 )
 
 api_router = APIRouter()
+api_router.include_router(product_team.router)
 api_router.include_router(product_workspace.router)
 api_router.include_router(authoring.router)
 api_router.include_router(reuse.router)

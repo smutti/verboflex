@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from tests.integration.test_preview_jobs import clean_preview_database, preview_session_factory
 from tests.integration.test_writeback_authority import seed_writeback_authority
+from tests.legacy_product_fixtures import mirror_fixture_role
 from verboflex.models.glossary import GlossaryEntry
 from verboflex.schemas.glossary import GlossaryInput, GlossaryMatchQuery
 from verboflex.services import glossary
@@ -93,6 +94,7 @@ def test_only_reviewers_can_manage_terms(preview_session_factory, monkeypatch, r
         session.get(User, seed.actor_id).roles = [
             session.scalar(select(Role).where(Role.name == role))
         ]
+        mirror_fixture_role(session, session.get(User, seed.actor_id).id)
     with factory.begin() as session:
         assert (
             glossary.list_entries(session, product_id=seed.product_id, actor_id=seed.actor_id).items

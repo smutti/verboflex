@@ -15,8 +15,10 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
 from verboflex.auth.principal import Principal
+from verboflex.auth.product_access import operational_roles
 from verboflex.core.config import Settings
 from verboflex.models.mcp_oauth import McpAuthorizationRequest, McpClient, McpGrant, McpToken
+from verboflex.models.product_member import ProductMember
 from verboflex.models.user import User
 from verboflex.schemas.mcp_oauth import READ_SCOPE, SCOPES, RegisterMcpClient
 from verboflex.schemas.users import RoleName
@@ -179,7 +181,20 @@ def _principal(session: Session, grant: McpGrant) -> Principal:
         user_id=user.id,
         email=user.email,
         display_name=user.display_name,
-        roles=tuple(sorted(RoleName(role.name) for role in user.roles)),
+        roles=tuple(
+            sorted(
+                {RoleName(role.name) for role in user.roles}
+                | {
+                    r
+                    for role in session.scalars(
+                        select(ProductMember.role).where(
+                            ProductMember.user_id == user.id, ProductMember.active
+                        )
+                    )
+                    for r in operational_roles(role)
+                }
+            )
+        ),
         must_change_password=False,
     )
 

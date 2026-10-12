@@ -63,6 +63,7 @@ EXPECTED_MODEL_MODULES = {
     "preview_job.py",
     "product.py",
     "product_mapping.py",
+    "product_member.py",
     "review.py",
     "repository.py",
     "role.py",

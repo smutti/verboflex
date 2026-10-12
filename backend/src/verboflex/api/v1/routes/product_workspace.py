@@ -45,7 +45,7 @@ def read_product_workspaces(
         raise_rate_limited(limit)
     response.headers["Cache-Control"] = "private, no-store"
     try:
-        return list_product_workspaces(session, query=query)
+        return list_product_workspaces(session, query=query, principal_id=principal.user_id)
     except Exception as error:
         logger.exception("product workspace read failed", exc_info=error)
         raise HTTPException(status_code=503, detail="Products unavailable") from error

@@ -18,6 +18,7 @@ from verboflex.models.review import (
     TranslationCommentMention,
     TranslationCommentVersion,
 )
+from verboflex.models.role import Role
 from verboflex.models.user import User
 from verboflex.services import translation_comments
 
@@ -33,6 +34,7 @@ def _recipient(factory, *, display_name: str = "Recipient") -> UUID:
                 hashed_password=hash_password("recipient password phrase!"),
                 is_active=True,
                 must_change_password=False,
+                roles=list(session.scalars(select(Role).where(Role.name == "viewer"))),
             )
         )
     return user_id

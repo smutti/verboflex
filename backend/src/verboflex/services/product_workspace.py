@@ -1,18 +1,21 @@
 """Product-card reads over import-time snapshots, independent of corpus size."""
 
+from uuid import UUID
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from verboflex.auth.product_access import visible_product_sql
 from verboflex.schemas.product_workspace import ProductWorkspacePage, ProductWorkspaceQuery
 from verboflex.services.translation_search import escape_like_literal, normalize_search_query
 
 PAGE_SIZE = 24
 
-_WORKSPACE_SQL = text("""
+_WORKSPACE_SQL = text(f"""
 WITH filtered AS MATERIALIZED (
     SELECT id, display_name, name_key, active_revision_id
     FROM products
-    WHERE is_active AND deleted_at IS NULL
+    WHERE is_active AND deleted_at IS NULL AND {visible_product_sql("products.id")}
       AND (CAST(:product_id AS uuid) IS NULL OR id=CAST(:product_id AS uuid))
       AND (CAST(:query AS text) IS NULL OR name_key LIKE :pattern ESCAPE '\\')
 ), page AS (
@@ -69,7 +72,7 @@ FROM page LEFT JOIN cards USING(id)
 
 
 def list_product_workspaces(
-    session: Session, *, query: ProductWorkspaceQuery
+    session: Session, *, query: ProductWorkspaceQuery, principal_id: UUID
 ) -> ProductWorkspacePage:
     normalized = normalize_search_query(query.q)
     row = (
@@ -77,6 +80,7 @@ def list_product_workspaces(
             _WORKSPACE_SQL,
             {
                 "query": normalized,
+                "principal_id": principal_id,
                 "product_id": query.product_id,
                 "pattern": f"%{escape_like_literal(normalized or '')}%",
                 "limit": PAGE_SIZE,

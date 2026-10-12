@@ -14,6 +14,7 @@ from uuid import UUID
 from sqlalchemy import Text, func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
+from verboflex.auth.product_access import product_roles
 from verboflex.integrations.bitbucket.writes import (
     BitbucketWriteAdapter,
     PullRequestIntent,
@@ -175,8 +176,8 @@ def _live(row: ChangeSet) -> bool:
 
 def recovery_capabilities(session: Session, row: ChangeSet, actor_id: UUID) -> dict[str, object]:
     actor = session.get(User, actor_id)
-    roles = {r.name for r in actor.roles} if actor is not None else set()
     batch = session.get(SubmissionBatch, row.batch_id)
+    roles = set(product_roles(session, actor_id, batch.product_id)) if batch else set()
     reviewer = bool(
         actor and actor.is_active and not actor.must_change_password and roles & REVIEW_ROLES
     )
