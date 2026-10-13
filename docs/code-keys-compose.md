@@ -227,3 +227,6 @@ can strip `JAVA_TOOL_OPTIONS` from worker environments. Use a dedicated copy of 
 same JDK with a `bin/java` launcher that forwards that option to its renamed original
 binary (`java-real`); point the local profile at that copy. Do not modify the system
 JDK or broaden the sandbox's outbound network policy to work around this problem.
+
+For a persistent Linux deployment with a private Docker relay and an offline
+Android runner, see [the Linux runner guide](compose-linux-runner.md).

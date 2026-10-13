@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Trusted worker adapter for an authenticated, local macOS capture service."""
+"""Trusted worker adapter for an authenticated private capture relay."""
 
 import argparse
 import urllib.request

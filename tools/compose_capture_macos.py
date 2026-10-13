@@ -19,7 +19,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from compose_capture import capture, checkout
+from compose_capture import apply_fixture_patch, capture, checkout
 from verboflex.localization.code_keys.capture import CaptureBundle
 from verboflex.worker.screenshot_tasks import validate_png
 
@@ -85,20 +85,6 @@ def sandbox_profile(workspace: Path, profile: dict) -> str:
     )
 
 
-def apply_fixture_patch(workspace: Path, patch: str) -> None:
-    # A disposable checkout can live underneath another Git worktree. Stop Git
-    # discovery there, otherwise `git apply` silently skips paths outside its prefix.
-    subprocess.run(
-        ["/usr/bin/git", "apply", "--no-index", patch],
-        cwd=workspace,
-        env={**os.environ, "GIT_CEILING_DIRECTORIES": str(workspace.parent)},
-        check=True,
-        timeout=30,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
-
 def render(payload: bytes, profiles: dict) -> bytes:
     bundle, profile = registered_profile(payload, profiles)
     work_root = Path(profile["work_root"])
@@ -160,7 +146,7 @@ def render(payload: bytes, profiles: dict) -> bytes:
         return content
 
 
-def handler(token: str, profiles: dict):
+def handler(token: str, profiles: dict, *, render_fn=None):
     lock = threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
@@ -192,7 +178,7 @@ def handler(token: str, profiles: dict):
                 self.send_error(503)
                 return
             try:
-                content = render(payload, profiles)
+                content = (render_fn or render)(payload, profiles)
                 self.send_response(200)
                 self.send_header("Content-Type", "image/png")
                 self.send_header("Content-Length", str(len(content)))

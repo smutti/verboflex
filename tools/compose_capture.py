@@ -6,6 +6,7 @@ Development workspace mode is explicit and never supplied by the HTTP API.
 """
 
 import argparse
+import hashlib
 import io
 import os
 import re
@@ -24,6 +25,19 @@ from verboflex.localization.code_keys.capture import (
     resource_overlay,
 )
 from verboflex.worker.screenshot_tasks import validate_png
+
+
+def apply_fixture_patch(workspace: Path, patch: str) -> None:
+    """Apply an operator-reviewed patch only inside the disposable checkout."""
+    subprocess.run(
+        ["git", "apply", "--no-index", patch],
+        cwd=workspace,
+        env={**os.environ, "GIT_CEILING_DIRECTORIES": str(workspace.parent)},
+        check=True,
+        timeout=30,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 
 def git(repo: Path, *args: str) -> bytes:
@@ -129,6 +143,9 @@ def main() -> None:
     parser.add_argument("--mirror", type=Path)
     parser.add_argument("--repository-id")
     parser.add_argument("--profile")
+    parser.add_argument("--commit")
+    parser.add_argument("--fixture-patch", type=Path)
+    parser.add_argument("--fixture-patch-sha256")
     parser.add_argument("--development-workspace", type=Path)
     args = parser.parse_args()
     bundle = CaptureBundle.model_validate_json(args.input.read_bytes())
@@ -146,11 +163,20 @@ def main() -> None:
         args.mirror is None
         or bundle.code_repository_id != args.repository_id
         or bundle.capture.runner_profile != args.profile
+        or (args.commit is not None and bundle.code_commit != args.commit)
     ):
         raise ValueError("Runner profile does not own this repository")
+    if args.fixture_patch and (
+        not args.commit
+        or hashlib.sha256(args.fixture_patch.read_bytes()).hexdigest()
+        != args.fixture_patch_sha256
+    ):
+        raise ValueError("Fixture patch is not bound to a reviewed revision")
     with tempfile.TemporaryDirectory(prefix="compose-checkout-") as directory:
         root = Path(directory)
         checkout(args.mirror, bundle.code_commit, root)
+        if args.fixture_patch:
+            apply_fixture_patch(root, str(args.fixture_patch.resolve()))
         sdk = os.environ.get("ANDROID_HOME")
         if sdk:
             (root / "local.properties").write_text(f"sdk.dir={sdk}\n")

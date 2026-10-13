@@ -1,5 +1,6 @@
 """Real Git snapshot checkout and fail-closed archive extraction, using local fixtures."""
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -158,3 +159,47 @@ def test_container_stdout_is_bounded_and_timed():
         )
     with pytest.raises(subprocess.TimeoutExpired):
         adapter.capture_output([sys.executable, "-c", "import time; time.sleep(5)"], 0.1)
+
+
+@pytest.mark.parametrize("image", ["runner:latest", "runner@sha256:wrong", "sha256:" + "a" * 63])
+def test_container_rejects_mutable_or_malformed_image(image, tmp_path):
+    payload = json.dumps(
+        {"capture": {"runner_profile": "demo"}, "code_repository_id": "demo"}
+    ).encode()
+    with pytest.raises(ValueError, match="digest"):
+        adapter.render(payload, {"demo": {"repository_id": "demo", "image": image}})
+
+
+def test_container_binds_reviewed_patch_and_revision_before_docker(tmp_path, monkeypatch):
+    patch = tmp_path / "fixture.patch"
+    patch.write_text("reviewed synthetic fixture")
+    payload = json.dumps(
+        {
+            "capture": {"runner_profile": "demo"},
+            "code_repository_id": "demo",
+            "code_commit": "a" * 40,
+        }
+    ).encode()
+    profile = {
+        "repository_id": "demo",
+        "commit": "a" * 40,
+        "mirror": str(tmp_path),
+        "image": "sha256:" + "b" * 64,
+        "patch": str(patch),
+        "patch_sha256": hashlib.sha256(patch.read_bytes()).hexdigest(),
+    }
+
+    def capture(command, timeout):
+        assert command[command.index("--commit") + 1] == "a" * 40
+        assert command[command.index("--fixture-patch-sha256") + 1] == profile["patch_sha256"]
+        assert f"type=bind,source={patch},target=/fixture.patch,readonly" in command
+        return b"synthetic"
+
+    monkeypatch.setattr(adapter, "capture_output", capture)
+    monkeypatch.setattr(adapter.subprocess, "run", lambda *args, **kwargs: None)
+    assert adapter.render(payload, {"demo": profile}, exchange_root=tmp_path) == b"synthetic"
+    with pytest.raises(ValueError, match="revision"):
+        adapter.render(payload, {"demo": {**profile, "commit": "c" * 40}})
+    patch.write_text("unreviewed change")
+    with pytest.raises(ValueError, match="patch"):
+        adapter.render(payload, {"demo": profile})
