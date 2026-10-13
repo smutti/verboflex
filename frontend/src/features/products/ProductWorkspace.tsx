@@ -1,5 +1,11 @@
 import { principalForProduct } from "../auth/productRoles";
-import { Languages, PackageOpen, RefreshCw } from "lucide-react";
+import {
+  GitPullRequest,
+  Languages,
+  PackageOpen,
+  RefreshCw,
+  Users,
+} from "lucide-react";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, Outlet, useLocation, useParams } from "react-router-dom";
 
@@ -151,8 +157,14 @@ export function ProductFocusWorkspace({
   const { identity, style } = identityStyle(product.id, product.name);
   const stringsPath = `/products/${encodeURIComponent(product.id)}/strings`;
   const changesPath = `/products/${encodeURIComponent(product.id)}/change-sets`;
+  const teamPath = `/products/${encodeURIComponent(product.id)}/team`;
   const changesActive = location.pathname.startsWith(changesPath);
-  const teamActive = location.pathname.endsWith("/team");
+  const teamActive =
+    location.pathname === teamPath ||
+    location.pathname.startsWith(`${teamPath}/`);
+  const tabClass =
+    "inline-flex min-h-11 items-center justify-center gap-2 rounded-md px-4 font-semibold no-underline";
+  const activeStyle = { backgroundColor: identity.accent, color: "#ffffff" };
   return (
     <div
       data-testid="product-focus"
@@ -198,40 +210,35 @@ export function ProductFocusWorkspace({
         </div>
         <nav
           aria-label={`${product.name} workspace`}
-          className="mt-(--space-lg)"
+          className="mt-(--space-lg) flex flex-wrap items-center gap-2"
         >
           <Link
             to={stringsPath}
             aria-current={changesActive || teamActive ? undefined : "page"}
-            className="inline-flex min-h-[44px] items-center gap-(--space-sm) rounded-md px-(--space-md) font-semibold no-underline"
-            style={
-              changesActive || teamActive
-                ? undefined
-                : { backgroundColor: identity.accent, color: "#ffffff" }
-            }
+            className={tabClass}
+            style={changesActive || teamActive ? undefined : activeStyle}
           >
-            <Languages aria-hidden="true" />
+            <Languages className="size-4 shrink-0" aria-hidden="true" />
             Strings
           </Link>
           <Link
             to={changesPath}
             aria-current={changesActive ? "page" : undefined}
-            className="inline-flex min-h-[44px] items-center rounded-md px-(--space-md) font-semibold no-underline"
-            style={
-              changesActive
-                ? { backgroundColor: identity.accent, color: "#ffffff" }
-                : undefined
-            }
+            className={tabClass}
+            style={changesActive ? activeStyle : undefined}
           >
+            <GitPullRequest className="size-4 shrink-0" aria-hidden="true" />
             Change sets
           </Link>
           {(principal.roles.includes("admin") ||
             principal.managed_product_ids?.includes(product.id)) && (
             <Link
-              to={`/products/${encodeURIComponent(product.id)}/team`}
+              to={teamPath}
               aria-current={teamActive ? "page" : undefined}
-              className="inline-flex min-h-[44px] items-center rounded-md px-4 font-semibold"
+              className={tabClass}
+              style={teamActive ? activeStyle : undefined}
             >
+              <Users className="size-4 shrink-0" aria-hidden="true" />
               Team
             </Link>
           )}

@@ -86,9 +86,13 @@ describe("Product team", () => {
   it("lets owners add operational roles but never appoint or demote an owner", async () => {
     const user = userEvent.setup();
     show();
-    await screen.findByText("Product Owner · Managed by admin");
+    await screen.findByText("owner@example.com");
     expect(
-      screen.queryByRole("button", { name: "Appoint owner" }),
+      screen.queryByRole("button", { name: "Edit owner@example.com" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add collaborator" }));
+    expect(
+      screen.queryByRole("button", { name: "Assign Product Owner" }),
     ).not.toBeInTheDocument();
     const select = screen.getByRole("combobox", { name: "Collaborator role" });
     expect(
@@ -105,7 +109,7 @@ describe("Product team", () => {
     );
     await user.type(screen.getByLabelText("Display name"), "New Translator");
     await user.selectOptions(select, "product_manager_reviewer");
-    await user.click(screen.getByRole("button", { name: "Add collaborator" }));
+    await user.click(screen.getByRole("button", { name: "Add to team" }));
     expect(addProductMember).toHaveBeenCalledWith(
       expect.objectContaining({
         auth: "test-token",
@@ -121,9 +125,9 @@ describe("Product team", () => {
   it("requires an explicit removal confirmation and sends the current version", async () => {
     const user = userEvent.setup();
     show();
-    await screen.findByRole("button", {
-      name: "Remove member@example.com from product",
-    });
+    await user.click(
+      await screen.findByRole("button", { name: "Edit member@example.com" }),
+    );
     await user.click(
       screen.getByRole("button", {
         name: "Remove member@example.com from product",
@@ -147,8 +151,11 @@ describe("Product team", () => {
       response: new Response(null, { status: 204 }),
     } as never);
     show();
+    await user.click(
+      await screen.findByRole("button", { name: "Assign Product Owner" }),
+    );
     await user.type(
-      await screen.findByLabelText("Appoint a Product Owner"),
+      screen.getByLabelText("Account email"),
       "new-owner@example.com",
     );
     await user.click(screen.getByRole("button", { name: "Appoint owner" }));
@@ -168,10 +175,13 @@ describe("Product team", () => {
       error: { detail: "Already a member." },
     } as never);
     show();
-    const input = await screen.findByLabelText("Collaborator email");
+    await user.click(
+      await screen.findByRole("button", { name: "Add collaborator" }),
+    );
+    const input = screen.getByLabelText("Collaborator email");
     await user.type(input, "duplicate@example.com");
     await user.type(screen.getByLabelText("Display name"), "Duplicate");
-    await user.click(screen.getByRole("button", { name: "Add collaborator" }));
+    await user.click(screen.getByRole("button", { name: "Add to team" }));
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent("Already a member."),
     );
@@ -184,12 +194,15 @@ it("keeps the only credential visible through refresh, copies it, then clears it
   const user = userEvent.setup();
   const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
   show();
+  await user.click(
+    await screen.findByRole("button", { name: "Add collaborator" }),
+  );
   await user.type(
-    await screen.findByLabelText("Collaborator email"),
+    screen.getByLabelText("Collaborator email"),
     "new@example.com",
   );
   await user.type(screen.getByLabelText("Display name"), "New Translator");
-  await user.click(screen.getByRole("button", { name: "Add collaborator" }));
+  await user.click(screen.getByRole("button", { name: "Add to team" }));
   const dialog = await screen.findByRole("dialog", {
     name: "Temporary password created",
   });
@@ -227,16 +240,134 @@ it("adds existing accounts without a password dialog", async () => {
   } as never);
   const user = userEvent.setup();
   show();
+  await user.click(
+    await screen.findByRole("button", { name: "Add collaborator" }),
+  );
   await user.type(
-    await screen.findByLabelText("Collaborator email"),
+    screen.getByLabelText("Collaborator email"),
     "existing@example.com",
   );
   await user.type(screen.getByLabelText("Display name"), "Existing");
-  await user.click(screen.getByRole("button", { name: "Add collaborator" }));
+  await user.click(screen.getByRole("button", { name: "Add to team" }));
   expect(
     await screen.findByText(
       "Existing account added. They can sign in with their current credentials.",
     ),
   ).toBeInTheDocument();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+it("separates owners and collaborators with roles and hides forms until requested", async () => {
+  show();
+  const owners = await screen.findByRole("region", { name: "Product Owner" });
+  const collaborators = screen.getByRole("region", { name: "Collaborators" });
+  expect(within(owners).getByText("owner@example.com")).toBeVisible();
+  expect(
+    within(owners).queryByText("member@example.com"),
+  ).not.toBeInTheDocument();
+  expect(within(collaborators).getByText("member@example.com")).toBeVisible();
+  expect(
+    within(collaborators).queryByText("owner@example.com"),
+  ).not.toBeInTheDocument();
+  expect(within(collaborators).getAllByText("Translator")).toHaveLength(2);
+  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Add collaborator" }),
+  ).toHaveAttribute("aria-expanded", "false");
+});
+
+it("preserves a failed role edit and saves with its membership version before closing", async () => {
+  const user = userEvent.setup();
+  vi.mocked(setProductMember).mockResolvedValueOnce({
+    response: new Response(null, { status: 409 }),
+    error: { detail: "Membership changed. Refresh the team." },
+  } as never);
+  show();
+  await user.click(
+    await screen.findByRole("button", { name: "Edit member@example.com" }),
+  );
+  const select = screen.getByRole("combobox", {
+    name: "Role for member@example.com",
+  });
+  await user.selectOptions(select, "product_manager_reviewer");
+  await user.click(screen.getByRole("button", { name: "Save role" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Membership changed.",
+  );
+  expect(select).toHaveValue("product_manager_reviewer");
+  expect(screen.queryByText("Role updated.")).not.toBeInTheDocument();
+  const updated = fixture();
+  updated.members[1] = {
+    ...updated.members[1],
+    role: "product_manager_reviewer",
+    version: "new-version",
+  };
+  vi.mocked(getProductTeam).mockResolvedValue({ data: updated } as never);
+  vi.mocked(setProductMember).mockResolvedValue({
+    response: new Response(null, { status: 204 }),
+  } as never);
+  await user.click(screen.getByRole("button", { name: "Save role" }));
+  expect(setProductMember).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      body: {
+        email: "member@example.com",
+        role: "product_manager_reviewer",
+        expected_version: "member-version",
+      },
+    }),
+  );
+  expect(await screen.findByText("Reviewer")).toBeVisible();
+  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+});
+
+it("moves a promoted collaborator into Product Owner after the administrator saves", async () => {
+  const user = userEvent.setup();
+  vi.mocked(getProductTeam).mockResolvedValueOnce({
+    data: fixture(true),
+  } as never);
+  const promoted = fixture(true);
+  promoted.members[1] = {
+    ...promoted.members[1],
+    role: "product_owner",
+    version: "promoted-version",
+  };
+  vi.mocked(getProductTeam).mockResolvedValue({ data: promoted } as never);
+  vi.mocked(setProductMember).mockResolvedValue({
+    response: new Response(null, { status: 204 }),
+  } as never);
+  show();
+  await user.click(
+    await screen.findByRole("button", { name: "Edit member@example.com" }),
+  );
+  await user.selectOptions(
+    screen.getByRole("combobox", { name: "Role for member@example.com" }),
+    "product_owner",
+  );
+  await user.click(screen.getByRole("button", { name: "Save role" }));
+  const owners = screen.getByRole("region", { name: "Product Owner" });
+  expect(await within(owners).findByText("member@example.com")).toBeVisible();
+  expect(
+    screen.getByRole("region", { name: "Collaborators" }),
+  ).toHaveTextContent("No collaborators yet.");
+});
+
+it("shows clear empty sections and lets an admin cancel owner assignment without saving", async () => {
+  const user = userEvent.setup();
+  vi.mocked(getProductTeam).mockResolvedValue({
+    data: { ...fixture(true), members: [], has_active_owner: false },
+  } as never);
+  show();
+  expect(await screen.findByText("No active Product Owner")).toBeVisible();
+  expect(screen.getByText("No collaborators yet.")).toBeVisible();
+  await user.click(
+    screen.getByRole("button", { name: "Assign Product Owner" }),
+  );
+  await user.type(
+    screen.getByLabelText("Account email"),
+    "new-owner@example.com",
+  );
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(setProductMember).not.toHaveBeenCalled();
 });

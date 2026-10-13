@@ -3,6 +3,11 @@
 An administrator creates/configures products and appoints Product Owners in
 **Administration → Products → Team**. A Product Owner uses the product's **Team**
 page to add collaborators, change their operational role, or remove access.
+The page separates **Product Owner** from **Collaborators**, showing each person's
+name, email and role. Choose **Edit** beside a person to change their role or
+remove them; removal still requires confirmation. Administrators use
+**Assign Product Owner** to open the owner assignment form. The product navigation
+highlights the current **Strings**, **Change sets** or **Team** page.
 
 Each account has one role per product: Viewer, Translator, Reviewer or Product
 Owner. Owners have Reviewer capabilities, including review/submission, and can
@@ -14,7 +19,8 @@ recoverable by a global administrator; Team shows when no active owner remains.
 
 ## Add a collaborator
 
-Enter their email, display name and operational role. For a new account, Team
+Choose **Add collaborator**, enter their email, display name and operational role,
+then select **Add to team**. For a new account, Team
 shows a random temporary password once, with a copy button. Save it and share it
 privately with the recipient, together with their email and the application URL.
 A team refresh preserves the open password dialog; dismiss it with **I saved the
