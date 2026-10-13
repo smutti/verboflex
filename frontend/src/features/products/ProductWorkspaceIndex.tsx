@@ -1,11 +1,4 @@
-import {
-  ArrowRight,
-  Languages,
-  PackageOpen,
-  Search,
-  RefreshCw,
-  X,
-} from "lucide-react";
+import { ArrowRight, Languages, PackageOpen, Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -218,51 +211,7 @@ export function ProductWorkspaceIndex({
   return (
     <div className="grid min-w-0 gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-display font-semibold">Products</h1>
-          <p
-            className="mt-2 text-label text-muted-foreground"
-            title="Based on the latest repository import. Local pending proposals are excluded."
-          >
-            Repository coverage
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={() => setAttempt((value) => value + 1)}
-          aria-label="Refresh products"
-        >
-          <RefreshCw className="size-4" aria-hidden="true" />
-          Refresh
-        </Button>
-      </header>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative w-full sm:max-w-md">
-          <Search
-            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <Input
-            type="search"
-            aria-label="Search products"
-            placeholder="Search products…"
-            maxLength={120}
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            className="min-h-[44px] bg-card pr-10 pl-10"
-          />
-          {input && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute top-0 right-0 size-11"
-              aria-label="Clear product search"
-              onClick={clear}
-            >
-              <X className="size-4" />
-            </Button>
-          )}
-        </div>
+        <h1 className="text-display font-semibold">Products</h1>
         <p role="status" className="text-label text-muted-foreground">
           {data
             ? `${numbers.format(data.total)} ${data.total === 1 ? "product" : "products"}`
@@ -270,6 +219,32 @@ export function ProductWorkspaceIndex({
               ? ""
               : "Loading products…"}
         </p>
+      </header>
+      <div className="relative w-full">
+        <Search
+          className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <Input
+          type="search"
+          aria-label="Search products"
+          placeholder="Search products…"
+          maxLength={120}
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          className="min-h-[44px] bg-card pr-10 pl-10"
+        />
+        {input && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-0 right-0 size-11"
+            aria-label="Clear product search"
+            onClick={clear}
+          >
+            <X className="size-4" />
+          </Button>
+        )}
       </div>
       {error ? (
         <Alert>
