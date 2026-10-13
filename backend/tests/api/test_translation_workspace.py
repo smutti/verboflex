@@ -878,3 +878,128 @@ def test_retired_member_does_not_disable_live_member_or_enter_saved_proposal(fac
     assert not reloaded["pending_change"]["reconciliation_required"]
     with factory() as session:
         assert session.get_one(TranslationValue, group).is_deleted
+
+
+def test_needs_translation_includes_absent_locales_and_empty_imported_values(factory):
+    token = WORK.authority(factory)
+    product, _, ids = seed_keys(factory, count=3)
+    with factory.begin() as session:
+        session.execute(
+            delete(TranslationValue).where(
+                TranslationValue.id.in_(
+                    [
+                        ids[0, "fr"],
+                        ids[1, "it"],
+                    ]
+                )
+            )
+        )
+        empty = session.get_one(TranslationValue, ids[2, "fr"])
+        empty.translated_text = empty.display_text = ""
+    filters = dict(product_id=product, work_status="needs_translation")
+    response = request(token, **filters)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [item["raw_key"] for item in body["items"]] == ["key-000", "key-001", "key-002"]
+    french = slots(body)["fr"]
+    assert french["kind"] == "absent" and french["matches_filters"]
+    assert french["group_id"] is None and not french["editable"]
+    assert french["read_only_reason"] == "absent"
+    assert not slots(body)["en"]["matches_filters"]
+    assert not slots(body)["it"]["matches_filters"]
+    assert slots(body, 1)["it"]["matches_filters"]
+    assert slots(body, 2)["fr"]["kind"] == "imported"
+    assert slots(body, 2)["fr"]["matches_filters"]
+    assert [
+        item["raw_key"] for item in request(token, **filters, language="fr").json()["items"]
+    ] == ["key-000", "key-002"]
+    assert [
+        item["raw_key"]
+        for item in request(token, **filters, visible_languages=["it"]).json()["items"]
+    ] == ["key-001"]
+    assert request(token, **filters, language="en").json()["items"] == []
+    assert request(token, **filters, visible_languages=["es"]).json()["items"] == []
+    assert request(token, **filters, language="fr", visible_languages=["en"]).json()["items"]
+    for condition in ({"state": "draft"}, {"violation": "no_max"}):
+        assert [
+            item["raw_key"] for item in request(token, **filters, **condition).json()["items"]
+        ] == ["key-002"]
+    for query in ("key-000", "en 0"):
+        found = request(token, **filters, q=query).json()
+        assert [item["raw_key"] for item in found["items"]] == ["key-000"]
+        assert slots(found)["fr"]["matches_filters"]
+    assert request(token, **filters, q="it 1").json()["items"] == []
+    assert request(token, **filters, deleted="deleted").json()["items"] == []
+    assert len(request(token, **filters, deleted="all").json()["items"]) == 3
+
+
+def test_absent_translation_queue_does_not_reintroduce_tombstones_or_foreign_locales(factory):
+    token = WORK.authority(factory)
+    product, _, ids = seed_keys(factory, count=2)
+    other, other_scope = SEARCH._seed_dataset(factory, name="Other locales")
+    SEARCH._add_group(
+        factory,
+        product_id=other,
+        scope_id=other_scope,
+        raw_key="other",
+        language="de",
+        values=({"display_text": "German", "translated_text": "German"},),
+    )
+    with factory.begin() as session:
+        deleted = session.get_one(TranslationValue, ids[0, "fr"])
+        deleted.is_deleted = True
+        deleted.deleted_at = datetime.now(UTC)
+        key = session.get_one(TranslationKey, deleted.translation_key_id)
+        key.is_deleted = True
+        key.deleted_at = datetime.now(UTC)
+        removed = session.get_one(TranslationValue, ids[1, "fr"])
+        removed.is_deleted = True
+        removed.deleted_at = datetime.now(UTC)
+    for mode in ("active", "all", "deleted"):
+        assert (
+            request(
+                token, product_id=product, work_status="needs_translation", deleted=mode
+            ).json()["items"]
+            == []
+        )
+    assert (
+        request(token, work_status="needs_translation", visible_languages=["de"]).json()["items"]
+        == []
+    )
+
+
+def test_absent_translation_queue_paginates_unique_keys_and_keeps_authority(factory):
+    token = WORK.authority(factory)
+    product, _, ids = seed_keys(factory, count=62)
+    with factory.begin() as session:
+        session.execute(
+            delete(TranslationValue).where(
+                TranslationValue.id.in_(
+                    [
+                        value
+                        for (index, language), value in ids.items()
+                        if language == "fr" and index < 61
+                    ]
+                )
+            )
+        )
+    filters = dict(
+        product_id=product, work_status="needs_translation", visible_languages=["en", "fr", "it"]
+    )
+    first_response = request(token, **filters)
+    assert first_response.status_code == 200, first_response.text
+    first = first_response.json()
+    assert len(first["items"]) == 50 and first["next_cursor"]
+    second = request(token, **filters, cursor=first["next_cursor"]).json()
+    assert len(second["items"]) == 11 and second["next_cursor"] is None
+    items = first["items"] + second["items"]
+    assert len({item["translation_key_id"] for item in items}) == 61
+    assert [item["raw_key"] for item in items] == [f"key-{index:03d}" for index in range(61)]
+    assert all(
+        next(slot for slot in item["slots"] if slot["language"] == "fr")["matches_filters"]
+        for item in items
+    )
+    assert request(token, **filters, cursor=first["next_cursor"], language="it").status_code == 422
+    with factory.begin() as session:
+        session.get_one(Product, product).is_active = False
+    assert request(token, **filters).json()["items"] == []

@@ -147,6 +147,9 @@ class OwnedRuntime:
                     "args": {"VITE_API_BASE_URL": self.backend},
                 },
                 "image": self.project + "-frontend",
+                # nginx resolves its API upstream at startup, so the backend
+                # must already be running on the owned Compose network.
+                "depends_on": {"backend": {"condition": "service_healthy"}},
                 "ports": [f"127.0.0.1:{self.frontend_port}:80"],
             },
         }
@@ -223,6 +226,8 @@ def seed(
     from sqlalchemy.orm import sessionmaker
     from verboflex.auth.passwords import hash_password
     from verboflex.models.import_job import ImportExecution, ImportJob
+    from verboflex.models.product import Product
+    from verboflex.models.product_member import ProductMember
     from verboflex.models.role import Role
     from verboflex.models.translation import TranslationKey
     from verboflex.models.user import User
@@ -320,6 +325,19 @@ def seed(
             fixture["excluded_products"] = [
                 str(row["product"]) for row in (hidden, unactivated, failed)
             ]
+        # Global operational labels no longer grant product access. These actors
+        # exercise only this disposable database's synthetic products.
+        with factory.begin() as session:
+            for product_id in session.scalars(select(Product.id)):
+                for role, user in fixture["users"].items():
+                    if role != "admin":
+                        session.merge(
+                            ProductMember(
+                                product_id=product_id,
+                                user_id=UUID(user["id"]),
+                                role=role,
+                            )
+                        )
         return fixture
     finally:
         engine.dispose()

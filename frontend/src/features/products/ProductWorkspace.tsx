@@ -1,11 +1,5 @@
 import { principalForProduct } from "../auth/productRoles";
-import {
-  GitPullRequest,
-  Languages,
-  PackageOpen,
-  RefreshCw,
-  Users,
-} from "lucide-react";
+import { GitPullRequest, Languages, RefreshCw, Users } from "lucide-react";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, Outlet, useLocation, useParams } from "react-router-dom";
 
@@ -180,34 +174,9 @@ export function ProductFocusWorkspace({
           borderLeftWidth: 8,
         }}
       >
-        <div className="flex flex-col gap-(--space-lg) sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-(--space-md)">
-            <span
-              className="grid size-16 shrink-0 place-items-center rounded-lg text-heading font-semibold shadow-sm"
-              style={{ backgroundColor: identity.accent, color: "#ffffff" }}
-              aria-hidden="true"
-            >
-              {identity.initials}
-            </span>
-            <div className="min-w-0">
-              <p
-                className="text-label font-semibold tracking-[0.16em] uppercase"
-                style={{ color: identity.ink }}
-              >
-                Product in focus
-              </p>
-              <h1 className="mt-(--space-xs) text-display font-semibold wrap-anywhere">
-                {product.name}
-              </h1>
-            </div>
-          </div>
-          <Button asChild variant="outline" className="shrink-0 bg-white/80">
-            <Link to="/products">
-              <PackageOpen aria-hidden="true" />
-              Change product
-            </Link>
-          </Button>
-        </div>
+        <h1 className="text-display font-semibold wrap-anywhere">
+          {product.name}
+        </h1>
         <nav
           aria-label={`${product.name} workspace`}
           className="mt-(--space-lg) flex flex-wrap items-center gap-2"

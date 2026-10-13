@@ -16,6 +16,11 @@ in the translations repository, compact source context, visible waiting state, l
 generation, dirty-edit blocking, authenticated image loading, retry after one failed
 image request and reload.
 The `code-capture-e2e.json` receipt and browser screenshots join the smoke artifacts.
+The multilingual browser smoke also checks that **Needs translation** includes
+absent target entries alongside empty imported values, with matching language
+markers and an **Add translation** action. Run it with
+`backend/.venv/bin/python tools/dashboard_smoke.py --multilingual`; it creates and
+removes its own database and application containers with synthetic fixtures.
 Actual Compose rendering is a separate Android check, described in
 [the capture integration guide](code-keys-compose.md). It requires a reviewed,
 prewarmed runner image; the ordinary application CI does not build private Android apps.

@@ -250,6 +250,8 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
         (array_agg(source_text ORDER BY is_deleted, language)
             FILTER (WHERE source_text IS NOT NULL))[1] AS source_text,
         bool_or(source_truncated) AS source_truncated,
+        coalesce(bool_or(NOT :has_query OR stable_key LIKE :partial ESCAPE '\'
+            OR source_partial), false) AS text_matches,
         bool_and(is_deleted) AS is_deleted,
         CASE WHEN NOT :has_query THEN 3
             WHEN bool_or(stable_key = :query OR source_exact) THEN 0
@@ -262,6 +264,25 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
                 OR (:deleted = 'deleted' AND bool_and(is_deleted))), false) AS matches
     FROM ranked GROUP BY key_id, scope_id
     HAVING bool_or(source_text IS NOT NULL)
+), absent_matches AS MATERIALIZED (
+    -- A missing target has no value identity. Match it through its live source
+    -- and this scope's supported locales, without inventing a group or state.
+    SELECT context.key_id, context.scope_id, language.code AS language, context.rank
+    FROM contexts AS context
+    JOIN current ON current.scope_id = context.scope_id
+    CROSS JOIN LATERAL unnest(CASE WHEN CAST(:language AS text) IS NOT NULL
+        THEN ARRAY[CAST(:language AS text)] ELSE CAST(:languages AS text[]) END) AS language(code)
+    WHERE :work_status = 'needs_translation' AND :deleted <> 'deleted'
+      AND CAST(:state AS text) IS NULL AND CAST(:violation AS text) IS NULL
+      AND context.text_matches AND NOT context.is_deleted
+      AND language.code <> context.language
+      AND coalesce((current.language_counts->language.code->>0)::bigint, 0) > 0
+      -- Retained deleted values remain tombstones, not newly absent work.
+      AND NOT EXISTS (
+          SELECT 1 FROM translation_values AS existing
+          WHERE existing.translation_key_id = context.key_id
+            AND existing.scope_id = context.scope_id AND existing.language = language.code
+      )
 ), matching AS (
     SELECT key_id, scope_id, min(rank) AS rank FROM (
         SELECT key_id, scope_id, rank FROM ranked
@@ -273,6 +294,8 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
             OR (CAST(:language AS text) IS NULL AND language = ANY(:languages)))
           AND NOT EXISTS (SELECT 1 FROM ranked AS imported WHERE imported.key_id=context.key_id
                 AND imported.scope_id=context.scope_id AND imported.language=context.language)
+        UNION ALL
+        SELECT key_id, scope_id, rank FROM absent_matches
     ) AS matches GROUP BY key_id, scope_id
 ), ordered AS (
     SELECT matching.*, casefold(key.raw_key COLLATE pg_unicode_fast) COLLATE "C" AS stable_key
@@ -301,7 +324,10 @@ LEFT JOIN LATERAL (
             WHEN language.code = context.language THEN 'source_context' ELSE 'absent' END,
         'group_id', slot.group_id,
         'matches_filters', (CAST(:language AS text) IS NULL OR language.code = :language)
-            AND coalesce(slot.matches, language.code = context.language AND context.matches, false),
+            AND (coalesce(slot.matches, language.code = context.language AND context.matches, false)
+                OR EXISTS (SELECT 1 FROM absent_matches AS missing
+                    WHERE missing.key_id = page.key_id AND missing.scope_id = page.scope_id
+                      AND missing.language = language.code)),
         'effective_text', CASE WHEN slot.group_id IS NULL THEN
             CASE WHEN language.code=context.language THEN context.source_text END
             WHEN slot.use_pending THEN slot.pending_text ELSE slot.imported_text END,
