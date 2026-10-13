@@ -126,29 +126,38 @@ function TranslationProvenance({
 }) {
   if (!value) return <p>Source location unavailable</p>;
   return (
-    <dl className="grid min-w-0 gap-(--space-sm)">
-      {[
-        ["Repository", value.repository_name],
-        ["Branch", value.branch],
-        ["File path", value.path],
-        ["Format", value.format],
-        ["Repository side", value.repository_side],
-        ["Line", value.line ?? "Line unavailable"],
-        ["Column", value.column ?? "Column unavailable"],
-        ["Execution", value.execution_id],
-      ].map(([label, text]) => (
-        <div key={label} className="min-w-0">
-          <dt className="text-label font-semibold">{label}</dt>
-          <dd className="font-mono wrap-anywhere">{text}</dd>
-        </div>
-      ))}
-      <div>
-        <dt className="text-label font-semibold">Import commit</dt>
-        <dd>
-          <Commit hash={value.commit_hash} />
-        </dd>
-      </div>
-    </dl>
+    <div className="min-w-0 space-y-3 text-sm">
+      <dl className="grid min-w-0 gap-2">
+        {[
+          ["Repository", value.repository_name],
+          ["Branch", value.branch],
+          ["File path", value.path],
+          ...(value.line === null ? [] : [["Line", value.line]]),
+        ].map(([label, text]) => (
+          <div key={label} className="min-w-0">
+            <dt className="text-label font-semibold">{label}</dt>
+            <dd className="font-mono wrap-anywhere">{text}</dd>
+          </div>
+        ))}
+      </dl>
+      <details>
+        <summary className="cursor-pointer text-muted-foreground">
+          Technical details
+        </summary>
+        <dl className="space-y-2 pt-2">
+          <div>
+            <dt className="font-semibold">Format</dt>
+            <dd>{value.format}</dd>
+          </div>
+          <div>
+            <dt className="text-label font-semibold">Import commit</dt>
+            <dd>
+              <Commit hash={value.commit_hash} />
+            </dd>
+          </div>
+        </dl>
+      </details>
+    </div>
   );
 }
 
@@ -394,7 +403,6 @@ function LoadedDetail({
   const partial = detail.values.some(
     (v) =>
       !v.provenance ||
-      v.provenance.line === null ||
       v.source_text === null ||
       !v.history?.length ||
       v.selector_fields === null,
@@ -654,10 +662,16 @@ function LoadedDetail({
             ))}
           </Section>
           <Section title="Source context">
-            <p className="wrap-anywhere">Product: {detail.product_name}</p>
             {detail.values.map((value) => (
               <div key={value.id} className="min-w-0 space-y-(--space-sm)">
-                <p className="font-mono wrap-anywhere">{value.id}</p>
+                {detail.values.length > 1 && (
+                  <p className="text-sm font-semibold">
+                    {kindNames[value.selector_kind]}
+                    {value.selector_fields?.map(
+                      (field) => ` · ${field.name}: ${String(field.value)}`,
+                    )}
+                  </p>
+                )}
                 <TranslationProvenance value={value.provenance} />
               </div>
             ))}

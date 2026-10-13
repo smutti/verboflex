@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { LoaderCircle } from "lucide-react";
 import {
   cancelTranslationScreenshot,
   getTranslationCodeContext,
@@ -14,6 +15,36 @@ import { Label } from "../../components/ui/label";
 
 const active = (job: ScreenshotResponse | null) =>
   job?.state === "queued" || job?.state === "rendering";
+
+function ElapsedTime({ since }: { since: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const seconds = Math.max(0, Math.floor((now - Date.parse(since)) / 1000));
+  return (
+    <p className="text-sm" aria-live="off">
+      Elapsed: {Math.floor(seconds / 60)}m {seconds % 60}s
+    </p>
+  );
+}
+
+function captureFailure(code: string | null) {
+  switch (code) {
+    case "render_timeout":
+      return "The screenshot took too long to generate. Try again.";
+    case "queue_timeout":
+      return "The screenshot service did not become available. Try again later.";
+    case "source_or_access_changed":
+    case "input_changed":
+      return "The source or your access changed. Refresh this page before trying again.";
+    case "worker_interrupted":
+      return "Screenshot generation was interrupted. Try again.";
+    default:
+      return "The screenshot could not be generated. Try again or contact your project administrator.";
+  }
+}
 
 export function TranslationScreenshots({
   accessToken,
@@ -32,7 +63,9 @@ export function TranslationScreenshots({
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [image, setImage] = useState("");
+  const [image, setImage] = useState<{ jobId: string; url: string } | null>(
+    null,
+  );
   const [retry, setRetry] = useState(0);
   const [pending, setPending] = useState<{
     id: string;
@@ -87,6 +120,7 @@ export function TranslationScreenshots({
           if (controller.signal.aborted) return;
           if (!result.data) throw new Error("Capture unavailable");
           setJob(result.data);
+          setError("");
         })
         .catch(() => {
           if (!controller.signal.aborted)
@@ -115,7 +149,7 @@ export function TranslationScreenshots({
         if (!(result.data instanceof Blob))
           throw new Error("Image unavailable");
         url = URL.createObjectURL(result.data);
-        setImage(url);
+        setImage({ jobId, url });
       })
       .catch(() => {
         if (!controller.signal.aborted)
@@ -141,7 +175,7 @@ export function TranslationScreenshots({
     setPending(request);
     setBusy(true);
     setError("");
-    setImage("");
+    setImage(null);
     try {
       const result = await requestTranslationScreenshot({
         auth: accessToken,
@@ -206,24 +240,95 @@ export function TranslationScreenshots({
       )}
       {context?.configured && (
         <>
-          <p className="text-sm text-muted-foreground">
-            Code references indicate possible usage. The selected preview shows
-            one fixture state.
-          </p>
-          <ul className="space-y-1 text-sm">
-            {context.occurrences.map((item, index) => (
-              <li
-                className="wrap-anywhere"
-                key={`${item.path}:${item.line}:${index}`}
+          {(busy || active(job)) && (
+            <div className="space-y-2 rounded-md border bg-muted p-4">
+              <p
+                role="status"
+                className="flex items-center gap-2 font-semibold"
               >
-                {item.path}:{item.line} ·{" "}
-                {item.function?.split(".").pop() ?? item.symbol}
-              </li>
-            ))}
-          </ul>
-          {context.occurrences_truncated && (
-            <p>Showing the first 100 references.</p>
+                <LoaderCircle
+                  aria-hidden="true"
+                  className="size-5 shrink-0 animate-spin motion-reduce:animate-none"
+                />
+                {busy
+                  ? "Requesting screenshot…"
+                  : job?.state === "queued"
+                    ? "Waiting to generate screenshot…"
+                    : "Generating screenshot…"}
+              </p>
+              {job && active(job) && (
+                <ElapsedTime key={job.id} since={job.created_at} />
+              )}
+              <p className="text-sm text-muted-foreground">
+                This can take several minutes. You can leave this page and
+                return to see the result.
+              </p>
+              {active(job) && (
+                <Button variant="outline" onClick={() => void cancel()}>
+                  Cancel capture
+                </Button>
+              )}
+            </div>
           )}
+          {job && !busy && !active(job) && (
+            <div className="space-y-2">
+              <p role="status">
+                {job.state === "succeeded"
+                  ? image?.jobId === job.id
+                    ? "Screenshot ready"
+                    : error
+                      ? "Screenshot generated. Reconnect to load the image."
+                      : "Loading screenshot…"
+                  : job.state === "failed"
+                    ? captureFailure(job.error_code)
+                    : job.state === "cancelled"
+                      ? "Screenshot cancelled. You can generate another one."
+                      : "This screenshot has expired. Generate a new one."}
+              </p>
+              {job.state === "succeeded" && image?.jobId === job.id && (
+                <>
+                  <a
+                    href={image.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="Open screenshot full size"
+                  >
+                    <img
+                      src={image.url}
+                      alt="Compose screen preview with the selected translations"
+                      className="h-auto w-full rounded-md border"
+                    />
+                  </a>
+                  <p className="text-xs text-muted-foreground">
+                    {job.request.proposal_version
+                      ? `Saved proposal version ${job.request.proposal_version}`
+                      : "Imported translations"}{" "}
+                    · {new Date(job.created_at).toLocaleString()}
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+          <details className="text-sm">
+            <summary className="cursor-pointer text-muted-foreground">
+              Code references ({context.occurrences.length}
+              {context.occurrences_truncated ? "+" : ""})
+            </summary>
+            <ul className="space-y-1 pt-2">
+              {context.occurrences.map((item, index) => (
+                <li
+                  className="wrap-anywhere"
+                  key={`${item.path}:${item.line}:${index}`}
+                >
+                  {item.path}:{item.line} ·{" "}
+                  {item.function?.split(".").pop() ?? item.symbol}
+                </li>
+              ))}
+            </ul>
+            {context.occurrences_truncated && (
+              <p>Showing the first 100 references.</p>
+            )}
+          </details>
           {available.length === 0 ? (
             <p>
               No callable Compose preview is registered for this key. Ask the
@@ -267,50 +372,27 @@ export function TranslationScreenshots({
                 onClick={() => void capture()}
                 disabled={dirty || busy || active(job)}
               >
+                {(busy || active(job)) && (
+                  <LoaderCircle
+                    aria-hidden="true"
+                    className="size-4 animate-spin motion-reduce:animate-none"
+                  />
+                )}
                 {busy
                   ? "Requesting…"
-                  : pending
-                    ? "Retry capture request"
-                    : "Generate screenshot"}
+                  : active(job)
+                    ? "Generating screenshot…"
+                    : pending
+                      ? "Retry capture request"
+                      : "Generate screenshot"}
               </Button>
               <p className="text-sm text-muted-foreground">
                 {proposalVersion
                   ? `Includes saved proposal version ${proposalVersion}.`
                   : "Uses the imported translations."}{" "}
-                A new request renders a fresh image.
+                The preview shows an example screen state.
               </p>
             </>
-          )}
-          {job && (
-            <div className="space-y-2">
-              <p role="status">
-                Screenshot: {job.state}
-                {job.error_code
-                  ? ` · ${job.error_code.replaceAll("_", " ")}`
-                  : ""}
-              </p>
-              {active(job) && (
-                <Button variant="outline" onClick={() => void cancel()}>
-                  Cancel capture
-                </Button>
-              )}
-              {job.state === "succeeded" && image && (
-                <a href={image} target="_blank" rel="noreferrer">
-                  <img
-                    src={image}
-                    alt="Compose screen preview with the selected translations"
-                    className="h-auto w-full rounded-md border"
-                  />
-                </a>
-              )}
-              <p className="text-xs text-muted-foreground">
-                {job.request.proposal_version
-                  ? `Captured proposal version ${job.request.proposal_version}. `
-                  : "Captured imported translations. "}
-                Created {new Date(job.created_at).toLocaleString()} · Expires{" "}
-                {new Date(job.expires_at).toLocaleDateString()}
-              </p>
-            </div>
           )}
         </>
       )}

@@ -103,7 +103,7 @@ export function writableTranslationDetail(
     )
       return false;
     return editField === "source_text"
-      ? provenance.repository_side === "direct" &&
+      ? ["direct", "translations"].includes(provenance.repository_side) &&
           provenance.format !== "qt_ts" &&
           value.translated_text === null &&
           value.source_text !== null
@@ -139,7 +139,8 @@ export function createActiveTranslationDraft(
         throw new Error("Translation edit basis unavailable");
       }
       const sourceLeaf =
-        value.provenance?.repository_side === "direct" &&
+        value.provenance !== null &&
+        ["direct", "translations"].includes(value.provenance.repository_side) &&
         ["android_xml", "json", "ios_strings"].includes(
           value.provenance.format,
         ) &&

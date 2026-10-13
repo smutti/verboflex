@@ -531,7 +531,9 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
     await screen.findByRole("heading", { name: "Translation details" });
     for (let i = 0; i < 6; i++)
       expect(document.getElementById(`value-value-${i}`)).not.toBeNull();
-    expect(screen.getByText("Default value")).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Default value" }),
+    ).toBeVisible();
     expect(screen.getByText("Quantity")).toBeVisible();
     expect(screen.getByText("Array position")).toBeVisible();
     expect(screen.getByText('["menu","a.b"]')).toBeVisible();
@@ -617,10 +619,41 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
       expect(screen.queryByText(data.raw_key)).toBeNull();
     },
   );
+  it("shows a compact source location with optional technical details and no unavailable coordinates", async () => {
+    const data = detailFixture();
+    data.values[0].provenance!.line = null;
+    data.values[0].provenance!.column = null;
+    vi.mocked(getTranslationGroup).mockResolvedValue({
+      data,
+      error: undefined,
+    });
+    mount();
+    const source = within(
+      await screen.findByRole("region", { name: "Source context" }),
+    );
+    expect(source.getByText("Mobile repo")).toBeVisible();
+    expect(source.getByText("main")).toBeVisible();
+    expect(source.getByText("locales/it.json")).toBeVisible();
+    expect(source.queryByText("value-1")).toBeNull();
+    expect(source.queryByText("execution")).toBeNull();
+    expect(source.queryByText(/unavailable/)).toBeNull();
+    expect(
+      source.getByRole("button", { name: "Copy full commit" }),
+    ).not.toBeVisible();
+    await userEvent.click(source.getByText("Technical details"));
+    expect(
+      source.getByRole("button", { name: "Copy full commit" }),
+    ).toBeVisible();
+  });
   it("announces clipboard failure without exposing the rejected error", async () => {
     const user = userEvent.setup();
     mount();
     await screen.findByText("Translation content");
+    await user.click(
+      within(screen.getByRole("region", { name: "Source context" })).getByText(
+        "Technical details",
+      ),
+    );
     vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(
       new Error("private clipboard error"),
     );
@@ -699,6 +732,11 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
     const user = userEvent.setup();
     mount();
     await screen.findByText("Translation content");
+    await user.click(
+      within(screen.getByRole("region", { name: "Source context" })).getByText(
+        "Technical details",
+      ),
+    );
     const copy = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
     await user.click(
       within(screen.getByRole("region", { name: "Source context" })).getByRole(

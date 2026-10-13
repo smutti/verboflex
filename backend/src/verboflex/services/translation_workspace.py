@@ -142,7 +142,7 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
                 WHERE locator.format = 'android_xml'
                   AND node->>'kind' IN ('android_xml:text', 'android_xml:tail', 'android_xml:cdata')
             )) AS shape_ok,
-        bool_and(locator.repository_side = 'direct'
+        bool_and(locator.repository_side IN ('direct', 'translations')
             AND locator.format IN ('android_xml', 'json', 'ios_strings')
             AND value.source_text IS NOT NULL AND value.translated_text IS NULL) AS source_leaf,
         bool_and(value.translated_text IS NOT NULL) AS translation_leaf

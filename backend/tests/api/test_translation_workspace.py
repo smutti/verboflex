@@ -258,9 +258,20 @@ def test_fresh_complete_pending_text_and_imported_state_are_distinct(factory):
 @pytest.mark.parametrize(
     "format,kind", [("android_xml", "scalar"), ("json", "json_path"), ("ios_strings", "scalar")]
 )
-def test_direct_base_leaf_is_editable_and_save_preserves_exact_basis(factory, format, kind):
+@pytest.mark.parametrize("side", ["direct", "translations"])
+def test_base_leaf_is_editable_and_save_preserves_exact_basis(factory, format, kind, side):
     token = WORK.authority(factory)
-    product, _, source = WORK.seed(factory, format=format, kind=kind)
+    product, target, source = WORK.seed(
+        factory, format=format, kind=kind, separate=side == "translations"
+    )
+    if side == "translations":
+        # Code-only keys have no base text; the base locale lives alongside
+        # the target locales in the translations repository.
+        with factory.begin() as session:
+            base_locator = session.get_one(TranslationValueLocator, source)
+            target_locator = session.get_one(TranslationValueLocator, target)
+            for field in ("repository_side", "repository_id", "source_reference_position", "path"):
+                setattr(base_locator, field, getattr(target_locator, field))
     base = slots(request(token, product_id=product).json())["en"]
     assert base["editable"] and base["edit_field"] == "source_text"
     assert base["group_id"] == str(source)
@@ -318,19 +329,34 @@ def test_direct_base_leaf_is_editable_and_save_preserves_exact_basis(factory, fo
             "en.lproj/Localizable.strings",
             "ios-strings:{locale}.lproj/Localizable.strings",
         ),
+        (
+            "android_xml",
+            b'<resources><string name="hello">Original</string></resources>',
+            "shared/moko-resources/base/strings.xml",
+            "shared/moko-resources",
+        ),
     ],
 )
+@pytest.mark.parametrize("side", ["direct", "translations"])
 def test_pure_writer_changes_base_source_leaf_preserving_identity(
-    factory, format, content, path, layout
+    factory, format, content, path, layout, side
 ):
     writer = importlib.import_module("tests.unit.localization.writing._support")
     from verboflex.localization.importing.registry import parse_canonical_snapshot
 
-    source = writer.snapshot(content, format=format, path=path, layout_identity=layout)
+    source = writer.snapshot(
+        content, format=format, path=path, layout_identity=layout, repository_side=side
+    )
     before = parse_canonical_snapshot(source.parser_input)
     assert not before.issues
     selected = next(value for value in before.values if value.logical_key == "hello")
-    assert selected.source_text == "Original" and selected.translated_text is None
+    assert selected.display_text == "Original"
+    if side == "direct":
+        assert selected.source_text == "Original" and selected.translated_text is None
+    else:
+        # Parsing a translations-side file happens before the code-key join
+        # promotes the base locale to source_text in the imported dataset.
+        assert selected.translated_text == "Original"
     rendered = writer.render(source, writer.edit(source, "hello", "Updated source"))
     from dataclasses import replace
 
@@ -339,8 +365,10 @@ def test_pure_writer_changes_base_source_leaf_preserving_identity(
     assert [(v.logical_key, v.language, v.selector) for v in before.values] == [
         (v.logical_key, v.language, v.selector) for v in after.values
     ]
-    assert next(v for v in after.values if v.logical_key == "hello").source_text == "Updated source"
-    assert all(v.source_text == "Unchanged" for v in after.values if v.logical_key == "keep")
+    assert (
+        next(v for v in after.values if v.logical_key == "hello").display_text == "Updated source"
+    )
+    assert all(v.display_text == "Unchanged" for v in after.values if v.logical_key == "keep")
 
 
 def test_embedded_source_and_keys_side_cannot_be_used_as_mutation_targets(factory):

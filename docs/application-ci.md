@@ -11,8 +11,10 @@ The built smoke also configures a separate code/translation mapping through HTTP
 imports code-only keys, checks missing keys in the browser, saves a proposal and
 requests its screenshot through the real scheduler/Celery queue. A synthetic renderer
 replaces only the Android build boundary; it verifies the frozen commit IDs and
-selected translation in its PNG. The browser checks lazy generation, dirty-edit
-blocking, authenticated image loading, retry after one failed image request and reload.
+selected translation in its PNG. The browser checks editing base-language resources
+in the translations repository, compact source context, visible waiting state, lazy
+generation, dirty-edit blocking, authenticated image loading, retry after one failed
+image request and reload.
 The `code-capture-e2e.json` receipt and browser screenshots join the smoke artifacts.
 Actual Compose rendering is a separate Android check, described in
 [the capture integration guide](code-keys-compose.md). It requires a reviewed,

@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TranslationScreenshots } from "./TranslationScreenshots";
@@ -24,7 +24,10 @@ const job = {
 };
 
 describe("Compose screenshots", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     api.getTranslationCodeContext.mockResolvedValue({
@@ -106,6 +109,140 @@ describe("Compose screenshots", () => {
       await screen.findByRole("button", { name: "Generate screenshot" }),
     ).toBeDisabled();
     expect(api.requestTranslationScreenshot).not.toHaveBeenCalled();
+  });
+
+  it("restores waiting work, shows elapsed time, polls through rendering and displays the result", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:05Z"));
+    api.listTranslationScreenshots.mockResolvedValue({
+      data: { items: [{ ...job, state: "queued" }] },
+    });
+    api.getTranslationScreenshot
+      .mockResolvedValueOnce({ data: { ...job, state: "rendering" } })
+      .mockResolvedValue({ data: job });
+    await act(async () => {
+      render(
+        <TranslationScreenshots
+          accessToken="token"
+          groupId="group"
+          dirty={false}
+        />,
+      );
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Waiting to generate screenshot",
+    );
+    expect(screen.getByText("Elapsed: 0m 5s")).toBeVisible();
+    expect(screen.getByText(/This can take several minutes/)).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Generating screenshot…" }),
+    ).toBeDisabled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Generating screenshot",
+    );
+    expect(screen.getByText("Elapsed: 0m 7s")).toBeVisible();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Screenshot ready");
+    expect(screen.getByRole("img")).toBeVisible();
+    expect(screen.queryByText(/Elapsed:/)).toBeNull();
+    expect(api.requestTranslationScreenshot).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000);
+    });
+    expect(api.getTranslationScreenshot).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears a transient connection warning when polling recovers", async () => {
+    vi.useFakeTimers();
+    api.listTranslationScreenshots.mockResolvedValue({
+      data: { items: [{ ...job, state: "rendering" }] },
+    });
+    api.getTranslationScreenshot
+      .mockRejectedValueOnce(new Error("Offline"))
+      .mockResolvedValue({ data: job });
+    await act(async () => {
+      render(
+        <TranslationScreenshots
+          accessToken="token"
+          groupId="group"
+          dirty={false}
+        />,
+      );
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Connection interrupted",
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("Screenshot ready");
+  });
+
+  it("explains a failed render and allows a fresh request", async () => {
+    api.listTranslationScreenshots.mockResolvedValue({
+      data: {
+        items: [{ ...job, state: "failed", error_code: "render_timeout" }],
+      },
+    });
+    const user = userEvent.setup();
+    render(
+      <TranslationScreenshots
+        accessToken="token"
+        groupId="group"
+        dirty={false}
+      />,
+    );
+    expect(
+      await screen.findByText(
+        "The screenshot took too long to generate. Try again.",
+      ),
+    ).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "Generate screenshot" }),
+    );
+    expect(await screen.findByRole("img")).toBeVisible();
+    expect(
+      api.requestTranslationScreenshot.mock.calls[0][0].path.job_id,
+    ).not.toBe(job.id);
+  });
+
+  it("announces the request immediately while the server accepts it", async () => {
+    let accept!: (value: unknown) => void;
+    api.requestTranslationScreenshot.mockReturnValue(
+      new Promise((resolve) => {
+        accept = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    render(
+      <TranslationScreenshots
+        accessToken="token"
+        groupId="group"
+        dirty={false}
+      />,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Generate screenshot" }),
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Requesting screenshot",
+    );
+    expect(screen.getByRole("button", { name: "Requesting…" })).toBeDisabled();
+    await act(async () => {
+      accept({ data: { ...job, state: "queued" } });
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Waiting to generate screenshot",
+    );
   });
 
   it("reuses the request identity after a network failure", async () => {

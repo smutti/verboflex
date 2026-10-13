@@ -158,6 +158,23 @@ and the selected saved proposal version. Other strings use their imported values
 Each new request renders again; retrying the same request ID returns the same job.
 The latest personal capture is restored when reopening the panel.
 
+The panel distinguishes request acceptance, queueing, rendering and image loading.
+While waiting it shows a spinner and elapsed time, including time in the queue;
+this is not a progress percentage or a completion estimate. Rendering can take
+several minutes, depending on the application and runner. Users can navigate away
+and reopen the panel without starting another build. A recovered status connection
+clears its warning automatically; image loading can be retried without rendering
+again. Render failures have readable explanations and allow another request.
+
+Source context shows the repository, branch and file, with a line number only when
+available. Format and import commit are behind **Technical details**. Code references
+are also collapsed so the screenshot controls and result remain prominent.
+
+When code-only keys use a separate translations repository, its base-language
+resource leaves are editable as source text, just like a direct repository's base
+locale. Code-key files remain read-only. Saving still creates a versioned proposal;
+repository publication retains the existing review and write-back checks.
+
 Membership is enforced on context, catalog, acceptance, status and image delivery.
 The worker checks the original membership generation before publishing. Source
 activation changes and access revocation fence late results. There is a limit of two

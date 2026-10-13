@@ -400,34 +400,42 @@ describe("TranslationConflictDialog", () => {
 });
 
 describe("compact cells", () => {
-  it("initializes direct base leaves from actual source text and never fills empty Qt targets", () => {
-    const source = detail();
-    source.language = "en";
-    source.values = [source.values[0]];
-    source.values[0].translated_text = null;
-    source.values[0].source_text = "Real base value";
-    source.values[0].display_text = "Real base value";
-    source.values[0].provenance = {
-      repository_id: "repo",
-      repository_name: "Repo",
-      repository_side: "direct",
-      branch: "main",
-      path: "en.json",
-      format: "json",
-      commit_hash: "a",
-      execution_id: "e",
-      line: null,
-      column: null,
-    };
-    const draft = createActiveTranslationDraft(source, "person");
-    expect(draft.values[0].text).toBe("Real base value");
-    expect(draft.values[0].publishedText).toBe("Real base value");
-    source.language = "it";
-    source.values[0].provenance.format = "qt_ts";
-    expect(createActiveTranslationDraft(source, "person").values[0].text).toBe(
-      "",
-    );
-  });
+  it.each(["direct", "translations"] as const)(
+    "initializes %s base leaves from actual source text and never fills empty Qt targets",
+    (side) => {
+      const source = detail();
+      source.language = "en";
+      source.values = [source.values[0]];
+      source.values[0].selector_kind = "json_path";
+      source.values[0].translated_text = null;
+      source.values[0].source_text = "Real base value";
+      source.values[0].display_text = "Real base value";
+      source.values[0].provenance = {
+        repository_id: "repo",
+        repository_name: "Repo",
+        repository_side: side,
+        branch: "main",
+        path: "en.json",
+        format: "json",
+        commit_hash: "a",
+        execution_id: "e",
+        line: null,
+        column: null,
+      };
+      const draft = createActiveTranslationDraft(source, "person");
+      expect(draft.values[0].text).toBe("Real base value");
+      expect(draft.values[0].publishedText).toBe("Real base value");
+      expect(writableTranslationDetail(source, "source_text")).toBe(true);
+      source.values[0].provenance.repository_side = "keys";
+      expect(writableTranslationDetail(source, "source_text")).toBe(false);
+      source.values[0].provenance.repository_side = side;
+      source.language = "it";
+      source.values[0].provenance.format = "qt_ts";
+      expect(
+        createActiveTranslationDraft(source, "person").values[0].text,
+      ).toBe("");
+    },
+  );
   it("keeps all member fields inside the cell with Save and Cancel and no duplicated source columns", async () => {
     const onStop = vi.fn();
     render(

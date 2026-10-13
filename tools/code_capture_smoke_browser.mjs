@@ -25,11 +25,24 @@ try {
   await expect(dialog.getByText("No imported translation", { exact: true })).toBeVisible();
   await expect(dialog.getByText("java_label", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
+  stage = "base-edit";
+  await page.getByRole("button", { name: "Edit translation for title (en)", exact: true }).click();
+  const baseEditor = page.locator('[data-language="en"]').filter({ has: page.locator("textarea") });
+  await expect(baseEditor.getByRole("textbox")).toHaveValue("Base title");
+  await baseEditor.getByRole("textbox").fill("Updated base title");
+  await baseEditor.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Edit translation for title (en)", exact: true })).toContainText("Updated base title");
   stage = "context";
   page.on("request", request => {
     if (request.method() === "PUT" && /\/screenshots\//.test(request.url())) puts++;
   });
   await page.goto(`${fixture.frontend}/products/${proof.product}/strings/${proof.group}`);
+  const source = page.getByRole("region", { name: "Source context", exact: true });
+  await expect(source.getByText("res/values-it/strings.xml", { exact: true })).toBeVisible();
+  await expect(source.getByRole("button", { name: "Copy full commit", exact: true })).toBeHidden();
+  await source.getByText("Technical details", { exact: true }).click();
+  await expect(source.getByRole("button", { name: "Copy full commit", exact: true })).toBeVisible();
+  await source.getByText("Technical details", { exact: true }).click();
   await page.getByText("Screenshots and code references", { exact: true }).click();
   const section = page.getByRole("region", { name: "Compose screenshots" });
   await expect(section.getByRole("button", { name: "Generate screenshot", exact: true })).toBeEnabled();
@@ -53,11 +66,15 @@ try {
   const accepted = await response;
   expect(accepted.status()).toBe(202);
   proof.job = (await accepted.json()).id;
-  await expect(section).toContainText("Screenshot: succeeded", { timeout: 90_000 });
+  await expect(section).toContainText("Elapsed:");
+  await expect(section).toContainText("This can take several minutes.");
+  await expect(section.getByRole("button", { name: "Generating screenshot…", exact: true })).toBeDisabled();
+  await expect(section).toContainText("Screenshot generated. Reconnect to load the image.", { timeout: 90_000 });
   stage = "image-reconnect";
   await section.getByRole("button", { name: "Reconnect", exact: true }).click();
   const image = section.getByAltText("Compose screen preview with the selected translations");
   await expect(image).toBeVisible();
+  await expect(section).toContainText("Screenshot ready");
   await expect.poll(() => image.evaluate(element => element.complete && element.naturalWidth)).toBe(2);
   expect(images).toBe(2);
   expect(puts).toBe(1);
@@ -70,7 +87,7 @@ try {
   await page.getByText("Screenshots and code references", { exact: true }).click();
   await expect(image).toBeVisible();
   expect(puts).toBe(1);
-  proof.browser = { catalog: true, dirty_save_guard: true, image_loaded: true, reconnect: true, reload: true, width320: true };
+  proof.browser = { catalog: true, base_source_edit: true, compact_source_context: true, capture_loading: true, dirty_save_guard: true, image_loaded: true, reconnect: true, reload: true, width320: true };
   writeFileSync(fixturePath, JSON.stringify(fixture), { mode: 0o600 });
 } catch (error) {
   writeFileSync(join(fixture.evidence_dir, "code-capture-browser-failure.json"), JSON.stringify({ stage, error: error.name }), { mode: 0o600 });
