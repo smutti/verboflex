@@ -22,6 +22,7 @@ def create_celery_app(settings: Settings | None = None) -> Celery:
         backend=redis_url,
         include=[
             "verboflex.worker.tasks",
+            "verboflex.worker.screenshot_tasks",
             "verboflex.worker.preview_tasks",
             "verboflex.worker.import_tasks",
             "verboflex.worker.submission_tasks",
@@ -46,7 +47,12 @@ def create_celery_app(settings: Settings | None = None) -> Celery:
         result_backend_max_retries=1,
         result_expires=300,
         worker_hijack_root_logger=False,
+        task_routes={"verboflex.screenshot.run": {"queue": "screenshots"}},
         task_annotations={
+            "verboflex.screenshot.run": {
+                "soft_time_limit": configured.screenshot_timeout_seconds + 30,
+                "time_limit": configured.screenshot_timeout_seconds + 60,
+            },
             "verboflex.maintenance.run": {
                 "acks_late": True,
                 "reject_on_worker_lost": True,
@@ -89,6 +95,10 @@ def create_celery_app(settings: Settings | None = None) -> Celery:
             },
         },
         beat_schedule={
+            "screenshot-durable-dispatch": {
+                "task": "verboflex.screenshot.reconcile",
+                "schedule": 10.0,
+            },
             "mcp-oauth-hourly-cleanup": {
                 "task": "verboflex.mcp.cleanup",
                 "schedule": crontab(minute=15),

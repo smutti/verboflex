@@ -28,6 +28,7 @@ from verboflex.localization.preview.core import (
 )
 from verboflex.localization.writing.core import SourceFileAuthority, WritebackRejected, WriteInsert
 from verboflex.models.authoring import AuthoringRequest
+from verboflex.models.import_job import ImportExecution
 from verboflex.models.product import Product
 from verboflex.models.repository import Repository
 from verboflex.models.translation import (
@@ -194,7 +195,15 @@ def resolve_file(
         raise AuthoringError("Destination unavailable", 404)
     ref = refs[0]
     if mapping.topology == "separate" and data.parent_key_id is None:
-        raise AuthoringError("Create the source key in the keys repository, then refresh")
+        from verboflex.localization.code_keys.catalog import CodeKeyCatalog
+
+        execution = session.get_one(ImportExecution, scope.active_execution_id)
+        catalog = execution.code_catalog
+        if (
+            catalog is None
+            or data.key not in CodeKeyCatalog.model_validate(catalog["catalog"]).keys
+        ):
+            raise AuthoringError("Create the source key in the keys repository, then refresh")
     parser = confirmed_file_parser_input(
         layouts,
         repository_side=ref.repository_side,

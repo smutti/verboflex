@@ -132,6 +132,21 @@ def test_no_deferred_phase4_operations():
     module = inventory()
     assert module.TRANSLATION_ROUTE_INVENTORY == {
         ("/api/v1/translations/keys", "get"): "searchTranslationKeys",
+        ("/api/v1/translations/{group_id}/code-context", "get"): "getTranslationCodeContext",
+        ("/api/v1/translations/{group_id}/screenshots", "get"): "listTranslationScreenshots",
+        (
+            "/api/v1/translations/{group_id}/screenshots/{job_id}",
+            "put",
+        ): "requestTranslationScreenshot",
+        ("/api/v1/translations/{group_id}/screenshots/{job_id}", "get"): "getTranslationScreenshot",
+        (
+            "/api/v1/translations/{group_id}/screenshots/{job_id}",
+            "delete",
+        ): "cancelTranslationScreenshot",
+        (
+            "/api/v1/translations/{group_id}/screenshots/{job_id}/image",
+            "get",
+        ): "getTranslationScreenshotImage",
         ("/api/v1/translations/options", "get"): "listTranslationOptions",
         ("/api/v1/translations", "get"): "searchTranslations",
         ("/api/v1/translations/{translation_group_id}", "get"): "getTranslationGroup",

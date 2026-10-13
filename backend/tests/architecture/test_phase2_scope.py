@@ -53,6 +53,7 @@ FORBIDDEN_PROVIDER_TOKENS = {
     "wiki",
 }
 EXPECTED_MODEL_MODULES = {
+    "screenshot.py",
     "audit.py",
     "authoring.py",
     "glossary.py",

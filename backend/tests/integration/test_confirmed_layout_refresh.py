@@ -50,22 +50,59 @@ def _xml(text, *, extra=""):
     return f'<resources><string name="hello">{text}</string>{extra}</resources>'.encode()
 
 
-def _published_confirmation(factory, adapter):
+def _published_confirmation(factory, adapter, *, code_source=False):
     product_id, _, revision_id, mapping_id = _seed_preview_graph(factory)
+    if code_source:
+        from verboflex.models.product_mapping import (
+            ProductMappingRepositorySide,
+            ProductRepositoryMapping,
+        )
+        from verboflex.models.repository import Repository
+
+        with factory.begin() as session:
+            mapping = session.get_one(ProductRepositoryMapping, mapping_id)
+            repository = Repository(
+                id=uuid4(),
+                workspace="synthetic",
+                repository_slug="code",
+            )
+            session.add(repository)
+            session.flush()
+            mapping.sides[0].role = "translations"
+            mapping.sides.append(
+                ProductMappingRepositorySide(
+                    role="keys",
+                    repository_id=repository.id,
+                    source_branch="main",
+                )
+            )
+            mapping.topology = "separate"
+            mapping.code_source = {"declaration_symbols": ["demo.Keys.*"]}
     with factory() as session:
         job = preview_jobs.create_or_reuse_preview_job(
             session,
             product_id=product_id,
             mapping_id=mapping_id,
             expected_candidate_version=4,
-            commits={"direct": "a" * 40},
+            commits=(
+                {"keys": "a" * 40, "translations": "a" * 40}
+                if code_source
+                else {"direct": "a" * 40}
+            ),
             enqueuer=lambda _: None,
             actor_id=None,
         )
+
+    def processor(identity):
+        try:
+            return process_preview(identity, factory=factory, adapter=adapter)
+        except Exception as error:
+            pytest.fail(f"Preview processing failed: {type(error).__name__}: {error}")
+
     preview_jobs.execute_preview_job(
         factory,
         job_id=job.id,
-        processor=lambda identity: process_preview(identity, factory=factory, adapter=adapter),
+        processor=processor,
     )
     with factory() as session:
         completed = preview_jobs.get_preview_job(session, job_id=job.id)
@@ -210,3 +247,88 @@ def test_worker_refresh_tracks_new_locale_and_moved_files_without_changing_ident
         issues = list(session.scalars(select(TranslationParseIssue)))
         assert issues
         assert all("PRIVATE_RAW_FAILURE" not in issue.message for issue in issues)
+
+
+def test_code_only_keys_preview_import_and_first_translation_authority(
+    preview_session_factory,
+    monkeypatch,
+):
+    from verboflex.models.import_job import ImportExecution
+    from verboflex.schemas.authoring import AuthoringInput
+    from verboflex.services.translation_authoring import AuthoringError, resolve_file
+    from verboflex.services.writeback_authority import _capture_mapping
+
+    factory = preview_session_factory
+    adapter = RefreshSource(
+        files={
+            "app/src/main/Screen.kt": b"""package demo
+object Keys {
+    const val MISSING = "missing"
+}
+fun Screen() = Res.strings.hello
+@Preview @Composable fun ScreenPreview() { Screen() }
+""",
+            "shared/moko-resources/base/strings.xml": _xml(
+                "Hello",
+                extra='<string name="orphan">Outside app</string>',
+            ),
+            "shared/moko-resources/it/strings.xml": _xml("Ciao"),
+        },
+        commit_hashes=["a" * 40],
+    )
+    product_id, mapping_id = _published_confirmation(factory, adapter, code_source=True)
+    settings = Settings(
+        bitbucket_oauth_client_id="worker-test-client",
+        bitbucket_oauth_client_secret=SecretStr("worker-test-secret"),
+        bitbucket_token_encryption_keyring=SecretStr(Fernet.generate_key().decode()),
+    )
+    monkeypatch.setattr(import_tasks, "get_settings", lambda: settings)
+    monkeypatch.setattr(import_tasks, "SessionFactory", factory)
+    monkeypatch.setattr(import_tasks, "create_repository_read_adapters", lambda _: adapter)
+    imported = _run(factory, product_id, mapping_id)
+    assert imported.state == "current", imported.last_error_code
+    with factory() as session:
+        scope = session.scalar(select(LocalizationScope))
+        execution = session.get_one(ImportExecution, scope.active_execution_id)
+        assert execution.code_catalog["catalog"]["keys"] == ["hello", "missing"]
+        assert execution.code_catalog["missing_keys"] == ["missing"]
+        assert execution.code_catalog["orphan_keys"] == ["orphan"]
+        assert set(session.scalars(select(TranslationKey.raw_key))) == {"hello"}
+        assert set(session.scalars(select(TranslationValue.display_text))) == {"Hello", "Ciao"}
+        assert set(session.scalars(select(TranslationValueLocator.repository_side))) == {
+            "translations",
+        }
+        captured, layouts = _capture_mapping(
+            session,
+            scope,
+            reference_limit=500,
+            byte_limit=20971520,
+        )
+        assert {layout.repository_side for layout in layouts} == {"translations"}
+        assert {side.repository_side for side in captured.sides} == {"keys", "translations"}
+        destination = next(ref for ref in captured.source_references if "/it/" in ref.path)
+        draft = AuthoringInput(
+            scope_id=scope.id,
+            execution_id=scope.active_execution_id,
+            file_position=destination.source_reference_position,
+            key="missing",
+            language="it",
+            kind="text",
+            forms=[{"form": "other", "text": "Nuovo"}],
+            expected_version=0,
+        )
+        _, ref, parser = resolve_file(session, scope, draft)
+        assert ref.repository_side == "translations" and parser.format == "android_xml"
+        with pytest.raises(AuthoringError, match="source key"):
+            resolve_file(session, scope, draft.model_copy(update={"key": "unregistered"}))
+        source = next(ref for ref in captured.source_references if ref.repository_side == "keys")
+        with pytest.raises(AuthoringError, match="Destination unavailable"):
+            resolve_file(
+                session,
+                scope,
+                draft.model_copy(
+                    update={
+                        "file_position": source.source_reference_position,
+                    }
+                ),
+            )

@@ -81,6 +81,7 @@ def stage_translation_parse(
     identity: ImportExecutionIdentity,
     references: tuple[ImportSourceReferenceRecord, ...],
     result: CanonicalParseResult,
+    code_catalog: dict[str, object] | None = None,
     correlation_references: Mapping[CorrelationIdentity, str] | None = None,
 ) -> StagedParseManifest | None:
     """Persist one immutable inactive parse result for an exact running execution."""
@@ -97,6 +98,7 @@ def stage_translation_parse(
         if authority is None:
             return None
         mapping, job, execution = authority
+        execution.code_catalog = code_catalog
         validated_references = _validate_references(identity=identity, references=references)
         reference_by_locator = {
             (reference.repository_side, reference.path): reference
@@ -247,7 +249,7 @@ def staged_manifest_digest(
         )
         for reference in references
     )
-    return _manifest_digest(
+    digest = _manifest_digest(
         identity=identity,
         references=reference_records,
         values=(_staged_payload(value) for value in staged_values),
@@ -264,6 +266,12 @@ def staged_manifest_digest(
             for issue in issues
         ],
     )
+
+    catalog = session.get_one(ImportExecution, identity.execution_id).code_catalog
+    if catalog is None:
+        return digest
+    encoded = json.dumps(catalog, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256((digest + encoded).encode("ascii")).hexdigest()
 
 
 def require_complete_staged_manifest(

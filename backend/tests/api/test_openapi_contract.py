@@ -62,6 +62,30 @@ IMPORT_OPERATIONS = {
 }
 
 TRANSLATION_OPERATIONS = {
+    ("/api/v1/translations/{group_id}/code-context", "get"): (
+        "getTranslationCodeContext",
+        {"422", "429", "401", "503", "200", "409", "403", "404"},
+    ),
+    ("/api/v1/translations/{group_id}/screenshots", "get"): (
+        "listTranslationScreenshots",
+        {"422", "429", "401", "503", "200", "409", "403", "404"},
+    ),
+    ("/api/v1/translations/{group_id}/screenshots/{job_id}", "put"): (
+        "requestTranslationScreenshot",
+        {"422", "429", "401", "503", "409", "202", "404", "403"},
+    ),
+    ("/api/v1/translations/{group_id}/screenshots/{job_id}", "get"): (
+        "getTranslationScreenshot",
+        {"422", "429", "401", "503", "200", "409", "403", "404"},
+    ),
+    ("/api/v1/translations/{group_id}/screenshots/{job_id}", "delete"): (
+        "cancelTranslationScreenshot",
+        {"422", "429", "401", "503", "200", "409", "403", "404"},
+    ),
+    ("/api/v1/translations/{group_id}/screenshots/{job_id}/image", "get"): (
+        "getTranslationScreenshotImage",
+        {"422", "429", "401", "503", "200", "409", "403", "404"},
+    ),
     ("/api/v1/translations/keys", "get"): (
         "searchTranslationKeys",
         {"200", "401", "403", "422", "503"},
@@ -788,6 +812,22 @@ EXPECTED_OPERATIONS.update(
             bearer,
         )
         for path, method, operation, success, bearer in TEAM_OPERATIONS
+    }
+)
+
+
+EXPECTED_OPERATIONS.update(
+    {
+        ("/api/v1/products/{product_id}/code-sources", "get"): (
+            "listProductCodeSources",
+            {"422", "429", "401", "503", "200", "409", "403", "404"},
+            True,
+        ),
+        ("/api/v1/localization-scopes/{scope_id}/code-keys", "get"): (
+            "listCodeKeys",
+            {"422", "429", "401", "503", "200", "409", "403", "404"},
+            True,
+        ),
     }
 )
 

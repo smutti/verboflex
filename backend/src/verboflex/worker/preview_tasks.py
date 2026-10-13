@@ -11,11 +11,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from verboflex.core.config import get_settings
 from verboflex.db.session import SessionFactory
 from verboflex.integrations.readers import create_repository_read_adapters
+from verboflex.localization.code_keys.catalog import CodeSourceConfig
+from verboflex.localization.code_keys.process import extract_catalog_isolated
 from verboflex.localization.duplicate_diagnostics import inspect_duplicate_keys
 from verboflex.localization.importing.core import CanonicalParserInput
 from verboflex.localization.moko_layout import moko_layout
 from verboflex.localization.preview.registry import detect_preview_layouts
 from verboflex.models.preview_job import PreviewJob
+from verboflex.models.product_mapping import ProductRepositoryMapping
 from verboflex.services.duplicate_reports import store_report
 from verboflex.services.preview_jobs import (
     PreviewJobIdentity,
@@ -39,6 +42,13 @@ async def _process_preview(
     factory: sessionmaker[Session],
     adapter: ReadAdapters,
 ) -> dict[str, object]:
+    with factory() as session:
+        mapping = session.get_one(ProductRepositoryMapping, identity.mapping_id)
+        code_config = (
+            CodeSourceConfig.model_validate(mapping.code_source)
+            if mapping.code_source is not None
+            else None
+        )
     candidates: list[dict[str, object]] = []
     diagnostic_inputs: list[CanonicalParserInput] = []
     diagnostic_sources: list[dict[str, str]] = []
@@ -50,9 +60,19 @@ async def _process_preview(
                 branch=side.source_branch,
                 adapter=adapter,
                 localization_root=side.localization_root,
+                code_sources=code_config is not None and side.role == "keys",
             )
         if snapshot.commit_hash != side.commit_hash:
             raise ValueError("preview commit changed during discovery")
+        if code_config is not None and side.role == "keys":
+            catalog = extract_catalog_isolated(
+                {file.path: file.content for file in snapshot.files}, code_config
+            )
+            if not catalog.keys:
+                raise ValueError(
+                    "No code keys discovered; check source root and extraction settings"
+                )
+            continue
         diagnostic_sources.append(
             dict(
                 repository_side=side.role,

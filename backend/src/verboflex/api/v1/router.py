@@ -23,6 +23,7 @@ from verboflex.api.v1.routes import (
     product_team,
     product_workspace,
     reuse,
+    screenshots,
     submissions,
     system,
     translation_constraints,
@@ -32,6 +33,7 @@ from verboflex.api.v1.routes import (
 )
 
 api_router = APIRouter()
+api_router.include_router(screenshots.router)
 api_router.include_router(product_team.router)
 api_router.include_router(product_workspace.router)
 api_router.include_router(authoring.router)

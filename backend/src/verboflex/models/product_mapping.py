@@ -17,6 +17,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -31,6 +32,11 @@ class ProductRepositoryMapping(Base):
 
     __tablename__ = "product_repository_mappings"
     __table_args__ = (
+        CheckConstraint(
+            "code_source IS NULL OR "
+            "(topology = 'separate' AND jsonb_typeof(code_source) = 'object')",
+            name="code_source_separate",
+        ),
         CheckConstraint(
             "topology IN ('direct', 'separate')",
             name="topology_value",
@@ -98,6 +104,9 @@ class ProductRepositoryMapping(Base):
     topology: Mapped[str] = mapped_column(String(16), nullable=False)
     identity_key: Mapped[str] = mapped_column(String(1200), nullable=False)
     base_language: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    code_source: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
     selected_layout_candidate_id: Mapped[UUID | None] = mapped_column(
         PostgreSQLUUID(as_uuid=True),
         nullable=True,

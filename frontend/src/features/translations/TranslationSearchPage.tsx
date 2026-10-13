@@ -1,3 +1,4 @@
+import { CodeKeyCatalog } from "./CodeKeyCatalog";
 import { rolesForProduct } from "../auth/productRoles";
 import { Glossary } from "./Glossary";
 import {
@@ -747,6 +748,13 @@ function ResolvedSearch({
         />
       )}
       <div className="flex flex-wrap items-start gap-2">
+        {search.filters.productId && (
+          <CodeKeyCatalog
+            key={`catalog:${search.filters.productId}`}
+            accessToken={context.accessToken}
+            productId={search.filters.productId}
+          />
+        )}
         {(authoringSelection?.item.product_id ?? search.filters.productId) && (
           <TranslationAuthoring
             key={`authoring:${authoringSelection?.item.product_id ?? search.filters.productId}`}

@@ -289,7 +289,8 @@ def _capture_mapping(
     roles = {"direct"} if mapping.topology == "direct" else {"keys", "translations"}
     if (
         {side.role for side in mapping.sides} != roles
-        or {candidate.repository_side for candidate in candidates} != roles
+        or {candidate.repository_side for candidate in candidates}
+        != ({"translations"} if mapping.code_source is not None else roles)
         or len({candidate.id for candidate in candidates}) != len(candidates)
     ):
         raise _stale()

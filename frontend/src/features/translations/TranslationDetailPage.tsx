@@ -35,6 +35,7 @@ import {
   TranslationEditor,
 } from "./TranslationEditor";
 import { TranslationReviewActions } from "./TranslationReviewActions";
+import { TranslationScreenshots } from "./TranslationScreenshots";
 import { TranslationConflictDialog } from "./TranslationConflictDialog";
 import { ActivityHistory } from "./ActivityHistory";
 import { Discussion } from "./Discussion";
@@ -305,6 +306,7 @@ function LoadedDetail({
     draft: NonNullable<TranslationsWorkspaceContext["activeDraft"]>;
   } | null>(null);
   const [editFailure, setEditFailure] = useState(false);
+  const [screenshotsOpen, setScreenshotsOpen] = useState(false);
   const [dialog, setDialog] = useState<{
     mode: ConstraintMutationMode;
     trigger: HTMLButtonElement;
@@ -586,6 +588,23 @@ function LoadedDetail({
           />
         </div>
         <aside className="min-w-0 space-y-(--space-xl)">
+          <details
+            className="min-w-0 rounded-lg border bg-secondary p-(--space-lg)"
+            onToggle={(event) => setScreenshotsOpen(event.currentTarget.open)}
+          >
+            <summary className="cursor-pointer font-semibold">
+              Screenshots and code references
+            </summary>
+            {screenshotsOpen && (
+              <TranslationScreenshots
+                key={`${detail.id}:${context.accessToken}`}
+                accessToken={context.accessToken}
+                groupId={detail.id}
+                dirty={Boolean(activeDraft?.dirty)}
+                proposalVersion={pendingVersion || undefined}
+              />
+            )}
+          </details>
           <Section title="Maximum length">
             {canMutate && (
               <div className="flex flex-wrap gap-(--space-sm)">

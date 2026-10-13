@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 from verboflex.integrations.bitbucket.urls import validate_localization_root
+from verboflex.localization.code_keys.catalog import CodeSourceConfig
 
 LocalizationRoot = Annotated[
     str, Field(max_length=4096), AfterValidator(validate_localization_root)
@@ -43,6 +44,7 @@ class AdminSeparateMappingWriteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     topology: Literal["separate"]
+    code_source: CodeSourceConfig | None = None
     sides: Annotated[
         list[AdminSeparateMappingSideWriteRequest],
         Field(min_length=2, max_length=2),
@@ -80,6 +82,7 @@ class AdminMappingResponse(BaseModel):
     selected_layout_candidate_id: UUID | None
     selected_layout_version: int | None
     candidate_version: int
+    code_source: CodeSourceConfig | None = None
     primary_localization_root: str | None = None
     translations_localization_root: str | None = None
 

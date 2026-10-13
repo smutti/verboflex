@@ -358,6 +358,16 @@
               "title": "Allowed Target Branches",
               "type": "array"
             },
+            "code_source": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CodeSourceConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "default_target_branch": {
               "maxLength": 255,
               "minLength": 1,
@@ -392,6 +402,104 @@
             "expected_candidate_version"
           ],
           "title": "AdminSeparateMappingWriteRequest",
+          "type": "object"
+        },
+        "CodeSourceConfig": {
+          "additionalProperties": false,
+          "properties": {
+            "compose": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComposeCaptureConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "declaration_symbols": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 100,
+              "title": "Declaration Symbols",
+              "type": "array"
+            },
+            "localization_calls": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 20,
+              "title": "Localization Calls",
+              "type": "array"
+            },
+            "resource_roots": {
+              "default": [
+                "Res.strings"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 20,
+              "title": "Resource Roots",
+              "type": "array"
+            }
+          },
+          "title": "CodeSourceConfig",
+          "type": "object"
+        },
+        "ComposeCaptureConfig": {
+          "additionalProperties": false,
+          "description": "Reviewed runner and callable fixture previews; no repository commands.",
+          "properties": {
+            "height_dp": {
+              "default": 800,
+              "maximum": 2048.0,
+              "minimum": 200.0,
+              "title": "Height Dp",
+              "type": "integer"
+            },
+            "module": {
+              "default": ":app",
+              "pattern": "^(:[A-Za-z][A-Za-z0-9_-]*)+$",
+              "title": "Module",
+              "type": "string"
+            },
+            "preview_functions": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "title": "Preview Functions",
+              "type": "array"
+            },
+            "runner_profile": {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "title": "Runner Profile",
+              "type": "string"
+            },
+            "variant": {
+              "default": "Debug",
+              "pattern": "^[A-Z][A-Za-z0-9]{0,63}$",
+              "title": "Variant",
+              "type": "string"
+            },
+            "width_dp": {
+              "default": 1280,
+              "maximum": 2048.0,
+              "minimum": 200.0,
+              "title": "Width Dp",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "runner_profile",
+            "preview_functions"
+          ],
+          "title": "ComposeCaptureConfig",
           "type": "object"
         }
       },
@@ -3991,6 +4099,16 @@
               "title": "Allowed Target Branches",
               "type": "array"
             },
+            "code_source": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CodeSourceConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "default_target_branch": {
               "maxLength": 255,
               "minLength": 1,
@@ -4025,6 +4143,104 @@
             "expected_candidate_version"
           ],
           "title": "AdminSeparateMappingWriteRequest",
+          "type": "object"
+        },
+        "CodeSourceConfig": {
+          "additionalProperties": false,
+          "properties": {
+            "compose": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComposeCaptureConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "declaration_symbols": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 100,
+              "title": "Declaration Symbols",
+              "type": "array"
+            },
+            "localization_calls": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 20,
+              "title": "Localization Calls",
+              "type": "array"
+            },
+            "resource_roots": {
+              "default": [
+                "Res.strings"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 20,
+              "title": "Resource Roots",
+              "type": "array"
+            }
+          },
+          "title": "CodeSourceConfig",
+          "type": "object"
+        },
+        "ComposeCaptureConfig": {
+          "additionalProperties": false,
+          "description": "Reviewed runner and callable fixture previews; no repository commands.",
+          "properties": {
+            "height_dp": {
+              "default": 800,
+              "maximum": 2048.0,
+              "minimum": 200.0,
+              "title": "Height Dp",
+              "type": "integer"
+            },
+            "module": {
+              "default": ":app",
+              "pattern": "^(:[A-Za-z][A-Za-z0-9_-]*)+$",
+              "title": "Module",
+              "type": "string"
+            },
+            "preview_functions": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "title": "Preview Functions",
+              "type": "array"
+            },
+            "runner_profile": {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "title": "Runner Profile",
+              "type": "string"
+            },
+            "variant": {
+              "default": "Debug",
+              "pattern": "^[A-Z][A-Za-z0-9]{0,63}$",
+              "title": "Variant",
+              "type": "string"
+            },
+            "width_dp": {
+              "default": 1280,
+              "maximum": 2048.0,
+              "minimum": 200.0,
+              "title": "Width Dp",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "runner_profile",
+            "preview_functions"
+          ],
+          "title": "ComposeCaptureConfig",
           "type": "object"
         }
       },

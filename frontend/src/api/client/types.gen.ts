@@ -685,6 +685,7 @@ export type AdminMappingResponse = {
      * Candidate Version
      */
     candidate_version: number;
+    code_source?: CodeSourceConfig | null;
     /**
      * Default Target Branch
      */
@@ -1528,6 +1529,7 @@ export type AdminSeparateMappingWriteRequest = {
      * Allowed Target Branches
      */
     allowed_target_branches: Array<string>;
+    code_source?: CodeSourceConfig | null;
     /**
      * Default Target Branch
      */
@@ -2550,6 +2552,191 @@ export type ChangeSetValuesPage = {
 };
 
 /**
+ * CodeCatalogEntry
+ */
+export type CodeCatalogEntry = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Missing Base
+     */
+    missing_base: boolean;
+    /**
+     * Missing Translation
+     */
+    missing_translation: boolean;
+};
+
+/**
+ * CodeCatalogPage
+ */
+export type CodeCatalogPage = {
+    /**
+     * Items
+     */
+    items: Array<CodeCatalogEntry>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+    /**
+     * Orphan Count
+     */
+    orphan_count: number;
+};
+
+/**
+ * CodeContextResponse
+ */
+export type CodeContextResponse = {
+    /**
+     * Capture Functions
+     */
+    capture_functions: Array<string>;
+    /**
+     * Code Commit
+     */
+    code_commit?: string | null;
+    /**
+     * Configured
+     */
+    configured: boolean;
+    /**
+     * Occurrences
+     */
+    occurrences: Array<CodeOccurrence>;
+    /**
+     * Occurrences Truncated
+     */
+    occurrences_truncated?: boolean;
+    /**
+     * Previews
+     */
+    previews: Array<CodePreview>;
+};
+
+/**
+ * CodeOccurrence
+ */
+export type CodeOccurrence = {
+    /**
+     * Column
+     */
+    column: number;
+    /**
+     * Function
+     */
+    function: string | null;
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Kind
+     */
+    kind: 'reference' | 'declaration' | 'call';
+    /**
+     * Line
+     */
+    line: number;
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Symbol
+     */
+    symbol: string;
+};
+
+/**
+ * CodePreview
+ */
+export type CodePreview = {
+    /**
+     * Annotation
+     */
+    annotation: string;
+    /**
+     * Evidence
+     */
+    evidence?: 'static_reference';
+    /**
+     * Function
+     */
+    function: string;
+    /**
+     * Keys
+     */
+    keys: Array<string>;
+    /**
+     * Line
+     */
+    line: number;
+    /**
+     * Path
+     */
+    path: string;
+};
+
+/**
+ * CodeSourceConfig
+ */
+export type CodeSourceConfig = {
+    compose?: ComposeCaptureConfig | null;
+    /**
+     * Declaration Symbols
+     */
+    declaration_symbols?: Array<string>;
+    /**
+     * Localization Calls
+     */
+    localization_calls?: Array<string>;
+    /**
+     * Resource Roots
+     */
+    resource_roots?: Array<string>;
+};
+
+/**
+ * CodeSourcePage
+ */
+export type CodeSourcePage = {
+    /**
+     * Items
+     */
+    items: Array<CodeSourceSummary>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * CodeSourceSummary
+ */
+export type CodeSourceSummary = {
+    /**
+     * Key Count
+     */
+    key_count: number;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Missing Count
+     */
+    missing_count: number;
+    /**
+     * Scope Id
+     */
+    scope_id: string;
+};
+
+/**
  * CommentAnchorWindowResponse
  */
 export type CommentAnchorWindowResponse = {
@@ -2587,6 +2774,38 @@ export type CommitReceiptResponse = {
      * Parent
      */
     parent: string;
+};
+
+/**
+ * ComposeCaptureConfig
+ *
+ * Reviewed runner and callable fixture previews; no repository commands.
+ */
+export type ComposeCaptureConfig = {
+    /**
+     * Height Dp
+     */
+    height_dp?: number;
+    /**
+     * Module
+     */
+    module?: string;
+    /**
+     * Preview Functions
+     */
+    preview_functions: Array<string>;
+    /**
+     * Runner Profile
+     */
+    runner_profile: string;
+    /**
+     * Variant
+     */
+    variant?: string;
+    /**
+     * Width Dp
+     */
+    width_dp?: number;
 };
 
 /**
@@ -4413,6 +4632,73 @@ export type SaveTranslationProposalValueRequest = {
      * Translation Value Id
      */
     translation_value_id: string;
+};
+
+/**
+ * ScreenshotPage
+ */
+export type ScreenshotPage = {
+    /**
+     * Items
+     */
+    items: Array<ScreenshotResponse>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * ScreenshotRequest
+ */
+export type ScreenshotRequest = {
+    /**
+     * Preview Function
+     */
+    preview_function: string;
+    /**
+     * Proposal Version
+     */
+    proposal_version?: number | null;
+    /**
+     * Theme
+     */
+    theme?: 'light' | 'dark';
+};
+
+/**
+ * ScreenshotResponse
+ */
+export type ScreenshotResponse = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Error Code
+     */
+    error_code: string | null;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Image Digest
+     */
+    image_digest: string | null;
+    /**
+     * Input Digest
+     */
+    input_digest: string;
+    request: ScreenshotRequest;
+    /**
+     * State
+     */
+    state: 'queued' | 'rendering' | 'succeeded' | 'failed' | 'cancelled' | 'expired';
 };
 
 /**
@@ -8820,6 +9106,65 @@ export type ReadHealthResponses = {
 
 export type ReadHealthResponse = ReadHealthResponses[keyof ReadHealthResponses];
 
+export type ListCodeKeysData = {
+    body?: never;
+    path: {
+        /**
+         * Scope Id
+         */
+        scope_id: string;
+    };
+    query?: {
+        /**
+         * After
+         */
+        after?: string | null;
+    };
+    url: '/api/v1/localization-scopes/{scope_id}/code-keys';
+};
+
+export type ListCodeKeysErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type ListCodeKeysError = ListCodeKeysErrors[keyof ListCodeKeysErrors];
+
+export type ListCodeKeysResponses = {
+    /**
+     * Successful Response
+     */
+    200: CodeCatalogPage;
+};
+
+export type ListCodeKeysResponse = ListCodeKeysResponses[keyof ListCodeKeysResponses];
+
 export type GetConsentApiV1McpAuthorizationRequestIdGetData = {
     body?: never;
     path: {
@@ -10070,6 +10415,65 @@ export type GetChangeSetValuesResponses = {
 
 export type GetChangeSetValuesResponse = GetChangeSetValuesResponses[keyof GetChangeSetValuesResponses];
 
+export type ListProductCodeSourcesData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: {
+        /**
+         * After
+         */
+        after?: string | null;
+    };
+    url: '/api/v1/products/{product_id}/code-sources';
+};
+
+export type ListProductCodeSourcesErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type ListProductCodeSourcesError = ListProductCodeSourcesErrors[keyof ListProductCodeSourcesErrors];
+
+export type ListProductCodeSourcesResponses = {
+    /**
+     * Successful Response
+     */
+    200: CodeSourcePage;
+};
+
+export type ListProductCodeSourcesResponse = ListProductCodeSourcesResponses[keyof ListProductCodeSourcesResponses];
+
 export type ListGlossaryTermsData = {
     body?: never;
     path: {
@@ -11135,6 +11539,349 @@ export type ListTranslationOptionsResponses = {
 };
 
 export type ListTranslationOptionsResponse = ListTranslationOptionsResponses[keyof ListTranslationOptionsResponses];
+
+export type GetTranslationCodeContextData = {
+    body?: never;
+    path: {
+        /**
+         * Group Id
+         */
+        group_id: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{group_id}/code-context';
+};
+
+export type GetTranslationCodeContextErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetTranslationCodeContextError = GetTranslationCodeContextErrors[keyof GetTranslationCodeContextErrors];
+
+export type GetTranslationCodeContextResponses = {
+    /**
+     * Successful Response
+     */
+    200: CodeContextResponse;
+};
+
+export type GetTranslationCodeContextResponse = GetTranslationCodeContextResponses[keyof GetTranslationCodeContextResponses];
+
+export type ListTranslationScreenshotsData = {
+    body?: never;
+    path: {
+        /**
+         * Group Id
+         */
+        group_id: string;
+    };
+    query?: {
+        /**
+         * After
+         */
+        after?: string | null;
+    };
+    url: '/api/v1/translations/{group_id}/screenshots';
+};
+
+export type ListTranslationScreenshotsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type ListTranslationScreenshotsError = ListTranslationScreenshotsErrors[keyof ListTranslationScreenshotsErrors];
+
+export type ListTranslationScreenshotsResponses = {
+    /**
+     * Successful Response
+     */
+    200: ScreenshotPage;
+};
+
+export type ListTranslationScreenshotsResponse = ListTranslationScreenshotsResponses[keyof ListTranslationScreenshotsResponses];
+
+export type CancelTranslationScreenshotData = {
+    body?: never;
+    path: {
+        /**
+         * Group Id
+         */
+        group_id: string;
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{group_id}/screenshots/{job_id}';
+};
+
+export type CancelTranslationScreenshotErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type CancelTranslationScreenshotError = CancelTranslationScreenshotErrors[keyof CancelTranslationScreenshotErrors];
+
+export type CancelTranslationScreenshotResponses = {
+    /**
+     * Successful Response
+     */
+    200: ScreenshotResponse;
+};
+
+export type CancelTranslationScreenshotResponse = CancelTranslationScreenshotResponses[keyof CancelTranslationScreenshotResponses];
+
+export type GetTranslationScreenshotData = {
+    body?: never;
+    path: {
+        /**
+         * Group Id
+         */
+        group_id: string;
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{group_id}/screenshots/{job_id}';
+};
+
+export type GetTranslationScreenshotErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetTranslationScreenshotError = GetTranslationScreenshotErrors[keyof GetTranslationScreenshotErrors];
+
+export type GetTranslationScreenshotResponses = {
+    /**
+     * Successful Response
+     */
+    200: ScreenshotResponse;
+};
+
+export type GetTranslationScreenshotResponse = GetTranslationScreenshotResponses[keyof GetTranslationScreenshotResponses];
+
+export type RequestTranslationScreenshotData = {
+    body: ScreenshotRequest;
+    path: {
+        /**
+         * Group Id
+         */
+        group_id: string;
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{group_id}/screenshots/{job_id}';
+};
+
+export type RequestTranslationScreenshotErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type RequestTranslationScreenshotError = RequestTranslationScreenshotErrors[keyof RequestTranslationScreenshotErrors];
+
+export type RequestTranslationScreenshotResponses = {
+    /**
+     * Successful Response
+     */
+    202: ScreenshotResponse;
+};
+
+export type RequestTranslationScreenshotResponse = RequestTranslationScreenshotResponses[keyof RequestTranslationScreenshotResponses];
+
+export type GetTranslationScreenshotImageData = {
+    body?: never;
+    path: {
+        /**
+         * Group Id
+         */
+        group_id: string;
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{group_id}/screenshots/{job_id}/image';
+};
+
+export type GetTranslationScreenshotImageErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetTranslationScreenshotImageError = GetTranslationScreenshotImageErrors[keyof GetTranslationScreenshotImageErrors];
+
+export type GetTranslationScreenshotImageResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type GetTranslationGroupData = {
     body?: never;

@@ -1,0 +1,15 @@
+# Local development only. Start the authenticated Mac renderer first.
+# Include after the normal local/staging Compose files.
+services:
+  screenshot-worker:
+    extends:
+      file: docker-compose.yml
+      service: worker
+    environment:
+      VERBOFLEX_DATABASE_URL: postgresql+psycopg://verboflex:${VERBOFLEX_POSTGRES_PASSWORD:-}@postgres:5432/${VERBOFLEX_POSTGRES_DB:-verboflex}
+    hostname: screenshot-worker
+    command: ["celery", "-A", "verboflex.worker.celery_app", "worker", "-Q", "screenshots", "--concurrency=1", "--loglevel=WARNING"]
+    volumes:
+      - ./tools/compose_capture_http.py:/opt/verboflex/compose_capture_http.py:ro
+      - ${VERBOFLEX_CAPTURE_TOKEN_PATH:?Set a private capture token file}:/run/secrets/capture-token:ro
+    restart: unless-stopped

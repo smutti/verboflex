@@ -20,6 +20,8 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getTranslationCommentAnchor,
+  getTranslationCodeContext,
+  listTranslationScreenshots,
   getTranslationGroup,
   listTranslationComments,
   listTranslationReviewActivity,
@@ -37,6 +39,8 @@ import { consumeSubmissionEntry } from "../change-sets/submissionEntry";
 import { DirtyFormNavigationProvider } from "../../components/navigation/DirtyFormNavigationGuard";
 
 vi.mock("../../api/client", () => ({
+  getTranslationCodeContext: vi.fn(),
+  listTranslationScreenshots: vi.fn(),
   getTranslationSuggestions: vi.fn().mockResolvedValue({ data: { items: [] } }),
   resolveTranslationSuggestion: vi.fn(),
   matchGlossaryTerms: vi
@@ -189,6 +193,19 @@ function mountProduct(id = "opaque-group") {
   );
 }
 beforeEach(() => {
+  vi.mocked(getTranslationCodeContext)
+    .mockReset()
+    .mockResolvedValue({
+      data: {
+        configured: false,
+        occurrences: [],
+        previews: [],
+        capture_functions: [],
+      },
+    } as never);
+  vi.mocked(listTranslationScreenshots)
+    .mockReset()
+    .mockResolvedValue({ data: { items: [], next_cursor: null } } as never);
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
     configurable: true,
     value: vi.fn(),
@@ -223,6 +240,26 @@ afterEach(() => {
 });
 
 describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/partial", () => {
+  it("offers lazy screenshots on a direct translation URL", async () => {
+    const user = userEvent.setup();
+    mountProduct();
+    const summary = await screen.findByText("Screenshots and code references", {
+      exact: true,
+    });
+    expect(getTranslationCodeContext).not.toHaveBeenCalled();
+    await user.click(summary);
+    expect(
+      await screen.findByText(
+        "No application code repository is configured for this translation.",
+      ),
+    ).toBeVisible();
+    expect(getTranslationCodeContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auth: "token",
+        path: { group_id: "opaque-group" },
+      }),
+    );
+  });
   it("loads a direct exact-comment URL without walking ordinary discussion pages", async () => {
     const target = {
       id: "opaque-comment",

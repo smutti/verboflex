@@ -277,6 +277,7 @@ async def discover_repository_sources_for_record(
     branch: str,
     adapter: ReadAdapters,
     localization_root: str | None = None,
+    code_sources: bool = False,
 ) -> RepositorySourceSnapshot:
     """Resolve one branch and read every candidate under the immutable A-03 budget."""
     root = validate_localization_root(localization_root) if localization_root is not None else None
@@ -299,7 +300,9 @@ async def discover_repository_sources_for_record(
         directory_path = directories.popleft()
         next_url: str | None = None
         while True:
-            if pages >= SOURCE_DISCOVERY_BUDGET.max_pages:
+            # Android package trees commonly exceed 50 directories even under
+            # src/main. Keep byte/file/depth budgets, with bounded extra traversal.
+            if pages >= (200 if code_sources else SOURCE_DISCOVERY_BUDGET.max_pages):
                 raise BitbucketProviderReadError(kind="limit_exceeded")
             page = await source_adapter(adapter, repository.provider).list_repository_source_page(
                 session,
@@ -329,7 +332,9 @@ async def discover_repository_sources_for_record(
                     continue
                 if entry.size is None:
                     raise BitbucketProviderReadError(kind="invalid_source")
-                if path.casefold().endswith(_CANDIDATE_SUFFIXES):
+                if path.casefold().endswith(
+                    (".kt", ".java") if code_sources else _CANDIDATE_SUFFIXES
+                ):
                     if entry.size > SOURCE_DISCOVERY_BUDGET.max_file_bytes:
                         raise BitbucketProviderReadError(kind="limit_exceeded")
                     candidate_entries.append((path, entry.size))
@@ -375,6 +380,7 @@ async def discover_live_repository_sources(
     branch: str,
     adapter: ReadAdapters,
     localization_root: str | None = None,
+    code_sources: bool = False,
 ) -> RepositorySourceSnapshot:
     """Resolve one registered repository before any commit-bound provider read."""
     repository = get_repository(session, repository_id=repository_id)
@@ -384,4 +390,5 @@ async def discover_live_repository_sources(
         branch=branch,
         adapter=adapter,
         localization_root=localization_root,
+        code_sources=code_sources,
     )

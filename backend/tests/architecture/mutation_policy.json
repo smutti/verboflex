@@ -554,5 +554,29 @@
     ],
     "boundary": "current_product_membership",
     "audit": "ProductTeamEvent and user.created audit event; never credentials"
+  },
+  "requestTranslationScreenshot": {
+    "method": "PUT",
+    "path": "/api/v1/translations/{group_id}/screenshots/{job_id}",
+    "roles": [
+      "admin",
+      "viewer",
+      "translator",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_product_membership_and_capture_owner",
+    "audit": "ScreenshotJob actor, immutable request identity and durable state"
+  },
+  "cancelTranslationScreenshot": {
+    "method": "DELETE",
+    "path": "/api/v1/translations/{group_id}/screenshots/{job_id}",
+    "roles": [
+      "admin",
+      "viewer",
+      "translator",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_product_membership_and_capture_owner",
+    "audit": "ScreenshotJob actor, immutable request identity and durable state"
   }
 }

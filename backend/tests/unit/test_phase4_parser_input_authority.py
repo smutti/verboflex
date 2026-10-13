@@ -37,6 +37,7 @@ def authority(monkeypatch, *, separate=False):
         repository_sides=tuple(SimpleNamespace(role=role) for role in roles),
     )
     mapping = SimpleNamespace(
+        code_source=None,
         base_language="en",
         confirmed_preview_job_id=uuid4(),
         selected_layout_candidate_id=candidate.id,

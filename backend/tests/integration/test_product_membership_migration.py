@@ -68,6 +68,6 @@ def test_membership_upgrade_backfills_only_existing_products_and_safe_downgrade(
         with factory() as session:
             assert (
                 session.scalar(text("SELECT version_num FROM alembic_version"))
-                == "0044_product_membership"
+                == "0046_screenshots"
             )
             assert session.scalar(select(ProductTeamEvent.id)) is not None

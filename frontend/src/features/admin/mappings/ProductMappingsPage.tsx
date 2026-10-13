@@ -21,6 +21,7 @@ import {
   listAdminRepositoryBranches,
   updateAdminCandidateMapping,
   type AdminBranchResponse,
+  type CodeSourceConfig,
   type AdminDirectMappingWriteRequest,
   type AdminMappingResponse,
   type AdminRepositoryResponse,
@@ -66,6 +67,7 @@ import {
   useCursorCollection,
   type CursorCollectionState,
 } from "../useCursorCollection";
+import { CodeSourceFields } from "./CodeSourceFields";
 import { PublishedMappingImports } from "../imports/PublishedMappingImports";
 
 type Topology = "direct" | "separate";
@@ -79,6 +81,7 @@ type MappingConflictField =
   | "translations_source_branch";
 
 interface MappingDraftFingerprintInput {
+  codeSource?: CodeSourceConfig | null;
   primaryRoot?: string;
   translationsRoot?: string;
   allowedTargetBranches: string[];
@@ -116,6 +119,7 @@ function mappingDraftFingerprint(input: MappingDraftFingerprintInput) {
           primarySourceBranch: input.keysSourceBranch,
           primaryRoot: input.primaryRoot ?? "",
           translationsRoot: input.translationsRoot ?? "",
+          codeSource: input.codeSource ?? null,
           topology: input.topology,
           translationsRepositoryId: input.translationsRepositoryId,
           translationsSourceBranch: input.translationsSourceBranch,
@@ -153,6 +157,7 @@ function savedMappingFingerprint(mapping: AdminMappingResponse | null) {
     translationsSourceBranch: mapping.translations_source_branch ?? "",
     primaryRoot: mapping.primary_localization_root ?? "",
     translationsRoot: mapping.translations_localization_root ?? "",
+    codeSource: mapping.code_source ?? null,
   });
 }
 
@@ -416,6 +421,7 @@ export function ProductMappingsPage({
   const [versionState, setVersionState] = useState<
     "error" | "loading" | "ready" | "published"
   >("loading");
+  const [codeSource, setCodeSource] = useState<CodeSourceConfig | null>(null);
   const [topology, setTopology] = useState<Topology>("direct");
   const [pendingTopology, setPendingTopology] = useState<Topology | null>(null);
   const [directRepositoryId, setDirectRepositoryId] = useState("");
@@ -452,6 +458,7 @@ export function ProductMappingsPage({
       mappingDraftFingerprint({
         primaryRoot,
         translationsRoot,
+        codeSource,
         allowedTargetBranches,
         defaultTargetBranch,
         directRepositoryId,
@@ -465,6 +472,7 @@ export function ProductMappingsPage({
     [
       primaryRoot,
       translationsRoot,
+      codeSource,
       allowedTargetBranches,
       defaultTargetBranch,
       directRepositoryId,
@@ -704,6 +712,7 @@ export function ProductMappingsPage({
   }
 
   function clearMappingSelection() {
+    setCodeSource(null);
     setPrimaryRoot("");
     setTranslationsRoot("");
     setDirectRepositoryId("");
@@ -742,6 +751,7 @@ export function ProductMappingsPage({
   }
 
   function beginEdit(mapping: AdminMappingResponse) {
+    setCodeSource(mapping.code_source ?? null);
     setPrimaryRoot(mapping.primary_localization_root ?? "");
     setTranslationsRoot(mapping.translations_localization_root ?? "");
     setEditingMapping(mapping);
@@ -837,6 +847,7 @@ export function ProductMappingsPage({
           }
         : {
             topology: "separate",
+            ...(codeSource ? { code_source: codeSource } : {}),
             sides: [
               {
                 role: "keys",
@@ -1352,6 +1363,10 @@ export function ProductMappingsPage({
                 </div>
               </details>
 
+              {topology === "separate" && (
+                <CodeSourceFields value={codeSource} onChange={setCodeSource} />
+              )}
+
               <details
                 className="rounded-md border p-4"
                 open={primaryRoot !== "" || translationsRoot !== ""}
@@ -1371,7 +1386,7 @@ export function ProductMappingsPage({
                       maxLength={4096}
                       value={primaryRoot}
                       onChange={(event) => setPrimaryRoot(event.target.value)}
-                  placeholder="shared/src/commonMain/moko-resources"
+                      placeholder="shared/src/commonMain/moko-resources"
                     />
                     <p className="text-sm text-muted-foreground">
                       Relative directory, without leading or trailing slashes.

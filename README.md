@@ -58,6 +58,7 @@ The application is a React/Vite frontend and FastAPI backend with PostgreSQL, Re
 | Backup and restore              | [`docs/backup-restore.md`](docs/backup-restore.md)                                               |
 | Database maintenance            | [`docs/database-maintenance.md`](docs/database-maintenance.md)                                   |
 | Public GitHub imports           | [`docs/github-imports.md`](docs/github-imports.md)                                               |
+| Kotlin/Java keys and Compose screenshots | [`docs/code-keys-compose.md`](docs/code-keys-compose.md) |
 
 ## Run your own workspace
 

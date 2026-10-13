@@ -27,6 +27,9 @@ dependencies = [
   "regex==2026.9.3",
   "verboflex-mcp",
   "babel==2.17.0",
+  "tree-sitter==0.25.2",
+  "tree-sitter-java==0.23.5",
+  "tree-sitter-kotlin==1.1.0",
 ]
 
 [dependency-groups]

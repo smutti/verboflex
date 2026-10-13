@@ -207,6 +207,9 @@ fi
 step redis-redaction verify_redis_boundary
 step redis-content compose exec -T backend python -c "$(<"$PHASE4_DRIVER")" redis-content
 step log-redaction verify_no_sensitive_surfaces
+if [ "${PHASE4_PROFILE:-4}" = 7 ]; then
+  step code-capture "$BACKEND_ROOT/.venv/bin/python" "$PHASE4_SCRIPT_DIR/code_capture_smoke.py" "$SMOKE_RUNTIME_DIR/fixture.json"
+fi
 if [ "${PHASE4_PROFILE:-4}" = 6 ]; then
   PHASE6_EVIDENCE=$("$BACKEND_ROOT/.venv/bin/python" - "$SMOKE_RUNTIME_DIR" <<'PY'
 import json, sys

@@ -431,6 +431,30 @@ const phaseThreeAdminOperationIds = new Map([
 ]);
 
 const phaseFiveTranslationOperationIds = new Map([
+  [
+    "GET /api/v1/translations/{group_id}/code-context",
+    "getTranslationCodeContext",
+  ],
+  [
+    "GET /api/v1/translations/{group_id}/screenshots",
+    "listTranslationScreenshots",
+  ],
+  [
+    "GET /api/v1/translations/{group_id}/screenshots/{job_id}",
+    "getTranslationScreenshot",
+  ],
+  [
+    "GET /api/v1/translations/{group_id}/screenshots/{job_id}/image",
+    "getTranslationScreenshotImage",
+  ],
+  [
+    "PUT /api/v1/translations/{group_id}/screenshots/{job_id}",
+    "requestTranslationScreenshot",
+  ],
+  [
+    "DELETE /api/v1/translations/{group_id}/screenshots/{job_id}",
+    "cancelTranslationScreenshot",
+  ],
   ["GET /api/v1/translations/keys", "searchTranslationKeys"],
   ["GET /api/v1/translations/options", "listTranslationOptions"],
   ["GET /api/v1/translations", "searchTranslations"],
@@ -738,7 +762,7 @@ describe("canonical generated API client", () => {
       }
     }
     expect(actualOperations).toEqual(phaseFiveTranslationOperationIds);
-    expect(new Set(actualOperations.values()).size).toBe(15);
+    expect(new Set(actualOperations.values()).size).toBe(21);
 
     for (const operation of phaseFiveTranslationOperationIds.values()) {
       expect(
@@ -958,7 +982,7 @@ describe("canonical generated API client", () => {
       ).toHaveLength(1);
     }
     expect(generatedSdkSource).not.toMatch(
-      /(?:cancel|schedule|bulk|attemptHistory|createBranch|createCommit|createPullRequest|mergePullRequest|approvePullRequest|declinePullRequest)/u,
+      /(?:cancel(?!TranslationScreenshot)|schedule|bulk|attemptHistory|createBranch|createCommit|createPullRequest|mergePullRequest|approvePullRequest|declinePullRequest)/u,
     );
     expect(generatedTypesSource).not.toMatch(
       /(?:provider_body|provider_status_text|raw_authority|raw_source|source_bytes|stack_trace|task_id|attempt_history)/u,

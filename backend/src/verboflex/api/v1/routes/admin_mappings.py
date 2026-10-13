@@ -132,6 +132,7 @@ def _response(record: MappingRecord) -> AdminMappingResponse:
     return AdminMappingResponse(
         id=record.id,
         topology=record.topology,
+        code_source=record.code_source,
         primary_repository_id=record.primary_repository_id,
         primary_source_branch=record.primary_source_branch,
         primary_localization_root=record.primary_localization_root,
@@ -625,6 +626,7 @@ async def create_admin_candidate_mapping(
         else:
             record = await create_separate_mapping(
                 session,
+                code_source=payload.code_source,
                 product_id=product_id,
                 expected_candidate_version=payload.expected_candidate_version,
                 repository_sides=tuple(
@@ -688,6 +690,7 @@ async def update_admin_candidate_mapping(
         else:
             record = await update_separate_mapping(
                 session,
+                code_source=payload.code_source,
                 product_id=product_id,
                 mapping_id=mapping_id,
                 expected_candidate_version=payload.expected_candidate_version,

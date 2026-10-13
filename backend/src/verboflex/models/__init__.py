@@ -39,6 +39,7 @@ from verboflex.models.review import (
     TranslationProposalValue,
 )
 from verboflex.models.role import Role, user_roles_table
+from verboflex.models.screenshot import ScreenshotJob
 from verboflex.models.submission import (
     ChangeSet,
     ChangeSetEvent,
@@ -65,6 +66,7 @@ from verboflex.models.translation_constraint import TranslationConstraint
 from verboflex.models.user import User
 
 __all__ = [
+    "ScreenshotJob",
     "ProductMember",
     "ProductTeamEvent",
     "AuthoringRequest",

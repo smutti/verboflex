@@ -6,6 +6,18 @@ protection: it fails if any component fails, is cancelled, or is skipped.
 Also require **Website checks**, which runs on every pull request and main push.
 The workflow does not deploy the application or contact real repositories.
 
+The code-key and screenshot tests use synthetic Kotlin/Java and localization fixtures.
+The built smoke also configures a separate code/translation mapping through HTTP,
+imports code-only keys, checks missing keys in the browser, saves a proposal and
+requests its screenshot through the real scheduler/Celery queue. A synthetic renderer
+replaces only the Android build boundary; it verifies the frozen commit IDs and
+selected translation in its PNG. The browser checks lazy generation, dirty-edit
+blocking, authenticated image loading, retry after one failed image request and reload.
+The `code-capture-e2e.json` receipt and browser screenshots join the smoke artifacts.
+Actual Compose rendering is a separate Android check, described in
+[the capture integration guide](code-keys-compose.md). It requires a reviewed,
+prewarmed runner image; the ordinary application CI does not build private Android apps.
+
 | Check | Coverage |
 | --- | --- |
 | Backend | Ruff, mypy, the complete pytest suite, migrations, disposable PostgreSQL 18, Redis 7 and a Celery worker; locked frontend tools and pinned fixtures for cross-language and historical regression checks |
@@ -82,3 +94,10 @@ require an up-to-date branch and resolved conversations, and disable force pushe
 and branch deletion. Keep the standard administrator recovery bypass. No independent
 reviewer is mandated for the single-maintainer repository. Workflows have read-only
 permissions by default; only the Pages deploy job receives Pages/OIDC write access.
+
+The local Mac relay has synthetic tests for authentication, revision/patch binding,
+request/output bounds and actual Seatbelt file/network restrictions (the latter runs
+only on macOS). Run `backend/.venv/bin/python -m pytest
+backend/tests/unit/localization/test_compose_macos.py`. A real private Android render
+remains a local integration check; no private Android source or translations belong
+in application CI fixtures.
