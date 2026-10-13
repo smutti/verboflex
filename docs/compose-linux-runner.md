@@ -21,23 +21,29 @@ relay, since bind paths are interpreted by the host Docker daemon.
    external Git alternates. Never mount a developer home, SSH directory or working
    repository with provider credentials.
 2. Build `docker/compose-toolchain.Dockerfile` on an amd64 Linux host. It installs
-   JDK 21, Android API 36, build tools 36 and NDK 27. The Android command-line tools
+   JDK 21, Android API 36, build tools 35 and 36, platform tools and NDK 27.
+   AGP can select build tools 35 even when the application targets API 36.
+   The Android command-line tools
    archive is checksum-verified against the [official downloads](https://developer.android.com/studio#command-tools).
    Match the SDK/NDK versions to the reviewed application profile when preparing
    another application. This preparation requires the Android SDK licenses.
 3. Prewarm dependencies in an operator-controlled preparation environment. Seed
    private artifacts from a trusted cache or download them in a separate, trusted
    dependency-only project. Do not expose Maven credentials to application builds.
-   Execute the screenshot task once, then verify a fresh offline build. Keep only
-   the needed Gradle caches and wrapper distribution; omit daemon logs, init scripts,
+   Execute the screenshot task once, then verify a fresh offline build. Include
+   every SDK package selected by that build in the immutable toolchain; packages
+   downloaded inside a disposable warm-up container are not retained in its image.
+   Keep only the needed Gradle caches and wrapper distribution; omit daemon logs, init scripts,
    credentials and `gradle.properties` from the cache.
 4. Build `docker/compose-prewarmed.Dockerfile` using that private context. Supply
-   `TOOLCHAIN_IMAGE` and `BACKEND_IMAGE` by immutable image ID. The context contains
-   `gradle-cache/` and `capture-gradle.properties`, the latter containing reviewed
+   `TOOLCHAIN_IMAGE` and `BACKEND_IMAGE` by registry digest, or unique local tags
+   bound to verified image IDs (BuildKit does not accept a bare image ID in `FROM`).
+   The context contains `gradle-cache/` and `capture-gradle.properties`, the latter containing reviewed
    resource limits and harmless offline property placeholders only.
 5. Build `docker/compose-runner.Dockerfile` with `CAPTURE_BASE_IMAGE` set to the
-   immutable prewarmed image. Register its full image ID (`sha256:` plus 64 hex
-   digits) or registry digest in the private operator profile. Mutable tags fail.
+   reviewed prewarmed image reference. Register the resulting runner's full image
+   ID (`sha256:` plus 64 hex digits) or registry digest in the private operator
+   profile. Mutable tags fail.
 6. Build `docker/compose-relay.Dockerfile` with the current backend image, and
    configure its private profile/token/exchange mounts. Give the worker only a copy
    of the relay token and `tools/compose_capture_http.py`, never the Docker socket.

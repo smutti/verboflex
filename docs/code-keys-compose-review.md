@@ -20,6 +20,40 @@ suite, including the Mac relay regressions, passed all 51 tests. Ruff, mypy and
 the generated MCP contract check also passed. Server rendering is verified
 separately after deployment; these results do not certify its Linux environment.
 
+## Linux deployment follow-up, 13 October 2026
+
+The application and trusted relay are deployed on the Linux host. The public site
+and health endpoint return HTTP 200 over a verified Let's Encrypt certificate;
+anonymous access to administration returns 401. Nginx configuration validation and
+the certificate renewal dry run passed. The backup runtime fix was restored to the
+deployment branch and a fresh backup of the reset instance verified successfully.
+
+The final focused parser/join/capture/runner suite passes **55 tests**, including
+immutable image IDs, revision-bound fixture patches and relay authentication.
+The first offline Android build exposed missing build tools 35: the online warm-up
+had installed them only inside its disposable container. The toolchain now includes
+build tools 35 and platform tools explicitly, in addition to API/build tools 36 and
+NDK 27. BuildKit preparation also uses immutable registry references or unique local
+tags bound to verified IDs, since bare local image IDs are not accepted in `FROM`.
+
+A real 1953 capture then passed through the production screenshot worker's HTTP
+adapter, authenticated private relay and immutable Linux renderer in **149.4 seconds**.
+It returned a **1280 × 800 PNG**, 19,707 bytes, with SHA-256
+`64ff690511c611731817630acc5ac6116e67069ff18a809359e6c32daee5e34d`, identical to the
+previously verified Mac rendering. The runner image ID is
+`sha256:9b60c069a75e174ce8424c992c68a94ed1616aab60d12a319890efd0224779e2`.
+Runtime inspection confirmed no network, read-only root and host input mounts,
+UID 65532 and a 6 GiB memory limit. This verifies the real Linux rendering boundary;
+the earlier built-stack smoke verifies API dispatch, scheduler/Celery execution,
+permissions and browser behavior with its synthetic renderer. The server check
+invoked the worker adapter directly and does not claim a new API/queue E2E run.
+
+The production database was explicitly reset after deployment. It contains the
+new administrator and no projects; provider connections and the 1953/Babel project
+must be configured again. The prepared capture profile must be bound to the new
+code-repository ID when that project is recreated. No production project or queued
+capture record was recreated as part of the renderer verification.
+
 ## Findings corrected
 
 | Priority | Finding and user impact | Correction and evidence |
@@ -131,8 +165,10 @@ backend/.venv/bin/python tools/verify_compose_transport.py \
   --image python@sha256:c3e521df8b2b498a7a682e7e18676771cb80c6b75b8699af886b2d554ce40151
 ```
 
-The application-specific production Android image is still unvalidated. The strict
-coverage/mutation limitations documented in the implementation report remain; neither
-gate was promoted to passing by this review. No commits, remote writes or deployment
-were performed. Repository code continues to run outside the API process, and the
+At the original 12 October review, the application-specific production Android
+image was still unvalidated. The strict coverage/mutation limitations documented
+in the implementation report remain; neither
+gate was promoted to passing by that review. No commits, remote writes or deployment
+were performed during that original review; the later deployment is recorded above.
+Repository code continues to run outside the API process, and the
 new screenshot endpoints retain current product-membership checks.

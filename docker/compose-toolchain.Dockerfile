@@ -17,4 +17,5 @@ RUN curl --fail --location --retry 3 \
     && rm -rf /tmp/android-tools* \
     && yes | /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null
 RUN /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager \
-    'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.0.12077973'
+    'platforms;android-36' 'build-tools;35.0.0' 'build-tools;36.0.0' \
+    'platform-tools' 'ndk;27.0.12077973'
