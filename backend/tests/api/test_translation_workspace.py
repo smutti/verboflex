@@ -18,7 +18,6 @@ from verboflex.auth.rate_limits import get_redis_client
 from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.product import Product
-from verboflex.models.product_mapping import ProductRepositoryMapping
 from verboflex.models.review import TranslationProposal, TranslationProposalValue
 from verboflex.models.translation import (
     LocalizationScope,
@@ -162,10 +161,7 @@ def seed_qt_base_catalog(factory):
     """Mixed source languages are not translations of the configured base locale."""
     import hashlib
 
-    product, scope = SEARCH._seed_dataset(factory, name="Qt mixed source")
-    with factory.begin() as session:
-        mapping_id = session.get_one(LocalizationScope, scope).current_mapping_id
-        session.get_one(ProductRepositoryMapping, mapping_id).base_language = "it-IT"
+    product, scope = SEARCH._seed_dataset(factory, name="Qt mixed source", base_language="it-IT")
     ids = []
     for index, source in enumerate(("Operazione completata", "Open the message")):
         group = SEARCH._add_group(
