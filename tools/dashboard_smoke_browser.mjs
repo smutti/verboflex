@@ -1284,6 +1284,63 @@ async function multilingualWorkspace() {
   );
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
 
+  progress("qt-base-source-and-translation");
+  const qtPath =
+    frontend +
+    "/products/" +
+    fixture.qt_base_product +
+    "/strings?language=it-IT";
+  await page.goto(qtPath);
+  await filter();
+  await page
+    .getByRole("button", { name: "Needs translation", exact: true })
+    .click();
+  await expect(
+    page
+      .locator('[data-part="source-text"]')
+      .filter({ hasText: "Operazione completata" }),
+  ).toBeVisible();
+  await expect(
+    page
+      .locator('[data-part="source-text"]')
+      .filter({ hasText: "Open the message" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Empty source text", { exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", {
+      name: "Edit translation for message-1 (it-IT)",
+      exact: true,
+    })
+    .click();
+  await expect(field).toHaveValue("");
+  await field.fill("Apri il messaggio");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(field).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText("message-1", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("message-0", { exact: true })).toBeVisible();
+  const qtDetail = await api(
+    "/translations/" + fixture.qt_base_groups[1],
+    bearer,
+  );
+  check(qtDetail.values[0].source_text === "Open the message");
+  check(qtDetail.values[0].translated_text === "");
+  check(qtDetail.pending_change.values[0].text === "Apri il messaggio");
+  await page
+    .getByRole("button", { name: "Clear filters", exact: true })
+    .click();
+  await expect(
+    page.getByText("Apri il messaggio", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .locator('[data-part="source-text"]')
+      .filter({ hasText: "Open the message" }),
+  ).toBeVisible();
+  await capture("qt-base-source");
+
   progress("viewer-and-comment-link");
   await page.goto(
     frontend +
@@ -1347,6 +1404,8 @@ async function multilingualWorkspace() {
         overLimitApprovalBlocked: true,
         sourceOnlyReadOnly: true,
         embeddedSourceReadOnly: true,
+        qtBaseSourceSeparateFromTranslation: true,
+        qtBaseMissingTranslationFilter: true,
         desktopMobileOverflow: false,
       },
       null,

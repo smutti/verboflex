@@ -533,6 +533,48 @@ describe("compact multilingual key blocks", () => {
     ).toBeNull();
     expect(screen.getByText(/Embedded source text/)).toBeVisible();
   });
+  it.each(["Operazione completata", "Open the message", "<b>Open</b>"])(
+    "shows Qt source %s without treating it as an Italian translation",
+    async (source) => {
+      const item = group(0, { base_language: "it-IT", source_text: source });
+      item.slots = [
+        {
+          ...item.slots[2],
+          effective_text: "",
+          edit_field: "translated_text",
+          provenance: {
+            repository_side: "direct",
+            format: "qt_ts",
+            repository_name: "Example",
+            branch: "work",
+            path: "it.ts",
+            path_truncated: false,
+          },
+        },
+      ];
+      const edit = vi.fn();
+      const { container } = mount({
+        ...defaults(),
+        items: [item],
+        canEdit: true,
+        onEditTranslation: edit,
+      });
+      expect(
+        await screen.findByText("Source text", { exact: true }),
+      ).toBeVisible();
+      expect(screen.getByText(source, { exact: true })).toBeVisible();
+      expect(screen.queryByText("Empty source text")).toBeNull();
+      expect(screen.queryByText("Source", { exact: true })).toBeNull();
+      expect(container.querySelector('[data-part="source-text"] b')).toBeNull();
+      const button = screen.getByRole("button", {
+        name: /Edit translation.*it-IT/,
+      });
+      expect(button).toHaveTextContent("Empty translation");
+      expect(button).not.toHaveTextContent(source);
+      await userEvent.click(button);
+      expect(edit).toHaveBeenCalledWith("it-IT-0", button);
+    },
+  );
   it("keeps siblings visible and pins the active editor beyond the visible range", async () => {
     mount({
       ...defaults(),

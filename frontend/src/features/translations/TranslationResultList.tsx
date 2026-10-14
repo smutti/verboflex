@@ -340,6 +340,16 @@ export function TranslationResultList({
                       slot.language === focusLanguage,
                   )
                 : item.slots;
+            // Qt catalogs embed source text independently of their locale. The
+            // configured base locale does not prove the language of that text.
+            const hasQtTranslations = item.slots.some(
+              (slot) =>
+                slot.kind === "imported" && slot.provenance?.format === "qt_ts",
+            );
+            const showQtSource =
+              hasQtTranslations &&
+              item.source_text !== null &&
+              !slots.some((slot) => slot.kind === "source_context");
             return (
               <article
                 key={virtualRow.key}
@@ -397,6 +407,23 @@ export function TranslationResultList({
                   </div>
                 </div>
                 <div className="min-w-0 divide-y">
+                  {showQtSource && (
+                    <div
+                      data-part="source-text"
+                      className="grid min-w-0 grid-cols-[minmax(5.5rem,7rem)_minmax(0,1fr)] bg-slate-50 xl:grid-cols-[minmax(6rem,8rem)_minmax(0,1fr)]"
+                    >
+                      <span className="p-3 text-label font-semibold">
+                        Source text
+                      </span>
+                      <p
+                        dir="auto"
+                        className="min-w-0 px-5 py-3 whitespace-pre-wrap wrap-anywhere"
+                      >
+                        {item.source_text}
+                        {item.source_truncated ? "…" : ""}
+                      </p>
+                    </div>
+                  )}
                   {slots.map((slot) => {
                     const active =
                       !!slot.group_id && slot.group_id === activeEditorGroupId;
@@ -424,11 +451,15 @@ export function TranslationResultList({
                       slot.editable &&
                       !slot.is_deleted &&
                       onEditTranslation;
+                    const isSource =
+                      slot.kind === "source_context" ||
+                      (slot.language === item.base_language &&
+                        !hasQtTranslations);
                     const text =
                       slot.kind === "absent"
                         ? "Not imported for this language"
                         : slot.effective_text ||
-                          (slot.language === item.base_language
+                          (isSource
                             ? "Empty source text"
                             : "Empty translation");
                     const actions = slot.group_id
@@ -511,7 +542,7 @@ export function TranslationResultList({
                                 Add forms
                               </Button>
                             )}
-                          {slot.language === item.base_language && (
+                          {isSource && (
                             <span className="block text-muted-foreground">
                               Source
                             </span>

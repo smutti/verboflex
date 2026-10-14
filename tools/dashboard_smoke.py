@@ -436,6 +436,7 @@ def seed_multilingual(factory) -> dict:
     embedded, _, _ = work.seed(
         factory, name="Embedded source", format="qt_ts", embedded=True, base=False
     )
+    qt_base_product, qt_base_groups = workspace.seed_qt_base_catalog(factory)
     cap_product, cap_scope = workspace.SEARCH._seed_dataset(
         factory, name="Language catalog"
     )
@@ -480,6 +481,8 @@ def seed_multilingual(factory) -> dict:
         "source_only_product": str(source_product),
         "source_only_group": str(source),
         "embedded_product": str(embedded),
+        "qt_base_product": str(qt_base_product),
+        "qt_base_groups": [str(group) for group in qt_base_groups],
         "language_catalog_product": str(cap_product),
     }
 

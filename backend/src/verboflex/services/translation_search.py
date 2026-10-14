@@ -537,6 +537,11 @@ WITH authorized_products AS (
         scope.current_mapping_id AS mapping_id,
         scope.id AS scope_id,
         mapping.base_language,
+        bool_and(value.source_text IS NOT NULL AND value.translated_text IS NOT NULL
+            AND EXISTS (SELECT 1 FROM translation_value_locators AS embedded_locator
+                WHERE embedded_locator.value_id = value.id AND embedded_locator.format = 'qt_ts'
+                  AND embedded_locator.repository_side IN ('direct', 'translations')))
+            AS embedded_translation,
         casefold(key.raw_key COLLATE pg_unicode_fast) COLLATE "C" AS stable_key,
         value.language,
         CASE
@@ -676,7 +681,8 @@ WITH authorized_products AS (
     ) AS pending_work ON CAST(:work_status AS text) IS NOT NULL
     WHERE CAST(:work_status AS text) IS NULL OR (
         NOT raw_grouped.is_deleted AND raw_grouped.base_language IS NOT NULL
-        AND raw_grouped.language <> raw_grouped.base_language AND (
+        AND (raw_grouped.language <> raw_grouped.base_language
+            OR raw_grouped.embedded_translation) AND (
             (CAST(:work_status AS text) = 'source_changed' AND raw_grouped.source_changed)
             OR (CAST(:work_status AS text) = 'needs_review' AND proposal.state = 'draft'
                 AND NOT proposal.reconciliation_required AND pending_work.fresh)

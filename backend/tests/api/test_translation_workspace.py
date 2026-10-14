@@ -18,6 +18,7 @@ from verboflex.auth.rate_limits import get_redis_client
 from verboflex.main import app
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.product import Product
+from verboflex.models.product_mapping import ProductRepositoryMapping
 from verboflex.models.review import TranslationProposal, TranslationProposalValue
 from verboflex.models.translation import (
     LocalizationScope,
@@ -155,6 +156,96 @@ def test_principal_releases_connection_before_workspace_read(factory):
 
 def slots(body, index=0):
     return {slot["language"]: slot for slot in body["items"][index]["slots"]}
+
+
+def seed_qt_base_catalog(factory):
+    """Mixed source languages are not translations of the configured base locale."""
+    import hashlib
+
+    product, scope = SEARCH._seed_dataset(factory, name="Qt mixed source")
+    with factory.begin() as session:
+        mapping_id = session.get_one(LocalizationScope, scope).current_mapping_id
+        session.get_one(ProductRepositoryMapping, mapping_id).base_language = "it-IT"
+    ids = []
+    for index, source in enumerate(("Operazione completata", "Open the message")):
+        group = SEARCH._add_group(
+            factory,
+            product_id=product,
+            scope_id=scope,
+            raw_key=f"message-{index}",
+            language="it-IT",
+            values=({"source_text": source, "translated_text": "", "display_text": ""},),
+        )
+        with factory.begin() as session:
+            value = session.get_one(TranslationValue, group)
+            value.selector_bytes = json.dumps(
+                {"version": 1, "kind": "scalar", "fields": {}}
+            ).encode()
+            value.selector_digest = hashlib.sha256(value.selector_bytes).hexdigest()
+            session.get_one(TranslationValueLocator, group).format = "qt_ts"
+            WORK.revision(session, value, source=source, number=1)
+        ids.append(group)
+    return product, ids
+
+
+def test_qt_base_catalog_keeps_mixed_sources_separate_and_empty_translations_actionable(factory):
+    token = WORK.authority(factory)
+    product, groups = seed_qt_base_catalog(factory)
+    filters = dict(product_id=product, language="it-IT", work_status="needs_translation")
+    response = request(token, **filters)
+    assert response.status_code == 200, response.text
+    assert [item["source_text"] for item in response.json()["items"]] == [
+        "Operazione completata",
+        "Open the message",
+    ]
+    for item, group in zip(response.json()["items"], groups, strict=True):
+        slot = item["slots"][0]
+        assert slot["effective_text"] == ""
+        assert slot["matches_filters"]
+        assert slot["editable"] and slot["edit_field"] == "translated_text"
+        assert slot["group_id"] == str(group)
+    assert len(WORK.request(token, **filters).json()["items"]) == 2
+    # Searching the embedded source must still find the empty Italian translation.
+    assert request(token, **filters, q="Open the message").json()["items"][0]["source_text"] == (
+        "Open the message"
+    )
+    member = WORK.request(token, f"/{groups[1]}").json()["values"][0]
+    saved = asyncio.run(
+        SUPPORT.SUPPORT._request(
+            "PUT",
+            f"/api/v1/translations/{groups[1]}/proposal",
+            token=token,
+            json={
+                "expected_version": 0,
+                "values": [
+                    {
+                        "translation_value_id": member["id"],
+                        "selector_version": member["selector_version"],
+                        "selector_digest": member["selector_digest"],
+                        "basis_revision_number": member["history"][0]["revision_number"],
+                        "basis_digest": member["history"][0]["revision_digest"],
+                        "proposed_text": "Apri il messaggio",
+                    }
+                ],
+            },
+        )
+    )
+    assert saved.status_code == 200, saved.text
+    assert len(request(token, **filters).json()["items"]) == 1
+    assert len(WORK.request(token, **filters).json()["items"]) == 1
+    translated = request(token, product_id=product, q="Open the message").json()["items"][0]
+    assert translated["source_text"] == "Open the message"
+    assert translated["slots"][0]["effective_text"] == "Apri il messaggio"
+    assert request(token, product_id=product, language="it-IT", work_status="needs_review").json()[
+        "items"
+    ]
+    # Rejected/stale proposals cannot hide a missing translation.
+    with factory.begin() as session:
+        session.scalar(select(TranslationProposal)).state = "rejected"
+    assert len(request(token, **filters).json()["items"]) == 2
+    with factory() as session:
+        value = session.get_one(TranslationValue, groups[1])
+        assert value.source_text == "Open the message" and value.translated_text == ""
 
 
 def test_scope_read_projection_tracks_commits_and_rolls_back_with_values(factory):

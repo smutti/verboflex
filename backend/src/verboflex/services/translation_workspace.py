@@ -145,7 +145,11 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
         bool_and(locator.repository_side IN ('direct', 'translations')
             AND locator.format IN ('android_xml', 'json', 'ios_strings')
             AND value.source_text IS NOT NULL AND value.translated_text IS NULL) AS source_leaf,
-        bool_and(value.translated_text IS NOT NULL) AS translation_leaf
+        bool_and(value.translated_text IS NOT NULL) AS translation_leaf,
+        bool_and(coalesce(locator.format = 'qt_ts'
+            AND locator.repository_side IN ('direct', 'translations')
+            AND value.source_text IS NOT NULL AND value.translated_text IS NOT NULL, false))
+            AS embedded_translation
     FROM current
     JOIN translation_keys AS key
       ON key.scope_id = current.scope_id AND key.product_id = current.product_id
@@ -246,7 +250,8 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
                OR (:deleted = 'deleted' AND is_deleted))
           AND state_matches AND limit_matches
           AND (CAST(:work_status AS text) IS NULL OR (
-            NOT has_deleted AND base_language IS NOT NULL AND language <> base_language AND (
+            NOT has_deleted AND base_language IS NOT NULL
+            AND (language <> base_language OR embedded_translation) AND (
                 (:work_status = 'needs_translation' AND empty)
                 OR (:work_status = 'needs_review' AND pending_state = 'draft'
                     AND NOT pending_reconciliation_required)

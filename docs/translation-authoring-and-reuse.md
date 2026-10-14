@@ -38,6 +38,25 @@ an existing scalar to a plural, ICU/JSON plural dialects, Apple `.stringsdict` a
 XLIFF writeback are outside this release. Public GitHub projects support local
 creation/review; GitHub publication is still unavailable.
 
+## Qt source text and the base catalog
+
+Qt catalogs keep `<source>` and `<translation>` separately, including in the
+configured base-language file. The workspace displays embedded **Source text**
+separately from editable translations. The catalog locale does not establish the
+language of each source phrase: a project can mix Italian and English sources.
+No language guessing, automatic translation or copying into empty translations
+takes place. Saving a translation preserves the source and its message identity.
+
+**Needs translation** includes empty Qt translations even in the base catalog;
+a fresh saved proposal supplies the effective translation as usual. Source text
+alone never fills that queue or changes imported coverage. Product coverage still
+measures target languages, excluding the configured base locale. A source-language
+phrase left intentionally untranslated in Qt remains an empty translation field.
+
+The multilingual built-stack smoke checks mixed-language Qt sources, empty base
+translations, the filter, an initially blank editor and saving/reloading a proposal
+without changing the imported source or translation.
+
 ## Native plurals
 
 Android quantities come from Babel 2.17 / CLDR 46 cardinal categories. Qt forms
