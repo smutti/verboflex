@@ -227,14 +227,25 @@ async function revokedDirtyEditor() {
 }
 async function scenario() {
   const task=fixture.scenario;check(task && /^[a-z0-9_-]+$/.test(task.name));let result={name:task.name,product:task.product};
-  if(task.action==="branch-workflow"){
+  if(task.action==="configure-branches"){
+    stage="configure-approval-branches";
+    await page.goto(`${frontend}/admin/products/${task.product}/branches`);
+    await expect(page.getByRole("heading",{name:"Approval branches",exact:true})).toBeVisible();
+    await page.getByLabel("Translation source",{exact:true}).selectOption(task.mapping);
+    await page.getByLabel("Working branch",{exact:true}).fill(task.work_branch);
+    await page.getByLabel("PR destination",{exact:true}).fill(task.target_branch);
+    await capture(task.name,"branch-settings");
+    await activate(page.getByRole("button",{name:"Enable approval commits",exact:true}));
+    await expect(page.getByText("Approval commits enabled. The next approval will be saved on the working branch.",{exact:true})).toBeVisible();
+    result={...result,configured_in_browser:true,working_branch:task.work_branch,target_branch:task.target_branch};
+  }else if(task.action==="branch-workflow"){
     stage="approval-branch-history";
     await page.goto(`${frontend}/products/${task.product}/change-sets`);
     await expect(page.getByRole("heading",{name:"Approved changes",exact:true})).toBeVisible();
     await expect(page.getByRole("link",{name:/^Commit /}).first()).toBeVisible();
     await capture(task.name,"approval-commits");
     await activate(page.getByRole("button",{name:"Create pull request",exact:true}));
-    await expect(page.getByText("Create a PR from feature/translations to main?",{exact:true})).toBeVisible();
+    await expect(page.getByText("Create a PR from feature/verboflex to master?",{exact:true})).toBeVisible();
     await activate(page.getByRole("button",{name:"Confirm pull request",exact:true}));
     await expect(page.getByRole("link",{name:"Open pull request",exact:true})).toBeVisible({timeout:120000});
     await capture(task.name,"approval-pull-request");

@@ -406,4 +406,8 @@ def get_translation_group_detail(
         ) from error
     except Exception as error:
         _service_unavailable(error)
-    return _detail_response(access.group)
+    from verboflex.services.branch_workflow import workflow_for
+
+    response = _detail_response(access.group)
+    response.approval_commits_enabled = workflow_for(session, access.product_id) is not None
+    return response

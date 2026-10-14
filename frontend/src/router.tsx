@@ -20,6 +20,7 @@ import { Skeleton } from "./components/ui/skeleton";
 import { AdminAccessDenied } from "./features/admin/AdminAccessDenied";
 import { BitbucketConnectionPage } from "./features/admin/bitbucket/BitbucketConnectionPage";
 import { ProductMappingsPage } from "./features/admin/mappings/ProductMappingsPage";
+import { ApprovalBranchesPage } from "./features/admin/mappings/ApprovalBranchesPage";
 import { ProductPreviewPage } from "./features/admin/previews/ProductPreviewPage";
 import { ProductDetailLayout } from "./features/admin/products/ProductDetailLayout";
 import { ProductOverviewPage } from "./features/admin/products/ProductOverviewPage";
@@ -269,6 +270,19 @@ function ProductMappingsRoute({ accessToken }: { accessToken: string }) {
   );
 }
 
+function ApprovalBranchesRoute({ accessToken }: { accessToken: string }) {
+  const productId = useParams<"productId">().productId ?? "";
+  return (
+    <ProductDetailLayout hideTitle>
+      <ApprovalBranchesPage
+        key={`${productId}:${accessToken}`}
+        accessToken={accessToken}
+        productId={productId}
+      />
+    </ProductDetailLayout>
+  );
+}
+
 function ProductRepositoriesRoute({ accessToken }: { accessToken: string }) {
   const productId = useParams<"productId">().productId ?? "";
   return (
@@ -321,6 +335,10 @@ export function AdminApplicationRoutes({
       <Route
         path="products/:productId/mappings"
         element={<ProductMappingsRoute accessToken={accessToken} />}
+      />
+      <Route
+        path="products/:productId/branches"
+        element={<ApprovalBranchesRoute accessToken={accessToken} />}
       />
       <Route
         path="products/:productId/preview"

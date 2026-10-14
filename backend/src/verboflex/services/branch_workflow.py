@@ -39,10 +39,41 @@ def validate_branch(value: str) -> str:
 
 
 def workflow_for(
-    session: Session, product_id: UUID, *, lock: bool = False
+    session: Session, product_id: UUID, *, lock: bool = False, workflow_id: UUID | None = None
 ) -> BranchWorkflow | None:
     query = select(BranchWorkflow).where(BranchWorkflow.product_id == product_id)
+    if workflow_id is not None:
+        query = query.where(BranchWorkflow.id == workflow_id)
+    query = query.order_by(BranchWorkflow.created_at, BranchWorkflow.id).limit(1)
     return session.scalar(query.with_for_update() if lock else query)
+
+
+def workflow_for_mapping(
+    session: Session, product_id: UUID, mapping: ProductRepositoryMapping, *, lock: bool = False
+) -> BranchWorkflow | None:
+    # Mapping UUIDs change on publication. The repository/import-branch identity is stable.
+    query = (
+        select(BranchWorkflow)
+        .join(ProductRepositoryMapping, ProductRepositoryMapping.id == BranchWorkflow.mapping_id)
+        .where(
+            BranchWorkflow.product_id == product_id,
+            ProductRepositoryMapping.identity_key == mapping.identity_key,
+        )
+    )
+    return session.scalar(query.with_for_update(of=BranchWorkflow) if lock else query)
+
+
+def active_mapping(session: Session, workflow: BranchWorkflow) -> ProductRepositoryMapping | None:
+    from verboflex.models.product import Product
+
+    original = session.get_one(ProductRepositoryMapping, workflow.mapping_id)
+    product = session.get_one(Product, workflow.product_id, populate_existing=True)
+    return session.scalar(
+        select(ProductRepositoryMapping).where(
+            ProductRepositoryMapping.revision_id == product.active_revision_id,
+            ProductRepositoryMapping.identity_key == original.identity_key,
+        )
+    )
 
 
 def configure(
@@ -75,15 +106,14 @@ def configure(
     repository = session.get_one(Repository, side.repository_id)
     if repository.provider != "bitbucket":
         raise BranchWorkflowError("Approval commits currently require Bitbucket")
-    existing = workflow_for(session, product_id)
+    existing = workflow_for_mapping(session, product_id, mapping)
     if existing:
-        if (existing.mapping_id, existing.work_branch, existing.target_branch) == (
-            mapping_id,
+        if (existing.work_branch, existing.target_branch) == (
             work_branch,
             target_branch,
         ):
             return existing
-        raise BranchWorkflowError("This product already has an approval commit workflow")
+        raise BranchWorkflowError("This translation source already has an approval commit workflow")
     from verboflex.models.submission import ChangeSet, SubmissionBatch
 
     outstanding = session.scalar(
@@ -121,16 +151,21 @@ def queue_approval(
     activity_id: UUID,
     label: str,
 ) -> None:
-    workflow = workflow_for(session, product_id, lock=True)
-    if workflow is None:
+    if workflow_for(session, product_id) is None:
         return
     captured = capture_writeback_authority(
         session,
         selection=WritebackSelection(actor_id, (ProposalSelection(proposal_id, version),)),
         allow_expired_connection=True,
     )
-    if len(captured.mappings) != 1 or captured.mappings[0].mapping_id != workflow.mapping_id:
-        raise BranchWorkflowError("Approval commits are configured for a different mapping")
+    if len(captured.mappings) != 1:
+        raise BranchWorkflowError("Approve one translation source at a time")
+    mapping = session.get_one(ProductRepositoryMapping, captured.mappings[0].mapping_id)
+    workflow = workflow_for_mapping(session, product_id, mapping, lock=True)
+    if workflow is None:
+        raise BranchWorkflowError("Configure approval branches for this translation source first")
+    if session.scalar(select(BranchJob.id).where(BranchJob.activity_id == activity_id)):
+        return
     job = BranchJob(
         workflow_id=workflow.id,
         activity_id=activity_id,
@@ -168,11 +203,23 @@ def has_unpublished_commits(session: Session, workflow_id: UUID) -> bool:
     return latest is not None and latest != merged
 
 
-def request_pr(session: Session, *, product_id: UUID, actor_id: UUID) -> BranchJob:
+def request_pr(
+    session: Session, *, product_id: UUID, actor_id: UUID, workflow_id: UUID | None = None
+) -> BranchJob:
     _product_actor(session, product_id, actor_id, action=True)
-    workflow = workflow_for(session, product_id, lock=True)
+    if workflow_id is None:
+        ids = list(
+            session.scalars(
+                select(BranchWorkflow.id).where(BranchWorkflow.product_id == product_id).limit(2)
+            )
+        )
+        if len(ids) > 1:
+            raise BranchWorkflowError("Select the repository workflow to publish")
+    workflow = workflow_for(session, product_id, lock=True, workflow_id=workflow_id)
     if workflow is None:
         raise BranchWorkflowError("Approval commits are not configured")
+    if active_mapping(session, workflow) is None:
+        raise BranchWorkflowError("This translation source is no longer active")
     pending = session.scalar(
         select(BranchJob.id)
         .where(
@@ -213,11 +260,13 @@ def request_pr(session: Session, *, product_id: UUID, actor_id: UUID) -> BranchJ
 
 def retry_job(session: Session, *, product_id: UUID, actor_id: UUID, job_id: UUID) -> None:
     _product_actor(session, product_id, actor_id, action=True)
-    workflow = workflow_for(session, product_id, lock=True)
     job = session.get(BranchJob, job_id)
-    if workflow is None or job is None or job.workflow_id != workflow.id:
+    if job is None:
         raise BranchWorkflowError("Change unavailable")
-    if job.state not in {"blocked", "sending"}:
+    workflow = workflow_for(session, product_id, lock=True, workflow_id=job.workflow_id)
+    if workflow is None:
+        raise BranchWorkflowError("Change unavailable")
+    if job.state != "blocked":
         raise BranchWorkflowError("This change cannot be retried")
     # A persisted intent may already have reached Bitbucket. It can only be read.
     job.state = "sending" if job.intent is not None else "queued"

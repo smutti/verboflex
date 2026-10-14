@@ -272,6 +272,7 @@ class TranslationGroupDetailResponse(ClosedTranslationModel):
     comment_count: Annotated[int, Field(ge=0)]
     mutation_eligible: bool
     review_eligible: bool
+    approval_commits_enabled: bool = False
     source_context: (
         Annotated[list[TranslationSourceContextResponse], Field(max_length=10_000)] | None
     ) = None

@@ -14,6 +14,7 @@ vi.mock("./changeSetContext", () => ({
 }));
 const workflow = {
   enabled: true,
+  workflow_id: "first-workflow",
   repository: "translations",
   work_branch: "feature/translations",
   target_branch: "main",
@@ -62,6 +63,11 @@ it("shows each saved commit and opens a PR only on explicit confirmation", async
   await waitFor(() =>
     expect(api.createBranchPullRequest).toHaveBeenCalledTimes(1),
   );
+  expect(api.createBranchPullRequest).toHaveBeenCalledWith({
+    auth: "token",
+    path: { product_id: "product" },
+    query: { workflow_id: "first-workflow" },
+  });
 });
 it("shows queued approvals and prevents creating a PR before commits finish", async () => {
   api.getBranchWorkflow.mockResolvedValue({
@@ -100,4 +106,54 @@ it("keeps workflow data out of an unauthorized response", async () => {
   ).toBeVisible();
   expect(screen.queryByText("hello (it)")).not.toBeInTheDocument();
   expect(screen.queryByText("Legacy submissions")).not.toBeInTheDocument();
+});
+
+it("requires a new confirmation after selecting a different repository branch", async () => {
+  const user = userEvent.setup();
+  const workflows = [
+    {
+      id: "first-workflow",
+      repository: "translations",
+      work_branch: "feature/translations",
+      target_branch: "main",
+      active: true,
+    },
+    {
+      id: "second-workflow",
+      repository: "other",
+      work_branch: "work",
+      target_branch: "release",
+      active: true,
+    },
+  ];
+  api.getBranchWorkflow
+    .mockResolvedValueOnce({ data: { ...workflow, workflows } })
+    .mockResolvedValue({
+      data: {
+        ...workflow,
+        workflow_id: "second-workflow",
+        repository: "other",
+        work_branch: "work",
+        target_branch: "release",
+        workflows,
+      },
+    });
+  render(<BranchWorkflowPanel>Legacy</BranchWorkflowPanel>);
+  await user.click(
+    await screen.findByRole("button", { name: "Create pull request" }),
+  );
+  await user.selectOptions(
+    screen.getByLabelText("Repository branch"),
+    "second-workflow",
+  );
+  await screen.findByRole("button", { name: "Create pull request" });
+  expect(
+    screen.queryByRole("button", { name: "Confirm pull request" }),
+  ).not.toBeInTheDocument();
+  expect(api.createBranchPullRequest).not.toHaveBeenCalled();
+  expect(api.getBranchWorkflow).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      query: { before: undefined, workflow_id: "second-workflow" },
+    }),
+  );
 });

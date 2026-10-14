@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import select
 
 from tests.api.test_submission_reviews import review_api as review_api
-from tests.integration.test_branch_workflow import Remote, approve, run
+from tests.integration.test_branch_workflow import Remote, approve, republish, run
 from tests.integration.test_preview_jobs import clean_preview_database as clean_preview_database
 from tests.integration.test_preview_jobs import preview_session_factory as preview_session_factory
 from tests.legacy_product_fixtures import mirror_fixture_role
@@ -33,6 +33,10 @@ def test_api_configure_approve_history_then_explicit_pr(review_api):
     client, seed, sent, factory = review_api
     url = configure(client, seed)
     remote = Remote(seed, factory)
+    assert (
+        client.get(f"/api/v1/translations/{seed.value_ids[0]}").json()["approval_commits_enabled"]
+        is True
+    )
     job_id = approve(factory, seed, "Sintetica")
     waiting = client.get(url).json()
     assert waiting["items"][0]["state"] == "queued"
@@ -129,3 +133,72 @@ def test_merged_commit_is_not_offered_for_another_pr(review_api):
         pr.state, pr.commit_hash = "merged", remote.head
     assert client.get(url).json()["can_create_pr"] is False
     assert client.post(url + "/pull-request").status_code == 409
+
+
+def test_each_source_can_configure_branches_and_pr_requires_exact_selection(review_api):
+    client, seed, _, factory = review_api
+    url = configure(client, seed)
+    first_id = client.get(url).json()["workflow_id"]
+    _, mapping_id = republish(factory, seed, extra_mapping=True)
+    before = client.get(url).json()
+    assert len(before["available_mappings"]) == 2
+    assert before["workflows"][0]["active"] is True
+    response = client.put(
+        url,
+        json={
+            "mapping_id": str(mapping_id),
+            "work_branch": "feature/localization",
+            "target_branch": "release/2026",
+        },
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    second_id = data["workflow_id"]
+    assert second_id != first_id
+    assert len(data["workflows"]) == 2
+    assert data["work_branch"] == "feature/localization"
+    assert data["target_branch"] == "release/2026"
+    assert (
+        client.get(url, params={"workflow_id": first_id}).json()["work_branch"]
+        == "feature/translations"
+    )
+    assert client.get(url, params={"workflow_id": str(uuid4())}).status_code == 404
+    assert client.post(url + "/pull-request").status_code == 409
+    assert "Select" in client.post(url + "/pull-request").json()["detail"]
+    assert client.post(url + "/pull-request", params={"workflow_id": second_id}).status_code == 409
+    assert (
+        client.put(
+            url,
+            json={
+                "mapping_id": str(mapping_id),
+                "work_branch": "feature/localization",
+                "target_branch": "release/2026",
+            },
+        ).json()["workflow_id"]
+        == second_id
+    )
+    with factory() as session:
+        assert not list(session.scalars(select(BranchJob)))
+
+
+def test_pr_double_click_is_serialized(review_api):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    client, seed, _, factory = review_api
+    url = configure(client, seed)
+    remote = Remote(seed, factory)
+    run(factory, remote, approve(factory, seed, "Ready"))
+    barrier = Barrier(2)
+
+    def publish():
+        barrier.wait(timeout=10)
+        return client.post(url + "/pull-request").status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: publish(), range(2)))
+    assert sorted(results) == [202, 409]
+    with factory() as session:
+        job = session.scalars(select(BranchJob.id).where(BranchJob.kind == "pull_request")).one()
+    assert run(factory, remote, job)[0] == "open"
+    assert len(remote.prs) == 1

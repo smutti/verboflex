@@ -453,6 +453,8 @@ def transition(
     scope = _scope(session, product, row.scope_id)
     if row.version != expected_version:
         raise AuthoringError("This draft changed. Reload before continuing", 409)
+    if state is not None and row.state == state:
+        raise AuthoringError("This draft is already in the requested state", 409)
     if state is None:
         record_audit(session, actor_id=actor_id, action="authoring.deleted", entity_id=row.id)
         session.delete(row)

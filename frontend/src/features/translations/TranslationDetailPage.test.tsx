@@ -992,6 +992,33 @@ describe("Phase 5 scalar proposal tracer RED", () => {
 });
 
 describe("Phase 5 complete review controls", () => {
+  it("routes approved branch changes to history without offering legacy submission", async () => {
+    const data = detailFixture();
+    const fresh = proposalProjection(data, "Approved commit");
+    data.approval_commits_enabled = true;
+    data.pending_change = {
+      version: 7,
+      state: "approved",
+      reconciliation_required: false,
+      updated_by: fresh.updated_by,
+      updated_at: fresh.updated_at,
+      values: fresh.pending,
+    };
+    vi.mocked(getTranslationGroup).mockResolvedValue({
+      data,
+      error: undefined,
+    });
+    mount("admin");
+    expect(
+      await screen.findByText(/Each approval queues a separate commit/),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Review for submission" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "View change-set history" }),
+    ).toHaveAttribute("href", "/products/product/change-sets/history");
+  });
   it.each(["viewer", "translator"] as const)(
     "keeps submission controls hidden for %s with an Approved proposal",
     async (role) => {

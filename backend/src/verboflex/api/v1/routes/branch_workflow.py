@@ -12,20 +12,25 @@ from sqlalchemy.orm import Session
 from verboflex.auth.principal import CurrentPrincipal
 from verboflex.auth.product_access import product_roles
 from verboflex.db.session import get_db_session
-from verboflex.models.branch_workflow import BranchJob
+from verboflex.models.branch_workflow import BranchJob, BranchWorkflow
+from verboflex.models.product_mapping import ProductMappingRepositorySide, ProductRepositoryMapping
 from verboflex.models.repository import Repository
 from verboflex.schemas.branch_workflow import (
     BranchChange,
+    BranchMappingChoice,
+    BranchWorkflowChoice,
     BranchWorkflowResponse,
     ConfigureBranchWorkflow,
 )
 from verboflex.services.branch_workflow import (
     BranchWorkflowError,
+    active_mapping,
     configure,
     has_unpublished_commits,
     request_pr,
     retry_job,
     workflow_for,
+    workflow_for_mapping,
 )
 from verboflex.services.submission_reviews import (
     SubmissionReviewDenied,
@@ -55,18 +60,58 @@ def get_workflow(
     principal: CurrentPrincipal,
     session: DB,
     before: Annotated[int | None, Query(ge=1)] = None,
+    workflow_id: UUID | None = None,
 ) -> BranchWorkflowResponse:
     try:
-        _product_actor(session, product_id, principal.user_id, action=False)
-        workflow = workflow_for(session, product_id)
-        if workflow is None:
-            return BranchWorkflowResponse(enabled=False)
-        repository = session.get_one(Repository, workflow.repository_id)
-        can_publish = bool(
-            {"admin", "product_manager_reviewer"}.intersection(
-                product_roles(session, principal.user_id, product_id)
+        product, _ = _product_actor(session, product_id, principal.user_id, action=False)
+        roles = product_roles(session, principal.user_id, product_id)
+        workflows = list(
+            session.scalars(
+                select(BranchWorkflow)
+                .where(BranchWorkflow.product_id == product_id)
+                .order_by(BranchWorkflow.created_at, BranchWorkflow.id)
             )
         )
+        choices = [
+            BranchWorkflowChoice(
+                id=w.id,
+                repository=session.get_one(Repository, w.repository_id).repository_slug,
+                work_branch=w.work_branch,
+                target_branch=w.target_branch,
+                active=active_mapping(session, w) is not None,
+            )
+            for w in workflows
+        ]
+        mappings = []
+        if "admin" in roles:
+            for m, side, repo in session.execute(
+                select(ProductRepositoryMapping, ProductMappingRepositorySide, Repository)
+                .select_from(ProductRepositoryMapping)
+                .join(ProductMappingRepositorySide)
+                .join(Repository)
+                .where(
+                    ProductRepositoryMapping.revision_id == product.active_revision_id,
+                    ProductMappingRepositorySide.role.in_(("direct", "translations")),
+                    Repository.provider == "bitbucket",
+                )
+                .order_by(Repository.repository_slug, ProductRepositoryMapping.id)
+            ):
+                configured = workflow_for_mapping(session, product_id, m)
+                mappings.append(
+                    BranchMappingChoice(
+                        mapping_id=m.id,
+                        repository=repo.repository_slug,
+                        source_branch=side.source_branch,
+                        workflow_id=configured.id if configured else None,
+                    )
+                )
+        workflow = workflow_for(session, product_id, workflow_id=workflow_id)
+        if workflow_id is not None and workflow is None:
+            raise SubmissionReviewUnavailable("Workflow unavailable")
+        if workflow is None:
+            return BranchWorkflowResponse(enabled=False, available_mappings=mappings)
+        repository = session.get_one(Repository, workflow.repository_id)
+        can_publish = bool({"admin", "product_manager_reviewer"}.intersection(roles))
         query = select(BranchJob).where(BranchJob.workflow_id == workflow.id)
         if before is not None:
             query = query.where(BranchJob.sequence < before)
@@ -113,11 +158,15 @@ def get_workflow(
         ]
         return BranchWorkflowResponse(
             enabled=True,
+            workflow_id=workflow.id,
+            workflows=choices,
+            available_mappings=mappings,
             repository=repository.repository_slug,
             work_branch=workflow.work_branch,
             target_branch=workflow.target_branch,
             can_publish=can_publish,
             can_create_pr=can_publish
+            and active_mapping(session, workflow) is not None
             and pending is None
             and has_unpublished_commits(session, workflow.id),
             items=items,
@@ -133,11 +182,11 @@ def put_workflow(
     product_id: UUID, principal: CurrentPrincipal, session: DB, payload: ConfigureBranchWorkflow
 ) -> BranchWorkflowResponse:
     try:
-        configure(
+        configured = configure(
             session, product_id=product_id, actor_id=principal.user_id, **payload.model_dump()
         )
         session.commit()
-        return get_workflow(product_id, principal, session)
+        return get_workflow(product_id, principal, session, workflow_id=configured.id)
     except Exception as error:
         session.rollback()
         _error(error)
@@ -150,11 +199,15 @@ def put_workflow(
     response_model=BranchWorkflowResponse,
     status_code=202,
 )
-def create_pr(product_id: UUID, principal: CurrentPrincipal, session: DB) -> BranchWorkflowResponse:
+def create_pr(
+    product_id: UUID, principal: CurrentPrincipal, session: DB, workflow_id: UUID | None = None
+) -> BranchWorkflowResponse:
     try:
-        request_pr(session, product_id=product_id, actor_id=principal.user_id)
+        job = request_pr(
+            session, product_id=product_id, actor_id=principal.user_id, workflow_id=workflow_id
+        )
         session.commit()
-        return get_workflow(product_id, principal, session)
+        return get_workflow(product_id, principal, session, workflow_id=job.workflow_id)
     except Exception as error:
         session.rollback()
         _error(error)
@@ -173,7 +226,8 @@ def retry(
     try:
         retry_job(session, product_id=product_id, actor_id=principal.user_id, job_id=job_id)
         session.commit()
-        return get_workflow(product_id, principal, session)
+        job = session.get_one(BranchJob, job_id)
+        return get_workflow(product_id, principal, session, workflow_id=job.workflow_id)
     except Exception as error:
         session.rollback()
         _error(error)

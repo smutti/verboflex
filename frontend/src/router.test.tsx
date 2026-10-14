@@ -973,6 +973,7 @@ describe("session routes", () => {
       "Team",
       "Repositories",
       "Translation sources",
+      "Approval branches",
       "Preview and import",
     ]);
     expect(

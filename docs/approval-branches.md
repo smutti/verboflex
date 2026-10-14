@@ -12,7 +12,13 @@ commits on the same working branch. Merging remains a Bitbucket action.
 
 ## Configuration
 
-An administrator enables the workflow with
+In **Product configuration → Approval branches**, an administrator selects a
+published translation source, its **Working branch** and its **PR destination**,
+then chooses **Enable approval commits**. Branch names are configurable for every
+product; no repository name or branch name is built into the workflow. The import
+branch is suggested as the PR destination, independently of the working branch.
+
+The same database-only action is available through
 `PUT /api/v1/products/{product_id}/branch-workflow`:
 
 ```json
@@ -26,8 +32,13 @@ An administrator enables the workflow with
 Both branches must already exist. The working branch must differ from the import
 branch and the PR destination. With a separate code/translation mapping, only the
 translation repository is written. The code repository remains an import source.
-One active mapping per product can use this workflow, and a repository working
-branch cannot be shared by two products. Configuration is immutable once enabled.
+Each translation source can have its own workflow. With multiple sources, configure
+each before approving its changes; **Change sets** lets users select the repository
+branch and its history. A repository working branch cannot be shared by two
+workflows. Branch configuration is immutable once enabled, preserving the meaning
+of retained intents and history. Publishing a new configuration revision with the
+same repository/import-branch identity retains the existing workflow; newly approved
+changes use the newly imported source. A removed source retains read-only history.
 Existing change sets must be completed before enabling it. Existing approvals are
 not sent retroactively; the workflow starts with the next approval. Products
 without this configuration keep the existing reviewed change-set workflow.
@@ -35,8 +46,11 @@ without this configuration keep the existing reviewed change-set workflow.
 ## Execution and recovery
 
 Approval and its outbox row commit in one database transaction. Celery dispatches
-pending rows every ten seconds and serializes effects per working branch. Each
-commit includes a stable operation ID and content manifest. Provider reads and
+pending rows every ten seconds and serializes effects per working branch. The
+dispatcher considers only the first unfinished job per workflow, so a blocked backlog
+does not prevent other products from progressing. Explicit recovery is eligible for
+the next dispatch immediately. Each commit includes a stable operation ID and
+content manifest. Provider reads and
 writes never run inside HTTP handlers. The API enforces current product roles;
 workers recheck membership, product configuration, import identity and constraints
 before sending. A reviewer can request the PR or retry a blocked operation.
@@ -55,16 +69,28 @@ An unresolved operation stops later commits and PR creation. The approval snapsh
 commit receipt and content-free audit events remain available for investigation.
 Open PR state is refreshed in the background, normally once per minute.
 
+When a product has more than one workflow, an explicit PR request must include
+`workflow_id` in `POST /products/{product_id}/branch-workflow/pull-request`.
+The history endpoint accepts the same query parameter. The API rejects an ambiguous
+PR request instead of choosing a destination. Neither configuration, approval nor
+background polling opens a PR. The translation detail explains approval commits
+and links to their history instead of offering the legacy submission action.
+
 ## Verification
 
 `test_branch_workflow.py` covers both imported edits and new translations,
-consecutive approvals, queued snapshots, timeouts, external changes, permission
-revocation and explicit PR creation. The API tests exercise configuration, product
+consecutive approvals, concurrent duplicate approvals and deliveries, worker crashes,
+commit and PR timeouts, external changes, permission revocation, long paths,
+multiple translation sources, equivalent configuration publication and explicit PR
+creation. The API tests exercise configuration, product
 visibility, publication roles, duplicate requests and the legacy submission boundary.
 
 The built-stack browser test uses only synthetic repositories and the TLS Bitbucket
-fixture. It verifies actual worker dispatch, multiple commits on one branch, no PR
-before an explicit browser action, and the interface at 320 pixels and 200% zoom:
+fixture. It configures branches through the browser and verifies actual worker
+dispatch, separate commits on `feature/verboflex`, duplicate approval rejection,
+zero PRs until the explicit browser action, then exactly one PR to `master`, and
+the interface at 320 pixels and 200% zoom. Other branch names are covered by the
+unit and integration tests:
 
 ```sh
 BRANCH_WORKFLOW_SMOKE_ONLY=1 PHASE8_HTTP_SETUP=1 \

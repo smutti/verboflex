@@ -38,6 +38,7 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
   const [confirm, setConfirm] = useState(false);
   const [reload, setReload] = useState(0);
   const [before, setBefore] = useState<number>();
+  const [workflowId, setWorkflowId] = useState<string>();
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
@@ -46,7 +47,7 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
         const result = await getBranchWorkflow({
           auth: accessToken,
           path: { product_id: productId },
-          query: { before },
+          query: { before, workflow_id: workflowId },
           signal: controller.signal,
         });
         if (controller.signal.aborted) return;
@@ -67,7 +68,7 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [accessToken, productId, reload, before]);
+  }, [accessToken, productId, reload, before, workflowId]);
   async function act(jobId?: string) {
     setBusy(true);
     setFailure(false);
@@ -80,6 +81,7 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
         : await createBranchPullRequest({
             auth: accessToken,
             path: { product_id: productId },
+            query: { workflow_id: data?.workflow_id ?? undefined },
           });
       if (!result.data) {
         if ([401, 403, 404].includes(result.response?.status ?? 0))
@@ -120,6 +122,30 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
         <>
           <div>
             <h2 className="text-heading font-semibold">Approved changes</h2>
+            {(data.workflows?.length ?? 0) > 1 && (
+              <label className="my-3 grid gap-2">
+                Repository branch
+                <select
+                  className="min-h-11 min-w-0 w-full rounded-md border bg-background px-3"
+                  value={data.workflow_id ?? ""}
+                  disabled={busy}
+                  onChange={(event) => {
+                    setWorkflowId(event.target.value);
+                    setBefore(undefined);
+                    setConfirm(false);
+                    setData(undefined);
+                  }}
+                >
+                  {data.workflows?.map((workflow) => (
+                    <option key={workflow.id} value={workflow.id}>
+                      {workflow.repository} · {workflow.work_branch} →{" "}
+                      {workflow.target_branch}
+                      {workflow.active ? "" : " (inactive)"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <p className="text-muted-foreground">
               Each approval is saved as a commit in {data.repository} on{" "}
               <strong>{data.work_branch}</strong>.
@@ -133,7 +159,7 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
             <div>
               {!confirm ? (
                 <Button
-                  disabled={!data.can_create_pr || busy}
+                  disabled={!data.can_create_pr || busy || failure}
                   onClick={() => setConfirm(true)}
                 >
                   Create pull request
@@ -143,7 +169,10 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                   <p>
                     Create a PR from {data.work_branch} to {data.target_branch}?
                   </p>
-                  <Button disabled={busy} onClick={() => void act()}>
+                  <Button
+                    disabled={busy || failure || !data.can_create_pr}
+                    onClick={() => void act()}
+                  >
                     {busy ? "Creating…" : "Confirm pull request"}
                   </Button>
                   <Button

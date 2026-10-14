@@ -1280,7 +1280,7 @@ def branch_workflow_smoke(h: Harness) -> None:
     repositories = dict(control.get("repositories", {}))
     repositories[slug] = {"fixture": "json"}
     branches = dict(control.get("branches", {}))
-    branches[slug] = {"feature/translations": p6.HEAD}
+    branches[slug] = {"feature/verboflex": p6.HEAD, "master": p6.HEAD}
     h.control(repositories=repositories, branches=branches, write_faults={})
     seeded = h.db("seed-extra", {"actor_id": h.fixture["actor_id"], "scenarios": [
         {"name": "approval-branch", "mappings": [{"slug": slug}]}
@@ -1291,10 +1291,8 @@ def branch_workflow_smoke(h: Harness) -> None:
     branches.pop(slug)
     h.control(branches=branches)
     product = scenario["product"]
-    h.api(f"/products/{product}/branch-workflow", "PUT", {
-        "mapping_id": scenario["mappings"][0]["mapping"],
-        "work_branch": "feature/translations", "target_branch": "main",
-    })
+    h.browser({"name": "approval-branch-config", "action": "configure-branches", "product": product,
+        "mapping": scenario["mappings"][0]["mapping"], "work_branch": "feature/verboflex", "target_branch": "master"})
     h.compose("up", "-d", "scheduler")
     h.prepare(scenario, replacement="First approved translation")
     endpoint = f"/products/{product}/branch-workflow"
@@ -1311,8 +1309,11 @@ def branch_workflow_smoke(h: Harness) -> None:
             "basis_revision_number": v["history"][0]["revision_number"],
             "basis_digest": v["history"][0]["revision_digest"]} for v in detail["values"]],
     })
-    h.api(f"/translations/{group['id']}/proposal/state", "POST", {
-        "expected_version": saved["version"], "target_state": "approved"})
+    approval_url = f"/translations/{group['id']}/proposal/state"
+    approval_payload = {"expected_version": saved["version"], "target_state": "approved"}
+    h.api(approval_url, "POST", approval_payload)
+    # A lost response or double-click must not enqueue another commit.
+    h.api(approval_url, "POST", approval_payload, expected=409)
     second = h.wait(lambda: h.api(endpoint), lambda d: d["items"][0]["state"] in ("committed", "blocked"), seconds=120)
     assert second["items"][0]["state"] == "committed", second
     assert len(second["items"]) == len(first["items"]) + 1
@@ -1327,7 +1328,8 @@ def branch_workflow_smoke(h: Harness) -> None:
     write_json(h.runtime / "branch-workflow-evidence.json", {
         "commits": len(second["items"]), "pull_requests": 1,
         "approval_snapshots": True, "sequential_commits": True, "explicit_pr": True,
-        "working_branch": "feature/translations", "target": "main",
+        "browser_configuration": True, "duplicate_approval_rejected": True,
+        "working_branch": "feature/verboflex", "target": "master",
     })
     destination = Path(h.fixture["evidence_dir"])
     destination.mkdir(parents=True, exist_ok=True)

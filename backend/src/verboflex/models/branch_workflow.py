@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     CheckConstraint,
+    Computed,
     DateTime,
     ForeignKey,
     Identity,
@@ -24,7 +25,7 @@ from verboflex.db.base import Base
 class BranchWorkflow(Base):
     __tablename__ = "branch_workflows"
     __table_args__ = (
-        UniqueConstraint("product_id"),
+        UniqueConstraint("mapping_id"),
         UniqueConstraint("repository_id", "work_branch"),
         CheckConstraint("work_branch <> target_branch", name="distinct_branches"),
     )
@@ -84,7 +85,10 @@ class BranchFile(Base):
     workflow_id: Mapped[UUID] = mapped_column(
         ForeignKey("branch_workflows.id", ondelete="RESTRICT"), primary_key=True
     )
-    path: Mapped[str] = mapped_column(String(4096), primary_key=True)
+    path_digest: Mapped[str] = mapped_column(
+        String(32), Computed("md5(path)", persisted=True), primary_key=True
+    )
+    path: Mapped[str] = mapped_column(String(4096))
     baseline_sha256: Mapped[str] = mapped_column(String(64))
     content_sha256: Mapped[str] = mapped_column(String(64))
     edits: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)

@@ -2033,6 +2033,28 @@ export type BranchChange = {
 };
 
 /**
+ * BranchMappingChoice
+ */
+export type BranchMappingChoice = {
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Repository
+     */
+    repository: string;
+    /**
+     * Source Branch
+     */
+    source_branch: string;
+    /**
+     * Workflow Id
+     */
+    workflow_id: string | null;
+};
+
+/**
  * BranchReceiptResponse
  */
 export type BranchReceiptResponse = {
@@ -2051,9 +2073,39 @@ export type BranchReceiptResponse = {
 };
 
 /**
+ * BranchWorkflowChoice
+ */
+export type BranchWorkflowChoice = {
+    /**
+     * Active
+     */
+    active: boolean;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Repository
+     */
+    repository: string;
+    /**
+     * Target Branch
+     */
+    target_branch: string;
+    /**
+     * Work Branch
+     */
+    work_branch: string;
+};
+
+/**
  * BranchWorkflowResponse
  */
 export type BranchWorkflowResponse = {
+    /**
+     * Available Mappings
+     */
+    available_mappings?: Array<BranchMappingChoice>;
     /**
      * Can Create Pr
      */
@@ -2086,6 +2138,14 @@ export type BranchWorkflowResponse = {
      * Work Branch
      */
     work_branch?: string | null;
+    /**
+     * Workflow Id
+     */
+    workflow_id?: string | null;
+    /**
+     * Workflows
+     */
+    workflows?: Array<BranchWorkflowChoice>;
 };
 
 /**
@@ -5307,6 +5367,10 @@ export type TranslationErrorResponse = {
  * TranslationGroupDetailResponse
  */
 export type TranslationGroupDetailResponse = {
+    /**
+     * Approval Commits Enabled
+     */
+    approval_commits_enabled?: boolean;
     /**
      * Base Language
      */
@@ -10032,6 +10096,10 @@ export type GetBranchWorkflowData = {
          * Before
          */
         before?: number | null;
+        /**
+         * Workflow Id
+         */
+        workflow_id?: string | null;
     };
     url: '/api/v1/products/{product_id}/branch-workflow';
 };
@@ -10126,7 +10194,12 @@ export type CreateBranchPullRequestData = {
          */
         product_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Workflow Id
+         */
+        workflow_id?: string | null;
+    };
     url: '/api/v1/products/{product_id}/branch-workflow/pull-request';
 };
 

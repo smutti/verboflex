@@ -692,7 +692,13 @@ function LoadedDetail({
             >
               View change-set history
             </Link>
-            {canSubmitReview && (
+            {detail.approval_commits_enabled && (
+              <p>
+                Each approval queues a separate commit on the working branch.
+                Open a pull request from Change sets when ready.
+              </p>
+            )}
+            {canSubmitReview && !detail.approval_commits_enabled && (
               <Button
                 className={actionClass}
                 onClick={(event) => {

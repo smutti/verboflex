@@ -71,8 +71,9 @@ Git history does not need the original development commits.
 
 The smoke also verifies [approval commits](approval-branches.md): consecutive
 approvals become separate commits on one working branch, and a PR is created only
-after the explicit browser action. The scenario checks 320-pixel and 200% zoom
-layouts and uses a synthetic Bitbucket provider.
+after the explicit browser action. The scenario also configures approval branches
+through the admin interface and rejects a repeated approval without another commit.
+It checks 320-pixel and 200% zoom layouts and uses a synthetic Bitbucket provider.
 
 ## Release boundary
 

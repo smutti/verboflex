@@ -30,10 +30,9 @@ from verboflex.localization.writing.registry import render_file
 from verboflex.models.bitbucket_connection import BitbucketConnection
 from verboflex.models.branch_workflow import BranchFile, BranchJob, BranchWorkflow
 from verboflex.models.product import Product
-from verboflex.models.product_mapping import ProductRepositoryMapping
 from verboflex.models.repository import Repository
 from verboflex.models.translation import LocalizationScope, TranslationKey
-from verboflex.services.branch_workflow import BranchWorkflowError
+from verboflex.services.branch_workflow import BranchWorkflowError, active_mapping
 from verboflex.services.submission_codec import decode_approval_snapshot, encode_approval_snapshot
 from verboflex.services.submission_selection import (
     SubmissionReadAdapter,
@@ -44,6 +43,15 @@ from verboflex.services.writeback_authority import CapturedWritebackAuthority
 
 LEASE = timedelta(minutes=10)
 TERMINAL = ("committed", "open", "merged", "declined")
+
+
+def _branch_file(session: Session, workflow_id: UUID, path: str) -> BranchFile | None:
+    # A bounded index supports long repository paths. Never trust the digest alone.
+    digest = hashlib.md5(path.encode(), usedforsecurity=False).hexdigest()
+    row = session.get(BranchFile, (workflow_id, digest))
+    if row is not None and row.path != path:
+        raise BranchWorkflowError("file_identity_conflict")
+    return row
 
 
 def _lock(session: Session, job_id: UUID) -> tuple[BranchWorkflow, BranchJob]:
@@ -62,11 +70,11 @@ def _lock(session: Session, job_id: UUID) -> tuple[BranchWorkflow, BranchJob]:
 
 def _authorize(session: Session, workflow: BranchWorkflow, job: BranchJob) -> None:
     product = session.get_one(Product, workflow.product_id, populate_existing=True)
-    mapping = session.get_one(ProductRepositoryMapping, workflow.mapping_id)
+    mapping = active_mapping(session, workflow)
     if (
         not product.is_active
         or product.deleted_at is not None
-        or product.active_revision_id != mapping.revision_id
+        or mapping is None
         or not {"admin", "product_manager_reviewer"}.intersection(
             product_roles(session, job.actor_id, product.id)
         )
@@ -81,8 +89,8 @@ def _authorize(session: Session, workflow: BranchWorkflow, job: BranchJob) -> No
             scope = session.get(LocalizationScope, m.scope_id, populate_existing=True)
             if (
                 scope is None
-                or m.mapping_id != workflow.mapping_id
-                or scope.current_mapping_id != workflow.mapping_id
+                or m.mapping_id != mapping.id
+                or scope.current_mapping_id != mapping.id
                 or scope.active_execution_id != m.execution_id
             ):
                 raise BranchWorkflowError("import_changed")
@@ -193,7 +201,7 @@ async def _prepare(
             )
             total += len(snapshot.parser_input.content)
             with factory() as s:
-                previous = s.get(BranchFile, (workflow.id, file.authority.path))
+                previous = _branch_file(s, workflow.id, file.authority.path)
                 adopted = False
                 if previous is not None and previous.baseline_sha256 != file.authority.sha256:
                     # A refreshed import can incorporate our already-merged file.
@@ -288,7 +296,7 @@ def _record(
             job.state, job.commit_hash, job.error_code = "committed", receipt.commit_hash, None
             assert job.intent is not None
             for f in cast(list[dict[str, object]], job.intent["files"]):
-                row = s.get(BranchFile, (workflow.id, str(f["path"])))
+                row = _branch_file(s, workflow.id, str(f["path"]))
                 if row is None:
                     row = BranchFile(workflow_id=workflow.id, path=str(f["path"]))
                     s.add(row)
@@ -415,15 +423,15 @@ async def refresh_branch_pr(
         outcome = await writes.read_pull_request(
             s, intent=intent, pull_request_id=pr_id, allow_rebased=True
         )
-    if outcome.state == "verified" and outcome.receipt is not None:
-        with factory.begin() as s:
-            _, current = _lock(s, job_id)
-            if current.state == "open":
+    with factory.begin() as s:
+        _, current = _lock(s, job_id)
+        if current.state == "open":
+            current.updated_at = datetime.now(UTC)
+            if outcome.state == "verified" and outcome.receipt is not None:
                 current.state = {
                     "OPEN": "open",
                     "MERGED": "merged",
                     "DECLINED": "declined",
                     "SUPERSEDED": "declined",
                 }[outcome.receipt.state]
-                current.updated_at = datetime.now(UTC)
                 current.commit_hash = outcome.receipt.source_commit
