@@ -12,6 +12,7 @@ from verboflex.auth.product_access import current_product_role, membership_stamp
 from verboflex.models.branch_workflow import BranchJob, BranchWorkflow
 from verboflex.models.product_mapping import ProductMappingRepositorySide, ProductRepositoryMapping
 from verboflex.models.repository import Repository
+from verboflex.models.review import TranslationProposal
 from verboflex.services.submission_codec import encode_approval_snapshot
 from verboflex.services.submission_reviews import SubmissionReviewDenied, _product_actor
 from verboflex.services.writeback_authority import (
@@ -166,6 +167,9 @@ def queue_approval(
         raise BranchWorkflowError("Configure approval branches for this translation source first")
     if session.scalar(select(BranchJob.id).where(BranchJob.activity_id == activity_id)):
         return
+    proposal = session.get(TranslationProposal, proposal_id)
+    if proposal is not None:
+        proposal.target_branch, proposal.target_commit_hash = workflow.target_branch, None
     job = BranchJob(
         workflow_id=workflow.id,
         activity_id=activity_id,

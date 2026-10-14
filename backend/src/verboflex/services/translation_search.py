@@ -104,6 +104,8 @@ class PendingTranslationSummary:
     state: StateFilter
     reconciliation_required: bool
     value_count: int
+    target_branch: str | None = None
+    target_integrated: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,6 +248,8 @@ class PendingTranslationDetail:
     updated_by: UUID
     updated_at: datetime
     values: tuple[PendingTranslationValueDetail, ...]
+    target_branch: str | None = None
+    target_integrated: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -359,7 +363,8 @@ def _scope_digest(
         proposals = session.execute(
             _scoped(
                 text(f"""
-            SELECT proposal.id, proposal.version, proposal.state, proposal.reconciliation_required
+            SELECT proposal.id, proposal.version, proposal.state, proposal.reconciliation_required,
+                   proposal.target_branch, proposal.target_commit_hash
             FROM ({_AUTHORIZED_ACTIVE_PRODUCTS_SQL}) AS product
             JOIN localization_scopes AS scope ON scope.product_id = product.id
               AND scope.active_execution_id IS NOT NULL
@@ -701,10 +706,15 @@ SELECT page.*, validity.cursor_valid, mapping.base_language AS source_language,
            AS provenance_repository_name,
        proposal.version AS pending_version,
        proposal.state AS pending_state,
+       proposal.target_branch,
+       (proposal.state='approved' AND proposal.target_commit_hash IS NOT NULL) AS target_integrated,
        CASE WHEN proposal.id IS NULL THEN NULL ELSE
-           proposal.reconciliation_required
+           (proposal.reconciliation_required
            OR coalesce(pending_projection.basis_stale, false)
-           OR coalesce(pending_projection.pending_value_count, 0) <> page.value_count
+           OR coalesce(pending_projection.pending_value_count, 0) <> page.value_count)
+           AND NOT (proposal.state='approved' AND proposal.target_commit_hash IS NOT NULL
+               AND pending_projection.pending_value_count = page.value_count
+               AND coalesce(pending_projection.matches_imported, false))
        END AS pending_reconciliation_required,
        pending_projection.pending_value_count,
        coalesce(discussion.comment_count, 0)::integer AS comment_count
@@ -719,12 +729,15 @@ LEFT JOIN translation_proposals AS proposal
 LEFT JOIN LATERAL (
     SELECT
         count(*)::integer AS pending_value_count,
+        bool_and(coalesce(NOT member.is_deleted
+            AND member.display_text = pending.proposed_text, false)) AS matches_imported,
         bool_or(
             latest.revision_number IS NULL
             OR pending.basis_revision_number <> latest.revision_number
             OR pending.basis_digest <> latest.revision_digest
         ) AS basis_stale
     FROM translation_proposal_values AS pending
+    LEFT JOIN translation_values AS member ON member.id=pending.translation_value_id
     LEFT JOIN LATERAL (
         SELECT revision.revision_number, revision.revision_digest
         FROM translation_value_revisions AS revision
@@ -931,12 +944,14 @@ WITH authorized_products AS (
       )
 )
 SELECT proposal.version, proposal.state, proposal.reconciliation_required,
+       proposal.target_branch, proposal.target_commit_hash,
        proposal.updated_by, proposal.updated_at,
        pending.translation_value_id, pending.selector_version,
        pending.selector_digest, pending.basis_revision_number,
        pending.basis_digest, pending.proposed_text,
        current_value.id AS current_value_id,
        current_value.is_deleted AS current_value_deleted,
+       current_value.display_text AS current_text,
        current_value.effective_max_chars,
        latest.revision_number AS current_revision_number,
        latest.revision_digest AS current_revision_digest
@@ -1139,6 +1154,12 @@ def _pending_detail(
         or basis_stale
         or len(proposal_rows) != current_value_count
     )
+    integrated = first["state"] == "approved" and first["target_commit_hash"] is not None
+    if integrated and len(proposal_rows) == current_value_count and all(
+        not row["current_value_deleted"] and row["current_text"] == row["proposed_text"]
+        for row in proposal_rows
+    ):
+        reconciliation_required = False
     values: list[PendingTranslationValueDetail] = []
     for row in proposal_rows:
         text_value = str(row["proposed_text"])
@@ -1174,6 +1195,8 @@ def _pending_detail(
         updated_by=UUID(str(first["updated_by"])),
         updated_at=cast(datetime, first["updated_at"]),
         values=tuple(values),
+        target_branch=first["target_branch"],
+        target_integrated=integrated,
     )
 
 
@@ -1424,6 +1447,8 @@ def search_translations(
                     state=cast(StateFilter, row["pending_state"]),
                     reconciliation_required=row["pending_reconciliation_required"],
                     value_count=row["pending_value_count"],
+                    target_branch=row["target_branch"],
+                    target_integrated=row["target_integrated"],
                 )
                 if row["pending_version"] is not None
                 else None

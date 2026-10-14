@@ -238,6 +238,24 @@ async function scenario() {
     await activate(page.getByRole("button",{name:"Enable approval commits",exact:true}));
     await expect(page.getByText("Approval commits enabled. The next approval will be saved on the working branch.",{exact:true})).toBeVisible();
     result={...result,configured_in_browser:true,working_branch:task.work_branch,target_branch:task.target_branch};
+  }else if(task.action==="translation-status"){
+    stage="translation-target-status";
+    await page.goto(`${frontend}/products/${task.product}/strings`);
+    const row=page.locator(`[data-group-id="${task.group}"]`);
+    await expect(row).toBeVisible();
+    if(task.status==="integrated"){
+      await expect(row.getByLabel("Translation status",{exact:true})).toHaveCount(0);
+      check(!await row.locator('.border-l-4').count());
+    }else if(task.status==="approved"){
+      await expect(row.getByText("Approved",{exact:true})).toBeVisible();
+      await expect(row.getByText("Awaiting master",{exact:true})).toBeVisible();
+      await expect(row.getByText("Pending",{exact:true})).toHaveCount(0);
+    }else{
+      await expect(row.getByText("Pending",{exact:true})).toBeVisible();
+      await expect(row.getByText("Approved",{exact:true})).toHaveCount(0);
+    }
+    await capture(task.name,"translation-status");
+    result={...result,status:task.status};
   }else if(task.action==="branch-workflow"){
     stage="approval-branch-history";
     await page.goto(`${frontend}/products/${task.product}/change-sets`);

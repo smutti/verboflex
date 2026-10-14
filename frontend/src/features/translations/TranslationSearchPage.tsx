@@ -159,6 +159,22 @@ function ResolvedSearch({
     initialSnapshot: seed.snapshot,
   });
   const refreshSearch = search.refresh;
+  const awaitingTarget = search.items.some((item) =>
+    item.slots.some(
+      (slot) =>
+        slot.pending_change?.state === "approved" &&
+        slot.pending_change.target_branch &&
+        !slot.pending_change.target_integrated,
+    ),
+  );
+  useEffect(() => {
+    if (!awaitingTarget || context.activeDraft || search.items.length > 50)
+      return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") refreshSearch();
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [awaitingTarget, context.activeDraft, search.items.length, refreshSearch]);
   useEffect(() => {
     if (
       search.filters.viewMode !== "bilingual" ||
@@ -700,6 +716,8 @@ function ResolvedSearch({
             : slot.over_limit_count,
         pending_change: {
           state: proposal.state,
+          target_branch: proposal.target_branch,
+          target_integrated: proposal.target_integrated,
           version: proposal.version,
           value_count: proposal.pending.length,
           reconciliation_required: proposal.reconciliation_required,
@@ -1010,6 +1028,8 @@ function ResolvedSearch({
                         pending_change: {
                           version: projection.version,
                           state: projection.state,
+                          target_branch: projection.target_branch,
+                          target_integrated: projection.target_integrated,
                           reconciliation_required:
                             projection.reconciliation_required,
                           updated_at: projection.updated_at,
@@ -1279,6 +1299,8 @@ function ResolvedSearch({
                             pending_change: {
                               version: projection.version,
                               state: projection.state,
+                              target_branch: projection.target_branch,
+                              target_integrated: projection.target_integrated,
                               reconciliation_required:
                                 projection.reconciliation_required,
                               updated_at: projection.updated_at,

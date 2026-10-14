@@ -177,10 +177,14 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
              current.base_language, value.language
 ), effective AS MATERIALIZED (
     SELECT aggregate.*, proposal.version AS pending_version, proposal.state AS pending_state,
+        proposal.target_branch,
+        (proposal.state = 'approved' AND proposal.target_commit_hash IS NOT NULL)
+            AS target_integrated,
         pending.value_count AS pending_value_count,
         pending.over_limit_count AS pending_over_limit_count,
-        (proposal.reconciliation_required OR NOT coalesce(pending.fresh, false))
-            AS pending_reconciliation_required,
+        ((proposal.reconciliation_required OR NOT coalesce(pending.fresh, false))
+            AND NOT (proposal.state = 'approved' AND proposal.target_commit_hash IS NOT NULL
+                AND coalesce(pending.matches_imported, false))) AS pending_reconciliation_required,
         (proposal.state <> 'rejected' AND NOT proposal.reconciliation_required
             AND coalesce(pending.fresh, false)) AS use_pending,
         pending.first_text AS pending_text, pending.text_truncated AS pending_truncated,
@@ -199,6 +203,9 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
       ON proposal.translation_key_id = aggregate.key_id AND proposal.language = aggregate.language
     LEFT JOIN LATERAL (
         SELECT count(*)::integer AS value_count,
+            count(*) = aggregate.value_count AND bool_and(coalesce(
+                NOT member.is_deleted AND member.display_text = pending.proposed_text, false))
+                AS matches_imported,
             count(*) FILTER (WHERE member.effective_max_chars IS NOT NULL
                 AND pending.grapheme_count > member.effective_max_chars)
                 ::integer AS over_limit_count,
@@ -343,6 +350,7 @@ LEFT JOIN LATERAL (
         'states', coalesce(slot.states, ARRAY[]::text[]),
         'pending_change', CASE WHEN slot.pending_version IS NULL THEN NULL ELSE jsonb_build_object(
             'version', slot.pending_version, 'state', slot.pending_state,
+            'target_branch', slot.target_branch, 'target_integrated', slot.target_integrated,
             'reconciliation_required', slot.pending_reconciliation_required,
             'value_count', slot.pending_value_count) END,
         'comment_count', (SELECT count(*) FROM translation_comments AS comment

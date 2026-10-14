@@ -12,6 +12,8 @@ from verboflex.db.session import SessionFactory
 from verboflex.integrations.bitbucket.client import BitbucketHttpAdapter
 from verboflex.integrations.bitbucket.writes import BitbucketWriteAdapter
 from verboflex.models.branch_workflow import BranchJob
+from verboflex.models.review import ReviewActivity, TranslationProposal
+from verboflex.services.approval_target import refresh_approval_target
 from verboflex.services.bitbucket_oauth import BitbucketOAuthService, BitbucketOAuthTokenExchange
 from verboflex.services.branch_jobs import LEASE, TERMINAL, execute_branch_job, refresh_branch_pr
 from verboflex.worker.celery_app import app
@@ -29,7 +31,10 @@ async def _run(job_id: UUID) -> None:
         with SessionFactory() as s:
             row = s.get(BranchJob, job_id)
             refresh = row is not None and row.state == "open"
-        if refresh:
+            check_target = row is not None and row.state == "committed"
+        if check_target:
+            await refresh_approval_target(SessionFactory, job_id=job_id, reads=reads)
+        elif refresh:
             await refresh_branch_pr(
                 SessionFactory, job_id=job_id, writes=BitbucketWriteAdapter(reads=reads)
             )
@@ -68,6 +73,16 @@ def dispatchable_jobs(session: Session) -> list[UUID]:
         )
         .exists()
     )
+    current_approval = (
+        select(ReviewActivity.id)
+        .join(TranslationProposal, TranslationProposal.id == ReviewActivity.proposal_id)
+        .where(
+            ReviewActivity.id == BranchJob.activity_id,
+            ReviewActivity.proposal_version == TranslationProposal.version,
+            TranslationProposal.state == "approved",
+        )
+        .exists()
+    )
     return list(
         session.scalars(
             select(BranchJob.id)
@@ -79,6 +94,10 @@ def dispatchable_jobs(session: Session) -> list[UUID]:
                         BranchJob.state.in_(("running", "sending"))
                         & or_(BranchJob.owner.is_(None), BranchJob.updated_at < now - LEASE),
                     ),
+                    (BranchJob.state == "committed")
+                    & current_approval
+                    & or_(BranchJob.owner.is_(None), BranchJob.updated_at < now - LEASE)
+                    & (BranchJob.updated_at < now - timedelta(minutes=1)),
                     (BranchJob.state == "open")
                     & (BranchJob.updated_at < now - timedelta(minutes=1)),
                 )

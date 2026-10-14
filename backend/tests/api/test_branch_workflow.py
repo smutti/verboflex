@@ -59,6 +59,52 @@ def test_api_configure_approve_history_then_explicit_pr(review_api):
         assert len(list(s.scalars(select(BranchJob).where(BranchJob.kind == "pull_request")))) == 1
 
 
+def test_all_http_projections_include_verified_target_status(review_api):
+    from pydantic import SecretStr
+
+    from tests.integration.test_approval_target import check, target_at
+    from verboflex.core.config import Settings, get_settings
+    from verboflex.main import app
+
+    client, seed, _, factory = review_api
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        jwt_secret_key=SecretStr("synthetic-target-status-signing-key" * 2)
+    )
+    configure(client, seed)
+    remote = Remote(seed, factory)
+    job = approve(factory, seed, "Approved translation")
+    run(factory, remote, job)
+    target_at(remote, remote.head)
+    check(factory, remote, job)
+    group_url = f"/api/v1/translations/{seed.value_ids[0]}"
+    detail = client.get(group_url).json()
+    assert detail["pending_change"]["target_integrated"] is True
+    assert detail["pending_change"]["target_branch"] == "main"
+    response = client.get(f"/api/v1/translations?product_id={seed.product_id}&language=it")
+    assert response.status_code == 200, response.text
+    summaries = response.json()
+    assert summaries["items"][0]["pending_change"]["target_integrated"] is True
+    # A new approval returns the target immediately in the mutation response,
+    # before any commit or background presence check.
+    rejected = client.post(
+        group_url + "/proposal/state",
+        json={
+            "expected_version": detail["pending_change"]["version"],
+            "target_state": "draft",
+        },
+    ).json()
+    approved = client.post(
+        group_url + "/proposal/state",
+        json={
+            "expected_version": rejected["version"],
+            "target_state": "approved",
+        },
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["target_branch"] == "main"
+    assert approved.json()["target_integrated"] is False
+
+
 @pytest.mark.parametrize("role", ["translator", "viewer"])
 def test_readers_cannot_publish_or_configure(review_api, role):
     client, seed, _, factory = review_api

@@ -1319,16 +1319,39 @@ def branch_workflow_smoke(h: Harness) -> None:
     assert len(second["items"]) == len(first["items"]) + 1
     assert second["items"][0]["commit_hash"] not in {i["commit_hash"] for i in first["items"]}
     assert h.graph()["repositories"][slug]["counters"]["pull_request"]["effects"] == 0
+    h.browser({"name": "translation-awaiting", "action": "translation-status", "product": product,
+        "group": group["id"], "status": "approved"})
     h.browser({"name": "approval-branch", "action": "branch-workflow", "product": product})
     published = h.wait(lambda: h.api(endpoint), lambda d: d["items"][0]["state"] in ("open", "blocked"), seconds=120)
     assert published["items"][0]["state"] == "open", published
     effects = h.graph()["repositories"][slug]["counters"]
     assert effects["pull_request"]["effects"] == 1
     assert effects["commit"]["effects"] == len(second["items"])
+    # Simulate target integration at the provider boundary, then let the real
+    # scheduler/worker verify the approved values. PR status alone is not used.
+    target_head = second["items"][0]["commit_hash"]
+    control = json.loads(h.control_path.read_text())
+    h.control(branches={**control.get("branches", {}), slug: {"master": target_head}})
+    h.wait(lambda: h.api(f"/translations/{group['id']}"),
+        lambda d: d["pending_change"]["target_integrated"], seconds=150)
+    h.browser({"name": "translation-integrated", "action": "translation-status", "product": product,
+        "group": group["id"], "status": "integrated"})
+    detail = h.api(f"/translations/{group['id']}")
+    h.api(f"/translations/{group['id']}/proposal", "PUT", {
+        "expected_version": detail["pending_change"]["version"],
+        "values": [{"translation_value_id": v["id"], "proposed_text": "Next pending translation",
+            "selector_version": v["selector_version"], "selector_digest": v["selector_digest"],
+            "basis_revision_number": v["history"][0]["revision_number"],
+            "basis_digest": v["history"][0]["revision_digest"]} for v in detail["values"]],
+    })
+    h.browser({"name": "translation-pending", "action": "translation-status", "product": product,
+        "group": group["id"], "status": "pending"})
+    assert h.graph()["repositories"][slug]["counters"] == effects
     write_json(h.runtime / "branch-workflow-evidence.json", {
         "commits": len(second["items"]), "pull_requests": 1,
         "approval_snapshots": True, "sequential_commits": True, "explicit_pr": True,
         "browser_configuration": True, "duplicate_approval_rejected": True,
+        "target_badge_lifecycle": True, "integration_does_not_publish": True,
         "working_branch": "feature/verboflex", "target": "master",
     })
     destination = Path(h.fixture["evidence_dir"])

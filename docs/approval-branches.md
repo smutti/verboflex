@@ -86,6 +86,24 @@ An unresolved operation stops later commits and PR creation. The approval snapsh
 commit receipt and content-free audit events remain available for investigation.
 Open PR state is refreshed in the background, normally once per minute.
 
+The strings workspace shows **Pending** for a saved change awaiting approval.
+After approval it shows **Approved**, plus **Awaiting <target branch>** when approval
+commits are enabled. A commit on the working branch does not clear that indicator.
+Celery checks the current approved version against the configured target branch,
+normally once per minute. It compares every selected key, language and selector at
+one immutable target commit; missing, ambiguous or different values remain awaiting
+integration. This also supports manual merges, squash merges and a target branch
+different from the import branch. Checking never creates a commit or a PR.
+
+Once all approved values are verified on the target, the workspace removes the
+badges and change highlighting. History and the approved snapshot remain available.
+A later edit starts a new pending version; an older approval's check cannot clear
+it. Re-importing the matching text does not raise a false reconciliation warning.
+A verified removal or reversal on the target restores the awaiting indicator.
+Transient provider failures retain the last verified observation and retry on a
+later check. Visible first-page results refresh every 30 seconds while awaiting
+integration, except while an editor is open; longer result lists update on reload.
+
 When a product has more than one workflow, an explicit PR request must include
 `workflow_id` in `POST /products/{product_id}/branch-workflow/pull-request`.
 The history endpoint accepts the same query parameter. The API rejects an ambiguous

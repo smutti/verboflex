@@ -3971,6 +3971,14 @@ export type PendingTranslationDetailResponse = {
      */
     state: 'draft' | 'approved' | 'rejected';
     /**
+     * Target Branch
+     */
+    target_branch?: string | null;
+    /**
+     * Target Integrated
+     */
+    target_integrated?: boolean;
+    /**
      * Updated At
      */
     updated_at: string;
@@ -4000,6 +4008,14 @@ export type PendingTranslationSummaryResponse = {
      * State
      */
     state: 'draft' | 'approved' | 'rejected';
+    /**
+     * Target Branch
+     */
+    target_branch?: string | null;
+    /**
+     * Target Integrated
+     */
+    target_integrated?: boolean;
     /**
      * Value Count
      */
@@ -5915,6 +5931,14 @@ export type TranslationProposalResponse = {
      * State
      */
     state: 'draft' | 'approved' | 'rejected';
+    /**
+     * Target Branch
+     */
+    target_branch?: string | null;
+    /**
+     * Target Integrated
+     */
+    target_integrated?: boolean;
     /**
      * Translation Group Id
      */

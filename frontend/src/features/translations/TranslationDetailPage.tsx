@@ -1,3 +1,4 @@
+import { TranslationStatusBadge } from "./TranslationStatusBadge";
 import { rolesForProduct } from "../auth/productRoles";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -486,11 +487,13 @@ function LoadedDetail({
               >
                 <div className="flex flex-wrap items-center gap-(--space-sm)">
                   <h3 className="text-heading font-semibold">
-                    Pending proposal
+                    {(proposal ?? detail.pending_change)?.target_integrated
+                      ? "Translation"
+                      : "Saved change"}
                   </h3>
-                  <Badge variant="outline">
-                    {reviewStateLabel(pendingState)}
-                  </Badge>
+                  <TranslationStatusBadge
+                    proposal={proposal ?? detail.pending_change!}
+                  />
                   {reconciliationRequired && (
                     <Badge variant="outline">Needs reconciliation</Badge>
                   )}
@@ -524,6 +527,8 @@ function LoadedDetail({
                             ? {
                                 version: proposal.version,
                                 state: proposal.state,
+                                target_branch: proposal.target_branch,
+                                target_integrated: proposal.target_integrated,
                                 reconciliation_required:
                                   proposal.reconciliation_required,
                                 updated_by: proposal.updated_by,

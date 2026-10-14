@@ -138,6 +138,8 @@ class TranslationProposalProjection:
     updated_by: UUID
     updated_at: datetime
     activity: TranslationProposalActivity | None
+    target_branch: str | None = None
+    target_integrated: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -434,7 +436,16 @@ def _project_proposal(
         or item.basis_digest != revisions[item.translation_value_id].revision_digest
         for item in proposal.values
     )
-    reconciliation_required = proposal.reconciliation_required or basis_stale
+    integrated = proposal.state == "approved" and proposal.target_commit_hash is not None
+    imported_matches = len(proposal.values) == len(values) and all(
+        item.translation_value_id in current_by_id
+        and not current_by_id[item.translation_value_id].is_deleted
+        and current_by_id[item.translation_value_id].display_text == item.proposed_text
+        for item in proposal.values
+    )
+    reconciliation_required = (proposal.reconciliation_required or basis_stale) and not (
+        integrated and imported_matches
+    )
     pending_items: list[PendingTranslationValue] = []
     for item in sorted(
         proposal.values, key=lambda row: (row.selector_version, row.selector_digest)
@@ -498,6 +509,8 @@ def _project_proposal(
         updated_by=proposal.updated_by,
         updated_at=proposal.updated_at,
         activity=projected_activity,
+        target_branch=proposal.target_branch,
+        target_integrated=integrated,
     )
 
 
@@ -676,6 +689,7 @@ def save_translation_proposal(
         session.flush()
         proposal.version += 1
         proposal.state = "draft"
+        proposal.target_branch, proposal.target_commit_hash = None, None
         proposal.reconciliation_required = False
         proposal.updated_by = principal.user_id
         proposal.updated_at = now
@@ -982,6 +996,7 @@ def transition_translation_proposal(
     now = datetime.now(UTC)
     proposal.version += 1
     proposal.state = transition.target_state
+    proposal.target_branch, proposal.target_commit_hash = None, None
     proposal.updated_by = principal.user_id
     proposal.updated_at = now
     activity = ReviewActivity(

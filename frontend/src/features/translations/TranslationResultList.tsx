@@ -15,13 +15,13 @@ import {
   Pencil,
   TriangleAlert,
   PackageOpen,
-  Clock3,
 } from "lucide-react";
 
 import type {
   TranslationKeySummary,
   TranslationLanguageSlot,
 } from "../../api/client";
+import { TranslationStatusBadge } from "./TranslationStatusBadge";
 import { translationKeyIdentity } from "./useTranslationSearch";
 import { productIdentity } from "../products/productIdentity";
 import {
@@ -404,7 +404,13 @@ export function TranslationResultList({
                     const overLimitCount =
                       slot.effective_over_limit_count ?? slot.over_limit_count;
                     const overLimit = overLimitCount > 0;
-                    const hasPendingChange = !!slot.pending_change;
+                    const hasPendingChange =
+                      !!slot.pending_change &&
+                      !(
+                        slot.pending_change.state === "approved" &&
+                        slot.pending_change.target_integrated
+                      );
+                    const approved = slot.pending_change?.state === "approved";
                     const limitId = `length-${item.scope_id}-${item.translation_key_id}-${slot.language}`;
                     const reason = slot.read_only_reason
                       ? READ_ONLY_REASONS[slot.read_only_reason]
@@ -472,7 +478,7 @@ export function TranslationResultList({
                         className={`grid min-w-0 grid-cols-[minmax(5.5rem,7rem)_minmax(0,1fr)] xl:grid-cols-[minmax(6rem,8rem)_minmax(0,1fr)_auto] ${active ? "bg-blue-50/50 ring-2 ring-inset ring-blue-600" : ""}`}
                       >
                         <div
-                          className={`min-w-0 p-3 text-label wrap-anywhere ${hasPendingChange ? "border-l-4 border-amber-400 bg-amber-50 dark:border-amber-500 dark:bg-amber-950/30" : "bg-slate-100"}`}
+                          className={`min-w-0 p-3 text-label wrap-anywhere ${hasPendingChange ? (approved ? "border-l-4 border-blue-400 bg-blue-50 dark:border-blue-500 dark:bg-blue-950/30" : "border-l-4 border-amber-400 bg-amber-50 dark:border-amber-500 dark:bg-amber-950/30") : "bg-slate-100"}`}
                         >
                           <span className="font-semibold">
                             {slot.language_label}
@@ -539,7 +545,7 @@ export function TranslationResultList({
                               aria-label={`Edit translation for ${label}`}
                               aria-expanded={false}
                               aria-describedby={overLimit ? limitId : undefined}
-                              className={`group flex min-h-[44px] w-full min-w-0 cursor-text items-start gap-3 rounded-md border px-3 py-2 text-left transition-colors focus-visible:outline-2 ${overLimit ? "border-destructive bg-red-50 hover:bg-red-100 focus-visible:border-destructive focus-visible:outline-destructive dark:bg-red-950/30" : hasPendingChange ? "border-amber-400 bg-amber-50 hover:border-amber-600 hover:bg-amber-100 focus-visible:border-amber-700 focus-visible:outline-amber-700 dark:bg-amber-950/30 dark:hover:bg-amber-950/50" : "border-blue-200 bg-blue-50/60 hover:border-blue-500 hover:bg-blue-100/70 focus-visible:border-blue-600 focus-visible:outline-blue-600"}`}
+                              className={`group flex min-h-[44px] w-full min-w-0 cursor-text items-start gap-3 rounded-md border px-3 py-2 text-left transition-colors focus-visible:outline-2 ${overLimit ? "border-destructive bg-red-50 hover:bg-red-100 focus-visible:border-destructive focus-visible:outline-destructive dark:bg-red-950/30" : hasPendingChange ? (approved ? "border-blue-300 bg-blue-50 text-foreground" : "border-amber-400 bg-amber-50 hover:border-amber-600 hover:bg-amber-100 focus-visible:border-amber-700 focus-visible:outline-amber-700 dark:bg-amber-950/30 dark:hover:bg-amber-950/50") : "border-blue-200 bg-blue-50/60 hover:border-blue-500 hover:bg-blue-100/70 focus-visible:border-blue-600 focus-visible:outline-blue-600"}`}
                               onClick={(event) =>
                                 onEditTranslation!(
                                   slot.group_id!,
@@ -568,7 +574,7 @@ export function TranslationResultList({
                               lang={slot.language}
                               dir="auto"
                               aria-describedby={overLimit ? limitId : undefined}
-                              className={`min-h-[44px] rounded-md px-3 py-2 whitespace-pre-wrap wrap-anywhere ${overLimit ? "border border-destructive bg-red-50 text-foreground dark:bg-red-950/30" : hasPendingChange ? "border border-amber-400 bg-amber-50 text-foreground dark:bg-amber-950/30" : "bg-slate-50 text-muted-foreground"}`}
+                              className={`min-h-[44px] rounded-md px-3 py-2 whitespace-pre-wrap wrap-anywhere ${overLimit ? "border border-destructive bg-red-50 text-foreground dark:bg-red-950/30" : hasPendingChange ? (approved ? "border border-blue-300 bg-blue-50 text-foreground" : "border border-amber-400 bg-amber-50 text-foreground dark:bg-amber-950/30") : "bg-slate-50 text-muted-foreground"}`}
                             >
                               {text}
                               {slot.text_truncated ? "…" : ""}
@@ -579,14 +585,9 @@ export function TranslationResultList({
                               <span>{reason}</span>
                             )}
                             {slot.pending_change && (
-                              <span className="my-1 inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-950 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-200">
-                                <Clock3
-                                  aria-hidden="true"
-                                  className="size-3.5 shrink-0"
-                                />
-                                Pending{" "}
-                                {STATE_LABELS[slot.pending_change.state]}
-                              </span>
+                              <TranslationStatusBadge
+                                proposal={slot.pending_change}
+                              />
                             )}
                             {slot.pending_change?.reconciliation_required && (
                               <span>Needs reconciliation</span>

@@ -876,7 +876,7 @@ describe("Phase 5 scalar proposal tracer RED", () => {
       within(published).getByText(/<img src=x onerror=bad\(\)>/),
     ).toBeVisible();
     expect(within(pending).getByText(pendingText)).toBeVisible();
-    expect(within(pending).getByText("Draft")).toBeVisible();
+    expect(within(pending).getByText("Pending", { exact: true })).toBeVisible();
   });
 
   it("keeps text browser-local until Save and discards it on Cancel", async () => {
@@ -1393,7 +1393,7 @@ describe("Phase 5 complete review controls", () => {
     });
     const pending = screen.getByRole("region", { name: "Pending proposal" });
     expect(within(published).getAllByText("Approved")[0]).toBeVisible();
-    expect(within(pending).getByText("Draft")).toBeVisible();
+    expect(within(pending).getByText("Pending", { exact: true })).toBeVisible();
     expect(within(pending).getByText("Pending draft")).toBeVisible();
     await user.click(
       screen.getByRole("button", { name: "Reject translation" }),
