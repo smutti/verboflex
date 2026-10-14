@@ -1983,6 +1983,56 @@ export type BodyIssueToken = {
 };
 
 /**
+ * BranchChange
+ */
+export type BranchChange = {
+    /**
+     * Can Retry
+     */
+    can_retry: boolean;
+    /**
+     * Commit Hash
+     */
+    commit_hash: string | null;
+    /**
+     * Commit Url
+     */
+    commit_url: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Error Code
+     */
+    error_code: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'commit' | 'pull_request';
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Pr Url
+     */
+    pr_url: string | null;
+    /**
+     * Sequence
+     */
+    sequence: number;
+    /**
+     * State
+     */
+    state: 'queued' | 'running' | 'sending' | 'committed' | 'open' | 'merged' | 'declined' | 'blocked';
+};
+
+/**
  * BranchReceiptResponse
  */
 export type BranchReceiptResponse = {
@@ -1998,6 +2048,44 @@ export type BranchReceiptResponse = {
      * Name
      */
     name: string;
+};
+
+/**
+ * BranchWorkflowResponse
+ */
+export type BranchWorkflowResponse = {
+    /**
+     * Can Create Pr
+     */
+    can_create_pr?: boolean;
+    /**
+     * Can Publish
+     */
+    can_publish?: boolean;
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+    /**
+     * Items
+     */
+    items?: Array<BranchChange>;
+    /**
+     * Next Before
+     */
+    next_before?: number | null;
+    /**
+     * Repository
+     */
+    repository?: string | null;
+    /**
+     * Target Branch
+     */
+    target_branch?: string | null;
+    /**
+     * Work Branch
+     */
+    work_branch?: string | null;
 };
 
 /**
@@ -2806,6 +2894,24 @@ export type ComposeCaptureConfig = {
      * Width Dp
      */
     width_dp?: number;
+};
+
+/**
+ * ConfigureBranchWorkflow
+ */
+export type ConfigureBranchWorkflow = {
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Target Branch
+     */
+    target_branch: string;
+    /**
+     * Work Branch
+     */
+    work_branch: string;
 };
 
 /**
@@ -9912,6 +10018,135 @@ export type ReviewAuthoringRequestResponses = {
 };
 
 export type ReviewAuthoringRequestResponse = ReviewAuthoringRequestResponses[keyof ReviewAuthoringRequestResponses];
+
+export type GetBranchWorkflowData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: {
+        /**
+         * Before
+         */
+        before?: number | null;
+    };
+    url: '/api/v1/products/{product_id}/branch-workflow';
+};
+
+export type GetBranchWorkflowErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetBranchWorkflowError = GetBranchWorkflowErrors[keyof GetBranchWorkflowErrors];
+
+export type GetBranchWorkflowResponses = {
+    /**
+     * Successful Response
+     */
+    200: BranchWorkflowResponse;
+};
+
+export type GetBranchWorkflowResponse = GetBranchWorkflowResponses[keyof GetBranchWorkflowResponses];
+
+export type ConfigureBranchWorkflowData = {
+    body: ConfigureBranchWorkflow;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/branch-workflow';
+};
+
+export type ConfigureBranchWorkflowErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConfigureBranchWorkflowError = ConfigureBranchWorkflowErrors[keyof ConfigureBranchWorkflowErrors];
+
+export type ConfigureBranchWorkflowResponses = {
+    /**
+     * Successful Response
+     */
+    200: BranchWorkflowResponse;
+};
+
+export type ConfigureBranchWorkflowResponse = ConfigureBranchWorkflowResponses[keyof ConfigureBranchWorkflowResponses];
+
+export type RetryBranchChangeData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/branch-workflow/jobs/{job_id}/retry';
+};
+
+export type RetryBranchChangeErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetryBranchChangeError = RetryBranchChangeErrors[keyof RetryBranchChangeErrors];
+
+export type RetryBranchChangeResponses = {
+    /**
+     * Successful Response
+     */
+    202: BranchWorkflowResponse;
+};
+
+export type RetryBranchChangeResponse = RetryBranchChangeResponses[keyof RetryBranchChangeResponses];
+
+export type CreateBranchPullRequestData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/branch-workflow/pull-request';
+};
+
+export type CreateBranchPullRequestErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateBranchPullRequestError = CreateBranchPullRequestErrors[keyof CreateBranchPullRequestErrors];
+
+export type CreateBranchPullRequestResponses = {
+    /**
+     * Successful Response
+     */
+    202: BranchWorkflowResponse;
+};
+
+export type CreateBranchPullRequestResponse = CreateBranchPullRequestResponses[keyof CreateBranchPullRequestResponses];
 
 export type GetChangeSetCandidatesData = {
     body?: never;

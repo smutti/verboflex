@@ -8,6 +8,7 @@ import { ChangeSetsLayout } from "./ChangeSetWorkspace";
 import { ChangeSetsPage } from "./ChangeSetsPage";
 import { setSubmissionEntry } from "./submissionEntry";
 const api = vi.hoisted(() => ({
+  getBranchWorkflow: vi.fn(),
   getChangeSetCandidates: vi.fn(),
   createSubmissionReview: vi.fn(),
   listChangeSets: vi.fn(),
@@ -52,6 +53,7 @@ const candidate = {
 };
 beforeEach(() => {
   vi.resetAllMocks();
+  api.getBranchWorkflow.mockResolvedValue({ data: { enabled: false } });
   api.getChangeSetCandidates.mockResolvedValue({
     data: {
       product_id: "product",

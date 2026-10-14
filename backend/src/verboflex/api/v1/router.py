@@ -15,6 +15,7 @@ from verboflex.api.v1.routes import (
     admin_workspace,
     auth,
     authoring,
+    branch_workflow,
     comments,
     dashboard,
     glossary,
@@ -41,6 +42,7 @@ api_router.include_router(reuse.router)
 api_router.include_router(glossary.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(submissions.router)
+api_router.include_router(branch_workflow.router)
 api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)

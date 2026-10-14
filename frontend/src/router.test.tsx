@@ -46,6 +46,7 @@ import {
 } from "./router";
 
 vi.mock("./api/client", () => ({
+  getBranchWorkflow: vi.fn().mockResolvedValue({ data: { enabled: false } }),
   getPersonalDashboard: vi.fn().mockResolvedValue({
     data: {
       my_activity: { items: [], has_more: false },

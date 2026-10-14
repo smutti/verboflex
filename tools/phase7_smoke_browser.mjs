@@ -227,7 +227,19 @@ async function revokedDirtyEditor() {
 }
 async function scenario() {
   const task=fixture.scenario;check(task && /^[a-z0-9_-]+$/.test(task.name));let result={name:task.name,product:task.product};
-  if(task.action==="inspect-workspace"){
+  if(task.action==="branch-workflow"){
+    stage="approval-branch-history";
+    await page.goto(`${frontend}/products/${task.product}/change-sets`);
+    await expect(page.getByRole("heading",{name:"Approved changes",exact:true})).toBeVisible();
+    await expect(page.getByRole("link",{name:/^Commit /}).first()).toBeVisible();
+    await capture(task.name,"approval-commits");
+    await activate(page.getByRole("button",{name:"Create pull request",exact:true}));
+    await expect(page.getByText("Create a PR from feature/translations to main?",{exact:true})).toBeVisible();
+    await activate(page.getByRole("button",{name:"Confirm pull request",exact:true}));
+    await expect(page.getByRole("link",{name:"Open pull request",exact:true})).toBeVisible({timeout:120000});
+    await capture(task.name,"approval-pull-request");
+    result={...result,approved_commits:true,explicit_pull_request:true};
+  }else if(task.action==="inspect-workspace"){
     stage=`${task.name}-workspace`;const before=admissionPosts;const data=await candidates(task.product);
     if(task.expected_read_only){
       check(data.can_request_review===false);

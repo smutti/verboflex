@@ -336,6 +336,10 @@ def create_submission_batch(
     try:
         with session.begin():
             product, actor = _product_actor(session, product_id, actor_id, action=True)
+            from verboflex.services.branch_workflow import workflow_for
+
+            if workflow_for(session, product_id) is not None:
+                raise SubmissionConflict("approval_branch_enabled")
             existing = session.scalar(
                 select(SubmissionBatch).where(
                     SubmissionBatch.product_id == product_id,

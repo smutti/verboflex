@@ -25,6 +25,7 @@ const api = vi.hoisted(() => ({
   finalizeChangeSet: vi.fn(),
   listChangeSets: vi.fn(),
   createSubmissionReview: vi.fn(),
+  getBranchWorkflow: vi.fn(),
   getChangeSetCandidates: vi.fn(),
 }));
 vi.mock("../../api/client", () => api);
@@ -57,6 +58,7 @@ function view(
 }
 beforeEach(() => {
   vi.resetAllMocks();
+  api.getBranchWorkflow.mockResolvedValue({ data: { enabled: false } });
   api.getChangeSet.mockResolvedValue(
     ok(submissionFixture({ status: "failed", can_retry: true })),
   );

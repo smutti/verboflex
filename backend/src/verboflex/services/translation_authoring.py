@@ -479,6 +479,26 @@ def transition(
         entity_id=row.id,
     )
     session.flush()
+    if state == "approved":
+        from verboflex.localization.writing.core import WritebackRejected
+        from verboflex.services.branch_workflow import (
+            BranchWorkflowError,
+            new_authoring_activity,
+            queue_approval,
+        )
+
+        try:
+            queue_approval(
+                session,
+                product_id=product_id,
+                actor_id=actor_id,
+                proposal_id=row.id,
+                version=row.version,
+                activity_id=new_authoring_activity(row.id, row.version),
+                label=f"{data.key} ({data.language})",
+            )
+        except (BranchWorkflowError, WritebackRejected) as error:
+            raise AuthoringError(str(error), 409) from error
     return response(row, scope)
 
 

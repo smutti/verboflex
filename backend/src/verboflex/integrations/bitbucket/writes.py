@@ -54,10 +54,11 @@ class WriteContext:
     repository_slug: str
     change_set_id: UUID
     expected_generation: int
+    work_branch: str | None = None
 
     @property
     def source_branch(self) -> str:
-        return f"verboflex/change-set-{self.change_set_id}"
+        return self.work_branch or f"verboflex/change-set-{self.change_set_id}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -935,6 +936,10 @@ class BitbucketWriteAdapter:
         if type(intent) is not BranchIntent or type(intent.context) is not WriteContext:
             raise ValueError("Invalid intent")
         context = intent.context
+        if context.work_branch is not None:
+            from verboflex.services.branch_workflow import validate_branch
+
+            validate_branch(context.work_branch)
         if (
             type(context.repository_id) is not UUID
             or type(context.change_set_id) is not UUID

@@ -38,6 +38,13 @@ anonymous requests, revoked sessions and insufficient roles, checking that denie
 requests do not write to PostgreSQL. Existing resource fixtures cover ownership,
 proposal transitions, constraints, notifications and submission recovery.
 
+Products may enable [approval commits](approval-branches.md). Configuration requires
+an administrator. Reviewers and Product Owners can approve commits and request a PR;
+viewers and translators cannot publish. The worker rechecks current authority before
+each external effect. `branch.*` audit events identify configuration, approval intake,
+explicit PR requests and retry authorization. Immutable snapshots preserve the original
+approval when later drafts are saved.
+
 ## MCP and OAuth
 
 The separately mounted protocol exposes `POST /oauth/register`,

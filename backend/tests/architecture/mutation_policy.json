@@ -578,5 +578,34 @@
     ],
     "boundary": "active_product_membership_and_capture_owner",
     "audit": "ScreenshotJob actor, immutable request identity and durable state"
+  },
+  "configureBranchWorkflow": {
+    "method": "PUT",
+    "path": "/api/v1/products/{product_id}/branch-workflow",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "AuditEntry branch actions and immutable BranchJob approval snapshot"
+  },
+  "createBranchPullRequest": {
+    "method": "POST",
+    "path": "/api/v1/products/{product_id}/branch-workflow/pull-request",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "AuditEntry branch actions and immutable BranchJob approval snapshot"
+  },
+  "retryBranchChange": {
+    "method": "POST",
+    "path": "/api/v1/products/{product_id}/branch-workflow/jobs/{job_id}/retry",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "AuditEntry branch actions and immutable BranchJob approval snapshot"
   }
 }

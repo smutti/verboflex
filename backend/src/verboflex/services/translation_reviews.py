@@ -1001,6 +1001,22 @@ def transition_translation_proposal(
     )
     session.add(activity)
     session.flush()
+    if transition.target_state == "approved":
+        from verboflex.localization.writing.core import WritebackRejected
+        from verboflex.services.branch_workflow import BranchWorkflowError, queue_approval
+
+        try:
+            queue_approval(
+                session,
+                product_id=access.product_id,
+                actor_id=principal.user_id,
+                proposal_id=proposal.id,
+                version=proposal.version,
+                activity_id=activity.id,
+                label=f"{key.raw_key} ({proposal.language})",
+            )
+        except (BranchWorkflowError, WritebackRejected) as error:
+            raise ProposalReviewBlocked(str(error)) from error
     return _project_proposal(
         translation_group_id=translation_group_id,
         proposal=proposal,

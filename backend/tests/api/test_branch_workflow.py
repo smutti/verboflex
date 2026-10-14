@@ -1,0 +1,131 @@
+"""Product permissions, database-only HTTP intake and explicit PR publication."""
+
+from uuid import uuid4
+
+import pytest
+from sqlalchemy import select
+
+from tests.api.test_submission_reviews import review_api as review_api
+from tests.integration.test_branch_workflow import Remote, approve, run
+from tests.integration.test_preview_jobs import clean_preview_database as clean_preview_database
+from tests.integration.test_preview_jobs import preview_session_factory as preview_session_factory
+from tests.legacy_product_fixtures import mirror_fixture_role
+from verboflex.models.branch_workflow import BranchJob
+from verboflex.models.role import Role
+from verboflex.models.user import User
+
+
+def configure(client, seed):
+    url = f"/api/v1/products/{seed.product_id}/branch-workflow"
+    response = client.put(
+        url,
+        json={
+            "mapping_id": str(seed.mapping_id),
+            "work_branch": "feature/translations",
+            "target_branch": "main",
+        },
+    )
+    assert response.status_code == 200, response.text
+    return url
+
+
+def test_api_configure_approve_history_then_explicit_pr(review_api):
+    client, seed, sent, factory = review_api
+    url = configure(client, seed)
+    remote = Remote(seed, factory)
+    job_id = approve(factory, seed, "Sintetica")
+    waiting = client.get(url).json()
+    assert waiting["items"][0]["state"] == "queued"
+    assert waiting["can_create_pr"] is False
+    assert client.post(url + "/pull-request").status_code == 409
+    assert run(factory, remote, job_id) == ("committed", None)
+    ready = client.get(url).json()
+    assert ready["can_create_pr"] is True
+    assert ready["items"][0]["commit_url"].startswith("https://bitbucket.org/")
+    assert "authority" not in str(ready) and "intent" not in str(ready)
+    result = client.post(url + "/pull-request")
+    assert result.status_code == 202, result.text
+    assert result.json()["items"][0]["kind"] == "pull_request"
+    assert result.json()["items"][0]["state"] == "queued"
+    assert remote.prs == []  # HTTP must not call Bitbucket.
+    assert sent == []  # No legacy submission job.
+    duplicate = client.post(url + "/pull-request")
+    assert duplicate.status_code == 409
+    with factory() as s:
+        assert len(list(s.scalars(select(BranchJob).where(BranchJob.kind == "pull_request")))) == 1
+
+
+@pytest.mark.parametrize("role", ["translator", "viewer"])
+def test_readers_cannot_publish_or_configure(review_api, role):
+    client, seed, _, factory = review_api
+    url = configure(client, seed)
+    with factory.begin() as s:
+        s.get(User, seed.actor_id).roles = [s.scalar(select(Role).where(Role.name == role))]
+        mirror_fixture_role(s, seed.actor_id)
+    assert client.get(url).status_code == 200
+    assert client.get(url).json()["can_publish"] is False
+    assert client.post(url + "/pull-request").status_code == 403
+    assert client.post(url + f"/jobs/{uuid4()}/retry").status_code == 403
+    assert (
+        client.put(
+            url,
+            json={
+                "mapping_id": str(seed.mapping_id),
+                "work_branch": "feature/translations",
+                "target_branch": "main",
+            },
+        ).status_code
+        == 403
+    )
+
+
+def test_rejects_foreign_and_dangerous_configuration(review_api):
+    client, seed, _, _ = review_api
+    url = f"/api/v1/products/{seed.product_id}/branch-workflow"
+    for branch in ("main", "../main", "work.lock", "feature//work", 'feature/a"b'):
+        result = client.put(
+            url,
+            json={
+                "mapping_id": str(seed.mapping_id),
+                "work_branch": branch,
+                "target_branch": "main",
+            },
+        )
+        assert result.status_code == 409
+    assert client.get(f"/api/v1/products/{uuid4()}/branch-workflow").status_code == 404
+    result = client.put(
+        url,
+        json={
+            "mapping_id": str(uuid4()),
+            "work_branch": "feature/translations",
+            "target_branch": "main",
+        },
+    )
+    assert result.status_code == 409
+
+
+def test_legacy_submission_cannot_bypass_configured_workflow(review_api):
+    client, seed, sent, _ = review_api
+    configure(client, seed)
+    result = client.post(
+        f"/api/v1/products/{seed.product_id}/submission-reviews",
+        json={
+            "proposals": [{"proposal_id": str(seed.proposal_id), "expected_version": seed.version}]
+        },
+    )
+    assert result.status_code == 403
+    assert not sent
+
+
+def test_merged_commit_is_not_offered_for_another_pr(review_api):
+    client, seed, _, factory = review_api
+    url = configure(client, seed)
+    remote = Remote(seed, factory)
+    job = approve(factory, seed, "Sintetica")
+    assert run(factory, remote, job)[0] == "committed"
+    client.post(url + "/pull-request")
+    with factory.begin() as s:
+        pr = s.scalar(select(BranchJob).where(BranchJob.kind == "pull_request"))
+        pr.state, pr.commit_hash = "merged", remote.head
+    assert client.get(url).json()["can_create_pr"] is False
+    assert client.post(url + "/pull-request").status_code == 409

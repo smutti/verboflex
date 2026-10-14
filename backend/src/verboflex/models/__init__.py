@@ -4,6 +4,7 @@ from verboflex.models.audit import AuditEntry
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.authoring import AuthoringRequest
 from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.models.branch_workflow import BranchFile, BranchJob, BranchWorkflow
 from verboflex.models.duplicate_report import (
     DuplicateGroupRow,
     DuplicateOccurrenceRow,
@@ -66,6 +67,9 @@ from verboflex.models.translation_constraint import TranslationConstraint
 from verboflex.models.user import User
 
 __all__ = [
+    "BranchFile",
+    "BranchJob",
+    "BranchWorkflow",
     "ScreenshotJob",
     "ProductMember",
     "ProductTeamEvent",

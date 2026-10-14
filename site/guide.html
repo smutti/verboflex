@@ -209,6 +209,15 @@
 <section id="review">
   <p class="eyebrow">04 / FOR REVIEWERS</p>
   <h2>Approve first. Submit when ready.</h2>
+  <p>
+    Products configured for <strong>approval commits</strong> save each approved
+    change as a separate commit on their working branch. Saving a draft still
+    keeps it in VerboFlex. Open <strong>Change sets</strong> to follow the save
+    status and inspect each commit. Once all saves finish, use
+    <strong>Create pull request</strong> to publish the accumulated changes to
+    the configured destination. Later approvals also update an open PR.
+  </p>
+  <p>Other products use the reviewed change-set workflow below.</p>
   <div class="state-flow" aria-label="Review workflow">
     <span>Draft</span><span aria-hidden="true">→</span
     ><span>Approved / Rejected</span><span aria-hidden="true">→</span
@@ -480,7 +489,9 @@ codex mcp login verboflex-oauth --scopes verboflex:read</code></pre>
   <details>
     <summary>My draft is not in the repository.</summary>
     <p>
-      Saving is local. A reviewer must approve eligible changes, then an
+      Saving a draft keeps it in VerboFlex. With approval commits enabled,
+      approving queues a commit on the working branch; follow its status in
+      Change sets. Otherwise, a reviewer must approve eligible changes, then an
       authorized user must prepare and submit them to Bitbucket. GitHub remote
       writes are not supported.
     </p>

@@ -69,6 +69,11 @@ Application tests do not depend on a developer's private GSD installation path.
 The performance baseline is a SHA-256-checked source fixture, so a fresh public
 Git history does not need the original development commits.
 
+The smoke also verifies [approval commits](approval-branches.md): consecutive
+approvals become separate commits on one working branch, and a PR is created only
+after the explicit browser action. The scenario checks 320-pixel and 200% zoom
+layouts and uses a synthetic Bitbucket provider.
+
 ## Release boundary
 
 A green check verifies the current automated baseline. It does not certify a
