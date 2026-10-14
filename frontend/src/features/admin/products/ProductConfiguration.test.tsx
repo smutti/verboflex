@@ -2210,6 +2210,9 @@ describe("administrator product configuration tracer", () => {
       );
       const view = render(tree("first-token", activeProduct.id));
       await screen.findByText("Loading translation summary");
+      await waitFor(() =>
+        expect(getAdminProductSummaryMock).toHaveBeenCalledTimes(1),
+      );
       const signal = getAdminProductSummaryMock.mock.calls[0][0]?.signal;
       const nextId =
         change === "product" ? candidateOnlyProduct.id : activeProduct.id;

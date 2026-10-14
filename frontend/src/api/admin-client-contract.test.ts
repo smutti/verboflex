@@ -974,6 +974,7 @@ describe("canonical generated API client", () => {
       "getAdminImport",
       "getAdminImportRewriteComparison",
       "confirmAdminImportRewriteBaseline",
+      "createBranchPullRequest",
     ]) {
       expect(
         generatedSdkSource.match(
@@ -982,7 +983,7 @@ describe("canonical generated API client", () => {
       ).toHaveLength(1);
     }
     expect(generatedSdkSource).not.toMatch(
-      /(?:cancel(?!TranslationScreenshot)|schedule|bulk|attemptHistory|createBranch|createCommit|createPullRequest|mergePullRequest|approvePullRequest|declinePullRequest)/u,
+      /(?:cancel(?!TranslationScreenshot)|schedule|bulk|attemptHistory|createBranch(?!PullRequest\b)|createCommit|createPullRequest|mergePullRequest|approvePullRequest|declinePullRequest)/u,
     );
     expect(generatedTypesSource).not.toMatch(
       /(?:provider_body|provider_status_text|raw_authority|raw_source|source_bytes|stack_trace|task_id|attempt_history)/u,
