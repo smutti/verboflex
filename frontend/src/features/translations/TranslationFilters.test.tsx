@@ -10,7 +10,12 @@ Object.defineProperties(HTMLElement.prototype, {
   releasePointerCapture: { configurable: true, value: () => {} },
   scrollIntoView: { configurable: true, value: () => {} },
 });
-afterEach(cleanup);
+afterEach(async () => {
+  cleanup();
+  // Radix restores focus on the next task. Let that callback finish while
+  // this test's document and CustomEvent still belong to the same DOM.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+});
 const defaults = {
   productId: null,
   language: null,
