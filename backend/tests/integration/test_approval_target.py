@@ -32,7 +32,7 @@ def check(factory, remote, job):
 
 def target_at(remote, commit):
     async def branch(session, **kw):
-        assert kw["branch"] == "main"
+        assert kw["branch"] == remote.target_branch
         return BitbucketBranch(kw["branch"], commit)
 
     remote.resolve_repository_branch = branch
@@ -160,26 +160,36 @@ def test_provider_failure_keeps_last_observation_without_resending(
     assert len(remote.commits) == 1 and not remote.prs
 
 
-def test_matching_reimport_keeps_integration_without_false_reconciliation(
-    preview_session_factory, monkeypatch
+@pytest.mark.parametrize("integrated", [False, True])
+def test_working_branch_reimport_preserves_approval_and_target_status(
+    preview_session_factory, monkeypatch, integrated
 ):
     from tests.integration.test_confirmed_layout_refresh import _run
 
     factory = preview_session_factory
-    seed, remote = setup(factory, monkeypatch)
+    seed, remote = setup(factory, monkeypatch, work_branch="main", target_branch="release/stable")
     job = approve(factory, seed, "Approved text")
     run(factory, remote, job)
-    target_at(remote, remote.head)
+    if integrated:
+        target_at(remote, remote.head)
     check(factory, remote, job)
     seed.adapter.files = dict(remote.versions[remote.head])
     seed.adapter.commit_hashes = [remote.head]
     assert _run(factory, seed.product_id, seed.mapping_id).state == "current"
     for status in projections(factory, seed):
-        assert status.target_integrated and not status.reconciliation_required
-    # Editing the integrated text starts a fresh pending version, retaining history.
+        assert status.state == "approved" and status.target_branch == "release/stable"
+        assert status.target_integrated is integrated and not status.reconciliation_required
+    assert len(remote.commits) == 1 and not remote.prs
+    # Editing the reimported text starts a fresh pending version, retaining history.
     save_draft(factory, seed, "Next draft")
     for status in projections(factory, seed):
         assert status.state == "draft" and not status.target_integrated
+    remote.resolve_repository_branch = type(remote).resolve_repository_branch.__get__(remote)
+    second = approve(factory, seed, "Next approval")
+    assert run(factory, remote, second) == ("committed", None)
+    assert run(factory, remote, second) == ("committed", None)
+    assert len(remote.commits) == 2 and not remote.prs
+    assert remote.commits[1].branch.parent != remote.commits[0].branch.parent
 
 
 def test_removed_target_file_restores_awaiting_badge(preview_session_factory, monkeypatch):
@@ -196,3 +206,32 @@ def test_removed_target_file_restores_awaiting_badge(preview_session_factory, mo
     remote.read_repository_source_metadata = missing
     check(factory, remote, job)
     assert all(not status.target_integrated for status in projections(factory, seed))
+
+
+@pytest.mark.parametrize("drift", ["text", "removed_member"])
+def test_working_branch_reimport_flags_changes_to_approved_values(
+    preview_session_factory, monkeypatch, drift
+):
+    from tests.integration.test_confirmed_layout_refresh import _run
+
+    factory = preview_session_factory
+    seed, remote = setup(factory, monkeypatch, work_branch="main", target_branch="release/stable")
+    job = approve(factory, seed, "Approved text")
+    assert run(factory, remote, job) == ("committed", None)
+    seed.adapter.files = dict(remote.versions[remote.head])
+    path = "app/res/values-it/strings.xml"
+    if drift == "text":
+        seed.adapter.files[path] = seed.adapter.files[path].replace(
+            b"Approved text", b"External edit", 1
+        )
+    else:
+        seed.adapter.files[path] = seed.adapter.files[path].replace(
+            b'<item quantity="other">Approved text</item>', b""
+        )
+    seed.adapter.commit_hashes = ["b" * 40]
+    assert _run(factory, seed.product_id, seed.mapping_id).state == "current"
+    for status in projections(factory, seed):
+        # Removing a member reopens the proposal through the import purge path.
+        assert status.state == ("draft" if drift == "removed_member" else "approved")
+        assert status.reconciliation_required and not status.target_integrated
+    assert len(remote.commits) == 1 and not remote.prs

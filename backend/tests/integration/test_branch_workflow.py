@@ -35,7 +35,7 @@ from verboflex.services.translation_reviews import (
 
 
 class Remote(PreparedSource):
-    def __init__(self, seed, factory):
+    def __init__(self, seed, factory, *, work_branch="feature/translations", target_branch="main"):
         super().__init__(seed)
         self.factory = factory
         self.head = "a" * 40
@@ -45,10 +45,11 @@ class Remote(PreparedSource):
         self.uncertain = False
         self.uncertain_pr = False
         self.before = lambda: None
+        self.work_branch, self.target_branch = work_branch, target_branch
 
     async def resolve_repository_branch(self, session, **kw):
         return BitbucketBranch(
-            kw["branch"], self.head if kw["branch"] == "feature/translations" else "a" * 40
+            kw["branch"], self.head if kw["branch"] == self.work_branch else "a" * 40
         )
 
     async def read_repository_source_metadata(self, session, **kw):
@@ -66,7 +67,7 @@ class Remote(PreparedSource):
             job = other.get(BranchJob, intent.branch.context.change_set_id)
             assert job.state == "sending" and job.intent is not None
         assert intent.branch.parent == self.head
-        assert intent.branch.context.source_branch == "feature/translations"
+        assert intent.branch.context.source_branch == self.work_branch
         assert all(
             hashlib.sha256(self.versions[self.head][f.path]).hexdigest() == f.before_sha256
             for f in intent.files
@@ -95,8 +96,8 @@ class Remote(PreparedSource):
 
     async def create_pull_request(self, session, *, intent, before_send):
         assert before_send()
-        assert intent.context.source_branch == "feature/translations"
-        assert intent.target_branch == "main"
+        assert intent.context.source_branch == self.work_branch
+        assert intent.target_branch == self.target_branch
         self.prs.append(intent)
         if self.uncertain_pr:
             return WriteOutcome("unknown", "timeout")
@@ -120,7 +121,7 @@ class Remote(PreparedSource):
         )
 
 
-def setup(factory, monkeypatch):
+def setup(factory, monkeypatch, *, work_branch="feature/translations", target_branch="main"):
     seed = seed_writeback_authority(factory, monkeypatch)
     with factory.begin() as s:
         configure(
@@ -128,10 +129,10 @@ def setup(factory, monkeypatch):
             product_id=seed.product_id,
             actor_id=seed.actor_id,
             mapping_id=seed.mapping_id,
-            work_branch="feature/translations",
-            target_branch="main",
+            work_branch=work_branch,
+            target_branch=target_branch,
         )
-    return seed, Remote(seed, factory)
+    return seed, Remote(seed, factory, work_branch=work_branch, target_branch=target_branch)
 
 
 def save_draft(factory, seed, text):
@@ -519,7 +520,7 @@ def test_migration_preserves_existing_workflow_and_committed_files(
     assert len(remote.commits) == 2
 
 
-def republish(factory, seed, *, extra_mapping=False):
+def republish(factory, seed, *, extra_mapping=False, source_branch=None):
     """Publish fresh mapping UUIDs through actual preview/confirmation, then import."""
     from uuid import UUID, uuid4
 
@@ -556,6 +557,11 @@ def republish(factory, seed, *, extra_mapping=False):
             )
         ).one()
         ids = [mapping.id]
+        if source_branch is not None:
+            from verboflex.services.mappings import _direct_identity
+
+            mapping.sides[0].source_branch = source_branch
+            mapping.identity_key = _direct_identity(mapping.sides[0].repository_id, source_branch)
         if extra_mapping:
             repo = Repository(id=uuid4(), workspace="preview-team", repository_slug="second-repo")
             s.add(repo)

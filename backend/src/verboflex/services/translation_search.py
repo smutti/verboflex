@@ -712,7 +712,7 @@ SELECT page.*, validity.cursor_valid, mapping.base_language AS source_language,
            (proposal.reconciliation_required
            OR coalesce(pending_projection.basis_stale, false)
            OR coalesce(pending_projection.pending_value_count, 0) <> page.value_count)
-           AND NOT (proposal.state='approved' AND proposal.target_commit_hash IS NOT NULL
+           AND NOT (proposal.state='approved' AND proposal.target_branch IS NOT NULL
                AND pending_projection.pending_value_count = page.value_count
                AND coalesce(pending_projection.matches_imported, false))
        END AS pending_reconciliation_required,
@@ -730,6 +730,8 @@ LEFT JOIN LATERAL (
     SELECT
         count(*)::integer AS pending_value_count,
         bool_and(coalesce(NOT member.is_deleted
+            AND member.selector_version = pending.selector_version
+            AND member.selector_digest = pending.selector_digest
             AND member.display_text = pending.proposed_text, false)) AS matches_imported,
         bool_or(
             latest.revision_number IS NULL
@@ -1155,9 +1157,16 @@ def _pending_detail(
         or len(proposal_rows) != current_value_count
     )
     integrated = first["state"] == "approved" and first["target_commit_hash"] is not None
-    if integrated and len(proposal_rows) == current_value_count and all(
-        not row["current_value_deleted"] and row["current_text"] == row["proposed_text"]
-        for row in proposal_rows
+    if (
+        first["state"] == "approved"
+        and first["target_branch"] is not None
+        and len(proposal_rows) == current_value_count
+        and all(
+            row["current_value_id"] is not None
+            and not row["current_value_deleted"]
+            and row["current_text"] == row["proposed_text"]
+            for row in proposal_rows
+        )
     ):
         reconciliation_required = False
     values: list[PendingTranslationValueDetail] = []

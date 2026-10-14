@@ -27,7 +27,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-it("configures any working branch separately from the requested PR destination", async () => {
+it.each(["team/approved", "release/base"])("configures working branch %s separately from the PR destination", async (workBranch) => {
   const user = userEvent.setup();
   api.configureBranchWorkflow.mockResolvedValue({
     data: {
@@ -40,7 +40,7 @@ it("configures any working branch separately from the requested PR destination",
         {
           id: "workflow",
           repository: "synthetic-repository",
-          work_branch: "team/approved",
+          work_branch: workBranch,
           target_branch: "release/next",
           active: true,
         },
@@ -53,7 +53,7 @@ it("configures any working branch separately from the requested PR destination",
     "source",
   );
   expect(screen.getByLabelText("PR destination")).toHaveValue("release/base");
-  await user.type(screen.getByLabelText("Working branch"), "team/approved");
+  await user.type(screen.getByLabelText("Working branch"), workBranch);
   await user.clear(screen.getByLabelText("PR destination"));
   await user.type(screen.getByLabelText("PR destination"), "release/next");
   expect(api.configureBranchWorkflow).not.toHaveBeenCalled();
@@ -68,11 +68,11 @@ it("configures any working branch separately from the requested PR destination",
     path: { product_id: "product" },
     body: {
       mapping_id: "source",
-      work_branch: "team/approved",
+      work_branch: workBranch,
       target_branch: "release/next",
     },
   });
-  expect(await screen.findByText("team/approved")).toBeVisible();
+  expect(await screen.findByText(workBranch)).toBeVisible();
   expect(screen.getByText("release/next")).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "Create pull request" }),

@@ -209,7 +209,8 @@ export function ApprovalBranchesPage({
                   autoComplete="off"
                 />
                 <p className="text-sm text-muted-foreground">
-                  Approved changes are committed here.
+                  Approved changes are committed here. Import from this branch
+                  to review translations before merging.
                 </p>
               </div>
               <div className="grid gap-2">

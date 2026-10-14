@@ -440,11 +440,15 @@ def _project_proposal(
     imported_matches = len(proposal.values) == len(values) and all(
         item.translation_value_id in current_by_id
         and not current_by_id[item.translation_value_id].is_deleted
+        and current_by_id[item.translation_value_id].selector_version == item.selector_version
+        and current_by_id[item.translation_value_id].selector_digest == item.selector_digest
         and current_by_id[item.translation_value_id].display_text == item.proposed_text
         for item in proposal.values
     )
+    # The import may follow the working branch before its PR is merged. Matching
+    # approved bytes are reconciled, but only the target worker proves integration.
     reconciliation_required = (proposal.reconciliation_required or basis_stale) and not (
-        integrated and imported_matches
+        proposal.state == "approved" and proposal.target_branch is not None and imported_matches
     )
     pending_items: list[PendingTranslationValue] = []
     for item in sorted(

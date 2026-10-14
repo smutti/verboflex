@@ -1280,10 +1280,10 @@ def branch_workflow_smoke(h: Harness) -> None:
     repositories = dict(control.get("repositories", {}))
     repositories[slug] = {"fixture": "json"}
     branches = dict(control.get("branches", {}))
-    branches[slug] = {"feature/verboflex": p6.HEAD, "master": p6.HEAD}
+    branches[slug] = {"feature/verboflex": "2" * 40, "master": p6.HEAD}
     h.control(repositories=repositories, branches=branches, write_faults={})
     seeded = h.db("seed-extra", {"actor_id": h.fixture["actor_id"], "scenarios": [
-        {"name": "approval-branch", "mappings": [{"slug": slug}]}
+        {"name": "approval-branch", "mappings": [{"slug": slug, "branch": "feature/verboflex"}]}
     ]})
     scenario = seeded["scenarios"][0]
     # The control is an external-force override on every read; seed once, then
@@ -1301,7 +1301,16 @@ def branch_workflow_smoke(h: Harness) -> None:
     assert all(i["state"] == "committed" for i in first["items"]), first
     assert h.graph()["repositories"][slug]["counters"]["pull_request"]["effects"] == 0
     group = h.api(f"/translations?product_id={product}&language=it&page_size=50&q=P6%20old")["items"][0]
+    # Reimport the approval from the same branch used for review and commits.
+    refreshed = h.api(f"/admin/products/{product}/published/mappings/{scenario['mappings'][0]['mapping']}/imports", "POST")
+    refreshed = h.wait(lambda: h.api(f"/admin/products/{product}/imports/{refreshed['id']}"),
+        lambda j: j["state"] not in ("queued", "running"), seconds=120)
+    assert refreshed["state"] == "current", refreshed
     detail = h.api(f"/translations/{group['id']}")
+    assert detail["pending_change"]["state"] == "approved"
+    assert not detail["pending_change"]["reconciliation_required"]
+    assert not detail["pending_change"]["target_integrated"]
+    assert all(v["translated_text"] == "First approved translation" for v in detail["values"])
     saved = h.api(f"/translations/{group['id']}/proposal", "PUT", {
         "expected_version": detail["pending_change"]["version"],
         "values": [{"translation_value_id": v["id"], "proposed_text": "Second approved translation",
@@ -1353,6 +1362,7 @@ def branch_workflow_smoke(h: Harness) -> None:
         "browser_configuration": True, "duplicate_approval_rejected": True,
         "target_badge_lifecycle": True, "integration_does_not_publish": True,
         "working_branch": "feature/verboflex", "target": "master",
+        "imports_working_branch": True, "reimport_preserves_approval": True,
     })
     destination = Path(h.fixture["evidence_dir"])
     destination.mkdir(parents=True, exist_ok=True)

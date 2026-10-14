@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from verboflex.audit.ledger import record_audit
 from verboflex.auth.product_access import current_product_role, membership_stamp
-from verboflex.models.branch_workflow import BranchJob, BranchWorkflow
+from verboflex.models.branch_workflow import BranchFile, BranchJob, BranchWorkflow
 from verboflex.models.product_mapping import ProductMappingRepositorySide, ProductRepositoryMapping
 from verboflex.models.repository import Repository
 from verboflex.models.review import TranslationProposal
@@ -100,10 +100,8 @@ def configure(
             ProductMappingRepositorySide.role.in_(("direct", "translations")),
         )
     )
-    if side is None or work_branch == target_branch or work_branch == side.source_branch:
-        raise BranchWorkflowError(
-            "The working branch must differ from the import and PR target branches"
-        )
+    if side is None or work_branch == target_branch:
+        raise BranchWorkflowError("The working branch must differ from the PR destination")
     repository = session.get_one(Repository, side.repository_id)
     if repository.provider != "bitbucket":
         raise BranchWorkflowError("Approval commits currently require Bitbucket")
@@ -128,6 +126,35 @@ def configure(
     )
     if outstanding is not None:
         raise BranchWorkflowError("Finish existing change sets before enabling approval commits")
+    # A source-branch correction creates a new mapping identity. Reuse only an
+    # inactive, unused workflow in this product; never reinterpret retained jobs.
+    reserved = session.scalar(
+        select(BranchWorkflow)
+        .where(
+            BranchWorkflow.repository_id == side.repository_id,
+            BranchWorkflow.work_branch == work_branch,
+        )
+        .with_for_update()
+    )
+    if reserved is not None:
+        if (
+            reserved.product_id != product_id
+            or reserved.target_branch != target_branch
+            or active_mapping(session, reserved) is not None
+            or session.scalar(
+                select(BranchJob.id).where(BranchJob.workflow_id == reserved.id).limit(1)
+            )
+            is not None
+            or session.scalar(
+                select(BranchFile.path).where(BranchFile.workflow_id == reserved.id).limit(1)
+            )
+            is not None
+        ):
+            raise BranchWorkflowError("This working branch is already configured")
+        reserved.mapping_id = mapping_id
+        session.flush()
+        record_audit(session, actor_id=actor_id, action="branch.configured", entity_id=reserved.id)
+        return reserved
     row = BranchWorkflow(
         product_id=product_id,
         mapping_id=mapping_id,

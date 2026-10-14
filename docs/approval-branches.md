@@ -29,14 +29,23 @@ The same database-only action is available through
 }
 ```
 
-Both branches must already exist. The working branch must differ from the import
-branch and the PR destination. With a separate code/translation mapping, only the
+Both branches must already exist. The working branch must differ from the PR
+destination, but it can also be the import branch. To review translations before
+merging them, import from the working branch and select the stable/release branch
+as the PR destination. Reimporting matching approved values does not require
+reconciliation or mark them as integrated: the **Awaiting target** badge remains
+until a background check verifies the values on the PR destination.
+With a separate code/translation mapping, only the
 translation repository is written. The code repository remains an import source.
 Each translation source can have its own workflow. With multiple sources, configure
 each before approving its changes; **Change sets** lets users select the repository
 branch and its history. A repository working branch cannot be shared by two
-workflows. Branch configuration is immutable once enabled, preserving the meaning
-of retained intents and history. Publishing a new configuration revision with the
+workflows. Branch configuration with recorded jobs is immutable, preserving the
+meaning of retained intents and history. After replacing an import source, an
+administrator can re-enable its unused, inactive workflow on the new mapping in
+the same product, with the same repository, working branch and PR destination.
+The change is audited; workflows with any job or retained file state cannot be
+reassigned. Publishing a new configuration revision with the
 same repository/import-branch identity retains the existing workflow; newly approved
 changes use the newly imported source. A removed source retains read-only history.
 Existing change sets must be completed before enabling it. Existing approvals are

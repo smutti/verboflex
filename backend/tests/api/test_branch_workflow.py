@@ -154,6 +154,81 @@ def test_rejects_foreign_and_dangerous_configuration(review_api):
     assert result.status_code == 409
 
 
+def test_import_branch_can_also_receive_approvals(review_api):
+    client, seed, sent, _ = review_api
+    response = client.put(
+        f"/api/v1/products/{seed.product_id}/branch-workflow",
+        json={
+            "mapping_id": str(seed.mapping_id),
+            "work_branch": "main",
+            "target_branch": "stable/v7",
+        },
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["available_mappings"][0]["source_branch"] == data["work_branch"] == "main"
+    assert data["target_branch"] == "stable/v7" and not data["items"] and not sent
+
+
+@pytest.mark.parametrize("blocker", [None, "queued", "committed", "file", "target", "foreign"])
+def test_rebind_replaced_source_only_without_retained_history(review_api, blocker):
+    from uuid import UUID
+
+    from verboflex.models.audit import AuditEntry
+    from verboflex.models.branch_workflow import BranchFile, BranchWorkflow
+    from verboflex.models.product import Product
+
+    client, seed, sent, factory = review_api
+    url = configure(client, seed)
+    workflow_id = client.get(url).json()["workflow_id"]
+    if blocker in ("queued", "committed"):
+        job = approve(factory, seed, "Retained approval")
+        if blocker == "committed":
+            assert run(factory, Remote(seed, factory), job)[0] == "committed"
+    with factory.begin() as session:
+        row = session.get_one(BranchWorkflow, UUID(workflow_id))
+        if blocker == "file":
+            session.add(
+                BranchFile(
+                    workflow_id=row.id,
+                    path="catalog.xml",
+                    baseline_sha256="a" * 64,
+                    content_sha256="b" * 64,
+                    edits=b"retained",
+                )
+            )
+        if blocker == "foreign":
+            other = Product(display_name="Other product", name_key="other product")
+            session.add(other)
+            session.flush()
+            row.product_id = other.id
+    mapping_id = republish(factory, seed, source_branch="feature/translations")[0]
+    body = {
+        "mapping_id": str(mapping_id),
+        "work_branch": "feature/translations",
+        "target_branch": "another-target" if blocker == "target" else "main",
+    }
+    response = client.put(url, json=body)
+    assert response.status_code == (409 if blocker else 200), response.text
+    with factory() as session:
+        row = session.get_one(BranchWorkflow, UUID(workflow_id))
+        assert row.mapping_id == (seed.mapping_id if blocker else mapping_id)
+        audits = list(
+            session.scalars(
+                select(AuditEntry).where(
+                    AuditEntry.entity_id == row.id, AuditEntry.action == "branch.configured"
+                )
+            )
+        )
+        assert len(audits) == (1 if blocker else 2)
+    if not blocker:
+        assert response.json()["workflow_id"] == workflow_id
+        assert len(response.json()["workflows"]) == 1
+        assert response.json()["workflows"][0]["active"] is True
+        assert client.put(url, json=body).json()["workflow_id"] == workflow_id
+    assert not sent
+
+
 def test_legacy_submission_cannot_bypass_configured_workflow(review_api):
     client, seed, sent, _ = review_api
     configure(client, seed)

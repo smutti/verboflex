@@ -73,6 +73,9 @@ The smoke also verifies [approval commits](approval-branches.md): consecutive
 approvals become separate commits on one working branch, and a PR is created only
 after the explicit browser action. The scenario also configures approval branches
 through the admin interface and rejects a repeated approval without another commit.
+Its import source is the working branch: after reimporting an approval, the next
+approval creates a new commit and the earlier approval remains awaiting the PR
+destination. Reimporting alone must not report target integration.
 It checks 320-pixel and 200% zoom layouts and uses a synthetic Bitbucket provider.
 It also verifies the translation badges through pending, approved/awaiting-target
 and integrated states, using a real Celery check against synthetic target contents.

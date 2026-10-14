@@ -183,7 +183,7 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
         pending.value_count AS pending_value_count,
         pending.over_limit_count AS pending_over_limit_count,
         ((proposal.reconciliation_required OR NOT coalesce(pending.fresh, false))
-            AND NOT (proposal.state = 'approved' AND proposal.target_commit_hash IS NOT NULL
+            AND NOT (proposal.state = 'approved' AND proposal.target_branch IS NOT NULL
                 AND coalesce(pending.matches_imported, false))) AS pending_reconciliation_required,
         (proposal.state <> 'rejected' AND NOT proposal.reconciliation_required
             AND coalesce(pending.fresh, false)) AS use_pending,
