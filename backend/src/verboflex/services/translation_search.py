@@ -15,7 +15,7 @@ from sqlalchemy.sql.elements import TextClause
 
 from verboflex.auth.product_access import visible_product_sql
 from verboflex.localization.graphemes import grapheme_count
-from verboflex.services.product_summary import _WHITESPACE
+from verboflex.services.product_summary import _ACTIVE_MAPPING_SQL, _WHITESPACE
 from verboflex.services.signed_cursor import InvalidSignedCursor, SignedCursorCodec
 
 SEARCH_PAGE_SIZE = 50
@@ -26,7 +26,7 @@ MAX_OPTION_COUNT = 500
 MAX_GROUP_VALUE_COUNT = 10_000
 _ZERO_UUID = UUID(int=0)
 _AUTHORIZED_ACTIVE_PRODUCTS_SQL = (
-    "SELECT id, display_name, name_key FROM products "
+    "SELECT id, display_name, name_key, active_revision_id FROM products "
     "WHERE is_active AND deleted_at IS NULL /* product_access */"
 )
 
@@ -341,6 +341,7 @@ def _scope_digest(
                 f"FROM ({_AUTHORIZED_ACTIVE_PRODUCTS_SQL}) AS product "
                 "JOIN localization_scopes AS scope ON scope.product_id = product.id "
                 "WHERE scope.active_execution_id IS NOT NULL "
+                f"AND {_ACTIVE_MAPPING_SQL} "
                 "ORDER BY product.id, scope.id "
                 "FOR SHARE OF product, scope"
             ),
@@ -368,6 +369,7 @@ def _scope_digest(
             FROM ({_AUTHORIZED_ACTIVE_PRODUCTS_SQL}) AS product
             JOIN localization_scopes AS scope ON scope.product_id = product.id
               AND scope.active_execution_id IS NOT NULL
+              AND {_ACTIVE_MAPPING_SQL}
             JOIN translation_keys AS key ON key.scope_id = scope.id AND key.product_id = product.id
             JOIN translation_proposals AS proposal ON proposal.translation_key_id = key.id
             WHERE (CAST(:product_id AS uuid) IS NULL OR product.id = :product_id)
@@ -582,6 +584,7 @@ WITH authorized_products AS (
     JOIN localization_scopes AS scope
       ON scope.product_id = product.id
      AND scope.active_execution_id IS NOT NULL
+     AND {_ACTIVE_MAPPING_SQL}
     JOIN translation_keys AS key
       ON key.scope_id = scope.id
      AND key.product_id = product.id
@@ -776,6 +779,7 @@ WITH authorized_products AS (
     JOIN localization_scopes AS scope
       ON scope.product_id = product.id
      AND scope.active_execution_id IS NOT NULL
+     AND {_ACTIVE_MAPPING_SQL}
     CROSS JOIN LATERAL jsonb_each(scope.language_counts) AS counts
     WHERE (counts.value->>0)::bigint > 0
       AND (CAST(:product_id AS uuid) IS NULL OR product.id = CAST(:product_id AS uuid))
@@ -813,6 +817,7 @@ WITH authorized_products AS (
     JOIN localization_scopes AS scope
       ON scope.product_id = product.id
      AND scope.active_execution_id IS NOT NULL
+     AND {_ACTIVE_MAPPING_SQL}
     JOIN translation_keys AS key
       ON key.scope_id = scope.id
      AND key.product_id = product.id
@@ -928,6 +933,7 @@ WITH authorized_products AS (
     JOIN localization_scopes AS scope
       ON scope.product_id = product.id
      AND scope.active_execution_id IS NOT NULL
+     AND {_ACTIVE_MAPPING_SQL}
     JOIN translation_keys AS key
       ON key.scope_id = scope.id
      AND key.product_id = product.id
@@ -993,6 +999,7 @@ WITH source_anchor AS (
     FROM ({_AUTHORIZED_ACTIVE_PRODUCTS_SQL}) AS product
     JOIN localization_scopes AS scope ON scope.product_id = product.id
       AND scope.active_execution_id IS NOT NULL
+     AND {_ACTIVE_MAPPING_SQL}
     JOIN translation_keys AS key ON key.scope_id = scope.id AND key.product_id = product.id
     JOIN translation_values AS candidate ON candidate.translation_key_id = key.id
       AND candidate.scope_id = scope.id

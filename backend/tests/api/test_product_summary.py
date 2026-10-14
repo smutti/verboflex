@@ -367,7 +367,7 @@ def test_only_owned_successful_baselines_and_keys_contribute(factory, invalid):
     assert body["expected_translation_count"] == body["translated_count"] == 0
 
 
-def add_retained_scope(factory, ids):
+def add_retained_scope(factory, ids, *, retain_original=True):
     """Publish a second mapping while keeping the first authentic baseline readable."""
     with factory.begin() as session:
         revision = ProductRevision(
@@ -391,6 +391,16 @@ def add_retained_scope(factory, ids):
             identity_key="pending-mapping",
             base_language="en",
         )
+        if retain_original:
+            original = session.get_one(ProductRepositoryMapping, ids["mapping"])
+            session.add(
+                ProductRepositoryMapping(
+                    revision_id=revision.id,
+                    topology=original.topology,
+                    identity_key=original.identity_key,
+                    base_language=original.base_language,
+                )
+            )
         session.add_all([mapping, pending_mapping])
         session.flush()
         now = datetime.now(UTC)
@@ -439,20 +449,31 @@ def add_retained_scope(factory, ids):
     return next_ids
 
 
-def test_scope_local_language_denominators_retained_scopes_and_unimported_mapping(factory):
+@pytest.mark.parametrize("retain_original", [False, True])
+def test_scope_local_language_denominators_retained_scopes_and_unimported_mapping(
+    factory, retain_original
+):
     token = authority(factory)
     ids = seed_two_keys(factory)
-    add_retained_scope(factory, ids)
+    add_retained_scope(factory, ids, retain_original=retain_original)
     body = request(token, ids["product"]).json()
-    assert body["source_string_count"] == 3
-    assert body["expected_translation_count"] == 3  # Not 3 keys x 2 languages.
-    assert body["translated_count"] == 2
-    assert body["imported_scope_count"] == 2
-    assert body["unimported_scope_count"] == 1
-    assert [(row["language"], row["expected_count"]) for row in body["languages"]] == [
-        ("vi", 2),
-        ("de", 1),
-    ]
+    assert body["source_string_count"] == (3 if retain_original else 1)
+    assert body["expected_translation_count"] == (3 if retain_original else 1)
+    assert body["translated_count"] == (2 if retain_original else 1)
+    assert body["imported_scope_count"] == (2 if retain_original else 1)
+    assert body["unimported_scope_count"] == (2 if retain_original else 1)
+    assert [(row["language"], row["expected_count"]) for row in body["languages"]] == (
+        [("vi", 2), ("de", 1)] if retain_original else [("de", 1)]
+    )
+    search = asyncio.run(
+        SUPPORT.SUPPORT._request(
+            "GET", f"/api/v1/translations?product_id={ids['product']}", token=token
+        )
+    )
+    assert search.status_code == 200, search.text
+    assert {item["language"] for item in search.json()["items"]} == (
+        {"it", "vi", "de"} if retain_original else {"de"}
+    )
 
 
 def test_bounded_sorted_languages_keep_all_totals_and_one_read_only_domain_query(factory):

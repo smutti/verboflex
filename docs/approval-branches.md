@@ -34,7 +34,9 @@ destination, but it can also be the import branch. To review translations before
 merging them, import from the working branch and select the stable/release branch
 as the PR destination. Reimporting matching approved values does not require
 reconciliation or mark them as integrated: the **Awaiting target** badge remains
-until a background check verifies the values on the PR destination.
+until a background check verifies the values on the PR destination. Coverage and
+search exclude imports from repository/branch identities removed from the active
+configuration; unchanged identities can retain their last successful baseline.
 With a separate code/translation mapping, only the
 translation repository is written. The code repository remains an import source.
 Each translation source can have its own workflow. With multiple sources, configure
