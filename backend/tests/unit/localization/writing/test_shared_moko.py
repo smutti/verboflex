@@ -101,3 +101,47 @@ def test_sequential_approved_snapshots_preserve_unrelated_duplicates():
     second = replace(first, replacement_text="Later approval")
     assert render_file(s, (first,)).content == CONTENT.replace(b">Original<", b">New<")
     assert render_file(s, (second,)).content == CONTENT.replace(b">Original<", b">Later approval<")
+
+
+def test_working_branch_overlay_preserves_unrelated_changes_across_approvals():
+    from verboflex.localization.writing.branch_overlay import overlay_approved_moko
+
+    s = source()
+    working = CONTENT.replace(
+        b"<resources>", b'<resources><string name="branch_only">Keep</string>'
+    ).replace(b">One<", b">Unrelated branch edit<")
+    first = selection(s)
+    out = overlay_approved_moko(s, working, (first,), ())
+    assert out == working.replace(b">Original<", b">New<")
+    second = replace(first, replacement_text="Second approval")
+    assert overlay_approved_moko(s, out, (second,), (first,)) == working.replace(
+        b">Original<", b">Second approval<"
+    )
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        (b">Original<", b">Changed externally<"),
+        (b'name="selected"', b'name="selected" formatted="false"'),
+        (b'<string name="selected">Original</string>', b""),
+        (b"</resources>", b'<string name="selected">Original</string></resources>'),
+    ],
+)
+def test_working_branch_overlay_rejects_changed_missing_or_ambiguous_targets(before, after):
+    from verboflex.localization.writing.branch_overlay import overlay_approved_moko
+
+    s = source()
+    with pytest.raises(WritebackRejected):
+        overlay_approved_moko(s, CONTENT.replace(before, after), (selection(s),), ())
+
+
+def test_working_branch_overlay_does_not_ignore_a_changed_previous_approval():
+    from verboflex.localization.writing.branch_overlay import overlay_approved_moko
+
+    s = source()
+    first = selection(s)
+    changed = CONTENT.replace(b">Original<", b">External change after approval<")
+    with pytest.raises(WritebackRejected) as error:
+        overlay_approved_moko(s, changed, (replace(first, replacement_text="Next"),), (first,))
+    assert error.value.reason == WritebackReason.SOURCE_FILE_CHANGED

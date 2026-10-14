@@ -70,6 +70,15 @@ unchanged. Unsupported source structures are reported as preparation failures:
 no commit has been sent, and **Check and retry** can prepare the same approval
 again after the problem is resolved.
 
+When the working branch already differs from the import at the first MOKO edit,
+the worker can preserve that existing work and apply only the approved text.
+Every selected key must remain unique and retain its expected text and structure;
+changed targets are blocked. Subsequent approvals require the last verified
+working-file digest and preserve the same branch baseline. External file changes
+after the first recorded commit remain blocked. This initial alignment supports
+edits to existing MOKO values; insertions and other formats require a matching
+baseline.
+
 The send intent is persisted before each network mutation. Duplicate deliveries
 cannot create another commit. After an uncertain response, **Check and retry**
 only reconciles that exact intent; it does not resend an unverified mutation.
@@ -105,6 +114,9 @@ approves a unique base-language key twice, and checks two sequential commits,
 exact preservation of unrelated duplicate resources and zero PRs. Synthetic
 writer tests additionally reject ambiguous targets, stale locators and
 unsupported content following a duplicate.
+The shared catalog smoke also starts from an existing branch with different
+unrelated entries, preserves those differences across approvals, and verifies
+that a later external file edit blocks the next approval without another commit.
 
 ```sh
 BRANCH_WORKFLOW_SMOKE_ONLY=1 PHASE8_HTTP_SETUP=1 \

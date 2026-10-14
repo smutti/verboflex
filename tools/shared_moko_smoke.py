@@ -22,18 +22,30 @@ def run(h):
     source = base64.b64decode(original["res/values/strings.xml"]).replace(
         b"</resources>", duplicates + b"</resources>"
     )
+    working_head = "2" * 40
+    working_source = source.replace(
+        b"<resources>", b'<resources><string name="branch_only">Preserve me</string>'
+    ).replace(b">Unrelated<", b">Existing branch change<")
     control["repositories"][slug]["files"] = {
         path: base64.b64encode(source).decode(),
         "shared/moko-resources/it/strings.xml": original["res/values-it/strings.xml"],
     }
     control.setdefault("branches", {})[slug] = {
-        "feature/verboflex": HEAD,
+        "feature/verboflex": working_head,
         "master": HEAD,
     }
-    h.control(repositories=control["repositories"], branches=control["branches"])
+    control.setdefault("files", {})[slug] = {
+        working_head: {path: base64.b64encode(working_source).decode()}
+    }
+    h.control(
+        repositories=control["repositories"],
+        branches=control["branches"],
+        files=control["files"],
+    )
     setup(h, repository_prefix=prefix)
     control["branches"].pop(slug)
-    h.control(branches=control["branches"])
+    control["files"].pop(slug)
+    h.control(branches=control["branches"], files=control["files"])
     product = h.fixture["code_capture"]["product"]
     source_mapping = h.fixture["code_capture"]["mapping"]
     endpoint = f"/products/{product}/branch-workflow"
@@ -53,7 +65,31 @@ def run(h):
     details = [h.api(f"/translations/{item['id']}") for item in groups]
     group = next(d for d in details if d["raw_key"] == "title")
     commits = []
-    for text in ("First approved title", "Second approved title"):
+    for text in (
+        "First approved title",
+        "Second approved title",
+        "Conflicting third approval",
+    ):
+        if len(commits) == 2:
+            external_head = "3" * 40
+            external_content = (
+                working_source.replace(b"Base title", b"Second approved title")
+                + b"\n<!-- external edit -->"
+            )
+            h.control(
+                branches={
+                    **control["branches"],
+                    slug: {"feature/verboflex": external_head},
+                },
+                files={
+                    **control["files"],
+                    slug: {
+                        external_head: {
+                            path: base64.b64encode(external_content).decode()
+                        }
+                    },
+                },
+            )
         detail = h.api(f"/translations/{group['id']}")
         pending = detail["pending_change"]
         saved = h.api(
@@ -83,14 +119,23 @@ def run(h):
             lambda d: d["items"][0]["state"] in ("committed", "blocked"),
             seconds=120,
         )
+        if len(commits) == 2:
+            assert result["items"][0]["state"] == "blocked"
+            assert result["items"][0]["error_code"] == "file_changed"
+            assert h.graph()["repositories"][slug]["counters"]["commit"]["effects"] == 2
+            assert (
+                h.graph()["repositories"][slug]["counters"]["pull_request"]["effects"]
+                == 0
+            )
+            break
         assert result["items"][0]["state"] == "committed", (
             "shared_catalog_commit_failed"
         )
         sha = result["items"][0]["commit_hash"]
         repo = h.graph()["repositories"][slug]
         commit = repo["commits"][sha]
-        assert commit["parents"] == [commits[-1] if commits else HEAD]
-        assert base64.b64decode(commit["files"][path]) == source.replace(
+        assert commit["parents"] == [commits[-1] if commits else working_head]
+        assert base64.b64decode(commit["files"][path]) == working_source.replace(
             b"Base title", text.encode()
         )
         assert repo["counters"]["commit"]["effects"] == len(commits) + 1
@@ -104,6 +149,8 @@ def run(h):
             "commits": 2,
             "pull_requests": 0,
             "unrelated_duplicate_bytes_preserved": True,
+            "existing_branch_changes_preserved": True,
+            "later_external_file_changes_blocked": True,
             "duplicate_approval_rejected": True,
         },
     )

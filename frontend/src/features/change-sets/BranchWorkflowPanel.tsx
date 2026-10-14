@@ -25,6 +25,8 @@ const errors: Record<string, string> = {
   ambiguous_locator:
     "The translation key is duplicated or its location is ambiguous. No commit was sent. Check the source file before retrying.",
   file_changed: "The file changed in Git. Review the branch before continuing.",
+  source_file_changed:
+    "The approved string or its structure changed on the working branch. Refresh and review it before retrying.",
   import_changed:
     "The imported source changed. Refresh the product configuration before continuing.",
   authority_changed:

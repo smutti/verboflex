@@ -25,6 +25,8 @@ from verboflex.integrations.bitbucket.writes import (
 from verboflex.localization.importing.core import (
     MAX_CANONICAL_AGGREGATE_BYTES,
 )
+from verboflex.localization.moko_layout import moko_layout
+from verboflex.localization.writing.branch_overlay import overlay_approved_moko
 from verboflex.localization.writing.core import WritebackRejected
 from verboflex.localization.writing.registry import render_file
 from verboflex.models.bitbucket_connection import BitbucketConnection
@@ -237,15 +239,24 @@ async def _prepare(
                     path=file.authority.path,
                     max_bytes=max(1, metadata.size_bytes),
                 )
-            if hashlib.sha256(current).hexdigest() != expected:
+            current_digest = hashlib.sha256(current).hexdigest()
+            if previous is not None and current_digest != expected:
                 raise BranchWorkflowError("file_changed")
+            content = rendered.content
+            if current != render_file(snapshot, old_edits).content:
+                if (
+                    snapshot.parser_input.repository_side != "translations"
+                    or moko_layout(snapshot.parser_input.path) is None
+                ):
+                    raise BranchWorkflowError("file_changed")
+                content = overlay_approved_moko(snapshot, current, operations, old_edits)
             files.append(
                 {
                     "path": file.authority.path,
-                    "before": expected,
-                    "content": base64.b64encode(rendered.content).decode(),
+                    "before": current_digest,
+                    "content": base64.b64encode(content).decode(),
                     "baseline": file.authority.sha256,
-                    "after": rendered.after_sha256,
+                    "after": hashlib.sha256(content).hexdigest(),
                     "edits": base64.b64encode(encode_approval_snapshot(operations)).decode(),
                     "attributes": list(snapshot.attributes or ()),
                 }
