@@ -20,6 +20,10 @@ const states: Record<string, string> = {
   blocked: "Needs attention",
 };
 const errors: Record<string, string> = {
+  unsupported_shape:
+    "The translation file contains a structure that cannot be edited safely. No commit was sent. Check the source file before retrying.",
+  ambiguous_locator:
+    "The translation key is duplicated or its location is ambiguous. No commit was sent. Check the source file before retrying.",
   file_changed: "The file changed in Git. Review the branch before continuing.",
   import_changed:
     "The imported source changed. Refresh the product configuration before continuing.",

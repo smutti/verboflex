@@ -1360,7 +1360,11 @@ def main() -> None:
         result["localization_unchanged"] = True
         write_json(harness.runtime / "happy-evidence.json", result)
     elif STAGE == "branch-workflow":
-        branch_workflow_smoke(Harness(Path(sys.argv[2])))
+        harness = Harness(Path(sys.argv[2]))
+        branch_workflow_smoke(harness)
+        from shared_moko_smoke import run
+
+        run(harness)
     elif STAGE == "faults":
         run_faults(Harness(Path(sys.argv[2])))
     elif STAGE == "audit":

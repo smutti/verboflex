@@ -16,7 +16,7 @@ from phase7_smoke import ROOT, Harness, write_json
 HEAD = "1" * 40
 
 
-def configure(h):
+def configure(h, *, repository_prefix="code-e2e"):
     # An extra override affects this UUID-named disposable project only.
     command = json.dumps(["python", "/run/code_capture_renderer.py"])
     override = h.runtime / "code-capture.yml"
@@ -47,7 +47,7 @@ def configure(h):
         timeout=180,
     )
     files = {
-        "code-e2e-app": {
+        f"{repository_prefix}-app": {
             "app/src/main/Screen.kt": b"""package demo
 object Keys {
  const val TITLE = "title"
@@ -58,7 +58,7 @@ fun Screen() { translate(Keys.TITLE) }
 """,
             "app/src/main/JavaKeys.java": b'package demo; class JavaKeys { static final String LABEL = "java_label"; }',
         },
-        "code-e2e-translations": {
+        f"{repository_prefix}-translations": {
             "res/values/strings.xml": b'<resources><string name="title">Base title</string><string name="java_label">Java base</string><string name="orphan">Unrelated</string></resources>',
             "res/values-it/strings.xml": b'<resources><string name="title">Synthetic imported title</string><string name="java_label">Java label</string></resources>',
         },
@@ -76,19 +76,19 @@ fun Screen() { translate(Keys.TITLE) }
     h.control(repositories=repositories)
 
 
-def setup(h):
+def setup(h, *, repository_prefix="code-e2e"):
     product = h.api(
         "/admin/products",
         "POST",
-        {"name": "Code capture E2E", "description": "Synthetic fixture"},
+        {"name": f"{repository_prefix} code capture", "description": "Synthetic fixture"},
         expected=201,
     )
     pid = product["id"]
     revision = product["candidate_revision"]
     sides = []
     for role, slug in (
-        ("keys", "code-e2e-app"),
-        ("translations", "code-e2e-translations"),
+        ("keys", f"{repository_prefix}-app"),
+        ("translations", f"{repository_prefix}-translations"),
     ):
         repo = h.api(
             "/admin/repositories",
@@ -183,6 +183,7 @@ def setup(h):
     assert h.api(f"/translations/{group['id']}/screenshots")["items"] == []
     h.fixture["code_capture"] = {
         "product": pid,
+        "mapping": mapping["id"],
         "group": group["id"],
         "scope": sources[0]["scope_id"],
     }

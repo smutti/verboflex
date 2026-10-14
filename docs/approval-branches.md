@@ -62,6 +62,14 @@ An external change to a managed file, a new import or a changed configuration ca
 block an operation for review; the worker never force-pushes or resets the branch.
 Unrelated files are not included in the commit.
 
+Shared MOKO translation catalogs can contain duplicate keys belonging to other
+products. Editing a unique key preserves those unrelated occurrences byte for
+byte, including comments, CDATA and whitespace. Selecting a duplicated resource
+still fails, even with an exact imported locator. Canonical import rules remain
+unchanged. Unsupported source structures are reported as preparation failures:
+no commit has been sent, and **Check and retry** can prepare the same approval
+again after the problem is resolved.
+
 The send intent is persisted before each network mutation. Duplicate deliveries
 cannot create another commit. After an uncertain response, **Check and retry**
 only reconciles that exact intent; it does not resend an unverified mutation.
@@ -90,7 +98,13 @@ fixture. It configures branches through the browser and verifies actual worker
 dispatch, separate commits on `feature/verboflex`, duplicate approval rejection,
 zero PRs until the explicit browser action, then exactly one PR to `master`, and
 the interface at 320 pixels and 200% zoom. Other branch names are covered by the
-unit and integration tests:
+unit and integration tests.
+
+The smoke also imports Kotlin/Java keys with a separate shared MOKO catalog,
+approves a unique base-language key twice, and checks two sequential commits,
+exact preservation of unrelated duplicate resources and zero PRs. Synthetic
+writer tests additionally reject ambiguous targets, stale locators and
+unsupported content following a duplicate.
 
 ```sh
 BRANCH_WORKFLOW_SMOKE_ONLY=1 PHASE8_HTTP_SETUP=1 \

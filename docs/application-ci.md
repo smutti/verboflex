@@ -74,6 +74,9 @@ approvals become separate commits on one working branch, and a PR is created onl
 after the explicit browser action. The scenario also configures approval branches
 through the admin interface and rejects a repeated approval without another commit.
 It checks 320-pixel and 200% zoom layouts and uses a synthetic Bitbucket provider.
+It also imports a shared MOKO catalog with unrelated duplicate keys, saves two
+approved edits as sequential commits, preserves every unrelated byte and verifies
+that no PR is opened for that product.
 
 ## Release boundary
 

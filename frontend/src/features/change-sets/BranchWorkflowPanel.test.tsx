@@ -37,6 +37,38 @@ beforeEach(() => {
   api.getBranchWorkflow.mockResolvedValue({ data: workflow });
 });
 afterEach(cleanup);
+it("explains a source-file preparation failure without claiming an uncertain Git send", async () => {
+  api.getBranchWorkflow.mockResolvedValue({
+    data: {
+      ...workflow,
+      can_create_pr: false,
+      items: [
+        {
+          ...workflow.items[0],
+          state: "blocked",
+          error_code: "unsupported_shape",
+          can_retry: true,
+          commit_hash: null,
+          commit_url: null,
+        },
+      ],
+    },
+  });
+  api.retryBranchChange.mockResolvedValue({ data: workflow });
+  render(<BranchWorkflowPanel>Legacy</BranchWorkflowPanel>);
+  expect(await screen.findByText(/No commit was sent/)).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Create pull request" }),
+  ).toBeDisabled();
+  await userEvent.click(
+    screen.getByRole("button", { name: "Check and retry" }),
+  );
+  expect(api.retryBranchChange).toHaveBeenCalledWith({
+    auth: "token",
+    path: { product_id: "product", job_id: "first" },
+  });
+  expect(api.createBranchPullRequest).not.toHaveBeenCalled();
+});
 it("shows each saved commit and opens a PR only on explicit confirmation", async () => {
   api.createBranchPullRequest.mockResolvedValue({
     data: { ...workflow, can_create_pr: false },
