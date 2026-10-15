@@ -62,6 +62,16 @@ Finish client generation before running frontend tests: generation replaces the
 client directory. Vitest uses two workers to avoid CPU contention in large DOM
 and accessibility tests; assertions and timeouts remain unchanged.
 
+The focused session-renewal browser regression uses synthetic HTTP responses and
+requires no backend or account credentials. After building, serve the frontend
+in one terminal with `cd frontend && npm exec vite -- preview --host 127.0.0.1
+--port 4179 --strictPort`. From the repository root in another terminal, run
+`PLAYWRIGHT_BASE_URL=http://127.0.0.1:4179 npm --prefix frontend run e2e --
+session-renewal.spec.ts`. It checks renewal after inactivity, preservation of
+unsaved form input, revoked-session redirects, retry after a temporary service
+failure and serialized refresh requests from two browser tabs. This focused
+browser check supplements the ordinary Vitest session regression tests.
+
 The frozen Phase 4 API-scope check uses a recorded GSD verdict bound to the exact
 plan contents in `tools/phase4_api_scope_receipt.json`. Any changed or added plan
 or coverage declaration requires rerunning and reviewing that workflow check.

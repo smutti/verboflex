@@ -15,7 +15,11 @@ import {
 } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { issueToken, readCurrentUser } from "../../api/client";
+import {
+  issueToken,
+  readCurrentUser,
+  refreshAccessToken,
+} from "../../api/client";
 import { client } from "../../api/client/client.gen";
 import { SessionProvider, useSession } from "./session";
 import { SessionNavigationBoundary } from "./SessionNavigationBoundary";
@@ -84,6 +88,12 @@ describe("session revocation", () => {
   beforeEach(() => {
     vi.mocked(issueToken).mockReset();
     vi.mocked(readCurrentUser).mockReset();
+    vi.mocked(refreshAccessToken).mockReset();
+    vi.mocked(refreshAccessToken).mockResolvedValue({
+      data: undefined,
+      error: { detail: "Invalid refresh session" },
+      response: new Response(null, { status: 401 }),
+    });
     vi.mocked(issueToken).mockResolvedValue({
       error: undefined,
       data: {
@@ -99,7 +109,7 @@ describe("session revocation", () => {
     });
   });
 
-  it("drops authenticated state when the server rejects its current token", async () => {
+  it("drops authenticated state when the server also rejects its refresh session", async () => {
     const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
     await act(() =>
       result.current.login({

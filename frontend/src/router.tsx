@@ -57,6 +57,7 @@ export type AdminRouteState =
 
 export interface SessionRoutesProps {
   state: SessionState;
+  onRetrySession?: () => void;
   loginElement: ReactNode;
   changePasswordElement: ReactNode;
   mcpConsentElement?: ReactNode;
@@ -116,6 +117,7 @@ function AdminRouteContent({
 
 export function SessionRoutes({
   state,
+  onRetrySession,
   loginElement,
   changePasswordElement,
   mcpConsentElement,
@@ -131,6 +133,21 @@ export function SessionRoutes({
   adminRouteState = { status: "ready" },
   accessDeniedElement,
 }: SessionRoutesProps) {
+  if (state.status === "session_unavailable") {
+    return (
+      <main className="flex min-h-screen items-center justify-center px-6">
+        <Alert className="max-w-md">
+          <AlertTitle>We could not check your session</AlertTitle>
+          <AlertDescription>
+            Check your connection and try again.
+            <Button onClick={onRetrySession} className="mt-4">
+              Try again
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </main>
+    );
+  }
   if (state.status === "checking_session") {
     return (
       <main className="flex min-h-screen items-center justify-center px-6">
@@ -368,7 +385,7 @@ export function AdminApplicationRoutes({
 }
 
 export function AppRouter() {
-  const { logout, state } = useSession();
+  const { logout, restoreSession, state } = useSession();
   const authenticatedShellProps =
     state.status === "authenticated"
       ? {
@@ -381,6 +398,7 @@ export function AppRouter() {
   return (
     <SessionRoutes
       state={state}
+      onRetrySession={() => void restoreSession()}
       loginElement={<LoginPage />}
       changePasswordElement={<ChangePasswordPage />}
       mcpConsentElement={

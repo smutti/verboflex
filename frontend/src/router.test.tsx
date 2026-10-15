@@ -154,6 +154,7 @@ beforeEach(() => {
   refreshAccessTokenMock.mockResolvedValue({
     data: undefined,
     error: { detail: "No session" },
+    response: new Response(null, { status: 401 }),
   });
 });
 
@@ -424,7 +425,11 @@ describe("session routes", () => {
     expect(listTranslationOptions).not.toHaveBeenCalled();
     expect(searchTranslationKeys).not.toHaveBeenCalled();
 
-    rejectSession({ data: undefined, error: { detail: "No session" } });
+    rejectSession({
+      data: undefined,
+      error: { detail: "No session" },
+      response: new Response(null, { status: 401 }),
+    });
     expect(
       await screen.findByRole("button", { name: "Sign in to VerboFlex" }),
     ).toBeVisible();
@@ -545,6 +550,25 @@ describe("session routes", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("Checking session");
     expect(screen.queryByRole("heading")).not.toBeInTheDocument();
+  });
+
+  it("offers a retry without redirecting to login when initial session validation is unavailable", async () => {
+    refreshAccessTokenMock.mockRejectedValue(new TypeError("Offline"));
+    renderApplication("/profile");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We could not check your session",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Sign in to VerboFlex" }),
+    ).toBeNull();
+    expect(screen.getByTestId("current-route")).toHaveTextContent("/profile");
+    restorePrincipal();
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() =>
+      expect(screen.queryByText("We could not check your session")).toBeNull(),
+    );
+    expect(screen.getByTestId("current-route")).toHaveTextContent("/profile");
+    expect(refreshAccessTokenMock).toHaveBeenCalledTimes(2);
   });
 
   it("renders the login route for signed-out authority", () => {
