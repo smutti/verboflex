@@ -17,6 +17,7 @@ from verboflex.auth.product_access import visible_product_sql
 from verboflex.localization.graphemes import grapheme_count
 from verboflex.services.product_summary import _ACTIVE_MAPPING_SQL, _WHITESPACE
 from verboflex.services.signed_cursor import InvalidSignedCursor, SignedCursorCodec
+from verboflex.services.source_fallback import SOURCE_FALLBACK_SQL
 
 SEARCH_PAGE_SIZE = 50
 MAX_SEARCH_QUERY_CHARS = 256
@@ -337,7 +338,9 @@ def _scope_digest(
         _scoped(
             text(
                 "SELECT product.id AS product_id, scope.id AS scope_id, "
-                "scope.active_execution_id, scope.dataset_version "
+                "scope.active_execution_id, scope.dataset_version, "
+                "coalesce((SELECT policy.version FROM source_fallback_policies policy "
+                "WHERE policy.product_id = product.id), 0) AS source_fallback_version "
                 f"FROM ({_AUTHORIZED_ACTIVE_PRODUCTS_SQL}) AS product "
                 "JOIN localization_scopes AS scope ON scope.product_id = product.id "
                 "WHERE scope.active_execution_id IS NOT NULL "
@@ -356,6 +359,7 @@ def _scope_digest(
                 str(row["scope_id"]),
                 str(row["active_execution_id"]),
                 row["dataset_version"],
+                row["source_fallback_version"],
             ]
             for row in rows
         ],
@@ -523,6 +527,9 @@ _SOURCE_COMPARISON_SQL = """
     ) AS revisions
 """
 
+_FALLBACK = SOURCE_FALLBACK_SQL.format(
+    base_language="mapping.base_language", product_id="key.product_id"
+)
 _SEARCH_SQL = text(
     rf"""
 WITH authorized_products AS (
@@ -569,7 +576,7 @@ WITH authorized_products AS (
         (array_agg(source_projection.source_text ORDER BY value.is_deleted, value.id))[1]
             AS source_text,
         bool_or(source_projection.source_changed) AS source_changed,
-        bool_or(NOT value.is_deleted AND
+        bool_or(NOT value.is_deleted AND NOT fallback.applies AND
             (value.translated_text IS NULL OR btrim(value.translated_text, :whitespace) = ''))
             AS needs_translation,
         (array_agg(value.translated_text ORDER BY value.is_deleted, value.id)
@@ -597,6 +604,9 @@ WITH authorized_products AS (
       ON value.scope_id = scope.id
      AND value.translation_key_id = key.id
     LEFT JOIN product_repository_mappings AS mapping ON mapping.id = scope.current_mapping_id
+    CROSS JOIN LATERAL (SELECT coalesce((
+        {_FALLBACK}
+    ), false) AS applies) AS fallback
     LEFT JOIN LATERAL (
         SELECT key.id AS key_id, scope.id AS scope_id,
                value.language AS language, mapping.base_language,

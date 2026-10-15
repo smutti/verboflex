@@ -286,6 +286,14 @@ const forbiddenWireShapes = [
 
 const phaseThreeAdminOperationIds = new Map([
   [
+    "GET /api/v1/admin/products/{product_id}/source-fallback",
+    "get_admin_source_fallback",
+  ],
+  [
+    "PUT /api/v1/admin/products/{product_id}/source-fallback",
+    "update_admin_source_fallback",
+  ],
+  [
     "GET /api/v1/admin/bitbucket/repositories",
     "list_admin_bitbucket_repositories",
   ],

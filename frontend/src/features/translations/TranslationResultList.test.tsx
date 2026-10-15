@@ -575,6 +575,29 @@ describe("compact multilingual key blocks", () => {
       expect(edit).toHaveBeenCalledWith("it-IT-0", button);
     },
   );
+  it("labels an explicitly configured source fallback as the effective translation", async () => {
+    const item = group(0, {
+      base_language: "it-IT",
+      source_text: "Operazione completata",
+    });
+    item.slots = [
+      {
+        ...item.slots[2],
+        effective_text: "Operazione completata",
+        uses_source_fallback: true,
+      },
+    ];
+    mount({
+      ...defaults(),
+      items: [item],
+      canEdit: true,
+      onEditTranslation: vi.fn(),
+    });
+    expect(await screen.findByText("Using source text")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /Edit translation.*it-IT/ }),
+    ).toHaveTextContent("Operazione completata");
+  });
   it("keeps siblings visible and pins the active editor beyond the visible range", async () => {
     mount({
       ...defaults(),

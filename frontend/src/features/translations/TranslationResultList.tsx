@@ -612,6 +612,7 @@ export function TranslationResultList({
                             </p>
                           )}
                           <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 px-1 text-label text-muted-foreground">
+                            {slot.uses_source_fallback && <span>Using source text</span>}
                             {reason && slot.kind !== "absent" && (
                               <span>{reason}</span>
                             )}

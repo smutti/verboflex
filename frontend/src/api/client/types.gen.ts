@@ -4898,6 +4898,58 @@ export type SelectedProposal = {
 };
 
 /**
+ * SourceFallbackResponse
+ */
+export type SourceFallbackResponse = {
+    /**
+     * Available Languages
+     */
+    available_languages: Array<string>;
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+    /**
+     * Language
+     */
+    language: string | null;
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Source Texts
+     */
+    source_texts: Array<string>;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * SourceFallbackWrite
+ */
+export type SourceFallbackWrite = {
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Language
+     */
+    language: string | null;
+    /**
+     * Source Texts
+     */
+    source_texts: Array<string>;
+};
+
+/**
  * SubmissionActionRequest
  */
 export type SubmissionActionRequest = {
@@ -5775,6 +5827,10 @@ export type TranslationLanguageSlot = {
      * Text Truncated
      */
     text_truncated: boolean;
+    /**
+     * Uses Source Fallback
+     */
+    uses_source_fallback?: boolean;
     /**
      * Value Count
      */
@@ -8336,6 +8392,98 @@ export type GetAdminProductReactivationEligibilityResponses = {
 };
 
 export type GetAdminProductReactivationEligibilityResponse = GetAdminProductReactivationEligibilityResponses[keyof GetAdminProductReactivationEligibilityResponses];
+
+export type GetAdminSourceFallbackData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/source-fallback';
+};
+
+export type GetAdminSourceFallbackErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAdminSourceFallbackError = GetAdminSourceFallbackErrors[keyof GetAdminSourceFallbackErrors];
+
+export type GetAdminSourceFallbackResponses = {
+    /**
+     * Successful Response
+     */
+    200: SourceFallbackResponse;
+};
+
+export type GetAdminSourceFallbackResponse = GetAdminSourceFallbackResponses[keyof GetAdminSourceFallbackResponses];
+
+export type UpdateAdminSourceFallbackData = {
+    body: SourceFallbackWrite;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/source-fallback';
+};
+
+export type UpdateAdminSourceFallbackErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateAdminSourceFallbackError = UpdateAdminSourceFallbackErrors[keyof UpdateAdminSourceFallbackErrors];
+
+export type UpdateAdminSourceFallbackResponses = {
+    /**
+     * Successful Response
+     */
+    200: SourceFallbackResponse;
+};
+
+export type UpdateAdminSourceFallbackResponse = UpdateAdminSourceFallbackResponses[keyof UpdateAdminSourceFallbackResponses];
 
 export type GetAdminProductSummaryData = {
     body?: never;

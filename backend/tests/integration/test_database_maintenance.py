@@ -27,6 +27,7 @@ from verboflex.integrations.bitbucket.client import BitbucketFileDelta
 from verboflex.models.bitbucket_connection import BitbucketConnection
 from verboflex.models.import_job import ImportExecution, ImportJob
 from verboflex.models.product import Product
+from verboflex.models.source_fallback import SourceFallbackPolicy, SourceFallbackText
 from verboflex.models.user import User
 from verboflex.services import database_maintenance as maintenance
 from verboflex.services import import_jobs
@@ -189,6 +190,17 @@ def test_product_purge_resume_preserves_active_graph(maintenance_factory):
     factory = maintenance_factory
     deleted = seed_staging(factory)
     active = seed_staging(factory)
+    with factory.begin() as session:
+        for product_id in (deleted.product_id, active.product_id):
+            session.add(
+                SourceFallbackPolicy(product_id=product_id, version=1, enabled=True, language="en")
+            )
+            session.flush()
+            session.add(
+                SourceFallbackText(
+                    product_id=product_id, source_digest="a" * 64, source_text="Synthetic source"
+                )
+            )
     mark_deleted(factory, deleted.product_id)
     now = datetime.now(UTC) + timedelta(days=8)
     policy = maintenance.MaintenancePolicy(batch_rows=3, max_rows_per_run=3)
@@ -218,6 +230,9 @@ def test_product_purge_resume_preserves_active_graph(maintenance_factory):
     with factory() as session:
         assert session.get(Product, deleted.product_id) is None
         assert session.get(Product, active.product_id).is_active
+        assert session.get(SourceFallbackPolicy, deleted.product_id) is None
+        assert session.get(SourceFallbackPolicy, active.product_id).enabled
+        assert session.get(SourceFallbackText, (active.product_id, "a" * 64)) is not None
         assert (
             session.scalar(
                 text(

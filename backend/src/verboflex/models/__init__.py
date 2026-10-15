@@ -41,6 +41,7 @@ from verboflex.models.review import (
 )
 from verboflex.models.role import Role, user_roles_table
 from verboflex.models.screenshot import ScreenshotJob
+from verboflex.models.source_fallback import SourceFallbackPolicy, SourceFallbackText
 from verboflex.models.submission import (
     ChangeSet,
     ChangeSetEvent,
@@ -67,6 +68,8 @@ from verboflex.models.translation_constraint import TranslationConstraint
 from verboflex.models.user import User
 
 __all__ = [
+    "SourceFallbackPolicy",
+    "SourceFallbackText",
     "BranchFile",
     "BranchJob",
     "BranchWorkflow",

@@ -24,6 +24,7 @@ from verboflex.schemas.translation_workspace import (
 from verboflex.schemas.translations import TranslationLanguageOptionResponse
 from verboflex.services.product_summary import _WHITESPACE
 from verboflex.services.signed_cursor import InvalidSignedCursor, SignedCursorCodec
+from verboflex.services.source_fallback import SOURCE_FALLBACK_SQL
 from verboflex.services.translation_search import (
     _SOURCE_COMPARISON_SQL,
     _SOURCE_RECORDS_SQL,
@@ -37,7 +38,9 @@ _CURRENT = f"""
     SELECT scope.id AS scope_id, product.id AS product_id, product.display_name AS product_name,
            scope.current_revision_id, scope.active_execution_id, scope.dataset_version,
            scope.read_version, scope.language_counts,
-           mapping.base_language
+           mapping.base_language,
+           coalesce((SELECT policy.version FROM source_fallback_policies AS policy
+               WHERE policy.product_id = product.id), 0) AS source_fallback_version
     FROM products AS product
     JOIN localization_scopes AS scope ON scope.product_id = product.id
         AND scope.current_revision_id = product.active_revision_id
@@ -76,6 +79,9 @@ SELECT coalesce((SELECT jsonb_agg(code ORDER BY is_base DESC, code COLLATE "C")
 
 # Imported and pending predicates remain separate. Only complete, current pending
 # membership may replace text; one member from another scope/language fails closed.
+_FALLBACK = SOURCE_FALLBACK_SQL.format(
+    base_language="current.base_language", product_id="current.product_id"
+)
 _KEY_PAGE = text(rf"""
 WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
     SELECT key.id AS key_id, current.scope_id, current.product_id, current.product_name,
@@ -102,8 +108,9 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
             OR (:violation = 'within_limit' AND value.effective_max_chars IS NOT NULL
                 AND NOT value.is_over_limit)
             OR (:violation = 'no_max' AND value.effective_max_chars IS NULL))) AS limit_matches,
-        bool_or(NOT value.is_deleted AND
+        bool_or(NOT value.is_deleted AND NOT fallback.applies AND
             btrim(coalesce(value.translated_text, ''), :whitespace) = '') AS imported_empty,
+        bool_or(fallback.applies) AS uses_source_fallback,
         bool_or(source_projection.source_changed) AS source_changed,
         (array_agg(source_projection.source_text ORDER BY value.is_deleted, value.id)
             FILTER (WHERE source_projection.source_text IS NOT NULL))[1] AS source_text,
@@ -119,9 +126,11 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
         bool_or((:deleted <> 'active' OR NOT value.is_deleted) AND
             casefold(value.display_text COLLATE pg_unicode_fast) LIKE :partial ESCAPE '\')
             AS text_partial,
-        (array_agg(left(value.display_text, 1024) ORDER BY value.is_deleted, value.id))[1]
+        (array_agg(left(CASE WHEN fallback.applies THEN value.source_text
+            ELSE value.display_text END, 1024) ORDER BY value.is_deleted, value.id))[1]
             AS imported_text,
-        bool_or(length(value.display_text) > 1024) AS imported_truncated,
+        bool_or(length(CASE WHEN fallback.applies THEN value.source_text
+            ELSE value.display_text END) > 1024) AS imported_truncated,
         bool_or(locator.repository_side = 'keys') AS keys_side,
         bool_and(coalesce(locator.value_id IS NOT NULL
             AND locator.import_execution_id = current.active_execution_id, false)) AS provenance_ok,
@@ -157,6 +166,9 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
       ON value.translation_key_id = key.id AND value.scope_id = current.scope_id
     LEFT JOIN translation_value_locators AS locator
       ON locator.value_id = value.id AND locator.translation_key_id = key.id
+    CROSS JOIN LATERAL (SELECT coalesce((
+        {_FALLBACK}
+    ), false) AS applies) AS fallback
     LEFT JOIN LATERAL (
         SELECT key.id AS key_id, current.scope_id, value.language, current.base_language,
                (key.is_deleted OR value.is_deleted) AS is_deleted,
@@ -343,6 +355,8 @@ LEFT JOIN LATERAL (
         'effective_text', CASE WHEN slot.group_id IS NULL THEN
             CASE WHEN language.code=context.language THEN context.source_text END
             WHEN slot.use_pending THEN slot.pending_text ELSE slot.imported_text END,
+        'uses_source_fallback', coalesce(slot.uses_source_fallback
+            AND NOT coalesce(slot.use_pending, false), false),
         'text_truncated', coalesce(CASE WHEN slot.group_id IS NULL THEN
             language.code=context.language AND context.source_truncated
             WHEN slot.use_pending THEN slot.pending_truncated

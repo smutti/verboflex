@@ -1308,6 +1308,62 @@ async function multilingualWorkspace() {
   await expect(
     page.getByText("Empty source text", { exact: true }),
   ).toHaveCount(0);
+  const sourceAdmin = await login("admin");
+  await sourceAdmin.goto(
+    `${frontend}/admin/products/${fixture.qt_base_product}/overview`,
+  );
+  await sourceAdmin
+    .getByText("Source language settings", { exact: true })
+    .click();
+  await sourceAdmin
+    .getByRole("checkbox", {
+      name: "Use confirmed source text for the base language",
+    })
+    .check();
+  await sourceAdmin
+    .getByRole("checkbox", { name: "Operazione completata", exact: true })
+    .check();
+  await expect(
+    sourceAdmin.getByRole("checkbox", {
+      name: "Open the message",
+      exact: true,
+    }),
+  ).not.toBeChecked();
+  await sourceAdmin
+    .getByRole("button", { name: "Save source language settings" })
+    .click();
+  await expect(
+    sourceAdmin.getByText("Source language settings saved."),
+  ).toBeVisible();
+  await sourceAdmin.reload();
+  await sourceAdmin
+    .getByText("Source language settings", { exact: true })
+    .click();
+  await expect(
+    sourceAdmin.getByRole("checkbox", {
+      name: "Operazione completata",
+      exact: true,
+    }),
+  ).toBeChecked();
+  await sourceAdmin.setViewportSize({ width: 320, height: 800 });
+  check(
+    await sourceAdmin.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  );
+  await sourceAdmin.close();
+  const sourcePolicy = await api(
+    `/admin/products/${fixture.qt_base_product}/source-fallback`,
+    adminToken,
+  );
+  check(
+    sourcePolicy.enabled &&
+      sourcePolicy.version === 1 &&
+      sourcePolicy.source_texts.length === 1,
+  );
+  await page.reload();
+  await expect(page.getByText("message-0", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("message-1", { exact: true })).toBeVisible();
   await page
     .getByRole("button", {
       name: "Edit translation for message-1 (it-IT)",
@@ -1320,7 +1376,7 @@ async function multilingualWorkspace() {
   await expect(field).toHaveCount(0);
   await page.reload();
   await expect(page.getByText("message-1", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("message-0", { exact: true })).toBeVisible();
+  await expect(page.getByText("message-0", { exact: true })).toHaveCount(0);
   const qtDetail = await api(
     "/translations/" + fixture.qt_base_groups[1],
     bearer,
@@ -1339,6 +1395,17 @@ async function multilingualWorkspace() {
       .locator('[data-part="source-text"]')
       .filter({ hasText: "Open the message" }),
   ).toBeVisible();
+  await expect(
+    page.getByText("Using source text", { exact: true }),
+  ).toBeVisible();
+  const nativeDetail = await api(
+    "/translations/" + fixture.qt_base_groups[0],
+    bearer,
+  );
+  check(
+    nativeDetail.values[0].translated_text === "" &&
+      !nativeDetail.pending_change,
+  );
   await capture("qt-base-source");
 
   progress("viewer-and-comment-link");
@@ -1406,6 +1473,8 @@ async function multilingualWorkspace() {
         embeddedSourceReadOnly: true,
         qtBaseSourceSeparateFromTranslation: true,
         qtBaseMissingTranslationFilter: true,
+        configuredNativeSourceFallback: true,
+        foreignSourceRemainsActionable: true,
         desktopMobileOverflow: false,
       },
       null,
