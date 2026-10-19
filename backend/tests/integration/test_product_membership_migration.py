@@ -10,8 +10,6 @@ from alembic import command
 from tests.integration.test_translation_workspace_performance import ROOT, owned_database
 from verboflex.models.product import Product
 from verboflex.models.product_member import ProductMember, ProductTeamEvent
-from verboflex.models.role import Role
-from verboflex.models.user import User
 
 
 def test_membership_upgrade_backfills_only_existing_products_and_safe_downgrade(monkeypatch):
@@ -27,16 +25,22 @@ def test_membership_upgrade_backfills_only_existing_products_and_safe_downgrade(
             for name in ("admin", "product_manager_reviewer", "translator", "viewer"):
                 identity = uuid4()
                 identities[identity] = "product_manager_reviewer" if name == "admin" else name
-                session.add(
-                    User(
-                        id=identity,
-                        email=f"{name}@example.com",
-                        display_name=name,
-                        hashed_password="synthetic-unused",
-                        is_active=True,
-                        must_change_password=False,
-                        roles=[session.scalar(select(Role).where(Role.name == name))],
-                    )
+                # Seed the historical schema without today's ORM user columns.
+                session.execute(
+                    text(
+                        "INSERT INTO users "
+                        "(id, email, display_name, hashed_password, "
+                        "is_active, must_change_password) "
+                        "VALUES (:id, :email, :name, 'synthetic-unused', true, false)"
+                    ),
+                    {"id": identity, "email": f"{name}@example.com", "name": name},
+                )
+                session.execute(
+                    text(
+                        "INSERT INTO user_roles (user_id, role_id) "
+                        "SELECT :id, id FROM roles WHERE name = :name"
+                    ),
+                    {"id": identity, "name": name},
                 )
         command.upgrade(config, "head")
         with factory.begin() as session:
