@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -100,10 +101,11 @@ function ordinaryUserFromCredential(
 }
 
 function UserRoles({ user }: { user: AdminUserResponse }) {
+  useUiLanguage();
   return (
     <div
       className="flex flex-wrap gap-2"
-      aria-label={`Roles for ${user.display_name}`}
+      aria-label={t("Roles for {{v0}}", { v0: user.display_name })}
     >
       {user.roles.map((role) => (
         <Badge key={role} variant="outline" className="rounded-md">
@@ -116,9 +118,10 @@ function UserRoles({ user }: { user: AdminUserResponse }) {
 }
 
 function UserStatus({ user }: { user: AdminUserResponse }) {
+  useUiLanguage();
   return (
     <Badge variant="outline" className="rounded-md">
-      {user.is_active ? "Active" : "Inactive"}
+      {user.is_active ? t("Active") : t("Inactive")}
     </Badge>
   );
 }
@@ -132,22 +135,35 @@ const LIFECYCLE_COPY: Record<
   }
 > = {
   reset: {
-    title: (displayName) => `Reset password for ${displayName}?`,
+    title: (displayName) =>
+      t("Reset password for {{v0}}?", { v0: displayName }),
     body: () =>
-      "Their current password and sessions will stop working. A new temporary password will be shown once.",
-    confirmLabel: "Reset password",
+      t(
+        "Their current password and sessions will stop working. A new temporary password will be shown once.",
+      ),
+    get confirmLabel() {
+      return t("Reset password");
+    },
   },
   deactivate: {
-    title: (displayName) => `Deactivate ${displayName}?`,
+    title: (displayName) => t("Deactivate {{v0}}?", { v0: displayName }),
     body: () =>
-      "They will immediately lose access. You can reactivate them later with a new temporary password.",
-    confirmLabel: "Deactivate user",
+      t(
+        "They will immediately lose access. You can reactivate them later with a new temporary password.",
+      ),
+    get confirmLabel() {
+      return t("Deactivate user");
+    },
   },
   reactivate: {
-    title: (displayName) => `Reactivate ${displayName}?`,
+    title: (displayName) => t("Reactivate {{v0}}?", { v0: displayName }),
     body: () =>
-      "A new temporary password will be created and all earlier credentials will remain invalid.",
-    confirmLabel: "Reactivate user",
+      t(
+        "A new temporary password will be created and all earlier credentials will remain invalid.",
+      ),
+    get confirmLabel() {
+      return t("Reactivate user");
+    },
   },
 };
 
@@ -158,10 +174,14 @@ function lifecycleErrorCopy(
   switch (error) {
     case "conflict":
       return action === "deactivate"
-        ? "This account cannot be deactivated because administrator authority must be preserved."
-        : "This user changed in another session or administrator authority must be preserved.";
+        ? t(
+            "This account cannot be deactivated because administrator authority must be preserved.",
+          )
+        : t(
+            "This user changed in another session or administrator authority must be preserved.",
+          );
     case "generic":
-      return "The current user state is unchanged. Try again.";
+      return t("The current user state is unchanged. Try again.");
   }
 }
 
@@ -174,6 +194,7 @@ function UserActions({
   onLifecycle: (target: LifecycleTarget) => void;
   user: AdminUserResponse;
 }) {
+  useUiLanguage();
   const actionTriggerRef = useRef<HTMLButtonElement>(null);
 
   return (
@@ -181,10 +202,10 @@ function UserActions({
       <Button
         type="button"
         variant="outline"
-        aria-label={`Edit ${user.display_name}`}
+        aria-label={t("Edit {{v0}}", { v0: user.display_name })}
         onClick={() => onEdit(user)}
       >
-        Edit
+        {t("Edit")}
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -192,9 +213,9 @@ function UserActions({
             ref={actionTriggerRef}
             type="button"
             variant="outline"
-            aria-label={`More actions for ${user.display_name}`}
+            aria-label={t("More actions for {{v0}}", { v0: user.display_name })}
           >
-            More actions
+            {t("More actions")}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -209,7 +230,7 @@ function UserActions({
                   })
                 }
               >
-                Reset password
+                {t("Reset password")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 variant="destructive"
@@ -221,7 +242,7 @@ function UserActions({
                   })
                 }
               >
-                Deactivate user
+                {t("Deactivate user")}
               </DropdownMenuItem>
             </>
           ) : (
@@ -234,7 +255,7 @@ function UserActions({
                 })
               }
             >
-              Reactivate user
+              {t("Reactivate user")}
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
@@ -244,6 +265,7 @@ function UserActions({
 }
 
 export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
+  useUiLanguage();
   const loadGeneration = useRef(0);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [users, setUsers] = useState<AdminUserResponse[]>([]);
@@ -468,7 +490,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="grid min-w-0 gap-2">
           <h1 id="admin-users-title" className="text-display font-semibold">
-            Users
+            {t("Users")}
           </h1>
         </div>
         <Button
@@ -477,7 +499,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
           disabled={loadState !== "ready"}
           onClick={openCreate}
         >
-          Add user
+          {t("Add user")}
         </Button>
       </div>
 
@@ -485,20 +507,20 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
         <div className="grid gap-4" role="status" aria-live="polite">
           <Skeleton className="h-9 w-48 max-w-full" />
           <Skeleton className="h-48 w-full" />
-          <span>Loading users</span>
+          <span>{t("Loading users")}</span>
         </div>
       ) : null}
 
       {loadState === "error" ? (
         <Alert variant="destructive">
-          <AlertTitle>Users unavailable</AlertTitle>
+          <AlertTitle>{t("Users unavailable")}</AlertTitle>
           <AlertDescription>
             <Button
               type="button"
               variant="outline"
               onClick={() => void loadUsers(null, false)}
             >
-              Retry loading page
+              {t("Retry loading page")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -508,7 +530,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
         <div className="grid min-w-0 gap-6">
           <div className="grid w-full max-w-xs gap-2">
             <label htmlFor="user-status-filter" className="text-sm font-medium">
-              User status
+              {t("User status")}
             </label>
             <Select
               value={statusFilter}
@@ -518,9 +540,9 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All users</SelectItem>
-                <SelectItem value="active">Active users</SelectItem>
-                <SelectItem value="inactive">Inactive users</SelectItem>
+                <SelectItem value="all">{t("All users")}</SelectItem>
+                <SelectItem value="active">{t("Active users")}</SelectItem>
+                <SelectItem value="inactive">{t("Inactive users")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -528,22 +550,24 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
           {visibleUsers.length === 0 ? (
             <section className="grid gap-2 rounded-lg border bg-secondary p-6">
               <h2 className="text-heading font-semibold">
-                No users match these filters
+                {t("No users match these filters")}
               </h2>
               <p className="text-muted-foreground">
-                Clear filters to see all users.
+                {t("Clear filters to see all users.")}
               </p>
             </section>
           ) : (
             <>
               <div className="hidden min-w-0 md:block">
-                <Table aria-label="Internal users">
+                <Table aria-label={t("Internal users")}>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>User</TableHead>
-                      <TableHead>Roles</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead>{t("User")}</TableHead>
+                      <TableHead>{t("Roles")}</TableHead>
+                      <TableHead>{t("Status")}</TableHead>
+                      <TableHead className="text-right">
+                        {t("Actions")}
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -580,7 +604,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
 
               <div
                 className="grid gap-4 md:hidden"
-                aria-label="Internal users mobile list"
+                aria-label={t("Internal users mobile list")}
               >
                 {visibleUsers.map((user) => (
                   <article key={user.id} className="grid gap-4 border-b pb-4">
@@ -612,7 +636,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
               aria-busy={loadingMore}
               onClick={() => void loadUsers(nextCursor, true)}
             >
-              Load more users
+              {t("Load more users")}
             </Button>
           ) : null}
         </div>
@@ -652,7 +676,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
                 tabIndex={-1}
                 variant="destructive"
               >
-                <AlertTitle>We could not update this account</AlertTitle>
+                <AlertTitle>{t("We could not update this account")}</AlertTitle>
                 <AlertDescription>
                   {lifecycleErrorCopy(lifecycleError, lifecycleTarget.action)}
                 </AlertDescription>
@@ -661,7 +685,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
 
             <AlertDialogFooter>
               <AlertDialogCancel disabled={lifecyclePending}>
-                Cancel
+                {t("Cancel")}
               </AlertDialogCancel>
               <Button
                 type="button"

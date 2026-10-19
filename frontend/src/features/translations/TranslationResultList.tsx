@@ -1,3 +1,4 @@
+import { displayLanguage, t, useUiLanguage, getUiLanguage } from "@/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   useWindowVirtualizer,
@@ -80,32 +81,65 @@ export interface TranslationResultListProps {
 }
 
 const STATE_LABELS = {
-  draft: "Draft",
-  approved: "Approved",
-  rejected: "Rejected",
-  mixed: "Mixed states",
+  get draft() {
+    return t("Draft");
+  },
+  get approved() {
+    return t("Approved");
+  },
+  get rejected() {
+    return t("Rejected");
+  },
+  get mixed() {
+    return t("Mixed states");
+  },
 } as const;
 const SELECTOR_LABELS = {
   scalar: null,
-  android_quantity: "Plural",
-  android_array_item: "Array",
-  qt_numerus: "Qt variant",
-  qt_length_variant: "Qt variant",
+  get android_quantity() {
+    return t("Plural");
+  },
+  get android_array_item() {
+    return t("Array");
+  },
+  get qt_numerus() {
+    return t("Qt variant");
+  },
+  get qt_length_variant() {
+    return t("Qt variant");
+  },
   json_path: "JSON path",
 } as const;
 
 const READ_ONLY_REASONS = {
-  absent: "Not imported for this language",
-  source_context:
-    "Embedded source text is read-only; edit it in the repository.",
-  deleted: "Deleted in source",
-  keys_repository: "Keys-repository values are read-only in this workspace.",
-  unsupported_format: "This source format cannot be edited here.",
-  unsupported_shape: "This structured value cannot be edited here.",
-  unavailable_provenance:
-    "Source provenance is unavailable; refresh the import before editing.",
-  mixed_edit_fields:
-    "Members have conflicting source provenance and cannot be edited together.",
+  get absent() {
+    return t("Not imported for this language");
+  },
+  get source_context() {
+    return t("Embedded source text is read-only; edit it in the repository.");
+  },
+  get deleted() {
+    return t("Deleted in source");
+  },
+  get keys_repository() {
+    return t("Keys-repository values are read-only in this workspace.");
+  },
+  get unsupported_format() {
+    return t("This source format cannot be edited here.");
+  },
+  get unsupported_shape() {
+    return t("This structured value cannot be edited here.");
+  },
+  get unavailable_provenance() {
+    return t(
+      "Source provenance is unavailable; refresh the import before editing.",
+    );
+  },
+  get mixed_edit_fields() {
+    return t(
+      "Members have conflicting source provenance and cannot be edited together.",
+    );
+  },
 } as const;
 
 export function TranslationResultList({
@@ -132,6 +166,7 @@ export function TranslationResultList({
   onOpenContext,
   onRefresh,
 }: TranslationResultListProps) {
+  useUiLanguage();
   const listRef = useRef<HTMLDivElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
   const userRequestedIdentity = useRef<string | null>(null);
@@ -143,11 +178,14 @@ export function TranslationResultList({
   >(null);
   const error = loadMoreError || callbackErrorIdentity === requestIdentity;
   const count = items.length;
-  const loadedCopy = `${count} ${count === 1 ? "key" : "keys"} loaded`;
+  const loadedCopy = t("{{v0}} {{v1}} loaded", {
+    v0: count,
+    v1: count === 1 ? t("key") : t("keys"),
+  });
   const [announcement, setAnnouncement] = useState({
     identity: requestIdentity,
     count,
-    text: loadedCopy,
+    added: 0,
   });
   if (
     announcement.identity !== requestIdentity ||
@@ -157,10 +195,7 @@ export function TranslationResultList({
     setAnnouncement({
       identity: requestIdentity,
       count,
-      text:
-        announcement.identity === requestIdentity && added > 0
-          ? `Loaded ${added} more ${added === 1 ? "key" : "keys"}`
-          : loadedCopy,
+      added: announcement.identity === requestIdentity && added > 0 ? added : 0,
     });
   }
 
@@ -315,12 +350,17 @@ export function TranslationResultList({
     <TooltipProvider>
       <div className="min-w-0 space-y-(--space-md)">
         <p role="status" aria-live="polite" className="sr-only">
-          {announcement.text}
+          {announcement.added > 0
+            ? t("Loaded {{v0}} more {{v1}}", {
+                v0: announcement.added,
+                v1: announcement.added === 1 ? t("key") : t("keys"),
+              })
+            : loadedCopy}
         </p>
         <div
           ref={listRef}
           role="list"
-          aria-label="Translation results"
+          aria-label={t("Translation results")}
           className="relative min-w-0 border-t bg-secondary"
           style={{ height: virtualizer.getTotalSize() }}
         >
@@ -386,7 +426,7 @@ export function TranslationResultList({
                           className="mt-0.5 size-4 shrink-0"
                         />
                         <span className="min-w-0" dir="auto">
-                          <span className="sr-only">Product: </span>
+                          <span className="sr-only">{t("Product: ")}</span>
                           {item.product_name}
                         </span>
                       </div>
@@ -413,7 +453,7 @@ export function TranslationResultList({
                       className="grid min-w-0 grid-cols-[minmax(5.5rem,7rem)_minmax(0,1fr)] bg-slate-50 xl:grid-cols-[minmax(6rem,8rem)_minmax(0,1fr)]"
                     >
                       <span className="p-3 text-label font-semibold">
-                        Source text
+                        {t("Source text")}
                       </span>
                       <p
                         dir="auto"
@@ -457,31 +497,43 @@ export function TranslationResultList({
                         !hasQtTranslations);
                     const text =
                       slot.kind === "absent"
-                        ? "Not imported for this language"
+                        ? t("Not imported for this language")
                         : slot.effective_text ||
                           (isSource
-                            ? "Empty source text"
-                            : "Empty translation");
+                            ? t("Empty source text")
+                            : t("Empty translation"));
                     const actions = slot.group_id
                       ? [
                           {
                             section: "comments" as const,
-                            label: `Comments for ${label}, ${slot.comment_count.toLocaleString()} comments`,
+                            label: t("Comments for {{v0}}, {{v1}} comments", {
+                              v0: label,
+                              v1: slot.comment_count.toLocaleString(
+                                getUiLanguage(),
+                              ),
+                            }),
                             Icon: MessageSquare,
                           },
                           {
                             section: "history" as const,
-                            label: `History for ${label}`,
+                            label: t("History for {{v0}}", { v0: label }),
                             Icon: History,
                           },
                           {
                             section: "review" as const,
-                            label: `Review for ${label}: ${state ? STATE_LABELS[state] : "No saved proposal"}`,
+                            label: t("Review for {{v0}}: {{v1}}", {
+                              v0: label,
+                              v1: state
+                                ? STATE_LABELS[state]
+                                : "No saved proposal",
+                            }),
                             Icon: CheckCircle2,
                           },
                           {
                             section: "source" as const,
-                            label: `Source and length details for ${label}`,
+                            label: t("Source and length details for {{v0}}", {
+                              v0: label,
+                            }),
                             Icon: Info,
                           },
                         ]
@@ -489,7 +541,9 @@ export function TranslationResultList({
                         ? [
                             {
                               section: "source" as const,
-                              label: `Source details for ${label}`,
+                              label: t("Source details for {{v0}}", {
+                                v0: label,
+                              }),
                               Icon: Info,
                             },
                           ]
@@ -512,7 +566,10 @@ export function TranslationResultList({
                           className={`min-w-0 p-3 text-label wrap-anywhere ${hasPendingChange ? (approved ? "border-l-4 border-blue-400 bg-blue-50 dark:border-blue-500 dark:bg-blue-950/30" : "border-l-4 border-amber-400 bg-amber-50 dark:border-amber-500 dark:bg-amber-950/30") : "bg-slate-100"}`}
                         >
                           <span className="font-semibold">
-                            {slot.language_label}
+                            {displayLanguage(
+                              slot.language,
+                              slot.language_label,
+                            )}
                           </span>
                           {slot.language_label !== slot.language && (
                             <span className="block text-muted-foreground">
@@ -539,12 +596,12 @@ export function TranslationResultList({
                                   )
                                 }
                               >
-                                Add forms
+                                {t("Add forms")}
                               </Button>
                             )}
                           {isSource && (
                             <span className="block text-muted-foreground">
-                              Source
+                              {t("Source")}
                             </span>
                           )}
                         </div>
@@ -567,13 +624,15 @@ export function TranslationResultList({
                                 )
                               }
                             >
-                              Add translation
+                              {t("Add translation")}
                             </Button>
                           ) : editable ? (
                             <button
                               type="button"
                               data-translation-editor-trigger={slot.group_id}
-                              aria-label={`Edit translation for ${label}`}
+                              aria-label={t("Edit translation for {{v0}}", {
+                                v0: label,
+                              })}
                               aria-expanded={false}
                               aria-describedby={overLimit ? limitId : undefined}
                               className={`group flex min-h-[44px] w-full min-w-0 cursor-text items-start gap-3 rounded-md border px-3 py-2 text-left transition-colors focus-visible:outline-2 ${overLimit ? "border-destructive bg-red-50 hover:bg-red-100 focus-visible:border-destructive focus-visible:outline-destructive dark:bg-red-950/30" : hasPendingChange ? (approved ? "border-blue-300 bg-blue-50 text-foreground" : "border-amber-400 bg-amber-50 hover:border-amber-600 hover:bg-amber-100 focus-visible:border-amber-700 focus-visible:outline-amber-700 dark:bg-amber-950/30 dark:hover:bg-amber-950/50") : "border-blue-200 bg-blue-50/60 hover:border-blue-500 hover:bg-blue-100/70 focus-visible:border-blue-600 focus-visible:outline-blue-600"}`}
@@ -597,7 +656,9 @@ export function TranslationResultList({
                                 className="flex shrink-0 items-center gap-1 pt-0.5 text-label font-semibold text-blue-700"
                               >
                                 <Pencil className="size-3.5" />
-                                <span className="hidden sm:inline">Edit</span>
+                                <span className="hidden sm:inline">
+                                  {t("Edit")}
+                                </span>
                               </span>
                             </button>
                           ) : (
@@ -612,7 +673,9 @@ export function TranslationResultList({
                             </p>
                           )}
                           <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 px-1 text-label text-muted-foreground">
-                            {slot.uses_source_fallback && <span>Using source text</span>}
+                            {slot.uses_source_fallback && (
+                              <span>{t("Using source text")}</span>
+                            )}
                             {reason && slot.kind !== "absent" && (
                               <span>{reason}</span>
                             )}
@@ -622,7 +685,7 @@ export function TranslationResultList({
                               />
                             )}
                             {slot.pending_change?.reconciliation_required && (
-                              <span>Needs reconciliation</span>
+                              <span>{t("Needs reconciliation")}</span>
                             )}
                             {overLimit && !active && (
                               <span
@@ -633,20 +696,22 @@ export function TranslationResultList({
                                   aria-hidden="true"
                                   className="size-4 shrink-0"
                                 />
-                                {overLimitCount} of {slot.value_count} over
-                                limit
+                                {overLimitCount} {t(" of ")}
+                                {slot.value_count} {t(" over limit")}
                               </span>
                             )}
-                            {slot.source_changed && <span>Source changed</span>}
+                            {slot.source_changed && (
+                              <span>{t("Source changed")}</span>
+                            )}
                             {selectors.length > 0 && (
                               <span>
-                                {slot.value_count} values ·{" "}
+                                {slot.value_count} {t(" values ·")}{" "}
                                 {selectors.join(", ")}
                               </span>
                             )}
                             {!slot.matches_filters &&
                               slot.kind !== "absent" && (
-                                <span>Context language</span>
+                                <span>{t("Context language")}</span>
                               )}
                           </div>
                         </div>
@@ -700,7 +765,9 @@ export function TranslationResultList({
                                 >
                                   <Link
                                     to={`${detailsBasePath}/${encodeURIComponent(slot.group_id)}`}
-                                    aria-label={`Open details for ${label}`}
+                                    aria-label={t("Open details for {{v0}}", {
+                                      v0: label,
+                                    })}
                                     data-translation-group-id={slot.group_id}
                                     onClick={() =>
                                       onOpenDetails?.(
@@ -717,7 +784,8 @@ export function TranslationResultList({
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>
-                                Open details for {label}
+                                {t("Open details for ")}
+                                {label}
                               </TooltipContent>
                             </Tooltip>
                           )}
@@ -732,10 +800,12 @@ export function TranslationResultList({
         </div>
         {error && (
           <Alert ref={alertRef} tabIndex={-1}>
-            <AlertTitle>More translations could not be loaded</AlertTitle>
+            <AlertTitle>
+              {t("More translations could not be loaded")}
+            </AlertTitle>
             {onRefresh && (
               <Button variant="outline" onClick={onRefresh}>
-                Refresh results
+                {t("Refresh results")}
               </Button>
             )}
           </Alert>
@@ -751,7 +821,7 @@ export function TranslationResultList({
               void requestMore(error);
             }}
           >
-            {error ? "Retry loading more" : "Load more translations"}
+            {error ? t("Retry loading more") : t("Load more translations")}
           </Button>
         )}
       </div>

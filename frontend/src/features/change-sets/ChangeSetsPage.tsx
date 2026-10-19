@@ -1,3 +1,5 @@
+import { statusLabel } from "@/i18n/statusLabels";
+import { t, useUiLanguage } from "@/i18n";
 import { useContext, useEffect, useRef, useState } from "react";
 import {
   useNavigate,
@@ -30,6 +32,7 @@ import { BranchWorkflowPanel } from "./BranchWorkflowPanel";
 import { consumeSubmissionEntry, peekSubmissionEntry } from "./submissionEntry";
 type Filters = NonNullable<GetChangeSetCandidatesData["query"]>;
 export function ChangeSetsPage({ accessToken }: { accessToken: string }) {
+  useUiLanguage();
   const context = useContext(ChangeSetContext);
   const productId = useParams<"productId">().productId ?? "";
   return context ? (
@@ -45,6 +48,7 @@ export function ChangeSetsPage({ accessToken }: { accessToken: string }) {
   );
 }
 function WorkspaceTabs() {
+  useUiLanguage();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { productId, accessToken } = useChangeSetWorkspace();
@@ -55,7 +59,7 @@ function WorkspaceTabs() {
     <BranchWorkflowPanel key={`${productId}:${accessToken}`}>
       <div className="grid min-w-0 gap-(--space-lg)">
         <nav
-          aria-label="Change set views"
+          aria-label={t("Change set views")}
           className="flex flex-wrap gap-(--space-sm)"
         >
           <Button
@@ -65,7 +69,7 @@ function WorkspaceTabs() {
               navigate(`/products/${encodeURIComponent(productId)}/change-sets`)
             }
           >
-            Pending changes
+            {t("Pending changes")}
           </Button>
           <Button
             variant={history ? "default" : "outline"}
@@ -76,7 +80,7 @@ function WorkspaceTabs() {
               )
             }
           >
-            Submission history
+            {t("Submission history")}
           </Button>
         </nav>
         {history ? <ChangeSetHistory /> : <CandidateList />}
@@ -85,6 +89,7 @@ function WorkspaceTabs() {
   );
 }
 function CandidateList() {
+  useUiLanguage();
   const {
     accessToken,
     productId,
@@ -242,9 +247,9 @@ function CandidateList() {
   if (unavailable)
     return (
       <Alert>
-        <AlertTitle>Change set unavailable</AlertTitle>
+        <AlertTitle>{t("Change set unavailable")}</AlertTitle>
         <AlertDescription>
-          This product's changes are unavailable to your account.
+          {t("This product's changes are unavailable to your account.")}
         </AlertDescription>
       </Alert>
     );
@@ -260,18 +265,19 @@ function CandidateList() {
           id="change-sets-heading"
           className="text-heading font-semibold"
         >
-          Change sets
+          {t("Change sets")}
         </h2>
         <p className="text-muted-foreground">
-          Select approved changes to prepare a pull request.
+          {t("Select approved changes to prepare a pull request.")}
         </p>
       </div>
       {entryError && (
         <Alert>
-          <AlertTitle>Selected changes need review</AlertTitle>
+          <AlertTitle>{t("Selected changes need review")}</AlertTitle>
           <AlertDescription>
-            The saved proposal changed or is no longer eligible. Review the
-            current version before selecting it.
+            {t(
+              "The saved proposal changed or is no longer eligible. Review the current version before selecting it.",
+            )}
           </AlertDescription>
         </Alert>
       )}
@@ -283,7 +289,7 @@ function CandidateList() {
         }}
       >
         <label htmlFor="change-query">
-          Search changes
+          {t("Search changes")}
           <Input
             id="change-query"
             value={query}
@@ -292,18 +298,18 @@ function CandidateList() {
           />
         </label>
         <label htmlFor="change-language">
-          Language
+          {t("Language")}
           <Input
             id="change-language"
             value={language}
             maxLength={64}
             onChange={(event) => setLanguage(event.target.value)}
-            placeholder="All languages"
+            placeholder={t("All languages")}
           />
         </label>
         <div>
           <label id="proposal-state-label" htmlFor="proposal-state">
-            Proposal state
+            {t("Proposal state")}
           </label>
           <Select
             value={filters.state}
@@ -325,15 +331,15 @@ function CandidateList() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="approved">Approved</SelectItem>
-              <SelectItem value="all">All pending</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
+              <SelectItem value="approved">{t("Approved")}</SelectItem>
+              <SelectItem value="all">{t("All pending")}</SelectItem>
+              <SelectItem value="draft">{t("Draft")}</SelectItem>
+              <SelectItem value="rejected">{t("Rejected")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <Button type="submit" variant="outline" className="w-fit">
-          Apply filters
+          {t("Apply filters")}
         </Button>
         <Button
           type="button"
@@ -345,36 +351,41 @@ function CandidateList() {
             updateFilters({ state: "approved", query: "", language: "" });
           }}
         >
-          Clear filters
+          {t("Clear filters")}
         </Button>
       </form>
       <p className="text-sm text-muted-foreground">
-        Showing {filters.state === "all" ? "all pending" : filters.state}{" "}
-        changes{filters.query ? ` matching “${filters.query}”` : ""}
-        {filters.language ? ` in ${filters.language}` : ""}.
+        {t("Showing ")}
+        {filters.state === "all"
+          ? t("all pending")
+          : statusLabel(filters.state)}{" "}
+        {t("changes")}
+        {filters.query ? t(" matching “{{v0}}”", { v0: filters.query }) : ""}
+        {filters.language ? t(" in {{v0}}", { v0: filters.language }) : ""}.
       </p>
       {failure === filterKey && (
         <Alert variant="destructive">
-          <AlertTitle>Pending changes could not be loaded</AlertTitle>
+          <AlertTitle>{t("Pending changes could not be loaded")}</AlertTitle>
           <AlertDescription>
             <Button
               variant="outline"
               onClick={() => setReload((value) => value + 1)}
             >
-              Retry loading changes
+              {t("Retry loading changes")}
             </Button>
           </AlertDescription>
         </Alert>
       )}
       {!current && failure !== filterKey && (
-        <p role="status">Loading approved changes…</p>
+        <p role="status">{t("Loading approved changes…")}</p>
       )}
       {current && !canRequest && (
         <Alert>
-          <AlertTitle>Submission access is read-only</AlertTitle>
+          <AlertTitle>{t("Submission access is read-only")}</AlertTitle>
           <AlertDescription>
-            An admin or reviewer can submit approved changes. You can inspect
-            changes and submission history.
+            {t(
+              "An admin or reviewer can submit approved changes. You can inspect changes and submission history.",
+            )}
           </AlertDescription>
         </Alert>
       )}
@@ -385,16 +396,18 @@ function CandidateList() {
             filters.language ||
             filters.state !== "approved" ||
             filters.translation_group_id
-              ? "No changes match these filters"
-              : "No approved changes ready"}
+              ? t("No changes match these filters")
+              : t("No approved changes ready")}
           </h3>
           <p>
             {filters.query ||
             filters.language ||
             filters.state !== "approved" ||
             filters.translation_group_id
-              ? "Clear filters to see the product's pending changes."
-              : "Approve complete pending changes before creating a pull request. You can view other proposal states or return to Strings."}
+              ? t("Clear filters to see the product's pending changes.")
+              : t(
+                  "Approve complete pending changes before creating a pull request. You can view other proposal states or return to Strings.",
+                )}
           </p>
         </div>
       )}
@@ -405,7 +418,7 @@ function CandidateList() {
         >
           <Checkbox
             id="select-loaded-changes"
-            aria-label="Select loaded eligible changes"
+            aria-label={t("Select loaded eligible changes")}
             checked={allLoaded ? true : someLoaded ? "indeterminate" : false}
             disabled={!eligible.length}
             onCheckedChange={(checked) => {
@@ -413,10 +426,10 @@ function CandidateList() {
               else for (const item of eligible) remove(item.proposal_id);
             }}
           />
-          Select loaded eligible changes
+          {t("Select loaded eligible changes")}
         </label>
       )}
-      <ul className="grid gap-(--space-md)" aria-label="Pending changes">
+      <ul className="grid gap-(--space-md)" aria-label={t("Pending changes")}>
         {items.map((item) => (
           <li
             key={item.proposal_id}
@@ -433,7 +446,10 @@ function CandidateList() {
                   disabled={
                     !item.can_review && !selectedIds.has(item.proposal_id)
                   }
-                  aria-label={`Select ${item.key} (${item.language})`}
+                  aria-label={t("Select {{v0}} ({{v1}})", {
+                    v0: item.key,
+                    v1: item.language,
+                  })}
                   onCheckedChange={(checked) =>
                     checked ? select([item]) : remove(item.proposal_id)
                   }
@@ -442,17 +458,18 @@ function CandidateList() {
               <span className="min-w-0 flex-1 wrap-anywhere">
                 {item.key} ({item.language})
               </span>
-              <Badge variant="outline">{item.state}</Badge>
+              <Badge variant="outline">{statusLabel(item.state)}</Badge>
             </label>
             <p className="text-sm text-muted-foreground">
-              Version {item.version} · {item.value_count} values
+              {t("Version ")}
+              {item.version} · {item.value_count} {t(" values")}
             </p>
             <p
               className="wrap-anywhere whitespace-pre-wrap"
               lang={item.language}
               dir="auto"
             >
-              <span className="font-semibold">Published: </span>
+              <span className="font-semibold">{t("Published: ")}</span>
               {item.published_excerpt}
             </p>
             <p
@@ -460,12 +477,12 @@ function CandidateList() {
               lang={item.language}
               dir="auto"
             >
-              <span className="font-semibold">Proposed: </span>
+              <span className="font-semibold">{t("Proposed: ")}</span>
               {item.proposed_excerpt}
             </p>
             {item.blocker && (
               <p className="mt-(--space-sm) text-sm">
-                Selected changes need review:{" "}
+                {t("Selected changes need review:")}{" "}
                 {item.blocker.replaceAll("_", " ")}.
               </p>
             )}
@@ -478,16 +495,17 @@ function CandidateList() {
           variant="outline"
           onClick={() => setAfter(current.page.next_after ?? undefined)}
         >
-          Load more changes
+          {t("Load more changes")}
         </Button>
       )}
       {selection.length > 0 && (
         <section
-          aria-label="Selected changes"
+          aria-label={t("Selected changes")}
           className="grid gap-(--space-sm)"
         >
           <h3 className="font-semibold">
-            {selection.length} selected · {outside} outside current filters
+            {selection.length} {t(" selected · ")}
+            {outside} {t(" outside current filters")}
           </h3>
           {selection.map((entry) => (
             <div
@@ -495,18 +513,21 @@ function CandidateList() {
               className="flex flex-wrap items-center gap-(--space-sm)"
             >
               <span className="min-w-0 wrap-anywhere">
-                {entry.candidate.key} ({entry.candidate.language}), version{" "}
-                {entry.candidate.version}
+                {entry.candidate.key} ({entry.candidate.language}
+                {t("), version")} {entry.candidate.version}
                 {entry.needsReview
-                  ? " — Needs review: remove and select the current version."
+                  ? t(" — Needs review: remove and select the current version.")
                   : ""}
               </span>
               <Button
                 variant="ghost"
                 onClick={() => remove(entry.candidate.proposal_id)}
-                aria-label={`Remove ${entry.candidate.key} (${entry.candidate.language})`}
+                aria-label={t("Remove {{v0}} ({{v1}})", {
+                  v0: entry.candidate.key,
+                  v1: entry.candidate.language,
+                })}
               >
-                Remove
+                {t("Remove")}
               </Button>
             </div>
           ))}
@@ -515,7 +536,8 @@ function CandidateList() {
       {canRequest && (
         <>
           <p className="text-sm text-muted-foreground">
-            Select at most {limit} complete proposals.
+            {t("Select at most ")}
+            {limit} {t(" complete proposals.")}
           </p>
           <Button
             id="review-selected-changes"
@@ -531,14 +553,15 @@ function CandidateList() {
               );
             }}
           >
-            Review selected changes ({selection.length})
+            {t("Review selected changes (")}
+            {selection.length})
           </Button>
         </>
       )}
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>Selected changes need review</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertTitle>{t("Selected changes need review")}</AlertTitle>
+          <AlertDescription>{t(error)}</AlertDescription>
         </Alert>
       )}
     </section>

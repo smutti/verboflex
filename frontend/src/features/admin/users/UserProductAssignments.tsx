@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useId } from "react";
 
 import {
@@ -26,6 +27,7 @@ export function UserProductAssignments({
   value,
   onChange,
 }: UserProductAssignmentsProps) {
+  useUiLanguage();
   const id = useId();
   const products = useCursorCollection<AdminUserProductAccess>({
     queryKey: `${accessToken}:${user?.id ?? "new"}`,
@@ -87,36 +89,47 @@ export function UserProductAssignments({
       disabled={disabled}
       className="grid min-w-0 gap-3 rounded-lg border p-4"
     >
-      <legend className="px-1 text-sm font-medium">Product access</legend>
+      <legend className="px-1 text-sm font-medium">
+        {t("Product access")}
+      </legend>
       <p className="text-sm text-muted-foreground">
         {user
-          ? "Manage this person's product roles. Choose No access to remove a membership. Changes apply when you save the user."
-          : "Choose a role for each active product this person should access. You can also assign products later from their Team page."}
+          ? t(
+              "Manage this person's product roles. Choose No access to remove a membership. Changes apply when you save the user.",
+            )
+          : t(
+              "Choose a role for each active product this person should access. You can also assign products later from their Team page.",
+            )}
       </p>
       {user && !user.is_active && (
         <p className="text-sm text-muted-foreground">
-          Reactivate this account before assigning or changing roles. You can
-          still remove product access.
+          {t(
+            "Reactivate this account before assigning or changing roles. You can still remove product access.",
+          )}
         </p>
       )}
-      {products.status === "loading" && <p role="status">Loading products…</p>}
+      {products.status === "loading" && (
+        <p role="status">{t("Loading products…")}</p>
+      )}
       {products.status === "error" && (
         <div className="grid justify-items-start gap-2">
           <p role="alert">
-            Products unavailable. Retry to assign product access.
+            {t("Products unavailable. Retry to assign product access.")}
           </p>
           <Button
             type="button"
             variant="outline"
             onClick={() => void products.reload()}
           >
-            Retry loading products
+            {t("Retry loading products")}
           </Button>
         </div>
       )}
       {products.isEmpty && (
         <p className="text-sm text-muted-foreground">
-          {user ? "No products available." : "No active products available."}
+          {user
+            ? t("No products available.")
+            : t("No active products available.")}
         </p>
       )}
       <div className="grid max-h-64 gap-3 overflow-y-auto">
@@ -140,14 +153,14 @@ export function UserProductAssignments({
                 disabled={!assignment && value.length >= 100}
                 onChange={(event) => assign(product, event.target.value)}
               >
-                <option value="none">No access</option>
+                <option value="none">{t("No access")}</option>
                 <option
                   value="viewer"
                   disabled={
                     user?.is_active === false && product.role !== "viewer"
                   }
                 >
-                  Viewer
+                  {t("Viewer")}
                 </option>
                 <option
                   value="translator"
@@ -155,7 +168,7 @@ export function UserProductAssignments({
                     user?.is_active === false && product.role !== "translator"
                   }
                 >
-                  Translator
+                  {t("Translator")}
                 </option>
                 <option
                   value="product_manager_reviewer"
@@ -164,7 +177,7 @@ export function UserProductAssignments({
                     product.role !== "product_manager_reviewer"
                   }
                 >
-                  Product manager / reviewer
+                  {t("Product manager / reviewer")}
                 </option>
                 <option
                   value="product_owner"
@@ -173,7 +186,7 @@ export function UserProductAssignments({
                     product.role !== "product_owner"
                   }
                 >
-                  Product Owner
+                  {t("Product Owner")}
                 </option>
               </select>
             </div>
@@ -183,13 +196,17 @@ export function UserProductAssignments({
       {value.length >= 100 && (
         <p className="text-sm text-muted-foreground">
           {user
-            ? "You can change up to 100 products in one save. Save these changes before editing more."
-            : "You can assign up to 100 products when creating an account."}
+            ? t(
+                "You can change up to 100 products in one save. Save these changes before editing more.",
+              )
+            : t("You can assign up to 100 products when creating an account.")}
         </p>
       )}
       {products.loadMoreError && (
         <p role="alert">
-          More products could not be loaded. Your selections are still here.
+          {t(
+            "More products could not be loaded. Your selections are still here.",
+          )}
         </p>
       )}
       {products.isPartial && (
@@ -200,8 +217,8 @@ export function UserProductAssignments({
           onClick={() => void products.loadMore()}
         >
           {products.loadMoreError
-            ? "Retry loading more products"
-            : "Load more products"}
+            ? t("Retry loading more products")
+            : t("Load more products")}
         </Button>
       )}
     </fieldset>

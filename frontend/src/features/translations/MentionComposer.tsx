@@ -1,3 +1,4 @@
+import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import {
   useEffect,
   useId,
@@ -134,6 +135,7 @@ export function MentionComposer({
   mentions,
   onChange,
 }: MentionComposerProps) {
+  useUiLanguage();
   const reactId = useId().replaceAll(":", "");
   const listboxId = `${id}-${reactId}-mentions`;
   const textarea = useRef<HTMLTextAreaElement>(null);
@@ -364,11 +366,12 @@ export function MentionComposer({
         onKeyDown={keyDown}
       />
       <p className="text-label text-muted-foreground">
-        {body.length.toLocaleString()} / {maxLength.toLocaleString()} characters
+        {body.length.toLocaleString(getUiLanguage())} /{" "}
+        {maxLength.toLocaleString(getUiLanguage())} {t(" characters")}
       </p>
       {mentions.length > 0 && (
         <div
-          aria-label="Selected mentions"
+          aria-label={t("Selected mentions")}
           className="flex flex-wrap gap-(--space-xs)"
         >
           {mentions.map((mention) => (
@@ -383,7 +386,9 @@ export function MentionComposer({
                 variant="ghost"
                 size="icon-sm"
                 disabled={disabled}
-                aria-label={`Remove mention ${mention.display_text}`}
+                aria-label={t("Remove mention {{v0}}", {
+                  v0: mention.display_text,
+                })}
                 onClick={() => removeMention(mention)}
               >
                 <X aria-hidden="true" />
@@ -396,7 +401,7 @@ export function MentionComposer({
         <div
           id={listboxId}
           role="listbox"
-          aria-label="Mention a person"
+          aria-label={t("Mention a person")}
           className="absolute z-20 max-h-72 w-full overflow-y-auto rounded-md border bg-popover p-(--space-xs) text-popover-foreground shadow-md"
         >
           {candidates.map((person, index) => (
@@ -423,13 +428,13 @@ export function MentionComposer({
         </div>
       )}
       <p aria-live="polite" className="text-label text-muted-foreground">
-        {searchState === "searching" && "Searching people"}
+        {searchState === "searching" && t("Searching people")}
         {searchState === "empty" &&
-          "No active people found. You can still post ordinary text."}
+          t("No active people found. You can still post ordinary text.")}
         {searchState === "error" &&
-          "People search is unavailable. You can still post ordinary text."}
+          t("People search is unavailable. You can still post ordinary text.")}
         {searchState === "duplicate" &&
-          "That person is already selected. The text remains ordinary text."}
+          t("That person is already selected. The text remains ordinary text.")}
       </p>
     </div>
   );

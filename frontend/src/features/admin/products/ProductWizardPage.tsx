@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import {
   useCallback,
   useEffect,
@@ -85,8 +86,8 @@ export function mobileWizardNavigation(
       (currentStep > 1 && !productAvailable),
     nextLabel:
       currentStep === PRODUCT_STEPS.length
-        ? "Next"
-        : `Next: ${PRODUCT_STEPS[currentStep]}`,
+        ? t("Next")
+        : t("Next: {{step}}", { step: t(PRODUCT_STEPS[currentStep]) }),
   };
 }
 
@@ -150,6 +151,7 @@ export function ProductWizardPage({
   accessToken,
   initialProduct,
 }: ProductWizardPageProps) {
+  useUiLanguage();
   const routeProductId = useParams<"productId">().productId;
   const nameId = useId();
   const descriptionId = useId();
@@ -347,7 +349,7 @@ export function ProductWizardPage({
         setSavedDescriptionValue(responseDescription);
         setName(responseName);
         setDescription(responseDescription);
-        toast.success("Draft saved");
+        toast.success(t("Draft saved"));
         setCurrentStep(2);
         return;
       }
@@ -413,7 +415,7 @@ export function ProductWizardPage({
       return;
     }
     if (currentStep === 2 && selectedRepositoryIds.size === 0) {
-      setStepError("Seleziona un repository prima di continuare.");
+      setStepError("Select a repository before continuing.");
       return;
     }
     if (currentStep === 3 && mappingEditorRef.current) {
@@ -432,7 +434,7 @@ export function ProductWizardPage({
       >
         <Skeleton className="h-9 w-64 max-w-full" />
         <Skeleton className="h-48 w-full" />
-        <span>Loading product draft</span>
+        <span>{t("Loading product draft")}</span>
       </section>
     );
   }
@@ -440,14 +442,14 @@ export function ProductWizardPage({
   if (routeLoadState === "error") {
     return (
       <Alert variant="destructive" className="max-w-3xl">
-        <AlertTitle>Product draft unavailable</AlertTitle>
+        <AlertTitle>{t("Product draft unavailable")}</AlertTitle>
         <AlertDescription>
           <Button
             type="button"
             variant="outline"
             onClick={() => void loadRouteProduct()}
           >
-            Retry loading page
+            {t("Retry loading page")}
           </Button>
         </AlertDescription>
       </Alert>
@@ -469,11 +471,14 @@ export function ProductWizardPage({
           id="product-wizard-title"
           className="break-words text-display font-semibold [overflow-wrap:anywhere]"
         >
-          {product === undefined ? "Create product" : product.name}
+          {product === undefined ? t("Create product") : product.name}
         </h1>
       </div>
 
-      <nav aria-label="Product setup steps" className="hidden min-w-0 md:block">
+      <nav
+        aria-label={t("Product setup steps")}
+        className="hidden min-w-0 md:block"
+      >
         <ol className="grid grid-cols-4 gap-2">
           {PRODUCT_STEPS.map((label, index) => {
             const step = index + 1;
@@ -487,7 +492,7 @@ export function ProductWizardPage({
                   disabled={pending || (product === undefined && step > 1)}
                   onClick={(event) => requestStep(step, event)}
                 >
-                  {label}
+                  {t(label)}
                 </button>
               </li>
             );
@@ -496,14 +501,16 @@ export function ProductWizardPage({
       </nav>
 
       <p
-        aria-label="Product setup progress"
+        aria-label={t("Product setup progress")}
         aria-live="polite"
         className="grid gap-1 rounded-lg border bg-secondary p-4 md:hidden"
       >
         <span className="text-label font-semibold">
-          Step {currentStep} of {PRODUCT_STEPS.length}
+          {t("Step ")}
+          {currentStep} {t(" of ")}
+          {PRODUCT_STEPS.length}
         </span>
-        <span>{PRODUCT_STEPS[currentStep - 1]}</span>
+        <span>{t(PRODUCT_STEPS[currentStep - 1])}</span>
       </p>
 
       {currentStep === 1 ? (
@@ -513,7 +520,7 @@ export function ProductWizardPage({
           onSubmit={(event) => void submitDetails(event)}
         >
           <div className="grid gap-2">
-            <Label htmlFor={nameId}>Name</Label>
+            <Label htmlFor={nameId}>{t("Name")}</Label>
             <Input
               ref={nameRef}
               id={nameId}
@@ -531,14 +538,14 @@ export function ProductWizardPage({
             {nameError !== null ? (
               <p id={`${nameId}-error`} className="text-sm text-destructive">
                 {nameError === "duplicate"
-                  ? "A product already uses this name."
-                  : "Enter a product name."}
+                  ? t("A product already uses this name.")
+                  : t("Enter a product name.")}
               </p>
             ) : null}
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor={descriptionId}>Description</Label>
+            <Label htmlFor={descriptionId}>{t("Description")}</Label>
             <Textarea
               id={descriptionId}
               value={description}
@@ -547,15 +554,16 @@ export function ProductWizardPage({
                 setSubmissionError(false);
               }}
             />
-            <p className="text-sm text-muted-foreground">Optional</p>
+            <p className="text-sm text-muted-foreground">{t("Optional")}</p>
           </div>
 
           {submissionError ? (
             <Alert variant="destructive">
-              <AlertTitle>Draft not saved</AlertTitle>
+              <AlertTitle>{t("Draft not saved")}</AlertTitle>
               <AlertDescription>
-                We could not save this draft. Your entries are still here.
-                Review the error and try again.
+                {t(
+                  "We could not save this draft. Your entries are still here. Review the error and try again.",
+                )}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -595,10 +603,11 @@ export function ProductWizardPage({
         />
       ) : product !== undefined ? (
         <Alert>
-          <AlertTitle>Create a draft to edit sources</AlertTitle>
+          <AlertTitle>{t("Create a draft to edit sources")}</AlertTitle>
           <AlertDescription>
-            Save the product details to start a draft, then choose its
-            translation sources.
+            {t(
+              "Save the product details to start a draft, then choose its translation sources.",
+            )}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -608,15 +617,15 @@ export function ProductWizardPage({
           ref={stepErrorRef}
           tabIndex={-1}
           variant="destructive"
-          aria-label="Wizard step incomplete"
+          aria-label={t("Wizard step incomplete")}
         >
-          <AlertTitle>Complete this step</AlertTitle>
+          <AlertTitle>{t("Complete this step")}</AlertTitle>
           <AlertDescription>{stepError}</AlertDescription>
         </Alert>
       ) : null}
 
       <nav
-        aria-label="Wizard navigation"
+        aria-label={t("Wizard navigation")}
         className="flex min-w-0 flex-wrap justify-between gap-3 border-t pt-4"
       >
         <Button
@@ -626,7 +635,7 @@ export function ProductWizardPage({
           disabled={mobileNavigation.backDisabled || pending}
           onClick={goBack}
         >
-          Back
+          {t("Back")}
         </Button>
         {currentStep < PRODUCT_STEPS.length ? (
           <Button
@@ -649,19 +658,19 @@ export function ProductWizardPage({
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
+              <AlertDialogTitle>{t("Leave without saving?")}</AlertDialogTitle>
               <AlertDialogDescription>
-                Your unsaved entries on this page will be lost.
+                {t("Your unsaved entries on this page will be lost.")}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Keep editing</AlertDialogCancel>
+              <AlertDialogCancel>{t("Keep editing")}</AlertDialogCancel>
               <Button
                 type="button"
                 variant="destructive"
                 onClick={() => discardAndNavigate(pendingNavigation)}
               >
-                Discard changes
+                {t("Discard changes")}
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>

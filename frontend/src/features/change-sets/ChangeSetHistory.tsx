@@ -1,3 +1,4 @@
+import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { listChangeSets, type ChangeSetResponse } from "../../api/client";
@@ -8,6 +9,7 @@ import { submissionStatus } from "./submissionStatus";
 import { PullRequestLink } from "./SubmissionPresentation";
 
 export function ChangeSetHistory() {
+  useUiLanguage();
   const {
     accessToken,
     productId,
@@ -49,7 +51,7 @@ export function ChangeSetHistory() {
           revokeRead();
           return;
         }
-        if (!result.data) throw new Error("Unavailable");
+        if (!result.data) throw new Error(t("Unavailable"));
         const page = result.data;
         setItems((old) =>
           cursor
@@ -97,21 +99,23 @@ export function ChangeSetHistory() {
         id="submission-history-heading"
         className="text-heading font-semibold"
       >
-        Submission history
+        {t("Submission history")}
       </h2>
       {unavailable ? (
         <Alert>
-          <AlertTitle>Change set unavailable</AlertTitle>
+          <AlertTitle>{t("Change set unavailable")}</AlertTitle>
           <AlertDescription>
-            This history is unavailable to your account.
+            {t("This history is unavailable to your account.")}
           </AlertDescription>
         </Alert>
       ) : (
         <>
-          {loading && <p role="status">Loading submission history…</p>}
+          {loading && <p role="status">{t("Loading submission history…")}</p>}
           {error && (
             <Alert>
-              <AlertTitle>Submission history could not be loaded</AlertTitle>
+              <AlertTitle>
+                {t("Submission history could not be loaded")}
+              </AlertTitle>
               <AlertDescription>
                 <Button
                   variant="outline"
@@ -120,14 +124,14 @@ export function ChangeSetHistory() {
                     setReload((n) => n + 1);
                   }}
                 >
-                  Retry loading history
+                  {t("Retry loading history")}
                 </Button>
               </AlertDescription>
             </Alert>
           )}
           {!loading && !error && !items.length && (
             <div>
-              <h3 className="font-semibold">No submissions yet</h3>
+              <h3 className="font-semibold">{t("No submissions yet")}</h3>
             </div>
           )}
           <ul className="grid min-w-0 gap-(--space-lg)">
@@ -140,16 +144,18 @@ export function ChangeSetHistory() {
                   {item.workspace}/{item.repository_slug} → {item.target_branch}
                 </h3>
                 <p>
-                  {submissionStatus(item)} · {item.proposal_count} proposals ·{" "}
-                  {item.value_count} values · {item.file_count} files
+                  {submissionStatus(item)} · {item.proposal_count}{" "}
+                  {t(" proposals ·")} {item.value_count} {t(" values · ")}
+                  {item.file_count} {t(" files")}
                 </p>
                 <p className="wrap-anywhere">
-                  Submitted by {item.actor?.display_name ?? "Unknown user"}
+                  {t("Submitted by ")}
+                  {item.actor?.display_name ?? t("Unknown user")}
                 </p>
                 <p>
-                  Accepted{" "}
+                  {t("Accepted")}{" "}
                   <time dateTime={item.created_at}>
-                    {new Date(item.created_at).toLocaleString()}
+                    {new Date(item.created_at).toLocaleString(getUiLanguage())}
                   </time>
                 </p>
                 <div className="flex flex-wrap gap-(--space-md)">
@@ -159,10 +165,11 @@ export function ChangeSetHistory() {
                     to={`/products/${encodeURIComponent(productId)}/change-sets/${encodeURIComponent(item.id)}`}
                     onClick={() => setReturnFocus(`history-${item.id}`)}
                   >
-                    View change set
+                    {t("View change set")}
                     <span className="sr-only">
                       {" "}
-                      for {item.repository_slug}, {item.target_branch}
+                      {t("for ")}
+                      {item.repository_slug}, {item.target_branch}
                     </span>
                   </Link>
                   <PullRequestLink record={item} />
@@ -180,7 +187,7 @@ export function ChangeSetHistory() {
                 setCursor(next);
               }}
             >
-              Load more submissions
+              {t("Load more submissions")}
             </Button>
           )}
         </>

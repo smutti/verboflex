@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useState, type FormEvent } from "react";
 import {
   configureBranchWorkflow,
@@ -20,6 +21,7 @@ export function ApprovalBranchesPage({
   accessToken: string;
   productId: string;
 }) {
+  useUiLanguage();
   const [data, setData] = useState<BranchWorkflowResponse>();
   const [mappingId, setMappingId] = useState("");
   const [workBranch, setWorkBranch] = useState("");
@@ -105,29 +107,33 @@ export function ApprovalBranchesPage({
     >
       <div>
         <h1 id="approval-branches-title" className="text-display font-semibold">
-          Approval branches
+          {t("Approval branches")}
         </h1>
         <p className="text-muted-foreground">
-          Save a draft in VerboFlex, approve it to create a commit, then open a
-          pull request when ready.
+          {t(
+            "Save a draft in VerboFlex, approve it to create a commit, then open a pull request when ready.",
+          )}
         </p>
       </div>
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>Configuration unavailable</AlertTitle>
+          <AlertTitle>{t("Configuration unavailable")}</AlertTitle>
           <AlertDescription>
-            {error}
+            {t(error)}
             <Button variant="outline" onClick={() => setReload((n) => n + 1)}>
-              Reload configuration
+              {t("Reload configuration")}
             </Button>
           </AlertDescription>
         </Alert>
       )}
-      {!data && !error && <p role="status">Loading approval branches…</p>}
+      {!data && !error && (
+        <p role="status">{t("Loading approval branches…")}</p>
+      )}
       {saved && (
         <p role="status">
-          Approval commits enabled. The next approval will be saved on the
-          working branch.
+          {t(
+            "Approval commits enabled. The next approval will be saved on the working branch.",
+          )}
         </p>
       )}
       {(data?.workflows ?? []).map((w) => (
@@ -139,21 +145,22 @@ export function ApprovalBranchesPage({
           <dl className="mt-2 grid gap-2 sm:grid-cols-2">
             <div>
               <dt className="text-sm text-muted-foreground">
-                Working branch · approval commits
+                {t("Working branch · approval commits")}
               </dt>
               <dd className="font-mono">{w.work_branch}</dd>
             </div>
             <div>
               <dt className="text-sm text-muted-foreground">
-                PR destination · on request
+                {t("PR destination · on request")}
               </dt>
               <dd className="font-mono">{w.target_branch}</dd>
             </div>
           </dl>
           {!w.active && (
             <p className="mt-2">
-              This translation source is no longer active. Its history is
-              retained.
+              {t(
+                "This translation source is no longer active. Its history is retained.",
+              )}
             </p>
           )}
         </div>
@@ -164,16 +171,16 @@ export function ApprovalBranchesPage({
           className="grid min-w-0 gap-4 rounded-lg border bg-card p-4"
         >
           <h2 className="text-heading font-semibold">
-            Enable approval commits
+            {t("Enable approval commits")}
           </h2>
           <p className="text-sm text-muted-foreground">
-            Choose existing branches. Each approval creates a separate commit on
-            the working branch. A pull request is opened only from Change sets
-            when you request it.
+            {t(
+              "Choose existing branches. Each approval creates a separate commit on the working branch. A pull request is opened only from Change sets when you request it.",
+            )}
           </p>
           <fieldset disabled={busy} className="grid min-w-0 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="approval-source">Translation source</Label>
+              <Label htmlFor="approval-source">{t("Translation source")}</Label>
               <select
                 id="approval-source"
                 value={mappingId}
@@ -188,17 +195,20 @@ export function ApprovalBranchesPage({
                 required
                 className="min-h-11 min-w-0 w-full rounded-md border bg-background px-3"
               >
-                <option value="">Select a translation source</option>
+                <option value="">{t("Select a translation source")}</option>
                 {available.map((m) => (
                   <option key={m.mapping_id} value={m.mapping_id}>
-                    {m.repository} · import from {m.source_branch}
+                    {m.repository} {t(" · import from ")}
+                    {m.source_branch}
                   </option>
                 ))}
               </select>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
-                <Label htmlFor="approval-work-branch">Working branch</Label>
+                <Label htmlFor="approval-work-branch">
+                  {t("Working branch")}
+                </Label>
                 <Input
                   id="approval-work-branch"
                   value={workBranch}
@@ -209,12 +219,15 @@ export function ApprovalBranchesPage({
                   autoComplete="off"
                 />
                 <p className="text-sm text-muted-foreground">
-                  Approved changes are committed here. Import from this branch
-                  to review translations before merging.
+                  {t(
+                    "Approved changes are committed here. Import from this branch to review translations before merging.",
+                  )}
                 </p>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="approval-target-branch">PR destination</Label>
+                <Label htmlFor="approval-target-branch">
+                  {t("PR destination")}
+                </Label>
                 <Input
                   id="approval-target-branch"
                   value={targetBranch}
@@ -225,14 +238,14 @@ export function ApprovalBranchesPage({
                   autoComplete="off"
                 />
                 <p className="text-sm text-muted-foreground">
-                  The pull request will propose merging into this branch.
+                  {t("The pull request will propose merging into this branch.")}
                 </p>
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              Finish existing change sets first. Once enabled, configure every
-              translation source before approving its changes. Existing
-              approvals are not committed retroactively.
+              {t(
+                "Finish existing change sets first. Once enabled, configure every translation source before approving its changes. Existing approvals are not committed retroactively.",
+              )}
             </p>
             <Button
               type="submit"
@@ -241,14 +254,16 @@ export function ApprovalBranchesPage({
                 !selected || !workBranch.trim() || !targetBranch.trim() || busy
               }
             >
-              {busy ? "Saving…" : "Enable approval commits"}
+              {busy ? t("Saving…") : t("Enable approval commits")}
             </Button>
           </fieldset>
         </form>
       )}
       {data && !(data.available_mappings ?? []).length && (
         <p>
-          Publish a Bitbucket translation source to configure approval commits.
+          {t(
+            "Publish a Bitbucket translation source to configure approval commits.",
+          )}
         </p>
       )}
     </section>

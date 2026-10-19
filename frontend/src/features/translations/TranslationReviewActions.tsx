@@ -1,3 +1,5 @@
+import { statusLabel } from "@/i18n/statusLabels";
+import { t, useUiLanguage } from "@/i18n";
 import { rolesForProduct } from "../auth/productRoles";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -68,6 +70,7 @@ function ReviewController({
   dirty,
   onChanged,
 }: Props) {
+  useUiLanguage();
   const [reviewing, setReviewing] = useState(false);
   const [failure, setFailure] = useState<"general" | "conflict" | null>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -173,25 +176,27 @@ function ReviewController({
   }
   if (!authorized || detail.is_deleted || !state) return null;
   return (
-    <div className="space-y-3" aria-label="Translation review actions">
+    <div className="space-y-3" aria-label={t("Translation review actions")}>
       {dirty && (
         <p className="text-label text-warning">
-          Save your changes before reviewing this proposal.
+          {t("Save your changes before reviewing this proposal.")}
         </p>
       )}
       {hasLengthViolation && (
         <Alert className="border-warning bg-warning/10 text-warning">
-          <AlertTitle>Approval blocked</AlertTitle>
+          <AlertTitle>{t("Approval blocked")}</AlertTitle>
           <AlertDescription>
-            Resolve every maximum-length violation before approval.
+            {t("Resolve every maximum-length violation before approval.")}
           </AlertDescription>
         </Alert>
       )}
       {(reconciliation || !membersComplete) && (
         <Alert>
-          <AlertTitle>Reconciliation required</AlertTitle>
+          <AlertTitle>{t("Reconciliation required")}</AlertTitle>
           <AlertDescription>
-            Edit and reconcile this proposal before changing its review state.
+            {t(
+              "Edit and reconcile this proposal before changing its review state.",
+            )}
           </AlertDescription>
         </Alert>
       )}
@@ -199,23 +204,27 @@ function ReviewController({
         <Alert role="alert">
           <AlertTitle>
             {failure === "conflict"
-              ? "Review state changed in another session"
-              : "Review action did not complete"}
+              ? t("Review state changed in another session")
+              : t("Review action did not complete")}
           </AlertTitle>
           <AlertDescription>
             {failure === "conflict"
-              ? "The latest saved proposal is shown. Review it before trying again."
-              : "Your proposal is unchanged. Retry the review action."}
+              ? t(
+                  "The latest saved proposal is shown. Review it before trying again.",
+                )
+              : t("Your proposal is unchanged. Retry the review action.")}
           </AlertDescription>
         </Alert>
       )}
       {latest && (
         <section
-          aria-label="Latest saved review proposal"
+          aria-label={t("Latest saved review proposal")}
           className="space-y-2 rounded-md border p-3"
         >
           <p className="text-label font-semibold">
-            Latest saved proposal · {latest.state} · Version {latest.version}
+            {t("Latest saved proposal · ")}
+            {statusLabel(latest.state)} {t(" · Version ")}
+            {latest.version}
           </p>
           {latest.pending.map((value) => (
             <p
@@ -224,7 +233,7 @@ function ReviewController({
               lang={detail.language}
               className="whitespace-pre-wrap wrap-anywhere"
             >
-              {value.text || "Empty translation"}
+              {value.text || t("Empty translation")}
             </p>
           ))}
         </section>
@@ -236,7 +245,7 @@ function ReviewController({
               disabled={reviewing || blocked || reconciliation || dirty}
               onClick={() => void transition("approved")}
             >
-              Approve translation
+              {t("Approve translation")}
             </Button>
           )}
           {state !== "rejected" && (
@@ -245,7 +254,7 @@ function ReviewController({
               disabled={reviewing || reconciliation || dirty}
               onClick={() => setRejectOpen(true)}
             >
-              Reject translation
+              {t("Reject translation")}
             </Button>
           )}
           {state !== "draft" && (
@@ -254,7 +263,7 @@ function ReviewController({
               disabled={reviewing || reconciliation || dirty}
               onClick={() => void transition("draft")}
             >
-              Return to Draft
+              {t("Return to Draft")}
             </Button>
           )}
         </div>
@@ -262,10 +271,10 @@ function ReviewController({
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Reject this translation?</DialogTitle>
+            <DialogTitle>{t("Reject this translation?")}</DialogTitle>
           </DialogHeader>
           <Label htmlFor="translation-rejection-reason">
-            Reason (optional)
+            {t("Reason (optional)")}
           </Label>
           <Textarea
             id="translation-rejection-reason"
@@ -275,14 +284,14 @@ function ReviewController({
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setRejectOpen(false)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button
               variant="destructive"
               disabled={reviewing || dirty}
               onClick={() => void transition("rejected")}
             >
-              Reject translation
+              {t("Reject translation")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -292,6 +301,7 @@ function ReviewController({
 }
 
 export function TranslationReviewActions(props: Props) {
+  useUiLanguage();
   const key = JSON.stringify([
     props.principal.id,
     props.principal.roles,

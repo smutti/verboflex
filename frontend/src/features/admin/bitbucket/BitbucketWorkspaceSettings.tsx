@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
   getAdminBitbucketWorkspace,
@@ -17,6 +18,7 @@ export function BitbucketWorkspaceSettings({
 }: {
   accessToken: string;
 }) {
+  useUiLanguage();
   const inputId = useId();
   const [workspace, setWorkspace] = useState("");
   const [saved, setSaved] = useState<string | null>(null);
@@ -76,21 +78,21 @@ export function BitbucketWorkspaceSettings({
     <form
       onSubmit={(event) => void save(event)}
       className="grid gap-4 rounded-lg border bg-secondary p-6"
-      aria-label="Workspace Bitbucket"
+      aria-label={t("Bitbucket workspace")}
     >
-      <h2 className="text-heading font-semibold">Workspace Bitbucket</h2>
+      <h2 className="text-heading font-semibold">{t("Bitbucket workspace")}</h2>
       <p className="text-muted-foreground">
-        Workspace condiviso da tutti i prodotti.
+        {t("This workspace is shared by all products.")}
       </p>
       <div className="grid gap-2">
-        <Label htmlFor={inputId}>Workspace</Label>
+        <Label htmlFor={inputId}>{t("Workspace")}</Label>
         <Input
           id={inputId}
           required
           maxLength={100}
           autoComplete="off"
           value={workspace}
-            placeholder="e.g. your-team"
+          placeholder={t("e.g. your-team")}
           disabled={loading || pending || saved === null}
           onChange={(event) => {
             setWorkspace(event.target.value);
@@ -100,7 +102,7 @@ export function BitbucketWorkspaceSettings({
       </div>
       {error ? (
         <Alert variant="destructive">
-          <AlertTitle>Workspace non salvato</AlertTitle>
+          <AlertTitle>{t("Workspace not saved")}</AlertTitle>
           <AlertDescription>
             {saved === null ? (
               <Button
@@ -108,10 +110,10 @@ export function BitbucketWorkspaceSettings({
                 variant="outline"
                 onClick={() => setReload((value) => value + 1)}
               >
-                Riprova
+                {t("Retry")}
               </Button>
             ) : (
-              "Inserisci lo slug del workspace e riprova."
+              t("Enter the workspace slug and try again.")
             )}
           </AlertDescription>
         </Alert>
@@ -121,11 +123,12 @@ export function BitbucketWorkspaceSettings({
           type="submit"
           disabled={loading || pending || saved === null || workspace === saved}
         >
-          {pending ? "Salvataggio…" : "Salva workspace"}
+          {pending ? t("Saving…") : t("Save workspace")}
         </Button>
         {!loading && saved && workspace === saved ? (
           <span role="status" className="text-sm text-muted-foreground">
-            Workspace configurato: {saved}
+            {t("Configured workspace: ")}
+            {saved}
           </span>
         ) : null}
       </div>

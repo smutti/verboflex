@@ -1,3 +1,4 @@
+import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import { useEffect, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import {
@@ -17,6 +18,7 @@ const active = (job: ScreenshotResponse | null) =>
   job?.state === "queued" || job?.state === "rendering";
 
 function ElapsedTime({ since }: { since: string }) {
+  useUiLanguage();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -25,7 +27,11 @@ function ElapsedTime({ since }: { since: string }) {
   const seconds = Math.max(0, Math.floor((now - Date.parse(since)) / 1000));
   return (
     <p className="text-sm" aria-live="off">
-      Elapsed: {Math.floor(seconds / 60)}m {seconds % 60}s
+      {t("Elapsed: ")}
+      {Math.floor(seconds / 60)}
+      {t("m ")}
+      {seconds % 60}
+      {t("s")}
     </p>
   );
 }
@@ -33,16 +39,22 @@ function ElapsedTime({ since }: { since: string }) {
 function captureFailure(code: string | null) {
   switch (code) {
     case "render_timeout":
-      return "The screenshot took too long to generate. Try again.";
+      return t("The screenshot took too long to generate. Try again.");
     case "queue_timeout":
-      return "The screenshot service did not become available. Try again later.";
+      return t(
+        "The screenshot service did not become available. Try again later.",
+      );
     case "source_or_access_changed":
     case "input_changed":
-      return "The source or your access changed. Refresh this page before trying again.";
+      return t(
+        "The source or your access changed. Refresh this page before trying again.",
+      );
     case "worker_interrupted":
-      return "Screenshot generation was interrupted. Try again.";
+      return t("Screenshot generation was interrupted. Try again.");
     default:
-      return "The screenshot could not be generated. Try again or contact your project administrator.";
+      return t(
+        "The screenshot could not be generated. Try again or contact your project administrator.",
+      );
   }
 }
 
@@ -57,6 +69,7 @@ export function TranslationScreenshots({
   dirty: boolean;
   proposalVersion?: number;
 }) {
+  useUiLanguage();
   const [context, setContext] = useState<CodeContextResponse | null>(null);
   const [job, setJob] = useState<ScreenshotResponse | null>(null);
   const [selected, setSelected] = useState("");
@@ -223,19 +236,21 @@ export function TranslationScreenshots({
     }
   }
   return (
-    <section aria-label="Compose screenshots" className="space-y-4 pt-4">
+    <section aria-label={t("Compose screenshots")} className="space-y-4 pt-4">
       {error && (
         <p role="alert">
-          {error}{" "}
+          {t(error)}{" "}
           <Button variant="outline" onClick={() => setRetry((n) => n + 1)}>
-            Reconnect
+            {t("Reconnect")}
           </Button>
         </p>
       )}
-      {!context && !error && <p role="status">Loading code context…</p>}
+      {!context && !error && <p role="status">{t("Loading code context…")}</p>}
       {context && !context.configured && (
         <p>
-          No application code repository is configured for this translation.
+          {t(
+            "No application code repository is configured for this translation.",
+          )}
         </p>
       )}
       {context?.configured && (
@@ -251,21 +266,22 @@ export function TranslationScreenshots({
                   className="size-5 shrink-0 animate-spin motion-reduce:animate-none"
                 />
                 {busy
-                  ? "Requesting screenshot…"
+                  ? t("Requesting screenshot…")
                   : job?.state === "queued"
-                    ? "Waiting to generate screenshot…"
-                    : "Generating screenshot…"}
+                    ? t("Waiting to generate screenshot…")
+                    : t("Generating screenshot…")}
               </p>
               {job && active(job) && (
                 <ElapsedTime key={job.id} since={job.created_at} />
               )}
               <p className="text-sm text-muted-foreground">
-                This can take several minutes. You can leave this page and
-                return to see the result.
+                {t(
+                  "This can take several minutes. You can leave this page and return to see the result.",
+                )}
               </p>
               {active(job) && (
                 <Button variant="outline" onClick={() => void cancel()}>
-                  Cancel capture
+                  {t("Cancel capture")}
                 </Button>
               )}
             </div>
@@ -275,15 +291,15 @@ export function TranslationScreenshots({
               <p role="status">
                 {job.state === "succeeded"
                   ? image?.jobId === job.id
-                    ? "Screenshot ready"
+                    ? t("Screenshot ready")
                     : error
-                      ? "Screenshot generated. Reconnect to load the image."
-                      : "Loading screenshot…"
+                      ? t("Screenshot generated. Reconnect to load the image.")
+                      : t("Loading screenshot…")
                   : job.state === "failed"
                     ? captureFailure(job.error_code)
                     : job.state === "cancelled"
-                      ? "Screenshot cancelled. You can generate another one."
-                      : "This screenshot has expired. Generate a new one."}
+                      ? t("Screenshot cancelled. You can generate another one.")
+                      : t("This screenshot has expired. Generate a new one.")}
               </p>
               {job.state === "succeeded" && image?.jobId === job.id && (
                 <>
@@ -291,19 +307,23 @@ export function TranslationScreenshots({
                     href={image.url}
                     target="_blank"
                     rel="noreferrer"
-                    aria-label="Open screenshot full size"
+                    aria-label={t("Open screenshot full size")}
                   >
                     <img
                       src={image.url}
-                      alt="Compose screen preview with the selected translations"
+                      alt={t(
+                        "Compose screen preview with the selected translations",
+                      )}
                       className="h-auto w-full rounded-md border"
                     />
                   </a>
                   <p className="text-xs text-muted-foreground">
                     {job.request.proposal_version
-                      ? `Saved proposal version ${job.request.proposal_version}`
-                      : "Imported translations"}{" "}
-                    · {new Date(job.created_at).toLocaleString()}
+                      ? t("Saved proposal version {{v0}}", {
+                          v0: job.request.proposal_version,
+                        })
+                      : t("Imported translations")}{" "}
+                    · {new Date(job.created_at).toLocaleString(getUiLanguage())}
                   </p>
                 </>
               )}
@@ -311,7 +331,8 @@ export function TranslationScreenshots({
           )}
           <details className="text-sm">
             <summary className="cursor-pointer text-muted-foreground">
-              Code references ({context.occurrences.length}
+              {t("Code references (")}
+              {context.occurrences.length}
               {context.occurrences_truncated ? "+" : ""})
             </summary>
             <ul className="space-y-1 pt-2">
@@ -326,18 +347,19 @@ export function TranslationScreenshots({
               ))}
             </ul>
             {context.occurrences_truncated && (
-              <p>Showing the first 100 references.</p>
+              <p>{t("Showing the first 100 references.")}</p>
             )}
           </details>
           {available.length === 0 ? (
             <p>
-              No callable Compose preview is registered for this key. Ask the
-              project administrator to register a fixture preview.
+              {t(
+                "No callable Compose preview is registered for this key. Ask the project administrator to register a fixture preview.",
+              )}
             </p>
           ) : (
             <>
               <Label className="grid gap-2">
-                Screen preview
+                {t("Screen preview")}
                 <select
                   className="rounded-md border bg-background p-2"
                   value={preview}
@@ -352,20 +374,22 @@ export function TranslationScreenshots({
                 </select>
               </Label>
               <Label className="grid gap-2">
-                Appearance
+                {t("Appearance")}
                 <select
                   className="rounded-md border bg-background p-2"
                   value={theme}
                   onChange={(e) => setTheme(e.target.value as "light" | "dark")}
                   disabled={busy || active(job) || pending !== null}
                 >
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
+                  <option value="light">{t("Light")}</option>
+                  <option value="dark">{t("Dark")}</option>
                 </select>
               </Label>
               {dirty && (
                 <p>
-                  Save your translation changes before requesting a screenshot.
+                  {t(
+                    "Save your translation changes before requesting a screenshot.",
+                  )}
                 </p>
               )}
               <Button
@@ -379,18 +403,20 @@ export function TranslationScreenshots({
                   />
                 )}
                 {busy
-                  ? "Requesting…"
+                  ? t("Requesting…")
                   : active(job)
-                    ? "Generating screenshot…"
+                    ? t("Generating screenshot…")
                     : pending
-                      ? "Retry capture request"
-                      : "Generate screenshot"}
+                      ? t("Retry capture request")
+                      : t("Generate screenshot")}
               </Button>
               <p className="text-sm text-muted-foreground">
                 {proposalVersion
-                  ? `Includes saved proposal version ${proposalVersion}.`
-                  : "Uses the imported translations."}{" "}
-                The preview shows an example screen state.
+                  ? t("Includes saved proposal version {{v0}}.", {
+                      v0: proposalVersion,
+                    })
+                  : t("Uses the imported translations.")}{" "}
+                {t("The preview shows an example screen state.")}
               </p>
             </>
           )}

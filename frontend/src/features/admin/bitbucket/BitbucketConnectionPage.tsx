@@ -1,3 +1,4 @@
+import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -44,18 +45,28 @@ type CapabilityReadiness = AdminBitbucketCapabilityProfile[CapabilityKey];
 const capabilityRows = [
   {
     key: "source_read",
-    label: "Read localization sources",
+    get label() {
+      return t("Read localization sources");
+    },
     supportingCopy: null,
   },
   {
     key: "source_write",
-    label: "Create branches and source commits",
-    supportingCopy: "Not used during imports.",
+    get label() {
+      return t("Create branches and source commits");
+    },
+    get supportingCopy() {
+      return t("Not used during imports.");
+    },
   },
   {
     key: "pull_request",
-    label: "Open pull requests",
-    supportingCopy: "Not used during imports.",
+    get label() {
+      return t("Open pull requests");
+    },
+    get supportingCopy() {
+      return t("Not used during imports.");
+    },
   },
 ] as const satisfies ReadonlyArray<{
   key: CapabilityKey;
@@ -64,23 +75,38 @@ const capabilityRows = [
 }>;
 
 const capabilityReadinessLabels = {
-  disconnected: "Disconnected",
-  ready: "Ready",
-  ready_for_later_phase: "Ready for a later phase",
-  reauthorization_required: "Reauthorization required",
-  unavailable: "Unavailable",
+  get disconnected() {
+    return t("Disconnected");
+  },
+  get ready() {
+    return t("Ready");
+  },
+  get ready_for_later_phase() {
+    return t("Ready for a later phase");
+  },
+  get reauthorization_required() {
+    return t("Reauthorization required");
+  },
+  get unavailable() {
+    return t("Unavailable");
+  },
 } as const satisfies Record<CapabilityReadiness, string>;
 
-const timestampFormatter = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  hour: "2-digit",
-  hour12: false,
-  minute: "2-digit",
-  month: "short",
-  timeZone: "UTC",
-  timeZoneName: "short",
-  year: "numeric",
-});
+function timestampFormatter() {
+  return new Intl.DateTimeFormat(
+    getUiLanguage() === "en" ? "en-GB" : getUiLanguage(),
+    {
+      day: "2-digit",
+      hour: "2-digit",
+      hour12: false,
+      minute: "2-digit",
+      month: "short",
+      timeZone: "UTC",
+      timeZoneName: "short",
+      year: "numeric",
+    },
+  );
+}
 
 function boundedTimestamp(value: string | null) {
   if (value === null) {
@@ -89,7 +115,7 @@ function boundedTimestamp(value: string | null) {
   const timestamp = new Date(value);
   return Number.isNaN(timestamp.getTime())
     ? null
-    : timestampFormatter.format(timestamp);
+    : timestampFormatter().format(timestamp);
 }
 
 function ConnectionTimestamp({
@@ -99,6 +125,7 @@ function ConnectionTimestamp({
   label: string;
   value: string | null;
 }) {
+  useUiLanguage();
   const bounded = boundedTimestamp(value);
   return bounded === null ? null : (
     <div>
@@ -115,9 +142,10 @@ function CapabilityProfile({
 }: {
   profile: AdminBitbucketCapabilityProfile;
 }) {
+  useUiLanguage();
   return (
-    <section aria-label="Capability profile" className="grid gap-4">
-      <h3 className="text-heading font-semibold">Capability profile</h3>
+    <section aria-label={t("Capability profile")} className="grid gap-4">
+      <h3 className="text-heading font-semibold">{t("Capability profile")}</h3>
       <dl className="grid divide-y">
         {capabilityRows.map((row) => (
           <div
@@ -148,9 +176,10 @@ function CapabilityProfile({
 }
 
 function CapabilityProfileSkeleton() {
+  useUiLanguage();
   return (
-    <section aria-label="Capability profile" className="grid gap-4">
-      <h2 className="text-heading font-semibold">Capability profile</h2>
+    <section aria-label={t("Capability profile")} className="grid gap-4">
+      <h2 className="text-heading font-semibold">{t("Capability profile")}</h2>
       <dl className="grid divide-y">
         {capabilityRows.map((row) => (
           <div
@@ -160,7 +189,7 @@ function CapabilityProfileSkeleton() {
             <dt className="font-medium">{row.label}</dt>
             <dd className="sm:justify-self-end">
               <Skeleton
-                aria-label="Loading capability readiness"
+                aria-label={t("Loading capability readiness")}
                 className="h-6 w-40 max-w-full"
               />
             </dd>
@@ -174,6 +203,7 @@ function CapabilityProfileSkeleton() {
 export function BitbucketConnectionPage({
   accessToken,
 }: BitbucketConnectionPageProps) {
+  useUiLanguage();
   const loadGenerationRef = useRef(0);
   const connectionPendingRef = useRef(false);
   const revokePendingRef = useRef(false);
@@ -309,16 +339,18 @@ export function BitbucketConnectionPage({
         <h1 className="text-display font-semibold">Bitbucket</h1>
         <div className="grid gap-6" role="status" aria-live="polite">
           <section
-            aria-label="Bitbucket connection status"
+            aria-label={t("Bitbucket connection status")}
             className="grid gap-5 rounded-lg border bg-secondary p-6"
           >
             <div className="flex flex-wrap items-center justify-between gap-4">
-              <h2 className="text-heading font-semibold">Connection status</h2>
+              <h2 className="text-heading font-semibold">
+                {t("Connection status")}
+              </h2>
               <Skeleton className="h-6 w-28 max-w-full" />
             </div>
             <CapabilityProfileSkeleton />
           </section>
-          <span className="sr-only">Loading Bitbucket connection</span>
+          <span className="sr-only">{t("Loading Bitbucket connection")}</span>
         </div>
       </section>
     );
@@ -329,14 +361,14 @@ export function BitbucketConnectionPage({
       <section className="grid max-w-3xl gap-6">
         <h1 className="text-display font-semibold">Bitbucket</h1>
         <Alert variant="destructive">
-          <AlertTitle>Bitbucket connection unavailable</AlertTitle>
+          <AlertTitle>{t("Bitbucket connection unavailable")}</AlertTitle>
           <AlertDescription>
             <Button
               type="button"
               variant="outline"
               onClick={() => void loadConnection()}
             >
-              Retry loading page
+              {t("Retry loading page")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -362,7 +394,7 @@ export function BitbucketConnectionPage({
       <div className="grid gap-2">
         <h1 className="text-display font-semibold">Bitbucket</h1>
         <p className="text-muted-foreground">
-          Shared connection for all products.
+          {t("Shared connection for all products.")}
         </p>
       </div>
 
@@ -370,10 +402,11 @@ export function BitbucketConnectionPage({
 
       {connectionError ? (
         <Alert variant="destructive">
-          <AlertTitle>Bitbucket connection unavailable</AlertTitle>
+          <AlertTitle>{t("Bitbucket connection unavailable")}</AlertTitle>
           <AlertDescription>
-            Verify the server configuration, then try again. The current
-            connection status is unchanged.
+            {t(
+              "Verify the server configuration, then try again. The current connection status is unchanged.",
+            )}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -381,44 +414,48 @@ export function BitbucketConnectionPage({
       {connectionPending !== null || connectionAnnouncement !== null ? (
         <div
           role="status"
-          aria-label="Bitbucket connection mutation"
+          aria-label={t("Bitbucket connection mutation")}
           aria-live="polite"
         >
           {connectionPending === "connect"
-            ? "Connecting Bitbucket"
+            ? t("Connecting Bitbucket")
             : connectionPending === "reconnect"
-              ? "Reconnecting Bitbucket"
+              ? t("Reconnecting Bitbucket")
               : connectionAnnouncement}
         </div>
       ) : null}
 
       <section
-        aria-label="Bitbucket connection status"
+        aria-label={t("Bitbucket connection status")}
         className="grid gap-5 rounded-lg border bg-secondary p-6"
       >
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-heading font-semibold">Connection status</h2>
+          <h2 className="text-heading font-semibold">
+            {t("Connection status")}
+          </h2>
           <Badge variant="outline" className="w-fit rounded-md">
-            {connection.status}
+            {t(connection.status)}
           </Badge>
         </div>
 
         {hasExpandedCapabilityProfile ? (
-          <p className="font-medium">Repository and pull-request access</p>
+          <p className="font-medium">
+            {t("Repository and pull-request access")}
+          </p>
         ) : null}
 
         {hasBoundedTimestamp ? (
           <dl className="grid gap-3 sm:grid-cols-2">
             <ConnectionTimestamp
-              label="Connected"
+              label={t("Connected")}
               value={connection.connected_at}
             />
             <ConnectionTimestamp
-              label="Access expires"
+              label={t("Access expires")}
               value={connection.expires_at}
             />
             <ConnectionTimestamp
-              label="Revoked"
+              label={t("Revoked")}
               value={connection.revoked_at}
             />
           </dl>
@@ -434,7 +471,7 @@ export function BitbucketConnectionPage({
               aria-busy={connectionPending === "connect"}
               onClick={() => void submitConnection("connect")}
             >
-              Connect Bitbucket
+              {t("Connect Bitbucket")}
             </Button>
           ) : null}
           {reconnect ? (
@@ -444,7 +481,7 @@ export function BitbucketConnectionPage({
               aria-busy={connectionPending === "reconnect"}
               onClick={() => void submitConnection("reconnect")}
             >
-              Reconnect Bitbucket
+              {t("Reconnect Bitbucket")}
             </Button>
           ) : null}
           {connection.status !== "Disconnected" ? (
@@ -454,7 +491,7 @@ export function BitbucketConnectionPage({
               variant="destructive"
               onClick={() => setRevokeOpen(true)}
             >
-              Revoke connection
+              {t("Revoke connection")}
             </Button>
           ) : null}
         </div>
@@ -465,27 +502,29 @@ export function BitbucketConnectionPage({
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                Revoke the Bitbucket connection?
+                {t("Revoke the Bitbucket connection?")}
               </AlertDialogTitle>
               <AlertDialogDescription>
-                New imports, branch reads, previews, confirmations, and
-                publications will be blocked until an administrator reconnects.
-                Existing successful baselines remain recorded.
+                {t(
+                  "New imports, branch reads, previews, confirmations, and publications will be blocked until an administrator reconnects. Existing successful baselines remain recorded.",
+                )}
               </AlertDialogDescription>
             </AlertDialogHeader>
 
             {revokeError ? (
               <Alert ref={revokeErrorRef} tabIndex={-1} variant="destructive">
-                <AlertTitle>Connection not revoked</AlertTitle>
+                <AlertTitle>{t("Connection not revoked")}</AlertTitle>
                 <AlertDescription>
-                  The current Bitbucket connection remains unchanged. Try again.
+                  {t(
+                    "The current Bitbucket connection remains unchanged. Try again.",
+                  )}
                 </AlertDescription>
               </Alert>
             ) : null}
 
             <AlertDialogFooter>
               <AlertDialogCancel disabled={revokePending}>
-                Cancel
+                {t("Cancel")}
               </AlertDialogCancel>
               <Button
                 type="button"
@@ -494,7 +533,7 @@ export function BitbucketConnectionPage({
                 aria-busy={revokePending}
                 onClick={() => void submitRevoke()}
               >
-                Revoke connection
+                {t("Revoke connection")}
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>

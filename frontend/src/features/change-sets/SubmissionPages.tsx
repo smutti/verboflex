@@ -1,3 +1,5 @@
+import { statusLabel } from "@/i18n/statusLabels";
+import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   getChangeSetItems,
@@ -35,6 +37,7 @@ function PagedSection<T>({
   render: (item: T) => ReactNode;
   onUnavailable: () => void;
 }) {
+  useUiLanguage();
   const { accessToken, productId } = useChangeSetWorkspace();
   const [items, setItems] = useState<T[]>([]);
   const [cursor, setCursor] = useState<string>();
@@ -58,7 +61,7 @@ function PagedSection<T>({
           onUnavailable();
           return;
         }
-        if (!result.data) throw new Error("Unavailable");
+        if (!result.data) throw new Error(t("Unavailable"));
         const page = result.data;
         setItems((old) => (cursor ? [...old, ...page.items] : page.items));
         setNext(page.next_cursor);
@@ -78,10 +81,15 @@ function PagedSection<T>({
   return (
     <section className="grid min-w-0 gap-(--space-md)" aria-label={heading}>
       <h3 className="text-heading font-semibold">{heading}</h3>
-      {loading && <p role="status">Loading {heading.toLowerCase()}…</p>}
+      {loading && (
+        <p role="status">
+          {t("Loading ")}
+          {heading.toLowerCase()}…
+        </p>
+      )}
       {error && (
         <p ref={summary} tabIndex={-1} role="alert">
-          {heading} could not be loaded.{" "}
+          {heading} {t(" could not be loaded.")}{" "}
           <Button
             variant="outline"
             onClick={() => {
@@ -89,12 +97,16 @@ function PagedSection<T>({
               setRetry((n) => n + 1);
             }}
           >
-            Retry {heading.toLowerCase()}
+            {t("Retry ")}
+            {heading.toLowerCase()}
           </Button>
         </p>
       )}
       {!loading && !error && !items.length && (
-        <p>No {heading.toLowerCase()} recorded.</p>
+        <p>
+          {t("No ")}
+          {heading.toLowerCase()} {t(" recorded.")}
+        </p>
       )}
       <ul className="grid min-w-0 gap-(--space-md)">
         {items.map((item, index) => (
@@ -130,24 +142,27 @@ export function SubmissionPages({
   id: string;
   onUnavailable: () => void;
 }) {
+  useUiLanguage();
   return (
     <>
       <PagedSection<ChangeSetItemResponse>
         id={id}
         onUnavailable={onUnavailable}
-        heading="Included proposals"
-        more="Load more proposals"
+        heading={t("Included proposals")}
+        more={t("Load more proposals")}
         load={getChangeSetItems}
         render={(item) => (
           <>
             <p>
-              {item.key} ({item.language}) · Submitted version{" "}
-              {item.proposal_version} · {item.value_count} values
+              {item.key} ({item.language}
+              {t(") · Submitted version")} {item.proposal_version} ·{" "}
+              {item.value_count} {t(" values")}
             </p>
             {item.newer_version_available && (
               <p className="font-semibold">
-                Newer proposal available · Current version{" "}
-                {item.current_version}. The submitted version remains unchanged.
+                {t("Newer proposal available · Current version")}{" "}
+                {item.current_version}
+                {t(". The submitted version remains unchanged. ")}
               </p>
             )}
           </>
@@ -156,21 +171,23 @@ export function SubmissionPages({
       <PagedSection<ChangeSetFileResponse>
         id={id}
         onUnavailable={onUnavailable}
-        heading="File changes"
-        more="Load more files"
+        heading={t("File changes")}
+        more={t("Load more files")}
         load={getChangeSetFiles}
         render={(item) => (
           <>
             <p className="font-mono">{item.path}</p>
             <p>
-              {item.format ?? "Format unavailable"} · {item.changed_values}{" "}
-              changed values
+              {item.format ?? t("Format unavailable")} · {item.changed_values}{" "}
+              {t("changed values")}
             </p>
             <p>
-              Before: {item.before_sha256} ({item.before_bytes} bytes)
+              {t("Before: ")}
+              {item.before_sha256} ({item.before_bytes} {t(" bytes)")}
             </p>
             <p>
-              After: {item.after_sha256} ({item.after_bytes} bytes)
+              {t("After: ")}
+              {item.after_sha256} ({item.after_bytes} {t(" bytes)")}
             </p>
           </>
         )}
@@ -178,19 +195,22 @@ export function SubmissionPages({
       <PagedSection<ChangeSetValueResponse>
         id={id}
         onUnavailable={onUnavailable}
-        heading="Submitted values"
-        more="Load more diff entries"
+        heading={t("Submitted values")}
+        more={t("Load more diff entries")}
         load={getChangeSetValues}
         render={(item) => (
           <>
             <p>
-              {item.key} ({item.language}) · Version {item.proposal_version} ·{" "}
-              {item.selector_kind}: {item.selector}
+              {item.key} ({item.language}
+              {t(") · Version ")}
+              {item.proposal_version} · {item.selector_kind}: {item.selector}
             </p>
             <p className="font-mono">{item.file_path}</p>
             <div className="grid min-w-0 gap-(--space-md) md:grid-cols-2">
               <div>
-                <h4 className="font-semibold">Published at submission</h4>
+                <h4 className="font-semibold">
+                  {t("Published at submission")}
+                </h4>
                 <p
                   lang={item.language}
                   dir="auto"
@@ -200,7 +220,7 @@ export function SubmissionPages({
                 </p>
               </div>
               <div>
-                <h4 className="font-semibold">Submitted proposal</h4>
+                <h4 className="font-semibold">{t("Submitted proposal")}</h4>
                 <p
                   lang={item.language}
                   dir="auto"
@@ -211,8 +231,8 @@ export function SubmissionPages({
               </div>
             </div>
             <p>
-              Imported revision {item.basis_revision_number} ·{" "}
-              {item.basis_digest}
+              {t("Imported revision ")}
+              {item.basis_revision_number} · {item.basis_digest}
             </p>
           </>
         )}
@@ -220,36 +240,41 @@ export function SubmissionPages({
       <PagedSection<ChangeSetActivityResponse>
         id={id}
         onUnavailable={onUnavailable}
-        heading="Activity"
-        more="Load more activity"
+        heading={t("Activity")}
+        more={t("Load more activity")}
         load={getChangeSetActivity}
         render={(item) => (
           <>
             <p>
-              Attempt {item.attempt} · {item.step.replaceAll("_", " ")} ·{" "}
-              {item.outcome.replaceAll("_", " ")}
+              {t("Attempt ")}
+              {item.attempt} · {statusLabel(item.step)} ·{" "}
+              {statusLabel(item.outcome)}
             </p>
             <time dateTime={item.created_at}>
-              {new Date(item.created_at).toLocaleString()}
+              {new Date(item.created_at).toLocaleString(getUiLanguage())}
             </time>
             {item.receipt?.kind === "branch" && (
               <p>
-                Branch {item.receipt.name} · {item.receipt.commit_hash}
+                {t("Branch ")}
+                {item.receipt.name} · {item.receipt.commit_hash}
               </p>
             )}
             {item.receipt?.kind === "commit" && (
               <p>
-                Commit {item.receipt.commit_hash} · Parent {item.receipt.parent}
+                {t("Commit ")}
+                {item.receipt.commit_hash} {t(" · Parent ")}
+                {item.receipt.parent}
               </p>
             )}
             {item.receipt?.kind === "pull_request" && (
               <p>
-                Pull request #{item.receipt.id} · {item.receipt.state} · Commit{" "}
-                {item.receipt.source_commit}
+                {t("Pull request #")}
+                {item.receipt.id} · {statusLabel(item.receipt.state)}{" "}
+                {t(" · Commit")} {item.receipt.source_commit}
               </p>
             )}
             {item.receipt?.kind === "authority" && (
-              <p>{item.receipt.action.replaceAll("_", " ")}</p>
+              <p>{statusLabel(item.receipt.action)}</p>
             )}
           </>
         )}

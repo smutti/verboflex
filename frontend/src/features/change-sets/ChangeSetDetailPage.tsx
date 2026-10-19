@@ -1,3 +1,4 @@
+import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
@@ -17,21 +18,24 @@ import { useSubmissionBatchPolling } from "./useSubmissionBatchPolling";
 import { SubmissionPages } from "./SubmissionPages";
 
 export function ChangeSetDetailPage() {
+  useUiLanguage();
   const { accessToken, productId } = useChangeSetWorkspace();
   const id = useParams<"changeSetId">().changeSetId ?? "";
   return <DetailLoader key={`${accessToken}:${productId}:${id}`} id={id} />;
 }
 function Unavailable() {
+  useUiLanguage();
   return (
     <Alert>
-      <AlertTitle>Change set unavailable</AlertTitle>
+      <AlertTitle>{t("Change set unavailable")}</AlertTitle>
       <AlertDescription>
-        This change set is unavailable to your account.
+        {t("This change set is unavailable to your account.")}
       </AlertDescription>
     </Alert>
   );
 }
 function DetailLoader({ id }: { id: string }) {
+  useUiLanguage();
   const { accessToken, productId, setReturnFocus, revokeRead } =
     useChangeSetWorkspace();
   const [record, setRecord] = useState<ChangeSetResponse>();
@@ -53,7 +57,7 @@ function DetailLoader({ id }: { id: string }) {
           return;
         }
         if (!result.data || result.data.id !== id)
-          throw new Error("Unavailable");
+          throw new Error(t("Unavailable"));
         setRecord(result.data);
         setError(false);
       })
@@ -69,7 +73,7 @@ function DetailLoader({ id }: { id: string }) {
         to={`/products/${encodeURIComponent(productId)}/change-sets/history`}
         onClick={() => setReturnFocus(`history-${id}`)}
       >
-        Back to submission history
+        {t("Back to submission history")}
       </Link>
       {unavailable ? (
         <Unavailable />
@@ -77,20 +81,21 @@ function DetailLoader({ id }: { id: string }) {
         <LoadedDetail initial={record} />
       ) : error ? (
         <Alert>
-          <AlertTitle>Change set could not be loaded</AlertTitle>
+          <AlertTitle>{t("Change set could not be loaded")}</AlertTitle>
           <AlertDescription>
             <Button variant="outline" onClick={() => setReload((n) => n + 1)}>
-              Retry loading change set
+              {t("Retry loading change set")}
             </Button>
           </AlertDescription>
         </Alert>
       ) : (
-        <p role="status">Loading change set…</p>
+        <p role="status">{t("Loading change set…")}</p>
       )}
     </div>
   );
 }
 function LoadedDetail({ initial }: { initial: ChangeSetResponse }) {
+  useUiLanguage();
   const { accessToken, productId, revokeRead } = useChangeSetWorkspace();
   const [unavailable, setUnavailable] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -146,7 +151,7 @@ function LoadedDetail({ initial }: { initial: ChangeSetResponse }) {
         lostAccess();
         return;
       }
-      if (!result.data) throw new Error("Unavailable");
+      if (!result.data) throw new Error(t("Unavailable"));
       polling.accept(result.data);
     } catch {
       if (!abort.signal.aborted) {
@@ -177,69 +182,90 @@ function LoadedDetail({ initial }: { initial: ChangeSetResponse }) {
         id="change-set-detail-heading"
         className="text-heading font-semibold"
       >
-        Change set
+        {t("Change set")}
       </h2>
       <p role="status" className="sr-only">
         {polling.announcement}
       </p>
       <section
         className="grid min-w-0 gap-(--space-md) rounded-lg border p-(--space-lg)"
-        aria-label="Submission status"
+        aria-label={t("Submission status")}
       >
         <h3 className="text-heading font-semibold">
           {submissionStatus(record)}
         </h3>
         <p className="wrap-anywhere">
-          {record.workspace}/{record.repository_slug} · Repository{" "}
+          {record.workspace}/{record.repository_slug} {t(" · Repository")}{" "}
           {record.repository_id}
         </p>
         <p>
-          {record.proposal_count} proposals · {record.value_count} values ·{" "}
-          {record.file_count} files · Attempt {record.attempt}
+          {record.proposal_count} {t(" proposals · ")}
+          {record.value_count} {t(" values ·")} {record.file_count}{" "}
+          {t(" files · Attempt ")}
+          {record.attempt}
         </p>
         <p className="wrap-anywhere">
-          Submitted by {record.actor?.display_name ?? "Unknown user"}
+          {t("Submitted by ")}
+          {record.actor?.display_name ?? t("Unknown user")}
         </p>
         <p>
-          Accepted {new Date(record.created_at).toLocaleString()}
+          {t("Accepted ")}
+          {new Date(record.created_at).toLocaleString(getUiLanguage())}
           {record.finished_at
-            ? ` · Finished ${new Date(record.finished_at).toLocaleString()}`
+            ? t(" · Finished {{v0}}", {
+                v0: new Date(record.finished_at).toLocaleString(
+                  getUiLanguage(),
+                ),
+              })
             : ""}
         </p>
         <p className="wrap-anywhere">
-          Pull request source branch: {record.source_branch}
+          {t("Pull request source branch: ")}
+          {record.source_branch}
         </p>
         <p className="wrap-anywhere">
-          Target branch: {record.target_branch} · Captured head{" "}
-          {record.target_head}
+          {t("Target branch: ")}
+          {record.target_branch} {t(" · Captured head")} {record.target_head}
         </p>
         {record.branch_commit && (
           <p className="wrap-anywhere">
-            Verified branch commit: {record.branch_commit}
+            {t("Verified branch commit: ")}
+            {record.branch_commit}
           </p>
         )}
         {record.commit_hash && (
           <p className="wrap-anywhere">
-            Submitted commit: {record.commit_hash}
+            {t("Submitted commit: ")}
+            {record.commit_hash}
           </p>
         )}
-        {record.pr_state && <p>Pull request state: {record.pr_state}</p>}
+        {record.pr_state && (
+          <p>
+            {t("Pull request state: ")}
+            {record.pr_state}
+          </p>
+        )}
         {record.pr_tracking && (
           <div className="grid gap-1 rounded-md border p-3">
             {record.status === "succeeded" &&
               record.pr_tracking.content_status === "verified" && (
                 <p className="font-semibold text-emerald-700 dark:text-emerald-400">
-                  Approved changes preserved. No Git conflicts.
+                  {t("Approved changes preserved. No Git conflicts.")}
                 </p>
               )}
             <p className="wrap-anywhere">
-              Current PR commit: {record.pr_tracking.source_commit}
+              {t("Current PR commit: ")}
+              {record.pr_tracking.source_commit}
             </p>
             <p className="wrap-anywhere">
-              Current base commit: {record.pr_tracking.target_commit}
+              {t("Current base commit: ")}
+              {record.pr_tracking.target_commit}
             </p>
             <p className="text-muted-foreground">
-              Checked {new Date(record.pr_tracking.checked_at).toLocaleString()}
+              {t("Checked ")}
+              {new Date(record.pr_tracking.checked_at).toLocaleString(
+                getUiLanguage(),
+              )}
             </p>
           </div>
         )}
@@ -247,14 +273,15 @@ function LoadedDetail({ initial }: { initial: ChangeSetResponse }) {
         {record.status === "reconciling" && (
           <p>
             {record.pr_id
-              ? "Checking the current PR."
-              : "Checking the submission outcome."}
+              ? t("Checking the current PR.")
+              : t("Checking the submission outcome.")}
           </p>
         )}
         {record.status === "blocked" && (
           <p>
-            Review the current proposal and repository configuration before
-            continuing.
+            {t(
+              "Review the current proposal and repository configuration before continuing.",
+            )}
           </p>
         )}
         {record.error_code &&
@@ -269,7 +296,8 @@ function LoadedDetail({ initial }: { initial: ChangeSetResponse }) {
             </Alert>
           ) : (
             <p className="wrap-anywhere">
-              Reason: {record.error_code.replaceAll("_", " ")}
+              {t("Reason: ")}
+              {record.error_code.replaceAll("_", " ")}
             </p>
           ))}
         {record.recovery_reason && (
@@ -278,12 +306,12 @@ function LoadedDetail({ initial }: { initial: ChangeSetResponse }) {
         <div className="flex flex-wrap gap-(--space-sm)">
           {record.can_retry && (
             <Button disabled={busy} onClick={() => void action("retry")}>
-              Retry submission
+              {t("Retry submission")}
             </Button>
           )}
           {record.can_reconcile && (
             <Button disabled={busy} onClick={() => void action("reconcile")}>
-              Check status
+              {t("Check status")}
             </Button>
           )}
           {record.can_finalize && (
@@ -292,7 +320,7 @@ function LoadedDetail({ initial }: { initial: ChangeSetResponse }) {
               disabled={busy}
               onClick={() => void action("finalize")}
             >
-              Release changes for a new review
+              {t("Release changes for a new review")}
             </Button>
           )}
           {record.status === "blocked" && (
@@ -300,41 +328,47 @@ function LoadedDetail({ initial }: { initial: ChangeSetResponse }) {
               <Link
                 to={`/products/${encodeURIComponent(productId)}/change-sets`}
               >
-                Review latest changes
+                {t("Review latest changes")}
               </Link>
             </Button>
           )}
         </div>
         {record.can_finalize && (
           <p>
-            Releasing permits a fresh review. Any recorded branch or commit
-            remains in Bitbucket.
+            {t(
+              "Releasing permits a fresh review. Any recorded branch or commit remains in Bitbucket.",
+            )}
           </p>
         )}
         {actionError && (
           <Alert ref={summary} tabIndex={-1} variant="destructive">
-            <AlertTitle>Submission action could not be confirmed</AlertTitle>
+            <AlertTitle>
+              {t("Submission action could not be confirmed")}
+            </AlertTitle>
             <AlertDescription>
-              The recorded status is being refreshed. Check the latest attempt
-              before another action.
+              {t(
+                "The recorded status is being refreshed. Check the latest attempt before another action.",
+              )}
             </AlertDescription>
           </Alert>
         )}
         {(polling.error || siblingPolling.error) && (
           <Alert>
-            <AlertTitle>Status could not be refreshed</AlertTitle>
+            <AlertTitle>{t("Status could not be refreshed")}</AlertTitle>
             <AlertDescription>
-              The last known status is shown. Refresh to check for updates.
+              {t(
+                "The last known status is shown. Refresh to check for updates.",
+              )}
             </AlertDescription>
           </Alert>
         )}
         {(polling.paused || siblingPolling.paused) && (
-          <p>Automatic updates paused. The job may still be running.</p>
+          <p>{t("Automatic updates paused. The job may still be running.")}</p>
         )}
         <p>
-          Last status read:{" "}
+          {t("Last status read:")}{" "}
           <time dateTime={polling.updatedAt}>
-            {new Date(polling.updatedAt).toLocaleString()}
+            {new Date(polling.updatedAt).toLocaleString(getUiLanguage())}
           </time>
         </p>
         <Button
@@ -345,18 +379,19 @@ function LoadedDetail({ initial }: { initial: ChangeSetResponse }) {
             siblingPolling.refresh();
           }}
         >
-          Refresh status
+          {t("Refresh status")}
         </Button>
       </section>
       {siblings.length > 1 && (
         <section
-          aria-label="Related submissions"
+          aria-label={t("Related submissions")}
           className="grid gap-(--space-md)"
         >
           <h3 className="text-heading font-semibold">
-            {success} of {siblings.length} pull requests opened
+            {success} {t(" of ")}
+            {siblings.length} {t(" pull requests opened")}
           </h3>
-          <p>Review each remaining change set for its next action.</p>
+          <p>{t("Review each remaining change set for its next action.")}</p>
           <ul>
             {siblings.map((group) => (
               <li
@@ -377,16 +412,17 @@ function LoadedDetail({ initial }: { initial: ChangeSetResponse }) {
         </section>
       )}
       <section
-        aria-label="Source provenance"
+        aria-label={t("Source provenance")}
         className="grid min-w-0 gap-(--space-md)"
       >
-        <h3 className="text-heading font-semibold">Source provenance</h3>
+        <h3 className="text-heading font-semibold">{t("Source provenance")}</h3>
         {record.provenance_available ? (
           <SourceProvenance sources={record.sources ?? []} />
         ) : (
           <p>
-            Source provenance unavailable. Recorded submission evidence remains
-            readable.
+            {t(
+              "Source provenance unavailable. Recorded submission evidence remains readable.",
+            )}
           </p>
         )}
       </section>

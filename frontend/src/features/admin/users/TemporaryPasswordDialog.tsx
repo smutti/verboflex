@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useState } from "react";
 import { flushSync } from "react-dom";
 
@@ -22,6 +23,7 @@ export function TemporaryPasswordDialog({
   onAcknowledged,
   temporaryPassword,
 }: TemporaryPasswordDialogProps) {
+  useUiLanguage();
   const [secret, setSecret] = useState(temporaryPassword);
   const [copyStatus, setCopyStatus] = useState("");
 
@@ -46,16 +48,19 @@ export function TemporaryPasswordDialog({
     <Dialog open>
       <DialogContent showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Temporary password created</DialogTitle>
+          <DialogTitle>{t("Temporary password created")}</DialogTitle>
           <DialogDescription>
-            Save this temporary password for {displayName}. It is shown only
-            once and must be changed at the next sign-in.
+            {t("Save this temporary password for ")}
+            {displayName}
+            {t(
+              ". It is shown only once and must be changed at the next sign-in. ",
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-3">
           <div
-            aria-label="Temporary password"
+            aria-label={t("Temporary password")}
             className="select-all break-all rounded-lg border bg-muted p-4 font-mono text-sm [overflow-wrap:anywhere]"
           >
             {secret}
@@ -65,16 +70,16 @@ export function TemporaryPasswordDialog({
             variant="outline"
             onClick={() => void copyTemporaryPassword()}
           >
-            Copy temporary password
+            {t("Copy temporary password")}
           </Button>
           <p role="status" aria-live="polite" className="min-h-5 text-sm">
-            {copyStatus}
+            {t(copyStatus)}
           </p>
         </div>
 
         <DialogFooter>
           <Button type="button" onClick={acknowledgeTemporaryPassword}>
-            I saved the password
+            {t("I saved the password")}
           </Button>
         </DialogFooter>
       </DialogContent>

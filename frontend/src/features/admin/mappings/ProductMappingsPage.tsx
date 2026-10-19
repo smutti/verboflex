@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import {
   useCallback,
   useEffect,
@@ -178,7 +179,7 @@ export interface ProductMappingsPageProps {
 }
 
 function repositoryLabel(repository: AdminRepositoryResponse) {
-  const providerIdentity = `${repository.provider === "github" ? "GitHub · " : ""}${repository.workspace}/${repository.repository_slug}`;
+  const providerIdentity = `${repository.provider === "github" ? t("GitHub · ") : ""}${repository.workspace}/${repository.repository_slug}`;
   return repository.descriptive_name === null
     ? providerIdentity
     : `${repository.descriptive_name} — ${providerIdentity}`;
@@ -212,25 +213,38 @@ function conflictField(error: unknown): MappingConflictField | null {
 function conflictCopy(field: MappingConflictField | null) {
   switch (field) {
     case "allowed_target_branches":
-      return "The allowed target branches changed. Your selections are still here. Refresh branches and try again.";
+      return t(
+        "The allowed target branches changed. Your selections are still here. Refresh branches and try again.",
+      );
     case "candidate_version":
-      return "This draft changed in another session. Your entries are still here.";
+      return t(
+        "This draft changed in another session. Your entries are still here.",
+      );
     case "keys_source_branch":
-      return "The Keys source branch changed. Your selections are still here. Refresh branches and try again.";
+      return t(
+        "The Keys source branch changed. Your selections are still here. Refresh branches and try again.",
+      );
     case "translations_source_branch":
-      return "The Translations source branch changed. Your selections are still here. Refresh branches and try again.";
+      return t(
+        "The Translations source branch changed. Your selections are still here. Refresh branches and try again.",
+      );
     case "source_branch":
-      return "The source branch changed. Your selections are still here. Refresh branches and try again.";
+      return t(
+        "The source branch changed. Your selections are still here. Refresh branches and try again.",
+      );
     default:
-      return "This mapping conflicts with the current draft. Your selections are still here.";
+      return t(
+        "This mapping conflicts with the current draft. Your selections are still here.",
+      );
   }
 }
 
 function MappingBranchDetails({ mapping }: { mapping: AdminMappingResponse }) {
+  useUiLanguage();
   return (
     <div
       role="region"
-      aria-label="Mapping branch details"
+      aria-label={t("Mapping branch details")}
       // The UI contract requires local keyboard-focusable overflow for opaque branches.
       // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
       tabIndex={0}
@@ -238,21 +252,21 @@ function MappingBranchDetails({ mapping }: { mapping: AdminMappingResponse }) {
     >
       <div className="w-max min-w-full space-y-1 font-mono text-sm">
         <p>
-          {mapping.topology === "direct" ? "Source" : "Keys source"}:{" "}
+          {mapping.topology === "direct" ? t("Source") : t("Keys source")}:{" "}
           {mapping.primary_source_branch}
         </p>
         {mapping.translations_source_branch === null ? null : (
           <p>
-            <span>Translations source: </span>
+            <span>{t("Translations source: ")}</span>
             <span>{mapping.translations_source_branch}</span>
           </p>
         )}
         <p>
-          <span>Default target: </span>
+          <span>{t("Default target: ")}</span>
           <span>{mapping.default_target_branch}</span>
         </p>
         <p>
-          <span>Allowed targets: </span>
+          <span>{t("Allowed targets: ")}</span>
           {mapping.allowed_target_branches.map((branch, index) => (
             <span key={branch}>
               {index === 0 ? null : ", "}
@@ -399,6 +413,7 @@ export function ProductMappingsPage({
   onContinueRequested,
   productId,
 }: ProductMappingsPageProps) {
+  useUiLanguage();
   const directId = useId();
   const separateId = useId();
   const defaultTargetId = useId();
@@ -893,7 +908,7 @@ export function ProductMappingsPage({
         mappingCollection.upsertItems([savedMapping]);
         onCandidateVersionChange?.(savedMapping.candidate_version);
         resetForm(savedMapping.candidate_version);
-        toast.success("Draft saved");
+        toast.success(t("Draft saved"));
         return true;
       }
       if (responseStatus(result) === 409) {
@@ -998,7 +1013,7 @@ export function ProductMappingsPage({
         <Checkbox
           id={checkboxId}
           checked={selected}
-          aria-label={`Allow target ${branchName}`}
+          aria-label={t("Allow target {{v0}}", { v0: branchName })}
           onCheckedChange={(checked) => {
             toggleAllowedTarget(branchName, checked === true);
             targetSearchRef.current?.focus();
@@ -1012,20 +1027,20 @@ export function ProductMappingsPage({
         </Label>
         {selected && defaultTargetBranch === branchName ? (
           <span className="ml-auto rounded-full bg-success/15 px-2 py-1 text-xs font-semibold text-success">
-            Default
+            {t("Default")}
           </span>
         ) : selected ? (
           <Button
             type="button"
             variant="ghost"
             className="ml-auto"
-            aria-label={`Make ${branchName} the default target`}
+            aria-label={t("Make {{v0}} the default target", { v0: branchName })}
             onClick={() => {
               setDefaultTargetBranch(branchName);
               setFormError(null);
             }}
           >
-            Make default
+            {t("Make default")}
           </Button>
         ) : null}
       </div>
@@ -1056,10 +1071,10 @@ export function ProductMappingsPage({
               : "text-display font-semibold"
           }
         >
-          Translation sources
+          {t("Translation sources")}
         </Heading>
         <p className="text-muted-foreground">
-          Select the repository and branch with your translations.
+          {t("Select the repository and branch with your translations.")}
         </p>
       </div>
 
@@ -1067,16 +1082,16 @@ export function ProductMappingsPage({
         <section className="grid gap-3" role="status" aria-live="polite">
           <Skeleton className="h-12 w-full" />
           <Skeleton className="h-12 w-full" />
-          <span>Loading mappings</span>
+          <span>{t("Loading mappings")}</span>
         </section>
       ) : null}
 
       {pageState === "error" ? (
         <Alert variant="destructive">
-          <AlertTitle>Mappings unavailable</AlertTitle>
+          <AlertTitle>{t("Mappings unavailable")}</AlertTitle>
           <AlertDescription>
             <Button type="button" variant="outline" onClick={retryPage}>
-              Retry loading page
+              {t("Retry loading page")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -1084,14 +1099,16 @@ export function ProductMappingsPage({
 
       {pageState === "published" ? (
         <Alert>
-          <AlertTitle>No draft changes</AlertTitle>
+          <AlertTitle>{t("No draft changes")}</AlertTitle>
           <AlertDescription className="grid gap-3">
-            <p>Edit the configuration to change repositories or branches.</p>
+            <p>
+              {t("Edit the configuration to change repositories or branches.")}
+            </p>
             <Button asChild variant="outline" className="w-fit">
               <Link
                 to={`/admin/products/${encodeURIComponent(productId)}/edit`}
               >
-                Edit product configuration
+                {t("Edit product configuration")}
               </Link>
             </Button>
           </AlertDescription>
@@ -1102,31 +1119,34 @@ export function ProductMappingsPage({
         <section className="grid min-w-0 max-w-full gap-4 overflow-x-clip">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-heading font-semibold">
-              Saved translation sources
+              {t("Saved translation sources")}
             </h3>
             {!embedded ? (
               <Button asChild>
                 <Link
                   to={`/admin/products/${encodeURIComponent(productId)}/preview`}
                 >
-                  Preview and import
+                  {t("Preview and import")}
                 </Link>
               </Button>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Continue to preview when all sources are saved.
+                {t("Continue to preview when all sources are saved.")}
               </p>
             )}
           </div>
           <div className="hidden min-w-0 max-w-full md:block">
-            <Table aria-label="Translation sources" className="table-fixed">
+            <Table
+              aria-label={t("Translation sources")}
+              className="table-fixed"
+            >
               <TableHeader>
                 <TableRow>
-                  <TableHead>Source setup</TableHead>
-                  <TableHead>Repositories</TableHead>
-                  <TableHead>Branches</TableHead>
-                  <TableHead>Draft</TableHead>
-                  <TableHead>Action</TableHead>
+                  <TableHead>{t("Source setup")}</TableHead>
+                  <TableHead>{t("Repositories")}</TableHead>
+                  <TableHead>{t("Branches")}</TableHead>
+                  <TableHead>{t("Draft")}</TableHead>
+                  <TableHead>{t("Action")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1134,8 +1154,8 @@ export function ProductMappingsPage({
                   <TableRow key={mapping.id}>
                     <TableCell className="capitalize">
                       {mapping.topology === "direct"
-                        ? "One repository"
-                        : "Two repositories"}
+                        ? t("One repository")
+                        : t("Two repositories")}
                     </TableCell>
                     <TableCell className="whitespace-normal break-words [overflow-wrap:anywhere]">
                       {repositoryName(mapping.primary_repository_id)}
@@ -1147,7 +1167,8 @@ export function ProductMappingsPage({
                       <MappingBranchDetails mapping={mapping} />
                     </TableCell>
                     <TableCell>
-                      Draft version {mapping.candidate_version}
+                      {t("Draft version ")}
+                      {mapping.candidate_version}
                     </TableCell>
                     <TableCell>
                       <Button
@@ -1155,7 +1176,7 @@ export function ProductMappingsPage({
                         variant="outline"
                         onClick={() => beginEdit(mapping)}
                       >
-                        Edit mapping
+                        {t("Edit mapping")}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -1166,14 +1187,14 @@ export function ProductMappingsPage({
 
           <div
             className="grid min-w-0 max-w-full divide-y md:hidden"
-            aria-label="Translation sources mobile list"
+            aria-label={t("Translation sources mobile list")}
           >
             {mappings.map((mapping) => (
               <article key={mapping.id} className="grid min-w-0 gap-3 py-4">
                 <strong>
                   {mapping.topology === "direct"
-                    ? "One repository"
-                    : "Two repositories"}
+                    ? t("One repository")
+                    : t("Two repositories")}
                 </strong>
                 <p className="break-words [overflow-wrap:anywhere]">
                   {repositoryName(mapping.primary_repository_id)}
@@ -1182,13 +1203,16 @@ export function ProductMappingsPage({
                     : ` / ${repositoryName(mapping.translations_repository_id)}`}
                 </p>
                 <MappingBranchDetails mapping={mapping} />
-                <p>Draft version {mapping.candidate_version}</p>
+                <p>
+                  {t("Draft version ")}
+                  {mapping.candidate_version}
+                </p>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => beginEdit(mapping)}
                 >
-                  Edit mapping
+                  {t("Edit mapping")}
                 </Button>
               </article>
             ))}
@@ -1196,7 +1220,7 @@ export function ProductMappingsPage({
           <CursorCollectionControls
             collection={mappingCollection}
             noun="mapping"
-            loadMoreLabel="Load more mappings"
+            loadMoreLabel={t("Load more mappings")}
           />
         </section>
       ) : null}
@@ -1210,9 +1234,9 @@ export function ProductMappingsPage({
           <summary className="cursor-pointer px-6 py-4 text-heading font-semibold">
             {editingMapping === null
               ? mappings.length === 0
-                ? "Configure a translation source"
-                : "Add another translation source"
-              : "Edit translation source"}
+                ? t("Configure a translation source")
+                : t("Add another translation source")
+              : t("Edit translation source")}
           </summary>
           <form
             className="p-6 pt-2"
@@ -1224,28 +1248,28 @@ export function ProductMappingsPage({
           >
             <fieldset disabled={submitPending} className="grid min-w-0 gap-6">
               <h3 className="sr-only">
-                {editingMapping === null ? "Add mapping" : "Edit mapping"}
+                {editingMapping === null ? t("Add mapping") : t("Edit mapping")}
               </h3>
               {repositoryCollection.isPartial ||
               repositoryCollection.loadMoreError ? (
                 <CursorCollectionControls
                   collection={repositoryCollection}
                   noun="repository"
-                  loadMoreLabel="Load more repositories for mappings"
+                  loadMoreLabel={t("Load more repositories for mappings")}
                 />
               ) : null}
 
               {topology === "direct" ? (
                 <div className="grid items-start gap-4 md:grid-cols-2">
                   <RepositorySelect
-                    label="Repository"
+                    label={t("Repository")}
                     repositories={repositories}
                     value={directRepositoryId}
                     onValueChange={(value) => chooseRepository("direct", value)}
                   />
                   <BranchSelect
                     key={`direct-source:${directRepositoryId}`}
-                    label="Source branch"
+                    label={t("Source branch")}
                     branchItems={directBranchItems}
                     collection={directBranches}
                     repositoryId={directRepositoryId}
@@ -1264,17 +1288,17 @@ export function ProductMappingsPage({
                 <div className="grid gap-6">
                   <fieldset className="grid items-start gap-4 rounded-md border p-4 md:grid-cols-2">
                     <legend className="px-1 text-sm font-semibold">
-                      Keys repository
+                      {t("Keys repository")}
                     </legend>
                     <RepositorySelect
-                      label="Keys repository"
+                      label={t("Keys repository")}
                       repositories={repositories}
                       value={keysRepositoryId}
                       onValueChange={(value) => chooseRepository("keys", value)}
                     />
                     <BranchSelect
                       key={`keys-source:${keysRepositoryId}`}
-                      label="Keys source branch"
+                      label={t("Keys source branch")}
                       branchItems={keysBranchItems}
                       collection={keysBranches}
                       repositoryId={keysRepositoryId}
@@ -1287,10 +1311,10 @@ export function ProductMappingsPage({
                   </fieldset>
                   <fieldset className="grid items-start gap-4 rounded-md border p-4 md:grid-cols-2">
                     <legend className="px-1 text-sm font-semibold">
-                      Translations repository
+                      {t("Translations repository")}
                     </legend>
                     <RepositorySelect
-                      label="Translations repository"
+                      label={t("Translations repository")}
                       repositories={repositories}
                       value={translationsRepositoryId}
                       onValueChange={(value) =>
@@ -1299,7 +1323,7 @@ export function ProductMappingsPage({
                     />
                     <BranchSelect
                       key={`translations-source:${translationsRepositoryId}`}
-                      label="Translations source branch"
+                      label={t("Translations source branch")}
                       branchItems={translationsBranchItems}
                       collection={translationsBranches}
                       repositoryId={translationsRepositoryId}
@@ -1322,12 +1346,12 @@ export function ProductMappingsPage({
                 open={topology === "separate"}
               >
                 <summary className="cursor-pointer text-sm font-semibold">
-                  Advanced repository settings
+                  {t("Advanced repository settings")}
                 </summary>
                 <div className="pt-4">
                   <fieldset className="grid gap-3">
                     <legend className="text-sm font-semibold">
-                      Where are keys and translations stored?
+                      {t("Where are keys and translations stored?")}
                     </legend>
                     <RadioGroup
                       value={topology}
@@ -1341,9 +1365,11 @@ export function ProductMappingsPage({
                       <div className="flex min-h-11 items-center gap-3 rounded-md border p-3 has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary/5">
                         <RadioGroupItem id={directId} value="direct" />
                         <div className="grid gap-1">
-                          <Label htmlFor={directId}>Same repository</Label>
+                          <Label htmlFor={directId}>
+                            {t("Same repository")}
+                          </Label>
                           <p className="text-sm text-muted-foreground">
-                            Keys and translated files live together.
+                            {t("Keys and translated files live together.")}
                           </p>
                         </div>
                       </div>
@@ -1351,10 +1377,12 @@ export function ProductMappingsPage({
                         <RadioGroupItem id={separateId} value="separate" />
                         <div className="grid gap-1">
                           <Label htmlFor={separateId}>
-                            Separate repositories
+                            {t("Separate repositories")}
                           </Label>
                           <p className="text-sm text-muted-foreground">
-                            Separate repositories for keys and translations.
+                            {t(
+                              "Separate repositories for keys and translations.",
+                            )}
                           </p>
                         </div>
                       </div>
@@ -1372,30 +1400,31 @@ export function ProductMappingsPage({
                 open={primaryRoot !== "" || translationsRoot !== ""}
               >
                 <summary className="cursor-pointer text-sm font-semibold">
-                  Limit the search to a folder (optional)
+                  {t("Limit the search to a folder (optional)")}
                 </summary>
                 <div className="pt-4">
                   <div className="grid gap-3">
                     <Label htmlFor={`${directId}-root`}>
                       {topology === "direct"
-                        ? "Localization root (optional)"
-                        : "Keys localization root (optional)"}
+                        ? t("Localization root (optional)")
+                        : t("Keys localization root (optional)")}
                     </Label>
                     <Input
                       id={`${directId}-root`}
                       maxLength={4096}
                       value={primaryRoot}
                       onChange={(event) => setPrimaryRoot(event.target.value)}
-                      placeholder="shared/src/commonMain/moko-resources"
+                      placeholder={t("shared/src/commonMain/moko-resources")}
                     />
                     <p className="text-sm text-muted-foreground">
-                      Relative directory, without leading or trailing slashes.
-                      Leave empty for the repository root.
+                      {t(
+                        "Relative directory, without leading or trailing slashes. Leave empty for the repository root.",
+                      )}
                     </p>
                     {topology === "separate" ? (
                       <>
                         <Label htmlFor={`${separateId}-root`}>
-                          Translations localization root (optional)
+                          {t("Translations localization root (optional)")}
                         </Label>
                         <Input
                           id={`${separateId}-root`}
@@ -1413,25 +1442,27 @@ export function ProductMappingsPage({
 
               {githubTarget ? (
                 <Alert>
-                  <AlertTitle>GitHub · Import only</AlertTitle>
+                  <AlertTitle>{t("GitHub · Import only")}</AlertTitle>
                   <AlertDescription>
-                    Translations can be imported, refreshed and edited locally.
-                    Sending commits or pull requests to GitHub is not available.
+                    {t(
+                      "Translations can be imported, refreshed and edited locally. Sending commits or pull requests to GitHub is not available.",
+                    )}
                   </AlertDescription>
                 </Alert>
               ) : (
                 <>
                   <fieldset className="grid gap-3">
                     <legend className="text-sm font-semibold">
-                      Where should future translation changes go?
+                      {t("Where should future translation changes go?")}
                     </legend>
                     <p className="text-sm text-muted-foreground">
-                      Pull request targets. The first selected branch is the
-                      default.
+                      {t(
+                        "Pull request targets. The first selected branch is the default.",
+                      )}
                     </p>
                     <div className="grid gap-2">
                       <Label htmlFor={targetSearchId}>
-                        Search target branches
+                        {t("Search target branches")}
                       </Label>
                       <Input
                         ref={targetSearchRef}
@@ -1440,7 +1471,7 @@ export function ProductMappingsPage({
                         autoComplete="off"
                         value={targetBranchQuery}
                         disabled={!targetRepositorySelected}
-                        placeholder="Type part of a branch name"
+                        placeholder={t("Type part of a branch name")}
                         aria-describedby={`${targetSearchId}-hint`}
                         onChange={(event) =>
                           setTargetBranchQuery(event.target.value)
@@ -1451,27 +1482,31 @@ export function ProductMappingsPage({
                         className="text-sm text-muted-foreground"
                       >
                         {targetRepositorySelected
-                          ? "Type to find branches. Your selections stay below."
-                          : "Choose a repository above to search its branches."}
+                          ? t(
+                              "Type to find branches. Your selections stay below.",
+                            )
+                          : t(
+                              "Choose a repository above to search its branches.",
+                            )}
                       </p>
                     </div>
                     {targetSearchActive &&
                     targetBranchCollection.status === "loading" ? (
-                      <p role="status">Searching branches…</p>
+                      <p role="status">{t("Searching branches…")}</p>
                     ) : null}
                     {targetRepositorySelected &&
                     targetBranchCollection.status === "error" ? (
                       <Alert variant="destructive">
-                        <AlertTitle>Branches unavailable</AlertTitle>
+                        <AlertTitle>{t("Branches unavailable")}</AlertTitle>
                         <AlertDescription>
-                          We could not load branches. Retry your search.
+                          {t("We could not load branches. Retry your search.")}
                         </AlertDescription>
                         <Button
                           type="button"
                           variant="outline"
                           onClick={() => void targetBranchCollection.reload()}
                         >
-                          Retry target branch search
+                          {t("Retry target branch search")}
                         </Button>
                       </Alert>
                     ) : null}
@@ -1484,14 +1519,22 @@ export function ProductMappingsPage({
                         >
                           {targetBranchCollection.isPartial
                             ? targetBranchCollection.loadMoreError
-                              ? "Search incomplete. Retry to find more branches."
-                              : "Searching branches…"
-                            : `${filteredTargetBranchItems.length} matching ${filteredTargetBranchItems.length === 1 ? "branch" : "branches"}`}
+                              ? t(
+                                  "Search incomplete. Retry to find more branches.",
+                                )
+                              : t("Searching branches…")
+                            : t("{{v0}} matching {{v1}}", {
+                                v0: filteredTargetBranchItems.length,
+                                v1:
+                                  filteredTargetBranchItems.length === 1
+                                    ? t("branch")
+                                    : t("branches"),
+                              })}
                         </p>
                         {availableTargetBranchItems.length > 0 ? (
                           <div
                             role="group"
-                            aria-label="Target branch search results"
+                            aria-label={t("Target branch search results")}
                             className="grid max-h-64 min-w-0 gap-2 overflow-y-auto overscroll-contain rounded-md border p-2"
                           >
                             {availableTargetBranchItems.map((branch) =>
@@ -1501,8 +1544,10 @@ export function ProductMappingsPage({
                         ) : !targetBranchCollection.isPartial ? (
                           <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
                             {filteredTargetBranchItems.length > 0
-                              ? "All matching branches are already selected."
-                              : `No live branches match “${targetBranchQuery.trim()}”.`}
+                              ? t("All matching branches are already selected.")
+                              : t("No live branches match “{{v0}}”.", {
+                                  v0: targetBranchQuery.trim(),
+                                })}
                           </p>
                         ) : null}
                         {targetBranchCollection.loadMoreError ? (
@@ -1512,7 +1557,7 @@ export function ProductMappingsPage({
                             className="justify-self-start"
                             onClick={() => void loadMoreTargetBranches()}
                           >
-                            Retry target branch search
+                            {t("Retry target branch search")}
                           </Button>
                         ) : null}
                       </div>
@@ -1520,11 +1565,11 @@ export function ProductMappingsPage({
                     {allowedTargetBranches.length > 0 ? (
                       <div className="grid min-w-0 gap-2">
                         <p className="text-sm font-semibold">
-                          Selected target branches
+                          {t("Selected target branches")}
                         </p>
                         <div
                           role="group"
-                          aria-label="Selected target branches"
+                          aria-label={t("Selected target branches")}
                           className="grid max-h-48 min-w-0 gap-2 overflow-y-auto overscroll-contain p-1"
                         >
                           {allowedTargetBranches.map(renderTargetBranchOption)}
@@ -1538,7 +1583,7 @@ export function ProductMappingsPage({
                       className="rounded-md border border-success/40 bg-success/10 px-4 py-3 font-mono text-sm text-success"
                       aria-live="polite"
                     >
-                      {defaultTargetBranch} is the default target
+                      {defaultTargetBranch} {t(" is the default target")}
                     </p>
                   ) : null}
                 </>
@@ -1546,13 +1591,17 @@ export function ProductMappingsPage({
 
               {formError !== null ? (
                 <Alert ref={formErrorRef} variant="destructive" tabIndex={-1}>
-                  <AlertTitle>Mapping not saved</AlertTitle>
+                  <AlertTitle>{t("Mapping not saved")}</AlertTitle>
                   <AlertDescription>
                     {formError.kind === "conflict"
                       ? conflictCopy(formError.field)
                       : formError.kind === "invalid"
-                        ? "Choose every repository and source branch, at least one allowed target, and a default target from that set."
-                        : "We could not save this draft. Your entries are still here. Review the error and try again."}
+                        ? t(
+                            "Choose every repository and source branch, at least one allowed target, and a default target from that set.",
+                          )
+                        : t(
+                            "We could not save this draft. Your entries are still here. Review the error and try again.",
+                          )}
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -1565,7 +1614,7 @@ export function ProductMappingsPage({
                       variant="outline"
                       onClick={() => resetForm()}
                     >
-                      Cancel edit
+                      {t("Cancel edit")}
                     </Button>
                   )}
                   {!embedded ? (
@@ -1574,7 +1623,7 @@ export function ProductMappingsPage({
                       disabled={submitPending}
                       aria-busy={submitPending}
                     >
-                      Save mapping
+                      {t("Save mapping")}
                     </Button>
                   ) : null}
                 </div>
@@ -1598,11 +1647,13 @@ export function ProductMappingsPage({
           />
         ) : (
           <Alert>
-            <AlertTitle>Published mapping imports</AlertTitle>
+            <AlertTitle>{t("Published mapping imports")}</AlertTitle>
             <AlertDescription>
               {importAuthority.published
-                ? "Reactivate this product before running or refreshing imports."
-                : "Publish a validated mapping before running an import."}
+                ? t(
+                    "Reactivate this product before running or refreshing imports.",
+                  )
+                : t("Publish a validated mapping before running an import.")}
             </AlertDescription>
           </Alert>
         )
@@ -1615,20 +1666,23 @@ export function ProductMappingsPage({
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Change mapping topology?</AlertDialogTitle>
+              <AlertDialogTitle>
+                {t("Change mapping topology?")}
+              </AlertDialogTitle>
               <AlertDialogDescription>
-                Changing topology clears the repository and branch selections in
-                this unsaved mapping.
+                {t(
+                  "Changing topology clears the repository and branch selections in this unsaved mapping.",
+                )}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
               <Button
                 type="button"
                 variant="destructive"
                 onClick={applyTopologyChange}
               >
-                Change topology
+                {t("Change topology")}
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -1649,13 +1703,14 @@ function RepositorySelect({
   repositories: readonly AdminRepositoryResponse[];
   value: string;
 }) {
+  useUiLanguage();
   const id = useId();
   return (
     <div className="grid min-w-0 content-start gap-2">
       <Label htmlFor={id}>{label}</Label>
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger id={id} className="w-full min-w-0">
-          <SelectValue placeholder="Select a repository" />
+          <SelectValue placeholder={t("Select a repository")} />
         </SelectTrigger>
         <SelectContent>
           {repositories.map((repository) => (
@@ -1678,21 +1733,30 @@ function CursorCollectionControls<TItem>({
   loadMoreLabel: string;
   noun: string;
 }) {
+  useUiLanguage();
   if (collection.status !== "ready") {
     return null;
   }
-  const pluralNoun = noun.endsWith("y")
-    ? `${noun.slice(0, -1)}ies`
-    : /(ch|sh|s|x|z)$/.test(noun)
-      ? `${noun}es`
-      : `${noun}s`;
-  const itemNoun = collection.items.length === 1 ? noun : pluralNoun;
+  const itemNoun =
+    noun === "mapping"
+      ? collection.items.length === 1
+        ? t("mapping")
+        : t("mappings")
+      : collection.items.length === 1
+        ? t("repository")
+        : t("repositories");
   return (
     <div className="grid min-w-0 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
       <p className="min-w-0 text-sm text-muted-foreground" aria-live="polite">
         {collection.isPartial
-          ? `${collection.items.length} ${itemNoun} loaded — more available`
-          : `All ${collection.items.length} ${itemNoun} loaded`}
+          ? t("{{v0}} {{v1}} loaded — more available", {
+              v0: collection.items.length,
+              v1: itemNoun,
+            })
+          : t("All {{v0}} {{v1}} loaded", {
+              v0: collection.items.length,
+              v1: itemNoun,
+            })}
       </p>
       {collection.isPartial ? (
         <Button
@@ -1703,14 +1767,18 @@ function CursorCollectionControls<TItem>({
           aria-label={loadMoreLabel}
           onClick={() => void collection.loadMore()}
         >
-          Load more
+          {t("Load more")}
         </Button>
       ) : null}
       {collection.loadMoreError ? (
         <Alert variant="destructive" className="sm:basis-full">
-          <AlertTitle>More {noun}s unavailable</AlertTitle>
+          <AlertTitle>
+            {noun === "mapping"
+              ? t("More mappings unavailable")
+              : t("More repositories unavailable")}
+          </AlertTitle>
           <AlertDescription>
-            The items already loaded are unchanged. Retry this page only.
+            {t("The items already loaded are unchanged. Retry this page only.")}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -1733,6 +1801,7 @@ function BranchSelect({
   repositoryId: string;
   value: string;
 }) {
+  useUiLanguage();
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -1808,7 +1877,7 @@ function BranchSelect({
         autoComplete="off"
         value={query}
         disabled={!repositorySelected}
-        placeholder="Search branches"
+        placeholder={t("Search branches")}
         onChange={(event) => {
           setQuery(event.target.value);
           setActiveIndex(-1);
@@ -1848,33 +1917,37 @@ function BranchSelect({
           id={`${id}-selected`}
           className="min-w-0 rounded-md border bg-primary/5 px-3 py-2 text-sm break-words [overflow-wrap:anywhere]"
         >
-          Selected branch:{" "}
+          {t("Selected branch:")}{" "}
           <span className="font-mono font-semibold">{value}</span>
         </p>
       ) : (
         <p id={`${id}-hint`} className="text-sm text-muted-foreground">
           {repositorySelected
-            ? "Type to find a source branch."
-            : "Choose a repository first."}
+            ? t("Type to find a source branch.")
+            : t("Choose a repository first.")}
         </p>
       )}
       {searchActive && collection.status === "loading" ? (
-        <p role="status">Searching branches…</p>
+        <p role="status">{t("Searching branches…")}</p>
       ) : null}
       {searchActive && collection.status === "ready" ? (
         <>
           <p className="text-sm text-muted-foreground" role="status">
             {collection.isPartial
               ? collection.loadMoreError
-                ? "Search incomplete. Retry to find more branches."
-                : "Searching branches…"
-              : `${filteredBranches.length} matching ${filteredBranches.length === 1 ? "branch" : "branches"}`}
+                ? t("Search incomplete. Retry to find more branches.")
+                : t("Searching branches…")
+              : t("{{v0}} matching {{v1}}", {
+                  v0: filteredBranches.length,
+                  v1:
+                    filteredBranches.length === 1 ? t("branch") : t("branches"),
+                })}
           </p>
           {resultsVisible ? (
             <div
               id={`${id}-results`}
               role="listbox"
-              aria-label={`${label} search results`}
+              aria-label={t("{{v0}} search results", { v0: label })}
               className="grid max-h-64 min-w-0 gap-1 overflow-y-auto overscroll-contain rounded-md border bg-background p-1"
             >
               {filteredBranches.map((branch, index) => (
@@ -1896,7 +1969,8 @@ function BranchSelect({
             </div>
           ) : !collection.isPartial ? (
             <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-              No live branches match “{query.trim()}”.
+              {t("No live branches match “")}
+              {query.trim()}”.
             </p>
           ) : null}
           {collection.loadMoreError ? (
@@ -1906,7 +1980,8 @@ function BranchSelect({
               className="justify-self-start"
               onClick={() => void loadMoreBranches()}
             >
-              Retry search for {label}
+              {t("Retry search for ")}
+              {label}
             </Button>
           ) : null}
         </>
@@ -1914,7 +1989,7 @@ function BranchSelect({
       {repositorySelected && collection.status === "error" ? (
         <div className="grid gap-2">
           <p className="text-sm text-destructive">
-            Live branches are unavailable for this repository.
+            {t("Live branches are unavailable for this repository.")}
           </p>
           <Button
             type="button"
@@ -1922,7 +1997,8 @@ function BranchSelect({
             className="justify-self-start"
             onClick={() => void collection.reload()}
           >
-            Retry search for {label}
+            {t("Retry search for ")}
+            {label}
           </Button>
         </div>
       ) : null}

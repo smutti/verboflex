@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useId, useState } from "react";
 import {
   getAdminImportDuplicates,
@@ -25,6 +26,7 @@ export interface DuplicateKeysDialogProps {
 }
 
 export function DuplicateKeysDialog(props: DuplicateKeysDialogProps) {
+  useUiLanguage();
   // Authority changes destroy open state, filters and every in-flight response.
   return (
     <DiagnosticView
@@ -47,6 +49,7 @@ function DiagnosticView({
   importId,
   execution,
 }: DuplicateKeysDialogProps) {
+  useUiLanguage();
   const [open, setOpen] = useState(false);
   const [language, setLanguage] = useState("");
   const [file, setFile] = useState("");
@@ -111,19 +114,19 @@ function DiagnosticView({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button type="button" variant="outline">
-          View duplicate keys
+          {t("View duplicate keys")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
-          <DialogTitle>Duplicate keys</DialogTitle>
+          <DialogTitle>{t("Duplicate keys")}</DialogTitle>
           <DialogDescription>
-            Read-only diagnostics. Unique strings continue to import while
-            duplicate identities stay quarantined. Correct them in Bitbucket,
-            then import again. Existing valid translations are unchanged.
+            {t(
+              "Read-only diagnostics. Unique strings continue to import while duplicate identities stay quarantined. Correct them in Bitbucket, then import again. Existing valid translations are unchanged.",
+            )}
           </DialogDescription>
         </DialogHeader>
-        <p>Only duplicate keys</p>
+        <p>{t("Only duplicate keys")}</p>
         <form
           className="flex flex-wrap items-end gap-3"
           onSubmit={(event) => {
@@ -136,7 +139,7 @@ function DiagnosticView({
           }}
         >
           <div>
-            <Label htmlFor={`${id}-language`}>Language (exact)</Label>
+            <Label htmlFor={`${id}-language`}>{t("Language (exact)")}</Label>
             <Input
               id={`${id}-language`}
               maxLength={64}
@@ -145,7 +148,7 @@ function DiagnosticView({
             />
           </div>
           <div>
-            <Label htmlFor={`${id}-file`}>File (exact path)</Label>
+            <Label htmlFor={`${id}-file`}>{t("File (exact path)")}</Label>
             <Input
               id={`${id}-file`}
               maxLength={4096}
@@ -154,7 +157,7 @@ function DiagnosticView({
             />
           </div>
           <Button type="submit" variant="outline">
-            Apply filters
+            {t("Apply filters")}
           </Button>
         </form>
         {state.error ? (
@@ -164,24 +167,26 @@ function DiagnosticView({
               type="button"
               onClick={() => setRetry((value) => value + 1)}
             >
-              Retry diagnostics
+              {t("Retry diagnostics")}
             </Button>
           </div>
         ) : !state.data ? (
-          <p role="status">Loading duplicate diagnostics…</p>
+          <p role="status">{t("Loading duplicate diagnostics…")}</p>
         ) : (
           <>
             <p>
-              {state.data.group_count} duplicate groups ·{" "}
-              {state.data.repeated_occurrences} repeated occurrences
+              {state.data.group_count} {t(" duplicate groups ·")}{" "}
+              {state.data.repeated_occurrences} {t(" repeated occurrences")}
             </p>
             <p>
-              Report execution {state.data.execution} · {state.data.report_id}
+              {t("Report execution ")}
+              {state.data.execution} · {state.data.report_id}
             </p>
             {!state.data.complete ? (
               <p role="alert">
-                Incomplete diagnostic scan. These counts do not cover all source
-                files. Publication and import remain blocked.{" "}
+                {t(
+                  "Incomplete diagnostic scan. These counts do not cover all source files. Publication and import remain blocked.",
+                )}{" "}
                 {state.data.issue_codes.join(", ")}
               </p>
             ) : null}
@@ -202,19 +207,22 @@ function DiagnosticView({
                 >
                   <h3 className="font-semibold">{group.key_preview}</h3>
                   {group.key_length > group.key_preview.length ? (
-                    <p>Abbreviated key · {group.key_length} characters</p>
+                    <p>
+                      {t("Abbreviated key · ")}
+                      {group.key_length} {t(" characters")}
+                    </p>
                   ) : null}
                   <p>
                     {group.language} · {group.repository_side} ·{" "}
-                    {group.occurrence_count} occurrences
+                    {group.occurrence_count} {t(" occurrences")}
                   </p>
                   <ul>
                     {group.occurrences.map((occurrence) => (
                       <li
                         key={`${occurrence.path}:${occurrence.resource_position}`}
                       >
-                        {occurrence.path} · Resource position{" "}
-                        {occurrence.resource_position} (zero-based)
+                        {occurrence.path} {t(" · Resource position")}{" "}
+                        {occurrence.resource_position} {t(" (zero-based)")}
                       </li>
                     ))}
                   </ul>
@@ -231,14 +239,14 @@ function DiagnosticView({
                         });
                       }}
                     >
-                      More occurrences
+                      {t("More occurrences")}
                     </Button>
                   ) : null}
                 </section>
               ))}
             </div>
             {state.data.items.length === 0 ? (
-              <p>No duplicate groups match these filters.</p>
+              <p>{t("No duplicate groups match these filters.")}</p>
             ) : null}
             {state.data.next_cursor ? (
               <Button
@@ -250,7 +258,7 @@ function DiagnosticView({
                   setQuery({ ...query, cursor });
                 }}
               >
-                Next duplicate keys
+                {t("Next duplicate keys")}
               </Button>
             ) : null}
             {query.cursor || query.group_id ? (
@@ -262,13 +270,13 @@ function DiagnosticView({
                   setQuery({ language: query.language, file: query.file });
                 }}
               >
-                Back to first page
+                {t("Back to first page")}
               </Button>
             ) : null}
           </>
         )}
         <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-          Close diagnostics
+          {t("Close diagnostics")}
         </Button>
       </DialogContent>
     </Dialog>

@@ -1,3 +1,5 @@
+import { statusLabel } from "@/i18n/statusLabels";
+import { t, useUiLanguage } from "@/i18n";
 import { CodeKeyCatalog } from "./CodeKeyCatalog";
 import { rolesForProduct } from "../auth/productRoles";
 import { Glossary } from "./Glossary";
@@ -96,9 +98,10 @@ type LocatedSnapshot = TranslationSearchSnapshot & {
 };
 
 function LoadingResults() {
+  useUiLanguage();
   return (
     <div className="space-y-(--space-md)" role="status" aria-live="polite">
-      <span>Loading translations</span>
+      <span>{t("Loading translations")}</span>
       {Array.from({ length: 5 }, (_, index) => (
         <div
           key={index}
@@ -122,9 +125,10 @@ function SearchError({
   onRetry: () => void;
   alertRef?: React.Ref<HTMLDivElement>;
 }) {
+  useUiLanguage();
   return (
     <Alert ref={alertRef} tabIndex={-1}>
-      <AlertTitle>Translations could not be loaded</AlertTitle>
+      <AlertTitle>{t("Translations could not be loaded")}</AlertTitle>
       <AlertDescription className="space-y-(--space-md)">
         <Button
           type="button"
@@ -132,7 +136,7 @@ function SearchError({
           className="min-h-[44px] min-w-[44px]"
           onClick={onRetry}
         >
-          Retry search
+          {t("Retry search")}
         </Button>
       </AlertDescription>
     </Alert>
@@ -148,6 +152,7 @@ function ResolvedSearch({
   context: TranslationsWorkspaceContext;
   onRestart: (seed: Seed) => void;
 }) {
+  useUiLanguage();
   const { options, seed } = ready;
   const [authoringSelection, setAuthoringSelection] =
     useState<AuthoringSelection>(null);
@@ -734,19 +739,32 @@ function ResolvedSearch({
     search.filters.violation != null ||
     search.filters.deleted !== "active";
   const criteria = [
-    search.query && `Search: ${search.query}`,
+    search.query && t("Search: {{v0}}", { v0: search.query }),
     !lockedProduct &&
       search.filters.productId &&
-      `Product: ${options.products.find((item) => item.id === search.filters.productId)?.name}`,
-    search.filters.language && `Language: ${search.filters.language}`,
+      t("Product: {{v0}}", {
+        v0: options.products.find(
+          (item) => item.id === search.filters.productId,
+        )?.name,
+      }),
+    search.filters.language &&
+      t("Language: {{v0}}", { v0: search.filters.language }),
     search.filters.workStatus &&
-      `Work queue: ${translationFilterLabels.workStatus[search.filters.workStatus]}`,
+      t("Work queue: {{v0}}", {
+        v0: translationFilterLabels.workStatus[search.filters.workStatus],
+      }),
     search.filters.state &&
-      `Approval state: ${translationFilterLabels.state[search.filters.state]}`,
+      t("Approval state: {{v0}}", {
+        v0: translationFilterLabels.state[search.filters.state],
+      }),
     search.filters.violation &&
-      `Length status: ${translationFilterLabels.violation[search.filters.violation]}`,
+      t("Length status: {{v0}}", {
+        v0: translationFilterLabels.violation[search.filters.violation],
+      }),
     search.filters.deleted !== "active" &&
-      `Deleted status: ${translationFilterLabels.deleted[search.filters.deleted]}`,
+      t("Deleted status: {{v0}}", {
+        v0: translationFilterLabels.deleted[search.filters.deleted],
+      }),
   ]
     .filter(Boolean)
     .join("; ");
@@ -840,13 +858,15 @@ function ResolvedSearch({
         searchControl={
           <div className="flex min-w-0 grow basis-64 items-center gap-1">
             <Label className="sr-only" htmlFor="translation-query">
-              Search keys and translations
+              {t("Search keys and translations")}
             </Label>
             <Input
               id="translation-query"
               className="min-h-[44px]"
-              placeholder="Enter a key or text"
-              title="Search original keys, source text, and translated text"
+              placeholder={t("Enter a key or text")}
+              title={t(
+                "Search original keys, source text, and translated text",
+              )}
               value={search.query}
               onChange={(event) => {
                 const value = event.target.value;
@@ -882,7 +902,7 @@ function ResolvedSearch({
                 );
               }}
             >
-              Clear search
+              {t("Clear search")}
             </Button>
           </div>
         }
@@ -898,12 +918,14 @@ function ResolvedSearch({
           tabIndex={-1}
           className="sr-only"
         >
-          Translation results
+          {t("Translation results")}
         </h2>
         {queueMessage && <p role="status">{queueMessage}</p>}
         {context.activeDraft && editorLoad?.status === "error" && (
           <Alert role="alert">
-            <AlertTitle>The translation editor could not be loaded</AlertTitle>
+            <AlertTitle>
+              {t("The translation editor could not be loaded")}
+            </AlertTitle>
             <AlertDescription>
               <Button
                 variant="outline"
@@ -911,7 +933,7 @@ function ResolvedSearch({
                   openEditor(editorLoad.groupId, resultHeading.current!)
                 }
               >
-                Retry editor
+                {t("Retry editor")}
               </Button>
             </AlertDescription>
           </Alert>
@@ -930,16 +952,23 @@ function ResolvedSearch({
           <div role="status" className="space-y-(--space-sm)">
             <h3 className="text-heading font-semibold">
               {filtered
-                ? "No translations match these filters"
-                : "No translations available"}
+                ? t("No translations match these filters")
+                : t("No translations available")}
             </h3>
             <p>
               {filtered
-                ? "Change your search or clear the filters to see more translations."
-                : "Complete an import for an active product, or choose another authorized product."}
+                ? t(
+                    "Change your search or clear the filters to see more translations.",
+                  )
+                : t(
+                    "Complete an import for an active product, or choose another authorized product.",
+                  )}
             </p>
             {filtered && (
-              <p className="wrap-anywhere">Active criteria: {criteria}</p>
+              <p className="wrap-anywhere">
+                {t("Active criteria: ")}
+                {criteria}
+              </p>
             )}
           </div>
         ) : (
@@ -1064,7 +1093,7 @@ function ResolvedSearch({
                           ),
                         ) ?? null,
                       );
-                      setQueueMessage("Translation saved as Draft.");
+                      setQueueMessage(t("Translation saved as Draft."));
                       // Every save changes cursor authority, even in the unfiltered queue.
                       search.refresh();
                       editorController.current?.abort();
@@ -1118,11 +1147,11 @@ function ResolvedSearch({
                     returnFocusTo={editorReturnFocusTo}
                   />
                 ) : editorLoad?.status === "loading" ? (
-                  <p role="status">Loading translation editor</p>
+                  <p role="status">{t("Loading translation editor")}</p>
                 ) : editorLoad?.status === "error" ? (
                   <Alert role="alert">
                     <AlertTitle>
-                      Translation editor could not be loaded
+                      {t("Translation editor could not be loaded")}
                     </AlertTitle>
                     <AlertDescription>
                       <Button
@@ -1133,7 +1162,7 @@ function ResolvedSearch({
                           openEditor(editorLoad.groupId, editorTrigger.current)
                         }
                       >
-                        Reload editor
+                        {t("Reload editor")}
                       </Button>
                     </AlertDescription>
                   </Alert>
@@ -1161,14 +1190,15 @@ function ResolvedSearch({
           }}
         >
           <AlertDialogHeader>
-            <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
+            <AlertDialogTitle>{t("Leave without saving?")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Your unsent comment and any unsaved translation changes will be
-              lost.
+              {t(
+                "Your unsent comment and any unsaved translation changes will be lost.",
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogCancel>{t("Keep editing")}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               disabled={discussionState.submitting}
@@ -1181,7 +1211,7 @@ function ResolvedSearch({
                 pending.action();
               }}
             >
-              Discard changes
+              {t("Discard changes")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1209,7 +1239,8 @@ function ResolvedSearch({
               <div className="flex items-start justify-between gap-3 border-b p-4">
                 <div className="min-w-0">
                   <SheetTitle>
-                    Translation context · {selectedContext.language}
+                    {t("Translation context · ")}
+                    {selectedContext.language}
                   </SheetTitle>
                   <SheetDescription className="wrap-anywhere">
                     {selectedContext.item.raw_key}
@@ -1219,14 +1250,17 @@ function ResolvedSearch({
                   <Button
                     variant="outline"
                     className="min-h-[44px]"
-                    aria-label="Close translation context"
+                    aria-label={t("Close translation context")}
                   >
-                    Close
+                    {t("Close")}
                   </Button>
                 </SheetClose>
               </div>
               {selectedContext.groupId === null ? (
-                <section className="space-y-3 p-4" aria-label="Source context">
+                <section
+                  className="space-y-3 p-4"
+                  aria-label={t("Source context")}
+                >
                   <p
                     lang={selectedContext.language}
                     dir="auto"
@@ -1234,11 +1268,12 @@ function ResolvedSearch({
                   >
                     {selectedContext.slot.effective_text ??
                       selectedContext.item.source_text ??
-                      "No source text available"}
+                      t("No source text available")}
                   </p>
                   <p>
-                    Embedded source text is read-only; edit it in the
-                    repository.
+                    {t(
+                      "Embedded source text is read-only; edit it in the repository.",
+                    )}
                   </p>
                   {selectedContext.slot.provenance && (
                     <p className="wrap-anywhere">
@@ -1312,7 +1347,9 @@ function ResolvedSearch({
                         ),
                       );
                     setQueueMessage(
-                      `Proposal ${projection.state}. Repository text is unchanged.`,
+                      t("Proposal {{v0}}. Repository text is unchanged.", {
+                        v0: statusLabel(projection.state),
+                      }),
                     );
                     search.refresh();
                   }}
@@ -1320,20 +1357,20 @@ function ResolvedSearch({
               ) : contextLoad?.failed ? (
                 <Alert role="alert">
                   <AlertTitle>
-                    Translation context could not be loaded
+                    {t("Translation context could not be loaded")}
                   </AlertTitle>
                   <AlertDescription>
                     <Button
                       variant="outline"
                       onClick={() => fetchContext(selectedContext)}
                     >
-                      Retry context
+                      {t("Retry context")}
                     </Button>
                   </AlertDescription>
                 </Alert>
               ) : (
                 <p role="status" className="p-4">
-                  Loading translation context
+                  {t("Loading translation context")}
                 </p>
               )}
             </SheetPrimitive.Content>
@@ -1353,6 +1390,7 @@ function SearchOptions({
   requestedProductId: string | null;
   requestedLanguage: string | null;
 }) {
+  useUiLanguage();
   const locationKey = useLocation().key;
   const snapshotMatches =
     context.snapshot &&
@@ -1513,9 +1551,9 @@ function SearchOptions({
     <div className="grid min-w-0 gap-(--space-xl)">
       <header className="space-y-(--space-sm)">
         {lockedProduct ? (
-          <h2 className="text-display font-semibold">Strings</h2>
+          <h2 className="text-display font-semibold">{t("Strings")}</h2>
         ) : (
-          <h1 className="text-display font-semibold">Translations</h1>
+          <h1 className="text-display font-semibold">{t("Translations")}</h1>
         )}
       </header>
       {ready ? (
@@ -1532,12 +1570,12 @@ function SearchOptions({
             aria-busy={!failed}
           >
             <Label htmlFor="translation-query">
-              Search keys and translations
+              {t("Search keys and translations")}
             </Label>
             <Input
               id="translation-query"
               className="min-h-[44px]"
-              placeholder="Enter a key or text"
+              placeholder={t("Enter a key or text")}
               aria-describedby="translation-query-help"
               value={pendingQuery}
               onChange={(event) => {
@@ -1549,7 +1587,7 @@ function SearchOptions({
               id="translation-query-help"
               className="text-body text-muted-foreground"
             >
-              Searches original keys, source text, and translated text.
+              {t("Searches original keys, source text, and translated text.")}
             </p>
           </div>
           <TranslationFilters
@@ -1591,6 +1629,7 @@ function SearchOptions({
 }
 
 export function TranslationSearchPage() {
+  useUiLanguage();
   const context = useOutletContext<TranslationsWorkspaceContext>();
   const locationKey = useLocation().key;
   const [searchParams] = useSearchParams();

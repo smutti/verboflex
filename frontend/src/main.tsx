@@ -4,7 +4,9 @@ import { RouterProvider } from "react-router-dom";
 
 import "./index.css";
 import { createVerboFlexBrowserRouter } from "./router";
+import { initializeUiLanguage } from "./i18n";
 
+initializeUiLanguage();
 const rootElement = document.getElementById("root");
 const router = createVerboFlexBrowserRouter();
 

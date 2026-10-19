@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import {
   useCallback,
   useEffect,
@@ -55,15 +56,27 @@ import {
 } from "./mutationAuthority";
 
 const SIDE_LABELS = {
-  direct: "Source",
-  keys: "Keys",
-  translations: "Translations",
+  get direct() {
+    return t("Source");
+  },
+  get keys() {
+    return t("Keys");
+  },
+  get translations() {
+    return t("Translations");
+  },
 } as const;
 
 const CHANGE_LABELS = {
-  added: "Added",
-  modified: "Modified",
-  removed: "Removed",
+  get added() {
+    return t("Added");
+  },
+  get modified() {
+    return t("Modified");
+  },
+  get removed() {
+    return t("Removed");
+  },
 } as const;
 
 type ComparisonLoadState =
@@ -139,6 +152,7 @@ function sideBranch(
 }
 
 function FullCommit({ commit }: { commit: string }) {
+  useUiLanguage();
   const [copied, setCopied] = useState(false);
 
   async function copyCommit() {
@@ -163,18 +177,18 @@ function FullCommit({ commit }: { commit: string }) {
               variant="outline"
               size="icon"
               className="min-h-[44px] min-w-[44px] shrink-0"
-              aria-label="Copy full commit"
+              aria-label={t("Copy full commit")}
               onClick={() => void copyCommit()}
             >
               <Copy aria-hidden="true" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Copy full commit</TooltipContent>
+          <TooltipContent>{t("Copy full commit")}</TooltipContent>
         </Tooltip>
       </TooltipProvider>
       {copied ? (
         <span className="sr-only" role="status" aria-live="polite">
-          Full commit copied
+          {t("Full commit copied")}
         </span>
       ) : null}
     </div>
@@ -190,46 +204,56 @@ function SideComparison({
   repositories: readonly AdminRepositoryResponse[];
   side: AdminImportRewriteSideResponse;
 }) {
+  useUiLanguage();
   const label = SIDE_LABELS[side.repository_side];
   return (
     <section
-      aria-label={`${label} baseline comparison`}
+      aria-label={t("{{v0}} baseline comparison", { v0: label })}
       className="grid min-w-0 gap-4 rounded-lg border p-4"
     >
       <h3 className="text-heading font-semibold">{label}</h3>
       <dl className="grid min-w-0 gap-3">
         <div className="grid min-w-0 gap-1">
-          <dt className="text-sm font-semibold">Repository</dt>
+          <dt className="text-sm font-semibold">{t("Repository")}</dt>
           <dd className="[overflow-wrap:anywhere]">
             {repositoryLabel(side.repository_id, repositories)}
           </dd>
         </div>
         <div className="grid min-w-0 gap-1">
-          <dt className="text-sm font-semibold">Branch</dt>
+          <dt className="text-sm font-semibold">{t("Branch")}</dt>
           <dd className="font-mono [overflow-wrap:anywhere]">
             {sideBranch(side, importRecord)}
           </dd>
         </div>
         <div className="grid min-w-0 gap-1">
-          <dt className="text-sm font-semibold">Current baseline</dt>
+          <dt className="text-sm font-semibold">{t("Current baseline")}</dt>
           <dd className="min-w-0">
             <FullCommit commit={side.old_commit_hash} />
           </dd>
         </div>
         <div className="grid min-w-0 gap-1">
-          <dt className="text-sm font-semibold">Proposed baseline</dt>
+          <dt className="text-sm font-semibold">{t("Proposed baseline")}</dt>
           <dd className="min-w-0">
             <FullCommit commit={side.new_commit_hash} />
           </dd>
         </div>
       </dl>
       <div
-        aria-label={`${label} change summary`}
+        aria-label={t("{{v0}} change summary", { v0: label })}
         className="flex flex-wrap gap-2"
       >
-        <Badge variant="outline">Added {side.added_count}</Badge>
-        <Badge variant="outline">Modified {side.modified_count}</Badge>
-        <Badge variant="outline">Removed {side.removed_count}</Badge>
+        <Badge variant="outline">
+          {t("Added ")}
+          {side.added_count}
+        </Badge>
+        <Badge variant="outline">
+          {t("Modified ")}
+          {side.modified_count}
+        </Badge>
+        <Badge variant="outline">
+          {t("Removed ")}
+          {side.removed_count}
+        </Badge>
       </div>
     </section>
   );
@@ -245,6 +269,7 @@ export function RewrittenBaselineDialog({
   repositories = [],
   triggerElement,
 }: RewrittenBaselineDialogProps) {
+  useUiLanguage();
   const requestGenerationRef = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
   const confirmationControllerRef = useRef<AbortController | null>(null);
@@ -460,7 +485,7 @@ export function RewrittenBaselineDialog({
         // The provider baseline is already committed; collection refresh is separate.
       }
       if (!isCurrentRequest()) return;
-      toast.success("Baseline updated");
+      toast.success(t("Baseline updated"));
       finishClose();
     } catch {
       if (isCurrentRequest()) {
@@ -499,17 +524,19 @@ export function RewrittenBaselineDialog({
         }}
       >
         <AlertDialogHeader>
-          <AlertDialogTitle>Review rewritten source history</AlertDialogTitle>
+          <AlertDialogTitle>
+            {t("Review rewritten source history")}
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            This branch no longer descends from the last successful baseline.
-            Review the complete localization-file change before choosing a new
-            baseline.
+            {t(
+              "This branch no longer descends from the last successful baseline. Review the complete localization-file change before choosing a new baseline.",
+            )}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
         <div
           role="region"
-          aria-label="Rewritten baseline comparison content"
+          aria-label={t("Rewritten baseline comparison content")}
           // The comparison may contain many metadata rows; scrolling remains local and keyboard accessible.
           // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
           tabIndex={0}
@@ -521,16 +548,17 @@ export function RewrittenBaselineDialog({
                 data-testid="rewrite-comparison-skeleton"
                 className="h-32 w-full"
               />
-              <span>Loading baseline comparison</span>
+              <span>{t("Loading baseline comparison")}</span>
             </div>
           ) : null}
 
           {loadState.status === "error" ? (
             <Alert ref={errorRef} tabIndex={-1} variant="destructive">
-              <AlertTitle>Baseline comparison unavailable</AlertTitle>
+              <AlertTitle>{t("Baseline comparison unavailable")}</AlertTitle>
               <AlertDescription>
-                The proposed source could not be read safely. Close this review
-                and retry the import later.
+                {t(
+                  "The proposed source could not be read safely. Close this review and retry the import later.",
+                )}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -547,21 +575,21 @@ export function RewrittenBaselineDialog({
               ))}
 
               {loadState.comparison.files.length === 0 ? (
-                <p>No localization file changes detected</p>
+                <p>{t("No localization file changes detected")}</p>
               ) : (
                 <div
                   role="region"
-                  aria-label="Localization file changes scroll area"
+                  aria-label={t("Localization file changes scroll area")}
                   // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
                   tabIndex={0}
                   className="max-w-full overflow-x-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <Table aria-label="Localization file changes">
+                  <Table aria-label={t("Localization file changes")}>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Change</TableHead>
-                        <TableHead>Repository side</TableHead>
-                        <TableHead>File path</TableHead>
+                        <TableHead>{t("Change")}</TableHead>
+                        <TableHead>{t("Repository side")}</TableHead>
+                        <TableHead>{t("File path")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -592,11 +620,12 @@ export function RewrittenBaselineDialog({
                 aria-labelledby="rewrite-confirmation-title"
               >
                 <h3 id="rewrite-confirmation-title" className="font-semibold">
-                  Use the rewritten baseline?
+                  {t("Use the rewritten baseline?")}
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  Pending edits are kept. Edits affected by source changes need
-                  reconciliation before submission.
+                  {t(
+                    "Pending edits are kept. Edits affected by source changes need reconciliation before submission.",
+                  )}
                 </p>
               </section>
 
@@ -604,13 +633,17 @@ export function RewrittenBaselineDialog({
                 <Alert ref={errorRef} tabIndex={-1} variant="destructive">
                   <AlertTitle>
                     {confirmationError === "stale"
-                      ? "Baseline changed again"
-                      : "Baseline update unavailable"}
+                      ? t("Baseline changed again")
+                      : t("Baseline update unavailable")}
                   </AlertTitle>
                   <AlertDescription>
                     {confirmationError === "stale"
-                      ? "The proposed baseline is no longer current. Close this review and run the import again."
-                      : "The baseline could not be updated safely. Close this review and run the import again."}
+                      ? t(
+                          "The proposed baseline is no longer current. Close this review and run the import again.",
+                        )
+                      : t(
+                          "The baseline could not be updated safely. Close this review and run the import again.",
+                        )}
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -623,7 +656,7 @@ export function RewrittenBaselineDialog({
             className="min-h-[44px]"
             disabled={confirmationPending}
           >
-            Keep current baseline
+            {t("Keep current baseline")}
           </AlertDialogCancel>
           {loadState.status === "ready" ? (
             <Button
@@ -633,7 +666,7 @@ export function RewrittenBaselineDialog({
               aria-busy={confirmationPending}
               onClick={() => void confirmBaseline(loadState.comparison)}
             >
-              Confirm new baseline
+              {t("Confirm new baseline")}
             </Button>
           ) : null}
         </AlertDialogFooter>

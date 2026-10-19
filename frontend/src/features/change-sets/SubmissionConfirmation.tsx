@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -18,6 +19,7 @@ export function SubmissionConfirmation({
 }: {
   review: SubmissionReviewResponse;
 }) {
+  useUiLanguage();
   const {
     accessToken,
     productId,
@@ -114,7 +116,7 @@ export function SubmissionConfirmation({
         return false;
       }
       if (!data || data.id !== review.id || data.product_id !== productId)
-        throw new Error("Unavailable");
+        throw new Error(t("Unavailable"));
       return true;
     }
     async function lookup() {
@@ -207,11 +209,12 @@ export function SubmissionConfirmation({
           tabIndex={-1}
           className="font-semibold"
         >
-          Submission queued
+          {t("Submission queued")}
         </h3>
         <p>
-          You can leave this page. Track each pull request through its change
-          set.
+          {t(
+            "You can leave this page. Track each pull request through its change set.",
+          )}
         </p>
         <ul className="grid gap-(--space-sm)">
           {groups.map((group) => (
@@ -220,7 +223,8 @@ export function SubmissionConfirmation({
                 className="text-primary underline"
                 to={`/products/${encodeURIComponent(productId)}/change-sets/${encodeURIComponent(group.id)}`}
               >
-                View change set: {group.workspace}/{group.repository_slug} →{" "}
+                {t("View change set: ")}
+                {group.workspace}/{group.repository_slug} →{" "}
                 {group.target_branch}
               </Link>
             </li>
@@ -228,42 +232,44 @@ export function SubmissionConfirmation({
         </ul>
       </section>
     );
-  if (!canRequest) return <p>Submission access is read-only</p>;
+  if (!canRequest) return <p>{t("Submission access is read-only")}</p>;
   if (current?.state === "rejected")
     return (
       <section className="grid gap-(--space-sm)" role="alert">
-        <h3 className="font-semibold">Selected changes need review</h3>
+        <h3 className="font-semibold">{t("Selected changes need review")}</h3>
         <p>
-          Submission was not accepted. Return to selection and review the latest
-          changes before submitting.
+          {t(
+            "Submission was not accepted. Return to selection and review the latest changes before submitting.",
+          )}
         </p>
       </section>
     );
   if (current && !inFlight)
     return (
       <section className="grid gap-(--space-md)">
-        <h3 className="font-semibold">Checking submission outcome</h3>
+        <h3 className="font-semibold">{t("Checking submission outcome")}</h3>
         <p>
-          The submission response could not be confirmed. Check the existing
-          request before attempting another submission.
+          {t(
+            "The submission response could not be confirmed. Check the existing request before attempting another submission.",
+          )}
         </p>
         <Button
           className="w-fit"
           variant="outline"
           onClick={() => void submitOrRecover(true)}
         >
-          Check status
+          {t("Check status")}
         </Button>
       </section>
     );
   const count = review.groups?.length ?? 0;
   return (
     <section
-      aria-label="Create pull request"
+      aria-label={t("Create pull request")}
       className="flex min-w-0 flex-wrap items-center justify-between gap-4 rounded-lg border bg-card p-4"
     >
       <p className="min-w-0 text-sm text-muted-foreground">
-        Approved changes only. No automatic merge.
+        {t("Approved changes only. No automatic merge.")}
       </p>
       <Button
         className="w-fit max-w-full min-h-[44px] h-auto whitespace-normal"
@@ -271,13 +277,13 @@ export function SubmissionConfirmation({
         onClick={() => void submitOrRecover(false)}
       >
         {inFlight
-          ? "Submitting changes…"
+          ? t("Submitting changes…")
           : count === 1
-            ? "Create pull request"
-            : `Create ${count} pull requests`}
+            ? t("Create pull request")
+            : t("Create {{v0}} pull requests", { v0: count })}
       </Button>
       {!inFlight && !canSubmit() && (
-        <p>Review the complete current selection before submitting.</p>
+        <p>{t("Review the complete current selection before submitting.")}</p>
       )}
     </section>
   );

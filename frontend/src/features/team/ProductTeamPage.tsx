@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import {
@@ -20,10 +21,18 @@ import { Badge } from "../../components/ui/badge";
 import { TemporaryPasswordDialog } from "../admin/users/TemporaryPasswordDialog";
 
 const labels = {
-  viewer: "Viewer",
-  translator: "Translator",
-  product_manager_reviewer: "Reviewer",
-  product_owner: "Product Owner",
+  get viewer() {
+    return t("Viewer");
+  },
+  get translator() {
+    return t("Translator");
+  },
+  get product_manager_reviewer() {
+    return t("Reviewer");
+  },
+  get product_owner() {
+    return t("Product Owner");
+  },
 };
 type Role = MemberInput["role"];
 const operational: Role[] = [
@@ -40,7 +49,7 @@ function errorMessage(error: unknown): string {
     typeof error.detail === "string"
   )
     return error.detail;
-  return "Unable to update the team. Refresh and try again.";
+  return t("Unable to update the team. Refresh and try again.");
 }
 
 function RoleSelect({
@@ -56,6 +65,7 @@ function RoleSelect({
   label: string;
   disabled?: boolean;
 }) {
+  useUiLanguage();
   return (
     <select
       aria-label={label}
@@ -88,6 +98,7 @@ function MemberRow({
   save: (role: Role) => Promise<boolean>;
   remove: () => void;
 }) {
+  useUiLanguage();
   const [role, setRole] = useState<Role>(member.role);
   const [editing, setEditing] = useState(false);
   const protectedMember = member.role === "product_owner" && !admin;
@@ -97,7 +108,7 @@ function MemberRow({
         <p className="font-semibold break-all">{member.display_name}</p>
         <p className="break-all text-sm text-muted-foreground">
           {member.email}
-          {!member.account_active && " · Account disabled"}
+          {!member.account_active && t(" · Account disabled")}
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -107,16 +118,16 @@ function MemberRow({
             variant="ghost"
             disabled={busy}
             onClick={() => setEditing(true)}
-            aria-label={`Edit ${member.email}`}
+            aria-label={t("Edit {{v0}}", { v0: member.email })}
           >
-            Edit
+            {t("Edit")}
           </Button>
         )}
       </div>
       {!protectedMember && editing && (
         <div className="flex w-full flex-wrap items-center gap-2 border-t pt-3">
           <RoleSelect
-            label={`Role for ${member.email}`}
+            label={t("Role for {{v0}}", { v0: member.email })}
             owner={admin}
             value={role}
             onChange={setRole}
@@ -129,7 +140,7 @@ function MemberRow({
               if (await save(role)) setEditing(false);
             }}
           >
-            Save role
+            {t("Save role")}
           </Button>
           <Button
             variant="ghost"
@@ -139,16 +150,16 @@ function MemberRow({
               setEditing(false);
             }}
           >
-            Cancel
+            {t("Cancel")}
           </Button>
           <Button
             variant="ghost"
             className="text-destructive"
             disabled={busy}
             onClick={remove}
-            aria-label={`Remove ${member.email} from product`}
+            aria-label={t("Remove {{v0}} from product", { v0: member.email })}
           >
-            Remove
+            {t("Remove")}
           </Button>
         </div>
       )}
@@ -157,6 +168,7 @@ function MemberRow({
 }
 
 export function ProductTeamPage({ accessToken }: { accessToken: string }) {
+  useUiLanguage();
   const productId = useParams<"productId">().productId ?? "";
   return (
     <TeamEditor
@@ -174,6 +186,7 @@ function TeamEditor({
   productId: string;
   accessToken: string;
 }) {
+  useUiLanguage();
   const [team, setTeam] = useState<TeamResponse | null>(null);
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState("");
@@ -261,7 +274,7 @@ function TeamEditor({
                   expected_version: member.version,
                 },
               }),
-            "Role updated.",
+            t("Role updated."),
           )
         }
         remove={() => setRemoval(member)}
@@ -304,25 +317,25 @@ function TeamEditor({
   return (
     <section className="grid min-w-0 gap-6" aria-labelledby="team-title">
       <h1 id="team-title" className="text-heading font-semibold">
-        Product team
+        {t("Product team")}
       </h1>
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>Team update unavailable</AlertTitle>
+          <AlertTitle>{t("Team update unavailable")}</AlertTitle>
           <AlertDescription>
-            {error}{" "}
+            {t(error)}{" "}
             <Button
               variant="outline"
               disabled={busy}
               onClick={() => setRevision((r) => r + 1)}
             >
-              Refresh team
+              {t("Refresh team")}
             </Button>
           </AlertDescription>
         </Alert>
       )}
-      {notice && <p role="status">{notice}</p>}
-      {!team && !error && <p role="status">Loading team…</p>}
+      {notice && <p role="status">{t(notice)}</p>}
+      {!team && !error && <p role="status">{t("Loading team…")}</p>}
       {team && (
         <>
           <section
@@ -331,7 +344,7 @@ function TeamEditor({
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 id="owners-title" className="font-semibold">
-                Product Owner
+                {t("Product Owner")}
               </h2>
               {admin && (
                 <Button
@@ -341,7 +354,7 @@ function TeamEditor({
                   aria-controls="owner-form"
                   onClick={() => setAddingOwner((value) => !value)}
                 >
-                  Assign Product Owner
+                  {t("Assign Product Owner")}
                 </Button>
               )}
             </div>
@@ -350,7 +363,7 @@ function TeamEditor({
             )}
             {!team.has_active_owner && (
               <p className="text-sm text-muted-foreground">
-                No active Product Owner
+                {t("No active Product Owner")}
               </p>
             )}
             {admin && addingOwner && (
@@ -364,7 +377,7 @@ function TeamEditor({
                         ...auth,
                         body: { email: ownerEmail, role: "product_owner" },
                       }),
-                    "Product Owner appointed.",
+                    t("Product Owner appointed."),
                   );
                   if (saved) {
                     setOwnerEmail("");
@@ -373,13 +386,14 @@ function TeamEditor({
                 }}
                 className="grid gap-3 border-t pt-4"
               >
-                <Label htmlFor="owner-email">Account email</Label>
+                <Label htmlFor="owner-email">{t("Account email")}</Label>
                 <p
                   id="owner-email-help"
                   className="text-sm text-muted-foreground"
                 >
-                  Use an existing account. To promote a collaborator, edit their
-                  role below.
+                  {t(
+                    "Use an existing account. To promote a collaborator, edit their role below.",
+                  )}
                 </p>
                 <Input
                   id="owner-email"
@@ -394,14 +408,14 @@ function TeamEditor({
                   className="max-w-md"
                 />
                 <div className="flex flex-wrap gap-2">
-                  <Button disabled={busy}>Appoint owner</Button>
+                  <Button disabled={busy}>{t("Appoint owner")}</Button>
                   <Button
                     type="button"
                     variant="ghost"
                     disabled={busy}
                     onClick={() => setAddingOwner(false)}
                   >
-                    Cancel
+                    {t("Cancel")}
                   </Button>
                 </div>
               </form>
@@ -413,7 +427,7 @@ function TeamEditor({
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 id="collaborators-title" className="font-semibold">
-                Collaborators
+                {t("Collaborators")}
               </h2>
               <Button
                 variant="outline"
@@ -422,14 +436,14 @@ function TeamEditor({
                 aria-controls="collaborator-form"
                 onClick={() => setAddingCollaborator((value) => !value)}
               >
-                Add collaborator
+                {t("Add collaborator")}
               </Button>
             </div>
             {collaborators.length > 0 ? (
               <ul className="grid gap-3">{collaborators.map(memberRow)}</ul>
             ) : (
               <p className="text-sm text-muted-foreground">
-                No collaborators yet.
+                {t("No collaborators yet.")}
               </p>
             )}
             {addingCollaborator && (
@@ -441,7 +455,7 @@ function TeamEditor({
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="grid gap-2">
                     <Label htmlFor="collaborator-email">
-                      Collaborator email
+                      {t("Collaborator email")}
                     </Label>
                     <Input
                       id="collaborator-email"
@@ -455,7 +469,9 @@ function TeamEditor({
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="collaborator-name">Display name</Label>
+                    <Label htmlFor="collaborator-name">
+                      {t("Display name")}
+                    </Label>
                     <Input
                       id="collaborator-name"
                       required
@@ -468,7 +484,7 @@ function TeamEditor({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <RoleSelect
-                    label="Collaborator role"
+                    label={t("Collaborator role")}
                     owner={false}
                     value={role}
                     onChange={(value) =>
@@ -476,14 +492,14 @@ function TeamEditor({
                     }
                     disabled={busy}
                   />
-                  <Button disabled={busy}>Add to team</Button>
+                  <Button disabled={busy}>{t("Add to team")}</Button>
                   <Button
                     type="button"
                     variant="ghost"
                     disabled={busy}
                     onClick={() => setAddingCollaborator(false)}
                   >
-                    Cancel
+                    {t("Cancel")}
                   </Button>
                 </div>
               </form>
@@ -492,12 +508,14 @@ function TeamEditor({
           {removal && (
             <Alert>
               <AlertTitle>
-                Remove {removal.display_name} from this product?
+                {t("Remove ")}
+                {removal.display_name} {t(" from this product?")}
               </AlertTitle>
               <AlertDescription>
                 <p>
-                  Their account and access to other products will remain
-                  available.
+                  {t(
+                    "Their account and access to other products will remain available.",
+                  )}
                 </p>
                 <div className="flex gap-2">
                   <Button
@@ -511,18 +529,18 @@ function TeamEditor({
                             path: { ...auth.path, user_id: removal.user_id },
                             query: { expected_version: removal.version },
                           }),
-                        "Product access removed.",
+                        t("Product access removed."),
                       )
                     }
                   >
-                    Confirm removal
+                    {t("Confirm removal")}
                   </Button>
                   <Button
                     variant="outline"
                     disabled={busy}
                     onClick={() => setRemoval(null)}
                   >
-                    Cancel
+                    {t("Cancel")}
                   </Button>
                 </div>
               </AlertDescription>

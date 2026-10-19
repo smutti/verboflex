@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import type {
   TranslationGroupDetailResponse,
   TranslationSourceComparisonResponse,
@@ -146,24 +147,27 @@ export function completeTranslationDetail(
 
 export const reviewStateLabel = (state: string) =>
   state === "mixed"
-    ? "Mixed states"
-    : ({ draft: "Draft", approved: "Approved", rejected: "Rejected" }[state] ??
-      "State unavailable");
+    ? t("Mixed states")
+    : ({ draft: t("Draft"), approved: t("Approved"), rejected: t("Rejected") }[
+        state
+      ] ?? t("State unavailable"));
 export const lengthStatusLabel = (
   constraint: TranslationGroupDetailResponse["values"][number]["constraint"],
 ) =>
   constraint.status === "no_max"
-    ? "No max length"
+    ? t("No max length")
     : constraint.status === "within_limit"
-      ? "Within limit"
-      : `Over limit by ${constraint.overage}`;
+      ? t("Within limit")
+      : t("Over limit by {{v0}}", { v0: constraint.overage });
 export function ruleSourceLabel(detail: TranslationGroupDetailResponse) {
   const source = detail.values[0].constraint.source;
   return source === "none"
-    ? "No max length"
+    ? t("No max length")
     : source === "language_override"
-      ? "Language override"
+      ? t("Language override")
       : detail.language === detail.base_language
-        ? "Base-language default"
-        : `Inherited from ${detail.base_language ?? "base language"}`;
+        ? t("Base-language default")
+        : t("Inherited from {{v0}}", {
+            v0: detail.base_language ?? t("base language"),
+          });
 }

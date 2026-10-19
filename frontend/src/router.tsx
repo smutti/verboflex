@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import type { ReactNode } from "react";
 import {
   createBrowserRouter,
@@ -81,6 +82,7 @@ function AdminRouteContent({
   children: ReactNode;
   state: AdminRouteState;
 }) {
+  useUiLanguage();
   if (state.status === "loading") {
     return (
       <section
@@ -90,7 +92,7 @@ function AdminRouteContent({
       >
         <Skeleton className="h-8 w-52 max-w-full" />
         <Skeleton className="h-24 w-full" />
-        <span>Loading administration page</span>
+        <span>{t("Loading administration page")}</span>
       </section>
     );
   }
@@ -98,14 +100,15 @@ function AdminRouteContent({
   if (state.status === "error") {
     return (
       <Alert variant="destructive" className="max-w-3xl">
-        <AlertTitle>Administration page unavailable</AlertTitle>
+        <AlertTitle>{t("Administration page unavailable")}</AlertTitle>
         <AlertDescription>
           <p>
-            We could not load this page. Retry without leaving the
-            administration area.
+            {t(
+              "We could not load this page. Retry without leaving the administration area.",
+            )}
           </p>
           <Button type="button" variant="outline" onClick={state.onRetry}>
-            Retry loading page
+            {t("Retry loading page")}
           </Button>
         </AlertDescription>
       </Alert>
@@ -133,15 +136,16 @@ export function SessionRoutes({
   adminRouteState = { status: "ready" },
   accessDeniedElement,
 }: SessionRoutesProps) {
+  useUiLanguage();
   if (state.status === "session_unavailable") {
     return (
       <main className="flex min-h-screen items-center justify-center px-6">
         <Alert className="max-w-md">
-          <AlertTitle>We could not check your session</AlertTitle>
+          <AlertTitle>{t("We could not check your session")}</AlertTitle>
           <AlertDescription>
-            Check your connection and try again.
+            {t("Check your connection and try again.")}
             <Button onClick={onRetrySession} className="mt-4">
-              Try again
+              {t("Try again")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -158,7 +162,7 @@ export function SessionRoutes({
         >
           <Skeleton className="mx-auto h-5 w-48" />
           <Skeleton className="mx-auto h-4 w-64" />
-          <span>Checking session</span>
+          <span>{t("Checking session")}</span>
         </div>
       </main>
     );
@@ -230,6 +234,7 @@ export function ProductApplicationRoutes({
   accessToken: string;
   principal: Extract<SessionState, { status: "authenticated" }>["principal"];
 }) {
+  useUiLanguage();
   return (
     <Routes>
       <Route
@@ -279,6 +284,7 @@ export function ProductApplicationRoutes({
 }
 
 function ProductMappingsRoute({ accessToken }: { accessToken: string }) {
+  useUiLanguage();
   const productId = useParams<"productId">().productId ?? "";
   return (
     <ProductDetailLayout hideTitle>
@@ -288,6 +294,7 @@ function ProductMappingsRoute({ accessToken }: { accessToken: string }) {
 }
 
 function ApprovalBranchesRoute({ accessToken }: { accessToken: string }) {
+  useUiLanguage();
   const productId = useParams<"productId">().productId ?? "";
   return (
     <ProductDetailLayout hideTitle>
@@ -301,6 +308,7 @@ function ApprovalBranchesRoute({ accessToken }: { accessToken: string }) {
 }
 
 function ProductRepositoriesRoute({ accessToken }: { accessToken: string }) {
+  useUiLanguage();
   const productId = useParams<"productId">().productId ?? "";
   return (
     <ProductDetailLayout hideTitle>
@@ -319,6 +327,7 @@ export function AdminApplicationRoutes({
   accessToken: string;
   currentUserId: string;
 }) {
+  useUiLanguage();
   return (
     <Routes>
       <Route
@@ -385,6 +394,7 @@ export function AdminApplicationRoutes({
 }
 
 export function AppRouter() {
+  useUiLanguage();
   const { logout, restoreSession, state } = useSession();
   const authenticatedShellProps =
     state.status === "authenticated"
@@ -500,6 +510,7 @@ export function AppRouter() {
 }
 
 function VerboFlexBrowserApplication() {
+  useUiLanguage();
   return (
     <SessionProvider>
       <SessionNavigationBoundary>
