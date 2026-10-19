@@ -616,5 +616,14 @@
     ],
     "boundary": "active_resource_and_recovery_policy",
     "audit": "AuditEntry branch actions and immutable BranchJob approval snapshot"
+  },
+  "delete_admin_user": {
+    "method": "DELETE",
+    "path": "/api/v1/admin/users/{user_id}",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry user.deleted; anonymous historical identity retained"
   }
 }

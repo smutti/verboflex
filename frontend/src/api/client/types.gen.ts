@@ -9028,6 +9028,60 @@ export type CreateAdminUserResponses = {
 
 export type CreateAdminUserResponse = CreateAdminUserResponses[keyof CreateAdminUserResponses];
 
+export type DeleteAdminUserData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/users/{user_id}';
+};
+
+export type DeleteAdminUserErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type DeleteAdminUserError = DeleteAdminUserErrors[keyof DeleteAdminUserErrors];
+
+export type DeleteAdminUserResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteAdminUserResponse = DeleteAdminUserResponses[keyof DeleteAdminUserResponses];
+
 export type UpdateAdminUserData = {
     body: AdminUserUpdateRequest;
     path: {

@@ -4,9 +4,16 @@ from typing import Annotated, Any, NoReturn
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from redis import Redis
 from sqlalchemy.orm import Session
 
 from verboflex.auth.principal import Principal, require_roles
+from verboflex.auth.rate_limits import (
+    RateLimitUnavailable,
+    enforce_auth_action_rate_limit,
+    get_redis_client,
+    raise_rate_limited,
+)
 from verboflex.db.session import get_db_session
 from verboflex.schemas.admin_users import (
     AdminUserCreateRequest,
@@ -34,6 +41,9 @@ from verboflex.services.admin_users import (
 )
 from verboflex.services.admin_users import (
     deactivate_admin_user as deactivate_admin_user_service,
+)
+from verboflex.services.admin_users import (
+    delete_admin_user as delete_admin_user_service,
 )
 from verboflex.services.admin_users import (
     reactivate_admin_user as reactivate_admin_user_service,
@@ -330,6 +340,45 @@ async def deactivate_user(
     ) as error:
         _raise_lifecycle_error(error)
     return _response(record)
+
+
+@router.delete(
+    "/{user_id}",
+    operation_id="delete_admin_user",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        **LIFECYCLE_RESPONSES,
+        429: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+)
+async def delete_user(
+    user_id: UUID,
+    principal: AdminPrincipal,
+    session: AdminSession,
+    redis_client: Annotated[Redis, Depends(get_redis_client)],
+) -> Response:
+    """Delete an inactive account; historical contributions retain an anonymous author."""
+    try:
+        limit = enforce_auth_action_rate_limit(
+            redis_client,
+            action="delete-user",
+            identity=str(principal.user_id),
+            client_ip="",  # Per administrator, independent of source address.
+            limit=10,
+        )
+    except RateLimitUnavailable as error:
+        raise HTTPException(503, "User deletion temporarily unavailable") from error
+    if not limit.allowed:
+        raise_rate_limited(limit)
+    try:
+        delete_admin_user_service(session, actor_id=principal.user_id, target_id=user_id)
+    except (AdminUserAuthorityError, AdminUserNotFound, AdminUserConflict) as error:
+        _raise_lifecycle_error(error)
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT,
+        headers={"Cache-Control": "no-store", "X-RateLimit-Remaining": str(limit.remaining)},
+    )
 
 
 @router.post(

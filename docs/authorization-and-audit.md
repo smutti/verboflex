@@ -68,6 +68,23 @@ The backend validates current account and session authority. User administration
 also reloads the acting administrator under its mutation lock; cached ORM objects
 cannot restore a disabled account or bypass a required password change.
 
+Administrators can permanently delete an account after deactivating it. The
+`DELETE /api/v1/admin/users/{user_id}` endpoint returns 204, rejects active accounts
+with 409, and returns 404 for missing or already deleted identities. It rechecks
+current administrator authority under the same lock as reactivation and product
+membership changes. Deletion attempts are limited to ten per administrator per
+minute; 429 includes `Retry-After`, and limiter outages fail closed with 503.
+
+Deletion removes the account from administration, removes its roles and product
+memberships, revokes browser sessions and MCP grants, and removes pending MCP
+authorization requests. The user UUID remains as a disabled historical identity
+for authored content: name and email are replaced and the password hash is rotated
+to an unknown random value. Existing contributions and audit receipts remain.
+The original email can be provisioned again with a new UUID and no inherited
+permissions. A deleted identity cannot be reset, edited or reactivated. Migration
+`0051_user_deletion` refuses downgrade after a deletion, so a schema rollback cannot
+make removed accounts available again.
+
 The frontend renews access authority before requests when the token is within
 30 seconds of expiry, including after an idle tab resumes. Concurrent requests
 share one refresh and browsers with Web Locks serialize cookie rotation across

@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createAdminUser,
   deactivateAdminUser,
+  deleteAdminUser,
   listAdminUsers,
   listAdminProducts,
   listAdminUserProducts,
@@ -63,6 +64,7 @@ vi.mock("../../../api/client", async (importOriginal) => {
     ...original,
     createAdminUser: vi.fn(),
     deactivateAdminUser: vi.fn(),
+    deleteAdminUser: vi.fn(),
     listAdminUsers: vi.fn(),
     listAdminProducts: vi.fn(),
     listAdminUserProducts: vi.fn(),
@@ -74,6 +76,7 @@ vi.mock("../../../api/client", async (importOriginal) => {
 
 const createAdminUserMock = vi.mocked(createAdminUser);
 const deactivateAdminUserMock = vi.mocked(deactivateAdminUser);
+const deleteAdminUserMock = vi.mocked(deleteAdminUser);
 const listAdminUsersMock = vi.mocked(listAdminUsers);
 const listAdminProductsMock = vi.mocked(listAdminProducts);
 const listAdminUserProductsMock = vi.mocked(listAdminUserProducts);
@@ -218,6 +221,7 @@ describe("administrator users page tracer", () => {
     );
     createAdminUserMock.mockReset();
     deactivateAdminUserMock.mockReset();
+    deleteAdminUserMock.mockReset();
     reactivateAdminUserMock.mockReset();
     resetAdminUserPasswordMock.mockReset();
     updateAdminUserMock.mockReset();
@@ -1695,5 +1699,145 @@ describe("administrator users page tracer", () => {
         },
       ),
     ).toHaveFocus();
+  });
+
+  it("only offers deletion after deactivation and lets the administrator cancel", async () => {
+    listAdminUsersMock.mockResolvedValue(
+      ok({ items: [currentAdmin, inactiveViewer], next_cursor: null }),
+    );
+    renderUsers();
+    const user = userEvent.setup();
+    const table = await screen.findByRole("table", { name: "Internal users" });
+    await user.click(
+      within(table).getByRole("button", {
+        name: "More actions for Zulu Admin",
+      }),
+    );
+    expect(
+      screen.queryByRole("menuitem", { name: "Delete user" }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await chooseRowAction(inactiveViewer.display_name, "Delete user");
+    const dialog = screen.getByRole("alertdialog", {
+      name: "Delete Middle Viewer?",
+    });
+    expect(dialog).toHaveTextContent(inactiveViewer.email);
+    expect(dialog).toHaveTextContent("This account cannot be reactivated.");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(deleteAdminUserMock).not.toHaveBeenCalled();
+    expect(
+      within(table).getByText(inactiveViewer.display_name),
+    ).toBeInTheDocument();
+  });
+
+  it.each([204, 404])(
+    "removes the deleted account from both layouts after status %s and restores focus",
+    async (status) => {
+      listAdminUsersMock.mockResolvedValue(
+        ok({ items: [currentAdmin, inactiveViewer], next_cursor: null }),
+      );
+      deleteAdminUserMock.mockResolvedValue({
+        data: undefined,
+        error: undefined,
+        request: new Request("http://localhost"),
+        response: new Response(null, { status }),
+      });
+      renderUsers();
+      const user = await chooseRowAction(
+        inactiveViewer.display_name,
+        "Delete user",
+      );
+      await user.click(
+        within(screen.getByRole("alertdialog")).getByRole("button", {
+          name: "Delete user",
+        }),
+      );
+      await waitFor(() =>
+        expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+      );
+      expect(screen.queryByText(inactiveViewer.email)).not.toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent("User deleted.");
+      expect(screen.getByRole("heading", { name: "Users" })).toHaveFocus();
+      expect(screen.getAllByText(currentAdmin.email)).toHaveLength(2);
+      expect(deleteAdminUserMock).toHaveBeenCalledExactlyOnceWith({
+        auth: "memory-only-admin-bearer",
+        path: { user_id: inactiveViewer.id },
+      });
+    },
+  );
+
+  it.each([403, 409, 429, 503])(
+    "keeps the account and confirmation on deletion denial %s",
+    async (status) => {
+      listAdminUsersMock.mockResolvedValue(
+        ok({ items: [inactiveViewer], next_cursor: null }),
+      );
+      deleteAdminUserMock.mockResolvedValue(failure(status));
+      renderUsers();
+      const user = await chooseRowAction(
+        inactiveViewer.display_name,
+        "Delete user",
+      );
+      const dialog = screen.getByRole("alertdialog");
+      await user.click(
+        within(dialog).getByRole("button", { name: "Delete user" }),
+      );
+      const alert = await within(dialog).findByRole("alert");
+      expect(alert).toHaveFocus();
+      expect(alert).not.toHaveTextContent("bounded test failure");
+      expect(alert).toHaveTextContent(
+        status === 409
+          ? "This account is active."
+          : status === 429
+            ? "Too many deletion attempts."
+            : "We could not confirm the deletion.",
+      );
+      expect(
+        within(screen.getByRole("table", { hidden: true })).getByText(
+          inactiveViewer.display_name,
+        ),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("disables confirmation and cancellation while deletion is pending", async () => {
+    listAdminUsersMock.mockResolvedValue(
+      ok({ items: [inactiveViewer], next_cursor: null }),
+    );
+    type DeletedResponse = {
+      data: undefined;
+      error: undefined;
+      request: Request;
+      response: Response;
+    };
+    let finish!: (result: DeletedResponse) => void;
+    deleteAdminUserMock.mockReturnValue(
+      new Promise<DeletedResponse>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    renderUsers();
+    const user = await chooseRowAction(
+      inactiveViewer.display_name,
+      "Delete user",
+    );
+    const dialog = screen.getByRole("alertdialog");
+    const confirm = within(dialog).getByRole("button", { name: "Delete user" });
+    await user.click(confirm);
+    expect(confirm).toBeDisabled();
+    expect(
+      within(dialog).getByRole("button", { name: "Cancel" }),
+    ).toBeDisabled();
+    await user.click(confirm);
+    expect(deleteAdminUserMock).toHaveBeenCalledTimes(1);
+    await act(async () =>
+      finish({
+        data: undefined,
+        error: undefined,
+        request: new Request("http://localhost"),
+        response: new Response(null, { status: 204 }),
+      }),
+    );
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   });
 });
