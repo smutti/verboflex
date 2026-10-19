@@ -358,6 +358,15 @@
     "boundary": "role_dependency",
     "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
   },
+  "update_admin_source_fallback": {
+    "method": "PUT",
+    "path": "/api/v1/admin/products/{product_id}/source-fallback",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry product.updated"
+  },
   "update_admin_product_candidate": {
     "method": "PATCH",
     "path": "/api/v1/admin/products/{product_id}",

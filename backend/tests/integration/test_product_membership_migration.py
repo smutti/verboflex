@@ -55,6 +55,7 @@ def test_membership_upgrade_backfills_only_existing_products_and_safe_downgrade(
         command.downgrade(config, "0043_product_workspace_coverage")
         command.upgrade(config, "head")
         with factory.begin() as session:
+            previous_version = session.scalar(text("SELECT version_num FROM alembic_version"))
             session.add(
                 ProductTeamEvent(
                     actor_id=next(iter(identities)),
@@ -67,7 +68,6 @@ def test_membership_upgrade_backfills_only_existing_products_and_safe_downgrade(
             command.downgrade(config, "0043_product_workspace_coverage")
         with factory() as session:
             assert (
-                session.scalar(text("SELECT version_num FROM alembic_version"))
-                == "0046_screenshots"
+                session.scalar(text("SELECT version_num FROM alembic_version")) == previous_version
             )
             assert session.scalar(select(ProductTeamEvent.id)) is not None

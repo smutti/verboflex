@@ -27,7 +27,7 @@ from verboflex.services.database_maintenance import (
     _product_counts,
 )
 
-REVISION = "0046_screenshots"
+REVISION = "0050_source_fallback"
 CHUNK_ROWS = 512
 OPERATIONAL_TABLES = {
     "alembic_version",

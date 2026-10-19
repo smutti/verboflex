@@ -296,6 +296,10 @@ def validate_boundaries(sources=None):
                 for module in modules:
                     writer_helpers = {
                         (
+                            "backend/src/verboflex/localization/writing/parsing.py",
+                            "verboflex.localization.importing.android_xml",
+                        ): {"AndroidXmlInspection", "inspect_android_xml"},
+                        (
                             "backend/src/verboflex/localization/writing/insertions.py",
                             "verboflex.localization.importing.ios_strings",
                         ): {"_decode_document"},

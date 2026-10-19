@@ -295,6 +295,7 @@ def test_admin_create_and_detail_return_closed_active_and_candidate_summaries(
         ADMIN_PRODUCTS_PATH,
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}",
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/summary",
+        f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/source-fallback",
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/deactivate",
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/publish",
         f"{ADMIN_PRODUCTS_PATH}/{{product_id}}/reactivate",

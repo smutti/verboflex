@@ -832,6 +832,38 @@ EXPECTED_OPERATIONS.update(
 )
 
 
+# Keep independently configured source fallback and approval branches in the
+# exact inventory, including their currently published responses and security.
+EXPECTED_OPERATIONS.update(
+    {
+        ("/api/v1/admin/products/{product_id}/source-fallback", method): (
+            operation_id,
+            {"200", "401", "403", "404", "409", "422"},
+            True,
+        )
+        for method, operation_id in (
+            ("get", "get_admin_source_fallback"),
+            ("put", "update_admin_source_fallback"),
+        )
+    }
+)
+EXPECTED_OPERATIONS.update(
+    {
+        (f"/api/v1/products/{{product_id}}/branch-workflow{suffix}", method): (
+            operation_id,
+            {success, "422"},
+            True,
+        )
+        for suffix, method, operation_id, success in (
+            ("", "get", "getBranchWorkflow", "200"),
+            ("", "put", "configureBranchWorkflow", "200"),
+            ("/pull-request", "post", "createBranchPullRequest", "202"),
+            ("/jobs/{job_id}/retry", "post", "retryBranchChange", "202"),
+        )
+    }
+)
+
+
 def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
     """Freeze every approved method, operation id, response, and bearer boundary."""
     schema = app.openapi()
@@ -1948,6 +1980,7 @@ def test_translation_schemas_are_closed_bounded_and_non_leaking() -> None:
 
     detail = schemas["TranslationGroupDetailResponse"]
     assert set(detail["properties"]) == {
+        "approval_commits_enabled",
         "source_context",
         "base_language",
         "explicit_maximum",
@@ -1968,7 +2001,12 @@ def test_translation_schemas_are_closed_bounded_and_non_leaking() -> None:
         "mutation_eligible",
         "review_eligible",
     }
-    assert set(detail["required"]) == set(detail["properties"]) - {"source_context"}
+    assert set(detail["required"]) == set(detail["properties"]) - {
+        "approval_commits_enabled",
+        "source_context",
+    }
+    assert detail["properties"]["approval_commits_enabled"]["type"] == "boolean"
+    assert detail["properties"]["approval_commits_enabled"]["default"] is False
     assert detail["properties"]["values"]["minItems"] == 1
     assert detail["properties"]["values"]["maxItems"] == 10_000
     assert _schema_references(detail["properties"]["pending_change"]) == {
