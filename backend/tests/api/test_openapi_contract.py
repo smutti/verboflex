@@ -508,6 +508,11 @@ EXPECTED_OPERATIONS = {
         {"200", "401", "403", "404", "409", "422"},
         True,
     ),
+    ("/api/v1/admin/users/{user_id}", "delete"): (
+        "delete_admin_user",
+        {"204", "401", "403", "404", "409", "422", "429", "503"},
+        True,
+    ),
     ("/api/v1/admin/users/{user_id}/products", "get"): (
         "list_admin_user_products",
         {"200", "401", "403", "404", "422"},
@@ -991,6 +996,15 @@ def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
             "404",
             "409",
             "422",
+        },
+        ("/api/v1/admin/users/{user_id}", "delete"): {
+            "401",
+            "403",
+            "404",
+            "409",
+            "422",
+            "429",
+            "503",
         },
         ("/api/v1/admin/users/{user_id}/deactivate", "post"): {
             "401",
@@ -3104,6 +3118,10 @@ def test_admin_user_openapi_keeps_temporary_credentials_on_one_time_responses_on
     }
     for key, operation in operations.items():
         if not key[0].startswith("/api/v1/admin/users"):
+            continue
+        if key == ("/api/v1/admin/users/{user_id}", "delete"):
+            assert "content" not in operation["responses"]["204"]
+            assert "requestBody" not in operation
             continue
         success_code = "201" if key == ("/api/v1/admin/users", "post") else "200"
         reference = _response_schema(operation, success_code)
