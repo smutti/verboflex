@@ -1709,6 +1709,96 @@ test("four-step configuration reuses repositories, exposes both topologies, and 
   await expectNoCredentialResidue(page);
 });
 
+test("new user product assignments remain usable at narrow widths and enlarged text", async ({
+  page,
+}, testInfo) => {
+  const state = defaultState();
+  const first = product({
+    id: "00000000-0000-4000-8000-000000000010",
+    name: "Synthetic Mobile",
+  });
+  const second = product({
+    id: "00000000-0000-4000-8000-000000000011",
+    name: "Synthetic Portal With A Long Product Name",
+  });
+  state.products = [
+    first,
+    second,
+    product({ id: "inactive", is_active: false, name: "Inactive Product" }),
+  ];
+  await installAdminApi(page, state);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+
+  for (const viewport of [
+    { width: 1440, height: 900, zoom: 1 },
+    { width: 320, height: 720, zoom: 1 },
+    { width: 320, height: 720, zoom: 2 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/admin/users");
+    await page.evaluate((zoom) => {
+      document.documentElement.style.fontSize = zoom === 2 ? "200%" : "";
+    }, viewport.zoom);
+    await page.getByRole("button", { name: "Add user" }).click();
+    const dialog = page.getByRole("dialog", { name: "Add user", exact: true });
+    await dialog.getByLabel("Corporate email").fill("new.person@example.com");
+    await dialog.getByLabel("Display name").fill("New Person");
+    await dialog
+      .getByRole("combobox", { name: first.name })
+      .selectOption("translator");
+    await dialog
+      .getByRole("combobox", { name: second.name })
+      .selectOption("product_owner");
+    await expect(
+      dialog.getByRole("combobox", { name: "Inactive Product" }),
+    ).toHaveCount(0);
+    await expectNoPageOverflow(page);
+    expect(
+      await dialog.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    const box = await dialog.boundingBox();
+    expect(box?.y).toBeGreaterThanOrEqual(0);
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(
+      viewport.height,
+    );
+    await dialog
+      .getByRole("button", { name: "Create user" })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: testInfo.outputPath(
+        `product-access-${viewport.width}-${viewport.zoom}.png`,
+      ),
+    });
+    const submitted = page.waitForRequest(
+      (request) =>
+        request.url().endsWith("/api/v1/admin/users") &&
+        request.method() === "POST",
+    );
+    await dialog.getByRole("button", { name: "Create user" }).click();
+    expect((await submitted).postDataJSON()).toEqual({
+      email: "new.person@example.com",
+      display_name: "New Person",
+      roles: ["viewer"],
+      product_assignments: [
+        { product_id: first.id, role: "translator" },
+        { product_id: second.id, role: "product_owner" },
+      ],
+    });
+    const credentialDialog = page.getByRole("dialog", {
+      name: "Temporary password created",
+    });
+    await expect(credentialDialog.getByLabel("Temporary password")).toHaveText(
+      temporaryPassword,
+    );
+    await credentialDialog
+      .getByRole("button", { name: "I saved the password" })
+      .click();
+    await expectNoCredentialResidue(page);
+  }
+});
+
 test("100/101 exact branches stay fail-closed at 200 percent zoom", async ({
   page,
 }) => {

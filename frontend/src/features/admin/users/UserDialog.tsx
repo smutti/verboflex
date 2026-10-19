@@ -4,6 +4,7 @@ import type {
   AdminUserCreateRequest,
   AdminUserResponse,
   AdminUserUpdateRequest,
+  AdminUserProductAssignment,
   RoleName,
 } from "../../../api/client";
 import {
@@ -24,13 +25,16 @@ import {
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { CREATE_DEFAULT_ROLES, USER_ROLE_OPTIONS } from "./userRoles";
+import { UserProductAssignments } from "./UserProductAssignments";
 
 export type UserDialogResult =
   | { status: "success" }
   | { status: "conflict"; owner: "email" | "dialog" }
+  | { status: "products-unavailable" }
   | { status: "error" };
 
 export interface UserDialogProps {
+  accessToken: string;
   currentUserId: string;
   onOpenChange: (open: boolean) => void;
   onSubmit: (
@@ -41,6 +45,7 @@ export interface UserDialogProps {
 }
 
 export function UserDialog({
+  accessToken,
   currentUserId,
   onOpenChange,
   onSubmit,
@@ -62,20 +67,23 @@ export function UserDialog({
     user?.roles ?? CREATE_DEFAULT_ROLES,
   );
   const [pending, setPending] = useState(false);
+  const [productAssignments, setProductAssignments] = useState<
+    AdminUserProductAssignment[]
+  >([]);
   const [roleError, setRoleError] = useState(false);
   const [emailConflict, setEmailConflict] = useState(false);
   const [fieldError, setFieldError] = useState<"email" | "display_name" | null>(
     null,
   );
   const [submissionError, setSubmissionError] = useState<
-    "conflict" | "generic" | null
+    "conflict" | "generic" | "products" | null
   >(null);
 
   const isEditing = user !== null;
   const isEditingSelf = user?.id === currentUserId;
 
   useEffect(() => {
-    if (submissionError === "conflict") {
+    if (submissionError !== null) {
       conflictRef.current?.focus();
     }
   }, [submissionError]);
@@ -132,6 +140,9 @@ export function UserDialog({
           email,
           display_name: displayName,
           roles,
+          ...(productAssignments.length > 0
+            ? { product_assignments: productAssignments }
+            : {}),
         } satisfies AdminUserCreateRequest);
 
     let result: UserDialogResult;
@@ -157,12 +168,14 @@ export function UserDialog({
       }
       return;
     }
-    setSubmissionError("generic");
+    setSubmissionError(
+      result.status === "products-unavailable" ? "products" : "generic",
+    );
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? `Edit ${user.display_name}` : "Add user"}
@@ -170,11 +183,14 @@ export function UserDialog({
           <DialogDescription>
             {isEditing
               ? "Update the display name and additive roles for this account."
-              : "Create an internal account with a fixed set of additive roles."}
+              : "Create an internal account and choose their product access."}
           </DialogDescription>
         </DialogHeader>
 
-        <form className="grid gap-5" onSubmit={(event) => void submit(event)}>
+        <form
+          className="grid min-w-0 gap-5 [overflow-wrap:anywhere]"
+          onSubmit={(event) => void submit(event)}
+        >
           {submissionError !== null ? (
             <Alert
               ref={conflictRef}
@@ -186,7 +202,9 @@ export function UserDialog({
               <AlertDescription id={conflictId}>
                 {submissionError === "conflict"
                   ? "This user changed in another session or the administrator role must be preserved."
-                  : "Your entries are still here. Review them and try again."}
+                  : submissionError === "products"
+                    ? "One or more selected products are no longer available. Remove their assignments or reopen this form to refresh the list. No account was created."
+                    : "Your entries are still here. Review them and try again."}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -267,11 +285,15 @@ export function UserDialog({
             tabIndex={roleError ? -1 : undefined}
             aria-labelledby={roleGroupId}
             aria-describedby={roleError ? roleErrorId : undefined}
-            className="grid gap-3 rounded-lg border p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="grid min-w-0 gap-3 rounded-lg border p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <legend id={roleGroupId} className="px-1 text-sm font-medium">
               Roles
             </legend>
+            <p className="text-sm text-muted-foreground">
+              Administrator grants access to all products. Other global roles
+              require a separate product assignment.
+            </p>
             {USER_ROLE_OPTIONS.map((option) => {
               const checkboxId = `${roleGroupId}-${option.value}`;
               const protectsSelfAdmin =
@@ -303,6 +325,15 @@ export function UserDialog({
               </p>
             ) : null}
           </fieldset>
+
+          {!isEditing && (
+            <UserProductAssignments
+              accessToken={accessToken}
+              disabled={pending}
+              value={productAssignments}
+              onChange={setProductAssignments}
+            />
+          )}
 
           <DialogFooter>
             <Button

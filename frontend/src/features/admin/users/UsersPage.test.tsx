@@ -16,11 +16,13 @@ import {
   createAdminUser,
   deactivateAdminUser,
   listAdminUsers,
+  listAdminProducts,
   reactivateAdminUser,
   resetAdminUserPassword,
   updateAdminUser,
   type AdminUserCredentialResponse,
   type AdminUserResponse,
+  type AdminProductResponse,
 } from "../../../api/client";
 import { TemporaryPasswordDialog } from "./TemporaryPasswordDialog";
 import { UserDialog } from "./UserDialog";
@@ -60,6 +62,7 @@ vi.mock("../../../api/client", async (importOriginal) => {
     createAdminUser: vi.fn(),
     deactivateAdminUser: vi.fn(),
     listAdminUsers: vi.fn(),
+    listAdminProducts: vi.fn(),
     reactivateAdminUser: vi.fn(),
     resetAdminUserPassword: vi.fn(),
     updateAdminUser: vi.fn(),
@@ -69,6 +72,7 @@ vi.mock("../../../api/client", async (importOriginal) => {
 const createAdminUserMock = vi.mocked(createAdminUser);
 const deactivateAdminUserMock = vi.mocked(deactivateAdminUser);
 const listAdminUsersMock = vi.mocked(listAdminUsers);
+const listAdminProductsMock = vi.mocked(listAdminProducts);
 const reactivateAdminUserMock = vi.mocked(reactivateAdminUser);
 const resetAdminUserPasswordMock = vi.mocked(resetAdminUserPassword);
 const updateAdminUserMock = vi.mocked(updateAdminUser);
@@ -98,6 +102,20 @@ const inactiveViewer: AdminUserResponse = {
   is_active: false,
   must_change_password: true,
   roles: ["viewer"],
+};
+
+const productAlpha: AdminProductResponse = {
+  id: "00000000-0000-4000-8000-000000000010",
+  name: "Synthetic Alpha",
+  is_active: true,
+  affected_mapping_count: 0,
+  active_revision: null,
+  candidate_revision: null,
+};
+const productBeta: AdminProductResponse = {
+  ...productAlpha,
+  id: "00000000-0000-4000-8000-000000000011",
+  name: "Synthetic Beta",
 };
 
 function ok<T>(data: T, status = 200) {
@@ -168,6 +186,10 @@ async function chooseRowAction(userName: string, actionName: string) {
 
 describe("administrator users page tracer", () => {
   beforeEach(() => {
+    listAdminProductsMock.mockReset();
+    listAdminProductsMock.mockResolvedValue(
+      ok({ items: [], next_cursor: null }),
+    );
     listAdminUsersMock.mockReset();
     listAdminUsersMock.mockResolvedValue(
       ok({ items: [currentAdmin, translator], next_cursor: null }),
@@ -183,6 +205,169 @@ describe("administrator users page tracer", () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  it("creates an account with independent product roles and allows clearing an assignment", async () => {
+    listAdminProductsMock.mockResolvedValue(
+      ok({ items: [productAlpha, productBeta], next_cursor: null }),
+    );
+    const created = {
+      ...translator,
+      email: "created@example.com",
+      temporary_password: "synthetic-temporary-password!",
+    };
+    createAdminUserMock.mockResolvedValue(ok(created, 201));
+    renderUsers();
+    const user = await openAddDialog();
+    const alpha = await screen.findByRole("combobox", {
+      name: productAlpha.name,
+    });
+    const beta = screen.getByRole("combobox", { name: productBeta.name });
+    expect(alpha).toHaveValue("none");
+    expect(beta).toHaveValue("none");
+    await user.selectOptions(alpha, "translator");
+    await user.selectOptions(beta, "product_manager_reviewer");
+    await user.selectOptions(beta, "none");
+    expect(beta).toHaveValue("none");
+    await user.selectOptions(beta, "product_owner");
+    await user.type(
+      screen.getByRole("textbox", { name: "Corporate email" }),
+      created.email,
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "Display name" }),
+      "New Person",
+    );
+    await user.click(screen.getByRole("button", { name: "Create user" }));
+    expect(createAdminUserMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      body: {
+        email: created.email,
+        display_name: "New Person",
+        roles: ["viewer"],
+        product_assignments: [
+          { product_id: productAlpha.id, role: "translator" },
+          { product_id: productBeta.id, role: "product_owner" },
+        ],
+      },
+    });
+    expect(
+      await screen.findByRole("dialog", { name: "Temporary password created" }),
+    ).toHaveTextContent(created.temporary_password);
+  });
+
+  it("preserves product choices across pagination failures and retry", async () => {
+    listAdminProductsMock
+      .mockResolvedValueOnce(
+        ok({ items: [productAlpha], next_cursor: "next-products" }),
+      )
+      .mockRejectedValueOnce(new Error("synthetic failure"))
+      .mockResolvedValueOnce(ok({ items: [productBeta], next_cursor: null }));
+    renderUsers();
+    const user = await openAddDialog();
+    const alpha = await screen.findByRole("combobox", {
+      name: productAlpha.name,
+    });
+    await user.selectOptions(alpha, "viewer");
+    await user.click(
+      screen.getByRole("button", { name: "Load more products" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Your selections are still here",
+    );
+    expect(alpha).toHaveValue("viewer");
+    await user.click(
+      screen.getByRole("button", { name: "Retry loading more products" }),
+    );
+    expect(
+      await screen.findByRole("combobox", { name: productBeta.name }),
+    ).toHaveValue("none");
+    expect(alpha).toHaveValue("viewer");
+    expect(listAdminProductsMock).toHaveBeenLastCalledWith({
+      auth: "memory-only-admin-bearer",
+      query: { cursor: "next-products", limit: 50, status: "active" },
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it("keeps fields and roles when a selected product becomes unavailable", async () => {
+    listAdminProductsMock.mockResolvedValue(
+      ok({ items: [productAlpha], next_cursor: null }),
+    );
+    createAdminUserMock.mockResolvedValue({
+      ...failure(422),
+      error: { detail: "Selected products unavailable" },
+    });
+    renderUsers();
+    const user = await openAddDialog();
+    const alpha = await screen.findByRole("combobox", {
+      name: productAlpha.name,
+    });
+    await user.selectOptions(alpha, "product_manager_reviewer");
+    await user.type(
+      screen.getByRole("textbox", { name: "Corporate email" }),
+      "new@example.com",
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "Display name" }),
+      "New Person",
+    );
+    await user.click(screen.getByRole("button", { name: "Create user" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No account was created",
+    );
+    expect(screen.getByRole("alert")).toHaveFocus();
+    expect(alpha).toHaveValue("product_manager_reviewer");
+    expect(
+      screen.getByRole("textbox", { name: "Corporate email" }),
+    ).toHaveValue("new@example.com");
+    expect(screen.getByRole("textbox", { name: "Display name" })).toHaveValue(
+      "New Person",
+    );
+    expect(
+      screen.queryByText("An account already uses this corporate email."),
+    ).not.toBeInTheDocument();
+    await user.selectOptions(alpha, "none");
+    await user.click(screen.getByRole("button", { name: "Create user" }));
+    expect(createAdminUserMock).toHaveBeenLastCalledWith({
+      auth: "memory-only-admin-bearer",
+      body: {
+        email: "new@example.com",
+        display_name: "New Person",
+        roles: ["viewer"],
+      },
+    });
+  });
+
+  it("retries initial product loading without clearing account fields", async () => {
+    listAdminProductsMock
+      .mockResolvedValueOnce(failure())
+      .mockResolvedValueOnce(ok({ items: [], next_cursor: null }));
+    renderUsers();
+    const user = await openAddDialog();
+    await user.type(
+      screen.getByRole("textbox", { name: "Display name" }),
+      "Draft Name",
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Products unavailable",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Retry loading products" }),
+    );
+    expect(
+      await screen.findByText("No active products available."),
+    ).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Display name" })).toHaveValue(
+      "Draft Name",
+    );
+  });
+
+  it("does not load or submit initial product assignments when editing an account", async () => {
+    renderUsers();
+    await openEditDialog(translator.display_name);
+    expect(screen.queryByText("Product access")).not.toBeInTheDocument();
+    expect(listAdminProductsMock).not.toHaveBeenCalled();
   });
 
   it("renders an approved stable loading state while the first API page is pending", () => {
@@ -457,6 +642,7 @@ describe("administrator users page tracer", () => {
     const onSubmit = vi.fn();
     render(
       <UserDialog
+        accessToken="memory-only-admin-bearer"
         currentUserId={currentAdmin.id}
         onOpenChange={onOpenChange}
         onSubmit={onSubmit}
@@ -492,6 +678,7 @@ describe("administrator users page tracer", () => {
     const onSubmit = vi.fn(() => pendingSubmission);
     render(
       <UserDialog
+        accessToken="memory-only-admin-bearer"
         currentUserId={currentAdmin.id}
         onOpenChange={onOpenChange}
         onSubmit={onSubmit}
@@ -531,6 +718,7 @@ describe("administrator users page tracer", () => {
       );
     render(
       <UserDialog
+        accessToken="memory-only-admin-bearer"
         currentUserId={currentAdmin.id}
         onOpenChange={vi.fn()}
         onSubmit={onSubmit}

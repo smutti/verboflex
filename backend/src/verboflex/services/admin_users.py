@@ -6,6 +6,7 @@ import base64
 import binascii
 import json
 import secrets
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID
@@ -22,8 +23,11 @@ from verboflex.auth.passwords import (
     validate_password_for_user,
 )
 from verboflex.models.auth_session import AuthSession
+from verboflex.models.product import Product
+from verboflex.models.product_member import ProductMember, ProductTeamEvent
 from verboflex.models.role import Role
 from verboflex.models.user import User
+from verboflex.schemas.admin_users import AdminUserProductAssignment
 from verboflex.schemas.users import RoleName
 
 ADMIN_AUTHORITY_LOCK_KEY = 0x564552424F464C58
@@ -44,6 +48,10 @@ class AdminUserConflict(ValueError):
 
 class AdminUserInputError(ValueError):
     """Raised when normalized input cannot form a valid user."""
+
+
+class AdminUserProductUnavailable(AdminUserInputError):
+    """Raised when an initial product assignment can no longer be granted."""
 
 
 class AdminUserNotFound(LookupError):
@@ -273,6 +281,7 @@ def create_admin_user(
     email: str,
     display_name: str,
     roles: frozenset[RoleName],
+    product_assignments: Sequence[AdminUserProductAssignment] = (),
 ) -> CreatedAdminUser:
     """Create one user under current database admin authority and return plaintext once."""
     normalized_email = _normalize_admin_email(email)
@@ -284,6 +293,23 @@ def create_admin_user(
             if session.scalar(select(User.id).where(User.email == normalized_email)) is not None:
                 raise AdminUserConflict("user could not be created")
             durable_roles = _load_requested_roles(session, roles)
+            product_ids = {assignment.product_id for assignment in product_assignments}
+            if len(product_ids) != len(product_assignments) or len(product_ids) > 100:
+                raise AdminUserInputError("invalid product assignments")
+            if product_ids:
+                # Lock in stable order so deactivation/deletion cannot race provisioning.
+                products = list(
+                    session.scalars(
+                        select(Product)
+                        .where(Product.id.in_(product_ids))
+                        .order_by(Product.id)
+                        .with_for_update()
+                    )
+                )
+                if len(products) != len(product_ids) or any(
+                    not product.is_active or product.deleted_at is not None for product in products
+                ):
+                    raise AdminUserProductUnavailable("selected products unavailable")
 
             temporary_password = secrets.token_urlsafe(24)
             validate_password_for_user(
@@ -303,6 +329,24 @@ def create_admin_user(
             session.add(user)
             session.flush()
             record_audit(session, actor_id=actor_id, action="user.created", entity_id=user.id)
+            for assignment in product_assignments:
+                session.add(
+                    ProductMember(
+                        product_id=assignment.product_id,
+                        user_id=user.id,
+                        role=assignment.role,
+                        active=True,
+                    )
+                )
+                session.add(
+                    ProductTeamEvent(
+                        actor_id=actor_id,
+                        product_id=assignment.product_id,
+                        subject_id=user.id,
+                        action="member.added",
+                        role=assignment.role,
+                    )
+                )
             result = CreatedAdminUser(
                 user=_to_record(user),
                 temporary_password=temporary_password,

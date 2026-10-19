@@ -19,6 +19,26 @@ recoverable by a global administrator; Team shows when no active owner remains.
 
 ## Add a collaborator
 
+Administrators can also create an account and assign several products at once in
+**Administration → Users → Add user**. Under **Product access**, choose one role
+per active product: Viewer, Translator, Product manager / reviewer, or Product
+Owner. Products default to **No access**. Use **Load more products** to reach later
+pages; up to 100 products can be assigned during account creation. Assignments
+are optional and independent of the global account roles. Only Administrator
+grants installation-wide access.
+
+Account creation and all selected memberships are one transaction. If any selected
+product has become inactive, deleted or unavailable, no account or memberships
+are created; remove that assignment or reopen the form to refresh the list. The
+temporary password is still shown only once after success. For an existing
+account, manage assignments from each product's **Team** page.
+
+The administrator create endpoint accepts an optional `product_assignments` array
+of `{ "product_id": "<UUID>", "role": "translator" }` objects. Duplicate product
+IDs, unsupported roles and unavailable products are rejected. Each successful
+assignment records a `member.added` team event in the same transaction as the
+`user.created` audit event.
+
 Choose **Add collaborator**, enter their email, display name and operational role,
 then select **Add to team**. For a new account, Team
 shows a random temporary password once, with a copy button. Save it and share it

@@ -22,6 +22,7 @@ from verboflex.services.admin_users import (
     AdminUserConflict,
     AdminUserInputError,
     AdminUserNotFound,
+    AdminUserProductUnavailable,
     AdminUserRecord,
     CreatedAdminUser,
     InvalidAdminUserCursor,
@@ -160,6 +161,7 @@ async def create_user(
             email=payload.email,
             display_name=payload.display_name,
             roles=frozenset(payload.roles),
+            product_assignments=payload.product_assignments,
         )
     except AdminUserAuthorityError as error:
         raise HTTPException(
@@ -170,6 +172,11 @@ async def create_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="User could not be created",
+        ) from error
+    except AdminUserProductUnavailable as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Selected products unavailable",
         ) from error
     except AdminUserInputError as error:
         raise HTTPException(

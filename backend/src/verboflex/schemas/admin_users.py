@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from verboflex.schemas.product_team import ProductRole
 from verboflex.schemas.users import RoleName
 
 
@@ -13,14 +14,35 @@ def _ordered_unique_roles(roles: list[RoleName]) -> list[RoleName]:
     return [role for role in RoleName if role in selected]
 
 
+class AdminUserProductAssignment(BaseModel):
+    """One initial product membership for a newly created account."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    role: ProductRole
+
+
 class AdminUserCreateRequest(BaseModel):
-    """Create one immutable corporate-email identity with additive roles."""
+    """Create one identity with global roles and optional product memberships."""
 
     model_config = ConfigDict(extra="forbid")
 
     email: Annotated[str, Field(min_length=1, max_length=320)]
     display_name: Annotated[str, Field(min_length=1, max_length=200)]
     roles: Annotated[list[RoleName], Field(min_length=1, max_length=4)]
+    product_assignments: list[AdminUserProductAssignment] = Field(
+        default_factory=list, max_length=100
+    )
+
+    @field_validator("product_assignments")
+    @classmethod
+    def unique_products(
+        cls, assignments: list[AdminUserProductAssignment]
+    ) -> list[AdminUserProductAssignment]:
+        if len({assignment.product_id for assignment in assignments}) != len(assignments):
+            raise ValueError("Select each product only once")
+        return assignments
 
     @field_validator("roles")
     @classmethod

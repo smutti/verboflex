@@ -1586,7 +1586,7 @@ export type AdminSourceFileResponse = {
 /**
  * AdminUserCreateRequest
  *
- * Create one immutable corporate-email identity with additive roles.
+ * Create one identity with global roles and optional product memberships.
  */
 export type AdminUserCreateRequest = {
     /**
@@ -1597,6 +1597,10 @@ export type AdminUserCreateRequest = {
      * Email
      */
     email: string;
+    /**
+     * Product Assignments
+     */
+    product_assignments?: Array<AdminUserProductAssignment>;
     /**
      * Roles
      */
@@ -1653,6 +1657,22 @@ export type AdminUserListResponse = {
      * Next Cursor
      */
     next_cursor: string | null;
+};
+
+/**
+ * AdminUserProductAssignment
+ *
+ * One initial product membership for a newly created account.
+ */
+export type AdminUserProductAssignment = {
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Role
+     */
+    role: 'viewer' | 'translator' | 'product_manager_reviewer' | 'product_owner';
 };
 
 /**
