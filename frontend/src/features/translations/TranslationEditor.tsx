@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { TranslationSuggestions } from "./TranslationSuggestions";
 import type { ReuseQuery } from "../../api/client";
 import { useEffect, useRef, useState } from "react";
@@ -187,8 +188,8 @@ function selectorLabel(value: ActiveTranslationDraftValue, index: number) {
   return parts.length > 0
     ? parts.join(", ")
     : index === 0
-      ? "Proposed translation"
-      : `Proposed translation ${index + 1}`;
+      ? t("Proposed translation")
+      : t("Proposed translation {{v0}}", { v0: index + 1 });
 }
 
 function isCompleteFreshProjection(
@@ -264,6 +265,7 @@ export function TranslationEditor({
   compact = false,
   continuing = false,
 }: TranslationEditorProps) {
+  useUiLanguage();
   const [saving, setSaving] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [failure, setFailure] = useState<"general" | "conflict" | null>(null);
@@ -354,7 +356,7 @@ export function TranslationEditor({
       if (!result.data || !isCompleteFreshProjection(result.data, draft))
         throw new Error("Incomplete proposal projection");
       onSaved(result.data);
-      toast.success("Translation saved as Draft");
+      toast.success(t("Translation saved as Draft"));
       if (!bilingual && !compact)
         queueMicrotask(() => returnFocusTo?.focus({ preventScroll: true }));
     } catch {
@@ -407,10 +409,12 @@ export function TranslationEditor({
     >
       {!bilingual && !compact && (
         <section
-          aria-label="Published translation"
+          aria-label={t("Published translation")}
           className="space-y-(--space-sm)"
         >
-          <h3 className="text-heading font-semibold">Published translation</h3>
+          <h3 className="text-heading font-semibold">
+            {t("Published translation")}
+          </h3>
           {draft.values.map((value, index) => (
             <div
               key={value.translationValueId}
@@ -424,7 +428,7 @@ export function TranslationEditor({
                 lang={draft.language}
                 dir="auto"
               >
-                {value.publishedText || "Empty translation"}
+                {value.publishedText || t("Empty translation")}
               </p>
             </div>
           ))}
@@ -439,14 +443,19 @@ export function TranslationEditor({
             value.source_resolution === "ambiguous",
         ) && (
           <section
-            aria-label={`Source variants (${draft.detail.base_language ?? "unknown"})`}
+            aria-label={t("Source variants ({{v0}})", {
+              v0: draft.detail.base_language ?? "unknown",
+            })}
             className="space-y-2 rounded-md bg-secondary p-3"
           >
             <h3 className="text-label font-semibold">
-              Source variants ({draft.detail.base_language ?? "unknown"})
+              {t("Source variants (")}
+              {draft.detail.base_language ?? "unknown"})
             </h3>
             <p className="text-label text-muted-foreground">
-              Source and target variants do not have a unique one-to-one match.
+              {t(
+                "Source and target variants do not have a unique one-to-one match.",
+              )}
             </p>
             {draft.detail.source_context.map((source) => (
               <div key={source.source_value_id}>
@@ -460,7 +469,7 @@ export function TranslationEditor({
                   dir="auto"
                   className="whitespace-pre-wrap wrap-anywhere"
                 >
-                  {source.source_text ?? "Source text unavailable"}
+                  {source.source_text ?? t("Source text unavailable")}
                 </p>
               </div>
             ))}
@@ -473,17 +482,20 @@ export function TranslationEditor({
             : ""
         }
       >
-        <section aria-label="Pending proposal" className="space-y-(--space-md)">
+        <section
+          aria-label={t("Pending proposal")}
+          className="space-y-(--space-md)"
+        >
           {!compact && (
             <h3 className="text-heading font-semibold">
               {bilingual
-                ? `Translation · ${draft.language}`
-                : "Pending proposal"}
+                ? t("Translation · {{v0}}", { v0: draft.language })
+                : t("Pending proposal")}
             </h3>
           )}
           {draft.reconciliationRequired && (
             <p className="text-label font-semibold text-warning">
-              Needs reconciliation
+              {t("Needs reconciliation")}
             </p>
           )}
           {draft.values.map((value, index) => {
@@ -512,8 +524,8 @@ export function TranslationEditor({
                   <div className="min-w-0 space-y-2 rounded-md bg-secondary p-3">
                     <p className="text-label font-semibold">
                       {sourceLanguage
-                        ? `Source · ${sourceLanguage}`
-                        : "Source text"}
+                        ? t("Source · {{v0}}", { v0: sourceLanguage })
+                        : t("Source text")}
                     </p>
                     <p
                       dir="auto"
@@ -522,10 +534,10 @@ export function TranslationEditor({
                     >
                       {member?.source_text ??
                         (member?.source_resolution === "ambiguous"
-                          ? "Ambiguous source variant"
+                          ? t("Ambiguous source variant")
                           : member?.source_resolution === "unmatched"
-                            ? "No matching source variant"
-                            : "Source text unavailable")}
+                            ? t("No matching source variant")
+                            : t("Source text unavailable"))}
                     </p>
                     {source?.provenance && (
                       <p className="text-label text-muted-foreground wrap-anywhere">
@@ -558,7 +570,7 @@ export function TranslationEditor({
                       changeValue(index, event.currentTarget.value)
                     }
                   />
-                  {value.text === "" && <p>Empty pending translation</p>}
+                  {value.text === "" && <p>{t("Empty pending translation")}</p>}
                   <p
                     id={`${id}-length`}
                     className={cn(
@@ -572,14 +584,17 @@ export function TranslationEditor({
                         className="size-4 shrink-0"
                       />
                     )}
-                    Actual: {value.actual} · Maximum: {value.maximum ?? "None"}
+                    {t("Actual: ")}
+                    {value.actual} {t(" · Maximum: ")}
+                    {value.maximum ?? t("None")}
                     {value.overage > 0
-                      ? ` · Over limit by ${value.overage}`
+                      ? t(" · Over limit by {{v0}}", { v0: value.overage })
                       : ""}
                   </p>
                   {bilingual && !compact && (
                     <p className="text-label text-muted-foreground whitespace-pre-wrap wrap-anywhere">
-                      Imported: {value.publishedText || "Empty translation"}
+                      {t("Imported: ")}
+                      {value.publishedText || t("Empty translation")}
                     </p>
                   )}
                 </div>
@@ -599,20 +614,24 @@ export function TranslationEditor({
       </div>
       {bilingual && !compact && (
         <p className="text-label text-muted-foreground">
-          Saved as a draft; publishing requires a pull request.
+          {t("Saved as a draft; publishing requires a pull request.")}
         </p>
       )}
       {failure && (
         <Alert ref={alert} tabIndex={-1} role="alert">
           <AlertTitle>
             {failure === "conflict"
-              ? "Translation changed in another session"
-              : "Translation was not saved"}
+              ? t("Translation changed in another session")
+              : t("Translation was not saved")}
           </AlertTitle>
           <AlertDescription>
             {failure === "conflict"
-              ? "Compare your version with the latest saved version, reconcile the differences, then save again."
-              : "Your changes are still in this editor. Review them and save again."}
+              ? t(
+                  "Compare your version with the latest saved version, reconcile the differences, then save again.",
+                )
+              : t(
+                  "Your changes are still in this editor. Review them and save again.",
+                )}
           </AlertDescription>
         </Alert>
       )}
@@ -624,7 +643,7 @@ export function TranslationEditor({
           disabled={saving || continuing}
           onClick={onStop}
         >
-          {compact ? "Cancel" : "Stop editing translation"}
+          {compact ? t("Cancel") : t("Stop editing translation")}
         </Button>
         <Button
           type="submit"
@@ -632,7 +651,7 @@ export function TranslationEditor({
           disabled={saving || continuing || !draft.detail.mutation_eligible}
           aria-busy={saving}
         >
-          {compact ? "Save" : "Save translation"}
+          {compact ? t("Save") : t("Save translation")}
         </Button>
       </div>
     </form>

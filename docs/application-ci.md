@@ -72,6 +72,19 @@ unsaved form input, revoked-session redirects, retry after a temporary service
 failure and serialized refresh requests from two browser tabs. This focused
 browser check supplements the ordinary Vitest session regression tests.
 
+The focused interface-language regression uses the same preview server and
+synthetic HTTP fixtures: `PLAYWRIGHT_BASE_URL=http://127.0.0.1:4179 npm --prefix
+frontend run e2e -- ui-language.spec.ts`. It checks browser-language detection,
+English fallback, all six supported interface languages, persisted manual choices,
+cross-tab changes, open dialogs, unsaved input, keyboard access and a narrow screen.
+It also checks the issue-reporting link, original product and branch names, French
+translation content, and filter selection, clearing and reload. It verifies the
+browser's inherited `translate` property
+for content and dialogs rendered outside the React root. The initial HTML opts
+out of automatic translation with `translate="no"`, `notranslate` and the Google
+translation meta tag. Headless Chromium does not exercise an external translation
+service; extensions that ignore these page directives require a manual check.
+
 The frozen Phase 4 API-scope check uses a recorded GSD verdict bound to the exact
 plan contents in `tools/phase4_api_scope_receipt.json`. Any changed or added plan
 or coverage declaration requires rerunning and reviewing that workflow check.

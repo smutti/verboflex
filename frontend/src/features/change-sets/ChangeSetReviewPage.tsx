@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -22,10 +23,11 @@ import { useReviewPolling } from "./useReviewPolling";
 import { SubmissionConfirmation } from "./SubmissionConfirmation";
 
 function quantity(count: number, singular: string) {
-  return `${count} ${singular}${count === 1 ? "" : "s"}`;
+  return `${count} ${t(count === 1 ? singular : `${singular}s`)}`;
 }
 
 export function ChangeSetReviewPage() {
+  useUiLanguage();
   const heading = useRef<HTMLHeadingElement>(null);
   const {
     accessToken,
@@ -67,11 +69,11 @@ export function ChangeSetReviewPage() {
     return (
       <section className="grid gap-(--space-md)">
         <h2 ref={heading} tabIndex={-1} className="text-heading font-semibold">
-          Review unavailable
+          {t("Review unavailable")}
         </h2>
-        <p>This review is unavailable to your account.</p>
+        <p>{t("This review is unavailable to your account.")}</p>
         <Button asChild variant="outline" className="w-fit">
-          <Link to={back}>Back to selection</Link>
+          <Link to={back}>{t("Back to selection")}</Link>
         </Button>
       </section>
     );
@@ -79,11 +81,11 @@ export function ChangeSetReviewPage() {
     return (
       <section className="grid gap-(--space-md)">
         <h2 ref={heading} tabIndex={-1} className="text-heading font-semibold">
-          No changes selected
+          {t("No changes selected")}
         </h2>
-        <p>Select approved changes to prepare a review.</p>
+        <p>{t("Select approved changes to prepare a review.")}</p>
         <Button asChild variant="outline" className="w-fit">
-          <Link to={back}>Back to selection</Link>
+          <Link to={back}>{t("Back to selection")}</Link>
         </Button>
       </section>
     );
@@ -99,29 +101,29 @@ export function ChangeSetReviewPage() {
           id="review-heading"
           className="text-heading font-semibold"
         >
-          {groups.length > 1 ? "Review change sets" : "Review change set"}
+          {groups.length > 1 ? t("Review change sets") : t("Review change set")}
         </h2>
         <Button asChild variant="outline" className="w-fit">
           <Link to={back}>
             <ArrowLeft aria-hidden="true" className="size-4" />
-            Back to selection
+            {t("Back to selection")}
           </Link>
         </Button>
       </div>
-      <section aria-label="Included proposals">
+      <section aria-label={t("Included proposals")}>
         <details className="rounded-lg border bg-card px-4">
           <summary className="cursor-pointer py-3 font-medium">
             {quantity(selection.length, "selected change")}
             {selection.some((entry) => entry.needsReview) && (
-              <span className="ml-2 text-destructive">Needs review</span>
+              <span className="ml-2 text-destructive">{t("Needs review")}</span>
             )}
           </summary>
           <ul className="space-y-2 pb-4 text-sm">
             {selection.map((entry) => (
               <li className="wrap-anywhere" key={entry.candidate.proposal_id}>
-                {entry.candidate.key} ({entry.candidate.language}) · Version{" "}
-                {entry.candidate.version}
-                {entry.needsReview ? " · Needs review" : ""}
+                {entry.candidate.key} ({entry.candidate.language}
+                {t(") · Version")} {entry.candidate.version}
+                {entry.needsReview ? t(" · Needs review") : ""}
               </li>
             ))}
           </ul>
@@ -130,15 +132,19 @@ export function ChangeSetReviewPage() {
       {relevant.length > 0 && (
         <section
           className="grid min-w-0 gap-3"
-          aria-label="Permitted destinations"
+          aria-label={t("Permitted destinations")}
         >
-          <h3 className="font-semibold">Destination</h3>
+          <h3 className="font-semibold">{t("Destination")}</h3>
           {relevant.map((destination) => {
             const chosen =
               targets.find(
                 (target) => target.mapping_id === destination.mapping_id,
               )?.target_branch ?? destination.chosen_target;
-            const label = `Target branch for ${destination.workspace}/${destination.repository_slug} (${destination.mapping_id})`;
+            const label = t("Target branch for {{v0}}/{{v1}} ({{v2}})", {
+              v0: destination.workspace,
+              v1: destination.repository_slug,
+              v2: destination.mapping_id,
+            });
             return (
               <div
                 key={destination.mapping_id}
@@ -146,7 +152,7 @@ export function ChangeSetReviewPage() {
               >
                 <div className="min-w-0">
                   <p className="mb-1 text-sm text-muted-foreground">
-                    Repository
+                    {t("Repository")}
                   </p>
                   <p className="font-semibold wrap-anywhere">
                     {destination.workspace}/{destination.repository_slug}
@@ -155,7 +161,7 @@ export function ChangeSetReviewPage() {
                 <div className="min-w-0">
                   <p className="mb-1 flex items-center gap-1.5 text-sm text-muted-foreground">
                     <GitBranch aria-hidden="true" className="size-4" />
-                    Target branch
+                    {t("Target branch")}
                   </p>
                   {!canRequest || destination.allowed_targets.length === 1 ? (
                     <p className="font-mono text-sm wrap-anywhere">{chosen}</p>
@@ -195,37 +201,39 @@ export function ChangeSetReviewPage() {
       )}
       <p role="status" className="text-sm text-muted-foreground">
         {busy || review?.state === "queued" || review?.state === "running"
-          ? "Checking selected changes…"
+          ? t("Checking selected changes…")
           : review?.state === "ready"
-            ? "Review ready"
+            ? t("Review ready")
             : review?.state === "accepted"
-              ? "Review accepted"
+              ? t("Review accepted")
               : review?.state === "expired"
-                ? "Review expired"
+                ? t("Review expired")
                 : review?.state === "failed" || error
-                  ? "Review could not be prepared"
-                  : "Review not prepared"}
+                  ? t("Review could not be prepared")
+                  : t("Review not prepared")}
       </p>
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>Selected changes need review</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertTitle>{t("Selected changes need review")}</AlertTitle>
+          <AlertDescription>{t(error)}</AlertDescription>
         </Alert>
       )}
       {review?.error_code && (
         <Alert variant="destructive">
-          <AlertTitle>Selected changes need review</AlertTitle>
+          <AlertTitle>{t("Selected changes need review")}</AlertTitle>
           <AlertDescription>
-            {review.error_code.replaceAll("_", " ")}. Refresh and review the
-            selected changes.
+            {review.error_code.replaceAll("_", " ")}
+            {t(". Refresh and review the selected changes. ")}
           </AlertDescription>
         </Alert>
       )}
-      {polling.error && <p role="alert">Status could not be refreshed</p>}
-      {polling.paused && <p>Automatic updates paused</p>}
+      {polling.error && (
+        <p role="alert">{t("Status could not be refreshed")}</p>
+      )}
+      {polling.paused && <p>{t("Automatic updates paused")}</p>}
       {(polling.error || polling.paused) && (
         <Button className="w-fit" variant="outline" onClick={polling.refresh}>
-          Refresh status
+          {t("Refresh status")}
         </Button>
       )}
       {canRequest &&
@@ -238,7 +246,7 @@ export function ChangeSetReviewPage() {
             disabled={selection.some((entry) => entry.needsReview)}
             onClick={() => void requestReview()}
           >
-            Check selected changes again
+            {t("Check selected changes again")}
           </Button>
         )}
       {(review?.state === "ready" || review?.state === "accepted") && (
@@ -262,6 +270,7 @@ function ReadyReview({
   accessToken: string;
   productId: string;
 }) {
+  useUiLanguage();
   const { readSignal, revokeRead } = useChangeSetWorkspace();
   const [files, setFiles] = useState<ReviewedFile[]>([]);
   const [values, setValues] = useState(review.values);
@@ -379,11 +388,11 @@ function ReadyReview({
   const groups = review.groups ?? [];
   return (
     <section
-      aria-label="Selected changes review"
+      aria-label={t("Selected changes review")}
       className="grid min-w-0 gap-(--space-lg)"
     >
       <div
-        aria-label="Review totals"
+        aria-label={t("Review totals")}
         className="flex flex-wrap items-center gap-2"
       >
         <Badge variant="secondary">
@@ -402,10 +411,10 @@ function ReadyReview({
       </div>
       {groups.length > 1 && (
         <section
-          aria-label="Pull requests"
+          aria-label={t("Pull requests")}
           className="grid min-w-0 gap-2 rounded-lg border bg-card p-4"
         >
-          <h3 className="font-semibold">Pull requests</h3>
+          <h3 className="font-semibold">{t("Pull requests")}</h3>
           {groups.map((group) => (
             <p key={group.id} className="text-sm wrap-anywhere">
               <span className="font-medium">
@@ -417,10 +426,10 @@ function ReadyReview({
         </section>
       )}
       <section
-        aria-label="Value changes"
+        aria-label={t("Value changes")}
         className="grid min-w-0 gap-(--space-md)"
       >
-        <h3 className="font-semibold">Translation changes</h3>
+        <h3 className="font-semibold">{t("Translation changes")}</h3>
         {values.map((value, index) => (
           <article
             key={`${value.group_id}:${value.value_id}:${index}`}
@@ -450,7 +459,7 @@ function ReadyReview({
             <div className="grid min-w-0 sm:grid-cols-2">
               <div className="min-w-0 border-b bg-muted/20 p-4 sm:border-r sm:border-b-0">
                 <p className="mb-2 text-sm font-medium text-muted-foreground">
-                  Current
+                  {t("Current")}
                 </p>
                 <p
                   lang={value.language}
@@ -458,13 +467,15 @@ function ReadyReview({
                   className="whitespace-pre-wrap wrap-anywhere"
                 >
                   {value.published_text || (
-                    <span className="italic text-muted-foreground">Empty</span>
+                    <span className="italic text-muted-foreground">
+                      {t("Empty")}
+                    </span>
                   )}
                 </p>
               </div>
               <div className="min-w-0 bg-emerald-50/60 p-4 dark:bg-emerald-950/20">
                 <p className="mb-2 text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-                  Proposed
+                  {t("Proposed")}
                 </p>
                 <p
                   lang={value.language}
@@ -472,7 +483,9 @@ function ReadyReview({
                   className="whitespace-pre-wrap wrap-anywhere"
                 >
                   {value.proposed_text || (
-                    <span className="italic text-muted-foreground">Empty</span>
+                    <span className="italic text-muted-foreground">
+                      {t("Empty")}
+                    </span>
                   )}
                 </p>
                 {value.effective_maximum != null &&
@@ -481,9 +494,9 @@ function ReadyReview({
                       className={`mt-3 text-sm ${value.character_count > value.effective_maximum ? "font-semibold text-destructive" : "text-muted-foreground"}`}
                     >
                       {value.character_count} / {value.effective_maximum}{" "}
-                      characters
+                      {t("characters")}
                       {value.character_count > value.effective_maximum
-                        ? " · Over limit"
+                        ? t(" · Over limit")
                         : ""}
                     </p>
                   )}
@@ -493,8 +506,9 @@ function ReadyReview({
         ))}
         {valueError && (
           <p role="alert">
-            Diff entries could not be loaded. Retry to inspect the complete
-            review.
+            {t(
+              "Diff entries could not be loaded. Retry to inspect the complete review.",
+            )}
           </p>
         )}
         {nextValue !== null && (
@@ -504,15 +518,17 @@ function ReadyReview({
             disabled={valueLoading}
             onClick={() => void loadValues()}
           >
-            {valueLoading ? "Loading diff entries…" : "Load more diff entries"}
+            {valueLoading
+              ? t("Loading diff entries…")
+              : t("Load more diff entries")}
           </Button>
         )}
       </section>
       <section
-        aria-label="File changes"
+        aria-label={t("File changes")}
         className="grid min-w-0 gap-(--space-md)"
       >
-        <h3 className="font-semibold">File changes</h3>
+        <h3 className="font-semibold">{t("File changes")}</h3>
         {files.map((file) => (
           <article
             key={file.index}
@@ -534,16 +550,24 @@ function ReadyReview({
             </p>
             <details>
               <summary className="cursor-pointer min-h-[44px]">
-                File preservation hashes
+                {t("File preservation hashes")}
               </summary>
-              <p className="wrap-anywhere">Before: {file.before_sha256}</p>
-              <p className="wrap-anywhere">After: {file.after_sha256}</p>
+              <p className="wrap-anywhere">
+                {t("Before: ")}
+                {file.before_sha256}
+              </p>
+              <p className="wrap-anywhere">
+                {t("After: ")}
+                {file.after_sha256}
+              </p>
             </details>
           </article>
         ))}
         {fileError && (
           <p role="alert">
-            Files could not be loaded. Retry to inspect the complete review.
+            {t(
+              "Files could not be loaded. Retry to inspect the complete review.",
+            )}
           </p>
         )}
         {nextFile !== null && (
@@ -553,13 +577,13 @@ function ReadyReview({
             disabled={fileLoading}
             onClick={() => void loadFiles()}
           >
-            {fileLoading ? "Loading files…" : "Load more files"}
+            {fileLoading ? t("Loading files…") : t("Load more files")}
           </Button>
         )}
       </section>
       <details className="min-w-0 rounded-lg border bg-card px-4">
         <summary className="cursor-pointer py-3 font-medium">
-          Technical details
+          {t("Technical details")}
         </summary>
         <div className="grid min-w-0 gap-4 pb-4">
           {groups.map((group) => (
@@ -572,7 +596,9 @@ function ReadyReview({
                 {group.target_branch}
               </h3>
               <p className="text-sm wrap-anywhere">
-                Repository {group.repository_id} · Group {group.id}
+                {t("Repository ")}
+                {group.repository_id} {t(" · Group ")}
+                {group.id}
               </p>
               <p>
                 {quantity(group.proposal_ids.length, "proposal")} ·{" "}
@@ -581,11 +607,13 @@ function ReadyReview({
               </p>
               <dl className="grid gap-(--space-sm) mt-(--space-md)">
                 <div>
-                  <dt className="font-medium">Pull request source branch</dt>
+                  <dt className="font-medium">
+                    {t("Pull request source branch")}
+                  </dt>
                   <dd className="wrap-anywhere">{group.source_branch}</dd>
                 </div>
                 <div>
-                  <dt className="font-medium">Target branch</dt>
+                  <dt className="font-medium">{t("Target branch")}</dt>
                   <dd className="wrap-anywhere">
                     {group.target_branch} · {group.target_head}
                   </dd>
@@ -595,12 +623,14 @@ function ReadyReview({
                     key={`${source.mapping_id}:${source.repository_side}:${index}`}
                   >
                     <dt className="font-medium">
-                      Imported source · {source.repository_side}
+                      {t("Imported source · ")}
+                      {source.repository_side}
                     </dt>
                     <dd className="wrap-anywhere">
                       {source.branch} · {source.commit_hash}
                       <br />
-                      Repository {source.repository_id} · Mapping{" "}
+                      {t("Repository ")}
+                      {source.repository_id} {t(" · Mapping")}{" "}
                       {source.mapping_id}
                     </dd>
                   </div>

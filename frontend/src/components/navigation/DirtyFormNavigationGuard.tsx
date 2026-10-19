@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import {
   createContext,
   type ReactNode,
@@ -53,6 +54,7 @@ export function DirtyFormNavigationProvider({
 }: {
   children: ReactNode;
 }) {
+  useUiLanguage();
   const [dirtyForms, setDirtyForms] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -201,17 +203,17 @@ export function DirtyFormNavigationProvider({
       >
         <AlertDialogContent onCloseAutoFocus={restoreFocus}>
           <AlertDialogHeader>
-            <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
+            <AlertDialogTitle>{t("Leave without saving?")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Your unsaved entries on this page will be lost.
+              {t("Your unsaved entries on this page will be lost.")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={keepEditing}>
-              Keep editing
+              {t("Keep editing")}
             </AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={discardChanges}>
-              Discard changes
+              {t("Discard changes")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

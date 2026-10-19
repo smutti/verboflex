@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -33,6 +34,7 @@ export function ProductDeleteDialog({
   product,
   onDeleted,
 }: ProductDeleteDialogProps) {
+  useUiLanguage();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
   const pendingRef = useRef(false);
@@ -107,20 +109,21 @@ export function ProductDeleteDialog({
         className="w-full sm:w-auto"
         onClick={() => setOpen(true)}
       >
-        Delete product
+        {t("Delete product")}
       </Button>
 
       {open ? (
         <AlertDialog open onOpenChange={changeOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete {product.name}?</AlertDialogTitle>
+              <AlertDialogTitle>
+                {t("Delete ")}
+                {product.name}?
+              </AlertDialogTitle>
               <AlertDialogDescription>
-                VerboFlex will hide this product. Its retained data may be
-                permanently removed under the configured maintenance policy.
-                Bitbucket will not be changed. You can later reuse the
-                product name, but the new product will have a different
-                identity.
+                {t(
+                  "VerboFlex will hide this product. Its retained data may be permanently removed under the configured maintenance policy. Bitbucket will not be changed. You can later reuse the product name, but the new product will have a different identity.",
+                )}
               </AlertDialogDescription>
             </AlertDialogHeader>
 
@@ -128,19 +131,25 @@ export function ProductDeleteDialog({
               <Alert ref={errorRef} tabIndex={-1} variant="destructive">
                 <AlertTitle>
                   {error === "blocked"
-                    ? "Product deletion is temporarily blocked"
-                    : "Product not deleted"}
+                    ? t("Product deletion is temporarily blocked")
+                    : t("Product not deleted")}
                 </AlertTitle>
                 <AlertDescription>
                   {error === "blocked"
-                    ? "Wait for the running import or preview to finish, then try again."
-                    : "We could not delete this product. It remains unchanged. Try again."}
+                    ? t(
+                        "Wait for the running import or preview to finish, then try again.",
+                      )
+                    : t(
+                        "We could not delete this product. It remains unchanged. Try again.",
+                      )}
                 </AlertDescription>
               </Alert>
             ) : null}
 
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+              <AlertDialogCancel disabled={pending}>
+                {t("Cancel")}
+              </AlertDialogCancel>
               <Button
                 type="button"
                 variant="destructive"
@@ -148,7 +157,7 @@ export function ProductDeleteDialog({
                 aria-busy={pending}
                 onClick={() => void submitDelete()}
               >
-                Delete product
+                {t("Delete product")}
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>

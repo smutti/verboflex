@@ -1205,10 +1205,10 @@ describe("administrator product configuration tracer", () => {
       "Step 2 of 4Repositories",
     );
     expect(
-      screen.getByRole("heading", { name: "Collega a repository bitbucket" }),
+      screen.getByRole("heading", { name: "Connect a Bitbucket repository" }),
     ).toBeVisible();
     expect(
-      await screen.findByRole("searchbox", { name: "Cerca repository" }),
+      await screen.findByRole("searchbox", { name: "Search repositories" }),
     ).toBeVisible();
 
     await userEvent.click(
@@ -1553,7 +1553,7 @@ describe("administrator product configuration tracer", () => {
     );
     expect(
       await screen.findByRole("heading", {
-        name: "Collega a repository bitbucket",
+        name: "Connect a Bitbucket repository",
       }),
     ).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Back" }));
@@ -1571,7 +1571,7 @@ describe("administrator product configuration tracer", () => {
     await userEvent.click(
       (
         await screen.findAllByRole("button", {
-          name: "Collega Mobile application source",
+          name: "Connect Mobile application source",
         })
       )[0],
     );
@@ -1663,7 +1663,7 @@ describe("administrator product configuration tracer", () => {
       name: "Wizard step incomplete",
     });
     expect(validationAlert).toHaveTextContent(
-      "Seleziona un repository prima di continuare.",
+      "Select a repository before continuing.",
     );
     expect(validationAlert).toHaveFocus();
     expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
@@ -1672,7 +1672,7 @@ describe("administrator product configuration tracer", () => {
 
     await user.click(
       screen.getAllByRole("button", {
-        name: "Collega Mobile application source",
+        name: "Connect Mobile application source",
       })[0],
     );
     await user.click(nextToMappings);
@@ -3019,7 +3019,7 @@ describe("administrator product configuration tracer", () => {
     await userEvent.click(screen.getByRole("button", { name: "Repositories" }));
     await userEvent.click(
       await screen.findByRole("button", {
-        name: "Collega Mobile application source",
+        name: "Connect Mobile application source",
       }),
     );
     await waitFor(() =>

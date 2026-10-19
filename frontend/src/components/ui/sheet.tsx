@@ -1,5 +1,7 @@
 "use client";
 
+import { t, useUiLanguage } from "@/i18n";
+
 import * as React from "react";
 import { XIcon } from "lucide-react";
 import { Dialog as SheetPrimitive } from "radix-ui";
@@ -7,24 +9,28 @@ import { Dialog as SheetPrimitive } from "radix-ui";
 import { cn } from "@/lib/utils";
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
+  useUiLanguage();
   return <SheetPrimitive.Root data-slot="sheet" {...props} />;
 }
 
 function SheetTrigger({
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Trigger>) {
+  useUiLanguage();
   return <SheetPrimitive.Trigger data-slot="sheet-trigger" {...props} />;
 }
 
 function SheetClose({
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Close>) {
+  useUiLanguage();
   return <SheetPrimitive.Close data-slot="sheet-close" {...props} />;
 }
 
 function SheetPortal({
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Portal>) {
+  useUiLanguage();
   return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />;
 }
 
@@ -32,6 +38,7 @@ function SheetOverlay({
   className,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Overlay>) {
+  useUiLanguage();
   return (
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
@@ -54,6 +61,7 @@ function SheetContent({
   side?: "top" | "right" | "bottom" | "left";
   showCloseButton?: boolean;
 }) {
+  useUiLanguage();
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -77,7 +85,7 @@ function SheetContent({
         {showCloseButton && (
           <SheetPrimitive.Close className="absolute top-4 right-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-secondary">
             <XIcon className="size-4" />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">{t("Close")}</span>
           </SheetPrimitive.Close>
         )}
       </SheetPrimitive.Content>
@@ -86,6 +94,7 @@ function SheetContent({
 }
 
 function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
+  useUiLanguage();
   return (
     <div
       data-slot="sheet-header"
@@ -96,6 +105,7 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
+  useUiLanguage();
   return (
     <div
       data-slot="sheet-footer"
@@ -109,6 +119,7 @@ function SheetTitle({
   className,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Title>) {
+  useUiLanguage();
   return (
     <SheetPrimitive.Title
       data-slot="sheet-title"
@@ -122,6 +133,7 @@ function SheetDescription({
   className,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Description>) {
+  useUiLanguage();
   return (
     <SheetPrimitive.Description
       data-slot="sheet-description"

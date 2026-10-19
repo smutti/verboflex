@@ -1,3 +1,5 @@
+import { statusLabel } from "@/i18n/statusLabels";
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useState } from "react";
 import {
   getTranslationGroup,
@@ -46,6 +48,7 @@ function Context({
   onDraftStateChange,
   embedded = false,
 }: Props) {
+  useUiLanguage();
   // A refetch belongs to one particular incoming detail response. A later
   // response wins immediately, including source-only changes at the same version.
   const [context, setContext] = useState({
@@ -99,33 +102,39 @@ function Context({
   const sourceContext = remote.source_context ?? [];
   return (
     <aside
-      aria-label="Selected translation context"
+      aria-label={t("Selected translation context")}
       className={`min-w-0 self-start space-y-4 bg-background p-4 ${embedded ? "" : "rounded-lg border xl:sticky xl:top-4"}`}
     >
       <div className="space-y-1">
-        <h2 className="text-heading font-semibold">String context</h2>
+        <h2 className="text-heading font-semibold">{t("String context")}</h2>
         <p className="font-mono text-label wrap-anywhere">
           {detail.raw_key} · {detail.language}
         </p>
       </div>
-      <section aria-label="Review selected translation" className="space-y-3">
+      <section
+        aria-label={t("Review selected translation")}
+        className="space-y-3"
+      >
         <p className="text-label font-semibold">
           {remote.pending_change
-            ? `Pending: ${remote.pending_change.state} · Version ${remote.pending_change.version}`
-            : "No saved proposal yet"}
+            ? t("Pending: {{v0}} · Version {{v1}}", {
+                v0: statusLabel(remote.pending_change.state),
+                v1: remote.pending_change.version,
+              })
+            : t("No saved proposal yet")}
         </p>
         {!authoritative && !failure && (
-          <p role="status">Refreshing saved proposal…</p>
+          <p role="status">{t("Refreshing saved proposal…")}</p>
         )}
         {failure && (
           <Alert role="alert">
-            <AlertTitle>Saved context could not be refreshed</AlertTitle>
+            <AlertTitle>{t("Saved context could not be refreshed")}</AlertTitle>
             <AlertDescription>
               <Button
                 variant="outline"
                 onClick={() => setRetry((value) => value + 1)}
               >
-                Retry context
+                {t("Retry context")}
               </Button>
             </AlertDescription>
           </Alert>
@@ -145,7 +154,7 @@ function Context({
         onToggle={(event) => setScreenshotsOpen(event.currentTarget.open)}
       >
         <summary className="cursor-pointer font-semibold">
-          Screenshots and code references
+          {t("Screenshots and code references")}
         </summary>
         {screenshotsOpen && (
           <TranslationScreenshots
@@ -166,9 +175,9 @@ function Context({
         className="min-w-0"
       >
         <TabsList className="flex h-auto w-full flex-wrap justify-start">
-          <TabsTrigger value="comments">Comments</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
-          <TabsTrigger value="source">Source changes</TabsTrigger>
+          <TabsTrigger value="comments">{t("Comments")}</TabsTrigger>
+          <TabsTrigger value="history">{t("History")}</TabsTrigger>
+          <TabsTrigger value="source">{t("Source changes")}</TabsTrigger>
         </TabsList>
         <TabsContent
           value="comments"
@@ -201,14 +210,15 @@ function Context({
           className="min-w-0 space-y-4 data-[state=inactive]:hidden"
         >
           <section
-            aria-label="Imported values and limits"
+            aria-label={t("Imported values and limits")}
             className="space-y-3"
           >
             {remote.values.map((value) => (
               <div key={value.id} className="min-w-0 text-label">
                 <p>
-                  Actual: {value.constraint.actual} · Maximum:{" "}
-                  {value.constraint.maximum ?? "None"}
+                  {t("Actual: ")}
+                  {value.constraint.actual} {t(" · Maximum:")}{" "}
+                  {value.constraint.maximum ?? t("None")}
                 </p>
                 {value.provenance && (
                   <p className="wrap-anywhere">
@@ -223,19 +233,21 @@ function Context({
             ))}
           </section>
           <p className="text-label text-muted-foreground">
-            Latest two source imports
+            {t("Latest two source imports")}
           </p>
           {sourceContext.length === 0 && (
-            <p>Source comparison unavailable for this imported entry.</p>
+            <p>{t("Source comparison unavailable for this imported entry.")}</p>
           )}
           {sourceContext.map((source) => (
             <section
               key={source.source_value_id}
               className="min-w-0 space-y-3 border-t pt-3"
-              aria-label={`Source variant ${source.source_value_id}`}
+              aria-label={t("Source variant {{v0}}", {
+                v0: source.source_value_id,
+              })}
             >
               <p className="text-label font-semibold">
-                {source.language ?? "Unknown source language"} ·{" "}
+                {source.language ?? t("Unknown source language")} ·{" "}
                 {source.selector_fields
                   ?.map((field) => `${field.name}: ${String(field.value)}`)
                   .join(", ") || source.selector_kind}
@@ -249,13 +261,13 @@ function Context({
                 <>
                   {!source.source_comparison.changed && (
                     <p className="text-label">
-                      Source unchanged between these imports.
+                      {t("Source unchanged between these imports.")}
                     </p>
                   )}
                   <div className="grid min-w-0 gap-3">
                     <div className="min-w-0 rounded-md bg-secondary p-3">
                       <h3 className="text-label font-semibold">
-                        Previous imported source · Revision{" "}
+                        {t("Previous imported source · Revision")}{" "}
                         {source.source_comparison.previous_revision_number}
                       </h3>
                       <p
@@ -264,12 +276,12 @@ function Context({
                         className="whitespace-pre-wrap wrap-anywhere"
                       >
                         {source.source_comparison.previous_text ||
-                          "Empty source text"}
+                          t("Empty source text")}
                       </p>
                     </div>
                     <div className="min-w-0 rounded-md border p-3">
                       <h3 className="text-label font-semibold">
-                        Current imported source · Revision{" "}
+                        {t("Current imported source · Revision")}{" "}
                         {source.source_comparison.current_revision_number}
                       </h3>
                       <p
@@ -278,37 +290,41 @@ function Context({
                         className="whitespace-pre-wrap wrap-anywhere"
                       >
                         {source.source_comparison.current_text ||
-                          "Empty source text"}
+                          t("Empty source text")}
                       </p>
                     </div>
                   </div>
                   {(source.source_comparison.previous_truncated ||
                     source.source_comparison.current_truncated) && (
                     <p className="text-label">
-                      Excerpt truncated to 4,096 characters; the change
-                      indicator compares the full source.
+                      {t(
+                        "Excerpt truncated to 4,096 characters; the change indicator compares the full source.",
+                      )}
                     </p>
                   )}
                   <details className="text-label text-muted-foreground">
                     <summary className="cursor-pointer">
-                      Import references
+                      {t("Import references")}
                     </summary>
                     <p className="wrap-anywhere">
-                      Source record: {source.source_value_id}
+                      {t("Source record: ")}
+                      {source.source_value_id}
                     </p>
                     <p className="wrap-anywhere">
-                      Previous: {source.source_comparison.previous_commit_hash}{" "}
-                      · {source.source_comparison.previous_execution_id}
+                      {t("Previous: ")}
+                      {source.source_comparison.previous_commit_hash} ·{" "}
+                      {source.source_comparison.previous_execution_id}
                     </p>
                     <p className="wrap-anywhere">
-                      Current: {source.source_comparison.current_commit_hash} ·{" "}
+                      {t("Current: ")}
+                      {source.source_comparison.current_commit_hash} ·{" "}
                       {source.source_comparison.current_execution_id}
                     </p>
                   </details>
                 </>
               ) : (
                 <p className="text-label">
-                  Two source revisions are needed to compare changes.
+                  {t("Two source revisions are needed to compare changes.")}
                 </p>
               )}
             </section>
@@ -320,6 +336,7 @@ function Context({
 }
 
 export function TranslationContextPanel(props: Props) {
+  useUiLanguage();
   return (
     <Context
       key={JSON.stringify([

@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import {
   useCallback,
   useEffect,
@@ -189,7 +190,10 @@ function WorkspaceState({
     );
     if (selection.length + additions.length > limit) {
       setError(
-        `Select at most ${limit} proposals. Remove selected changes before adding this set.`,
+        t(
+          "Select at most {{v0}} proposals. Remove selected changes before adding this set.",
+          { v0: limit },
+        ),
       );
       return;
     }
@@ -257,7 +261,7 @@ function WorkspaceState({
           return;
         }
         if (!read.data || read.data.product_id !== productId)
-          throw new Error("Unavailable");
+          throw new Error(t("Unavailable"));
         setError("Submission access is read-only");
         return;
       }

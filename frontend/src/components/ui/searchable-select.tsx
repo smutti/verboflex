@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useId, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { Input } from "./input";
@@ -20,6 +21,7 @@ export function SearchableSelect({
   disabled,
   className,
 }: SearchableSelectProps) {
+  useUiLanguage();
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const listId = `${inputId}-options`;
@@ -66,7 +68,7 @@ export function SearchableSelect({
         disabled={disabled}
         className={cn("min-h-[44px] pr-9", className)}
         value={open ? query : (selected?.label ?? "")}
-        placeholder={selected?.label ?? "Search…"}
+        placeholder={selected?.label ?? t("Search…")}
         onFocus={show}
         onClick={show}
         onBlur={close}
@@ -139,7 +141,7 @@ export function SearchableSelect({
           </div>
           {!filtered.length && (
             <p role="status" className="p-2 text-sm text-muted-foreground">
-              No results
+              {t("No results")}
             </p>
           )}
         </div>

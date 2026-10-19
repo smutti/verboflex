@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 import type {
@@ -53,6 +54,7 @@ export function UserDialog({
   open,
   user,
 }: UserDialogProps) {
+  useUiLanguage();
   const emailId = useId();
   const displayNameId = useId();
   const roleGroupId = useId();
@@ -194,12 +196,18 @@ export function UserDialog({
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <DialogHeader className="min-w-0">
           <DialogTitle className="[overflow-wrap:anywhere]">
-            {isEditing ? `Edit ${user.display_name}` : "Add user"}
+            {isEditing
+              ? t("Edit {{v0}}", { v0: user.display_name })
+              : t("Add user")}
           </DialogTitle>
           <DialogDescription>
             {isEditing
-              ? "Update this account's display name, global roles and product access."
-              : "Create an internal account and choose their product access."}
+              ? t(
+                  "Update this account's display name, global roles and product access.",
+                )
+              : t(
+                  "Create an internal account and choose their product access.",
+                )}
           </DialogDescription>
         </DialogHeader>
 
@@ -214,32 +222,44 @@ export function UserDialog({
               variant="destructive"
               aria-describedby={conflictId}
             >
-              <AlertTitle>We could not save this user</AlertTitle>
+              <AlertTitle>{t("We could not save this user")}</AlertTitle>
               <AlertDescription id={conflictId}>
                 {submissionError === "conflict"
-                  ? "This user changed in another session or the administrator role must be preserved."
+                  ? t(
+                      "This user changed in another session or the administrator role must be preserved.",
+                    )
                   : submissionError === "products-conflict"
-                    ? "Product access changed in another session, or a product or account is no longer available. No changes were saved. Reopen this form to review current roles before trying again."
+                    ? t(
+                        "Product access changed in another session, or a product or account is no longer available. No changes were saved. Reopen this form to review current roles before trying again.",
+                      )
                     : submissionError === "products"
-                      ? "One or more selected products are no longer available. Remove their assignments or reopen this form to refresh the list. No account was created."
-                      : "Your entries are still here. Review them and try again."}
+                      ? t(
+                          "One or more selected products are no longer available. Remove their assignments or reopen this form to refresh the list. No account was created.",
+                        )
+                      : t(
+                          "Your entries are still here. Review them and try again.",
+                        )}
               </AlertDescription>
             </Alert>
           ) : null}
 
           {isEditing ? (
             <div className="grid min-w-0 grid-cols-1 gap-2">
-              <span className="text-sm font-medium">Corporate email</span>
+              <span className="text-sm font-medium">
+                {t("Corporate email")}
+              </span>
               <p className="min-w-0 text-sm [overflow-wrap:anywhere]">
                 {user.email}
               </p>
               <p className="text-sm text-muted-foreground">
-                Email cannot be changed. Create a new account to correct it.
+                {t(
+                  "Email cannot be changed. Create a new account to correct it.",
+                )}
               </p>
             </div>
           ) : (
             <div className="grid gap-2">
-              <Label htmlFor={emailId}>Corporate email</Label>
+              <Label htmlFor={emailId}>{t("Corporate email")}</Label>
               <Input
                 ref={emailRef}
                 id={emailId}
@@ -263,15 +283,15 @@ export function UserDialog({
                   className="text-sm text-destructive"
                 >
                   {emailConflict
-                    ? "An account already uses this corporate email."
-                    : "Enter a corporate email."}
+                    ? t("An account already uses this corporate email.")
+                    : t("Enter a corporate email.")}
                 </p>
               ) : null}
             </div>
           )}
 
           <div className="grid gap-2">
-            <Label htmlFor={displayNameId}>Display name</Label>
+            <Label htmlFor={displayNameId}>{t("Display name")}</Label>
             <Input
               ref={displayNameRef}
               id={displayNameId}
@@ -292,7 +312,7 @@ export function UserDialog({
                 id={`${displayNameId}-error`}
                 className="text-sm text-destructive"
               >
-                Enter a display name.
+                {t("Enter a display name.")}
               </p>
             ) : null}
           </div>
@@ -306,11 +326,12 @@ export function UserDialog({
             className="grid min-w-0 gap-3 rounded-lg border p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <legend id={roleGroupId} className="px-1 text-sm font-medium">
-              Roles
+              {t("Roles")}
             </legend>
             <p className="text-sm text-muted-foreground">
-              Administrator grants access to all products. Other global roles
-              require a separate product assignment.
+              {t(
+                "Administrator grants access to all products. Other global roles require a separate product assignment.",
+              )}
             </p>
             {USER_ROLE_OPTIONS.map((option) => {
               const checkboxId = `${roleGroupId}-${option.value}`;
@@ -331,7 +352,7 @@ export function UserDialog({
                   </div>
                   {protectsSelfAdmin ? (
                     <p className="pl-7 text-sm text-muted-foreground">
-                      You cannot remove your own administrator role.
+                      {t("You cannot remove your own administrator role.")}
                     </p>
                   ) : null}
                 </div>
@@ -339,7 +360,7 @@ export function UserDialog({
             })}
             {roleError ? (
               <p id={roleErrorId} className="text-sm text-destructive">
-                Select at least one role.
+                {t("Select at least one role.")}
               </p>
             ) : null}
           </fieldset>
@@ -358,10 +379,10 @@ export function UserDialog({
               variant="outline"
               onClick={() => onOpenChange(false)}
             >
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button type="submit" disabled={pending} aria-busy={pending}>
-              {isEditing ? "Save user" : "Create user"}
+              {isEditing ? t("Save user") : t("Create user")}
             </Button>
           </DialogFooter>
         </form>

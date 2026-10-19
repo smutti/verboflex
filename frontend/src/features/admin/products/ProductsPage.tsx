@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PackageOpen, Search } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
@@ -40,31 +41,37 @@ function normalizeSearch(value: string) {
 }
 
 function ProductStatus({ product }: { product: AdminProductResponse }) {
+  useUiLanguage();
   return (
     <Badge
       variant={product.is_active ? "success" : "warning"}
       className="rounded-md"
     >
-      {product.is_active ? "Active" : "Inactive"}
+      {product.is_active ? t("Active") : t("Inactive")}
     </Badge>
   );
 }
 
 function revisionLabel(product: AdminProductResponse) {
   if (product.active_revision !== null) {
-    return `Published version ${product.active_revision.version}`;
+    return t("Published version {{v0}}", {
+      v0: product.active_revision.version,
+    });
   }
-  return "Not published";
+  return t("Not published");
 }
 
 function candidateLabel(product: AdminProductResponse) {
   if (product.candidate_revision !== null) {
-    return `Draft version ${product.candidate_revision.version}`;
+    return t("Draft version {{v0}}", {
+      v0: product.candidate_revision.version,
+    });
   }
-  return "No draft";
+  return t("No draft");
 }
 
 function ProductFields({ product }: { product: AdminProductResponse }) {
+  useUiLanguage();
   return (
     <>
       <div className="grid min-w-0 gap-1">
@@ -85,6 +92,7 @@ function ProductFields({ product }: { product: AdminProductResponse }) {
 }
 
 export function ProductsPage({ accessToken }: ProductsPageProps) {
+  useUiLanguage();
   const currentLocation = useLocation();
   const loadGeneration = useRef(0);
   const loadedAuthorityRef = useRef<string | null>(null);
@@ -228,7 +236,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="grid min-w-0 gap-2">
           <h1 id="admin-products-title" className="text-display font-semibold">
-            Products
+            {t("Products")}
           </h1>
         </div>
         <Button asChild className="w-full sm:w-auto">
@@ -237,7 +245,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
             aria-disabled={!collectionReady}
             tabIndex={collectionReady ? undefined : -1}
           >
-            Create product
+            {t("Create product")}
           </Link>
         </Button>
       </div>
@@ -246,13 +254,13 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
         <div className="grid gap-4" role="status" aria-live="polite">
           <Skeleton className="h-9 w-64 max-w-full" />
           <Skeleton className="h-48 w-full" />
-          <span>Loading products</span>
+          <span>{t("Loading products")}</span>
         </div>
       ) : null}
 
       {loadState === "error" ? (
         <Alert variant="destructive">
-          <AlertTitle>Products unavailable</AlertTitle>
+          <AlertTitle>{t("Products unavailable")}</AlertTitle>
           <AlertDescription>
             <Button
               type="button"
@@ -261,7 +269,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
                 void loadProducts(null, false, statusFilter, nameFilter)
               }
             >
-              Retry loading page
+              {t("Retry loading page")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -275,7 +283,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
                 htmlFor="product-name-filter"
                 className="text-sm font-medium"
               >
-                Search by product name
+                {t("Search by product name")}
               </label>
               <div className="relative">
                 <Search
@@ -284,9 +292,9 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
                 />
                 <Input
                   id="product-name-filter"
-                  aria-label="Search products"
+                  aria-label={t("Search products")}
                   className="pl-9"
-                  placeholder="Search products…"
+                  placeholder={t("Search products…")}
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
                 />
@@ -295,7 +303,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
             <div
               className="flex flex-wrap gap-2"
               role="group"
-              aria-label="Product status"
+              aria-label={t("Product status")}
             >
               {(["all", "active", "inactive"] as const).map((status) => (
                 <Button
@@ -308,10 +316,10 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
                   onClick={() => setStatusFilter(status)}
                 >
                   {status === "all"
-                    ? "All"
+                    ? t("All")
                     : status === "active"
-                      ? "Active"
-                      : "Inactive"}
+                      ? t("Active")
+                      : t("Inactive")}
                 </Button>
               ))}
             </div>
@@ -324,15 +332,15 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
               className="text-muted-foreground flex items-center gap-2 text-sm"
             >
               <span className="border-primary size-4 animate-spin rounded-full border-2 border-r-transparent" />
-              Updating products
+              {t("Updating products")}
             </div>
           ) : null}
 
           {refreshError ? (
             <Alert variant="destructive">
-              <AlertTitle>Products could not be updated</AlertTitle>
+              <AlertTitle>{t("Products could not be updated")}</AlertTitle>
               <AlertDescription>
-                <p>Your current results are still available.</p>
+                <p>{t("Your current results are still available.")}</p>
                 <Button
                   type="button"
                   variant="outline"
@@ -340,7 +348,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
                     void loadProducts(null, false, statusFilter, nameFilter)
                   }
                 >
-                  Retry updating products
+                  {t("Retry updating products")}
                 </Button>
               </AlertDescription>
             </Alert>
@@ -359,19 +367,21 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
                 <div className="grid gap-2">
                   <h2 className="text-heading font-semibold">
                     {filtersActive
-                      ? "No products found"
-                      : "No products configured"}
+                      ? t("No products found")
+                      : t("No products configured")}
                   </h2>
                   <p className="text-muted-foreground">
                     {filtersActive
-                      ? "Try a different name or status filter."
-                      : "Create a product to connect repositories and validate a localization layout."}
+                      ? t("Try a different name or status filter.")
+                      : t(
+                          "Create a product to connect repositories and validate a localization layout.",
+                        )}
                   </p>
                 </div>
                 {!filtersActive ? (
                   <Button asChild>
                     <Link to="/admin/products/new">
-                      Create your first product
+                      {t("Create your first product")}
                     </Link>
                   </Button>
                 ) : null}
@@ -380,12 +390,12 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
           ) : (
             <>
               <div className="hidden min-w-0 md:block">
-                <Table aria-label="Products">
+                <Table aria-label={t("Products")}>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Candidate</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>{t("Product")}</TableHead>
+                      <TableHead>{t("Candidate")}</TableHead>
+                      <TableHead>{t("Status")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -418,7 +428,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
 
               <div
                 className="grid min-w-0 max-w-full gap-4 md:hidden"
-                aria-label="Products mobile list"
+                aria-label={t("Products mobile list")}
               >
                 {products.map((product) => (
                   <article
@@ -445,7 +455,7 @@ export function ProductsPage({ accessToken }: ProductsPageProps) {
                   className="flex items-center gap-3 text-sm text-muted-foreground"
                 >
                   <span className="border-primary size-5 animate-spin rounded-full border-2 border-r-transparent" />
-                  Loading more products
+                  {t("Loading more products")}
                 </div>
               ) : null}
             </div>

@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom/vitest";
+import { UI_LANGUAGES, setUiLanguage, t } from "@/i18n";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -81,10 +82,47 @@ const props = () => ({
 });
 afterEach(() => {
   cleanup();
+  setUiLanguage("en");
   vi.clearAllMocks();
 });
 
 describe("shared translation review", () => {
+  it.each(UI_LANGUAGES)(
+    "keeps review API states unchanged in $name",
+    async ({ code }) => {
+      setUiLanguage(code);
+      const current = props();
+      const view = render(<TranslationReviewActions {...current} dirty />);
+      expect(
+        screen.getByRole("button", { name: t("Approve translation") }),
+      ).toBeDisabled();
+      view.rerender(<TranslationReviewActions {...current} />);
+      vi.mocked(transitionTranslationProposal).mockResolvedValue({
+        data: projection(),
+      } as never);
+      await userEvent.click(
+        screen.getByRole("button", { name: t("Approve translation") }),
+      );
+      await waitFor(() =>
+        expect(current.onChanged).toHaveBeenCalledWith(projection()),
+      );
+      expect(transitionTranslationProposal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: { expected_version: 1, target_state: "approved", reason: null },
+        }),
+      );
+      view.rerender(
+        <TranslationReviewActions
+          {...current}
+          principal={{ id: "viewer", roles: ["viewer"] }}
+        />,
+      );
+      expect(
+        screen.queryByRole("button", { name: t("Approve translation") }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
   it.each([false, true])(
     "reports actual length violations separately from stale source (over limit: %s)",
     (isOverLimit) => {

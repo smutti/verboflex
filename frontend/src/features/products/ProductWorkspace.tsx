@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { principalForProduct } from "../auth/productRoles";
 import { GitPullRequest, Languages, RefreshCw, Users } from "lucide-react";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
@@ -67,14 +68,15 @@ function useAuthorizedProducts(accessToken: string, productId: string) {
 }
 
 function ProductError({ retry }: { retry: () => void }) {
+  useUiLanguage();
   return (
     <Alert>
-      <AlertTitle>Products could not be loaded</AlertTitle>
+      <AlertTitle>{t("Products could not be loaded")}</AlertTitle>
       <AlertDescription className="space-y-(--space-md)">
-        <p>Retry without leaving your workspace.</p>
+        <p>{t("Retry without leaving your workspace.")}</p>
         <Button type="button" variant="outline" onClick={retry}>
           <RefreshCw aria-hidden="true" />
-          Retry loading products
+          {t("Retry loading products")}
         </Button>
       </AlertDescription>
     </Alert>
@@ -96,11 +98,12 @@ function identityStyle(productId: string, productName: string) {
 export { ProductWorkspaceIndex } from "./ProductWorkspaceIndex";
 
 function FocusUnavailable({ children }: { children: ReactNode }) {
+  useUiLanguage();
   return (
     <div className="grid gap-(--space-lg)">
       {children}
       <Button asChild variant="outline" className="w-fit">
-        <Link to="/products">Choose another product</Link>
+        <Link to="/products">{t("Choose another product")}</Link>
       </Button>
     </div>
   );
@@ -113,6 +116,7 @@ export function ProductFocusWorkspace({
   accessToken: string;
   principal: CurrentUserResponse;
 }) {
+  useUiLanguage();
   const location = useLocation();
   const rawProductId = useParams<"productId">().productId ?? "";
   let productId = rawProductId;
@@ -126,7 +130,7 @@ export function ProductFocusWorkspace({
   if (load.status === "loading") {
     return (
       <div className="grid gap-(--space-md)" role="status">
-        <span>Loading product workspace</span>
+        <span>{t("Loading product workspace")}</span>
         <Skeleton className="h-52 w-full rounded-lg" />
         <Skeleton className="h-80 w-full rounded-lg" />
       </div>
@@ -139,9 +143,9 @@ export function ProductFocusWorkspace({
     return (
       <FocusUnavailable>
         <Alert>
-          <AlertTitle>Product workspace unavailable</AlertTitle>
+          <AlertTitle>{t("Product workspace unavailable")}</AlertTitle>
           <AlertDescription>
-            This product is inactive or outside your authorized products.
+            {t("This product is inactive or outside your authorized products.")}
           </AlertDescription>
         </Alert>
       </FocusUnavailable>
@@ -178,7 +182,7 @@ export function ProductFocusWorkspace({
           {product.name}
         </h1>
         <nav
-          aria-label={`${product.name} workspace`}
+          aria-label={t("{{v0}} workspace", { v0: product.name })}
           className="mt-(--space-lg) flex flex-wrap items-center gap-2"
         >
           <Link
@@ -188,7 +192,7 @@ export function ProductFocusWorkspace({
             style={changesActive || teamActive ? undefined : activeStyle}
           >
             <Languages className="size-4 shrink-0" aria-hidden="true" />
-            Strings
+            {t("Strings")}
           </Link>
           <Link
             to={changesPath}
@@ -197,7 +201,7 @@ export function ProductFocusWorkspace({
             style={changesActive ? activeStyle : undefined}
           >
             <GitPullRequest className="size-4 shrink-0" aria-hidden="true" />
-            Change sets
+            {t("Change sets")}
           </Link>
           {(principal.roles.includes("admin") ||
             principal.managed_product_ids?.includes(product.id)) && (
@@ -208,7 +212,7 @@ export function ProductFocusWorkspace({
               style={teamActive ? activeStyle : undefined}
             >
               <Users className="size-4 shrink-0" aria-hidden="true" />
-              Team
+              {t("Team")}
             </Link>
           )}
         </nav>

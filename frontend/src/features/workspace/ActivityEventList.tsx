@@ -1,3 +1,5 @@
+import { statusLabel } from "@/i18n/statusLabels";
+import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import type { ReactNode } from "react";
 import { Link, useInRouterContext } from "react-router-dom";
 import type { DashboardFeed } from "../../api/client";
@@ -13,6 +15,7 @@ export function Destination({
   to: string;
   children: ReactNode;
 }) {
+  useUiLanguage();
   const inRouter = useInRouterContext();
   return inRouter ? (
     <Link to={to} className={linkClass}>
@@ -41,19 +44,22 @@ function eventDestination(event: DashboardEvent): string {
 function eventLabel(event: DashboardEvent): string {
   switch (event.kind) {
     case "proposal_saved":
-      return "Saved a proposal";
+      return t("Saved a proposal");
     case "state_changed":
-      return `Changed review state from ${event.from_state} to ${event.to_state}`;
+      return t("Changed review state from {{v0}} to {{v1}}", {
+        v0: statusLabel(event.from_state),
+        v1: statusLabel(event.to_state),
+      });
     case "comment_created":
-      return "Added a comment";
+      return t("Added a comment");
     case "comment_edited":
-      return "Edited a comment";
+      return t("Edited a comment");
     case "comment_removed":
-      return "Removed a comment";
+      return t("Removed a comment");
     case "change_set_submitted":
-      return "Submitted a change set";
+      return t("Submitted a change set");
     case "current_import_completed":
-      return "Current import completed";
+      return t("Current import completed");
   }
 }
 
@@ -62,6 +68,7 @@ export function ActivityEventList({
 }: {
   items: DashboardFeed["items"];
 }) {
+  useUiLanguage();
   return (
     <ul className="mt-4 divide-y">
       {items.map((event) => (
@@ -86,17 +93,18 @@ export function ActivityEventList({
           <p className="text-xs text-muted-foreground">
             {event.actor ? `${event.actor.display_name} · ` : ""}
             <time dateTime={event.occurred_at}>
-              {new Date(event.occurred_at).toLocaleString()}
+              {new Date(event.occurred_at).toLocaleString(getUiLanguage())}
             </time>
           </p>
           {event.kind === "change_set_submitted" ? (
             <p className="text-sm text-muted-foreground">
-              Current status: {event.current_status.replaceAll("_", " ")}
+              {t("Current status: ")}
+              {statusLabel(event.current_status)}
             </p>
           ) : null}
           {"comment_status" in event && event.comment_status === "removed" ? (
             <p className="text-sm text-muted-foreground">
-              Comment no longer available
+              {t("Comment no longer available")}
             </p>
           ) : null}
         </li>

@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import {
   useCallback,
   useEffect,
@@ -102,11 +103,21 @@ type PublicationBlocker =
   | "target_configuration_invalid";
 
 const JOB_LABELS: Record<AdminPreviewJobResponse["state"], string> = {
-  failed: "Failed",
-  queued: "Queued",
-  running: "Running",
-  succeeded: "Succeeded",
-  timed_out: "Timed out",
+  get failed() {
+    return t("Failed");
+  },
+  get queued() {
+    return t("Queued");
+  },
+  get running() {
+    return t("Running");
+  },
+  get succeeded() {
+    return t("Succeeded");
+  },
+  get timed_out() {
+    return t("Timed out");
+  },
 };
 
 function hasActionableDuplicateReport(
@@ -125,16 +136,28 @@ const FORMAT_LABELS: Record<
   android_xml: "Android XML",
   ios_strings: "iOS strings",
   json: "JSON",
-  qt_ts: "Qt TS",
+  get qt_ts() {
+    return t("Qt TS");
+  },
   xliff: "XLIFF",
 };
 
 const BLOCKER_LABELS: Record<PublicationBlocker, string> = {
-  layout_required: "Layout selection required",
-  mapping_configuration_invalid: "Mapping configuration invalid",
-  mappings_required: "At least one mapping is required",
-  preview_confirmation_required: "Preview confirmation required",
-  target_configuration_invalid: "Target configuration invalid",
+  get layout_required() {
+    return t("Layout selection required");
+  },
+  get mapping_configuration_invalid() {
+    return t("Mapping configuration invalid");
+  },
+  get mappings_required() {
+    return t("At least one mapping is required");
+  },
+  get preview_confirmation_required() {
+    return t("Preview confirmation required");
+  },
+  get target_configuration_invalid() {
+    return t("Target configuration invalid");
+  },
 };
 
 function detectedLanguages(
@@ -380,6 +403,7 @@ function PreviewAlert({
   title: string;
   tone?: "error" | "warning";
 }) {
+  useUiLanguage();
   return (
     <Alert
       variant={tone === "error" ? "destructive" : "default"}
@@ -404,22 +428,24 @@ function DuplicateValidationAlert({
 }: {
   summary: DuplicateReportSummary;
 }) {
+  useUiLanguage();
   const groupLabel = summary.group_count === 1 ? "group" : "groups";
   const occurrenceLabel =
     summary.repeated_occurrences === 1 ? "occurrence" : "occurrences";
   return summary.group_count > 0 ? (
-    <PreviewAlert title="Duplicate keys detected" tone="warning">
-      {summary.group_count} duplicate {groupLabel} and{" "}
-      {summary.repeated_occurrences} repeated {occurrenceLabel} were found in
-      this mapping. Unique strings remain available while duplicate identities
-      are quarantined. Open “View duplicate keys” to inspect them and correct
-      the source repository.
+    <PreviewAlert title={t("Duplicate keys detected")} tone="warning">
+      {summary.group_count} {t(" duplicate ")}
+      {groupLabel} {t(" and")} {summary.repeated_occurrences} {t(" repeated ")}
+      {occurrenceLabel}{" "}
+      {t(
+        " were found in this mapping. Unique strings remain available while duplicate identities are quarantined. Open “View duplicate keys” to inspect them and correct the source repository.",
+      )}
     </PreviewAlert>
   ) : (
-    <PreviewAlert title="Duplicate-key scan incomplete">
-      Duplicate-key validation could not inspect the complete mapping. Review
-      the diagnostic details, correct the source repository, then run validation
-      again.
+    <PreviewAlert title={t("Duplicate-key scan incomplete")}>
+      {t(
+        "Duplicate-key validation could not inspect the complete mapping. Review the diagnostic details, correct the source repository, then run validation again.",
+      )}
     </PreviewAlert>
   );
 }
@@ -431,6 +457,7 @@ function SourceDetails({
   candidates: readonly AdminPreviewLayoutCandidateResponse[];
   job: { repository_sides: AdminPreviewJobResponse["repository_sides"] };
 }) {
+  useUiLanguage();
   const languages = detectedLanguages(candidates);
   const files = candidates.flatMap((candidate) =>
     candidate.files.map((path) => ({
@@ -442,24 +469,29 @@ function SourceDetails({
   const formats = [...new Set(files.map((file) => file.format))];
   return (
     <section
-      aria-label="Files, languages and source details"
+      aria-label={t("Files, languages and source details")}
       className="grid min-w-0 gap-5"
     >
       <div className="grid gap-2">
         <h3 className="text-heading font-semibold">
-          Files, languages and source details
+          {t("Files, languages and source details")}
         </h3>
         <p className="text-muted-foreground">
-          {files.length} files · {languages.length} languages ·{" "}
-          {formats.join(", ")}
+          {files.length} {t(" files · ")}
+          {languages.length} {t(" languages ·")} {formats.join(", ")}
         </p>
         <p>
-          Choose the base language. All detected languages will be imported.
+          {t(
+            "Choose the base language. All detected languages will be imported.",
+          )}
         </p>
       </div>
       <div className="grid gap-2">
-        <h4 className="font-medium">Languages to import</h4>
-        <ul aria-label="Languages to import" className="flex flex-wrap gap-2">
+        <h4 className="font-medium">{t("Languages to import")}</h4>
+        <ul
+          aria-label={t("Languages to import")}
+          className="flex flex-wrap gap-2"
+        >
           {languages.map((language) => (
             <li key={language}>
               <Badge variant="outline">{language}</Badge>
@@ -472,7 +504,7 @@ function SourceDetails({
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <p className="min-w-0 break-words">
               <span className="font-medium">
-                {side.role === "keys" ? "Key files" : "Translation files"}
+                {side.role === "keys" ? t("Key files") : t("Translation files")}
               </span>{" "}
               · {side.source_branch}
             </p>
@@ -482,8 +514,8 @@ function SourceDetails({
               className="font-mono text-xs"
               aria-label={
                 job.repository_sides.length === 1
-                  ? "Copy full commit"
-                  : `Copy ${side.role} commit`
+                  ? t("Copy full commit")
+                  : t("Copy {{v0}} commit", { v0: side.role })
               }
               onClick={() =>
                 void navigator.clipboard?.writeText(side.commit_hash)
@@ -495,7 +527,7 @@ function SourceDetails({
           <div
             // Long file collections scroll locally and remain keyboard accessible.
             role="region"
-            aria-label={`${side.role} files`}
+            aria-label={t("{{v0}} files", { v0: side.role })}
             // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
             tabIndex={0}
             className="max-h-72 min-w-0 overflow-y-auto rounded-md border outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -537,6 +569,7 @@ function BaseLanguageSelect({
   onValueChange: (value: string) => void;
   value: string;
 }) {
+  useUiLanguage();
   const guidanceId = `${controlId}-guidance`;
   const errorId = `${controlId}-error`;
   const required = value === "";
@@ -544,14 +577,14 @@ function BaseLanguageSelect({
 
   return (
     <div className="grid gap-2">
-      <Label htmlFor={controlId}>Base language</Label>
+      <Label htmlFor={controlId}>{t("Base language")}</Label>
       {hasDefault ? (
         <Input
           id={controlId}
           className="min-h-[44px] w-full min-w-0 motion-reduce:transition-none"
           value={value}
           onChange={(event) => onValueChange(event.target.value)}
-          placeholder="For example, en or en-US"
+          placeholder={t("For example, en or en-US")}
           autoCapitalize="none"
           spellCheck={false}
           aria-describedby={`${guidanceId}${invalid ? ` ${errorId}` : ""}`}
@@ -565,7 +598,7 @@ function BaseLanguageSelect({
             aria-describedby={`${guidanceId}${required ? ` ${errorId}` : ""}`}
             aria-invalid={required}
           >
-            <SelectValue placeholder="Select base language" />
+            <SelectValue placeholder={t("Select base language")} />
           </SelectTrigger>
           <SelectContent className="motion-reduce:animate-none motion-reduce:transition-none">
             {languages.map((language) => (
@@ -582,14 +615,18 @@ function BaseLanguageSelect({
       )}
       <p id={guidanceId} className="text-muted-foreground">
         {hasDefault
-          ? "Enter the language of the default source files, for example en or en-US. All other languages are imported too."
-          : "Used as the reference language for translation limits. All other languages are imported too."}
+          ? t(
+              "Enter the language of the default source files, for example en or en-US. All other languages are imported too.",
+            )
+          : t(
+              "Used as the reference language for translation limits. All other languages are imported too.",
+            )}
       </p>
       {invalid ? (
         <p id={errorId} className="font-semibold text-warning">
           {required
-            ? "Base language required"
-            : "Enter a canonical language code, for example en or en-US"}
+            ? t("Base language required")
+            : t("Enter a canonical language code, for example en or en-US")}
         </p>
       ) : null}
     </div>
@@ -607,6 +644,7 @@ function PreviewJobView({
   onConfirmed: (confirmed: boolean) => void;
   onRetry: () => void;
 }) {
+  useUiLanguage();
   const [announcement, setAnnouncement] = useState("");
   const [baseLanguageChoice, setSelectedBaseLanguage] = useState("");
   const [confirmPending, setConfirmPending] = useState(false);
@@ -755,7 +793,7 @@ function PreviewJobView({
   return (
     <div className="grid gap-6">
       <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {announcement}
+        {t(announcement)}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Badge variant="outline" className="w-fit rounded-md">
@@ -766,13 +804,13 @@ function PreviewJobView({
         job.state !== "succeeded" &&
         job.state !== "timed_out" ? (
           <div className="flex flex-wrap items-center gap-3">
-            <span>Automatic updates paused</span>
+            <span>{t("Automatic updates paused")}</span>
             <Button
               type="button"
               variant="outline"
               onClick={() => void refreshStatus()}
             >
-              Refresh status
+              {t("Refresh status")}
             </Button>
           </div>
         ) : null}
@@ -780,7 +818,7 @@ function PreviewJobView({
 
       {job.state === "queued" || job.state === "running" ? (
         <div className="grid gap-3" role="status">
-          <p className="font-medium">Reading files and strings…</p>
+          <p className="font-medium">{t("Reading files and strings…")}</p>
           <Skeleton className="h-2 w-full" />
         </div>
       ) : null}
@@ -795,40 +833,48 @@ function PreviewJobView({
       ) : null}
 
       {pollingError ? (
-        <PreviewAlert title="Status unavailable">
-          Automatic updates paused. Refresh status when the connection is
-          available.
+        <PreviewAlert title={t("Status unavailable")}>
+          {t(
+            "Automatic updates paused. Refresh status when the connection is available.",
+          )}
         </PreviewAlert>
       ) : null}
 
       {job.state === "timed_out" ? (
-        <PreviewAlert title="Validation timed out">
+        <PreviewAlert title={t("Validation timed out")}>
           <p>
-            Validation timed out before the repository could be checked safely.
+            {t(
+              "Validation timed out before the repository could be checked safely.",
+            )}
           </p>
           <Button type="button" variant="outline" onClick={onRetry}>
-            Retry validation
+            {t("Retry validation")}
           </Button>
         </PreviewAlert>
       ) : null}
 
       {job.state === "failed" ? (
-        <PreviewAlert title="Validation did not complete">
+        <PreviewAlert title={t("Validation did not complete")}>
           <p>
             {job.diagnostic_code === "repository_scan_limit_reached"
-              ? "The repository scan limit was reached. Set a narrower localization root in the mapping, then retry validation."
-              : "Validation did not complete. Review the reason, then retry."}
+              ? t(
+                  "The repository scan limit was reached. Set a narrower localization root in the mapping, then retry validation.",
+                )
+              : t(
+                  "Validation did not complete. Review the reason, then retry.",
+                )}
           </p>
           <Button type="button" variant="outline" onClick={onRetry}>
-            Retry validation
+            {t("Retry validation")}
           </Button>
         </PreviewAlert>
       ) : null}
 
       {job.state === "succeeded" && !job.is_current ? (
-        <PreviewAlert title="Preview out of date">
-          This preview no longer matches the current draft. Run validation
-          again.
+        <PreviewAlert title={t("Preview out of date")}>
+          {t(
+            "This preview no longer matches the current draft. Run validation again.",
+          )}
         </PreviewAlert>
       ) : null}
 
@@ -844,8 +890,10 @@ function PreviewJobView({
       job.is_current &&
       candidates.length === 0 &&
       !duplicateReportActionable ? (
-        <PreviewAlert title="No supported layout">
-          No supported localization layout was found in this source branch.
+        <PreviewAlert title={t("No supported layout")}>
+          {t(
+            "No supported localization layout was found in this source branch.",
+          )}
         </PreviewAlert>
       ) : null}
 
@@ -854,16 +902,18 @@ function PreviewJobView({
       candidates.length > 0 &&
       !candidatesAreExact &&
       !hasMissingBaseLanguage ? (
-        <PreviewAlert title="Preview cannot be confirmed">
-          This preview cannot be confirmed. Review the selected repository and
-          branch, then run validation again.
+        <PreviewAlert title={t("Preview cannot be confirmed")}>
+          {t(
+            "This preview cannot be confirmed. Review the selected repository and branch, then run validation again.",
+          )}
         </PreviewAlert>
       ) : null}
 
       {job.state === "succeeded" && job.is_current && hasMissingBaseLanguage ? (
-        <PreviewAlert title="Base language required">
-          No detected language is available for this preview candidate. Run
-          validation again.
+        <PreviewAlert title={t("Base language required")}>
+          {t(
+            "No detected language is available for this preview candidate. Run validation again.",
+          )}
         </PreviewAlert>
       ) : null}
 
@@ -892,11 +942,11 @@ function PreviewJobView({
               aria-busy={confirmPending}
               onClick={() => void submitConfirmation()}
             >
-              Confirm preview
+              {t("Confirm preview")}
             </Button>
             {confirmed ? (
               <Badge variant="outline" className="w-fit rounded-md">
-                Confirmed
+                {t("Confirmed")}
               </Badge>
             ) : null}
           </div>
@@ -906,20 +956,24 @@ function PreviewJobView({
               tabIndex={-1}
               aria-label={
                 confirmError === "base_language_required"
-                  ? "Base language required"
-                  : "Preview not confirmed"
+                  ? t("Base language required")
+                  : t("Preview not confirmed")
               }
               variant="destructive"
             >
               <AlertTitle>
                 {confirmError === "base_language_required"
-                  ? "Base language required"
-                  : "Preview not confirmed"}
+                  ? t("Base language required")
+                  : t("Preview not confirmed")}
               </AlertTitle>
               <AlertDescription>
                 {confirmError === "base_language_required"
-                  ? "The selected base language is no longer available. Choose a detected language and confirm the preview again."
-                  : "This preview no longer matches the current draft. Run validation again."}
+                  ? t(
+                      "The selected base language is no longer available. Choose a detected language and confirm the preview again.",
+                    )
+                  : t(
+                      "This preview no longer matches the current draft. Run validation again.",
+                    )}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -936,7 +990,7 @@ function sourceName(
   const repository = repositories.find(
     (item) => item.id === mapping.primary_repository_id,
   );
-  return `${repository?.descriptive_name || repository?.repository_slug || "Source"} · ${mapping.primary_source_branch}`;
+  return `${repository?.descriptive_name || repository?.repository_slug || t("Source")} · ${mapping.primary_source_branch}`;
 }
 
 function useSourceRepositories(
@@ -1007,6 +1061,7 @@ function MappingPreview({
   revisionId: string;
   revisionVersion: number;
 }) {
+  useUiLanguage();
   const runGenerationRef = useRef(0);
   const runPendingRef = useRef(false);
   const restoreGenerationRef = useRef(0);
@@ -1169,9 +1224,10 @@ function MappingPreview({
           </h2>
           <p className="text-muted-foreground">
             {mapping.topology === "direct"
-              ? "One repository"
-              : "Separate repositories"}{" "}
-            · Source branch: {mapping.primary_source_branch}
+              ? t("One repository")
+              : t("Separate repositories")}{" "}
+            {t("· Source branch: ")}
+            {mapping.primary_source_branch}
           </p>
         </div>
         {job !== null && !["queued", "running"].includes(job.state) ? (
@@ -1182,34 +1238,36 @@ function MappingPreview({
             aria-busy={runPending}
             onClick={() => void runValidation()}
           >
-            Refresh preview
+            {t("Refresh preview")}
           </Button>
         ) : null}
       </div>
 
       {restoreError ? (
-        <PreviewAlert title="Preview status unavailable">
+        <PreviewAlert title={t("Preview status unavailable")}>
           <p>
-            We could not check the latest analysis. Retry to resume it safely.
+            {t(
+              "We could not check the latest analysis. Retry to resume it safely.",
+            )}
           </p>
           <Button
             type="button"
             variant="outline"
             onClick={() => setRestoreAttempt((attempt) => attempt + 1)}
           >
-            Retry preview status
+            {t("Retry preview status")}
           </Button>
         </PreviewAlert>
       ) : runError ? (
-        <PreviewAlert title="Validation did not complete">
-          <p>The source could not be read. Try again.</p>
+        <PreviewAlert title={t("Validation did not complete")}>
+          <p>{t("The source could not be read. Try again.")}</p>
           <Button
             type="button"
             variant="outline"
             disabled={runPending}
             onClick={() => void runValidation()}
           >
-            Retry validation
+            {t("Retry validation")}
           </Button>
         </PreviewAlert>
       ) : null}
@@ -1219,13 +1277,15 @@ function MappingPreview({
       (job === null && !runError && !restoreError) ? (
         <div className="grid gap-3" role="status" aria-live="polite">
           <p className="font-medium">
-            {restorePending ? "Checking source…" : "Reading files and strings…"}
+            {restorePending
+              ? t("Checking source…")
+              : t("Reading files and strings…")}
           </p>
           <Skeleton className="h-2 w-full" />
           <p className="text-sm text-muted-foreground">
             {!collectionReady
-              ? "Loading your sources before starting the analysis."
-              : "The preview will appear here automatically."}
+              ? t("Loading your sources before starting the analysis.")
+              : t("The preview will appear here automatically.")}
           </p>
         </div>
       ) : job !== null ? (
@@ -1262,6 +1322,7 @@ function PublishedMappingRecovery({
   revisionId: string;
   revisionVersion: number;
 }) {
+  useUiLanguage();
   const runButtonRef = useRef<HTMLButtonElement>(null);
   const runGenerationRef = useRef(0);
   const runPendingRef = useRef(false);
@@ -1611,12 +1672,12 @@ function PublishedMappingRecovery({
     >
       <div
         role="status"
-        aria-label="Active revision recovery status"
+        aria-label={t("Active revision recovery status")}
         aria-live="polite"
         aria-atomic="true"
         className="sr-only"
       >
-        {announcement}
+        {t(announcement)}
       </div>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid gap-1">
@@ -1627,17 +1688,17 @@ function PublishedMappingRecovery({
             {sourceName}
           </h2>
           <p className="text-muted-foreground">
-            {mapping.topology === "direct" ? "Direct" : "Separate"} published
-            mapping
+            {mapping.topology === "direct" ? t("Direct") : t("Separate")}{" "}
+            {t(" published mapping")}
           </p>
         </div>
         {eligibilityReady && isCurrent ? (
           <Badge variant="outline" className="w-fit rounded-md">
-            Confirmed
+            {t("Confirmed")}
           </Badge>
         ) : !eligibilityReady ? (
           <Badge variant="outline" className="w-fit rounded-md">
-            Checking confirmation
+            {t("Checking confirmation")}
           </Badge>
         ) : (
           <Button
@@ -1647,36 +1708,37 @@ function PublishedMappingRecovery({
             aria-busy={runPending}
             onClick={() => void runValidationAgain()}
           >
-            Run validation again
+            {t("Run validation again")}
           </Button>
         )}
       </div>
 
       {eligibilityReady && !isCurrent ? (
-        <PreviewAlert title="Preview out of date">
-          This preview no longer matches the current draft. Run validation
-          again.
+        <PreviewAlert title={t("Preview out of date")}>
+          {t(
+            "This preview no longer matches the current draft. Run validation again.",
+          )}
         </PreviewAlert>
       ) : null}
 
       {runError ? (
-        <PreviewAlert title="Validation did not complete">
-          Validation did not complete. Try again.
+        <PreviewAlert title={t("Validation did not complete")}>
+          {t("Validation did not complete. Try again.")}
         </PreviewAlert>
       ) : null}
 
       {pollingError ? (
-        <PreviewAlert title="Status unavailable">
-          Validation status is unavailable. Try again.
+        <PreviewAlert title={t("Status unavailable")}>
+          {t("Validation status is unavailable. Try again.")}
         </PreviewAlert>
       ) : null}
 
       {restorePending && !isCurrent ? (
         <div className="grid gap-2" role="status" aria-live="polite">
           <h3 className="text-heading font-semibold">
-            Restoring validation status
+            {t("Restoring validation status")}
           </h3>
-          <p className="text-muted-foreground">Checking validation…</p>
+          <p className="text-muted-foreground">{t("Checking validation…")}</p>
         </div>
       ) : job === null || isCurrent ? null : (
         <div className="grid gap-6">
@@ -1694,17 +1756,20 @@ function PublishedMappingRecovery({
           ) : null}
 
           {job.state === "failed" || job.state === "timed_out" ? (
-            <PreviewAlert title="Validation did not complete">
+            <PreviewAlert title={t("Validation did not complete")}>
               {job.diagnostic_code === "repository_scan_limit_reached"
-                ? "The repository scan limit was reached. Set a narrower localization root in the mapping, then run validation again."
-                : "Validation did not complete. Run validation again."}
+                ? t(
+                    "The repository scan limit was reached. Set a narrower localization root in the mapping, then run validation again.",
+                  )
+                : t("Validation did not complete. Run validation again.")}
             </PreviewAlert>
           ) : null}
 
           {job.state === "succeeded" && hasMissingBaseLanguage ? (
-            <PreviewAlert title="Base language required">
-              No detected language is available for this preview candidate. Run
-              validation again.
+            <PreviewAlert title={t("Base language required")}>
+              {t(
+                "No detected language is available for this preview candidate. Run validation again.",
+              )}
             </PreviewAlert>
           ) : null}
 
@@ -1733,11 +1798,11 @@ function PublishedMappingRecovery({
                   aria-busy={confirmPending}
                   onClick={() => void submitConfirmation()}
                 >
-                  Confirm preview
+                  {t("Confirm preview")}
                 </Button>
                 {confirmed ? (
                   <Badge variant="outline" className="w-fit rounded-md">
-                    Confirmed
+                    {t("Confirmed")}
                   </Badge>
                 ) : null}
               </div>
@@ -1750,20 +1815,22 @@ function PublishedMappingRecovery({
               tabIndex={-1}
               aria-label={
                 confirmError === "base_language_required"
-                  ? "Base language required"
-                  : "Preview not confirmed"
+                  ? t("Base language required")
+                  : t("Preview not confirmed")
               }
               variant="destructive"
             >
               <AlertTitle>
                 {confirmError === "base_language_required"
-                  ? "Base language required"
-                  : "Preview not confirmed"}
+                  ? t("Base language required")
+                  : t("Preview not confirmed")}
               </AlertTitle>
               <AlertDescription>
                 {confirmError === "base_language_required"
-                  ? "The selected base language is no longer available. Choose a detected language and confirm the preview again."
-                  : "Preview was not confirmed. Run validation again."}
+                  ? t(
+                      "The selected base language is no longer available. Choose a detected language and confirm the preview again.",
+                    )
+                  : t("Preview was not confirmed. Run validation again.")}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -1779,6 +1846,7 @@ export function ProductPreviewPage({
   embedded = false,
   onProductPublished,
 }: ProductPreviewPageProps) {
+  useUiLanguage();
   const Heading = embedded ? "h2" : "h1";
   const routeProductId = useParams<"productId">().productId;
   const resolvedProductId = productId ?? routeProductId;
@@ -1998,12 +2066,12 @@ export function ProductPreviewPage({
               : "text-display font-semibold"
           }
         >
-          Preview and import
+          {t("Preview and import")}
         </Heading>
         <div className="grid gap-4" role="status" aria-live="polite">
           <Skeleton className="h-8 w-48 max-w-full" />
           <Skeleton className="h-56 w-full" />
-          <span>Loading product preview</span>
+          <span>{t("Loading product preview")}</span>
         </div>
       </section>
     );
@@ -2019,15 +2087,15 @@ export function ProductPreviewPage({
               : "text-display font-semibold"
           }
         >
-          Preview and import
+          {t("Preview and import")}
         </Heading>
-        <PreviewAlert title="Product preview unavailable">
+        <PreviewAlert title={t("Product preview unavailable")}>
           <Button
             type="button"
             variant="outline"
             onClick={() => void loadPage()}
           >
-            Retry loading page
+            {t("Retry loading page")}
           </Button>
         </PreviewAlert>
       </section>
@@ -2044,12 +2112,12 @@ export function ProductPreviewPage({
               : "text-display font-semibold"
           }
         >
-          Preview and import
+          {t("Preview and import")}
         </Heading>
         <div className="grid gap-4" role="status" aria-live="polite">
           <Skeleton className="h-8 w-48 max-w-full" />
           <Skeleton className="h-56 w-full" />
-          <span>Loading product preview</span>
+          <span>{t("Loading product preview")}</span>
         </div>
       </section>
     );
@@ -2065,15 +2133,15 @@ export function ProductPreviewPage({
               : "text-display font-semibold"
           }
         >
-          Preview and import
+          {t("Preview and import")}
         </Heading>
-        <PreviewAlert title="Product preview unavailable">
+        <PreviewAlert title={t("Product preview unavailable")}>
           <Button
             type="button"
             variant="outline"
             onClick={() => void reloadMappings()}
           >
-            Retry loading page
+            {t("Retry loading page")}
           </Button>
         </PreviewAlert>
       </section>
@@ -2111,8 +2179,8 @@ export function ProductPreviewPage({
           (mapping) => reactivationMappingCurrentness.get(mapping.id) === true,
         )
       : mappings.every((mapping) => confirmationState[mapping.id] === true));
-  const publishLabel = "Import strings";
-  const actionLabel = isReactivation ? "Reactivate product" : publishLabel;
+  const publishLabel = t("Import strings");
+  const actionLabel = isReactivation ? t("Reactivate product") : publishLabel;
   const showAction =
     isReactivation || currentProduct.candidate_revision !== null;
 
@@ -2160,7 +2228,7 @@ export function ProductPreviewPage({
       setPublicationOpen(false);
       onProductPublished?.(result.data);
       toast.success(
-        isReactivation ? "Product reactivated" : "Product published",
+        isReactivation ? t("Product reactivated") : t("Product published"),
       );
     } catch {
       if (submissionGeneration === loadGenerationRef.current) {
@@ -2185,22 +2253,31 @@ export function ProductPreviewPage({
                 : "text-display font-semibold"
             }
           >
-            Preview and import
+            {t("Preview and import")}
           </Heading>
           <p className="break-words text-muted-foreground">
             {isPublished
-              ? `Follow the import for ${currentProduct.name} and open its strings when ready.`
+              ? t(
+                  "Follow the import for {{v0}} and open its strings when ready.",
+                  { v0: currentProduct.name },
+                )
               : isReactivation
-                ? `Review the confirmed published configuration for ${currentProduct.name}.`
-                : `We read the sources for ${currentProduct.name} automatically. Review the detected files and languages, then choose the base language.`}
+                ? t(
+                    "Review the confirmed published configuration for {{v0}}.",
+                    { v0: currentProduct.name },
+                  )
+                : t(
+                    "We read the sources for {{v0}} automatically. Review the detected files and languages, then choose the base language.",
+                    { v0: currentProduct.name },
+                  )}
           </p>
         </div>
         <Badge variant="outline" className="w-fit rounded-md">
           {currentProduct.is_active
-            ? "Active"
+            ? t("Active")
             : isReactivation
-              ? "Inactive"
-              : "Draft"}
+              ? t("Inactive")
+              : t("Draft")}
         </Badge>
       </div>
 
@@ -2218,14 +2295,14 @@ export function ProductPreviewPage({
               <Link
                 to={`/products/${encodeURIComponent(readyState.productId)}/strings`}
               >
-                Open product strings
+                {t("Open product strings")}
               </Link>
             </Button>
             <Button asChild variant="outline">
               <Link
                 to={`/admin/products/${encodeURIComponent(readyState.productId)}/edit`}
               >
-                Edit configuration
+                {t("Edit configuration")}
               </Link>
             </Button>
           </div>
@@ -2233,23 +2310,28 @@ export function ProductPreviewPage({
       ) : null}
 
       {!collectionReady && !mappingLoadMoreError ? (
-        <Alert aria-label="Loading complete mapping set">
-          <AlertTitle>Loading all mappings</AlertTitle>
+        <Alert aria-label={t("Loading complete mapping set")}>
+          <AlertTitle>{t("Loading all mappings")}</AlertTitle>
           <AlertDescription>
-            Loading complete mapping set: {mappings.length}{" "}
-            {mappings.length === 1 ? "mapping" : "mappings"} loaded.
+            {t("Loading complete mapping set: ")}
+            {mappings.length} {mappings.length === 1 ? "mapping" : "mappings"}{" "}
+            {t(" loaded.")}
           </AlertDescription>
         </Alert>
       ) : null}
 
       {mappingLoadMoreError ? (
-        <Alert variant="destructive" aria-label="Mapping collection incomplete">
-          <AlertTitle>Mapping collection incomplete</AlertTitle>
+        <Alert
+          variant="destructive"
+          aria-label={t("Mapping collection incomplete")}
+        >
+          <AlertTitle>{t("Mapping collection incomplete")}</AlertTitle>
           <AlertDescription>
             <p>
               {mappings.length} {mappings.length === 1 ? "mapping" : "mappings"}{" "}
-              loaded. The complete revision mapping set is required before
-              validation or lifecycle actions are available.
+              {t(
+                "loaded. The complete revision mapping set is required before validation or lifecycle actions are available.",
+              )}
             </p>
             <Button
               type="button"
@@ -2258,35 +2340,39 @@ export function ProductPreviewPage({
               aria-busy={mappingLoadingMore}
               onClick={() => void loadMoreMappings()}
             >
-              Retry loading mappings
+              {t("Retry loading mappings")}
             </Button>
           </AlertDescription>
         </Alert>
       ) : null}
 
       {isReactivation && reactivationEligibilityState.status === "error" ? (
-        <PreviewAlert title="Reactivation status unavailable">
-          <p>The current confirmation state could not be checked. Try again.</p>
+        <PreviewAlert title={t("Reactivation status unavailable")}>
+          <p>
+            {t(
+              "The current confirmation state could not be checked. Try again.",
+            )}
+          </p>
           <Button
             type="button"
             variant="outline"
             onClick={() => void loadReactivationEligibility()}
           >
-            Retry confirmation check
+            {t("Retry confirmation check")}
           </Button>
         </PreviewAlert>
       ) : null}
 
       {isPublished ? null : collectionReady && mappings.length === 0 ? (
         <Alert>
-          <AlertTitle>No mappings configured</AlertTitle>
+          <AlertTitle>{t("No mappings configured")}</AlertTitle>
           <AlertDescription>
-            <p>Add a translation source before previewing its files.</p>
+            <p>{t("Add a translation source before previewing its files.")}</p>
             <Button asChild variant="outline">
               <Link
                 to={`/admin/products/${encodeURIComponent(readyState.productId)}/mappings`}
               >
-                Configure translation sources
+                {t("Configure translation sources")}
               </Link>
             </Button>
           </AlertDescription>
@@ -2325,14 +2411,14 @@ export function ProductPreviewPage({
       )}
 
       {publicationError ? (
-        <PreviewAlert title="Publication did not complete">
-          The current product configuration remains unchanged. Try again.
+        <PreviewAlert title={t("Publication did not complete")}>
+          {t("The current product configuration remains unchanged. Try again.")}
         </PreviewAlert>
       ) : null}
 
       {blockers.length > 0 ? (
-        <Alert variant="destructive" aria-label="Publication blocked">
-          <AlertTitle>Publication blocked</AlertTitle>
+        <Alert variant="destructive" aria-label={t("Publication blocked")}>
+          <AlertTitle>{t("Publication blocked")}</AlertTitle>
           <AlertDescription>
             <ul className="grid gap-2">
               {blockers.map((blocker) => (
@@ -2346,7 +2432,8 @@ export function ProductPreviewPage({
                     className="text-accent underline"
                     href={`#preview-${mapping.id}`}
                   >
-                    Review {sourceName(mapping, repositories)}
+                    {t("Review ")}
+                    {sourceName(mapping, repositories)}
                   </a>
                 </li>
               ))}
@@ -2359,8 +2446,10 @@ export function ProductPreviewPage({
         <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-6">
           <p className="text-sm text-muted-foreground">
             {allConfirmed
-              ? "Your sources are confirmed and ready to import."
-              : "Choose a base language and confirm the sources above to continue."}
+              ? t("Your sources are confirmed and ready to import.")
+              : t(
+                  "Choose a base language and confirm the sources above to continue.",
+                )}
           </p>
           <Button
             type="button"
@@ -2386,18 +2475,26 @@ export function ProductPreviewPage({
             <AlertDialogHeader>
               <AlertDialogTitle>
                 {isReactivation
-                  ? `Reactivate ${currentProduct.name}?`
-                  : `Import strings for ${currentProduct.name}?`}
+                  ? t("Reactivate {{v0}}?", { v0: currentProduct.name })
+                  : t("Import strings for {{v0}}?", {
+                      v0: currentProduct.name,
+                    })}
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {isReactivation
-                  ? "Its confirmed published mappings will resume operating."
-                  : `Save this configuration and import strings from ${mappings.length} confirmed ${mappings.length === 1 ? "source" : "sources"}. Progress will appear on this page.`}
+                  ? t("Its confirmed published mappings will resume operating.")
+                  : t(
+                      "Save this configuration and import strings from {{v0}} confirmed {{v1}}. Progress will appear on this page.",
+                      {
+                        v0: mappings.length,
+                        v1: mappings.length === 1 ? t("source") : t("sources"),
+                      },
+                    )}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel disabled={publicationPending}>
-                Cancel
+                {t("Cancel")}
               </AlertDialogCancel>
               <Button
                 type="button"

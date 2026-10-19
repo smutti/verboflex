@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom/vitest";
+import { UI_LANGUAGES, setUiLanguage, t } from "@/i18n";
 
 import {
   act,
@@ -129,6 +130,21 @@ function capabilityRow(profile: HTMLElement, label: string) {
 }
 
 describe("administrator Bitbucket connection page", () => {
+  it.each(UI_LANGUAGES)(
+    "uses raw connection status for actions in $name",
+    async ({ code }) => {
+      setUiLanguage(code);
+      renderPage();
+      expect(
+        await screen.findByRole("button", { name: t("Connect Bitbucket") }),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("button", { name: t("Revoke connection") }),
+      ).not.toBeInTheDocument();
+      expect((await screen.findAllByText(t("Disconnected")))[0]).toBeVisible();
+    },
+  );
+
   beforeEach(() => {
     vi.mocked(getAdminBitbucketWorkspace).mockResolvedValue(
       ok({ workspace: "acme" }),
@@ -144,6 +160,7 @@ describe("administrator Bitbucket connection page", () => {
 
   afterEach(() => {
     cleanup();
+    setUiLanguage("en");
   });
 
   it("UI3-C05 renders geometry-matched capability Skeletons during initial load", async () => {

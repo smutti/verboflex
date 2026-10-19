@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -32,6 +33,7 @@ export interface ProductRepositoriesPageProps {
 }
 
 export function ProductRepositoriesPage(props: ProductRepositoriesPageProps) {
+  useUiLanguage();
   return props.productId !== undefined ? (
     <MappedProductRepositories
       accessToken={props.accessToken}
@@ -45,10 +47,15 @@ export function ProductRepositoriesPage(props: ProductRepositoriesPageProps) {
 function RepositoryProviderPicker(
   props: Omit<ProductRepositoriesPageProps, "productId">,
 ) {
+  useUiLanguage();
   const [provider, setProvider] = useState<"bitbucket" | "github">("bitbucket");
   return (
     <div className="grid gap-6">
-      <div className="flex gap-2" role="group" aria-label="Repository provider">
+      <div
+        className="flex gap-2"
+        role="group"
+        aria-label={t("Repository provider")}
+      >
         <Button
           type="button"
           variant={provider === "bitbucket" ? "default" : "outline"}
@@ -85,6 +92,7 @@ function BitbucketRepositoryPicker({
   onRepositorySelected,
   selectedRepositoryIds = [],
 }: Omit<ProductRepositoriesPageProps, "productId">) {
+  useUiLanguage();
   const searchId = useId();
   const [workspace, setWorkspace] = useState<string | null>();
   const [workspaceError, setWorkspaceError] = useState(false);
@@ -206,79 +214,86 @@ function BitbucketRepositoryPicker({
   return (
     <section
       className="grid min-w-0 gap-6"
-      aria-label="Collegamento repository Bitbucket"
+      aria-label={t("Bitbucket repository connection")}
     >
       <Heading className="text-heading font-semibold">
-        Collega a repository bitbucket
+        {t("Connect a Bitbucket repository")}
       </Heading>
       {workspaceError ? (
         <Alert variant="destructive">
-          <AlertTitle>Connessione non disponibile</AlertTitle>
+          <AlertTitle>{t("Connection unavailable")}</AlertTitle>
           <AlertDescription>
             <Button
               variant="outline"
               onClick={() => setReload((value) => value + 1)}
             >
-              Riprova
+              {t("Retry")}
             </Button>
           </AlertDescription>
         </Alert>
       ) : workspace === undefined ? (
-        <Skeleton className="h-32 w-full" aria-label="Caricamento workspace" />
+        <Skeleton className="h-32 w-full" aria-label={t("Loading workspace")} />
       ) : workspace === null ? (
         <Alert>
-          <AlertTitle>Configura il workspace Bitbucket</AlertTitle>
+          <AlertTitle>{t("Configure the Bitbucket workspace")}</AlertTitle>
           <AlertDescription>
             <Button asChild variant="outline">
-              <Link to="/admin/bitbucket">Apri connessione Bitbucket</Link>
+              <Link to="/admin/bitbucket">
+                {t("Open Bitbucket connection")}
+              </Link>
             </Button>
           </AlertDescription>
         </Alert>
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <Badge variant="outline">Workspace: {workspace}</Badge>
+            <Badge variant="outline">
+              {t("Workspace: ")}
+              {workspace}
+            </Badge>
             <Link
               className="text-sm text-primary underline"
               to="/admin/bitbucket"
             >
-              Configura workspace
+              {t("Configure workspace")}
             </Link>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor={searchId}>Cerca repository</Label>
+            <Label htmlFor={searchId}>{t("Search repositories")}</Label>
             <Input
               id={searchId}
               type="search"
               maxLength={100}
-              placeholder="Nome o slug del repository"
+              placeholder={t("Repository name or slug")}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
           {collection.status === "error" ? (
             <Alert variant="destructive">
-              <AlertTitle>Repository non disponibili</AlertTitle>
+              <AlertTitle>{t("Repositories unavailable")}</AlertTitle>
               <AlertDescription>
                 <p>
-                  Verifica il workspace e la connessione Bitbucket, poi riprova.
+                  {t(
+                    "Check the workspace and Bitbucket connection, then try again.",
+                  )}
                 </p>
                 <Button
                   variant="outline"
                   onClick={() => setReload((value) => value + 1)}
                 >
-                  Riprova
+                  {t("Retry")}
                 </Button>
               </AlertDescription>
             </Alert>
           ) : collection.status === "loading" || isSearching ? (
-            <p role="status">Ricerca repository…</p>
+            <p role="status">{t("Searching repositories…")}</p>
           ) : collection.isEmpty ? (
-            <p role="status">Nessun repository trovato.</p>
+            <p role="status">{t("No repositories found.")}</p>
           ) : (
             <div
               className="max-h-80 overflow-y-auto rounded-lg border"
-              aria-label="Repository Bitbucket"
+              aria-label={t("Bitbucket repositories")}
             >
               <ul className="divide-y">
                 {collection.items.map((repository) => {
@@ -294,7 +309,9 @@ function BitbucketRepositoryPicker({
                         type="button"
                         className="flex min-h-14 w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted focus-visible:outline-primary disabled:opacity-60"
                         disabled={pending !== null || linked}
-                        aria-label={`Collega ${repository.name}`}
+                        aria-label={t("Connect {{v0}}", {
+                          v0: repository.name,
+                        })}
                         onClick={() => void selectRepository(repository)}
                       >
                         <span className="grid min-w-0 gap-1">
@@ -307,10 +324,10 @@ function BitbucketRepositoryPicker({
                         </span>
                         <span className="shrink-0 text-sm text-primary">
                           {linked
-                            ? "Collegato"
+                            ? t("Connected")
                             : pending === repository.repository_slug
-                              ? "Collegamento…"
-                              : "Collega"}
+                              ? t("Connecting…")
+                              : t("Connect")}
                         </span>
                       </button>
                     </li>
@@ -326,29 +343,33 @@ function BitbucketRepositoryPicker({
               onClick={() => void collection.loadMore()}
             >
               {collection.loadingMore
-                ? "Caricamento…"
-                : "Carica altri repository"}
+                ? t("Loading…")
+                : t("Load more repositories")}
             </Button>
           ) : null}
           {collection.loadMoreError ? (
             <p role="alert">
-              Impossibile caricare altri risultati. Riprova: i repository già
-              caricati restano disponibili.
+              {t(
+                "Could not load more results. Retry: repositories already loaded remain available.",
+              )}
             </p>
           ) : null}
         </>
       )}
       {selectionError ? (
         <Alert variant="destructive">
-          <AlertTitle>Repository non collegato</AlertTitle>
+          <AlertTitle>{t("Repository not connected")}</AlertTitle>
           <AlertDescription>
-            Verifica la connessione e riprova a selezionare il repository.
+            {t("Check the connection and try selecting the repository again.")}
           </AlertDescription>
         </Alert>
       ) : null}
       {selected.length > 0 ? (
-        <section className="grid gap-3" aria-label="Repository collegati">
-          <h3 className="font-semibold">Repository collegati</h3>
+        <section
+          className="grid gap-3"
+          aria-label={t("Connected repositories")}
+        >
+          <h3 className="font-semibold">{t("Connected repositories")}</h3>
           <div className="flex flex-wrap gap-2">
             {selected.map((item) => (
               <Badge

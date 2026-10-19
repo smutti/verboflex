@@ -1,3 +1,5 @@
+import { t, useUiLanguage } from "@/i18n";
+import { LanguagePicker } from "@/i18n/LanguagePicker";
 import type { CurrentUserResponse } from "../../api/client";
 import {
   Boxes,
@@ -72,26 +74,44 @@ interface NavigationDestination {
 
 const WORKSPACE_DESTINATION: NavigationDestination = {
   icon: LayoutDashboard,
-  label: "Home",
+  get label() {
+    return t("Home");
+  },
   to: "/",
 };
 
 const PRODUCTS_DESTINATION: NavigationDestination = {
   icon: PackageSearch,
-  label: "Product workspace",
+  get label() {
+    return t("Product workspace");
+  },
   productFocus: true,
   to: "/products",
 };
 
 const TRANSLATIONS_DESTINATION: NavigationDestination = {
   icon: Languages,
-  label: "All translations",
+  get label() {
+    return t("All translations");
+  },
   to: "/translations",
 };
 
 const ADMINISTRATION_DESTINATIONS: NavigationDestination[] = [
-  { icon: Boxes, label: "Product configuration", to: "/admin/products" },
-  { icon: Users, label: "Users", to: "/admin/users" },
+  {
+    icon: Boxes,
+    get label() {
+      return t("Product configuration");
+    },
+    to: "/admin/products",
+  },
+  {
+    icon: Users,
+    get label() {
+      return t("Users");
+    },
+    to: "/admin/users",
+  },
   { icon: Cloud, label: "Bitbucket", to: "/admin/bitbucket" },
 ];
 
@@ -108,6 +128,7 @@ function MobileNavigationCommitObserver({
   destination: string | null;
   onCommit: () => void;
 }) {
+  useUiLanguage();
   const location = useLocation();
 
   useEffect(() => {
@@ -126,6 +147,7 @@ function DestinationContent({
   icon: Icon,
   label,
 }: Pick<NavigationDestination, "icon" | "label">) {
+  useUiLanguage();
   return (
     <>
       <Icon aria-hidden="true" />
@@ -143,6 +165,7 @@ function RoutedDestination({
   destination: NavigationDestination;
   onNavigate?: (destination: NavigationDestination) => void;
 }) {
+  useUiLanguage();
   const location = useLocation();
   const isCurrent =
     destination.to === "/"
@@ -160,7 +183,7 @@ function RoutedDestination({
     } catch {
       // Keep the raw route segment; the workspace will render it unavailable.
     }
-    const identity = productIdentity(productId, "Product");
+    const identity = productIdentity(productId, t("Product"));
     productStyle = {
       backgroundColor: identity.soft,
       borderLeftColor: identity.accent,
@@ -194,6 +217,7 @@ function DestinationLink({
   destination: NavigationDestination;
   onNavigate?: (destination: NavigationDestination) => void;
 }) {
+  useUiLanguage();
   const isWithinRouter = useInRouterContext();
 
   if (isWithinRouter) {
@@ -221,9 +245,10 @@ function WorkspaceNavigation({
   onNavigate,
   showAdministration,
 }: WorkspaceNavigationProps) {
+  useUiLanguage();
   return (
     <nav
-      aria-label="Primary navigation"
+      aria-label={t("Primary navigation")}
       className="grid w-full content-start gap-6"
     >
       <div>
@@ -246,7 +271,7 @@ function WorkspaceNavigation({
             id={administrationLabelId}
             className="px-3 text-label font-semibold text-muted-foreground"
           >
-            Administration
+            {t("Administration")}
           </h2>
           {ADMINISTRATION_DESTINATIONS.map((destination) => (
             <DestinationLink
@@ -267,6 +292,7 @@ export function AppShell({
   onLogout,
   principal,
 }: AppShellProps) {
+  useUiLanguage();
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [pendingMobileDestination, setPendingMobileDestination] = useState<
     string | null
@@ -316,14 +342,14 @@ export function AppShell({
                         variant="ghost"
                         size="icon"
                         className="lg:hidden"
-                        aria-label="Open navigation"
+                        aria-label={t("Open navigation")}
                       >
                         <Menu aria-hidden="true" />
                       </Button>
                     </SheetTrigger>
                   </TooltipTrigger>
                   {!navigationOpen && (
-                    <TooltipContent>Open navigation</TooltipContent>
+                    <TooltipContent>{t("Open navigation")}</TooltipContent>
                   )}
                 </Tooltip>
               </TooltipProvider>
@@ -339,7 +365,7 @@ export function AppShell({
                 }}
               >
                 <SheetHeader>
-                  <SheetTitle>Navigation</SheetTitle>
+                  <SheetTitle>{t("Navigation")}</SheetTitle>
                 </SheetHeader>
                 <div className="px-4">
                   <WorkspaceNavigation
@@ -356,12 +382,15 @@ export function AppShell({
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
             <NotificationPanel />
+            <LanguagePicker />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   type="button"
                   variant="ghost"
-                  aria-label={`Open user menu for ${principal.display_name}`}
+                  aria-label={t("Open user menu for {{v0}}", {
+                    v0: principal.display_name,
+                  })}
                   className="max-w-[14rem]"
                 >
                   <UserRound aria-hidden="true" />
@@ -384,7 +413,7 @@ export function AppShell({
                   </span>
                   <span
                     className="flex flex-wrap gap-1.5"
-                    aria-label="Assigned roles"
+                    aria-label={t("Assigned roles")}
                   >
                     {principal.roles.map((role) => (
                       <Badge
@@ -402,21 +431,31 @@ export function AppShell({
                   {isWithinRouter ? (
                     <Link to="/profile">
                       <UserRound aria-hidden="true" />
-                      Profile
+                      {t("Profile")}
                     </Link>
                   ) : (
                     <a href="/profile">
                       <UserRound aria-hidden="true" />
-                      Profile
+                      {t("Profile")}
                     </a>
                   )}
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   {isWithinRouter ? (
-                    <Link to="/mcp/connections">Connected apps</Link>
+                    <Link to="/mcp/connections">{t("Connected apps")}</Link>
                   ) : (
-                    <a href="/mcp/connections">Connected apps</a>
+                    <a href="/mcp/connections">{t("Connected apps")}</a>
                   )}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <a
+                    href="https://github.com/smutti/verboflex/issues/new/choose"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {t("Report a problem on GitHub")}
+                  </a>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -426,16 +465,16 @@ export function AppShell({
                   <Button
                     type="button"
                     variant="ghost"
-                    aria-label="Sign out of VerboFlex"
+                    aria-label={t("Sign out of VerboFlex")}
                     onClick={() => void onLogout()}
                   >
                     <LogOut aria-hidden="true" />
                     <span className="hidden sm:inline">
-                      Sign out of VerboFlex
+                      {t("Sign out of VerboFlex")}
                     </span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Sign out of VerboFlex</TooltipContent>
+                <TooltipContent>{t("Sign out of VerboFlex")}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>

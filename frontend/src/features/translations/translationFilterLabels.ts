@@ -1,18 +1,47 @@
+import { t } from "@/i18n";
 export const translationFilterLabels = {
   workStatus: {
-    needs_translation: "Needs translation",
-    needs_review: "Needs review",
-    source_changed: "Source changed",
+    get needs_translation() {
+      return t("Needs translation");
+    },
+    get needs_review() {
+      return t("Needs review");
+    },
+    get source_changed() {
+      return t("Source changed");
+    },
   },
-  state: { draft: "Draft", approved: "Approved", rejected: "Rejected" },
+  state: {
+    get draft() {
+      return t("Draft");
+    },
+    get approved() {
+      return t("Approved");
+    },
+    get rejected() {
+      return t("Rejected");
+    },
+  },
   violation: {
-    over_limit: "Over limit",
-    within_limit: "Within limit",
-    no_max: "No max length",
+    get over_limit() {
+      return t("Over limit");
+    },
+    get within_limit() {
+      return t("Within limit");
+    },
+    get no_max() {
+      return t("No max length");
+    },
   },
   deleted: {
-    active: "Active only",
-    deleted: "Deleted only",
-    all: "Active and deleted",
+    get active() {
+      return t("Active only");
+    },
+    get deleted() {
+      return t("Deleted only");
+    },
+    get all() {
+      return t("Active and deleted");
+    },
   },
 } as const;

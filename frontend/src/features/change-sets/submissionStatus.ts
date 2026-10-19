@@ -1,44 +1,89 @@
+import { t } from "@/i18n";
 import type { ChangeSetResponse } from "../../api/client";
 
 const statuses: Record<ChangeSetResponse["status"], string> = {
-  queued: "Queued",
-  running: "Working",
-  reconciling: "Checking submission outcome",
-  blocked: "Needs review",
-  failed: "Submission failed",
-  succeeded: "Pull request opened",
-  needs_attention: "Submission needs attention",
-  resolved: "Submission resolved",
+  get queued() {
+    return t("Queued");
+  },
+  get running() {
+    return t("Working");
+  },
+  get reconciling() {
+    return t("Checking submission outcome");
+  },
+  get blocked() {
+    return t("Needs review");
+  },
+  get failed() {
+    return t("Submission failed");
+  },
+  get succeeded() {
+    return t("Pull request opened");
+  },
+  get needs_attention() {
+    return t("Submission needs attention");
+  },
+  get resolved() {
+    return t("Submission resolved");
+  },
 };
 const stages: Record<ChangeSetResponse["stage"], string> = {
-  branch: "Creating branch",
-  commit: "Committing changes",
-  pull_request: "Opening pull request",
-  complete: "Complete",
+  get branch() {
+    return t("Creating branch");
+  },
+  get commit() {
+    return t("Committing changes");
+  },
+  get pull_request() {
+    return t("Opening pull request");
+  },
+  get complete() {
+    return t("Complete");
+  },
 };
 export const pullRequestProblems: Record<
   string,
   { title: string; detail: string }
 > = {
   pr_merge_conflicts: {
-    title: "Merge conflicts",
-    detail: "Resolve conflicts in the repository, then check status.",
+    get title() {
+      return t("Merge conflicts");
+    },
+    get detail() {
+      return t("Resolve conflicts in the repository, then check status.");
+    },
   },
   pr_content_changed: {
-    title: "PR changes need review",
-    detail: "The current PR differs from the approved changes.",
+    get title() {
+      return t("PR changes need review");
+    },
+    get detail() {
+      return t("The current PR differs from the approved changes.");
+    },
   },
   pr_check_unavailable: {
-    title: "PR check incomplete",
-    detail: "Could not verify the PR. Check status again.",
+    get title() {
+      return t("PR check incomplete");
+    },
+    get detail() {
+      return t("Could not verify the PR. Check status again.");
+    },
   },
   pr_changed_during_check: {
-    title: "PR changed during check",
-    detail: "Check status again to verify the latest commits.",
+    get title() {
+      return t("PR changed during check");
+    },
+    get detail() {
+      return t("Check status again to verify the latest commits.");
+    },
   },
   pr_identity_changed: {
-    title: "PR identity changed",
-    detail: "The PR no longer matches this submission.",
+    get title() {
+      return t("PR identity changed");
+    },
+    get detail() {
+      return t("The PR no longer matches this submission.");
+    },
   },
 };
 
@@ -53,9 +98,9 @@ export function submissionStatus(record: ChangeSetResponse) {
     record.status === "succeeded" &&
     record.pr_tracking?.content_status === "verified"
   )
-    return "Rebase verified";
+    return t("Rebase verified");
   if (record.status === "running" && record.pr_id)
-    return "Checking pull request";
+    return t("Checking pull request");
   return record.status === "running"
     ? stages[record.stage]
     : statuses[record.status];

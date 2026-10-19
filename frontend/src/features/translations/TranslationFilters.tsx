@@ -1,3 +1,4 @@
+import { t, useUiLanguage, displayLanguage } from "@/i18n";
 import { useId, useState, type ReactNode } from "react";
 import { Filter, Languages, Rows3, Columns2, X } from "lucide-react";
 import type { TranslationOptionsResponse } from "../../api/client";
@@ -32,12 +33,7 @@ interface TranslationFiltersProps {
 }
 
 function languageLabel(code: string, label: string) {
-  if (label !== code) return label;
-  try {
-    return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code;
-  } catch {
-    return code;
-  }
+  return displayLanguage(code, label);
 }
 
 export function TranslationFilters({
@@ -53,6 +49,7 @@ export function TranslationFilters({
   onChange,
   onClear,
 }: TranslationFiltersProps) {
+  useUiLanguage();
   const id = useId();
   const [filterOpen, setFilterOpen] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
@@ -67,17 +64,17 @@ export function TranslationFilters({
   const controls = [
     {
       key: "productId",
-      label: "Product",
+      label: t("Product"),
       choices: [
-        ["all", "All products"],
+        ["all", t("All products")],
         ...options.products.map((p) => [p.id, p.name]),
       ],
     },
     {
       key: "language",
-      label: "Matching language",
+      label: t("Matching language"),
       choices: [
-        ["all", "All selected languages"],
+        ["all", t("All selected languages")],
         ...languages.map((l) => [
           l.code,
           l.label === l.code ? l.code : l.label + " (" + l.code + ")",
@@ -86,31 +83,31 @@ export function TranslationFilters({
     },
     {
       key: "workStatus",
-      label: "Work queue",
+      label: t("Work queue"),
       choices: [
-        ["all", "All entries"],
+        ["all", t("All entries")],
         ...Object.entries(translationFilterLabels.workStatus),
       ],
     },
     {
       key: "state",
-      label: "Imported approval state",
+      label: t("Imported approval state"),
       choices: [
-        ["all", "Any state"],
+        ["all", t("Any state")],
         ...Object.entries(translationFilterLabels.state),
       ],
     },
     {
       key: "violation",
-      label: "Imported length status",
+      label: t("Imported length status"),
       choices: [
-        ["all", "Any length"],
+        ["all", t("Any length")],
         ...Object.entries(translationFilterLabels.violation),
       ],
     },
     {
       key: "deleted",
-      label: "Deleted status",
+      label: t("Deleted status"),
       choices: Object.entries(translationFilterLabels.deleted),
     },
   ] as const;
@@ -123,7 +120,7 @@ export function TranslationFilters({
     chips.push({
       key: "productId",
       label:
-        "Product: " +
+        t("Product: ") +
         (options.products.find((p) => p.id === filters.productId)?.name ??
           filters.productId),
       reset: null,
@@ -131,7 +128,7 @@ export function TranslationFilters({
   if (filters.language)
     chips.push({
       key: "language",
-      label: "Matching language: " + filters.language,
+      label: t("Matching language: ") + filters.language,
       reset: null,
     });
   if (filters.workStatus)
@@ -143,14 +140,15 @@ export function TranslationFilters({
   if (filters.state)
     chips.push({
       key: "state",
-      label: "Imported state: " + translationFilterLabels.state[filters.state],
+      label:
+        t("Imported state: ") + translationFilterLabels.state[filters.state],
       reset: null,
     });
   if (filters.violation)
     chips.push({
       key: "violation",
       label:
-        "Imported length: " +
+        t("Imported length: ") +
         translationFilterLabels.violation[filters.violation],
       reset: null,
     });
@@ -178,7 +176,7 @@ export function TranslationFilters({
     <div className="min-w-0 space-y-2">
       <div
         className="flex min-w-0 flex-wrap items-center gap-2"
-        aria-label="Translation toolbar"
+        aria-label={t("Translation toolbar")}
       >
         {searchControl}
         <Dialog
@@ -195,7 +193,8 @@ export function TranslationFilters({
               className="min-h-[44px]"
             >
               <Filter aria-hidden="true" />
-              Filter{chips.length ? " (" + chips.length + ")" : ""}
+              {t("Filter")}
+              {chips.length ? " (" + chips.length + ")" : ""}
             </Button>
           </DialogTrigger>
           <DialogContent
@@ -208,21 +207,21 @@ export function TranslationFilters({
                 event.preventDefault();
             }}
           >
-            <DialogTitle>Filter translations</DialogTitle>
+            <DialogTitle>{t("Filter translations")}</DialogTitle>
             <DialogDescription>
-              One language must match all filters.
+              {t("One language must match all filters.")}
             </DialogDescription>
             <div
               className="flex flex-wrap gap-2"
               role="group"
-              aria-label="Translation work queue"
+              aria-label={t("Translation work queue")}
             >
               {(
                 [
-                  [null, "All"],
-                  ["needs_translation", "Needs translation"],
-                  ["needs_review", "Needs review"],
-                  ["source_changed", "Source changed"],
+                  [null, t("All")],
+                  ["needs_translation", t("Needs translation")],
+                  ["needs_review", t("Needs review")],
+                  ["source_changed", t("Source changed")],
                 ] as const
               ).map(([value, label]) => (
                 <Button
@@ -261,13 +260,15 @@ export function TranslationFilters({
                 ))}
             </div>
             <p className="text-sm text-muted-foreground">
-              State and length use imported values; review uses drafts.
+              {t("State and length use imported values; review uses drafts.")}
             </p>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setFilterOpen(false)}>
-                Cancel
+                {t("Cancel")}
               </Button>
-              <Button onClick={() => accept(draft)}>Apply filters</Button>
+              <Button onClick={() => accept(draft)}>
+                {t("Apply filters")}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -288,22 +289,25 @@ export function TranslationFilters({
               className="min-h-[44px]"
             >
               <Languages aria-hidden="true" />
-              Languages ({visibleLanguages.length})
+              {t("Languages (")}
+              {visibleLanguages.length})
             </Button>
           </DialogTrigger>
           <DialogContent className="max-h-[85dvh] overflow-y-auto [&_button]:min-h-[44px] [&_[data-slot=dialog-close]]:min-w-[44px]">
-            <DialogTitle>Visible languages</DialogTitle>
+            <DialogTitle>{t("Visible languages")}</DialogTitle>
             <DialogDescription className="sr-only">
-              Select up to 20 languages.
+              {t("Select up to 20 languages.")}
             </DialogDescription>
             <p
               className="text-sm text-muted-foreground"
-              aria-label="Languages selected"
+              aria-label={t("Languages selected")}
             >
               {languageDraft.length}/20
             </p>
             {availableLanguagesTruncated && (
-              <p className="text-sm">Select a product for more languages.</p>
+              <p className="text-sm">
+                {t("Select a product for more languages.")}
+              </p>
             )}
             <div className="flex flex-wrap gap-2">
               <Button
@@ -311,21 +315,21 @@ export function TranslationFilters({
                 disabled={languages.length > 20}
                 onClick={() => setLanguageDraft(languages.map((l) => l.code))}
               >
-                Select all
+                {t("Select all")}
               </Button>
               <Button variant="outline" onClick={() => setLanguageDraft([])}>
-                Clear selection
+                {t("Clear selection")}
               </Button>
               <Button
                 variant="outline"
                 onClick={() => accept({ ...filters, visibleLanguages: null })}
               >
-                Use default languages
+                {t("Use default languages")}
               </Button>
             </div>
             <Input
-              aria-label="Search languages"
-              placeholder="Search languages"
+              aria-label={t("Search languages")}
+              placeholder={t("Search languages")}
               value={languageQuery}
               onChange={(event) => setLanguageQuery(event.target.value)}
             />
@@ -365,7 +369,9 @@ export function TranslationFilters({
                     </span>
                     {baseLanguage && (
                       <span className="ml-auto text-xs text-muted-foreground">
-                        {code === baseLanguage ? "Base / source" : "Target"}
+                        {code === baseLanguage
+                          ? t("Base / source")
+                          : t("Target")}
                       </span>
                     )}
                   </label>
@@ -377,17 +383,17 @@ export function TranslationFilters({
                 .includes(languageQuery.trim().toLocaleLowerCase()),
             ) && (
               <p role="status" className="text-sm text-muted-foreground">
-                No results
+                {t("No results")}
               </p>
             )}
             {languageDraft.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                Select a language.
+                {t("Select a language.")}
               </p>
             )}
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setLanguageOpen(false)}>
-                Cancel
+                {t("Cancel")}
               </Button>
               <Button
                 disabled={!languageDraft.length}
@@ -395,12 +401,16 @@ export function TranslationFilters({
                   accept({ ...filters, visibleLanguages: languageDraft })
                 }
               >
-                Apply languages
+                {t("Apply languages")}
               </Button>
             </div>
           </DialogContent>
         </Dialog>
-        <div role="group" aria-label="Translation view" className="flex gap-1">
+        <div
+          role="group"
+          aria-label={t("Translation view")}
+          className="flex gap-1"
+        >
           {(["multilingual", "bilingual"] as const).map((mode) => (
             <Button
               key={mode}
@@ -428,14 +438,14 @@ export function TranslationFilters({
               ) : (
                 <Columns2 aria-hidden="true" />
               )}
-              {mode === "multilingual" ? "Multilingual" : "Bilingual"}
+              {mode === "multilingual" ? t("Multilingual") : t("Bilingual")}
             </Button>
           ))}
         </div>
       </div>
       <div
         className="flex flex-wrap items-center gap-1"
-        aria-label="Active filters"
+        aria-label={t("Active filters")}
       >
         {chips.map((chip) => (
           <Button
@@ -443,7 +453,7 @@ export function TranslationFilters({
             variant="outline"
             size="sm"
             className="min-h-[44px] max-w-full whitespace-normal"
-            aria-label={"Remove " + chip.label}
+            aria-label={t("Remove ") + chip.label}
             onClick={() => accept({ ...filters, [chip.key]: chip.reset })}
           >
             {chip.label}
@@ -458,7 +468,7 @@ export function TranslationFilters({
           className="min-h-[44px]"
           onClick={onClear}
         >
-          Clear filters
+          {t("Clear filters")}
         </Button>
       </div>
     </div>

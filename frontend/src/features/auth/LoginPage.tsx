@@ -1,3 +1,5 @@
+import { t, useUiLanguage } from "@/i18n";
+import { LanguagePicker } from "@/i18n/LanguagePicker";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Languages } from "lucide-react";
@@ -21,6 +23,7 @@ interface LoginFormValues {
 }
 
 export function LoginPage() {
+  useUiLanguage();
   const { login } = useSession();
   const [authError, setAuthError] = useState(false);
   const form = useForm<LoginFormValues>({
@@ -106,7 +109,7 @@ export function LoginPage() {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email</FormLabel>
+                  <FormLabel>{t("Email")}</FormLabel>
                   <FormControl>
                     <Input
                       className="min-h-[44px]"
@@ -124,7 +127,7 @@ export function LoginPage() {
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Password</FormLabel>
+                  <FormLabel>{t("Password")}</FormLabel>
                   <FormControl>
                     <Input
                       className="min-h-[44px]"
@@ -139,8 +142,9 @@ export function LoginPage() {
             {authError ? (
               <Alert variant="destructive">
                 <AlertDescription>
-                  We could not sign you in. Check your email and password, then
-                  try again.
+                  {t(
+                    "We could not sign you in. Check your email and password, then try again.",
+                  )}
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -150,11 +154,14 @@ export function LoginPage() {
               disabled={form.formState.isSubmitting}
               type="submit"
             >
-              Sign in to VerboFlex
+              {t("Sign in to VerboFlex")}
             </Button>
           </form>
         </Form>
       </section>
+      <div className="absolute right-4 top-4 z-10">
+        <LanguagePicker />
+      </div>
     </main>
   );
 }

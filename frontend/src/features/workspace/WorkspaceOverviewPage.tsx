@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useInRouterContext } from "react-router-dom";
 
@@ -33,11 +34,11 @@ type AdminLoadState =
   | { authorityKey: string; status: "ready"; summaries: AdminSummaries };
 
 function loadedCount(count: number, singular: string, plural = `${singular}s`) {
-  return `${count} loaded ${count === 1 ? singular : plural}`;
+  return t(`{{count}} loaded ${count === 1 ? singular : plural}`, { count });
 }
 
 function countLabel(count: number, singular: string, plural = `${singular}s`) {
-  return `${count} ${count === 1 ? singular : plural}`;
+  return `${count} ${t(count === 1 ? singular : plural)}`;
 }
 
 function AdminDestinationLink({
@@ -47,6 +48,7 @@ function AdminDestinationLink({
   children: string;
   to: string;
 }) {
+  useUiLanguage();
   const isWithinRouter = useInRouterContext();
   const className =
     "font-semibold text-primary underline-offset-4 hover:underline focus-visible:underline";
@@ -69,6 +71,7 @@ function AdministratorSummaries({
   accessToken: string;
   principalId: string;
 }) {
+  useUiLanguage();
   const requestGeneration = useRef(0);
   const authorityKey = `${principalId}:${accessToken}`;
   const [loadState, setLoadState] = useState<AdminLoadState>({
@@ -155,10 +158,10 @@ function AdministratorSummaries({
           id="administrator-summaries-title"
           className="text-heading font-semibold"
         >
-          Project statistics
+          {t("Project statistics")}
         </h2>
         <p role="status" aria-live="polite" className="text-muted-foreground">
-          Loading administrator summaries
+          {t("Loading administrator summaries")}
         </p>
       </section>
     );
@@ -172,7 +175,7 @@ function AdministratorSummaries({
         aria-labelledby="administrator-summaries-error-title"
       >
         <AlertTitle id="administrator-summaries-error-title">
-          Administrator summaries unavailable
+          {t("Administrator summaries unavailable")}
         </AlertTitle>
         <AlertDescription className="grid gap-3">
           <Button
@@ -181,7 +184,7 @@ function AdministratorSummaries({
             className="w-fit"
             onClick={() => void loadSummaries()}
           >
-            Retry administrator summaries
+            {t("Retry administrator summaries")}
           </Button>
         </AlertDescription>
       </Alert>
@@ -199,77 +202,77 @@ function AdministratorSummaries({
           id="administrator-summaries-title"
           className="text-heading font-semibold"
         >
-          Project statistics
+          {t("Project statistics")}
         </h2>
         <p className="text-muted-foreground">
-          Counts include loaded items only.
+          {t("Counts include loaded items only.")}
         </p>
       </div>
       <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <div className="grid gap-2 rounded-lg border bg-background p-4 shadow-sm">
           <dt className="text-label font-semibold uppercase tracking-wide text-muted-foreground">
-            Configured products
+            {t("Configured products")}
           </dt>
           <dd className="text-heading font-semibold">
             {loadedCount(summaries.productCount, "product")}
           </dd>
           <AdminDestinationLink to="/admin/products">
-            Open Products
+            {t("Open Products")}
           </AdminDestinationLink>
         </div>
         <div className="grid gap-2 rounded-lg border bg-background p-4 shadow-sm">
           <dt className="text-label font-semibold uppercase tracking-wide text-muted-foreground">
-            Published products
+            {t("Published products")}
           </dt>
           <dd className="text-heading font-semibold">
             {countLabel(summaries.publishedCount, "published product")}
           </dd>
           <AdminDestinationLink to="/admin/products">
-            View published products
+            {t("View published products")}
           </AdminDestinationLink>
         </div>
         <div className="grid gap-2 rounded-lg border bg-background p-4 shadow-sm">
           <dt className="text-label font-semibold uppercase tracking-wide text-muted-foreground">
-            Draft configurations
+            {t("Draft configurations")}
           </dt>
           <dd className="text-heading font-semibold">
             {loadedCount(summaries.draftCount, "draft")}
           </dd>
           <AdminDestinationLink to="/admin/products">
-            Review drafts
+            {t("Review drafts")}
           </AdminDestinationLink>
         </div>
         <div className="grid gap-2 rounded-lg border bg-background p-4 shadow-sm">
           <dt className="text-label font-semibold uppercase tracking-wide text-muted-foreground">
-            Inactive products
+            {t("Inactive products")}
           </dt>
           <dd className="text-heading font-semibold">
             {countLabel(summaries.inactiveCount, "inactive product")}
           </dd>
           <AdminDestinationLink to="/admin/products">
-            Review inactive products
+            {t("Review inactive products")}
           </AdminDestinationLink>
         </div>
         <div className="grid gap-2 rounded-lg border bg-background p-4 shadow-sm">
           <dt className="text-label font-semibold uppercase tracking-wide text-muted-foreground">
-            Internal users
+            {t("Internal users")}
           </dt>
           <dd className="text-heading font-semibold">
             {loadedCount(summaries.userCount, "user")}
           </dd>
           <AdminDestinationLink to="/admin/users">
-            Open Users
+            {t("Open Users")}
           </AdminDestinationLink>
         </div>
         <div className="grid gap-2 rounded-lg border bg-background p-4 shadow-sm">
           <dt className="text-label font-semibold uppercase tracking-wide text-muted-foreground">
-            Bitbucket connection
+            {t("Bitbucket connection")}
           </dt>
           <dd className="text-heading font-semibold">
             {summaries.bitbucketStatus}
           </dd>
           <AdminDestinationLink to="/admin/bitbucket">
-            Open Bitbucket
+            {t("Open Bitbucket")}
           </AdminDestinationLink>
         </div>
       </dl>
@@ -281,6 +284,7 @@ export function WorkspaceOverviewPage({
   accessToken,
   principal,
 }: WorkspaceOverviewPageProps) {
+  useUiLanguage();
   const isAdministrator = principal.roles.includes("admin");
 
   return (
@@ -292,7 +296,7 @@ export function WorkspaceOverviewPage({
             tabIndex={-1}
             className="text-display font-semibold focus:outline-none"
           >
-            Dashboard
+            {t("Dashboard")}
           </h1>
         </div>
       </section>

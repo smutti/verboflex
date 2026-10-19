@@ -1,3 +1,4 @@
+import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   createBranchPullRequest,
@@ -10,33 +11,70 @@ import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { useChangeSetWorkspace } from "./changeSetContext";
 
 const states: Record<string, string> = {
-  queued: "Waiting to save",
-  running: "Saving to branch…",
-  sending: "Checking Git result…",
-  committed: "Saved to branch",
-  open: "Pull request open",
-  merged: "Merged",
-  declined: "Pull request closed",
-  blocked: "Needs attention",
+  get queued() {
+    return t("Waiting to save");
+  },
+  get running() {
+    return t("Saving to branch…");
+  },
+  get sending() {
+    return t("Checking Git result…");
+  },
+  get committed() {
+    return t("Saved to branch");
+  },
+  get open() {
+    return t("Pull request open");
+  },
+  get merged() {
+    return t("Merged");
+  },
+  get declined() {
+    return t("Pull request closed");
+  },
+  get blocked() {
+    return t("Needs attention");
+  },
 };
 const errors: Record<string, string> = {
-  unsupported_shape:
-    "The translation file contains a structure that cannot be edited safely. No commit was sent. Check the source file before retrying.",
-  ambiguous_locator:
-    "The translation key is duplicated or its location is ambiguous. No commit was sent. Check the source file before retrying.",
-  file_changed: "The file changed in Git. Review the branch before continuing.",
-  source_file_changed:
-    "The approved string or its structure changed on the working branch. Refresh and review it before retrying.",
-  import_changed:
-    "The imported source changed. Refresh the product configuration before continuing.",
-  authority_changed:
-    "Repository access changed. An authorized reviewer can retry.",
-  branch_advanced:
-    "The branch changed while saving. Check the Git result before continuing.",
-  no_changes: "The working branch has no new commits to publish.",
+  get unsupported_shape() {
+    return t(
+      "The translation file contains a structure that cannot be edited safely. No commit was sent. Check the source file before retrying.",
+    );
+  },
+  get ambiguous_locator() {
+    return t(
+      "The translation key is duplicated or its location is ambiguous. No commit was sent. Check the source file before retrying.",
+    );
+  },
+  get file_changed() {
+    return t("The file changed in Git. Review the branch before continuing.");
+  },
+  get source_file_changed() {
+    return t(
+      "The approved string or its structure changed on the working branch. Refresh and review it before retrying.",
+    );
+  },
+  get import_changed() {
+    return t(
+      "The imported source changed. Refresh the product configuration before continuing.",
+    );
+  },
+  get authority_changed() {
+    return t("Repository access changed. An authorized reviewer can retry.");
+  },
+  get branch_advanced() {
+    return t(
+      "The branch changed while saving. Check the Git result before continuing.",
+    );
+  },
+  get no_changes() {
+    return t("The working branch has no new commits to publish.");
+  },
 };
 
 export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
+  useUiLanguage();
   const { accessToken, productId } = useChangeSetWorkspace();
   const [data, setData] = useState<BranchWorkflowResponse>();
   const [failure, setFailure] = useState(false);
@@ -106,20 +144,22 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
   }
   if (data && !data.enabled) return children;
   if (!data && !failure)
-    return <p role="status">Loading repository workflow…</p>;
+    return <p role="status">{t("Loading repository workflow…")}</p>;
   const items = data?.items ?? [];
   return (
     <section
       className="grid min-w-0 gap-(--space-lg)"
-      aria-label="Approved changes on branch"
+      aria-label={t("Approved changes on branch")}
     >
       {failure && (
         <Alert variant="destructive">
-          <AlertTitle>Repository workflow unavailable</AlertTitle>
+          <AlertTitle>{t("Repository workflow unavailable")}</AlertTitle>
           <AlertDescription>
-            The request could not be completed. Your saved changes are retained.
+            {t(
+              "The request could not be completed. Your saved changes are retained.",
+            )}
             <Button variant="outline" onClick={() => setReload((n) => n + 1)}>
-              Reload status
+              {t("Reload status")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -127,10 +167,12 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
       {data?.enabled && (
         <>
           <div>
-            <h2 className="text-heading font-semibold">Approved changes</h2>
+            <h2 className="text-heading font-semibold">
+              {t("Approved changes")}
+            </h2>
             {(data.workflows?.length ?? 0) > 1 && (
               <label className="my-3 grid gap-2">
-                Repository branch
+                {t("Repository branch")}
                 <select
                   className="min-h-11 min-w-0 w-full rounded-md border bg-background px-3"
                   value={data.workflow_id ?? ""}
@@ -153,12 +195,13 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
               </label>
             )}
             <p className="text-muted-foreground">
-              Each approval is saved as a commit in {data.repository} on{" "}
-              <strong>{data.work_branch}</strong>.
+              {t("Each approval is saved as a commit in ")}
+              {data.repository} {t(" on")} <strong>{data.work_branch}</strong>.
             </p>
             <p className="text-muted-foreground">
-              Open a pull request to <strong>{data.target_branch}</strong> when
-              the changes are ready.
+              {t("Open a pull request to ")}
+              <strong>{data.target_branch}</strong>{" "}
+              {t(" when the changes are ready.")}
             </p>
           </div>
           {data.can_publish && (
@@ -168,25 +211,27 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                   disabled={!data.can_create_pr || busy || failure}
                   onClick={() => setConfirm(true)}
                 >
-                  Create pull request
+                  {t("Create pull request")}
                 </Button>
               ) : (
                 <div className="flex flex-wrap items-center gap-(--space-md)">
                   <p>
-                    Create a PR from {data.work_branch} to {data.target_branch}?
+                    {t("Create a PR from ")}
+                    {data.work_branch} {t(" to ")}
+                    {data.target_branch}?
                   </p>
                   <Button
                     disabled={busy || failure || !data.can_create_pr}
                     onClick={() => void act()}
                   >
-                    {busy ? "Creating…" : "Confirm pull request"}
+                    {busy ? t("Creating…") : t("Confirm pull request")}
                   </Button>
                   <Button
                     variant="outline"
                     disabled={busy}
                     onClick={() => setConfirm(false)}
                   >
-                    Cancel
+                    {t("Cancel")}
                   </Button>
                 </div>
               )}
@@ -194,11 +239,15 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
           )}
           {!items.length && (
             <p>
-              No approvals saved yet. Approve a translation in Strings to save
-              its first commit.
+              {t(
+                "No approvals saved yet. Approve a translation in Strings to save its first commit.",
+              )}
             </p>
           )}
-          <ol className="grid gap-(--space-md)" aria-label="Branch history">
+          <ol
+            className="grid gap-(--space-md)"
+            aria-label={t("Branch history")}
+          >
             {items.map((item) => (
               <li
                 key={item.id}
@@ -219,12 +268,14 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                     className="text-sm text-muted-foreground"
                     dateTime={item.created_at}
                   >
-                    {new Date(item.created_at).toLocaleString()}
+                    {new Date(item.created_at).toLocaleString(getUiLanguage())}
                   </time>
                   {item.error_code && (
                     <p>
                       {errors[item.error_code] ??
-                        "The Git result could not be verified. Check its status before continuing."}
+                        t(
+                          "The Git result could not be verified. Check its status before continuing.",
+                        )}
                     </p>
                   )}
                 </div>
@@ -235,7 +286,8 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Commit {item.commit_hash?.slice(0, 7)}
+                    {t("Commit ")}
+                    {item.commit_hash?.slice(0, 7)}
                   </a>
                 )}
                 {item.pr_url && (
@@ -245,7 +297,7 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Open pull request
+                    {t("Open pull request")}
                   </a>
                 )}
                 {item.can_retry && (
@@ -254,7 +306,7 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                     disabled={busy}
                     onClick={() => void act(item.id)}
                   >
-                    Check and retry
+                    {t("Check and retry")}
                   </Button>
                 )}
               </li>
@@ -263,7 +315,7 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
           <div className="flex gap-(--space-md)">
             {before && (
               <Button variant="outline" onClick={() => setBefore(undefined)}>
-                Latest changes
+                {t("Latest changes")}
               </Button>
             )}
             {data.next_before && (
@@ -271,7 +323,7 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                 variant="outline"
                 onClick={() => setBefore(data.next_before ?? undefined)}
               >
-                Older changes
+                {t("Older changes")}
               </Button>
             )}
           </div>

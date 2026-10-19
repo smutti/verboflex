@@ -1,3 +1,4 @@
+import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import { useState } from "react";
 import { useMcpData } from "./useMcpData";
 import { Button } from "../../components/ui/button";
@@ -12,6 +13,7 @@ type Connection = {
 };
 
 export function McpConnectionsPage({ accessToken }: { accessToken: string }) {
+  useUiLanguage();
   const connections = useMcpData<{ items: Connection[] }>(
     accessToken,
     "/connections",
@@ -36,17 +38,17 @@ export function McpConnectionsPage({ accessToken }: { accessToken: string }) {
   }
   return (
     <section className="grid max-w-3xl gap-5">
-      <h1 className="text-display font-semibold">Connected apps</h1>
-      {connections.isPending && <p role="status">Loading apps…</p>}
+      <h1 className="text-display font-semibold">{t("Connected apps")}</h1>
+      {connections.isPending && <p role="status">{t("Loading apps…")}</p>}
       {(connections.error || error) && (
         <div role="alert" className="grid gap-2 text-destructive">
           <p>{(connections.error || error)?.message}</p>
           <Button variant="outline" onClick={() => void connections.refetch()}>
-            Retry
+            {t("Retry")}
           </Button>
         </div>
       )}
-      {connections.data?.items.length === 0 && <p>No connected apps.</p>}
+      {connections.data?.items.length === 0 && <p>{t("No connected apps.")}</p>}
       {connections.data?.items.map((app) => (
         <article
           key={app.id}
@@ -56,11 +58,12 @@ export function McpConnectionsPage({ accessToken }: { accessToken: string }) {
             <h2 className="font-semibold break-words">{app.client_name}</h2>
             <p>
               {app.scopes.includes("verboflex:write")
-                ? "Read and write"
-                : "Read only"}
+                ? t("Read and write")
+                : t("Read only")}
             </p>
             <p className="text-sm text-muted-foreground">
-              Expires {new Date(app.expires_at).toLocaleDateString()}
+              {t("Expires ")}
+              {new Date(app.expires_at).toLocaleDateString(getUiLanguage())}
             </p>
           </div>
           <Button
@@ -68,7 +71,7 @@ export function McpConnectionsPage({ accessToken }: { accessToken: string }) {
             disabled={busy}
             onClick={() => void revoke(app.id)}
           >
-            Revoke access
+            {t("Revoke access")}
           </Button>
         </article>
       ))}

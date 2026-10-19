@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { GlossaryMatches } from "./GlossaryMatches";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Copy, RotateCw } from "lucide-react";
@@ -16,6 +17,7 @@ function SourceDifference({
   source: string;
   current: string;
 }) {
+  useUiLanguage();
   if (source === current) return <>{source}</>;
   // Bound linear comparison; changed spans remain readable with either script.
   const before = Array.from(source),
@@ -57,6 +59,7 @@ export function TranslationSuggestions({
   onUse: (text: string) => void;
   currentText: string;
 }) {
+  useUiLanguage();
   const [loadedIdentity, setLoadedIdentity] = useState("");
   const [items, setItems] = useState<ReuseSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
@@ -99,7 +102,8 @@ export function TranslationSuggestions({
           generation.current !== requestGeneration
         )
           return;
-        if (!response.data) throw new Error("Suggestions could not be loaded");
+        if (!response.data)
+          throw new Error(t("Suggestions could not be loaded"));
         setItems(response.data.items);
         setLoadedIdentity(identity);
       } catch {
@@ -158,16 +162,16 @@ export function TranslationSuggestions({
   if (!query) return null;
   return (
     <aside
-      aria-label="Translation suggestions"
+      aria-label={t("Translation suggestions")}
       className="min-w-0 self-start rounded-lg border bg-background p-3 space-y-3"
     >
       <div className="flex items-center justify-between gap-2">
-        <h3 className="font-semibold">Suggestions</h3>
+        <h3 className="font-semibold">{t("Suggestions")}</h3>
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          aria-label="Refresh suggestions"
+          aria-label={t("Refresh suggestions")}
           disabled={loading || !!applying}
           onClick={() => setRefresh((r) => r + 1)}
         >
@@ -176,16 +180,16 @@ export function TranslationSuggestions({
       </div>
       {loading && (
         <p role="status" className="text-sm text-muted-foreground">
-          Finding matches…
+          {t("Finding matches…")}
         </p>
       )}
       {failure && (
         <p role="alert" className="text-sm text-destructive">
-          {failure}
+          {t(failure)}
         </p>
       )}
       {!loading && !failure && items.length === 0 && (
-        <p className="text-sm text-muted-foreground">No matches</p>
+        <p className="text-sm text-muted-foreground">{t("No matches")}</p>
       )}
       <div className="max-h-[32rem] space-y-3 overflow-y-auto">
         {(loadedIdentity === identity ? items : []).map((item) => (
@@ -201,8 +205,8 @@ export function TranslationSuggestions({
               </span>
               <span className="text-xs text-muted-foreground">
                 {item.origin === "approved_draft"
-                  ? "Approved draft"
-                  : "Repository"}
+                  ? t("Approved draft")
+                  : t("Repository")}
               </span>
             </div>
             <p
@@ -237,7 +241,7 @@ export function TranslationSuggestions({
               onClick={() => void applySuggestion(item)}
             >
               <Copy className="size-3.5" />
-              {applying === item.digest ? "Checking…" : "Use"}
+              {applying === item.digest ? t("Checking…") : t("Use")}
             </Button>
           </article>
         ))}
