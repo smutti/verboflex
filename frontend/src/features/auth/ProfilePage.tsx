@@ -10,7 +10,7 @@ import { ROLE_LABELS } from "./roleLabels";
 export function ProfilePage({ principal }: { principal: CurrentUserResponse }) {
   useUiLanguage();
   return (
-    <div className="grid min-w-0 max-w-4xl gap-8">
+    <div className="mx-auto grid w-full min-w-0 max-w-2xl gap-8">
       <header className="grid gap-2">
         <h1 className="text-display font-semibold">{t("Profile")}</h1>
       </header>
@@ -53,7 +53,7 @@ export function ProfilePage({ principal }: { principal: CurrentUserResponse }) {
 
       <section
         aria-labelledby="profile-language-title"
-        className="grid max-w-2xl gap-3 rounded-lg border bg-secondary p-6 shadow-sm"
+        className="grid gap-3 rounded-lg border bg-secondary p-6 shadow-sm"
       >
         <div className="flex items-center gap-3">
           <Languages aria-hidden="true" className="size-6 text-primary" />
@@ -74,7 +74,7 @@ export function ProfilePage({ principal }: { principal: CurrentUserResponse }) {
 
       <section
         aria-labelledby="profile-password-title"
-        className="grid max-w-2xl gap-6 rounded-lg border bg-secondary p-6 shadow-sm"
+        className="grid gap-6 rounded-lg border bg-secondary p-6 shadow-sm"
       >
         <div className="flex items-start gap-3">
           <KeyRound aria-hidden="true" className="mt-0.5 size-6 text-primary" />
