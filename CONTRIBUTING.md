@@ -18,7 +18,14 @@ Run the checks relevant to your change and explain their results in the pull req
 Keep frontend and backend separate. Run repository work in Celery, enforce permissions
 in the API, use Alembic for schema changes and preserve localization file structure.
 Parser and serializer changes need fixtures covering round trips and unsupported input.
-Keep product copy and documentation in English and update the guide when behavior changes.
+Keep documentation and the source UI catalog in English and update the guide when
+behavior changes. The interface supports English, Italian, German, Spanish, French
+and Dutch. Keep all six catalogs in `frontend/src/i18n/locales/` aligned, preserve
+interpolation placeholders and use `t()` only for application-owned copy. Never
+translate repository identifiers, branch names, user input or translation values.
+Components rendering translated copy subscribe with `useUiLanguage()` so changing
+language updates open views without remounting forms. See
+[UI localization](docs/ui-localization.md) for conventions and checks.
 
 Contributions are provided under the [Apache License 2.0](LICENSE). Preserve third-party
 notices. See [SECURITY.md](SECURITY.md) for vulnerability reporting.

@@ -1,9 +1,11 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "../../components/ui/button";
 
 export function AdminAccessDenied() {
+  useUiLanguage();
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -21,14 +23,14 @@ export function AdminAccessDenied() {
         tabIndex={-1}
         className="text-display font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        Administrator access required
+        {t("Administrator access required")}
       </h1>
       <p className="text-muted-foreground">
-        Your account does not have permission to open administration.
+        {t("Your account does not have permission to open administration.")}
       </p>
       <div>
         <Button asChild>
-          <Link to="/">Return to workspace</Link>
+          <Link to="/">{t("Return to workspace")}</Link>
         </Button>
       </div>
     </section>

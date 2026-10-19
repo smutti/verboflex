@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import type { CodeSourceConfig } from "../../../api/client";
 import { useState, type ChangeEvent, type FocusEvent } from "react";
 import { Checkbox } from "../../../components/ui/checkbox";
@@ -23,6 +24,7 @@ function SymbolField({
   multiline?: boolean;
   onChange: (values: string[]) => void;
 }) {
+  useUiLanguage();
   // Preserve separators while typing; the parent still receives every edit.
   const [editing, setEditing] = useState<string | null>(null);
   const props = {
@@ -58,10 +60,11 @@ export function CodeSourceFields({
   value: CodeSourceConfig | null;
   onChange: (value: CodeSourceConfig | null) => void;
 }) {
+  useUiLanguage();
   return (
     <fieldset className="space-y-4 rounded-md border p-4">
       <legend className="text-sm font-semibold">
-        Keys defined in Kotlin or Java
+        {t("Keys defined in Kotlin or Java")}
       </legend>
       <Label className="flex gap-2">
         <Checkbox
@@ -79,22 +82,23 @@ export function CodeSourceFields({
             )
           }
         />
-        Extract keys from application code
+        {t("Extract keys from application code")}
       </Label>
       <p className="text-sm text-muted-foreground">
-        The keys repository contains code; the translations repository supplies
-        the language files and base text.
+        {t(
+          "The keys repository contains code; the translations repository supplies the language files and base text.",
+        )}
       </p>
       {value && (
         <>
           <SymbolField
-            label="Resource references"
+            label={t("Resource references")}
             values={value.resource_roots ?? []}
             placeholder="Res.strings"
             onChange={(roots) => onChange({ ...value, resource_roots: roots })}
           />
           <SymbolField
-            label="Constant declarations (qualified names or patterns)"
+            label={t("Constant declarations (qualified names or patterns)")}
             values={value.declaration_symbols ?? []}
             placeholder="com.example.Keys.*"
             onChange={(names) =>
@@ -105,9 +109,9 @@ export function CodeSourceFields({
             }
           />
           <SymbolField
-            label="Translation functions"
+            label={t("Translation functions")}
             values={value.localization_calls ?? []}
-            placeholder="translate, localize"
+            placeholder={t("translate, localize")}
             onChange={(names) =>
               onChange({
                 ...value,
@@ -134,12 +138,12 @@ export function CodeSourceFields({
                 })
               }
             />{" "}
-            Enable on-demand Compose screenshots
+            {t("Enable on-demand Compose screenshots")}
           </Label>
           {value.compose && (
             <div className="grid gap-4">
               <Label className="grid gap-2">
-                Configured capture runner
+                {t("Configured capture runner")}
                 <Input
                   value={value.compose.runner_profile}
                   placeholder="android-preview"
@@ -155,7 +159,7 @@ export function CodeSourceFields({
                 />
               </Label>
               <Label className="grid gap-2">
-                Android module
+                {t("Android module")}
                 <Input
                   value={value.compose.module ?? ":app"}
                   onChange={(e) =>
@@ -167,7 +171,7 @@ export function CodeSourceFields({
                 />
               </Label>
               <Label className="grid gap-2">
-                Build variant
+                {t("Build variant")}
                 <Input
                   value={value.compose.variant ?? "Debug"}
                   onChange={(e) =>
@@ -179,7 +183,7 @@ export function CodeSourceFields({
                 />
               </Label>
               <SymbolField
-                label="Callable preview functions (one per line)"
+                label={t("Callable preview functions (one per line)")}
                 multiline
                 values={value.compose.preview_functions}
                 placeholder="com.example.screens.HomePreview"
@@ -194,9 +198,9 @@ export function CodeSourceFields({
                 }
               />
               <p className="text-sm text-muted-foreground">
-                Register previews with fixture data and configure the isolated
-                runner on the server. Screenshots are rendered only when
-                requested.
+                {t(
+                  "Register previews with fixture data and configure the isolated runner on the server. Screenshots are rendered only when requested.",
+                )}
               </p>
             </div>
           )}

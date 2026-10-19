@@ -1,3 +1,4 @@
+import { displayLanguage, t, useUiLanguage } from "@/i18n";
 import { TranslationStatusBadge } from "./TranslationStatusBadge";
 import { rolesForProduct } from "../auth/productRoles";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -54,24 +55,49 @@ const sectionClass =
   "min-w-0 space-y-(--space-md) rounded-lg border bg-secondary p-(--space-lg)";
 const actionClass = "min-h-[44px] h-auto whitespace-normal";
 const selectorNames: Record<string, string> = {
-  quantity: "Quantity",
-  index: "Array position",
-  position: "Array position",
-  form: "Numerus form",
-  variant: "Length variant",
-  segments: "JSON path segments",
-  path: "JSON path segments",
+  get quantity() {
+    return t("Quantity");
+  },
+  get index() {
+    return t("Array position");
+  },
+  get position() {
+    return t("Array position");
+  },
+  get form() {
+    return t("Numerus form");
+  },
+  get variant() {
+    return t("Length variant");
+  },
+  get segments() {
+    return t("JSON path segments");
+  },
+  get path() {
+    return t("JSON path segments");
+  },
 };
 const kindNames = {
-  scalar: "Default value",
-  android_quantity: "Plural",
-  android_array_item: "Array",
-  qt_numerus: "Qt numerus",
-  qt_length_variant: "Qt length variant",
+  get scalar() {
+    return t("Default value");
+  },
+  get android_quantity() {
+    return t("Plural");
+  },
+  get android_array_item() {
+    return t("Array");
+  },
+  get qt_numerus() {
+    return t("Qt numerus");
+  },
+  get qt_length_variant() {
+    return t("Qt length variant");
+  },
   json_path: "JSON path",
 };
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
+  useUiLanguage();
   return (
     <section aria-label={title} className={sectionClass}>
       <h2 className="text-heading font-semibold">{title}</h2>
@@ -81,6 +107,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 function Commit({ hash }: { hash: string }) {
+  useUiLanguage();
   const [notice, setNotice] = useState("");
   const live = useRef(true);
   useEffect(() => {
@@ -101,21 +128,22 @@ function Commit({ hash }: { hash: string }) {
               onClick={() => {
                 void navigator.clipboard.writeText(hash).then(
                   () => {
-                    if (live.current) setNotice("Full commit copied");
+                    if (live.current) setNotice(t("Full commit copied"));
                   },
                   () => {
-                    if (live.current) setNotice("Commit could not be copied");
+                    if (live.current)
+                      setNotice(t("Commit could not be copied"));
                   },
                 );
               }}
             >
-              Copy full commit
+              {t("Copy full commit")}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Copy full commit</TooltipContent>
+          <TooltipContent>{t("Copy full commit")}</TooltipContent>
         </Tooltip>
       </TooltipProvider>
-      {notice && <span role="status">{notice}</span>}
+      {notice && <span role="status">{t(notice)}</span>}
     </div>
   );
 }
@@ -125,15 +153,16 @@ function TranslationProvenance({
 }: {
   value: TranslationProvenanceResponse | null;
 }) {
-  if (!value) return <p>Source location unavailable</p>;
+  useUiLanguage();
+  if (!value) return <p>{t("Source location unavailable")}</p>;
   return (
     <div className="min-w-0 space-y-3 text-sm">
       <dl className="grid min-w-0 gap-2">
         {[
-          ["Repository", value.repository_name],
-          ["Branch", value.branch],
-          ["File path", value.path],
-          ...(value.line === null ? [] : [["Line", value.line]]),
+          [t("Repository"), value.repository_name],
+          [t("Branch"), value.branch],
+          [t("File path"), value.path],
+          ...(value.line === null ? [] : [[t("Line"), value.line]]),
         ].map(([label, text]) => (
           <div key={label} className="min-w-0">
             <dt className="text-label font-semibold">{label}</dt>
@@ -143,15 +172,15 @@ function TranslationProvenance({
       </dl>
       <details>
         <summary className="cursor-pointer text-muted-foreground">
-          Technical details
+          {t("Technical details")}
         </summary>
         <dl className="space-y-2 pt-2">
           <div>
-            <dt className="font-semibold">Format</dt>
+            <dt className="font-semibold">{t("Format")}</dt>
             <dd>{value.format}</dd>
           </div>
           <div>
-            <dt className="text-label font-semibold">Import commit</dt>
+            <dt className="text-label font-semibold">{t("Import commit")}</dt>
             <dd>
               <Commit hash={value.commit_hash} />
             </dd>
@@ -163,11 +192,12 @@ function TranslationProvenance({
 }
 
 function TranslationHistory({ value }: { value: TranslationValueResponse }) {
+  useUiLanguage();
   return (
     <div className="space-y-(--space-sm)">
-      <h4 className="font-semibold">History</h4>
+      <h4 className="font-semibold">{t("History")}</h4>
       {!value.history?.length ? (
-        <p>No revision history available</p>
+        <p>{t("No revision history available")}</p>
       ) : (
         <ol className="space-y-(--space-md)">
           {value.history.map((entry) => (
@@ -175,10 +205,13 @@ function TranslationHistory({ value }: { value: TranslationValueResponse }) {
               key={entry.revision_number}
               className="min-w-0 space-y-(--space-sm)"
             >
-              <p>Revision {entry.revision_number}</p>
+              <p>
+                {t("Revision ")}
+                {entry.revision_number}
+              </p>
               <p>
                 {reviewStateLabel(entry.review_state)}
-                {entry.is_deleted ? " · Deleted in source" : ""}
+                {entry.is_deleted ? t(" · Deleted in source") : ""}
               </p>
               <time dateTime={entry.created_at}>{entry.created_at}</time>
               <p className="font-mono wrap-anywhere">{entry.execution_id}</p>
@@ -188,7 +221,7 @@ function TranslationHistory({ value }: { value: TranslationValueResponse }) {
         </ol>
       )}
       {value.history_has_more && (
-        <p>Latest 50 revisions. Earlier history is retained.</p>
+        <p>{t("Latest 50 revisions. Earlier history is retained.")}</p>
       )}
     </div>
   );
@@ -201,6 +234,7 @@ function TranslationValueCard({
   value: TranslationValueResponse;
   detail: TranslationGroupDetailResponse;
 }) {
+  useUiLanguage();
   return (
     <article
       id={`value-${value.id}`}
@@ -212,7 +246,7 @@ function TranslationValueCard({
       </h3>
       <dl className="grid min-w-0 gap-(--space-sm)">
         <div>
-          <dt className="text-label font-semibold">Value ID</dt>
+          <dt className="text-label font-semibold">{t("Value ID")}</dt>
           <dd className="font-mono wrap-anywhere">{value.id}</dd>
         </div>
         {value.selector_fields?.map((field) => (
@@ -229,50 +263,53 @@ function TranslationValueCard({
         ))}
         {value.selector_fields === null && (
           <div>
-            <dt>Selector</dt>
-            <dd>Selector metadata unavailable</dd>
+            <dt>{t("Selector")}</dt>
+            <dd>{t("Selector metadata unavailable")}</dd>
           </div>
         )}
       </dl>
       <p>{reviewStateLabel(value.review_state)}</p>
       {value.is_deleted && (
         <>
-          <Badge variant="outline">Deleted in source</Badge>
+          <Badge variant="outline">{t("Deleted in source")}</Badge>
           <p className="wrap-anywhere">
-            Deleted at: {value.deleted_at ?? "Date unavailable"}
+            {t("Deleted at: ")}
+            {value.deleted_at ?? t("Date unavailable")}
           </p>
         </>
       )}
       <div>
-        <h4 className="font-semibold">Source text</h4>
+        <h4 className="font-semibold">{t("Source text")}</h4>
         <p
           className="whitespace-pre-wrap wrap-anywhere"
           lang={detail.base_language ?? undefined}
           dir="auto"
         >
           {value.source_text === null
-            ? "No source text available"
-            : value.source_text || "Empty source text"}
+            ? t("No source text available")
+            : value.source_text || t("Empty source text")}
         </p>
       </div>
       <div>
-        <h4 className="font-semibold">Translated text</h4>
+        <h4 className="font-semibold">{t("Translated text")}</h4>
         <div className="space-y-(--space-sm)">
-          <p className="text-label font-semibold">Published translation</p>
+          <p className="text-label font-semibold">
+            {t("Published translation")}
+          </p>
           <p
             data-testid={`target-${value.id}`}
             className="whitespace-pre-wrap wrap-anywhere"
             lang={detail.language}
             dir="auto"
           >
-            {value.translated_text || "Empty translation"}
+            {value.translated_text || t("Empty translation")}
           </p>
         </div>
       </div>
       {value.structure.length > 0 && (
         <details>
           <summary className="min-h-[44px] cursor-pointer">
-            Format structure
+            {t("Format structure")}
           </summary>
           <pre className="whitespace-pre-wrap wrap-anywhere text-body">
             {JSON.stringify(value.structure, null, 2)}
@@ -280,8 +317,9 @@ function TranslationValueCard({
         </details>
       )}
       <p>
-        Actual: {value.constraint.actual} characters · Maximum:{" "}
-        {value.constraint.maximum ?? "None"}
+        {t("Actual: ")}
+        {value.constraint.actual} {t(" characters · Maximum:")}{" "}
+        {value.constraint.maximum ?? t("None")}
       </p>
       <p>{lengthStatusLabel(value.constraint)}</p>
       <TranslationHistory value={value} />
@@ -296,6 +334,7 @@ function LoadedDetail({
   detail: TranslationGroupDetailResponse;
   onChanged: (detail: TranslationGroupDetailResponse) => void;
 }) {
+  useUiLanguage();
   const context = useOutletContext<TranslationsWorkspaceContext>();
   const navigate = useNavigate();
   const notificationShell = useOptionalNotificationShell();
@@ -394,10 +433,10 @@ function LoadedDetail({
     detail.values.every((value) => value.selector_fields !== null);
   const mutationLabel =
     detail.explicit_maximum !== null
-      ? "Edit max length"
+      ? t("Edit max length")
       : detail.language !== detail.base_language && detail.base_maximum !== null
-        ? "Add language override"
-        : "Set max length";
+        ? t("Add language override")
+        : t("Set max length");
   const over = detail.values.filter(
     (v) => v.constraint.status === "over_limit",
   ).length;
@@ -423,49 +462,54 @@ function LoadedDetail({
       <header className="space-y-(--space-sm)">
         <p className="font-mono wrap-anywhere">{detail.raw_key}</p>
         <p>
-          {detail.language_label} ({detail.language})
+          {displayLanguage(detail.language, detail.language_label)} (
+          {detail.language})
         </p>
         {detail.is_deleted && (
-          <Badge variant="outline">Deleted in source</Badge>
+          <Badge variant="outline">{t("Deleted in source")}</Badge>
         )}
       </header>
       {partial && (
         <Alert>
           <AlertTitle>
-            Some source or history metadata is unavailable
+            {t("Some source or history metadata is unavailable")}
           </AlertTitle>
           <AlertDescription>
-            The available translation content remains readable.
+            {t("The available translation content remains readable.")}
           </AlertDescription>
         </Alert>
       )}
       {over > 0 && (
         <Alert className="border-warning bg-warning/10 text-warning">
           <AlertTitle>
-            {over} of {detail.values.length} over limit
+            {over} {t(" of ")}
+            {detail.values.length} {t(" over limit")}
           </AlertTitle>
           <AlertDescription>
-            This translation can remain Draft, but it cannot be approved or
-            submitted while over the limit.
+            {t(
+              "This translation can remain Draft, but it cannot be approved or submitted while over the limit.",
+            )}
           </AlertDescription>
         </Alert>
       )}
       <div className="grid min-w-0 gap-(--space-xl) xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
         <div className="min-w-0 space-y-(--space-xl)">
-          <Section title="Translation content">
+          <Section title={t("Translation content")}>
             {editFailure && (
               <Alert role="alert">
-                <AlertTitle>Translation editor could not be opened</AlertTitle>
+                <AlertTitle>
+                  {t("Translation editor could not be opened")}
+                </AlertTitle>
               </Alert>
             )}
             {!activeDraft && (
               <section
-                aria-label="Published translation"
+                aria-label={t("Published translation")}
                 className="space-y-(--space-md)"
               >
                 <div className="flex flex-wrap items-center gap-(--space-sm)">
                   <h3 className="text-heading font-semibold">
-                    Published translation
+                    {t("Published translation")}
                   </h3>
                   <Badge variant="outline">
                     {reviewStateLabel(detail.state_summary)}
@@ -482,20 +526,20 @@ function LoadedDetail({
             )}
             {pendingState !== null && !activeDraft && (
               <section
-                aria-label="Pending proposal"
+                aria-label={t("Pending proposal")}
                 className="space-y-(--space-md) rounded-md border p-(--space-md)"
               >
                 <div className="flex flex-wrap items-center gap-(--space-sm)">
                   <h3 className="text-heading font-semibold">
                     {(proposal ?? detail.pending_change)?.target_integrated
-                      ? "Translation"
-                      : "Saved change"}
+                      ? t("Translation")
+                      : t("Saved change")}
                   </h3>
                   <TranslationStatusBadge
                     proposal={proposal ?? detail.pending_change!}
                   />
                   {reconciliationRequired && (
-                    <Badge variant="outline">Needs reconciliation</Badge>
+                    <Badge variant="outline">{t("Needs reconciliation")}</Badge>
                   )}
                 </div>
                 {detail.values.map((value) => (
@@ -507,7 +551,7 @@ function LoadedDetail({
                       dir="auto"
                     >
                       {pendingById.get(value.id)?.text ||
-                        "Empty pending translation"}
+                        t("Empty pending translation")}
                     </p>
                   </div>
                 ))}
@@ -545,7 +589,7 @@ function LoadedDetail({
                   }
                 }}
               >
-                Edit translation
+                {t("Edit translation")}
               </Button>
             )}
             {canPropose && activeDraft && (
@@ -606,7 +650,7 @@ function LoadedDetail({
             onToggle={(event) => setScreenshotsOpen(event.currentTarget.open)}
           >
             <summary className="cursor-pointer font-semibold">
-              Screenshots and code references
+              {t("Screenshots and code references")}
             </summary>
             {screenshotsOpen && (
               <TranslationScreenshots
@@ -618,7 +662,7 @@ function LoadedDetail({
               />
             )}
           </details>
-          <Section title="Maximum length">
+          <Section title={t("Maximum length")}>
             {canMutate && (
               <div className="flex flex-wrap gap-(--space-sm)">
                 <Button
@@ -648,8 +692,8 @@ function LoadedDetail({
                     }
                   >
                     {detail.language === detail.base_language
-                      ? "Remove base limit"
-                      : "Remove language override"}
+                      ? t("Remove base limit")
+                      : t("Remove language override")}
                   </Button>
                 )}
               </div>
@@ -659,14 +703,15 @@ function LoadedDetail({
               <div key={value.id} className="space-y-(--space-sm)">
                 <p className="font-mono wrap-anywhere">{value.id}</p>
                 <p>
-                  Actual: {value.constraint.actual} · Maximum:{" "}
-                  {value.constraint.maximum ?? "None"}
+                  {t("Actual: ")}
+                  {value.constraint.actual} {t(" · Maximum:")}{" "}
+                  {value.constraint.maximum ?? t("None")}
                 </p>
                 <p>{lengthStatusLabel(value.constraint)}</p>
               </div>
             ))}
           </Section>
-          <Section title="Source context">
+          <Section title={t("Source context")}>
             {detail.values.map((value) => (
               <div key={value.id} className="min-w-0 space-y-(--space-sm)">
                 {detail.values.length > 1 && (
@@ -681,26 +726,33 @@ function LoadedDetail({
               </div>
             ))}
           </Section>
-          <Section title="Review context">
+          <Section title={t("Review context")}>
             <Badge variant="outline">
               {reviewStateLabel(detail.state_summary)}
             </Badge>
-            <p>Published: {reviewStateLabel(detail.state_summary)}</p>
             <p>
-              Pending change:{" "}
-              {pendingState ? reviewStateLabel(pendingState) : "None"}
+              {t("Published: ")}
+              {reviewStateLabel(detail.state_summary)}
             </p>
-            <p>Comments: {detail.comment_count || "No comments yet"}</p>
+            <p>
+              {t("Pending change:")}{" "}
+              {pendingState ? reviewStateLabel(pendingState) : t("None")}
+            </p>
+            <p>
+              {t("Comments: ")}
+              {detail.comment_count || t("No comments yet")}
+            </p>
             <Link
               className="inline-flex min-h-[44px] items-center underline"
               to={`/products/${detail.product_id}/change-sets/history`}
             >
-              View change-set history
+              {t("View change-set history")}
             </Link>
             {detail.approval_commits_enabled && (
               <p>
-                Each approval queues a separate commit on the working branch.
-                Open a pull request from Change sets when ready.
+                {t(
+                  "Each approval queues a separate commit on the working branch. Open a pull request from Change sets when ready.",
+                )}
               </p>
             )}
             {canSubmitReview && !detail.approval_commits_enabled && (
@@ -724,7 +776,7 @@ function LoadedDetail({
                   }, event.currentTarget);
                 }}
               >
-                Review for submission
+                {t("Review for submission")}
               </Button>
             )}
             <TranslationReviewActions
@@ -785,6 +837,7 @@ function DetailRequest({
   id: string;
   accessToken: string;
 }) {
+  useUiLanguage();
   const context = useOutletContext<TranslationsWorkspaceContext>();
   const [attempt, setAttempt] = useState(0);
   const [load, setLoad] = useState<{
@@ -845,11 +898,11 @@ function DetailRequest({
         className="inline-flex min-h-[44px] items-center underline"
       >
         {context.lockedProduct
-          ? `Back to ${context.lockedProduct.name} strings`
-          : "Back to translations"}
+          ? t("Back to {{v0}} strings", { v0: context.lockedProduct.name })
+          : t("Back to translations")}
       </Link>
       <h1 ref={heading} tabIndex={-1} className="text-display font-semibold">
-        Translation details
+        {t("Translation details")}
       </h1>
       {current?.data ? (
         <LoadedDetail
@@ -860,24 +913,27 @@ function DetailRequest({
         <Alert ref={errorAlert} tabIndex={-1}>
           <AlertTitle>
             {current.error === "missing"
-              ? "Translation not available"
-              : "Translation details unavailable"}
+              ? t("Translation not available")
+              : t("Translation details unavailable")}
           </AlertTitle>
           <AlertDescription>
             {current.error === "missing" ? (
-              "This translation may have been removed or is outside your authorized products."
+              t(
+                "This translation may have been removed or is outside your authorized products.",
+              )
             ) : (
               <>
                 <p>
-                  We could not load this translation. Retry without losing your
-                  search.
+                  {t(
+                    "We could not load this translation. Retry without losing your search.",
+                  )}
                 </p>
                 <Button
                   className={actionClass}
                   variant="outline"
                   onClick={() => setAttempt((n) => n + 1)}
                 >
-                  Retry details
+                  {t("Retry details")}
                 </Button>
               </>
             )}
@@ -885,7 +941,7 @@ function DetailRequest({
         </Alert>
       ) : (
         <div role="status">
-          <p>Loading translation details</p>
+          <p>{t("Loading translation details")}</p>
           <Skeleton className="h-12 w-full" />
           <div className="mt-(--space-xl) grid gap-(--space-xl) xl:grid-cols-2">
             <Skeleton className="h-96 w-full" />
@@ -898,6 +954,7 @@ function DetailRequest({
 }
 
 export function TranslationDetailPage() {
+  useUiLanguage();
   const { translationGroupId = "" } = useParams<"translationGroupId">();
   const { accessToken, principal } =
     useOutletContext<TranslationsWorkspaceContext>();

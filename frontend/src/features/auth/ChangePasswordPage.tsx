@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
@@ -22,10 +23,11 @@ interface ChangePasswordFormValues {
 }
 
 export function PasswordChangeForm({
-  submitLabel = "Set new password",
+  submitLabel = t("Set new password"),
 }: {
   submitLabel?: string;
 }) {
+  useUiLanguage();
   const { changePassword } = useSession();
   const [actionError, setActionError] = useState(false);
   const form = useForm<ChangePasswordFormValues>({
@@ -57,7 +59,7 @@ export function PasswordChangeForm({
           name="currentPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Current password</FormLabel>
+              <FormLabel>{t("Current password")}</FormLabel>
               <FormControl>
                 <Input
                   autoComplete="current-password"
@@ -75,21 +77,22 @@ export function PasswordChangeForm({
             validate: {
               length: (value) =>
                 (value.length >= 12 && value.length <= 128) ||
-                "Password must contain 12 to 128 characters.",
+                t("Password must contain 12 to 128 characters."),
               differsFromCurrent: (value) =>
                 value !== form.getValues("currentPassword") ||
-                "New password must differ from current password.",
+                t("New password must differ from current password."),
             },
           }}
           render={({ field }) => (
             <FormItem>
-              <FormLabel>New password</FormLabel>
+              <FormLabel>{t("New password")}</FormLabel>
               <FormControl>
                 <Input autoComplete="new-password" type="password" {...field} />
               </FormControl>
               <FormDescription>
-                Use 12 to 128 characters. Spaces and Unicode characters are
-                allowed.
+                {t(
+                  "Use 12 to 128 characters. Spaces and Unicode characters are allowed.",
+                )}
               </FormDescription>
               <FormMessage role="alert" />
             </FormItem>
@@ -101,11 +104,11 @@ export function PasswordChangeForm({
           rules={{
             validate: (value) =>
               value === form.getValues("newPassword") ||
-              "Passwords do not match.",
+              t("Passwords do not match."),
           }}
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Confirm new password</FormLabel>
+              <FormLabel>{t("Confirm new password")}</FormLabel>
               <FormControl>
                 <Input autoComplete="new-password" type="password" {...field} />
               </FormControl>
@@ -116,8 +119,9 @@ export function PasswordChangeForm({
         {actionError ? (
           <Alert variant="destructive">
             <AlertDescription>
-              We could not change your password. Check the requirements and try
-              again.
+              {t(
+                "We could not change your password. Check the requirements and try again.",
+              )}
             </AlertDescription>
           </Alert>
         ) : null}
@@ -135,14 +139,15 @@ export function PasswordChangeForm({
 }
 
 export function ChangePasswordPage() {
+  useUiLanguage();
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6 py-12">
       <section className="w-full max-w-md rounded-lg border bg-card p-6 shadow-xs">
         <h1 className="text-[28px] font-semibold leading-[1.15]">
-          Set a new password
+          {t("Set a new password")}
         </h1>
         <p className="mt-4 text-muted-foreground">
-          Replace your temporary password to continue.
+          {t("Replace your temporary password to continue.")}
         </p>
         <div className="mt-8">
           <PasswordChangeForm />

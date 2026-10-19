@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useCallback, useRef, useState } from "react";
 import { Outlet } from "react-router-dom";
 import type { CurrentUserResponse } from "../../api/client";
@@ -47,6 +48,7 @@ function PrincipalWorkspace({
   detailsBasePath = "/translations",
   searchPath = "/translations",
 }: TranslationsWorkspaceProps) {
+  useUiLanguage();
   const [memory, setMemory] = useState<{
     token: string;
     snapshot: TranslationSearchSnapshot | null;
@@ -130,13 +132,13 @@ function PrincipalWorkspace({
           }}
         >
           <AlertDialogHeader>
-            <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
+            <AlertDialogTitle>{t("Leave without saving?")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Your unsaved translation changes will be lost.
+              {t("Your unsaved translation changes will be lost.")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogCancel>{t("Keep editing")}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
@@ -147,7 +149,7 @@ function PrincipalWorkspace({
                 pending.action();
               }}
             >
-              Discard changes
+              {t("Discard changes")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -157,6 +159,7 @@ function PrincipalWorkspace({
 }
 
 export function TranslationsWorkspace(props: TranslationsWorkspaceProps) {
+  useUiLanguage();
   return (
     <PrincipalWorkspace
       key={`${props.principal.id}:${props.lockedProduct?.id ?? "all"}`}

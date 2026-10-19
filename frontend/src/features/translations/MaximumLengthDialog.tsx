@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -53,6 +54,7 @@ function AuthorizedDialog({
   triggerElement,
   fallbackElement,
 }: MaximumLengthDialogProps) {
+  useUiLanguage();
   const [authority, setAuthority] = useState(detail);
   const [input, setInput] = useState(
     String(
@@ -103,32 +105,39 @@ function AuthorizedDialog({
   const isBase = authority.language === authority.base_language;
   const removing = mode === "remove";
   const successCopy = removing
-    ? "Maximum length removed"
-    : "Maximum length saved";
+    ? t("Maximum length removed")
+    : t("Maximum length saved");
   const cancelLabel = removing
     ? isBase
-      ? "Keep base limit"
-      : "Keep language override"
-    : "Discard max length changes";
+      ? t("Keep base limit")
+      : t("Keep language override")
+    : t("Discard max length changes");
   const submitLabel = removing
     ? isBase
-      ? "Remove base limit"
-      : "Remove language override"
-    : "Save max length";
+      ? t("Remove base limit")
+      : t("Remove language override")
+    : t("Save max length");
   const title = removing
     ? isBase
-      ? "Remove the base-language limit?"
-      : `Remove the ${authority.language} override?`
+      ? t("Remove the base-language limit?")
+      : t("Remove the {{v0}} override?", { v0: authority.language })
     : mode === "edit"
-      ? "Edit maximum length"
-      : "Set maximum length";
+      ? t("Edit maximum length")
+      : t("Set maximum length");
   const description = removing
     ? isBase
-      ? "Languages without their own override will have no maximum length. Existing language overrides will remain."
+      ? t(
+          "Languages without their own override will have no maximum length. Existing language overrides will remain.",
+        )
       : authority.base_maximum === null
-        ? "This language will have no maximum length."
-        : `This language will inherit the current ${authority.base_language} maximum of ${authority.base_maximum} characters.`
-    : "Maximum length counts visible characters. A combined emoji or composed character counts as one.";
+        ? t("This language will have no maximum length.")
+        : t(
+            "This language will inherit the current {{v0}} maximum of {{v1}} characters.",
+            { v0: authority.base_language, v1: authority.base_maximum },
+          )
+    : t(
+        "Maximum length counts visible characters. A combined emoji or composed character counts as one.",
+      );
 
   function finishClose() {
     if (intentionalClose.current) return;
@@ -275,26 +284,30 @@ function AuthorizedDialog({
     <Alert ref={alert} tabIndex={-1}>
       <AlertTitle>
         {failure === "conflict"
-          ? "Maximum length changed"
+          ? t("Maximum length changed")
           : failure === "refresh"
-            ? `${successCopy}; current details could not be loaded`
+            ? t("{{v0}}; current details could not be loaded", {
+                v0: successCopy,
+              })
             : removing
-              ? "Maximum length was not removed. Try again."
-              : "Maximum length was not saved"}
+              ? t("Maximum length was not removed. Try again.")
+              : t("Maximum length was not saved")}
       </AlertTitle>
       <AlertDescription className="space-y-(--space-sm)">
         {failure === "conflict" ? (
           <p>
-            This constraint changed in another session. Reload the current value
-            before saving again.
+            {t(
+              "This constraint changed in another session. Reload the current value before saving again.",
+            )}
           </p>
         ) : failure === "refresh" ? (
           <p>
-            Reload the current value to see the saved result. The change will
-            not be submitted again.
+            {t(
+              "Reload the current value to see the saved result. The change will not be submitted again.",
+            )}
           </p>
         ) : (
-          !removing && <p>Review the value and try again.</p>
+          !removing && <p>{t("Review the value and try again.")}</p>
         )}
         {(failure === "conflict" || failure === "refresh") && (
           <Button
@@ -304,7 +317,7 @@ function AuthorizedDialog({
             disabled={pending !== null}
             onClick={() => setReplaceConfirmation(true)}
           >
-            Reload current value
+            {t("Reload current value")}
           </Button>
         )}
       </AlertDescription>
@@ -389,7 +402,7 @@ function AuthorizedDialog({
             >
               {error}
               <div className="space-y-(--space-sm)">
-                <Label htmlFor={fieldId}>Maximum characters</Label>
+                <Label htmlFor={fieldId}>{t("Maximum characters")}</Label>
                 <Input
                   className="min-h-[44px] min-w-[44px]"
                   ref={field}
@@ -410,16 +423,20 @@ function AuthorizedDialog({
                 />
                 {fieldError && (
                   <p id={`${fieldId}-error`}>
-                    Enter a whole number from 0 to 1,048,576.
+                    {t("Enter a whole number from 0 to 1,048,576.")}
                   </p>
                 )}
               </div>
               <p>
                 {isBase
-                  ? "Languages without their own override inherit this value and will be recalculated."
+                  ? t(
+                      "Languages without their own override inherit this value and will be recalculated.",
+                    )
                   : authority.base_maximum === null
-                    ? "No base-language default is currently available."
-                    : `This value overrides the ${authority.base_language} default.`}
+                    ? t("No base-language default is currently available.")
+                    : t("This value overrides the {{v0}} default.", {
+                        v0: authority.base_language,
+                      })}
               </p>
               <DialogFooter>{actions}</DialogFooter>
             </form>
@@ -441,10 +458,13 @@ function AuthorizedDialog({
           }}
         >
           <AlertDialogHeader>
-            <AlertDialogTitle>Replace your entered value?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t("Replace your entered value?")}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Your entered maximum will be replaced with the current server
-              value. This does not save a change.
+              {t(
+                "Your entered maximum will be replaced with the current server value. This does not save a change.",
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -454,7 +474,7 @@ function AuthorizedDialog({
               disabled={pending !== null}
               onClick={() => setReplaceConfirmation(false)}
             >
-              Keep entered value
+              {t("Keep entered value")}
             </Button>
             <Button
               className={actionClass}
@@ -462,7 +482,7 @@ function AuthorizedDialog({
               aria-busy={pending === "reload"}
               onClick={() => void execute("reload")}
             >
-              Replace entered value
+              {t("Replace entered value")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -472,6 +492,7 @@ function AuthorizedDialog({
 }
 
 export function MaximumLengthDialog(props: MaximumLengthDialogProps) {
+  useUiLanguage();
   if (
     !props.roles.some(
       (role) => role === "admin" || role === "product_manager_reviewer",

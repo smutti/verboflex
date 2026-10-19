@@ -62,14 +62,14 @@ describe("GitHub public repository connection", () => {
       />,
     );
     await user.type(
-      screen.getByLabelText("Repository GitHub"),
+      screen.getByLabelText("GitHub repository"),
       "https://github.com/owner/app",
     );
     await user.click(
-      screen.getByRole("button", { name: "Collega repository GitHub" }),
+      screen.getByRole("button", { name: "Connect GitHub repository" }),
     );
     expect(await screen.findByText("owner/app")).toBeVisible();
-    expect(screen.getByText("GitHub · Importazione")).toBeVisible();
+    expect(screen.getByText("GitHub · Import only")).toBeVisible();
     expect(screen.getByText("Kotlin")).toBeVisible();
     expect(selected).toHaveBeenCalledWith(repository);
     expect(connectAdminGithubRepository).toHaveBeenCalledWith(
@@ -84,14 +84,14 @@ describe("GitHub public repository connection", () => {
     const user = userEvent.setup();
     render(<GitHubRepositoryPicker accessToken="session" />);
     await user.type(
-      screen.getByLabelText("Repository GitHub"),
+      screen.getByLabelText("GitHub repository"),
       "https://github.com.evil.test/owner/app",
     );
     await user.click(
-      screen.getByRole("button", { name: "Collega repository GitHub" }),
+      screen.getByRole("button", { name: "Connect GitHub repository" }),
     );
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Inserisci owner/repository",
+      "Enter owner/repository",
     );
     expect(connectAdminGithubRepository).not.toHaveBeenCalled();
   });
@@ -111,14 +111,14 @@ describe("GitHub public repository connection", () => {
         onRepositorySelected={selected}
       />,
     );
-    await user.type(screen.getByLabelText("Repository GitHub"), "owner/app");
+    await user.type(screen.getByLabelText("GitHub repository"), "owner/app");
     await user.click(
-      screen.getByRole("button", { name: "Collega repository GitHub" }),
+      screen.getByRole("button", { name: "Connect GitHub repository" }),
     );
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "limite di richieste pubbliche",
+      "public request limit",
     );
-    expect(screen.getByLabelText("Repository GitHub")).toHaveValue("owner/app");
+    expect(screen.getByLabelText("GitHub repository")).toHaveValue("owner/app");
     expect(selected).not.toHaveBeenCalled();
   });
 });

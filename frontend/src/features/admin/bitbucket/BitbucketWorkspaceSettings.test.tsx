@@ -32,14 +32,12 @@ afterEach(cleanup);
 
 it("loads the central workspace and saves a normalized replacement", async () => {
   render(<BitbucketWorkspaceSettings accessToken="token" />);
-  expect(await screen.findByText("Workspace configurato: acme")).toBeVisible();
+  expect(await screen.findByText("Configured workspace: acme")).toBeVisible();
   const input = screen.getByLabelText("Workspace");
   await userEvent.clear(input);
   await userEvent.type(input, " Other ");
-  await userEvent.click(
-    screen.getByRole("button", { name: "Salva workspace" }),
-  );
-  expect(await screen.findByText("Workspace configurato: other")).toBeVisible();
+  await userEvent.click(screen.getByRole("button", { name: "Save workspace" }));
+  expect(await screen.findByText("Configured workspace: other")).toBeVisible();
   expect(updateAdminBitbucketWorkspace).toHaveBeenCalledWith({
     auth: "token",
     body: { workspace: "Other" },
@@ -52,13 +50,11 @@ it("preserves input after a save failure and bounds duplicate writes", async () 
     new Error("private diagnostics"),
   );
   render(<BitbucketWorkspaceSettings accessToken="token" />);
-  await screen.findByText("Workspace configurato: acme");
+  await screen.findByText("Configured workspace: acme");
   const input = screen.getByLabelText("Workspace");
   await userEvent.clear(input);
   await userEvent.type(input, "other");
-  await userEvent.click(
-    screen.getByRole("button", { name: "Salva workspace" }),
-  );
+  await userEvent.click(screen.getByRole("button", { name: "Save workspace" }));
   expect(await screen.findByRole("alert")).not.toHaveTextContent(
     "private diagnostics",
   );
@@ -67,10 +63,10 @@ it("preserves input after a save failure and bounds duplicate writes", async () 
     new Promise<ReturnType<typeof ok>>(() => {}),
   );
   await userEvent.dblClick(
-    screen.getByRole("button", { name: "Salva workspace" }),
+    screen.getByRole("button", { name: "Save workspace" }),
   );
   expect(updateAdminBitbucketWorkspace).toHaveBeenCalledTimes(2);
-  expect(screen.getByRole("button", { name: "Salvataggio…" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
 });
 
 it("retries a failed load before allowing a workspace overwrite", async () => {
@@ -82,7 +78,7 @@ it("retries a failed load before allowing a workspace overwrite", async () => {
     "private diagnostics",
   );
   expect(screen.getByLabelText("Workspace")).toBeDisabled();
-  await userEvent.click(screen.getByRole("button", { name: "Riprova" }));
+  await userEvent.click(screen.getByRole("button", { name: "Retry" }));
   await waitFor(() =>
     expect(screen.getByLabelText("Workspace")).toHaveValue("acme"),
   );

@@ -1,3 +1,4 @@
+import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import { Bell, CircleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useInRouterContext } from "react-router-dom";
@@ -18,12 +19,12 @@ import { useNotificationShell } from "./NotificationShell";
 
 function notificationBellLabel(unreadCount: number): string {
   if (unreadCount === 0) {
-    return "Notifications, no unread notifications";
+    return t("Notifications, no unread notifications");
   }
   if (unreadCount === 1) {
-    return "Notifications, 1 unread notification";
+    return t("Notifications, 1 unread notification");
   }
-  return `Notifications, ${unreadCount} unread notifications`;
+  return t("Notifications, {{v0}} unread notifications", { v0: unreadCount });
 }
 
 function notificationHref(item: NotificationItemResponse): string {
@@ -31,6 +32,7 @@ function notificationHref(item: NotificationItemResponse): string {
 }
 
 function NotificationSummary({ item }: { item: NotificationItemResponse }) {
+  useUiLanguage();
   const {
     actor: { display_name: actorDisplayName },
     comment_status: commentStatus,
@@ -51,7 +53,7 @@ function NotificationSummary({ item }: { item: NotificationItemResponse }) {
           {actorDisplayName}
         </span>
         <span className="shrink-0 text-xs text-muted-foreground">
-          {isRead ? "Read" : "Unread"}
+          {isRead ? t("Read") : t("Unread")}
         </span>
       </div>
       <span className="truncate text-sm" title={productName}>
@@ -66,11 +68,13 @@ function NotificationSummary({ item }: { item: NotificationItemResponse }) {
       </span>
       <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <span>{language}</span>
-        <time dateTime={createdAt}>{new Date(createdAt).toLocaleString()}</time>
+        <time dateTime={createdAt}>
+          {new Date(createdAt).toLocaleString(getUiLanguage())}
+        </time>
       </span>
       {commentStatus === "removed" ? (
         <span className="text-sm font-medium text-muted-foreground">
-          Comment no longer available
+          {t("Comment no longer available")}
         </span>
       ) : null}
     </div>
@@ -78,6 +82,7 @@ function NotificationSummary({ item }: { item: NotificationItemResponse }) {
 }
 
 function NotificationRow({ item }: { item: NotificationItemResponse }) {
+  useUiLanguage();
   const { markRead, readErrorId, readingIds } = useNotificationShell();
   const [successAnnouncement, setSuccessAnnouncement] = useState("");
   const alertRef = useRef<HTMLDivElement>(null);
@@ -103,7 +108,9 @@ function NotificationRow({ item }: { item: NotificationItemResponse }) {
   return (
     <article
       className="grid min-w-0 gap-1 rounded-md border bg-background p-1"
-      aria-label={`Notification from ${item.actor.display_name}`}
+      aria-label={t("Notification from {{v0}}", {
+        v0: item.actor.display_name,
+      })}
     >
       {item.comment_status === "available" ? (
         <DropdownMenuItem
@@ -129,7 +136,7 @@ function NotificationRow({ item }: { item: NotificationItemResponse }) {
           }}
           className="min-h-[44px] justify-center"
         >
-          {isReading ? "Marking as read" : "Mark as read"}
+          {isReading ? t("Marking as read") : t("Mark as read")}
         </DropdownMenuItem>
       ) : null}
       {failed ? (
@@ -141,14 +148,14 @@ function NotificationRow({ item }: { item: NotificationItemResponse }) {
         >
           <span className="flex items-center gap-2 font-semibold text-destructive">
             <CircleAlert aria-hidden="true" />
-            Notification was not marked as read
+            {t("Notification was not marked as read")}
           </span>
           <Button
             type="button"
             variant="outline"
             onClick={() => void readItem()}
           >
-            Retry marking as read
+            {t("Retry marking as read")}
           </Button>
         </div>
       ) : null}
@@ -160,13 +167,14 @@ function NotificationRow({ item }: { item: NotificationItemResponse }) {
 }
 
 function PanelBody() {
+  useUiLanguage();
   const { recent, refresh, stale, status } = useNotificationShell();
 
   if (status === "loading") {
     return (
       <div
         role="status"
-        aria-label="Loading notifications"
+        aria-label={t("Loading notifications")}
         className="grid gap-2 p-2"
       >
         {Array.from({ length: 5 }, (_, index) => (
@@ -184,10 +192,10 @@ function PanelBody() {
     return (
       <div role="alert" className="grid gap-2 p-2">
         <p className="font-semibold text-destructive">
-          Notifications could not be loaded
+          {t("Notifications could not be loaded")}
         </p>
         <Button type="button" variant="outline" onClick={() => void refresh()}>
-          Refresh notifications
+          {t("Refresh notifications")}
         </Button>
       </div>
     );
@@ -196,7 +204,7 @@ function PanelBody() {
   if (recent.length === 0) {
     return (
       <div className="grid gap-1 p-4 text-center">
-        <p className="font-semibold">No notifications yet</p>
+        <p className="font-semibold">{t("No notifications yet")}</p>
       </div>
     );
   }
@@ -208,14 +216,16 @@ function PanelBody() {
           role="status"
           className="flex flex-wrap items-center justify-between gap-2 p-1 text-sm"
         >
-          <span className="font-medium text-amber-800">May be out of date</span>
+          <span className="font-medium text-amber-800">
+            {t("May be out of date")}
+          </span>
           <Button
             type="button"
             size="sm"
             variant="outline"
             onClick={() => void refresh()}
           >
-            Refresh notifications
+            {t("Refresh notifications")}
           </Button>
         </div>
       ) : null}
@@ -227,6 +237,7 @@ function PanelBody() {
 }
 
 export function NotificationPanel() {
+  useUiLanguage();
   const { announcement, unreadCount } = useNotificationShell();
   const [open, setOpen] = useState(false);
   const visualCount = unreadCount > 99 ? "99+" : String(unreadCount);
@@ -271,7 +282,7 @@ export function NotificationPanel() {
             id="notification-panel-title"
             className="text-base font-semibold"
           >
-            Notifications
+            {t("Notifications")}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <PanelBody />
@@ -281,15 +292,15 @@ export function NotificationPanel() {
             className="min-h-[44px] justify-center font-medium"
           >
             {isWithinRouter ? (
-              <Link to="/notifications">View all notifications</Link>
+              <Link to="/notifications">{t("View all notifications")}</Link>
             ) : (
-              <a href="/notifications">View all notifications</a>
+              <a href="/notifications">{t("View all notifications")}</a>
             )}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <span className="sr-only" aria-live="polite" aria-atomic="true">
-        {announcement}
+        {t(announcement)}
       </span>
     </>
   );

@@ -1,3 +1,4 @@
+import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import {
   useCallback,
   useEffect,
@@ -79,38 +80,78 @@ const STATUS_LABELS: Record<
   AdminPublishedMappingImportResponse["state"],
   string
 > = {
-  current: "Current",
-  import_failed: "Import failed",
-  may_be_stale: "May be stale",
-  not_imported: "Not imported",
-  queued: "Queued",
-  review_required: "Review required",
-  running: "Running",
+  get current() {
+    return t("Current");
+  },
+  get import_failed() {
+    return t("Import failed");
+  },
+  get may_be_stale() {
+    return t("May be stale");
+  },
+  get not_imported() {
+    return t("Not imported");
+  },
+  get queued() {
+    return t("Queued");
+  },
+  get review_required() {
+    return t("Review required");
+  },
+  get running() {
+    return t("Running");
+  },
 };
 
 const ACTION_LABELS: Record<
   AdminPublishedMappingImportResponse["action"],
   string
 > = {
-  import_in_progress: "Import in progress",
-  refresh_import: "Refresh import",
-  retry_import: "Retry import",
-  review_baseline_change: "Review baseline change",
-  run_import: "Run import",
+  get import_in_progress() {
+    return t("Import in progress");
+  },
+  get refresh_import() {
+    return t("Refresh import");
+  },
+  get retry_import() {
+    return t("Retry import");
+  },
+  get review_baseline_change() {
+    return t("Review baseline change");
+  },
+  get run_import() {
+    return t("Run import");
+  },
 };
 
 const SIDE_LABELS = {
-  direct: "Source",
-  keys: "Keys",
-  translations: "Translations",
+  get direct() {
+    return t("Source");
+  },
+  get keys() {
+    return t("Keys");
+  },
+  get translations() {
+    return t("Translations");
+  },
 } as const;
 
 const PARSER_CATEGORIES: Record<ImportParserIssue["issue_code"], string> = {
-  malformed_file: "Malformed file",
-  ambiguous_structure: "Ambiguous structure",
-  unsupported_structure: "Unsupported structure",
-  duplicate_key: "Duplicate key",
-  base_language_required: "Base language required",
+  get malformed_file() {
+    return t("Malformed file");
+  },
+  get ambiguous_structure() {
+    return t("Ambiguous structure");
+  },
+  get unsupported_structure() {
+    return t("Unsupported structure");
+  },
+  get duplicate_key() {
+    return t("Duplicate key");
+  },
+  get base_language_required() {
+    return t("Base language required");
+  },
 };
 
 function hasParserFailure(item: AdminPublishedMappingImportResponse) {
@@ -129,21 +170,27 @@ function isImportActive(item: AdminPublishedMappingImportResponse) {
 function importProgress(item: AdminPublishedMappingImportResponse) {
   switch (item.state) {
     case "not_imported":
-      return { step: 0, label: "Ready to start" };
+      return { step: 0, label: t("Ready to start") };
     case "queued":
-      return { step: 1, label: "Step 1 of 3: Waiting for the import worker" };
+      return {
+        step: 1,
+        label: t("Step 1 of 3: Waiting for the import worker"),
+      };
     case "running":
       return {
         step: 2,
-        label: "Step 2 of 3: Reading and validating repository files",
+        label: t("Step 2 of 3: Reading and validating repository files"),
       };
     case "current":
-      return { step: 3, label: "Step 3 of 3: Imported strings are available" };
+      return {
+        step: 3,
+        label: t("Step 3 of 3: Imported strings are available"),
+      };
     case "review_required":
-      return { step: 3, label: "Step 3 of 3: Source changes need review" };
+      return { step: 3, label: t("Step 3 of 3: Source changes need review") };
     case "import_failed":
     case "may_be_stale":
-      return { step: 3, label: "Step 3 of 3: Completed with warnings" };
+      return { step: 3, label: t("Step 3 of 3: Completed with warnings") };
   }
 }
 
@@ -170,6 +217,7 @@ function ImportProgress({
   item: AdminPublishedMappingImportResponse;
   repositories: readonly AdminRepositoryResponse[];
 }) {
+  useUiLanguage();
   const progress = importProgress(item);
   const primarySide = item.repository_sides[0];
   return (
@@ -179,7 +227,7 @@ function ImportProgress({
           <span className="font-semibold [overflow-wrap:anywhere]">
             {primarySide
               ? repositoryLabel(primarySide.repository_id, repositories)
-              : "Published mapping"}
+              : t("Published mapping")}
           </span>
           {primarySide ? (
             <span className="font-mono text-sm [overflow-wrap:anywhere]">
@@ -191,7 +239,9 @@ function ImportProgress({
       </div>
       <div
         role="progressbar"
-        aria-label={`Import progress for mapping ${item.mapping_id}`}
+        aria-label={t("Import progress for mapping {{v0}}", {
+          v0: item.mapping_id,
+        })}
         aria-valuemin={0}
         aria-valuemax={3}
         aria-valuenow={progress.step}
@@ -228,6 +278,7 @@ function preserveNewerImport(
 }
 
 function ConfigureBaseLanguage({ productId }: { productId: string }) {
+  useUiLanguage();
   const { state } = useSession();
   if (
     state.status !== "authenticated" ||
@@ -242,7 +293,7 @@ function ConfigureBaseLanguage({ productId }: { productId: string }) {
       className="min-h-[44px] h-auto whitespace-normal motion-reduce:transition-none"
     >
       <Link to={`/admin/products/${encodeURIComponent(productId)}/preview`}>
-        Configure base language
+        {t("Configure base language")}
       </Link>
     </Button>
   );
@@ -255,6 +306,7 @@ function ParserIssues({
   item: AdminPublishedMappingImportResponse;
   productId: string;
 }) {
+  useUiLanguage();
   // Stable sort preserves the provider-file order projected within each side.
   const sideOrder = { direct: 0, keys: 1, translations: 2 };
   const issues = [...item.parser_issues]
@@ -266,7 +318,10 @@ function ParserIssues({
   return (
     <>
       {issues.length > 0 ? (
-        <ul aria-label="Parser errors" className="grid min-w-0 w-full gap-2">
+        <ul
+          aria-label={t("Parser errors")}
+          className="grid min-w-0 w-full gap-2"
+        >
           {issues.map((issue, index) => (
             <li key={index} className="min-w-0 [overflow-wrap:anywhere]">
               <span className="font-semibold">
@@ -278,17 +333,28 @@ function ParserIssues({
               <span className="block font-mono">{issue.path}</span>
               {issue.line !== null ? (
                 <span>
-                  Line {issue.line}
-                  {issue.column !== null ? `, column ${issue.column}` : ""}
+                  {t("Line ")}
+                  {issue.line}
+                  {issue.column !== null
+                    ? t(", column {{v0}}", { v0: issue.column })
+                    : ""}
                 </span>
               ) : issue.column !== null ? (
-                <span>Column {issue.column}</span>
+                <span>
+                  {t("Column ")}
+                  {issue.column}
+                </span>
               ) : null}
             </li>
           ))}
         </ul>
       ) : null}
-      {remaining > 0 ? <p>And {remaining} more errors.</p> : null}
+      {remaining > 0 ? (
+        <p>
+          {t("And ")}
+          {remaining} {t(" more errors.")}
+        </p>
+      ) : null}
       {item.parser_issues.some(
         (issue) => issue.issue_code === "base_language_required",
       ) ? (
@@ -303,47 +369,90 @@ const ERROR_COPY: Record<
   { heading: string; message: string }
 > = {
   bounded_failure: {
-    heading: "Import did not complete",
-    message:
-      "The source could not be read within the safe import limits. The last successful baseline is unchanged. Review the mapping before retrying.",
+    get heading() {
+      return t("Import did not complete");
+    },
+    get message() {
+      return t(
+        "The source could not be read within the safe import limits. The last successful baseline is unchanged. Review the mapping before retrying.",
+      );
+    },
   },
   connection_required: {
-    heading: "Bitbucket connection required",
-    message:
-      "The organizational Bitbucket connection is not ready for imports. An administrator must reconnect it before retrying this mapping.",
+    get heading() {
+      return t("Bitbucket connection required");
+    },
+    get message() {
+      return t(
+        "The organizational Bitbucket connection is not ready for imports. An administrator must reconnect it before retrying this mapping.",
+      );
+    },
   },
   permission_denied: {
-    heading: "Repository access denied",
-    message:
-      "Bitbucket denied access to this repository or branch. Review the organizational connection and repository permissions, then retry from this mapping.",
+    get heading() {
+      return t("Repository access denied");
+    },
+    get message() {
+      return t(
+        "Bitbucket denied access to this repository or branch. Review the organizational connection and repository permissions, then retry from this mapping.",
+      );
+    },
   },
   provider_unavailable: {
-    heading: "Bitbucket unavailable",
-    message:
-      "Bitbucket could not complete this import. The last successful baseline is unchanged. Retry later.",
+    get heading() {
+      return t("Bitbucket unavailable");
+    },
+    get message() {
+      return t(
+        "Bitbucket could not complete this import. The last successful baseline is unchanged. Retry later.",
+      );
+    },
   },
   rate_limited: {
-    heading: "Bitbucket request limit reached",
-    message:
-      "Bitbucket is temporarily limiting requests. Wait a few minutes, then retry this import from the mapping.",
+    get heading() {
+      return t("Bitbucket request limit reached");
+    },
+    get message() {
+      return t(
+        "Bitbucket is temporarily limiting requests. Wait a few minutes, then retry this import from the mapping.",
+      );
+    },
   },
   source_not_found: {
-    heading: "Import source not found",
-    message:
-      "The configured repository, branch, or localization file could not be found. Review the mapping configuration before retrying.",
+    get heading() {
+      return t("Import source not found");
+    },
+    get message() {
+      return t(
+        "The configured repository, branch, or localization file could not be found. Review the mapping configuration before retrying.",
+      );
+    },
   },
   timeout: {
-    heading: "Import timed out",
-    message:
-      "Bitbucket did not respond within the safe time limit. The last successful baseline is unchanged. Retry later.",
+    get heading() {
+      return t("Import timed out");
+    },
+    get message() {
+      return t(
+        "Bitbucket did not respond within the safe time limit. The last successful baseline is unchanged. Retry later.",
+      );
+    },
   },
 };
 
 function fixedErrorCopy(item: AdminPublishedMappingImportResponse) {
   if (hasParserFailure(item)) {
     return {
-      heading: "Localization files could not be imported",
-      message: `One or more configured files are malformed, ambiguous, or contain unsupported structure. ${item.dataset_status === "retained" ? "The last successful translation dataset remains active." : "No translation dataset was created."}`,
+      heading: t("Localization files could not be imported"),
+      message: t(
+        "One or more configured files are malformed, ambiguous, or contain unsupported structure. {{v0}}",
+        {
+          v0:
+            item.dataset_status === "retained"
+              ? "The last successful translation dataset remains active."
+              : "No translation dataset was created.",
+        },
+      ),
     };
   }
   if (item.error_category === null) {
@@ -356,8 +465,8 @@ function fixedErrorCopy(item: AdminPublishedMappingImportResponse) {
   return {
     ...copy,
     message: copy.message.replace(
-      "The last successful baseline is unchanged.",
-      "No import baseline was created.",
+      t("The last successful baseline is unchanged."),
+      t("No import baseline was created."),
     ),
   };
 }
@@ -408,13 +517,16 @@ function RepositorySides({
   item: AdminPublishedMappingImportResponse;
   repositories: readonly AdminRepositoryResponse[];
 }) {
+  useUiLanguage();
   return (
     <div className="grid gap-2">
       {item.repository_sides.map((side) => (
         <div
           key={`${side.role}:${side.repository_id}`}
           role="region"
-          aria-label={`${SIDE_LABELS[side.role]} repository and branch`}
+          aria-label={t("{{v0}} repository and branch", {
+            v0: SIDE_LABELS[side.role],
+          })}
           // Opaque provider values use a local keyboard-scrollable boundary.
           // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
           tabIndex={0}
@@ -436,9 +548,10 @@ function RepositorySides({
 }
 
 function Baseline({ item }: { item: AdminPublishedMappingImportResponse }) {
+  useUiLanguage();
   const references = baselineReferences(item);
   if (references.length === 0) {
-    return <span>No successful import yet</span>;
+    return <span>{t("No successful import yet")}</span>;
   }
   return (
     <div className="grid gap-1">
@@ -463,14 +576,20 @@ function LatestExecution({
 }: {
   item: AdminPublishedMappingImportResponse;
 }) {
+  useUiLanguage();
   return (
     <div className="grid gap-1">
       <span>
         {item.latest_execution_at === null
-          ? "Never"
-          : new Date(item.latest_execution_at).toLocaleString()}
+          ? t("Never")
+          : new Date(item.latest_execution_at).toLocaleString(getUiLanguage())}
       </span>
-      {item.retry_count > 0 ? <span>Retry {item.retry_count}</span> : null}
+      {item.retry_count > 0 ? (
+        <span>
+          {t("Retry ")}
+          {item.retry_count}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -488,6 +607,7 @@ function RowError({
   pollingFailed: boolean;
   productId: string;
 }) {
+  useUiLanguage();
   const errorCopy = fixedErrorCopy(item);
   if (errorCopy === null && !mutationFailed && !pollingFailed) {
     return null;
@@ -496,14 +616,16 @@ function RowError({
     errorCopy ??
     (pollingFailed
       ? {
-          heading: "Status update unavailable",
-          message:
+          heading: t("Status update unavailable"),
+          message: t(
             "Automatic status updates paused. Refresh status from this mapping.",
+          ),
         }
       : {
-          heading: "Import did not start",
-          message:
+          heading: t("Import did not start"),
+          message: t(
             "The import request could not be accepted. The current baseline is unchanged.",
+          ),
         });
   return (
     <Alert
@@ -532,6 +654,7 @@ function AdminDuplicateAction({
   productId: string;
   item: AdminPublishedMappingImportResponse;
 }) {
+  useUiLanguage();
   const { state } = useSession();
   if (
     state.status !== "authenticated" ||
@@ -565,6 +688,7 @@ function ImportAction({
   onRefreshStatus: () => void;
   pending: boolean;
 }) {
+  useUiLanguage();
   const inProgress = item.action === "import_in_progress";
   return (
     <div className="grid gap-2">
@@ -593,7 +717,7 @@ function ImportAction({
       {automaticUpdatesPaused && inProgress ? (
         <>
           <span className="text-sm text-muted-foreground">
-            Automatic status updates paused
+            {t("Automatic status updates paused")}
           </span>
           <Button
             type="button"
@@ -601,7 +725,7 @@ function ImportAction({
             className="min-h-[44px] h-auto w-full whitespace-normal motion-reduce:transition-none"
             onClick={onRefreshStatus}
           >
-            Refresh status
+            {t("Refresh status")}
           </Button>
         </>
       ) : null}
@@ -627,11 +751,14 @@ function ImportPollingBridge({
     refresh: (() => Promise<void>) | null,
   ) => void;
 }) {
+  useUiLanguage();
   const polling = useImportPolling({
     accessToken,
     initialImport: item,
     onAnnouncement: (state) =>
-      onAnnouncement(`${state} for mapping ${item.mapping_id}`),
+      onAnnouncement(
+        t("{{v0}} for mapping {{v1}}", { v0: state, v1: item.mapping_id }),
+      ),
     productId,
   });
   const sourceProjectionKey = JSON.stringify(item);
@@ -670,6 +797,7 @@ export function PublishedMappingImports({
   repositories = [],
   statusFilter = "all",
 }: PublishedMappingImportsProps) {
+  useUiLanguage();
   const authorityIdentity = useMemo(
     () => JSON.stringify({ accessToken, productId, statusFilter }),
     [accessToken, productId, statusFilter],
@@ -1081,7 +1209,7 @@ export function PublishedMappingImports({
               : previous,
           ),
         );
-        toast.success("Import started");
+        toast.success(t("Import started"));
         const refreshed = await loadCompleteCollection(true);
         if (!refreshed) {
           throw new Error("import status unavailable");
@@ -1174,15 +1302,17 @@ export function PublishedMappingImports({
       <div className="grid gap-2">
         <Heading className="text-heading font-semibold">
           {autoStart
-            ? "Import progress"
+            ? t("Import progress")
             : compact
-              ? "Imports from published sources"
-              : "Published mapping imports"}
+              ? t("Imports from published sources")
+              : t("Published mapping imports")}
         </Heading>
         <p className="text-muted-foreground">
           {autoStart
-            ? "New sources start importing automatically. You can follow their progress here."
-            : "Import localization sources from the exact published branch."}
+            ? t(
+                "New sources start importing automatically. You can follow their progress here.",
+              )
+            : t("Import localization sources from the exact published branch.")}
         </p>
       </div>
 
@@ -1192,14 +1322,14 @@ export function PublishedMappingImports({
             data-testid="published-import-skeleton"
             className="h-24 w-full"
           />
-          <span>Loading published mappings</span>
+          <span>{t("Loading published mappings")}</span>
         </div>
       ) : null}
 
       {collectionState === "error" ? (
         <Alert variant="destructive">
           <AlertTitle>
-            <h4>Published imports unavailable</h4>
+            <h4>{t("Published imports unavailable")}</h4>
           </AlertTitle>
           <AlertDescription>
             <Button
@@ -1208,7 +1338,7 @@ export function PublishedMappingImports({
               className="min-h-11 whitespace-normal"
               onClick={() => void loadCompleteCollection()}
             >
-              Retry loading published imports
+              {t("Retry loading published imports")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -1216,9 +1346,11 @@ export function PublishedMappingImports({
 
       {collectionState === "ready" && items.length === 0 ? (
         <div className="grid gap-2 rounded-lg border bg-secondary p-6">
-          <h4 className="font-semibold">No published mappings to import</h4>
+          <h4 className="font-semibold">
+            {t("No published mappings to import")}
+          </h4>
           <p className="text-muted-foreground">
-            Publish a validated mapping before running an import.
+            {t("Publish a validated mapping before running an import.")}
           </p>
         </div>
       ) : null}
@@ -1239,14 +1371,15 @@ export function PublishedMappingImports({
 
           <Tabs defaultValue="progress" className="min-w-0 max-w-full">
             <TabsList
-              aria-label="Import views"
+              aria-label={t("Import views")}
               className="h-auto w-full flex-wrap justify-start"
             >
-              <TabsTrigger value="progress">Import progress</TabsTrigger>
+              <TabsTrigger value="progress">{t("Import progress")}</TabsTrigger>
               <TabsTrigger value="warnings">
-                Warnings ({warningItems.length})
+                {t("Warnings (")}
+                {warningItems.length})
               </TabsTrigger>
-              <TabsTrigger value="strings">Imported strings</TabsTrigger>
+              <TabsTrigger value="strings">{t("Imported strings")}</TabsTrigger>
             </TabsList>
             <TabsContent value="progress" className="mt-3">
               <div className="grid gap-3 lg:grid-cols-2">
@@ -1265,7 +1398,7 @@ export function PublishedMappingImports({
                   <Link
                     to={`/products/${encodeURIComponent(productId)}/strings`}
                   >
-                    Manage imported strings
+                    {t("Manage imported strings")}
                   </Link>
                 </Button>
               ) : null}
@@ -1273,7 +1406,7 @@ export function PublishedMappingImports({
             <TabsContent value="warnings" className="mt-3">
               {warningItems.length === 0 ? (
                 <div role="status" className="rounded-lg border bg-card p-4">
-                  No import warnings detected.
+                  {t("No import warnings detected.")}
                 </div>
               ) : (
                 <div className="grid gap-3">
@@ -1294,7 +1427,7 @@ export function PublishedMappingImports({
                                     primarySide.repository_id,
                                     repositories,
                                   )
-                                : "Published mapping"}
+                                : t("Published mapping")}
                             </h3>
                             {primarySide ? (
                               <span className="font-mono text-sm [overflow-wrap:anywhere]">
@@ -1308,16 +1441,19 @@ export function PublishedMappingImports({
                         </div>
                         {duplicates && duplicates.group_count > 0 ? (
                           <p>
-                            {duplicates.group_count} duplicate key groups ·{" "}
-                            {duplicates.repeated_occurrences} repeated
-                            occurrences
+                            {duplicates.group_count}{" "}
+                            {t(" duplicate key groups ·")}{" "}
+                            {duplicates.repeated_occurrences}{" "}
+                            {t(" repeated occurrences")}
                           </p>
                         ) : null}
                         {parserWarnings > 0 ? (
                           <div className="grid gap-2">
                             <p>
-                              {parserWarnings} parser warning
-                              {parserWarnings === 1 ? "" : "s"}
+                              {parserWarnings}{" "}
+                              {parserWarnings === 1
+                                ? t("parser warning")
+                                : t("parser warnings")}
                             </p>
                             <ParserIssues item={item} productId={productId} />
                           </div>
@@ -1344,24 +1480,26 @@ export function PublishedMappingImports({
                 {importedMappingCount > 0 ? (
                   <>
                     <p>
-                      Imported strings from {importedMappingCount} published{" "}
+                      {t("Imported strings from ")}
+                      {importedMappingCount} {t(" published")}{" "}
                       {importedMappingCount === 1
-                        ? "mapping is"
-                        : "mappings are"}{" "}
-                      available.
+                        ? t("mapping is")
+                        : t("mappings are")}{" "}
+                      {t("available.")}
                     </p>
                     <Button asChild className="w-fit">
                       <Link
                         to={`/translations?product_id=${encodeURIComponent(productId)}`}
                       >
-                        View imported strings
+                        {t("View imported strings")}
                       </Link>
                     </Button>
                   </>
                 ) : (
                   <p role="status">
-                    No imported strings yet. Start an import and this view will
-                    update automatically.
+                    {t(
+                      "No imported strings yet. Start an import and this view will update automatically.",
+                    )}
                   </p>
                 )}
               </div>
@@ -1369,14 +1507,14 @@ export function PublishedMappingImports({
           </Tabs>
 
           <div className="hidden max-w-full overflow-x-auto md:block">
-            <Table aria-label="Published mapping imports">
+            <Table aria-label={t("Published mapping imports")}>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Mapping</TableHead>
-                  <TableHead>Import status</TableHead>
-                  <TableHead>Last successful baseline</TableHead>
-                  <TableHead>Latest execution</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>{t("Mapping")}</TableHead>
+                  <TableHead>{t("Import status")}</TableHead>
+                  <TableHead>{t("Last successful baseline")}</TableHead>
+                  <TableHead>{t("Latest execution")}</TableHead>
+                  <TableHead>{t("Actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1462,7 +1600,7 @@ export function PublishedMappingImports({
           </div>
 
           <section
-            aria-label="Published mapping imports mobile list"
+            aria-label={t("Published mapping imports mobile list")}
             className="grid min-w-0 max-w-full gap-3 overflow-x-clip md:hidden"
           >
             {visibleItems.map(
@@ -1476,24 +1614,28 @@ export function PublishedMappingImports({
                   className="grid min-w-0 max-w-full gap-4 rounded-lg border bg-secondary p-4"
                 >
                   <div className="grid min-w-0 gap-1">
-                    <span className="text-sm font-semibold">Mapping</span>
+                    <span className="text-sm font-semibold">
+                      {t("Mapping")}
+                    </span>
                     <RepositorySides item={item} repositories={repositories} />
                   </div>
                   <div className="grid gap-1">
-                    <span className="text-sm font-semibold">Import status</span>
+                    <span className="text-sm font-semibold">
+                      {t("Import status")}
+                    </span>
                     <Badge className="w-fit" variant="outline">
                       {STATUS_LABELS[item.state]}
                     </Badge>
                   </div>
                   <div className="grid min-w-0 gap-1">
                     <span className="text-sm font-semibold">
-                      Last successful baseline
+                      {t("Last successful baseline")}
                     </span>
                     <Baseline item={item} />
                   </div>
                   <div className="grid gap-1">
                     <span className="text-sm font-semibold">
-                      Latest execution
+                      {t("Latest execution")}
                     </span>
                     <LatestExecution item={item} />
                   </div>
@@ -1535,7 +1677,7 @@ export function PublishedMappingImports({
           </section>
 
           <p className="sr-only" aria-live="polite" aria-atomic="true">
-            {announcement}
+            {t(announcement)}
           </p>
 
           {rewriteReview !== null ? (
@@ -1545,7 +1687,7 @@ export function PublishedMappingImports({
               onClose={() => setRewriteReview(null)}
               onConfirmed={async () => {
                 const refreshed = await loadCompleteCollection(true);
-                if (refreshed) setAnnouncement("Baseline updated");
+                if (refreshed) setAnnouncement(t("Baseline updated"));
                 return refreshed;
               }}
               open

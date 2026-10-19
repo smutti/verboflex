@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -12,6 +13,7 @@ import { Input } from "../../../components/ui/input";
 type Props = { accessToken: string; productId: string };
 
 export function SourceFallbackSettings(props: Props) {
+  useUiLanguage();
   const [opened, setOpened] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<{
@@ -45,7 +47,7 @@ export function SourceFallbackSettings(props: Props) {
       }}
     >
       <summary className="cursor-pointer font-semibold">
-        Source language settings
+        {t("Source language settings")}
       </summary>
       {opened && (
         <div className="mt-4">
@@ -53,13 +55,13 @@ export function SourceFallbackSettings(props: Props) {
             <SourceFallbackForm key={attempt} {...props} initial={state.data} />
           ) : state.failed ? (
             <div role="alert">
-              <p>Source language settings could not be loaded.</p>
+              <p>{t("Source language settings could not be loaded.")}</p>
               <Button variant="outline" onClick={() => setAttempt(attempt + 1)}>
-                Retry settings
+                {t("Retry settings")}
               </Button>
             </div>
           ) : (
-            <p role="status">Loading source language settings…</p>
+            <p role="status">{t("Loading source language settings…")}</p>
           )}
         </div>
       )}
@@ -72,6 +74,7 @@ function SourceFallbackForm({
   productId,
   initial,
 }: Props & { initial: SourceFallbackResponse }) {
+  useUiLanguage();
   const [policy, setPolicy] = useState(initial);
   const [enabled, setEnabled] = useState(initial.enabled);
   const [language, setLanguage] = useState(
@@ -179,10 +182,9 @@ function SourceFallbackForm({
   return (
     <div className="max-w-4xl space-y-4">
       <p className="text-sm text-muted-foreground">
-        Confirm which source phrases are already in the base language. Empty Qt
-        translations will use the selected text and leave Needs translation. New
-        or changed phrases still need translation until confirmed here.
-        Repository files and approvals are unchanged.
+        {t(
+          "Confirm which source phrases are already in the base language. Empty Qt translations will use the selected text and leave Needs translation. New or changed phrases still need translation until confirmed here. Repository files and approvals are unchanged.",
+        )}
       </p>
       <label className="flex items-center gap-2">
         <input
@@ -191,12 +193,12 @@ function SourceFallbackForm({
           disabled={saving}
           onChange={(event) => setEnabled(event.target.checked)}
         />
-        Use confirmed source text for the base language
+        {t("Use confirmed source text for the base language")}
       </label>
       <label className="flex flex-wrap items-center gap-3">
-        Base language
+        {t("Base language")}
         <select
-          aria-label="Source fallback base language"
+          aria-label={t("Source fallback base language")}
           value={language}
           disabled={saving}
           className="rounded-md border p-2"
@@ -207,7 +209,7 @@ function SourceFallbackForm({
             setPage({ texts: [], cursor: null });
           }}
         >
-          {!language && <option value="">Select a base language</option>}
+          {!language && <option value="">{t("Select a base language")}</option>}
           {initial.available_languages.map((value) => (
             <option key={value} value={value}>
               {value}
@@ -215,10 +217,12 @@ function SourceFallbackForm({
           ))}
         </select>
       </label>
-      <p className="text-sm">{selected.size} source phrases confirmed</p>
+      <p className="text-sm">
+        {selected.size} {t(" source phrases confirmed")}
+      </p>
       <Input
-        aria-label="Find source phrases"
-        placeholder="Find source phrases…"
+        aria-label={t("Find source phrases")}
+        placeholder={t("Find source phrases…")}
         maxLength={256}
         value={query}
         disabled={saving}
@@ -230,7 +234,7 @@ function SourceFallbackForm({
       />
       <div
         className="max-h-80 space-y-2 overflow-y-auto rounded-md border p-3"
-        aria-label="Source phrases"
+        aria-label={t("Source phrases")}
       >
         {page.texts.map((text) => (
           <label key={text} className="flex items-start gap-3 text-sm">
@@ -258,14 +262,14 @@ function SourceFallbackForm({
             </span>
           </label>
         ))}
-        {loading && <p role="status">Loading source phrases…</p>}
+        {loading && <p role="status">{t("Loading source phrases…")}</p>}
         {page.failed && (
           <p role="alert">
-            Source phrases could not be loaded. Search again to retry.
+            {t("Source phrases could not be loaded. Search again to retry.")}
           </p>
         )}
         {!loading && !page.failed && page.texts.length === 0 && (
-          <p>No matching Qt source phrases.</p>
+          <p>{t("No matching Qt source phrases.")}</p>
         )}
       </div>
       {page.cursor && (
@@ -274,7 +278,7 @@ function SourceFallbackForm({
           disabled={loading || saving}
           onClick={() => setCursor(page.cursor)}
         >
-          Load more source phrases
+          {t("Load more source phrases")}
         </Button>
       )}
       <div>
@@ -282,10 +286,10 @@ function SourceFallbackForm({
           disabled={saving || (enabled && !language)}
           onClick={() => void save()}
         >
-          {saving ? "Saving…" : "Save source language settings"}
+          {saving ? t("Saving…") : t("Save source language settings")}
         </Button>
       </div>
-      {message && <p role={failed ? "alert" : "status"}>{message}</p>}
+      {message && <p role={failed ? "alert" : "status"}>{t(message)}</p>}
     </div>
   );
 }

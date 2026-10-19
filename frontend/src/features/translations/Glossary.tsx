@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useState } from "react";
 import { BookOpen, Pencil, Trash2 } from "lucide-react";
 import {
@@ -39,12 +40,13 @@ export function Glossary({
   canManage: boolean;
   languages: { code: string; label: string }[];
 }) {
+  useUiLanguage();
   const [open, setOpen] = useState(false);
   return (
     <>
       <Button variant="outline" onClick={() => setOpen(true)}>
         <BookOpen className="size-4" />
-        Glossary
+        {t("Glossary")}
       </Button>
       {open && (
         <GlossaryDialog
@@ -71,6 +73,7 @@ function GlossaryDialog({
   languages: { code: string; label: string }[];
   onClose: () => void;
 }) {
+  useUiLanguage();
   const [items, setItems] = useState<GlossaryResponse[]>([]);
   const [next, setNext] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -214,19 +217,19 @@ function GlossaryDialog({
         }}
       >
         <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogTitle>Glossary</DialogTitle>
+          <DialogTitle>{t("Glossary")}</DialogTitle>
           <DialogDescription className="sr-only">
-            Project terminology
+            {t("Project terminology")}
           </DialogDescription>
           {error && (
             <p role="alert" className="text-destructive">
-              {error}{" "}
+              {t(error)}{" "}
               <Button
                 variant="ghost"
                 onClick={() => setRefresh((r) => r + 1)}
                 disabled={busy}
               >
-                Reload
+                {t("Reload")}
               </Button>
             </p>
           )}
@@ -240,7 +243,9 @@ function GlossaryDialog({
             >
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="term-source-language">Source language</Label>
+                  <Label htmlFor="term-source-language">
+                    {t("Source language")}
+                  </Label>
                   <SearchableSelect
                     id="term-source-language"
                     value={editing.data.source_language}
@@ -252,7 +257,9 @@ function GlossaryDialog({
                   />
                 </div>
                 <div>
-                  <Label htmlFor="term-target-language">Target language</Label>
+                  <Label htmlFor="term-target-language">
+                    {t("Target language")}
+                  </Label>
                   <SearchableSelect
                     id="term-target-language"
                     value={editing.data.target_language}
@@ -264,7 +271,7 @@ function GlossaryDialog({
                   />
                 </div>
                 <div>
-                  <Label htmlFor="source-term">Source term</Label>
+                  <Label htmlFor="source-term">{t("Source term")}</Label>
                   <Input
                     id="source-term"
                     required
@@ -275,7 +282,7 @@ function GlossaryDialog({
                   />
                 </div>
                 <div>
-                  <Label htmlFor="target-term">Translation</Label>
+                  <Label htmlFor="target-term">{t("Translation")}</Label>
                   <Input
                     id="target-term"
                     required
@@ -293,7 +300,7 @@ function GlossaryDialog({
                   disabled={busy}
                   onChange={(e) => change({ forbidden: e.target.checked })}
                 />
-                Forbidden translation
+                {t("Forbidden translation")}
               </label>
               <label className="flex gap-2 items-center">
                 <input
@@ -302,10 +309,10 @@ function GlossaryDialog({
                   disabled={busy}
                   onChange={(e) => change({ case_sensitive: e.target.checked })}
                 />
-                Case sensitive
+                {t("Case sensitive")}
               </label>
               <div>
-                <Label htmlFor="term-note">Note</Label>
+                <Label htmlFor="term-note">{t("Note")}</Label>
                 <Input
                   id="term-note"
                   maxLength={1000}
@@ -324,7 +331,7 @@ function GlossaryDialog({
                     else setEditing(null);
                   }}
                 >
-                  Cancel
+                  {t("Cancel")}
                 </Button>
                 <Button
                   disabled={
@@ -333,7 +340,7 @@ function GlossaryDialog({
                     !editing.data.target_language
                   }
                 >
-                  {busy ? "Saving…" : "Save term"}
+                  {busy ? t("Saving…") : t("Save term")}
                 </Button>
               </div>
             </form>
@@ -347,14 +354,14 @@ function GlossaryDialog({
                 }}
               >
                 <Input
-                  aria-label="Search terms"
+                  aria-label={t("Search terms")}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   disabled={busy}
                   maxLength={256}
                 />
                 <Button variant="outline" disabled={busy}>
-                  Search
+                  {t("Search")}
                 </Button>
                 {canManage && (
                   <Button
@@ -382,16 +389,16 @@ function GlossaryDialog({
                       });
                     }}
                   >
-                    Add term
+                    {t("Add term")}
                   </Button>
                 )}
               </form>
               {loading ? (
-                <p role="status">Loading glossary…</p>
+                <p role="status">{t("Loading glossary…")}</p>
               ) : (
                 <div className="space-y-2">
                   {!items.length && (
-                    <p className="text-muted-foreground">No terms</p>
+                    <p className="text-muted-foreground">{t("No terms")}</p>
                   )}
                   {items.map((item) => (
                     <article
@@ -415,8 +422,8 @@ function GlossaryDialog({
                           </span>
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {item.forbidden ? "Forbidden" : "Preferred"}
-                          {item.case_sensitive ? " · Case sensitive" : ""}
+                          {item.forbidden ? t("Forbidden") : t("Preferred")}
+                          {item.case_sensitive ? t(" · Case sensitive") : ""}
                         </p>
                         {item.note && <p className="text-sm">{item.note}</p>}
                       </div>
@@ -425,7 +432,9 @@ function GlossaryDialog({
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label={`Edit ${item.source_term}`}
+                            aria-label={t("Edit {{v0}}", {
+                              v0: item.source_term,
+                            })}
                             disabled={busy}
                             onClick={() => {
                               setDirty(false);
@@ -458,7 +467,9 @@ function GlossaryDialog({
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label={`Delete ${item.source_term}`}
+                            aria-label={t("Delete {{v0}}", {
+                              v0: item.source_term,
+                            })}
                             disabled={busy}
                             onClick={() => setConfirmation(item)}
                           >
@@ -474,7 +485,7 @@ function GlossaryDialog({
                       disabled={busy}
                       onClick={() => void loadMore()}
                     >
-                      Load more
+                      {t("Load more")}
                     </Button>
                   )}
                 </div>
@@ -493,17 +504,17 @@ function GlossaryDialog({
           <AlertDialogHeader>
             <AlertDialogTitle>
               {typeof confirmation === "object"
-                ? "Delete term?"
-                : "Discard changes?"}
+                ? t("Delete term?")
+                : t("Discard changes?")}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {typeof confirmation === "object"
-                ? "The term will be removed from this glossary."
-                : "Your unsaved changes will be lost."}
+                ? t("The term will be removed from this glossary.")
+                : t("Your unsaved changes will be lost.")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep</AlertDialogCancel>
+            <AlertDialogCancel>{t("Keep")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 const action = confirmation;
@@ -515,7 +526,7 @@ function GlossaryDialog({
                 } else if (action) void remove(action);
               }}
             >
-              {typeof confirmation === "object" ? "Delete" : "Discard"}
+              {typeof confirmation === "object" ? t("Delete") : t("Discard")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

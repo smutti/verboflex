@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -18,11 +19,21 @@ const TERMINAL_STATES = new Set<AdminPreviewJobResponse["state"]>([
 ]);
 
 const STATE_LABELS: Record<AdminPreviewJobResponse["state"], string> = {
-  failed: "Failed",
-  queued: "Queued",
-  running: "Running",
-  succeeded: "Succeeded",
-  timed_out: "Timed out",
+  get failed() {
+    return t("Failed");
+  },
+  get queued() {
+    return t("Queued");
+  },
+  get running() {
+    return t("Running");
+  },
+  get succeeded() {
+    return t("Succeeded");
+  },
+  get timed_out() {
+    return t("Timed out");
+  },
 };
 
 export function nextPreviewPollDelay(elapsedMs: number) {

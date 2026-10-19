@@ -1,3 +1,4 @@
+import { t, useUiLanguage, displayLanguage } from "@/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
@@ -47,6 +48,7 @@ type ProductLoadState =
 type ReadyProductLoadState = Extract<ProductLoadState, { status: "ready" }>;
 
 function CoverageBar({ value, label }: { value: number; label: string }) {
+  useUiLanguage();
   return (
     <div
       role="progressbar"
@@ -64,11 +66,9 @@ function CoverageBar({ value, label }: { value: number; label: string }) {
   );
 }
 
-const countFormat = new Intl.NumberFormat("en");
-const percentFormat = new Intl.NumberFormat("en", { maximumFractionDigits: 1 });
 function languageName(code: string) {
   try {
-    return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code;
+    return displayLanguage(code);
   } catch {
     return code;
   }
@@ -83,6 +83,11 @@ function LocalizationSummary({
   productId: string;
   isActive: boolean;
 }) {
+  const language = useUiLanguage();
+  const countFormat = new Intl.NumberFormat(language);
+  const percentFormat = new Intl.NumberFormat(language, {
+    maximumFractionDigits: 1,
+  });
   const [request, setRequest] = useState(0);
   const [load, setLoad] = useState<{
     request: number;
@@ -111,18 +116,19 @@ function LocalizationSummary({
   if (current?.failed)
     return (
       <Alert variant="destructive">
-        <AlertTitle>Translation summary unavailable</AlertTitle>
+        <AlertTitle>{t("Translation summary unavailable")}</AlertTitle>
         <AlertDescription className="grid gap-3">
           <p>
-            We could not load translation coverage. Product settings are still
-            available.
+            {t(
+              "We could not load translation coverage. Product settings are still available.",
+            )}
           </p>
           <Button
             variant="outline"
             className="w-fit"
             onClick={() => setRequest((value) => value + 1)}
           >
-            Retry summary
+            {t("Retry summary")}
           </Button>
         </AlertDescription>
       </Alert>
@@ -130,27 +136,29 @@ function LocalizationSummary({
   if (!current?.data)
     return (
       <section role="status" aria-live="polite" className="grid gap-4">
-        <span>Loading translation summary</span>
+        <span>{t("Loading translation summary")}</span>
         <Skeleton className="h-40 w-full" />
       </section>
     );
   const summary = current.data;
   const stats = [
     {
-      label: "Source strings",
+      label: t("Source strings"),
       value: summary.source_string_count,
     },
     {
-      label: "Translated",
+      label: t("Translated"),
       value: summary.translated_count,
-      detail: `of ${countFormat.format(summary.expected_translation_count)} target strings`,
+      detail: t("of {{v0}} target strings", {
+        v0: countFormat.format(summary.expected_translation_count),
+      }),
     },
     {
-      label: "Missing or unfinished",
+      label: t("Missing or unfinished"),
       value: summary.missing_count,
     },
     {
-      label: "Target languages",
+      label: t("Target languages"),
       value: summary.target_language_count,
     },
   ];
@@ -176,14 +184,16 @@ function LocalizationSummary({
         ))}
       </div>
       <section
-        aria-label="Translation coverage"
+        aria-label={t("Translation coverage")}
         className="grid gap-5 rounded-lg border bg-secondary p-5 sm:p-6"
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="grid gap-1">
-            <h2 className="text-heading font-semibold">Translation coverage</h2>
+            <h2 className="text-heading font-semibold">
+              {t("Translation coverage")}
+            </h2>
             <p className="text-sm text-muted-foreground">
-              Target languages only
+              {t("Target languages only")}
             </p>
           </div>
           <p className="text-3xl font-semibold tracking-tight tabular-nums">
@@ -195,30 +205,30 @@ function LocalizationSummary({
         {summary.coverage_percent !== null && (
           <CoverageBar
             value={summary.coverage_percent}
-            label="Overall translation coverage"
+            label={t("Overall translation coverage")}
           />
         )}
         {summary.imported_scope_count === 0 ? (
-          <p>Import translations to see coverage.</p>
+          <p>{t("Import translations to see coverage.")}</p>
         ) : summary.source_string_count === 0 ? (
-          <p>No source strings imported.</p>
+          <p>{t("No source strings imported.")}</p>
         ) : summary.target_language_count === 0 ? (
-          <p>Only source strings imported; no target languages yet.</p>
+          <p>{t("Only source strings imported; no target languages yet.")}</p>
         ) : null}
         {summary.unimported_scope_count > 0 ? (
           <p className="text-sm text-warning">
             {summary.unimported_scope_count}{" "}
             {summary.unimported_scope_count === 1
-              ? "translation source has"
-              : "translation sources have"}{" "}
-            not been imported yet; excluded from totals.
+              ? t("translation source has")
+              : t("translation sources have")}{" "}
+            {t("not been imported yet; excluded from totals.")}
           </p>
         ) : null}
         {summary.last_imported_at ? (
           <p className="text-sm text-muted-foreground">
-            Last successful import:{" "}
+            {t("Last successful import:")}{" "}
             <time dateTime={summary.last_imported_at}>
-              {new Intl.DateTimeFormat("en", {
+              {new Intl.DateTimeFormat(language, {
                 dateStyle: "medium",
                 timeStyle: "short",
               }).format(new Date(summary.last_imported_at))}
@@ -236,30 +246,30 @@ function LocalizationSummary({
               id="language-coverage-heading"
               className="text-heading font-semibold"
             >
-              Languages needing attention
+              {t("Languages needing attention")}
             </h2>
           </div>
           <div className="relative max-w-full overflow-x-auto rounded-lg border bg-secondary">
             <table
-              aria-label="Translation coverage by language"
+              aria-label={t("Translation coverage by language")}
               className="w-full text-left text-sm"
             >
               <thead className="border-b bg-muted/40">
                 <tr>
                   <th scope="col" className="p-4">
-                    Language
+                    {t("Language")}
                   </th>
                   <th scope="col" className="p-4">
-                    Translated
+                    {t("Translated")}
                   </th>
                   <th scope="col" className="p-4">
-                    Missing or unfinished
+                    {t("Missing or unfinished")}
                   </th>
                   <th scope="col" className="min-w-32 p-4">
-                    Coverage
+                    {t("Coverage")}
                   </th>
                   <th scope="col" className="p-4">
-                    <span className="sr-only">Actions</span>
+                    <span className="sr-only">{t("Actions")}</span>
                   </th>
                 </tr>
               </thead>
@@ -293,7 +303,9 @@ function LocalizationSummary({
                         {row.coverage_percent !== null ? (
                           <CoverageBar
                             value={row.coverage_percent}
-                            label={`${row.language} translation coverage`}
+                            label={t("{{v0}} translation coverage", {
+                              v0: row.language,
+                            })}
                           />
                         ) : null}
                       </div>
@@ -304,7 +316,7 @@ function LocalizationSummary({
                           <Link
                             to={`/products/${encodeURIComponent(productId)}/strings?language=${encodeURIComponent(row.language)}`}
                           >
-                            Open language
+                            {t("Open language")}
                           </Link>
                         </Button>
                       ) : null}
@@ -316,24 +328,26 @@ function LocalizationSummary({
           </div>
           {!isActive ? (
             <p className="text-sm text-muted-foreground">
-              Activate the product to access its strings.
+              {t("Activate the product to access its strings.")}
             </p>
           ) : null}
           {summary.languages_has_more ? (
             <p className="text-sm text-muted-foreground">
-              Top {countFormat.format(summary.languages.length)} languages by
-              missing strings. Totals cover all{" "}
-              {countFormat.format(summary.target_language_count)} languages.
+              {t("Top ")}
+              {countFormat.format(summary.languages.length)}{" "}
+              {t(" languages by missing strings. Totals cover all")}{" "}
+              {countFormat.format(summary.target_language_count)}{" "}
+              {t(" languages.")}
             </p>
           ) : null}
         </section>
       ) : null}
       <details className="max-w-3xl text-sm text-muted-foreground">
-        <summary className="cursor-pointer">About coverage</summary>
+        <summary className="cursor-pointer">{t("About coverage")}</summary>
         <p className="mt-2">
-          Imported languages only. A translation is complete when every form has
-          finished text. Missing or unfinished forms count as missing. Draft
-          edits and review status are excluded.
+          {t(
+            "Imported languages only. A translation is complete when every form has finished text. Missing or unfinished forms count as missing. Draft edits and review status are excluded.",
+          )}
         </p>
       </details>
     </div>
@@ -344,6 +358,7 @@ export function ProductOverviewPage({
   accessToken,
   productId,
 }: ProductOverviewPageProps) {
+  useUiLanguage();
   const routeProductId = useParams<"productId">().productId;
   const navigate = useNavigate();
   const resolvedProductId = productId ?? routeProductId;
@@ -464,7 +479,7 @@ export function ProductOverviewPage({
       <section className="grid gap-4" role="status" aria-live="polite">
         <Skeleton className="h-9 w-64 max-w-full" />
         <Skeleton className="h-48 w-full" />
-        <span>Loading product overview</span>
+        <span>{t("Loading product overview")}</span>
       </section>
     );
   }
@@ -472,14 +487,14 @@ export function ProductOverviewPage({
   if (loadState.status === "error") {
     return (
       <Alert variant="destructive">
-        <AlertTitle>Product unavailable</AlertTitle>
+        <AlertTitle>{t("Product unavailable")}</AlertTitle>
         <AlertDescription>
           <Button
             type="button"
             variant="outline"
             onClick={() => void loadProduct()}
           >
-            Retry loading page
+            {t("Retry loading page")}
           </Button>
         </AlertDescription>
       </Alert>
@@ -495,7 +510,7 @@ export function ProductOverviewPage({
     >
       <section
         className="grid min-w-0 max-w-full gap-8 overflow-x-clip"
-        aria-label="Product overview"
+        aria-label={t("Product overview")}
       >
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="grid min-w-0 gap-2">
@@ -503,7 +518,7 @@ export function ProductOverviewPage({
               variant={product.is_active ? "success" : "warning"}
               className="w-fit rounded-md"
             >
-              {product.is_active ? "Active" : "Inactive"}
+              {product.is_active ? t("Active") : t("Inactive")}
             </Badge>
             {(product.active_revision ?? product.candidate_revision)
               ?.description ? (
@@ -522,7 +537,7 @@ export function ProductOverviewPage({
                 <Link
                   to={`/admin/products/${encodeURIComponent(loadState.productId)}/edit`}
                 >
-                  Configure product
+                  {t("Configure product")}
                 </Link>
               </Button>
             ) : null}
@@ -534,7 +549,7 @@ export function ProductOverviewPage({
                 className="w-full sm:w-auto"
                 onClick={() => setDeactivateOpen(true)}
               >
-                Deactivate product
+                {t("Deactivate product")}
               </Button>
             ) : null}
             <ProductDeleteDialog
@@ -547,7 +562,7 @@ export function ProductOverviewPage({
 
         {product.affected_mapping_count > 0 ? (
           <section
-            aria-label="Product freshness"
+            aria-label={t("Product freshness")}
             className="flex min-w-0 flex-wrap items-center gap-2"
           >
             <Badge
@@ -556,11 +571,11 @@ export function ProductOverviewPage({
             >
               {product.affected_mapping_count}{" "}
               {product.affected_mapping_count === 1
-                ? "mapping may be stale"
-                : "mappings may be stale"}
+                ? t("mapping may be stale")
+                : t("mappings may be stale")}
             </Badge>
             <p className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]">
-              Import failed. Showing the last successful import.
+              {t("Import failed. Showing the last successful import.")}
             </p>
           </section>
         ) : null}
@@ -571,9 +586,9 @@ export function ProductOverviewPage({
               className="font-medium text-primary underline underline-offset-4"
               to={`/admin/products/${encodeURIComponent(loadState.productId)}/edit`}
             >
-              Unpublished configuration changes
+              {t("Unpublished configuration changes")}
             </Link>
-            {" — your current configuration is still active."}
+            {t(" — your current configuration is still active.")}
           </p>
         ) : null}
 
@@ -593,10 +608,14 @@ export function ProductOverviewPage({
           <AlertDialog open onOpenChange={closeDeactivate}>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Deactivate {product.name}?</AlertDialogTitle>
+                <AlertDialogTitle>
+                  {t("Deactivate ")}
+                  {product.name}?
+                </AlertDialogTitle>
                 <AlertDialogDescription>
-                  Its mappings will stop operating, but its published
-                  configuration will be kept.
+                  {t(
+                    "Its mappings will stop operating, but its published configuration will be kept.",
+                  )}
                 </AlertDialogDescription>
               </AlertDialogHeader>
 
@@ -606,17 +625,18 @@ export function ProductOverviewPage({
                   tabIndex={-1}
                   variant="destructive"
                 >
-                  <AlertTitle>Product not deactivated</AlertTitle>
+                  <AlertTitle>{t("Product not deactivated")}</AlertTitle>
                   <AlertDescription>
-                    We could not deactivate this product. Its active state is
-                    unchanged.
+                    {t(
+                      "We could not deactivate this product. Its active state is unchanged.",
+                    )}
                   </AlertDescription>
                 </Alert>
               ) : null}
 
               <AlertDialogFooter>
                 <AlertDialogCancel disabled={deactivatePending}>
-                  Cancel
+                  {t("Cancel")}
                 </AlertDialogCancel>
                 <Button
                   type="button"
@@ -625,7 +645,7 @@ export function ProductOverviewPage({
                   aria-busy={deactivatePending}
                   onClick={() => void submitDeactivate(loadState)}
                 >
-                  Deactivate product
+                  {t("Deactivate product")}
                 </Button>
               </AlertDialogFooter>
             </AlertDialogContent>

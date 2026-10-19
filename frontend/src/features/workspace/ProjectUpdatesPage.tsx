@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -16,7 +17,8 @@ function ProjectUpdatesController({
   accessToken: string;
   personal: boolean;
 }) {
-  const title = personal ? "My activity" : "Project updates";
+  useUiLanguage();
+  const title = personal ? t("My activity") : t("Project updates");
   const list = personal ? listMyActivity : listProjectUpdates;
   const [items, setItems] = useState<ProjectUpdatesResponse["items"]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -89,7 +91,7 @@ function ProjectUpdatesController({
       aria-labelledby="project-updates-title"
     >
       <Link to="/" className="w-fit text-sm text-primary hover:underline">
-        Back to Home
+        {t("Back to Home")}
       </Link>
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 id="project-updates-title" className="text-display font-semibold">
@@ -100,24 +102,24 @@ function ProjectUpdatesController({
           disabled={loading}
           onClick={() => void load()}
         >
-          Refresh
+          {t("Refresh")}
         </Button>
       </header>
       {items.length > 0 && <ActivityEventList items={items} />}
-      {loading && <p role="status">Loading activity…</p>}
+      {loading && <p role="status">{t("Loading activity…")}</p>}
       {failedCursor !== undefined && (
         <div
           role="alert"
           className="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/40 p-4"
         >
-          <p>Activity could not be loaded.</p>
+          <p>{t("Activity could not be loaded.")}</p>
           <Button variant="outline" onClick={() => void load(failedCursor)}>
-            Retry
+            {t("Retry")}
           </Button>
         </div>
       )}
       {!loading && failedCursor === undefined && items.length === 0 && (
-        <p>{personal ? "No activity yet" : "No project updates yet"}</p>
+        <p>{personal ? t("No activity yet") : t("No project updates yet")}</p>
       )}
       {nextCursor && failedCursor === undefined && (
         <Button
@@ -126,7 +128,7 @@ function ProjectUpdatesController({
           disabled={loading}
           onClick={() => void load(nextCursor)}
         >
-          Load more
+          {t("Load more")}
         </Button>
       )}
     </section>
@@ -142,6 +144,7 @@ export function ProjectUpdatesPage({
   principal: CurrentUserResponse;
   personal?: boolean;
 }) {
+  useUiLanguage();
   return (
     <ProjectUpdatesController
       key={JSON.stringify([

@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import type { TranslationProposalResponse } from "../../api/client";
 import { Button } from "../../components/ui/button";
 import {
@@ -25,7 +26,7 @@ function selectorLabel(
         : `${field.name} ${String(field.value)}`,
     )
     .join(", ");
-  return label || `Translation ${index + 1}`;
+  return label || t("Translation {{v0}}", { v0: index + 1 });
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -83,6 +84,7 @@ export function TranslationConflictDialog({
   onKeepEditing: () => void;
   onReconcile: (draft: ActiveTranslationDraft) => void;
 }) {
+  useUiLanguage();
   const serverById = new Map(
     latest.pending.map((value) => [value.translation_value_id, value]),
   );
@@ -95,21 +97,23 @@ export function TranslationConflictDialog({
         <DialogHeader>
           <DialogTitle>
             {latest.reconciliation_required
-              ? "Translation source changed"
-              : "Translation changed in another session"}
+              ? t("Translation source changed")
+              : t("Translation changed in another session")}
           </DialogTitle>
           <DialogDescription>
             {latest.reconciliation_required
-              ? "Review the repository changes before saving your draft."
-              : "Compare your changes with the latest saved version."}
+              ? t("Review the repository changes before saving your draft.")
+              : t("Compare your changes with the latest saved version.")}
           </DialogDescription>
         </DialogHeader>
         <div className="grid max-h-[60vh] gap-(--space-lg) overflow-y-auto md:grid-cols-2">
           <section
-            aria-label="Your unsaved version"
+            aria-label={t("Your unsaved version")}
             className="space-y-(--space-md)"
           >
-            <h3 className="text-heading font-semibold">Your unsaved version</h3>
+            <h3 className="text-heading font-semibold">
+              {t("Your unsaved version")}
+            </h3>
             {draft.values.map((value, index) => (
               <div
                 key={value.translationValueId}
@@ -123,16 +127,18 @@ export function TranslationConflictDialog({
                   lang={draft.language}
                   dir="auto"
                 >
-                  {value.text || "Empty pending translation"}
+                  {value.text || t("Empty pending translation")}
                 </p>
               </div>
             ))}
           </section>
           <section
-            aria-label="Latest saved version"
+            aria-label={t("Latest saved version")}
             className="space-y-(--space-md)"
           >
-            <h3 className="text-heading font-semibold">Latest saved version</h3>
+            <h3 className="text-heading font-semibold">
+              {t("Latest saved version")}
+            </h3>
             {draft.values.map((value, index) => {
               const server = serverById.get(value.translationValueId);
               return (
@@ -148,7 +154,7 @@ export function TranslationConflictDialog({
                     lang={draft.language}
                     dir="auto"
                   >
-                    {server?.text || "Empty pending translation"}
+                    {server?.text || t("Empty pending translation")}
                   </p>
                 </div>
               );
@@ -156,11 +162,11 @@ export function TranslationConflictDialog({
           </section>
           {latest.reconciliation_required && (
             <section
-              aria-label="Current repository version"
+              aria-label={t("Current repository version")}
               className="space-y-(--space-md) md:col-span-2"
             >
               <h3 className="text-heading font-semibold">
-                Current repository version
+                {t("Current repository version")}
               </h3>
               {draft.values.map((value, index) => (
                 <div
@@ -176,7 +182,7 @@ export function TranslationConflictDialog({
                     dir="auto"
                   >
                     {publishedById.get(value.translationValueId)?.text ||
-                      "Empty translation"}
+                      t("Empty translation")}
                   </p>
                 </div>
               ))}
@@ -185,7 +191,7 @@ export function TranslationConflictDialog({
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onKeepEditing}>
-            Keep editing
+            {t("Keep editing")}
           </Button>
           <Button
             type="button"
@@ -193,7 +199,7 @@ export function TranslationConflictDialog({
               onReconcile(reconcileTranslationDraft(draft, latest))
             }
           >
-            Reconcile with latest
+            {t("Reconcile with latest")}
           </Button>
         </DialogFooter>
       </DialogContent>

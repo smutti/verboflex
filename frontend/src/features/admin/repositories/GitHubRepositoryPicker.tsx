@@ -1,3 +1,4 @@
+import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import { useEffect, useId, useRef, useState } from "react";
 import { FolderGit2, Star } from "lucide-react";
 
@@ -26,6 +27,7 @@ export function GitHubRepositoryPicker({
   onRepositorySelected?: (repository: AdminRepositoryResponse) => void;
   selectedRepositoryIds?: readonly string[];
 }) {
+  useUiLanguage();
   const id = useId();
   const [identity, setIdentity] = useState("");
   const [pending, setPending] = useState(false);
@@ -78,7 +80,7 @@ export function GitHubRepositoryPicker({
     );
     if (!match) {
       setError(
-        "Inserisci owner/repository oppure l’indirizzo https://github.com/owner/repository.",
+        "Enter owner/repository or https://github.com/owner/repository.",
       );
       return;
     }
@@ -96,8 +98,8 @@ export function GitHubRepositoryPicker({
       if (!result.data) {
         setError(
           result.response?.status === 429
-            ? "GitHub ha raggiunto il limite di richieste pubbliche. Attendi e riprova."
-            : "Repository non disponibile. Verifica che esista, sia pubblico e che owner e nome siano corretti.",
+            ? "GitHub has reached its public request limit. Wait and try again."
+            : "Repository unavailable. Check that it exists, is public, and that the owner and name are correct.",
         );
         return;
       }
@@ -110,7 +112,7 @@ export function GitHubRepositoryPicker({
       setIdentity("");
     } catch {
       if (!request.signal.aborted)
-        setError("Impossibile raggiungere GitHub. Riprova tra poco.");
+        setError("Could not reach GitHub. Try again shortly.");
     } finally {
       if (!request.signal.aborted) setPending(false);
       controller.current = null;
@@ -118,22 +120,26 @@ export function GitHubRepositoryPicker({
   }
 
   return (
-    <section className="grid gap-5" aria-label="Collegamento repository GitHub">
+    <section
+      className="grid gap-5"
+      aria-label={t("GitHub repository connection")}
+    >
       <div className="flex items-center gap-2">
         <FolderGit2 aria-hidden="true" className="size-5" />
         <h2 className="text-heading font-semibold">
-          Collega un repository GitHub
+          {t("Connect a GitHub repository")}
         </h2>
       </div>
       <p className="text-sm text-muted-foreground">
-        Repository pubblici, senza token. Modifiche e pull request verso GitHub
-        non supportate.
+        {t(
+          "Public repositories, no token required. Changes and pull requests to GitHub are not supported.",
+        )}
       </p>
       <div className="grid gap-2">
-        <Label htmlFor={id}>Repository GitHub</Label>
+        <Label htmlFor={id}>{t("GitHub repository")}</Label>
         <Input
           id={id}
-          placeholder="owner/repository o URL GitHub"
+          placeholder={t("owner/repository or GitHub URL")}
           value={identity}
           maxLength={230}
           disabled={pending}
@@ -146,27 +152,27 @@ export function GitHubRepositoryPicker({
         disabled={pending || !identity.trim()}
         onClick={() => void connect()}
       >
-        {pending ? "Collegamento…" : "Collega repository GitHub"}
+        {pending ? t("Connecting…") : t("Connect GitHub repository")}
       </Button>
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>Collegamento non riuscito</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertTitle>{t("Connection failed")}</AlertTitle>
+          <AlertDescription>{t(error)}</AlertDescription>
         </Alert>
       )}
       {selected.length > 0 && (
         <section
           className="grid gap-3"
-          aria-label="Repository GitHub collegati"
+          aria-label={t("Connected GitHub repositories")}
         >
-          <h3 className="font-semibold">Repository collegati</h3>
+          <h3 className="font-semibold">{t("Connected repositories")}</h3>
           {selected.map((repo) => (
             <div key={repo.id} className="grid gap-2 rounded-lg border p-4">
               <strong>
                 {repo.workspace}/{repo.repository_slug}
               </strong>
               <div className="flex flex-wrap gap-2">
-                <Badge variant="outline">GitHub · Importazione</Badge>
+                <Badge variant="outline">{t("GitHub · Import only")}</Badge>
                 {repo.default_branch && (
                   <Badge variant="secondary">{repo.default_branch}</Badge>
                 )}
@@ -176,7 +182,7 @@ export function GitHubRepositoryPicker({
                 {repo.stars !== undefined && (
                   <span className="inline-flex items-center gap-1 text-sm">
                     <Star className="size-4" aria-hidden="true" />
-                    {repo.stars.toLocaleString()} stelle
+                    {repo.stars.toLocaleString(getUiLanguage())} {t(" stars")}
                   </span>
                 )}
               </div>

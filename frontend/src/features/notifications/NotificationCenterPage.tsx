@@ -1,3 +1,4 @@
+import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import { Bell, CircleAlert } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -80,9 +81,10 @@ function validReadProjection(
 }
 
 function LoadingRows() {
+  useUiLanguage();
   return (
     <div role="status" aria-live="polite" className="grid gap-3">
-      <span>Loading notifications</span>
+      <span>{t("Loading notifications")}</span>
       {Array.from({ length: 5 }, (_, index) => (
         <Skeleton key={index} className="h-28 w-full rounded-lg" />
       ))}
@@ -91,11 +93,14 @@ function LoadingRows() {
 }
 
 function EmptyState({ view }: { view: NotificationView }) {
+  useUiLanguage();
   return (
     <section className="grid justify-items-center gap-3 py-12 text-center">
       <Bell aria-hidden="true" className="size-10 text-muted-foreground" />
       <h2 className="text-heading-2 font-semibold">
-        {view === "unread" ? "You're all caught up" : "No notifications yet"}
+        {view === "unread"
+          ? t("You're all caught up")
+          : t("No notifications yet")}
       </h2>
     </section>
   );
@@ -112,6 +117,7 @@ function NotificationRow({
   readError: boolean;
   reading: boolean;
 }) {
+  useUiLanguage();
   const alertRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (readError) alertRef.current?.focus();
@@ -130,12 +136,12 @@ function NotificationRow({
   return (
     <article
       className={`grid min-w-0 gap-3 border-b p-4 ${isRead ? "bg-background" : "bg-accent/5 font-semibold"}`}
-      aria-label={`Notification from ${actorName}`}
+      aria-label={t("Notification from {{v0}}", { v0: actorName })}
     >
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 space-y-1">
           <p className="break-words [overflow-wrap:anywhere]">
-            <span>{actorName}</span> mentioned you in{" "}
+            <span>{actorName}</span> {t(" mentioned you in")}{" "}
             <span dir="auto">{keyExcerpt}</span>
           </p>
           <p className="flex flex-wrap gap-x-3 gap-y-1 text-sm font-normal text-muted-foreground">
@@ -144,11 +150,11 @@ function NotificationRow({
             </span>
             <span>{language}</span>
             <time dateTime={createdAt}>
-              {new Date(createdAt).toLocaleString()}
+              {new Date(createdAt).toLocaleString(getUiLanguage())}
             </time>
           </p>
         </div>
-        <Badge variant="outline">{isRead ? "Read" : "Unread"}</Badge>
+        <Badge variant="outline">{isRead ? t("Read") : t("Unread")}</Badge>
       </div>
 
       <div className="flex min-w-0 flex-wrap gap-2">
@@ -159,11 +165,11 @@ function NotificationRow({
             variant="outline"
             className="h-auto min-h-[44px] whitespace-normal"
           >
-            <Link to={notificationHref(item)}>Open comment</Link>
+            <Link to={notificationHref(item)}>{t("Open comment")}</Link>
           </Button>
         ) : (
           <p className="flex min-h-[44px] items-center text-sm font-medium text-muted-foreground">
-            Comment not available
+            {t("Comment not available")}
           </p>
         )}
         {!isRead ? (
@@ -175,7 +181,7 @@ function NotificationRow({
             aria-busy={reading}
             onClick={() => onMarkRead(item.id)}
           >
-            {reading ? "Marking as read" : "Mark as read"}
+            {reading ? t("Marking as read") : t("Mark as read")}
           </Button>
         ) : null}
       </div>
@@ -183,14 +189,14 @@ function NotificationRow({
       {readError ? (
         <Alert ref={alertRef} tabIndex={-1} variant="destructive">
           <CircleAlert aria-hidden="true" />
-          <AlertTitle>Notification was not marked as read</AlertTitle>
+          <AlertTitle>{t("Notification was not marked as read")}</AlertTitle>
           <AlertDescription>
             <Button
               type="button"
               variant="outline"
               onClick={() => onMarkRead(item.id)}
             >
-              Retry marking as read
+              {t("Retry marking as read")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -206,6 +212,7 @@ export function NotificationCenterPage({
   accessToken: string;
   principalId: string;
 }) {
+  useUiLanguage();
   const productLabelId = useId();
   const [view, setView] = useState<NotificationView>("all");
   const [productId, setProductId] = useState<string | null>(null);
@@ -381,27 +388,33 @@ export function NotificationCenterPage({
   return (
     <main className="mx-auto grid w-full min-w-0 max-w-6xl gap-8">
       <header className="grid min-w-0 gap-2">
-        <h1 className="text-heading-1 font-semibold">Notifications</h1>
+        <h1 className="text-heading-1 font-semibold">{t("Notifications")}</h1>
       </header>
 
-      <section className="grid min-w-0 gap-4" aria-label="Notification filters">
+      <section
+        className="grid min-w-0 gap-4"
+        aria-label={t("Notification filters")}
+      >
         <Tabs
           value={view}
           onValueChange={(value) =>
             setView(value === "unread" ? "unread" : "all")
           }
         >
-          <TabsList aria-label="Notification view" className="min-h-[44px]">
+          <TabsList
+            aria-label={t("Notification view")}
+            className="min-h-[44px]"
+          >
             <TabsTrigger value="all" className="min-h-[44px]">
-              All
+              {t("All")}
             </TabsTrigger>
             <TabsTrigger value="unread" className="min-h-[44px]">
-              Unread
+              {t("Unread")}
             </TabsTrigger>
           </TabsList>
         </Tabs>
         <div className="grid min-w-0 gap-2 sm:max-w-md">
-          <Label id={productLabelId}>Product</Label>
+          <Label id={productLabelId}>{t("Product")}</Label>
           <Select
             value={productId ?? "all"}
             onValueChange={(value) =>
@@ -416,7 +429,7 @@ export function NotificationCenterPage({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all" className="min-h-[44px]">
-                All products
+                {t("All products")}
               </SelectItem>
               {products.map((product) => (
                 <SelectItem
@@ -435,14 +448,14 @@ export function NotificationCenterPage({
       {status === "loading" ? <LoadingRows /> : null}
       {status === "error" ? (
         <Alert variant="destructive">
-          <AlertTitle>Notifications could not be loaded</AlertTitle>
+          <AlertTitle>{t("Notifications could not be loaded")}</AlertTitle>
           <AlertDescription className="grid gap-3">
             <Button
               type="button"
               variant="outline"
               onClick={() => void load(null)}
             >
-              Reload notifications
+              {t("Reload notifications")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -452,7 +465,7 @@ export function NotificationCenterPage({
       ) : null}
       {status === "ready" && items.length > 0 ? (
         <section
-          aria-label="Notifications"
+          aria-label={t("Notifications")}
           className="min-w-0 overflow-x-hidden rounded-lg border bg-background"
         >
           {items.map((item) => (
@@ -469,14 +482,14 @@ export function NotificationCenterPage({
 
       {status === "ready" && loadMoreError ? (
         <Alert ref={loadMoreAlertRef} tabIndex={-1} variant="destructive">
-          <AlertTitle>More notifications could not be loaded</AlertTitle>
+          <AlertTitle>{t("More notifications could not be loaded")}</AlertTitle>
           <AlertDescription>
             <Button
               type="button"
               variant="outline"
               onClick={() => nextCursor && void load(nextCursor)}
             >
-              Retry loading more
+              {t("Retry loading more")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -491,12 +504,12 @@ export function NotificationCenterPage({
           onClick={() => void load(nextCursor)}
         >
           {loadingMore
-            ? "Loading more notifications"
-            : "Load more notifications"}
+            ? t("Loading more notifications")
+            : t("Load more notifications")}
         </Button>
       ) : null}
       <p role="status" aria-live="polite" className="sr-only">
-        {announcement}
+        {t(announcement)}
       </p>
     </main>
   );

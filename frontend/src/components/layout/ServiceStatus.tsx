@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useRef, useState } from "react";
 import {
   Activity,
@@ -41,19 +42,25 @@ interface StatePresentation {
 const STATE_PRESENTATION: Record<ServiceState, StatePresentation> = {
   online: {
     Icon: CheckCircle2,
-    label: "Online",
+    get label() {
+      return t("Online");
+    },
     surfaceClassName: "border-success/40 bg-success/10",
     textClassName: "text-success",
   },
   pending: {
     Icon: Clock3,
-    label: "Pending",
+    get label() {
+      return t("Pending");
+    },
     surfaceClassName: "border-warning/40 bg-warning/10",
     textClassName: "text-warning",
   },
   unavailable: {
     Icon: TriangleAlert,
-    label: "Unavailable",
+    get label() {
+      return t("Unavailable");
+    },
     surfaceClassName: "border-destructive/40 bg-destructive/10",
     textClassName: "text-destructive",
   },
@@ -61,13 +68,19 @@ const STATE_PRESENTATION: Record<ServiceState, StatePresentation> = {
 
 const OVERALL_PRESENTATION: Record<ServiceState, { title: string }> = {
   online: {
-    title: "All services operational",
+    get title() {
+      return t("All services operational");
+    },
   },
   pending: {
-    title: "Service checks in progress",
+    get title() {
+      return t("Service checks in progress");
+    },
   },
   unavailable: {
-    title: "Attention required",
+    get title() {
+      return t("Attention required");
+    },
   },
 };
 
@@ -94,6 +107,7 @@ export function ServiceStatus({
   accessToken,
   prominent = false,
 }: ServiceStatusProps) {
+  useUiLanguage();
   const [state, setState] = useState<StatusState>({ status: "loading" });
   const requestVersion = useRef(0);
 
@@ -131,17 +145,17 @@ export function ServiceStatus({
                 id="service-status-title"
                 className="text-heading font-semibold"
               >
-                Service status
+                {t("Service status")}
               </p>
               <p role="status" aria-live="polite" className="font-semibold">
-                Checking service status
+                {t("Checking service status")}
               </p>
             </div>
           </div>
         </section>
       );
     }
-    return <p role="status">Checking service status</p>;
+    return <p role="status">{t("Checking service status")}</p>;
   }
 
   if (state.status === "error") {
@@ -167,10 +181,10 @@ export function ServiceStatus({
                   id="service-status-title"
                   className="text-heading font-semibold"
                 >
-                  Service status unavailable
+                  {t("Service status unavailable")}
                 </h2>
               ) : null}
-              <p>{API_ERROR_COPY}</p>
+              <p>{t(API_ERROR_COPY)}</p>
             </div>
           </div>
           <Button
@@ -192,7 +206,7 @@ export function ServiceStatus({
               });
             }}
           >
-            Retry connection
+            {t("Retry connection")}
           </Button>
         </AlertDescription>
       </Alert>
@@ -202,9 +216,9 @@ export function ServiceStatus({
   const status = state.data;
   const services = [
     ["API", status.api, Activity],
-    ["Database", status.database, Database],
+    [t("Database"), status.database, Database],
     ["Redis", status.redis, Layers3],
-    ["Worker", status.worker, Cpu],
+    [t("Worker"), status.worker, Cpu],
   ] as const;
 
   if (prominent) {
@@ -235,7 +249,7 @@ export function ServiceStatus({
                 id="service-status-title"
                 className="text-label font-semibold tracking-wide text-muted-foreground uppercase"
               >
-                Service status
+                {t("Service status")}
               </h2>
               <h3 className="text-heading font-semibold">
                 {overallCopy.title}
@@ -253,7 +267,7 @@ export function ServiceStatus({
 
         <ul
           className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
-          aria-label="Platform services"
+          aria-label={t("Platform services")}
         >
           {services.map(([name, serviceState, ServiceIcon]) => {
             const serviceStyle = STATE_PRESENTATION[serviceState];
@@ -277,7 +291,7 @@ export function ServiceStatus({
         </ul>
 
         <p className="text-label text-muted-foreground">
-          Last checked:{" "}
+          {t("Last checked:")}{" "}
           <time dateTime={status.checked_at}>{status.checked_at}</time>
         </p>
       </section>
@@ -291,14 +305,14 @@ export function ServiceStatus({
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="service-status-title" className="text-heading font-semibold">
-          Service status
+          {t("Service status")}
         </h2>
         <p className="text-label text-muted-foreground">
-          Last checked:{" "}
+          {t("Last checked:")}{" "}
           <time dateTime={status.checked_at}>{status.checked_at}</time>
         </p>
       </div>
-      <ul className="flex flex-wrap gap-2" aria-label="Platform services">
+      <ul className="flex flex-wrap gap-2" aria-label={t("Platform services")}>
         {services.map(([name, state]) => (
           <li key={name}>
             <Badge

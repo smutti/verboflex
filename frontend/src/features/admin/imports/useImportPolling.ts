@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -21,13 +22,27 @@ const STATE_LABELS: Record<
   AdminPublishedMappingImportResponse["state"],
   string
 > = {
-  current: "Current",
-  import_failed: "Import failed",
-  may_be_stale: "May be stale",
-  not_imported: "Not imported",
-  queued: "Queued",
-  review_required: "Review required",
-  running: "Running",
+  get current() {
+    return t("Current");
+  },
+  get import_failed() {
+    return t("Import failed");
+  },
+  get may_be_stale() {
+    return t("May be stale");
+  },
+  get not_imported() {
+    return t("Not imported");
+  },
+  get queued() {
+    return t("Queued");
+  },
+  get review_required() {
+    return t("Review required");
+  },
+  get running() {
+    return t("Running");
+  },
 };
 
 export function nextImportPollDelay(elapsedMs: number) {

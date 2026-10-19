@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import type { ReactNode } from "react";
 import { Link, Outlet, useLocation, useParams } from "react-router-dom";
 
@@ -11,12 +12,42 @@ export interface ProductDetailLayoutProps {
 }
 
 const PRODUCT_SECTIONS = [
-  { label: "Overview", slug: "overview" },
-  { label: "Team", slug: "team" },
-  { label: "Repositories", slug: "repositories" },
-  { label: "Translation sources", slug: "mappings" },
-  { label: "Approval branches", slug: "branches" },
-  { label: "Preview and import", slug: "preview" },
+  {
+    get label() {
+      return t("Overview");
+    },
+    slug: "overview",
+  },
+  {
+    get label() {
+      return t("Team");
+    },
+    slug: "team",
+  },
+  {
+    get label() {
+      return t("Repositories");
+    },
+    slug: "repositories",
+  },
+  {
+    get label() {
+      return t("Translation sources");
+    },
+    slug: "mappings",
+  },
+  {
+    get label() {
+      return t("Approval branches");
+    },
+    slug: "branches",
+  },
+  {
+    get label() {
+      return t("Preview and import");
+    },
+    slug: "preview",
+  },
 ] as const;
 
 type ProductSection = (typeof PRODUCT_SECTIONS)[number]["slug"];
@@ -34,8 +65,9 @@ export function ProductDetailLayout({
   children,
   hideTitle = false,
   productId: productIdProp,
-  productName = "Product configuration",
+  productName = t("Product configuration"),
 }: ProductDetailLayoutProps) {
+  useUiLanguage();
   const location = useLocation();
   const routeProductId = useParams<"productId">().productId;
   const productId = productIdProp ?? routeProductId ?? "";
@@ -46,7 +78,7 @@ export function ProductDetailLayout({
     <section
       data-testid="product-detail-layout"
       className="grid min-w-0 max-w-full gap-8 overflow-x-clip"
-      aria-label={hideTitle ? "Product configuration" : undefined}
+      aria-label={hideTitle ? t("Product configuration") : undefined}
       aria-labelledby={hideTitle ? undefined : "product-detail-title"}
     >
       {hideTitle ? null : (
@@ -57,7 +89,10 @@ export function ProductDetailLayout({
           {productName}
         </h1>
       )}
-      <nav aria-label="Product configuration" className="min-w-0 max-w-full">
+      <nav
+        aria-label={t("Product configuration")}
+        className="min-w-0 max-w-full"
+      >
         <ul className="flex min-w-0 max-w-full flex-wrap gap-2 border-b">
           {PRODUCT_SECTIONS.map(({ label, slug }) => {
             const isCurrent = currentSection === slug;

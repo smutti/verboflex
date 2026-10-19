@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -163,19 +164,21 @@ function formatTimestamp(value: string) {
 }
 
 function UnavailableComment() {
+  useUiLanguage();
   return (
     <Alert role="alert">
-      <AlertTitle>Comment not available</AlertTitle>
+      <AlertTitle>{t("Comment not available")}</AlertTitle>
       <AlertDescription className="space-y-(--space-sm)">
         <p>
-          This comment may have been removed or is outside your authorized
-          products. Return to your notifications and choose another item.
+          {t(
+            "This comment may have been removed or is outside your authorized products. Return to your notifications and choose another item.",
+          )}
         </p>
         <Link
           to="/notifications"
           className="inline-flex min-h-[44px] items-center underline"
         >
-          Back to notifications
+          {t("Back to notifications")}
         </Link>
       </AlertDescription>
     </Alert>
@@ -190,6 +193,7 @@ export function ExactCommentTarget({
   onFocused,
   onNotificationStateChanged,
 }: ExactCommentTargetProps) {
+  useUiLanguage();
   const validAuthority =
     OPAQUE_ID.test(translationGroupId) && OPAQUE_ID.test(commentId);
   const [status, setStatus] = useState<ExactCommentStatus>(() =>
@@ -328,10 +332,10 @@ export function ExactCommentTarget({
     return <UnavailableComment />;
   if (status === "loading") {
     return (
-      <section aria-label="Exact comment" className="space-y-(--space-sm)">
-        <h2 className="text-heading font-semibold">Discussion</h2>
+      <section aria-label={t("Exact comment")} className="space-y-(--space-sm)">
+        <h2 className="text-heading font-semibold">{t("Discussion")}</h2>
         <div role="status" className="space-y-(--space-sm)">
-          <p>Loading comment context</p>
+          <p>{t("Loading comment context")}</p>
           <Skeleton className="h-28 w-full" />
         </div>
       </section>
@@ -340,20 +344,27 @@ export function ExactCommentTarget({
 
   return (
     <section
-      aria-label="Discussion"
+      aria-label={t("Discussion")}
       className="min-w-0 space-y-(--space-md) rounded-lg border bg-secondary p-(--space-lg)"
     >
-      <h2 className="text-heading font-semibold">Discussion</h2>
+      <h2 className="text-heading font-semibold">{t("Discussion")}</h2>
       {readFailed && (
         <Alert role="alert">
-          <AlertTitle>Notification status could not be updated</AlertTitle>
+          <AlertTitle>
+            {t("Notification status could not be updated")}
+          </AlertTitle>
           <AlertDescription>
-            The comment is open, but its notification may still appear unread.
-            You can try again from Notifications.
+            {t(
+              "The comment is open, but its notification may still appear unread. You can try again from Notifications.",
+            )}
           </AlertDescription>
         </Alert>
       )}
-      <div role="list" aria-label="Comments" className="space-y-(--space-md)">
+      <div
+        role="list"
+        aria-label={t("Comments")}
+        className="space-y-(--space-md)"
+      >
         {items.map((item, index) => {
           const isTarget = item.id === commentId;
           return (
@@ -371,8 +382,11 @@ export function ExactCommentTarget({
             >
               {item.status === "removed" ? (
                 <>
-                  <h3 className="font-semibold">Comment {index + 1}</h3>
-                  <p>Comment removed by an administrator</p>
+                  <h3 className="font-semibold">
+                    {t("Comment ")}
+                    {index + 1}
+                  </h3>
+                  <p>{t("Comment removed by an administrator")}</p>
                   {item.deleted_at && (
                     <time dateTime={item.deleted_at}>
                       {formatTimestamp(item.deleted_at)}
@@ -385,7 +399,9 @@ export function ExactCommentTarget({
                     <h3 className="font-semibold wrap-anywhere">
                       {item.author.display_name}
                     </h3>
-                    {item.edited && <Badge variant="outline">Edited</Badge>}
+                    {item.edited && (
+                      <Badge variant="outline">{t("Edited")}</Badge>
+                    )}
                   </div>
                   <time dateTime={item.created_at}>
                     {formatTimestamp(item.created_at)}

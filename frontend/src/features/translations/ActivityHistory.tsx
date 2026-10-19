@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -55,12 +56,13 @@ function ActivityValues({
   title: string;
   values: ReviewActivityResponse["after_values"];
 }) {
+  useUiLanguage();
   if (values === null) return null;
   return (
     <section aria-label={title} className="space-y-(--space-sm)">
       <h4 className="font-semibold">{title}</h4>
       {values.length === 0 ? (
-        <p>No values</p>
+        <p>{t("No values")}</p>
       ) : (
         values.map((value) => (
           <div
@@ -71,7 +73,7 @@ function ActivityValues({
               {value.translation_value_id}
             </p>
             <p className="whitespace-pre-wrap wrap-anywhere" dir="auto">
-              {value.text || "Empty translation"}
+              {value.text || t("Empty translation")}
             </p>
           </div>
         ))
@@ -81,29 +83,36 @@ function ActivityValues({
 }
 
 function ActivityItem({ item }: { item: ReviewActivityResponse }) {
+  useUiLanguage();
   return (
     <li className="space-y-(--space-md) rounded-md border p-(--space-md)">
       <div className="flex min-w-0 flex-wrap items-center gap-(--space-sm)">
         <h3 className="font-semibold">
           {item.kind === "proposal_saved"
-            ? "Proposal saved"
-            : "Review state changed"}
+            ? t("Proposal saved")
+            : t("Review state changed")}
         </h3>
-        <Badge variant="outline">Version {item.proposal_version}</Badge>
+        <Badge variant="outline">
+          {t("Version ")}
+          {item.proposal_version}
+        </Badge>
       </div>
-      <p className="wrap-anywhere">Actor: {item.actor_id}</p>
+      <p className="wrap-anywhere">
+        {t("Actor: ")}
+        {item.actor_id}
+      </p>
       <time dateTime={item.created_at}>{item.created_at}</time>
       {item.kind === "state_changed" && (
         <p>
-          {item.from_state ?? "No prior state"} →{" "}
-          {item.to_state ?? "No new state"}
+          {item.from_state ?? t("No prior state")} →{" "}
+          {item.to_state ?? t("No new state")}
         </p>
       )}
-      <ActivityValues title="Before values" values={item.before_values} />
-      <ActivityValues title="After values" values={item.after_values} />
+      <ActivityValues title={t("Before values")} values={item.before_values} />
+      <ActivityValues title={t("After values")} values={item.after_values} />
       {item.reason !== null && (
         <div className="space-y-(--space-xs)">
-          <h4 className="font-semibold">Reason</h4>
+          <h4 className="font-semibold">{t("Reason")}</h4>
           <p className="whitespace-pre-wrap wrap-anywhere">{item.reason}</p>
         </div>
       )}
@@ -112,7 +121,8 @@ function ActivityItem({ item }: { item: ReviewActivityResponse }) {
           className="wrap-anywhere underline"
           href={`#comment-${item.comment_id}`}
         >
-          Comment {item.comment_id}
+          {t("Comment ")}
+          {item.comment_id}
         </a>
       )}
     </li>
@@ -128,6 +138,7 @@ export function ActivityHistory({
   translationGroupId: string;
   language: string;
 }) {
+  useUiLanguage();
   const [state, setState] = useState<LoadState>("collapsed");
   const [items, setItems] = useState<ReviewActivityResponse[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -192,24 +203,30 @@ export function ActivityHistory({
 
   if (state === "collapsed")
     return (
-      <section aria-label="Activity history" className="space-y-(--space-md)">
-        <h2 className="text-heading font-semibold">Activity history</h2>
+      <section
+        aria-label={t("Activity history")}
+        className="space-y-(--space-md)"
+      >
+        <h2 className="text-heading font-semibold">{t("Activity history")}</h2>
         <Button
           type="button"
           variant="outline"
           onClick={() => void load(null, true)}
         >
-          Show activity history
+          {t("Show activity history")}
         </Button>
       </section>
     );
 
   return (
-    <section aria-label="Activity history" className="space-y-(--space-md)">
-      <h2 className="text-heading font-semibold">Activity history</h2>
+    <section
+      aria-label={t("Activity history")}
+      className="space-y-(--space-md)"
+    >
+      <h2 className="text-heading font-semibold">{t("Activity history")}</h2>
       {state === "loading" && items.length === 0 && (
         <div role="status" className="space-y-(--space-sm)">
-          <p>Loading activity history</p>
+          <p>{t("Loading activity history")}</p>
           {Array.from({ length: 3 }, (_, index) => (
             <Skeleton key={index} className="h-28 w-full" />
           ))}
@@ -217,14 +234,14 @@ export function ActivityHistory({
       )}
       {state === "initial-error" && (
         <Alert role="alert">
-          <AlertTitle>Activity history could not be loaded</AlertTitle>
+          <AlertTitle>{t("Activity history could not be loaded")}</AlertTitle>
           <AlertDescription>
             <Button
               type="button"
               variant="outline"
               onClick={() => void load(null, true)}
             >
-              Reload activity history
+              {t("Reload activity history")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -233,7 +250,7 @@ export function ActivityHistory({
         items.length === 0 &&
         state !== "loading" && (
           <div className="space-y-(--space-xs)">
-            <h3 className="font-semibold">No activity yet</h3>
+            <h3 className="font-semibold">{t("No activity yet")}</h3>
           </div>
         )}
       {items.length > 0 && (
@@ -245,14 +262,14 @@ export function ActivityHistory({
       )}
       {state === "earlier-error" && (
         <Alert role="alert">
-          <AlertTitle>Earlier activity could not be loaded</AlertTitle>
+          <AlertTitle>{t("Earlier activity could not be loaded")}</AlertTitle>
           <AlertDescription>
             <Button
               type="button"
               variant="outline"
               onClick={() => void load(nextCursor, false)}
             >
-              Retry earlier activity
+              {t("Retry earlier activity")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -265,8 +282,8 @@ export function ActivityHistory({
           onClick={() => void load(nextCursor, false)}
         >
           {state === "loading"
-            ? "Loading earlier activity"
-            : "Show earlier activity"}
+            ? t("Loading earlier activity")
+            : t("Show earlier activity")}
         </Button>
       )}
     </section>

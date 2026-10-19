@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import {
   createContext,
   useCallback,
@@ -145,6 +146,7 @@ function NotificationShellController({
   accessToken,
   children,
 }: NotificationShellProps) {
+  useUiLanguage();
   const [status, setStatus] = useState<NotificationShellStatus>("loading");
   const [unreadCount, setUnreadCount] = useState(0);
   const [recent, setRecent] = useState<readonly NotificationItemResponse[]>([]);
@@ -153,7 +155,13 @@ function NotificationShellController({
   const [visible, setVisible] = useState(
     () => document.visibilityState !== "hidden",
   );
-  const [announcement, setAnnouncement] = useState("");
+  const [announcementCount, setAnnouncementCount] = useState(0);
+  const announcement =
+    announcementCount === 0
+      ? ""
+      : announcementCount === 1
+        ? t("1 new notification")
+        : t("{{v0}} new notifications", { v0: announcementCount });
   const [readingIds, setReadingIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -183,9 +191,7 @@ function NotificationShellController({
       const total = pendingAnnouncementCount.current;
       pendingAnnouncementCount.current = 0;
       announcementTimer.current = null;
-      setAnnouncement(
-        total === 1 ? "1 new notification" : `${total} new notifications`,
-      );
+      setAnnouncementCount(total);
     }, ANNOUNCEMENT_DELAY_MS);
   }, []);
 

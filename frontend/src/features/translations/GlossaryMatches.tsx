@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useState } from "react";
 import {
   matchGlossaryTerms,
@@ -32,6 +33,7 @@ export function GlossaryMatches({
   currentText: string;
   refresh: number;
 }) {
+  useUiLanguage();
   const identity = JSON.stringify([
     productId,
     query.source_language,
@@ -67,17 +69,22 @@ export function GlossaryMatches({
     return () => controller.abort();
   }, [accessToken, identity, refresh]);
   if (!result || result.identity !== identity)
-    return <p className="text-xs text-muted-foreground">Checking terms…</p>;
+    return (
+      <p className="text-xs text-muted-foreground">{t("Checking terms…")}</p>
+    );
   if (result.error)
     return (
       <p role="status" className="text-sm text-destructive">
-        Terms could not be loaded
+        {t("Terms could not be loaded")}
       </p>
     );
   if (!result.data?.items.length) return null;
   return (
-    <section aria-label="Glossary terms" className="space-y-2 border-t pt-3">
-      <h4 className="font-semibold text-sm">Terms</h4>
+    <section
+      aria-label={t("Glossary terms")}
+      className="space-y-2 border-t pt-3"
+    >
+      <h4 className="font-semibold text-sm">{t("Terms")}</h4>
       {result.data.items.map((term) => {
         const present = containsTerm(
           currentText,
@@ -99,18 +106,20 @@ export function GlossaryMatches({
             <p className="text-xs">
               {term.forbidden
                 ? violation
-                  ? "Forbidden term in translation"
-                  : "Forbidden"
+                  ? t("Forbidden term in translation")
+                  : t("Forbidden")
                 : present
-                  ? "Preferred term used"
-                  : "Preferred term"}
+                  ? t("Preferred term used")
+                  : t("Preferred term")}
             </p>
             {term.note && <p className="text-xs mt-1">{term.note}</p>}
           </div>
         );
       })}
       {result.data.truncated && (
-        <p className="text-xs text-muted-foreground">First 50 matching terms</p>
+        <p className="text-xs text-muted-foreground">
+          {t("First 50 matching terms")}
+        </p>
       )}
     </section>
   );

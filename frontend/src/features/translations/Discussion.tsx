@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import {
   useCallback,
   useEffect,
@@ -185,6 +186,7 @@ function MentionedText({
   body: string;
   mentions: MentionResponse[];
 }) {
+  useUiLanguage();
   const sorted = [...mentions].sort(
     (left, right) => left.start_utf16 - right.start_utf16,
   );
@@ -204,7 +206,9 @@ function MentionedText({
     parts.push(
       <span
         key={`${mention.user_id}:${mention.start_utf16}:${mention.end_utf16}`}
-        aria-label={`Mentioned user: ${mention.display_text.replace(/^@/, "")}`}
+        aria-label={t("Mentioned user: {{v0}}", {
+          v0: mention.display_text.replace(/^@/, ""),
+        })}
         className="rounded-sm bg-accent/15 px-0.5 text-foreground"
       >
         {mention.display_text}
@@ -275,6 +279,7 @@ function CommentEditHistory({
   comment: TranslationCommentResponse;
   position: number;
 }) {
+  useUiLanguage();
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">(
     "idle",
@@ -344,30 +349,30 @@ function CommentEditHistory({
           void load(null);
         }}
       >
-        View edit history
+        {t("View edit history")}
       </Button>
     );
   }
 
   return (
     <section
-      aria-label={`Edit history for comment ${position}`}
+      aria-label={t("Edit history for comment {{v0}}", { v0: position })}
       className="space-y-(--space-sm) rounded-md border p-(--space-md)"
     >
-      <h4 className="font-semibold">Edit history</h4>
+      <h4 className="font-semibold">{t("Edit history")}</h4>
       {status === "loading" && items.length === 0 && (
-        <p role="status">Loading edit history</p>
+        <p role="status">{t("Loading edit history")}</p>
       )}
       {status === "error" && (
         <Alert role="alert">
-          <AlertTitle>Edit history could not be loaded</AlertTitle>
+          <AlertTitle>{t("Edit history could not be loaded")}</AlertTitle>
           <AlertDescription>
             <Button
               type="button"
               variant="outline"
               onClick={() => void load(nextCursor)}
             >
-              Retry edit history
+              {t("Retry edit history")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -379,13 +384,19 @@ function CommentEditHistory({
               key={item.version}
               className="space-y-(--space-xs) border-t pt-(--space-sm)"
             >
-              <p>Version {item.version}</p>
-              <p>Edited by {item.actor.display_name}</p>
+              <p>
+                {t("Version ")}
+                {item.version}
+              </p>
+              <p>
+                {t("Edited by ")}
+                {item.actor.display_name}
+              </p>
               <time dateTime={item.created_at}>
                 {formatTimestamp(item.created_at)}
               </time>
               {item.status === "removed" ? (
-                <p>Comment removed by an administrator</p>
+                <p>{t("Comment removed by an administrator")}</p>
               ) : (
                 <p className="whitespace-pre-wrap wrap-anywhere" dir="auto">
                   <MentionedText
@@ -405,7 +416,7 @@ function CommentEditHistory({
           disabled={status === "loading"}
           onClick={() => void load(nextCursor)}
         >
-          Show more edit history
+          {t("Show more edit history")}
         </Button>
       )}
     </section>
@@ -429,6 +440,7 @@ function CommentArticle({
   onReplace: (comment: TranslationCommentResponse) => void;
   onDraftStateChange: (id: string, state: DiscussionDraftState) => void;
 }) {
+  useUiLanguage();
   const editTrigger = useRef<HTMLButtonElement>(null);
   const restoreEditFocus = useRef(false);
   const errorRef = useRef<HTMLDivElement>(null);
@@ -591,8 +603,11 @@ function CommentArticle({
     >
       {comment.status === "removed" ? (
         <>
-          <h3 className="font-semibold">Comment {position}</h3>
-          <p>Comment removed by an administrator</p>
+          <h3 className="font-semibold">
+            {t("Comment ")}
+            {position}
+          </h3>
+          <p>{t("Comment removed by an administrator")}</p>
           {comment.deleted_at && (
             <time dateTime={comment.deleted_at}>
               {formatTimestamp(comment.deleted_at)}
@@ -605,7 +620,7 @@ function CommentArticle({
             <h3 className="font-semibold wrap-anywhere">
               {comment.author.display_name}
             </h3>
-            {comment.edited && <Badge variant="outline">Edited</Badge>}
+            {comment.edited && <Badge variant="outline">{t("Edited")}</Badge>}
           </div>
           <time dateTime={comment.created_at}>
             {formatTimestamp(comment.created_at)}
@@ -622,7 +637,7 @@ function CommentArticle({
                 translationGroupId={translationGroupId}
                 accessToken={accessToken}
                 id={`edit-${comment.id}`}
-                label="Edit comment text"
+                label={t("Edit comment text")}
                 body={editBody}
                 mentions={editMentions}
                 disabled={saving}
@@ -636,20 +651,21 @@ function CommentArticle({
                 <Alert ref={errorRef} tabIndex={-1} role="alert">
                   <AlertTitle>
                     {failure === "conflict"
-                      ? "Comment changed in another session"
-                      : "Comment was not saved"}
+                      ? t("Comment changed in another session")
+                      : t("Comment was not saved")}
                   </AlertTitle>
                   <AlertDescription>
                     {failure === "conflict" ? (
                       <div className="space-y-(--space-sm)">
                         <p>
-                          Your comment is still in the editor. Reload the latest
-                          comment before replacing it.
+                          {t(
+                            "Your comment is still in the editor. Reload the latest comment before replacing it.",
+                          )}
                         </p>
                         {latestConflict?.body !== null && latestConflict && (
                           <div>
                             <p className="font-semibold">
-                              Latest saved comment
+                              {t("Latest saved comment")}
                             </p>
                             <p
                               className="whitespace-pre-wrap wrap-anywhere"
@@ -661,7 +677,9 @@ function CommentArticle({
                         )}
                       </div>
                     ) : (
-                      "Your comment is still in the editor. Review it and try again."
+                      t(
+                        "Your comment is still in the editor. Review it and try again.",
+                      )
                     )}
                   </AlertDescription>
                 </Alert>
@@ -679,7 +697,7 @@ function CommentArticle({
                     setEditMentions(comment.mentions);
                   }}
                 >
-                  Stop editing comment
+                  {t("Stop editing comment")}
                 </Button>
                 <Button
                   type="button"
@@ -687,7 +705,7 @@ function CommentArticle({
                   disabled={saving || !editBody.trim()}
                   onClick={() => void save()}
                 >
-                  Save comment
+                  {t("Save comment")}
                 </Button>
               </div>
             </div>
@@ -705,7 +723,7 @@ function CommentArticle({
                     setEditing(true);
                   }}
                 >
-                  Edit comment
+                  {t("Edit comment")}
                 </Button>
               )}
               {comment.edited && (
@@ -722,7 +740,7 @@ function CommentArticle({
                   variant="destructive"
                   onClick={() => setDeleteOpen(true)}
                 >
-                  Delete comment
+                  {t("Delete comment")}
                 </Button>
               )}
             </div>
@@ -733,23 +751,24 @@ function CommentArticle({
           >
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Delete this comment?</AlertDialogTitle>
+                <AlertDialogTitle>{t("Delete this comment?")}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  The comment text will no longer be visible. Its audit record
-                  and existing notification links will remain.
+                  {t(
+                    "The comment text will no longer be visible. Its audit record and existing notification links will remain.",
+                  )}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               {deleteFailure && (
                 <Alert role="alert">
-                  <AlertTitle>Comment was not deleted</AlertTitle>
+                  <AlertTitle>{t("Comment was not deleted")}</AlertTitle>
                   <AlertDescription>
-                    The original comment is still visible.
+                    {t("The original comment is still visible.")}
                   </AlertDescription>
                 </Alert>
               )}
               <AlertDialogFooter>
                 <AlertDialogCancel disabled={deleting}>
-                  Keep comment
+                  {t("Keep comment")}
                 </AlertDialogCancel>
                 <Button
                   type="button"
@@ -758,7 +777,7 @@ function CommentArticle({
                   disabled={deleting}
                   onClick={() => void remove()}
                 >
-                  Delete comment
+                  {t("Delete comment")}
                 </Button>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -776,6 +795,7 @@ function DiscussionContent({
   principal,
   onDraftStateChange,
 }: DiscussionProps) {
+  useUiLanguage();
   const [status, setStatus] = useState<DiscussionStatus>("loading");
   const [items, setItems] = useState<TranslationCommentResponse[]>([]);
   const [olderCursor, setOlderCursor] = useState<string | null>(null);
@@ -982,13 +1002,13 @@ function DiscussionContent({
 
   return (
     <section
-      aria-label="Discussion"
+      aria-label={t("Discussion")}
       className="min-w-0 space-y-(--space-md) rounded-lg border bg-secondary p-(--space-lg)"
     >
-      <h2 className="text-heading font-semibold">Discussion</h2>
+      <h2 className="text-heading font-semibold">{t("Discussion")}</h2>
       {status === "loading" && (
         <div role="status" className="space-y-(--space-sm)">
-          <p>Loading comments</p>
+          <p>{t("Loading comments")}</p>
           {Array.from({ length: 3 }, (_, index) => (
             <Skeleton key={index} className="h-28 w-full" />
           ))}
@@ -996,14 +1016,14 @@ function DiscussionContent({
       )}
       {status === "initial-error" && (
         <Alert role="alert">
-          <AlertTitle>Comments could not be loaded</AlertTitle>
+          <AlertTitle>{t("Comments could not be loaded")}</AlertTitle>
           <AlertDescription>
             <Button
               type="button"
               variant="outline"
               onClick={() => void load(null, true)}
             >
-              Reload comments
+              {t("Reload comments")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -1012,7 +1032,7 @@ function DiscussionContent({
         status !== "initial-error" &&
         items.length === 0 && (
           <div className="space-y-(--space-xs)">
-            <h3 className="font-semibold">No comments yet</h3>
+            <h3 className="font-semibold">{t("No comments yet")}</h3>
           </div>
         )}
       {olderCursor && status !== "older-error" && (
@@ -1023,26 +1043,30 @@ function DiscussionContent({
           onClick={() => void load(olderCursor, false)}
         >
           {status === "older-loading"
-            ? "Loading earlier comments"
-            : "Show earlier comments"}
+            ? t("Loading earlier comments")
+            : t("Show earlier comments")}
         </Button>
       )}
       {status === "older-error" && (
         <Alert role="alert">
-          <AlertTitle>Earlier comments could not be loaded</AlertTitle>
+          <AlertTitle>{t("Earlier comments could not be loaded")}</AlertTitle>
           <AlertDescription>
             <Button
               type="button"
               variant="outline"
               onClick={() => void load(olderCursor, false)}
             >
-              Retry earlier comments
+              {t("Retry earlier comments")}
             </Button>
           </AlertDescription>
         </Alert>
       )}
       {items.length > 0 && (
-        <div role="list" aria-label="Comments" className="space-y-(--space-md)">
+        <div
+          role="list"
+          aria-label={t("Comments")}
+          className="space-y-(--space-md)"
+        >
           {items.map((comment, index) => (
             <div key={comment.id} role="listitem">
               <CommentArticle
@@ -1071,7 +1095,7 @@ function DiscussionContent({
             translationGroupId={translationGroupId}
             accessToken={accessToken}
             id={`new-comment-${translationGroupId}`}
-            label="Add a comment"
+            label={t("Add a comment")}
             body={newBody}
             mentions={newMentions}
             disabled={posting}
@@ -1083,9 +1107,11 @@ function DiscussionContent({
           />
           {postFailure && (
             <Alert role="alert">
-              <AlertTitle>Comment was not posted</AlertTitle>
+              <AlertTitle>{t("Comment was not posted")}</AlertTitle>
               <AlertDescription>
-                Your comment is still in the editor. Review it and try again.
+                {t(
+                  "Your comment is still in the editor. Review it and try again.",
+                )}
               </AlertDescription>
             </Alert>
           )}
@@ -1100,7 +1126,7 @@ function DiscussionContent({
                 setPostFailure(false);
               }}
             >
-              Discard comment draft
+              {t("Discard comment draft")}
             </Button>
           )}
           <Button
@@ -1108,7 +1134,7 @@ function DiscussionContent({
             aria-busy={posting}
             disabled={posting || !newBody.trim()}
           >
-            Post comment
+            {t("Post comment")}
           </Button>
         </form>
       )}
@@ -1117,6 +1143,7 @@ function DiscussionContent({
 }
 
 export function Discussion(props: DiscussionProps) {
+  useUiLanguage();
   return (
     <DiscussionContent
       key={JSON.stringify([

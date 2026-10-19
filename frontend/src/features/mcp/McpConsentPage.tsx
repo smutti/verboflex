@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useState } from "react";
 import { useMcpData } from "./useMcpData";
 import { useSearchParams } from "react-router-dom";
@@ -20,6 +21,7 @@ export function McpConsentPage({
   account?: string;
   onSignOut?: () => Promise<void>;
 }) {
+  useUiLanguage();
   const [params] = useSearchParams();
   const requestId = params.get("request") ?? "";
   const [allowWrite, setAllowWrite] = useState(false);
@@ -50,7 +52,9 @@ export function McpConsentPage({
   return (
     <main className="mx-auto grid min-h-screen max-w-lg content-center gap-5 px-6 py-12">
       <Plug aria-hidden="true" className="size-9 text-primary" />
-      <h1 className="text-display font-semibold">Connect to VerboFlex</h1>
+      <h1 className="text-display font-semibold">
+        {t("Connect to VerboFlex")}
+      </h1>
       {account && (
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
           <span className="break-all">{account}</span>
@@ -61,12 +65,12 @@ export function McpConsentPage({
               disabled={busy}
               onClick={() => void onSignOut()}
             >
-              Use another account
+              {t("Use another account")}
             </Button>
           )}
         </div>
       )}
-      {consent.isPending && <p role="status">Loading request…</p>}
+      {consent.isPending && <p role="status">{t("Loading request…")}</p>}
       {(consent.error || error) && (
         <p role="alert" className="text-destructive">
           {(consent.error || error)?.message}
@@ -79,14 +83,16 @@ export function McpConsentPage({
               {consent.data.client_name}
             </h2>
             <p className="text-sm text-muted-foreground">
-              Check the callback address before connecting.
+              {t("Check the callback address before connecting.")}
             </p>
             <code className="break-all text-sm">
               {consent.data.redirect_origin}
             </code>
           </div>
           <p>
-            Read projects, translations and activity available to your account.
+            {t(
+              "Read projects, translations and activity available to your account.",
+            )}
           </p>
           {consent.data.scopes.includes("verboflex:write") && (
             <label className="flex items-start gap-3">
@@ -97,7 +103,9 @@ export function McpConsentPage({
                 className="mt-1 size-4 accent-primary"
               />
               <span>
-                Allow changes and repository actions permitted by my role.
+                {t(
+                  "Allow changes and repository actions permitted by my role.",
+                )}
               </span>
             </label>
           )}
@@ -107,10 +115,10 @@ export function McpConsentPage({
               disabled={busy}
               onClick={() => void decide(false)}
             >
-              Deny
+              {t("Deny")}
             </Button>
             <Button disabled={busy} onClick={() => void decide(true)}>
-              {busy ? "Connecting…" : "Connect"}
+              {busy ? t("Connecting…") : t("Connect")}
             </Button>
           </div>
         </section>

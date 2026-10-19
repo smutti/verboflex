@@ -1,3 +1,5 @@
+import { statusLabel } from "@/i18n/statusLabels";
+import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Check } from "lucide-react";
 import { toast } from "sonner";
@@ -55,7 +57,7 @@ function errorMessage(error: unknown) {
     "detail" in error &&
     typeof error.detail === "string"
     ? error.detail
-    : "Could not save. Please try again.";
+    : t("Could not save. Please try again.");
 }
 const destinationId = (d: AuthoringDestination) =>
   `${d.scope_id}:${d.file_position}`;
@@ -69,6 +71,7 @@ export function TranslationAuthoring({
   onClearSelection,
   onNew,
 }: Props) {
+  useUiLanguage();
   const [page, setPage] = useState<AuthoringResponse[]>([]);
   const [next, setNext] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -127,18 +130,18 @@ export function TranslationAuthoring({
       toast.success(
         state
           ? state === "approved"
-            ? "Approved"
-            : "Rejected"
-          : "Draft deleted",
+            ? t("Approved")
+            : t("Rejected")
+          : t("Draft deleted"),
       );
     } catch {
-      toast.error("Could not update this draft");
+      toast.error(t("Could not update this draft"));
     } finally {
       setBusy(false);
     }
   }
   return (
-    <section aria-label="New keys and translations" className="space-y-3">
+    <section aria-label={t("New keys and translations")} className="space-y-3">
       <div className="flex flex-wrap gap-2">
         {canWrite && (
           <Button
@@ -150,12 +153,12 @@ export function TranslationAuthoring({
             }
           >
             <Plus />
-            New key
+            {t("New key")}
           </Button>
         )}
         {(page.length > 0 || loadError) && (
           <Button variant="outline" onClick={() => setExpanded(!expanded)}>
-            New entries{" "}
+            {t("New entries")}{" "}
             {page.length ? `(${page.length}${next ? "+" : ""})` : ""}
           </Button>
         )}
@@ -164,7 +167,7 @@ export function TranslationAuthoring({
         <div className="max-h-80 overflow-auto rounded-lg border divide-y">
           {loadError && (
             <Button variant="outline" onClick={() => setRevision((r) => r + 1)}>
-              Retry new entries
+              {t("Retry new entries")}
             </Button>
           )}
           {page.map((row) => (
@@ -172,15 +175,18 @@ export function TranslationAuthoring({
               <div className="min-w-0 grow">
                 <p className="font-mono break-all">{row.input.key}</p>
                 <p className="text-sm text-muted-foreground">
-                  {row.input.language} · {row.state}
-                  {row.source_changed ? " · Source changed" : ""}
+                  {row.input.language} · {statusLabel(row.state)}
+                  {row.source_changed ? t(" · Source changed") : ""}
                 </p>
               </div>
               {canWrite && (
                 <Button
                   variant="outline"
                   size="icon"
-                  aria-label={`Edit new entry ${row.input.key} (${row.input.language})`}
+                  aria-label={t("Edit new entry {{v0}} ({{v1}})", {
+                    v0: row.input.key,
+                    v1: row.input.language,
+                  })}
                   disabled={busy}
                   onClick={() => {
                     setEditing(row);
@@ -197,7 +203,7 @@ export function TranslationAuthoring({
                   onClick={() => void act(row, "approved")}
                 >
                   <Check />
-                  Approve
+                  {t("Approve")}
                 </Button>
               )}
               {canReview && row.state !== "rejected" && (
@@ -206,7 +212,7 @@ export function TranslationAuthoring({
                   disabled={busy}
                   onClick={() => void act(row, "rejected")}
                 >
-                  Reject
+                  {t("Reject")}
                 </Button>
               )}
               {canWrite && (
@@ -214,7 +220,7 @@ export function TranslationAuthoring({
                   variant="ghost"
                   size="icon"
                   disabled={busy}
-                  aria-label={`Delete draft ${row.input.key}`}
+                  aria-label={t("Delete draft {{v0}}", { v0: row.input.key })}
                   onClick={() => setDeleting(row)}
                 >
                   <Trash2 />
@@ -237,15 +243,15 @@ export function TranslationAuthoring({
                   if (r.data) {
                     setPage((p) => [...p, ...r.data!.items]);
                     setNext(r.data.next_after ?? null);
-                  } else toast.error("Could not load entries");
+                  } else toast.error(t("Could not load entries"));
                 } catch {
-                  toast.error("Could not load entries");
+                  toast.error(t("Could not load entries"));
                 } finally {
                   setBusy(false);
                 }
               }}
             >
-              Load more
+              {t("Load more")}
             </Button>
           )}
         </div>
@@ -257,18 +263,18 @@ export function TranslationAuthoring({
         }}
       >
         <AlertDialogContent>
-          <AlertDialogTitle>Delete this draft?</AlertDialogTitle>
+          <AlertDialogTitle>{t("Delete this draft?")}</AlertDialogTitle>
           <AlertDialogDescription>
             {deleting?.input.key} · {deleting?.input.language}
           </AlertDialogDescription>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 if (deleting) void act(deleting, null);
               }}
             >
-              Delete
+              {t("Delete ")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -312,6 +318,7 @@ function AuthoringDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  useUiLanguage();
   const [destinations, setDestinations] = useState<AuthoringDestination[]>([]);
   const [data, setData] = useState<AuthoringInput | null>(
     editing?.input ?? null,
@@ -568,7 +575,7 @@ function AuthoringDialog({
         return;
       }
       setDirty(false);
-      toast.success("Draft saved");
+      toast.success(t("Draft saved"));
       onSaved();
     } catch {
       setFailure("Could not save. Please try again.");
@@ -587,18 +594,18 @@ function AuthoringDialog({
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogTitle>
             {editing
-              ? "Edit new entry"
+              ? t("Edit new entry")
               : selection
-                ? "Add translation"
-                : "New key"}
+                ? t("Add translation")
+                : t("New key")}
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Create a translation draft for review.
+            {t("Create a translation draft for review.")}
           </DialogDescription>
-          {loading && <p role="status">Loading destinations…</p>}
+          {loading && <p role="status">{t("Loading destinations…")}</p>}
           {failure && (
             <p role="alert" className="text-destructive">
-              {failure}
+              {t(failure)}
             </p>
           )}
           {data && !loading && (
@@ -610,7 +617,7 @@ function AuthoringDialog({
               }}
             >
               <div className="space-y-1">
-                <Label htmlFor="authoring-file">File</Label>
+                <Label htmlFor="authoring-file">{t("File")}</Label>
                 <SearchableSelect
                   id="authoring-file"
                   value={destination}
@@ -644,16 +651,18 @@ function AuthoringDialog({
                 />
               </div>
               {destinations.length === 0 && (
-                <p>No mapped file is available for this language.</p>
+                <p>{t("No mapped file is available for this language.")}</p>
               )}
               {selected?.provider === "github" && (
                 <p className="text-sm text-muted-foreground">
-                  GitHub drafts stay local. Remote submission is not available.
+                  {t(
+                    "GitHub drafts stay local. Remote submission is not available.",
+                  )}
                 </p>
               )}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label htmlFor="authoring-language">Language</Label>
+                  <Label htmlFor="authoring-language">{t("Language")}</Label>
                   <SearchableSelect
                     id="authoring-language"
                     value={data.language}
@@ -668,7 +677,7 @@ function AuthoringDialog({
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="authoring-type">Type</Label>
+                  <Label htmlFor="authoring-type">{t("Type")}</Label>
                   <SearchableSelect
                     id="authoring-type"
                     value={data.kind ?? "text"}
@@ -678,7 +687,7 @@ function AuthoringDialog({
                       ...(["android_xml", "qt_ts"].includes(
                         selected?.format ?? "",
                       )
-                        ? [{ value: "plural", label: "Plural" }]
+                        ? [{ value: "plural", label: t("Plural") }]
                         : []),
                     ]}
                     onValueChange={(kind) => {
@@ -692,7 +701,7 @@ function AuthoringDialog({
                 </div>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="authoring-key">Key</Label>
+                <Label htmlFor="authoring-key">{t("Key")}</Label>
                 <Input
                   id="authoring-key"
                   required
@@ -712,14 +721,14 @@ function AuthoringDialog({
               {selected?.format === "qt_ts" && (
                 <>
                   <div className="space-y-1">
-                    <Label htmlFor="authoring-identity">Key type</Label>
+                    <Label htmlFor="authoring-identity">{t("Key type")}</Label>
                     <SearchableSelect
                       id="authoring-identity"
                       value={data.identity_kind ?? "id"}
                       disabled={busy || !!selection || !!editing}
                       options={[
-                        { value: "id", label: "Message ID" },
-                        { value: "source", label: "Source text" },
+                        { value: "id", label: t("Message ID") },
+                        { value: "source", label: t("Source text") },
                       ]}
                       onValueChange={(identity_kind) =>
                         change({
@@ -732,7 +741,7 @@ function AuthoringDialog({
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="authoring-context">Context</Label>
+                    <Label htmlFor="authoring-context">{t("Context")}</Label>
                     <Input
                       id="authoring-context"
                       required
@@ -742,7 +751,7 @@ function AuthoringDialog({
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="authoring-source">Source text</Label>
+                    <Label htmlFor="authoring-source">{t("Source text")}</Label>
                     <Textarea
                       id="authoring-source"
                       required
@@ -758,7 +767,7 @@ function AuthoringDialog({
               {selected?.format === "json" && (
                 <div className="space-y-1">
                   <Label htmlFor="authoring-parents">
-                    Parent path (JSON array)
+                    {t("Parent path (JSON array)")}
                   </Label>
                   <Input
                     id="authoring-parents"
@@ -776,7 +785,7 @@ function AuthoringDialog({
                         change({ parents });
                       } catch {
                         setFailure(
-                          'Enter a path such as ["screen", "buttons"]',
+                          t('Enter a path such as ["screen", "buttons"]'),
                         );
                       }
                     }}
@@ -784,7 +793,7 @@ function AuthoringDialog({
                 </div>
               )}
               {data.forms.length === 0 && (
-                <p>All plural forms are already present.</p>
+                <p>{t("All plural forms are already present.")}</p>
               )}
               {data.forms.map((form, index) => {
                 const count = countTranslationGraphemes(form.text);
@@ -795,7 +804,7 @@ function AuthoringDialog({
                       {data.kind === "plural"
                         ? (formOptions.find((f) => f.form === form.form)
                             ?.label ?? form.form)
-                        : "Translation"}
+                        : t("Translation")}
                     </Label>
                     <Textarea
                       id={`authoring-form-${form.form}`}
@@ -823,13 +832,13 @@ function AuthoringDialog({
                     >
                       {count}
                       {data.max_chars != null ? ` / ${data.max_chars}` : ""}
-                      {over ? " · Over limit" : ""}
+                      {over ? t(" · Over limit") : ""}
                     </p>
                   </div>
                 );
               })}
               <div className="space-y-1">
-                <Label htmlFor="authoring-max">Character limit</Label>
+                <Label htmlFor="authoring-max">{t("Character limit")}</Label>
                 <Input
                   id="authoring-max"
                   type="number"
@@ -852,7 +861,7 @@ function AuthoringDialog({
                   disabled={busy}
                   onClick={close}
                 >
-                  Cancel
+                  {t("Cancel")}
                 </Button>
                 <Button
                   type="submit"
@@ -865,7 +874,7 @@ function AuthoringDialog({
                     invalidPath
                   }
                 >
-                  {busy ? "Saving…" : "Save"}
+                  {busy ? t("Saving…") : t("Save")}
                 </Button>
               </div>
             </form>
@@ -874,13 +883,15 @@ function AuthoringDialog({
       </Dialog>
       <AlertDialog open={confirmClose} onOpenChange={setConfirmClose}>
         <AlertDialogContent>
-          <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+          <AlertDialogTitle>{t("Discard unsaved changes?")}</AlertDialogTitle>
           <AlertDialogDescription>
-            Your changes have not been saved.
+            {t("Your changes have not been saved.")}
           </AlertDialogDescription>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep editing</AlertDialogCancel>
-            <AlertDialogAction onClick={onClose}>Discard</AlertDialogAction>
+            <AlertDialogCancel>{t("Keep editing")}</AlertDialogCancel>
+            <AlertDialogAction onClick={onClose}>
+              {t("Discard")}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -151,7 +151,7 @@ describe("ProductRepositoriesPage cursor boundaries", () => {
     picker(selected);
     expect(await screen.findByText("Workspace: product-team")).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "Collega a repository bitbucket" }),
+      screen.getByRole("heading", { name: "Connect a Bitbucket repository" }),
     ).toBeVisible();
     expect(screen.queryByText("Use repository")).not.toBeInTheDocument();
     expect(
@@ -159,7 +159,7 @@ describe("ProductRepositoriesPage cursor boundaries", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Workspace")).not.toBeInTheDocument();
     await userEvent.click(
-      await screen.findByRole("button", { name: "Collega Repository 1" }),
+      await screen.findByRole("button", { name: "Connect Repository 1" }),
     );
     await waitFor(() => expect(selected).toHaveBeenCalledWith(repository(1)));
     expect(selectAdminBitbucketRepository).toHaveBeenCalledWith({
@@ -176,22 +176,22 @@ describe("ProductRepositoriesPage cursor boundaries", () => {
     );
     picker();
     expect(
-      await screen.findByRole("link", { name: "Apri connessione Bitbucket" }),
+      await screen.findByRole("link", { name: "Open Bitbucket connection" }),
     ).toHaveAttribute("href", "/admin/bitbucket");
     expect(listAdminBitbucketRepositories).not.toHaveBeenCalled();
   });
 
   it("filters through Bitbucket instead of only searching the loaded results", async () => {
     picker();
-    await screen.findByRole("button", { name: "Collega Repository 1" });
+    await screen.findByRole("button", { name: "Connect Repository 1" });
     vi.mocked(listAdminBitbucketRepositories).mockResolvedValue(
       ok({ workspace: "product-team", items: [], next_cursor: null }),
     );
     await userEvent.type(
-      screen.getByRole("searchbox", { name: "Cerca repository" }),
+      screen.getByRole("searchbox", { name: "Search repositories" }),
       "missing",
     );
-    expect(await screen.findByText("Nessun repository trovato.")).toBeVisible();
+    expect(await screen.findByText("No repositories found.")).toBeVisible();
     expect(listAdminBitbucketRepositories).toHaveBeenLastCalledWith(
       expect.objectContaining({
         query: { q: "missing", limit: 20, cursor: null },
@@ -210,22 +210,22 @@ describe("ProductRepositoriesPage cursor boundaries", () => {
       }),
     );
     picker();
-    await screen.findByRole("button", { name: "Collega One" });
+    await screen.findByRole("button", { name: "Connect One" });
     vi.mocked(listAdminBitbucketRepositories).mockRejectedValueOnce(
       new Error("private diagnostics"),
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Carica altri repository" }),
+      screen.getByRole("button", { name: "Load more repositories" }),
     );
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Impossibile caricare altri risultati",
+      "Could not load more results",
     );
-    expect(screen.getByRole("button", { name: "Collega One" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Connect One" })).toBeVisible();
     await userEvent.click(
-      screen.getByRole("button", { name: "Carica altri repository" }),
+      screen.getByRole("button", { name: "Load more repositories" }),
     );
     expect(
-      await screen.findByRole("button", { name: "Collega Repository 1" }),
+      await screen.findByRole("button", { name: "Connect Repository 1" }),
     ).toBeVisible();
     expect(listAdminBitbucketRepositories).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -240,21 +240,21 @@ describe("ProductRepositoriesPage cursor boundaries", () => {
     );
     picker();
     await userEvent.click(
-      await screen.findByRole("button", { name: "Collega Repository 1" }),
+      await screen.findByRole("button", { name: "Connect Repository 1" }),
     );
-    expect(await screen.findByText("Repository non collegato")).toBeVisible();
+    expect(await screen.findByText("Repository not connected")).toBeVisible();
     expect(screen.queryByText("private diagnostics")).not.toBeInTheDocument();
     await userEvent.click(
-      screen.getByRole("button", { name: "Collega Repository 1" }),
+      screen.getByRole("button", { name: "Connect Repository 1" }),
     );
     expect(
-      await screen.findByRole("region", { name: "Repository collegati" }),
+      await screen.findByRole("region", { name: "Connected repositories" }),
     ).toBeVisible();
   });
 
   it("ignores an older search response after the filter changes", async () => {
     picker();
-    await screen.findByRole("button", { name: "Collega Repository 1" });
+    await screen.findByRole("button", { name: "Connect Repository 1" });
     let resolveOld!: (
       value: ReturnType<
         typeof ok<{
@@ -270,7 +270,9 @@ describe("ProductRepositoriesPage cursor boundaries", () => {
           resolveOld = resolve;
         }),
     );
-    const search = screen.getByRole("searchbox", { name: "Cerca repository" });
+    const search = screen.getByRole("searchbox", {
+      name: "Search repositories",
+    });
     await userEvent.type(search, "old");
     await waitFor(() =>
       expect(listAdminBitbucketRepositories).toHaveBeenLastCalledWith(
@@ -284,7 +286,7 @@ describe("ProductRepositoriesPage cursor boundaries", () => {
     );
     await userEvent.clear(search);
     await userEvent.type(search, "new");
-    await screen.findByText("Nessun repository trovato.");
+    await screen.findByText("No repositories found.");
     await act(async () =>
       resolveOld(
         ok({
@@ -297,9 +299,9 @@ describe("ProductRepositoriesPage cursor boundaries", () => {
       ),
     );
     expect(
-      screen.queryByRole("button", { name: "Collega Old" }),
+      screen.queryByRole("button", { name: "Connect Old" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Nessun repository trovato.")).toBeVisible();
+    expect(screen.getByText("No repositories found.")).toBeVisible();
   });
 
   it("shows only repositories referenced by this product mappings", async () => {
@@ -327,7 +329,7 @@ describe("ProductRepositoriesPage cursor boundaries", () => {
       }),
     ).toBeVisible();
     const list = await screen.findByRole("list", {
-        name: "Repositories used by this product",
+      name: "Repositories used by this product",
     });
     expect(within(list).getByText("Repository 1")).toBeVisible();
     expect(within(list).queryByText("Repository 2")).not.toBeInTheDocument();

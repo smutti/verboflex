@@ -1,3 +1,4 @@
+import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getPersonalDashboard,
@@ -11,6 +12,7 @@ import { Button } from "../../components/ui/button";
 import { useNotificationShell } from "../notifications/NotificationShell";
 
 function DashboardNotification({ item }: { item: NotificationItemResponse }) {
+  useUiLanguage();
   const { markRead, readErrorId, readingIds } = useNotificationShell();
   const failure = useRef<HTMLDivElement>(null);
   const failed = readErrorId === item.id;
@@ -20,7 +22,7 @@ function DashboardNotification({ item }: { item: NotificationItemResponse }) {
   const summary = (
     <>
       <span className="block font-medium">
-        {item.actor.display_name} mentioned you
+        {item.actor.display_name} {t(" mentioned you")}
       </span>
       <span className="mt-1 block text-sm font-normal" dir="auto">
         {item.key_excerpt}
@@ -39,7 +41,7 @@ function DashboardNotification({ item }: { item: NotificationItemResponse }) {
         <div>
           {summary}
           <p className="mt-2 text-sm text-muted-foreground">
-            Comment no longer available
+            {t("Comment no longer available")}
           </p>
         </div>
       )}
@@ -49,9 +51,9 @@ function DashboardNotification({ item }: { item: NotificationItemResponse }) {
       </div>
       <p className="text-xs text-muted-foreground">
         <time dateTime={item.created_at}>
-          {new Date(item.created_at).toLocaleString()}
+          {new Date(item.created_at).toLocaleString(getUiLanguage())}
         </time>{" "}
-        · <span>{item.is_read ? "Read" : "Unread"}</span>
+        · <span>{item.is_read ? t("Read") : t("Unread")}</span>
       </p>
       {!item.is_read && !failed ? (
         <Button
@@ -62,7 +64,7 @@ function DashboardNotification({ item }: { item: NotificationItemResponse }) {
           aria-busy={readingIds.has(item.id)}
           onClick={() => void markRead(item.id)}
         >
-          {readingIds.has(item.id) ? "Marking as read" : "Mark as read"}
+          {readingIds.has(item.id) ? t("Marking as read") : t("Mark as read")}
         </Button>
       ) : null}
       {failed ? (
@@ -72,7 +74,7 @@ function DashboardNotification({ item }: { item: NotificationItemResponse }) {
           tabIndex={-1}
           className="grid gap-2 rounded-md border border-destructive/40 p-3 text-sm focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <p>Notification was not marked as read</p>
+          <p>{t("Notification was not marked as read")}</p>
           <Button
             type="button"
             variant="outline"
@@ -80,7 +82,7 @@ function DashboardNotification({ item }: { item: NotificationItemResponse }) {
             disabled={readingIds.has(item.id)}
             onClick={() => void markRead(item.id)}
           >
-            Retry marking as read
+            {t("Retry marking as read")}
           </Button>
         </div>
       ) : null}
@@ -89,6 +91,7 @@ function DashboardNotification({ item }: { item: NotificationItemResponse }) {
 }
 
 function DashboardNotifications() {
+  useUiLanguage();
   const { status, recent, stale, unreadCount, refresh } =
     useNotificationShell();
   return (
@@ -98,11 +101,11 @@ function DashboardNotifications() {
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="dashboard-notifications" className="text-heading font-semibold">
-          Notifications
+          {t("Notifications")}
         </h2>
         {status === "ready" || recent.length > 0 ? (
           <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-            {unreadCount} unread
+            {unreadCount} {t(" unread")}
           </span>
         ) : null}
       </div>
@@ -112,23 +115,23 @@ function DashboardNotifications() {
         disabled={status === "loading"}
         onClick={() => void refresh()}
       >
-        Refresh notifications
+        {t("Refresh notifications")}
       </Button>
       {status === "loading" ? (
         <p role="status" className="py-6 text-sm text-muted-foreground">
-          Loading notifications
+          {t("Loading notifications")}
         </p>
       ) : (
         <>
           {status === "error" && recent.length === 0 ? (
             <p role="alert" className="py-6 text-sm">
-              Notifications could not be loaded
+              {t("Notifications could not be loaded")}
             </p>
           ) : (
             <>
               {stale ? (
                 <p role="status" className="mb-3 text-sm text-muted-foreground">
-                  May be out of date
+                  {t("May be out of date")}
                 </p>
               ) : null}
               {recent.length ? (
@@ -139,7 +142,7 @@ function DashboardNotifications() {
                 </ul>
               ) : (
                 <div className="grid gap-2 py-6 text-sm">
-                  <p className="font-medium">No notifications yet</p>
+                  <p className="font-medium">{t("No notifications yet")}</p>
                 </div>
               )}
             </>
@@ -147,7 +150,9 @@ function DashboardNotifications() {
         </>
       )}
       <div className="mt-3 border-t pt-4 text-sm">
-        <Destination to="/notifications">View all notifications</Destination>
+        <Destination to="/notifications">
+          {t("View all notifications")}
+        </Destination>
       </div>
     </section>
   );
@@ -164,6 +169,7 @@ function ActivityFeed({
   feed: DashboardFeed;
   personal: boolean;
 }) {
+  useUiLanguage();
   return (
     <section
       aria-labelledby={id}
@@ -177,13 +183,15 @@ function ActivityFeed({
       ) : (
         <div className="grid gap-2 py-8 text-sm">
           <p className="font-medium">
-            {personal ? "No recent activity yet" : "No project updates yet"}
+            {personal
+              ? t("No recent activity yet")
+              : t("No project updates yet")}
           </p>
         </div>
       )}
       <div className="mt-3 grid gap-2 border-t pt-4 text-sm">
         <Destination to={personal ? "/my-activity" : "/project-updates"}>
-          {personal ? "View all my activity" : "View all project updates"}
+          {personal ? t("View all my activity") : t("View all project updates")}
         </Destination>
       </div>
     </section>
@@ -195,6 +203,7 @@ type ActivityState =
   | { status: "error" }
   | { status: "ready"; data: DashboardResponse };
 function ActivityController({ accessToken }: { accessToken: string }) {
+  useUiLanguage();
   const [state, setState] = useState<ActivityState>({ status: "loading" });
   const generation = useRef(0);
   const request = useRef<AbortController | null>(null);
@@ -238,7 +247,7 @@ function ActivityController({ accessToken }: { accessToken: string }) {
           onClick={() => void load()}
           disabled={state.status === "loading"}
         >
-          Refresh activity
+          {t("Refresh activity")}
         </Button>
       </div>
       <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,2fr)]">
@@ -249,33 +258,33 @@ function ActivityController({ accessToken }: { accessToken: string }) {
               role="status"
               className="rounded-lg border p-6 text-muted-foreground"
             >
-              Loading activity
+              {t("Loading activity")}
             </p>
           ) : state.status === "error" ? (
             <div
               role="alert"
               className="grid gap-3 rounded-lg border border-destructive/40 p-5"
             >
-              <p>Activity could not be loaded. Please try again.</p>
+              <p>{t("Activity could not be loaded. Please try again.")}</p>
               <Button
                 variant="outline"
                 className="w-fit"
                 onClick={() => void load()}
               >
-                Retry activity
+                {t("Retry activity")}
               </Button>
             </div>
           ) : (
             <div className="grid min-w-0 items-start gap-4 lg:grid-cols-2">
               <ActivityFeed
                 id="my-activity"
-                title="My recent activity"
+                title={t("My recent activity")}
                 feed={state.data.my_activity}
                 personal
               />
               <ActivityFeed
                 id="project-updates"
-                title="Project updates"
+                title={t("Project updates")}
                 feed={state.data.project_updates}
                 personal={false}
               />
@@ -294,6 +303,7 @@ export function PersonalDashboard({
   accessToken: string;
   principal: CurrentUserResponse;
 }) {
+  useUiLanguage();
   const authorityKey = JSON.stringify([
     principal.id,
     accessToken,

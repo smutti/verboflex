@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import * as React from "react";
 import type { Label as LabelPrimitive } from "radix-ui";
 import { Slot } from "radix-ui";
@@ -135,8 +136,9 @@ function FormDescription({ className, ...props }: React.ComponentProps<"p">) {
 }
 
 function FormMessage({ className, ...props }: React.ComponentProps<"p">) {
+  useUiLanguage();
   const { error, formMessageId } = useFormField();
-  const body = error ? String(error?.message ?? "") : props.children;
+  const body = error ? t(String(error?.message ?? "")) : props.children;
 
   if (!body) {
     return null;

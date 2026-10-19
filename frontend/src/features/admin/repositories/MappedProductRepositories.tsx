@@ -1,3 +1,4 @@
+import { t, useUiLanguage } from "@/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FolderGit2, GitBranch, Network } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -128,6 +129,7 @@ export function MappedProductRepositories({
   accessToken: string;
   productId: string;
 }) {
+  useUiLanguage();
   const generationRef = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
@@ -185,18 +187,18 @@ export function MappedProductRepositories({
             id="product-repositories-title"
             className="text-display font-semibold"
           >
-            Repositories used by this product
+            {t("Repositories used by this product")}
           </h1>
           <p className="max-w-3xl text-muted-foreground">
-            Repositories linked through translation sources.
+            {t("Repositories linked through translation sources.")}
           </p>
         </div>
         {loadState.status === "ready" && loadState.repositories.length > 0 ? (
           <Badge variant="success" className="rounded-md px-3 py-1">
             {loadState.repositories.length}{" "}
             {loadState.repositories.length === 1
-              ? "repository in use"
-              : "repositories in use"}
+              ? t("repository in use")
+              : t("repositories in use")}
           </Badge>
         ) : null}
       </header>
@@ -206,23 +208,23 @@ export function MappedProductRepositories({
           className="grid gap-3"
           role="status"
           aria-live="polite"
-          aria-label="Loading product repositories"
+          aria-label={t("Loading product repositories")}
         >
           <Skeleton className="h-28 w-full rounded-xl" />
           <Skeleton className="h-28 w-full rounded-xl" />
           <span className="text-sm text-muted-foreground">
-            Resolving repositories from saved mappings
+            {t("Resolving repositories from saved mappings")}
           </span>
         </section>
       ) : null}
 
       {loadState.status === "error" ? (
         <Alert ref={errorRef} tabIndex={-1} variant="destructive">
-          <AlertTitle>Product repositories unavailable</AlertTitle>
+          <AlertTitle>{t("Product repositories unavailable")}</AlertTitle>
           <AlertDescription>
-            <p>Could not load linked repositories.</p>
+            <p>{t("Could not load linked repositories.")}</p>
             <Button type="button" variant="outline" onClick={() => void load()}>
-              Retry loading product repositories
+              {t("Retry loading product repositories")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -240,14 +242,14 @@ export function MappedProductRepositories({
             </span>
             <div className="grid gap-2">
               <h2 className="text-heading font-semibold">
-                No repositories in use
+                {t("No repositories in use")}
               </h2>
               <p className="text-muted-foreground">
-                Add a translation source to link a repository.
+                {t("Add a translation source to link a repository.")}
               </p>
             </div>
             <Button asChild>
-              <Link to={mappingsUrl}>Configure a mapping</Link>
+              <Link to={mappingsUrl}>{t("Configure a mapping")}</Link>
             </Button>
           </div>
         </section>
@@ -257,7 +259,7 @@ export function MappedProductRepositories({
         <>
           <ul
             className="grid list-none gap-4 p-0 lg:grid-cols-2"
-            aria-label="Repositories used by this product"
+            aria-label={t("Repositories used by this product")}
           >
             {loadState.repositories.map((repository) => (
               <li key={repository.id} className="min-w-0">
@@ -272,7 +274,7 @@ export function MappedProductRepositories({
                       </h2>
                       <Badge variant="outline">
                         {repository.provider === "github"
-                          ? "GitHub · Import only"
+                          ? t("GitHub · Import only")
                           : "Bitbucket Cloud"}
                       </Badge>
                       <span className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
@@ -287,7 +289,7 @@ export function MappedProductRepositories({
                     </div>
                   </div>
                   <Badge variant="success" className="rounded-md">
-                    Connected by a saved mapping
+                    {t("Connected by a saved mapping")}
                   </Badge>
                 </article>
               </li>
@@ -298,10 +300,10 @@ export function MappedProductRepositories({
             className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-secondary/50 p-5"
           >
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Manage branches and paths in translation sources.
+              {t("Manage branches and paths in translation sources.")}
             </p>
             <Button asChild variant="outline">
-              <Link to={mappingsUrl}>Manage mappings</Link>
+              <Link to={mappingsUrl}>{t("Manage mappings")}</Link>
             </Button>
           </aside>
         </>
