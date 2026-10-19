@@ -40,7 +40,6 @@ def target_at(remote, commit):
 
 def projections(factory, seed):
     with factory() as session:
-        detail = get_translation_group(session, group_id=seed.value_ids[0]).pending_change
         result = search_translations(
             session,
             principal_id=seed.actor_id,
@@ -48,7 +47,11 @@ def projections(factory, seed):
             cursor=None,
             cursor_secret="synthetic cursor secret",
         )
-        summary = next(item.pending_change for item in result.items if item.pending_change)
+        # A removed plural member can have been the group's representative UUID.
+        # Resolve the current server-issued group before checking its detail.
+        group = next(item for item in result.items if item.pending_change)
+        summary = group.pending_change
+        detail = get_translation_group(session, group_id=group.id).pending_change
     with factory() as session:
         page = search_translation_keys(
             session,
