@@ -130,6 +130,8 @@ class TranslationProposalResponse(ClosedReviewModel):
     version: PositiveVersion
     state: ReviewState
     reconciliation_required: bool
+    target_branch: str | None = None
+    target_integrated: bool = False
     published: Annotated[
         list[PublishedTranslationValueResponse], Field(min_length=1, max_length=10_000)
     ]

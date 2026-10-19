@@ -403,9 +403,10 @@ def test_submission_uses_action_time_and_retains_old_revision_history(factory):
     assert item["current_status"] == "succeeded"
     assert datetime.fromisoformat(item["occurred_at"]) == occurred
     assert item["actor"]["id"] == str(actor_id)
-    # Retained readable groups must survive the new configuration, too.
+    # Audit history survives a new configuration, while groups from a removed
+    # translation source are no longer exposed in the current workspace.
     assert any(i["kind"] == "proposal_saved" for i in body["my_activity"]["items"])
-    assert request(token, f"/api/v1/translations/{ids['group']}").status_code == 200
+    assert request(token, f"/api/v1/translations/{ids['group']}").status_code == 404
     history = request(token, f"/api/v1/products/{ids['product']}/change-sets")
     assert history.status_code == 200, history.text
     assert history.json()["items"][0]["id"] == str(change_id)

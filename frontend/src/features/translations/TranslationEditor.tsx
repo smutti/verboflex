@@ -103,7 +103,7 @@ export function writableTranslationDetail(
     )
       return false;
     return editField === "source_text"
-      ? provenance.repository_side === "direct" &&
+      ? ["direct", "translations"].includes(provenance.repository_side) &&
           provenance.format !== "qt_ts" &&
           value.translated_text === null &&
           value.source_text !== null
@@ -139,7 +139,8 @@ export function createActiveTranslationDraft(
         throw new Error("Translation edit basis unavailable");
       }
       const sourceLeaf =
-        value.provenance?.repository_side === "direct" &&
+        value.provenance !== null &&
+        ["direct", "translations"].includes(value.provenance.repository_side) &&
         ["android_xml", "json", "ios_strings"].includes(
           value.provenance.format,
         ) &&
@@ -494,6 +495,10 @@ export function TranslationEditor({
             const source = draft.detail.source_context?.find(
               (entry) => entry.source_value_id === member?.source_value_id,
             );
+            const sourceLanguage =
+              member?.provenance?.format === "qt_ts"
+                ? undefined
+                : (source?.language ?? draft.detail.base_language ?? undefined);
             return (
               <div
                 key={value.translationValueId}
@@ -506,18 +511,13 @@ export function TranslationEditor({
                 {bilingual && !compact && (
                   <div className="min-w-0 space-y-2 rounded-md bg-secondary p-3">
                     <p className="text-label font-semibold">
-                      Source ·{" "}
-                      {source?.language ??
-                        draft.detail.base_language ??
-                        "Unknown"}
+                      {sourceLanguage
+                        ? `Source · ${sourceLanguage}`
+                        : "Source text"}
                     </p>
                     <p
                       dir="auto"
-                      lang={
-                        source?.language ??
-                        draft.detail.base_language ??
-                        undefined
-                      }
+                      lang={sourceLanguage}
                       className="whitespace-pre-wrap wrap-anywhere"
                     >
                       {member?.source_text ??

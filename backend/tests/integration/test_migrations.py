@@ -26,6 +26,8 @@ ADMIN_DATABASE_URL = os.environ.get(
     "postgresql://postgres@127.0.0.1:55432/postgres",
 )
 EXPECTED_TABLES = {
+    "source_fallback_policies",
+    "source_fallback_texts",
     "active_revision_revalidation_confirmations",
     "auth_sessions",
     "bitbucket_connections",

@@ -73,6 +73,8 @@ class PendingTranslationSummaryResponse(ClosedTranslationModel):
     version: Annotated[int, Field(ge=1, le=9_007_199_254_740_991)]
     state: Literal["draft", "approved", "rejected"]
     reconciliation_required: bool
+    target_branch: str | None = None
+    target_integrated: bool = False
     value_count: Annotated[int, Field(ge=1, le=10_000)]
 
 
@@ -242,6 +244,8 @@ class PendingTranslationDetailResponse(ClosedTranslationModel):
     version: Annotated[int, Field(ge=1, le=9_007_199_254_740_991)]
     state: Literal["draft", "approved", "rejected"]
     reconciliation_required: bool
+    target_branch: str | None = None
+    target_integrated: bool = False
     updated_by: UUID
     updated_at: datetime
     values: Annotated[
@@ -272,6 +276,7 @@ class TranslationGroupDetailResponse(ClosedTranslationModel):
     comment_count: Annotated[int, Field(ge=0)]
     mutation_eligible: bool
     review_eligible: bool
+    approval_commits_enabled: bool = False
     source_context: (
         Annotated[list[TranslationSourceContextResponse], Field(max_length=10_000)] | None
     ) = None

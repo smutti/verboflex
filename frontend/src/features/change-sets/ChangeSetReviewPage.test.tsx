@@ -25,6 +25,7 @@ import { ChangeSetsLayout } from "./ChangeSetWorkspace";
 import { useChangeSetWorkspace } from "./changeSetContext";
 
 const api = vi.hoisted(() => ({
+  getBranchWorkflow: vi.fn(),
   getChangeSetCandidates: vi.fn(),
   createSubmissionReview: vi.fn(),
   getSubmissionReview: vi.fn(),
@@ -199,6 +200,7 @@ function WorkspaceCache() {
 }
 beforeEach(() => {
   vi.resetAllMocks();
+  api.getBranchWorkflow.mockResolvedValue({ data: { enabled: false } });
   api.getChangeSetCandidates.mockResolvedValue({ data: page() });
   api.createSubmissionReview.mockResolvedValue({ data: ready() });
   api.getSubmissionReview.mockResolvedValue({ data: ready() });

@@ -218,6 +218,59 @@ async function scroll(top: number) {
   });
 }
 
+it("shows pending, approval and target status, then removes all change highlighting", async () => {
+  const item = group(0);
+  const pending = {
+    state: "draft" as const,
+    version: 1,
+    value_count: 1,
+    reconciliation_required: false,
+  };
+  item.slots[0].pending_change = pending;
+  const props = {
+    ...defaults(),
+    items: [item],
+    canEdit: true,
+    onEditTranslation: vi.fn(),
+  };
+  const view = mount(props);
+  expect(await screen.findByText("Pending", { exact: true })).toBeVisible();
+  expect(screen.queryByText("Pending Draft")).toBeNull();
+  const update = (state: "approved" | "draft", integrated = false) => {
+    const next = {
+      ...item,
+      slots: item.slots.map((slot, index) =>
+        index
+          ? slot
+          : {
+              ...slot,
+              pending_change: {
+                ...pending,
+                state,
+                target_branch: "release/translations",
+                target_integrated: integrated,
+              },
+            },
+      ),
+    };
+    view.update({ ...props, items: [next] });
+  };
+  update("approved");
+  expect(await screen.findByText("Approved", { exact: true })).toBeVisible();
+  expect(screen.getByText("Awaiting release/translations")).toBeVisible();
+  expect(screen.queryByText("Pending", { exact: true })).toBeNull();
+  update("approved", true);
+  await waitFor(() =>
+    expect(screen.queryByLabelText("Translation status")).toBeNull(),
+  );
+  const row = view.container.querySelector('[data-group-id="en-0"]')!;
+  expect(row.innerHTML).not.toContain("border-l-4");
+  expect(screen.getByText("en value 0")).toBeVisible();
+  update("draft");
+  expect(await screen.findByText("Pending", { exact: true })).toBeVisible();
+  expect(screen.queryByText("Awaiting release/translations")).toBeNull();
+});
+
 beforeEach(() => {
   measuredHeights.clear();
   resizeObservers.clear();
@@ -479,6 +532,71 @@ describe("compact multilingual key blocks", () => {
       screen.queryByRole("button", { name: /Comments.*\(en\)/ }),
     ).toBeNull();
     expect(screen.getByText(/Embedded source text/)).toBeVisible();
+  });
+  it.each(["Operazione completata", "Open the message", "<b>Open</b>"])(
+    "shows Qt source %s without treating it as an Italian translation",
+    async (source) => {
+      const item = group(0, { base_language: "it-IT", source_text: source });
+      item.slots = [
+        {
+          ...item.slots[2],
+          effective_text: "",
+          edit_field: "translated_text",
+          provenance: {
+            repository_side: "direct",
+            format: "qt_ts",
+            repository_name: "Example",
+            branch: "work",
+            path: "it.ts",
+            path_truncated: false,
+          },
+        },
+      ];
+      const edit = vi.fn();
+      const { container } = mount({
+        ...defaults(),
+        items: [item],
+        canEdit: true,
+        onEditTranslation: edit,
+      });
+      expect(
+        await screen.findByText("Source text", { exact: true }),
+      ).toBeVisible();
+      expect(screen.getByText(source, { exact: true })).toBeVisible();
+      expect(screen.queryByText("Empty source text")).toBeNull();
+      expect(screen.queryByText("Source", { exact: true })).toBeNull();
+      expect(container.querySelector('[data-part="source-text"] b')).toBeNull();
+      const button = screen.getByRole("button", {
+        name: /Edit translation.*it-IT/,
+      });
+      expect(button).toHaveTextContent("Empty translation");
+      expect(button).not.toHaveTextContent(source);
+      await userEvent.click(button);
+      expect(edit).toHaveBeenCalledWith("it-IT-0", button);
+    },
+  );
+  it("labels an explicitly configured source fallback as the effective translation", async () => {
+    const item = group(0, {
+      base_language: "it-IT",
+      source_text: "Operazione completata",
+    });
+    item.slots = [
+      {
+        ...item.slots[2],
+        effective_text: "Operazione completata",
+        uses_source_fallback: true,
+      },
+    ];
+    mount({
+      ...defaults(),
+      items: [item],
+      canEdit: true,
+      onEditTranslation: vi.fn(),
+    });
+    expect(await screen.findByText("Using source text")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /Edit translation.*it-IT/ }),
+    ).toHaveTextContent("Operazione completata");
   });
   it("keeps siblings visible and pins the active editor beyond the visible range", async () => {
     mount({

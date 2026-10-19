@@ -763,6 +763,15 @@ async function multilingualWorkspace() {
   await expect(edit(0, "fr")).toBeVisible();
   await expect(page.getByText("key-000", { exact: true })).toHaveCount(1);
   await expect(
+    page.getByRole("heading", { name: "Multilingual", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Product in focus", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("link", { name: "Change product", exact: true }),
+  ).toHaveCount(0);
+  await expect(
     page.getByRole("button", { name: "Multilingual", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
   await expect(context).toHaveCount(0);
@@ -808,7 +817,7 @@ async function multilingualWorkspace() {
   await expect
     .poll(async () => (await detail(0, "it")).pending_change?.values[0].text)
     .toBe("Ciao multilingual");
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(field).toHaveCount(0);
   const french = await detail(0, "fr");
   const italian = await detail(0, "it");
   check(
@@ -829,10 +838,10 @@ async function multilingualWorkspace() {
     .poll(async () => (await detail(0, "en")).pending_change?.values[0].text)
     .toBe("Updated base source");
   check((await detail(0, "en")).values[0].source_text === "en 0");
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(field).toHaveCount(0);
   await search("key-002");
   await expect(
-    page.getByText("Not imported for this language", { exact: true }),
+    page.getByRole("button", { name: "Add translation", exact: true }),
   ).toBeVisible();
   await expect(edit(2, "it")).toHaveCount(0);
   await search("key-010");
@@ -850,7 +859,9 @@ async function multilingualWorkspace() {
   await expect
     .poll(async () => (await detail(10, "fr")).pending_change?.values.length)
     .toBe(2);
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(
+    page.getByRole("textbox", { name: /quantity (one|other)/ }),
+  ).toHaveCount(0);
 
   progress("advanced-filters");
   await search("it 60");
@@ -902,6 +913,20 @@ async function multilingualWorkspace() {
     .click();
   await expect(edit(1, "fr")).toBeVisible();
   await expect(edit(1, "it")).toBeVisible();
+  await expect(page.getByText("key-002", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Add translation", exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(() =>
+      keyResponses
+        .at(-1)
+        .body.items.find((item) => item.raw_key === "key-002")
+        ?.slots.filter((slot) => slot.matches_filters)
+        .map((slot) => [slot.language, slot.kind]),
+    )
+    .toEqual([["it", "absent"]]);
+  await capture("needs-translation-including-absent");
   await page
     .getByRole("button", { name: "Clear filters", exact: true })
     .click();
@@ -1070,44 +1095,20 @@ async function multilingualWorkspace() {
   }
   await edit(49, "fr").click();
   await field.fill("French across page boundary");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect
+    .poll(async () => (await detail(49, "fr")).pending_change?.values[0].text)
+    .toBe("French across page boundary");
+  await expect(field).toHaveCount(0);
   await page
-    .getByRole("button", { name: "Save and next", exact: true })
+    .getByRole("button", { name: "Load more translations", exact: true })
     .click();
-  try {
-    await expect(
-      page
-        .locator('[data-group-id="' + group(50, "fr") + '"]')
-        .getByRole("textbox"),
-    ).toBeVisible();
-  } catch (error) {
-    writeFileSync(
-      evidence + "/page-boundary-details.json",
-      JSON.stringify(
-        {
-          text: await page.locator("body").innerText(),
-          fields: await page.locator("textarea").evaluateAll((nodes) =>
-            nodes.map((node) => ({
-              id: node.id,
-              value: node.value,
-              disabled: node.disabled,
-            })),
-          ),
-          requests: keyResponses.map((response) => ({
-            url: response.url,
-            keys: response.body?.items?.map((item) => item.raw_key),
-          })),
-          saved: (await detail(49, "fr")).pending_change,
-        },
-        null,
-        2,
-      ),
-    );
-    throw error;
+  for (let i = 0; i < 20 && !(await edit(50, "fr").count()); i++) {
+    await page.mouse.wheel(0, 1000);
+    await page.waitForTimeout(60);
   }
-  check(
-    (await detail(49, "fr")).pending_change.values[0].text ===
-      "French across page boundary",
-  );
+  await edit(50, "fr").click();
+  await expect(field).toHaveValue("fr 50");
   check(
     keyResponses.some((response) =>
       new URL(response.url).searchParams.get("cursor"),
@@ -1117,15 +1118,11 @@ async function multilingualWorkspace() {
   await search("key-060");
   await edit(60, "fr").click();
   await field.fill("Final French");
-  await page
-    .getByRole("button", { name: "Save and next", exact: true })
-    .click();
-  await expect(
-    page.getByText("End of this work queue. Your translation is saved.", {
-      exact: true,
-    }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect
+    .poll(async () => (await detail(60, "fr")).pending_change?.values[0].text)
+    .toBe("Final French");
+  await expect(field).toHaveCount(0);
 
   progress("reviewer-first-save");
   const reviewer = await login("product_manager_reviewer");
@@ -1227,7 +1224,9 @@ async function multilingualWorkspace() {
     frontend + "/products/" + fixture.source_only_product + "/strings",
   );
   await expect(
-    page.getByText("No target translations imported in the visible languages"),
+    page.getByText("Keys-repository values are read-only in this workspace.", {
+      exact: true,
+    }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: /^Edit translation/ }),
@@ -1237,7 +1236,9 @@ async function multilingualWorkspace() {
   ).toBeVisible();
   await page.getByRole("button", { name: "Bilingual", exact: true }).click();
   await expect(
-    page.getByText("No target translations imported in the visible languages"),
+    page.getByText("Keys-repository values are read-only in this workspace.", {
+      exact: true,
+    }),
   ).toBeVisible();
   await capture("source-only");
   await page.goto(
@@ -1282,6 +1283,130 @@ async function multilingualWorkspace() {
       .count()) === 1,
   );
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
+
+  progress("qt-base-source-and-translation");
+  const qtPath =
+    frontend +
+    "/products/" +
+    fixture.qt_base_product +
+    "/strings?language=it-IT";
+  await page.goto(qtPath);
+  await filter();
+  await page
+    .getByRole("button", { name: "Needs translation", exact: true })
+    .click();
+  await expect(
+    page
+      .locator('[data-part="source-text"]')
+      .filter({ hasText: "Operazione completata" }),
+  ).toBeVisible();
+  await expect(
+    page
+      .locator('[data-part="source-text"]')
+      .filter({ hasText: "Open the message" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Empty source text", { exact: true }),
+  ).toHaveCount(0);
+  const sourceAdmin = await login("admin");
+  await sourceAdmin.goto(
+    `${frontend}/admin/products/${fixture.qt_base_product}/overview`,
+  );
+  await sourceAdmin
+    .getByText("Source language settings", { exact: true })
+    .click();
+  await sourceAdmin
+    .getByRole("checkbox", {
+      name: "Use confirmed source text for the base language",
+    })
+    .check();
+  await sourceAdmin
+    .getByRole("checkbox", { name: "Operazione completata", exact: true })
+    .check();
+  await expect(
+    sourceAdmin.getByRole("checkbox", {
+      name: "Open the message",
+      exact: true,
+    }),
+  ).not.toBeChecked();
+  await sourceAdmin
+    .getByRole("button", { name: "Save source language settings" })
+    .click();
+  await expect(
+    sourceAdmin.getByText("Source language settings saved."),
+  ).toBeVisible();
+  await sourceAdmin.reload();
+  await sourceAdmin
+    .getByText("Source language settings", { exact: true })
+    .click();
+  await expect(
+    sourceAdmin.getByRole("checkbox", {
+      name: "Operazione completata",
+      exact: true,
+    }),
+  ).toBeChecked();
+  await sourceAdmin.setViewportSize({ width: 320, height: 800 });
+  check(
+    await sourceAdmin.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  );
+  await sourceAdmin.close();
+  const sourcePolicy = await api(
+    `/admin/products/${fixture.qt_base_product}/source-fallback`,
+    adminToken,
+  );
+  check(
+    sourcePolicy.enabled &&
+      sourcePolicy.version === 1 &&
+      sourcePolicy.source_texts.length === 1,
+  );
+  await page.reload();
+  await expect(page.getByText("message-0", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("message-1", { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", {
+      name: "Edit translation for message-1 (it-IT)",
+      exact: true,
+    })
+    .click();
+  await expect(field).toHaveValue("");
+  await field.fill("Apri il messaggio");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(field).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText("message-1", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("message-0", { exact: true })).toHaveCount(0);
+  const qtDetail = await api(
+    "/translations/" + fixture.qt_base_groups[1],
+    bearer,
+  );
+  check(qtDetail.values[0].source_text === "Open the message");
+  check(qtDetail.values[0].translated_text === "");
+  check(qtDetail.pending_change.values[0].text === "Apri il messaggio");
+  await page
+    .getByRole("button", { name: "Clear filters", exact: true })
+    .click();
+  await expect(
+    page.getByText("Apri il messaggio", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .locator('[data-part="source-text"]')
+      .filter({ hasText: "Open the message" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Using source text", { exact: true }),
+  ).toBeVisible();
+  const nativeDetail = await api(
+    "/translations/" + fixture.qt_base_groups[0],
+    bearer,
+  );
+  check(
+    nativeDetail.values[0].translated_text === "" &&
+      !nativeDetail.pending_change,
+  );
+  await capture("qt-base-source");
 
   progress("viewer-and-comment-link");
   await page.goto(
@@ -1331,6 +1456,8 @@ async function multilingualWorkspace() {
         baseLeafDraft: true,
         completePluralMembers: 2,
         absentTargetNotEditable: true,
+        needsTranslationIncludesAbsent: true,
+        compactProductHeader: true,
         cursorContinuation: true,
         filterApplyCancel: true,
         languageLimit: 20,
@@ -1344,6 +1471,10 @@ async function multilingualWorkspace() {
         overLimitApprovalBlocked: true,
         sourceOnlyReadOnly: true,
         embeddedSourceReadOnly: true,
+        qtBaseSourceSeparateFromTranslation: true,
+        qtBaseMissingTranslationFilter: true,
+        configuredNativeSourceFallback: true,
+        foreignSourceRemainsActionable: true,
         desktopMobileOverflow: false,
       },
       null,

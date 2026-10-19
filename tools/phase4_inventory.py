@@ -80,6 +80,30 @@ UI = {
 AXES = {"network loss", "request-response without live updates", "reduced motion"}
 TRANSLATION_ROUTE_INVENTORY = {
     ("/api/v1/translations/keys", "get"): "searchTranslationKeys",
+    (
+        "/api/v1/translations/{group_id}/code-context",
+        "get",
+    ): "getTranslationCodeContext",
+    (
+        "/api/v1/translations/{group_id}/screenshots",
+        "get",
+    ): "listTranslationScreenshots",
+    (
+        "/api/v1/translations/{group_id}/screenshots/{job_id}",
+        "put",
+    ): "requestTranslationScreenshot",
+    (
+        "/api/v1/translations/{group_id}/screenshots/{job_id}",
+        "get",
+    ): "getTranslationScreenshot",
+    (
+        "/api/v1/translations/{group_id}/screenshots/{job_id}",
+        "delete",
+    ): "cancelTranslationScreenshot",
+    (
+        "/api/v1/translations/{group_id}/screenshots/{job_id}/image",
+        "get",
+    ): "getTranslationScreenshotImage",
     ("/api/v1/translations/options", "get"): "listTranslationOptions",
     ("/api/v1/translations", "get"): "searchTranslations",
     ("/api/v1/translations/{translation_group_id}", "get"): "getTranslationGroup",
@@ -271,6 +295,10 @@ def validate_boundaries(sources=None):
                 )
                 for module in modules:
                     writer_helpers = {
+                        (
+                            "backend/src/verboflex/localization/writing/parsing.py",
+                            "verboflex.localization.importing.android_xml",
+                        ): {"AndroidXmlInspection", "inspect_android_xml"},
                         (
                             "backend/src/verboflex/localization/writing/insertions.py",
                             "verboflex.localization.importing.ios_strings",

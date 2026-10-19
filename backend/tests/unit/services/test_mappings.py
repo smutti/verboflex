@@ -1020,6 +1020,7 @@ def test_schema_is_reversible_revision_owned_and_has_no_manual_or_lifecycle_cont
         "id",
         "revision_id",
         "topology",
+        "code_source",
         "identity_key",
         "base_language",
         "selected_layout_candidate_id",

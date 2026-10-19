@@ -15,6 +15,7 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
+import { Badge } from "../../components/ui/badge";
 
 import { TemporaryPasswordDialog } from "../admin/users/TemporaryPasswordDialog";
 
@@ -58,7 +59,7 @@ function RoleSelect({
   return (
     <select
       aria-label={label}
-      className="min-h-11 rounded-md border bg-background px-3"
+      className="min-h-11 max-w-full rounded-md border bg-background px-3"
       value={value}
       disabled={disabled}
       onChange={(e) => onChange(e.target.value as Role)}
@@ -84,13 +85,14 @@ function MemberRow({
   member: TeamMember;
   admin: boolean;
   busy: boolean;
-  save: (role: Role) => void;
+  save: (role: Role) => Promise<boolean>;
   remove: () => void;
 }) {
   const [role, setRole] = useState<Role>(member.role);
+  const [editing, setEditing] = useState(false);
   const protectedMember = member.role === "product_owner" && !admin;
   return (
-    <li className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
+    <li className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background p-4">
       <div className="min-w-0">
         <p className="font-semibold break-all">{member.display_name}</p>
         <p className="break-all text-sm text-muted-foreground">
@@ -98,10 +100,21 @@ function MemberRow({
           {!member.account_active && " · Account disabled"}
         </p>
       </div>
-      {protectedMember ? (
-        <span>Product Owner · Managed by admin</span>
-      ) : (
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="secondary">{labels[member.role]}</Badge>
+        {!protectedMember && !editing && (
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onClick={() => setEditing(true)}
+            aria-label={`Edit ${member.email}`}
+          >
+            Edit
+          </Button>
+        )}
+      </div>
+      {!protectedMember && editing && (
+        <div className="flex w-full flex-wrap items-center gap-2 border-t pt-3">
           <RoleSelect
             label={`Role for ${member.email}`}
             owner={admin}
@@ -112,12 +125,25 @@ function MemberRow({
           <Button
             variant="outline"
             disabled={busy || role === member.role || !member.account_active}
-            onClick={() => save(role)}
+            onClick={async () => {
+              if (await save(role)) setEditing(false);
+            }}
           >
             Save role
           </Button>
           <Button
-            variant="outline"
+            variant="ghost"
+            disabled={busy}
+            onClick={() => {
+              setRole(member.role);
+              setEditing(false);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="ghost"
+            className="text-destructive"
             disabled={busy}
             onClick={remove}
             aria-label={`Remove ${member.email} from product`}
@@ -158,6 +184,8 @@ function TeamEditor({
   const [credential, setCredential] = useState<MemberAdded | null>(null);
   const [role, setRole] = useState<AddMemberInput["role"]>("translator");
   const [ownerEmail, setOwnerEmail] = useState("");
+  const [addingOwner, setAddingOwner] = useState(false);
+  const [addingCollaborator, setAddingCollaborator] = useState(false);
   const [removal, setRemoval] = useState<TeamMember | null>(null);
   const auth = { auth: accessToken, path: { product_id: productId } };
   useEffect(() => {
@@ -189,7 +217,7 @@ function TeamEditor({
     operation: () => Promise<{ error?: unknown; response?: Response }>,
     success: string,
   ) {
-    if (busy) return;
+    if (busy) return false;
     setBusy(true);
     setError("");
     setNotice("");
@@ -197,18 +225,49 @@ function TeamEditor({
       const result = await operation();
       if (!result.response?.ok) {
         setError(errorMessage(result.error));
-        return;
+        return false;
       }
       setNotice(success);
       setRemoval(null);
       setRevision((value) => value + 1);
+      return true;
     } catch {
       setError("Unable to update the team. Your changes were not confirmed.");
+      return false;
     } finally {
       setBusy(false);
     }
   }
   const admin = team?.access.role === "admin";
+  const owners =
+    team?.members.filter((member) => member.role === "product_owner") ?? [];
+  const collaborators =
+    team?.members.filter((member) => member.role !== "product_owner") ?? [];
+  function memberRow(member: TeamMember) {
+    return (
+      <MemberRow
+        key={`${member.user_id}:${member.version}`}
+        member={member}
+        admin={admin}
+        busy={busy}
+        save={(nextRole) =>
+          mutate(
+            () =>
+              setProductMember({
+                ...auth,
+                body: {
+                  email: member.email,
+                  role: nextRole,
+                  expected_version: member.version,
+                },
+              }),
+            "Role updated.",
+          )
+        }
+        remove={() => setRemoval(member)}
+      />
+    );
+  }
   async function submitCollaborator(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
@@ -232,6 +291,7 @@ function TeamEditor({
       );
       setEmail("");
       setDisplayName("");
+      setAddingCollaborator(false);
       setRevision((value) => value + 1);
     } catch {
       setError(
@@ -242,22 +302,20 @@ function TeamEditor({
     }
   }
   return (
-    <section className="grid max-w-5xl gap-6" aria-labelledby="team-title">
-      <div>
-        <h1 id="team-title" className="text-heading font-semibold">
-          Product team
-        </h1>
-        <p className="text-muted-foreground">
-          Manage access to this product. Only an administrator can appoint or
-          remove Product Owners.
-        </p>
-      </div>
+    <section className="grid min-w-0 gap-6" aria-labelledby="team-title">
+      <h1 id="team-title" className="text-heading font-semibold">
+        Product team
+      </h1>
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>Team unavailable</AlertTitle>
+          <AlertTitle>Team update unavailable</AlertTitle>
           <AlertDescription>
             {error}{" "}
-            <Button variant="outline" onClick={() => setRevision((r) => r + 1)}>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => setRevision((r) => r + 1)}
+            >
               Refresh team
             </Button>
           </AlertDescription>
@@ -267,123 +325,170 @@ function TeamEditor({
       {!team && !error && <p role="status">Loading team…</p>}
       {team && (
         <>
-          {!team.has_active_owner && (
-            <Alert>
-              <AlertTitle>No active Product Owner</AlertTitle>
-              <AlertDescription>
-                An administrator can appoint an existing account below.
-              </AlertDescription>
-            </Alert>
-          )}
-          {admin && (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void mutate(
-                  () =>
-                    setProductMember({
-                      ...auth,
-                      body: { email: ownerEmail, role: "product_owner" },
-                    }),
-                  "Product Owner appointed.",
-                );
-              }}
-              className="grid gap-3 rounded-lg border p-4"
-            >
-              <Label htmlFor="owner-email">Appoint a Product Owner</Label>
+          <section
+            aria-labelledby="owners-title"
+            className="grid gap-4 rounded-lg border bg-card p-4 sm:p-5"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 id="owners-title" className="font-semibold">
+                Product Owner
+              </h2>
+              {admin && (
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  aria-expanded={addingOwner}
+                  aria-controls="owner-form"
+                  onClick={() => setAddingOwner((value) => !value)}
+                >
+                  Assign Product Owner
+                </Button>
+              )}
+            </div>
+            {owners.length > 0 && (
+              <ul className="grid gap-3">{owners.map(memberRow)}</ul>
+            )}
+            {!team.has_active_owner && (
               <p className="text-sm text-muted-foreground">
-                Enter an existing account email. To promote a current team
-                member, change their role in the list.
+                No active Product Owner
               </p>
-              <div className="flex flex-wrap gap-2">
+            )}
+            {admin && addingOwner && (
+              <form
+                id="owner-form"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  const saved = await mutate(
+                    () =>
+                      setProductMember({
+                        ...auth,
+                        body: { email: ownerEmail, role: "product_owner" },
+                      }),
+                    "Product Owner appointed.",
+                  );
+                  if (saved) {
+                    setOwnerEmail("");
+                    setAddingOwner(false);
+                  }
+                }}
+                className="grid gap-3 border-t pt-4"
+              >
+                <Label htmlFor="owner-email">Account email</Label>
+                <p
+                  id="owner-email-help"
+                  className="text-sm text-muted-foreground"
+                >
+                  Use an existing account. To promote a collaborator, edit their
+                  role below.
+                </p>
                 <Input
                   id="owner-email"
                   type="email"
                   required
-                  value={ownerEmail}
-                  onChange={(e) => setOwnerEmail(e.target.value)}
-                  placeholder="name@example.com"
-                  className="max-w-sm"
-                />
-                <Button disabled={busy}>Appoint owner</Button>
-              </div>
-            </form>
-          )}
-          <form
-            onSubmit={(event) => void submitCollaborator(event)}
-            className="grid gap-3 rounded-lg border p-4"
-          >
-            <h2 className="font-semibold">Add a collaborator</h2>
-            <p className="text-sm text-muted-foreground">
-              New accounts receive a temporary password to share privately and
-              must change it at first sign-in. Existing accounts keep their
-              current name and credentials.
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="collaborator-email">Collaborator email</Label>
-                <Input
-                  id="collaborator-email"
-                  type="email"
-                  required
                   maxLength={320}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={ownerEmail}
+                  onChange={(event) => setOwnerEmail(event.target.value)}
                   placeholder="name@example.com"
+                  aria-describedby="owner-email-help"
                   disabled={busy}
+                  className="max-w-md"
                 />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="collaborator-name">Display name</Label>
-                <Input
-                  id="collaborator-name"
-                  required
-                  maxLength={200}
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  disabled={busy}
-                />
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <RoleSelect
-                label="Collaborator role"
-                owner={false}
-                value={role}
-                onChange={(value) => setRole(value as AddMemberInput["role"])}
+                <div className="flex flex-wrap gap-2">
+                  <Button disabled={busy}>Appoint owner</Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => setAddingOwner(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            )}
+          </section>
+          <section
+            aria-labelledby="collaborators-title"
+            className="grid gap-4 rounded-lg border bg-card p-4 sm:p-5"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 id="collaborators-title" className="font-semibold">
+                Collaborators
+              </h2>
+              <Button
+                variant="outline"
                 disabled={busy}
-              />
-              <Button disabled={busy}>Add collaborator</Button>
+                aria-expanded={addingCollaborator}
+                aria-controls="collaborator-form"
+                onClick={() => setAddingCollaborator((value) => !value)}
+              >
+                Add collaborator
+              </Button>
             </div>
-          </form>
-          <div>
-            <h2 className="mb-3 font-semibold">Members</h2>
-            <ul className="grid gap-3">
-              {team.members.map((member) => (
-                <MemberRow
-                  key={`${member.user_id}:${member.version}`}
-                  member={member}
-                  admin={admin}
-                  busy={busy}
-                  save={(nextRole) =>
-                    void mutate(
-                      () =>
-                        setProductMember({
-                          ...auth,
-                          body: {
-                            email: member.email,
-                            role: nextRole,
-                            expected_version: member.version,
-                          },
-                        }),
-                      "Role updated.",
-                    )
-                  }
-                  remove={() => setRemoval(member)}
-                />
-              ))}
-            </ul>
-          </div>
+            {collaborators.length > 0 ? (
+              <ul className="grid gap-3">{collaborators.map(memberRow)}</ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No collaborators yet.
+              </p>
+            )}
+            {addingCollaborator && (
+              <form
+                id="collaborator-form"
+                onSubmit={(event) => void submitCollaborator(event)}
+                className="grid gap-3 border-t pt-4"
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="collaborator-email">
+                      Collaborator email
+                    </Label>
+                    <Input
+                      id="collaborator-email"
+                      type="email"
+                      required
+                      maxLength={320}
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="name@example.com"
+                      disabled={busy}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="collaborator-name">Display name</Label>
+                    <Input
+                      id="collaborator-name"
+                      required
+                      maxLength={200}
+                      value={displayName}
+                      onChange={(event) => setDisplayName(event.target.value)}
+                      disabled={busy}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <RoleSelect
+                    label="Collaborator role"
+                    owner={false}
+                    value={role}
+                    onChange={(value) =>
+                      setRole(value as AddMemberInput["role"])
+                    }
+                    disabled={busy}
+                  />
+                  <Button disabled={busy}>Add to team</Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => setAddingCollaborator(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            )}
+          </section>
           {removal && (
             <Alert>
               <AlertTitle>

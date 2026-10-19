@@ -465,6 +465,10 @@ def create_submission_review(
 ) -> SubmissionReviewResponse:
     with session.begin():
         product, actor = _product_actor(session, product_id, actor_id, action=True)
+        from verboflex.services.branch_workflow import workflow_for
+
+        if workflow_for(session, product_id) is not None:
+            raise SubmissionReviewDenied("Use the configured approval branch workflow")
         # Serialize intake per product; worker never holds this lock over provider IO.
         session.execute(select(Product.id).where(Product.id == product_id).with_for_update()).one()
         selection = _selection(

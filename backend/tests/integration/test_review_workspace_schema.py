@@ -35,7 +35,7 @@ ADMIN_DATABASE_URL = os.environ.get(
     "VERBOFLEX_TEST_POSTGRES_ADMIN_URL",
     "postgresql://postgres@127.0.0.1:55432/postgres",
 )
-EXPECTED_HEAD = "0044_product_membership"
+EXPECTED_HEAD = "0050_source_fallback"
 REVIEW_TABLES = {
     "translation_proposals",
     "translation_proposal_values",

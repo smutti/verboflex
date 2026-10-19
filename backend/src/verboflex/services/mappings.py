@@ -18,6 +18,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from verboflex.audit.ledger import record_audit
 from verboflex.integrations.bitbucket.urls import validate_localization_root
+from verboflex.localization.code_keys.catalog import CodeSourceConfig
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
     ProductMappingAllowedTarget,
@@ -82,6 +83,7 @@ class MappingRecord:
     selected_layout_candidate_id: UUID | None
     selected_layout_version: int | None
     candidate_version: int
+    code_source: CodeSourceConfig | None = None
     primary_localization_root: str | None = None
     translations_localization_root: str | None = None
 
@@ -309,6 +311,9 @@ def _record(
         id=mapping.id,
         revision_id=mapping.revision_id,
         topology=topology,
+        code_source=CodeSourceConfig.model_validate(mapping.code_source)
+        if mapping.code_source is not None
+        else None,
         primary_repository_id=primary.repository_id,
         primary_source_branch=primary.source_branch,
         primary_localization_root=primary.localization_root,
@@ -756,6 +761,7 @@ async def update_direct_mapping(
             if duplicate is not None:
                 raise MappingConflict("mapping unavailable")
             mapping.topology = "direct"
+            mapping.code_source = None
             mapping.identity_key = identity_key
             mapping.selected_layout_candidate_id = None
             mapping.selected_layout_version = None
@@ -787,6 +793,7 @@ async def create_separate_mapping(
     allowed_target_branches: object,
     default_target_branch: object,
     adapter: BranchAdapters,
+    code_source: CodeSourceConfig | None = None,
 ) -> MappingRecord:
     """Create one explicit Keys/Translations mapping and advance its candidate once."""
     keys, translations = _separate_sides(repository_sides)
@@ -831,6 +838,9 @@ async def create_separate_mapping(
                 id=mapping_id,
                 revision_id=candidate.id,
                 topology="separate",
+                code_source=code_source.model_dump(mode="json")
+                if code_source is not None
+                else None,
                 identity_key=identity_key,
                 sides=_side_rows(
                     (side.role, side.repository_id, side.source_branch, side.localization_root)
@@ -858,6 +868,7 @@ async def update_separate_mapping(
     allowed_target_branches: object,
     default_target_branch: object,
     adapter: BranchAdapters,
+    code_source: CodeSourceConfig | None = None,
 ) -> MappingRecord:
     """Replace any candidate mapping with explicit separate topology or preserve a no-op."""
     keys, translations = _separate_sides(repository_sides)
@@ -900,6 +911,7 @@ async def update_separate_mapping(
             current = _record(mapping, candidate_version=candidate.version)
             if (
                 current.topology == "separate"
+                and current.code_source == code_source
                 and current.primary_repository_id == keys.repository_id
                 and current.primary_source_branch == keys.source_branch
                 and current.primary_localization_root == keys.localization_root
@@ -920,6 +932,9 @@ async def update_separate_mapping(
             if duplicate is not None:
                 raise MappingConflict("mapping unavailable")
             mapping.topology = "separate"
+            mapping.code_source = (
+                code_source.model_dump(mode="json") if code_source is not None else None
+            )
             mapping.identity_key = identity_key
             mapping.selected_layout_candidate_id = None
             mapping.selected_layout_version = None

@@ -1,3 +1,4 @@
+import { TranslationStatusBadge } from "./TranslationStatusBadge";
 import { rolesForProduct } from "../auth/productRoles";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -35,6 +36,7 @@ import {
   TranslationEditor,
 } from "./TranslationEditor";
 import { TranslationReviewActions } from "./TranslationReviewActions";
+import { TranslationScreenshots } from "./TranslationScreenshots";
 import { TranslationConflictDialog } from "./TranslationConflictDialog";
 import { ActivityHistory } from "./ActivityHistory";
 import { Discussion } from "./Discussion";
@@ -125,29 +127,38 @@ function TranslationProvenance({
 }) {
   if (!value) return <p>Source location unavailable</p>;
   return (
-    <dl className="grid min-w-0 gap-(--space-sm)">
-      {[
-        ["Repository", value.repository_name],
-        ["Branch", value.branch],
-        ["File path", value.path],
-        ["Format", value.format],
-        ["Repository side", value.repository_side],
-        ["Line", value.line ?? "Line unavailable"],
-        ["Column", value.column ?? "Column unavailable"],
-        ["Execution", value.execution_id],
-      ].map(([label, text]) => (
-        <div key={label} className="min-w-0">
-          <dt className="text-label font-semibold">{label}</dt>
-          <dd className="font-mono wrap-anywhere">{text}</dd>
-        </div>
-      ))}
-      <div>
-        <dt className="text-label font-semibold">Import commit</dt>
-        <dd>
-          <Commit hash={value.commit_hash} />
-        </dd>
-      </div>
-    </dl>
+    <div className="min-w-0 space-y-3 text-sm">
+      <dl className="grid min-w-0 gap-2">
+        {[
+          ["Repository", value.repository_name],
+          ["Branch", value.branch],
+          ["File path", value.path],
+          ...(value.line === null ? [] : [["Line", value.line]]),
+        ].map(([label, text]) => (
+          <div key={label} className="min-w-0">
+            <dt className="text-label font-semibold">{label}</dt>
+            <dd className="font-mono wrap-anywhere">{text}</dd>
+          </div>
+        ))}
+      </dl>
+      <details>
+        <summary className="cursor-pointer text-muted-foreground">
+          Technical details
+        </summary>
+        <dl className="space-y-2 pt-2">
+          <div>
+            <dt className="font-semibold">Format</dt>
+            <dd>{value.format}</dd>
+          </div>
+          <div>
+            <dt className="text-label font-semibold">Import commit</dt>
+            <dd>
+              <Commit hash={value.commit_hash} />
+            </dd>
+          </div>
+        </dl>
+      </details>
+    </div>
   );
 }
 
@@ -305,6 +316,7 @@ function LoadedDetail({
     draft: NonNullable<TranslationsWorkspaceContext["activeDraft"]>;
   } | null>(null);
   const [editFailure, setEditFailure] = useState(false);
+  const [screenshotsOpen, setScreenshotsOpen] = useState(false);
   const [dialog, setDialog] = useState<{
     mode: ConstraintMutationMode;
     trigger: HTMLButtonElement;
@@ -392,7 +404,6 @@ function LoadedDetail({
   const partial = detail.values.some(
     (v) =>
       !v.provenance ||
-      v.provenance.line === null ||
       v.source_text === null ||
       !v.history?.length ||
       v.selector_fields === null,
@@ -476,11 +487,13 @@ function LoadedDetail({
               >
                 <div className="flex flex-wrap items-center gap-(--space-sm)">
                   <h3 className="text-heading font-semibold">
-                    Pending proposal
+                    {(proposal ?? detail.pending_change)?.target_integrated
+                      ? "Translation"
+                      : "Saved change"}
                   </h3>
-                  <Badge variant="outline">
-                    {reviewStateLabel(pendingState)}
-                  </Badge>
+                  <TranslationStatusBadge
+                    proposal={proposal ?? detail.pending_change!}
+                  />
                   {reconciliationRequired && (
                     <Badge variant="outline">Needs reconciliation</Badge>
                   )}
@@ -514,6 +527,8 @@ function LoadedDetail({
                             ? {
                                 version: proposal.version,
                                 state: proposal.state,
+                                target_branch: proposal.target_branch,
+                                target_integrated: proposal.target_integrated,
                                 reconciliation_required:
                                   proposal.reconciliation_required,
                                 updated_by: proposal.updated_by,
@@ -586,6 +601,23 @@ function LoadedDetail({
           />
         </div>
         <aside className="min-w-0 space-y-(--space-xl)">
+          <details
+            className="min-w-0 rounded-lg border bg-secondary p-(--space-lg)"
+            onToggle={(event) => setScreenshotsOpen(event.currentTarget.open)}
+          >
+            <summary className="cursor-pointer font-semibold">
+              Screenshots and code references
+            </summary>
+            {screenshotsOpen && (
+              <TranslationScreenshots
+                key={`${detail.id}:${context.accessToken}`}
+                accessToken={context.accessToken}
+                groupId={detail.id}
+                dirty={Boolean(activeDraft?.dirty)}
+                proposalVersion={pendingVersion || undefined}
+              />
+            )}
+          </details>
           <Section title="Maximum length">
             {canMutate && (
               <div className="flex flex-wrap gap-(--space-sm)">
@@ -635,10 +667,16 @@ function LoadedDetail({
             ))}
           </Section>
           <Section title="Source context">
-            <p className="wrap-anywhere">Product: {detail.product_name}</p>
             {detail.values.map((value) => (
               <div key={value.id} className="min-w-0 space-y-(--space-sm)">
-                <p className="font-mono wrap-anywhere">{value.id}</p>
+                {detail.values.length > 1 && (
+                  <p className="text-sm font-semibold">
+                    {kindNames[value.selector_kind]}
+                    {value.selector_fields?.map(
+                      (field) => ` · ${field.name}: ${String(field.value)}`,
+                    )}
+                  </p>
+                )}
                 <TranslationProvenance value={value.provenance} />
               </div>
             ))}
@@ -659,7 +697,13 @@ function LoadedDetail({
             >
               View change-set history
             </Link>
-            {canSubmitReview && (
+            {detail.approval_commits_enabled && (
+              <p>
+                Each approval queues a separate commit on the working branch.
+                Open a pull request from Change sets when ready.
+              </p>
+            )}
+            {canSubmitReview && !detail.approval_commits_enabled && (
               <Button
                 className={actionClass}
                 onClick={(event) => {

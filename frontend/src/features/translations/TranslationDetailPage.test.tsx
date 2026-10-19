@@ -20,6 +20,8 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getTranslationCommentAnchor,
+  getTranslationCodeContext,
+  listTranslationScreenshots,
   getTranslationGroup,
   listTranslationComments,
   listTranslationReviewActivity,
@@ -37,6 +39,8 @@ import { consumeSubmissionEntry } from "../change-sets/submissionEntry";
 import { DirtyFormNavigationProvider } from "../../components/navigation/DirtyFormNavigationGuard";
 
 vi.mock("../../api/client", () => ({
+  getTranslationCodeContext: vi.fn(),
+  listTranslationScreenshots: vi.fn(),
   getTranslationSuggestions: vi.fn().mockResolvedValue({ data: { items: [] } }),
   resolveTranslationSuggestion: vi.fn(),
   matchGlossaryTerms: vi
@@ -189,6 +193,19 @@ function mountProduct(id = "opaque-group") {
   );
 }
 beforeEach(() => {
+  vi.mocked(getTranslationCodeContext)
+    .mockReset()
+    .mockResolvedValue({
+      data: {
+        configured: false,
+        occurrences: [],
+        previews: [],
+        capture_functions: [],
+      },
+    } as never);
+  vi.mocked(listTranslationScreenshots)
+    .mockReset()
+    .mockResolvedValue({ data: { items: [], next_cursor: null } } as never);
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
     configurable: true,
     value: vi.fn(),
@@ -223,6 +240,26 @@ afterEach(() => {
 });
 
 describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/partial", () => {
+  it("offers lazy screenshots on a direct translation URL", async () => {
+    const user = userEvent.setup();
+    mountProduct();
+    const summary = await screen.findByText("Screenshots and code references", {
+      exact: true,
+    });
+    expect(getTranslationCodeContext).not.toHaveBeenCalled();
+    await user.click(summary);
+    expect(
+      await screen.findByText(
+        "No application code repository is configured for this translation.",
+      ),
+    ).toBeVisible();
+    expect(getTranslationCodeContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auth: "token",
+        path: { group_id: "opaque-group" },
+      }),
+    );
+  });
   it("loads a direct exact-comment URL without walking ordinary discussion pages", async () => {
     const target = {
       id: "opaque-comment",
@@ -494,7 +531,9 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
     await screen.findByRole("heading", { name: "Translation details" });
     for (let i = 0; i < 6; i++)
       expect(document.getElementById(`value-value-${i}`)).not.toBeNull();
-    expect(screen.getByText("Default value")).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Default value" }),
+    ).toBeVisible();
     expect(screen.getByText("Quantity")).toBeVisible();
     expect(screen.getByText("Array position")).toBeVisible();
     expect(screen.getByText('["menu","a.b"]')).toBeVisible();
@@ -580,10 +619,41 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
       expect(screen.queryByText(data.raw_key)).toBeNull();
     },
   );
+  it("shows a compact source location with optional technical details and no unavailable coordinates", async () => {
+    const data = detailFixture();
+    data.values[0].provenance!.line = null;
+    data.values[0].provenance!.column = null;
+    vi.mocked(getTranslationGroup).mockResolvedValue({
+      data,
+      error: undefined,
+    });
+    mount();
+    const source = within(
+      await screen.findByRole("region", { name: "Source context" }),
+    );
+    expect(source.getByText("Mobile repo")).toBeVisible();
+    expect(source.getByText("main")).toBeVisible();
+    expect(source.getByText("locales/it.json")).toBeVisible();
+    expect(source.queryByText("value-1")).toBeNull();
+    expect(source.queryByText("execution")).toBeNull();
+    expect(source.queryByText(/unavailable/)).toBeNull();
+    expect(
+      source.getByRole("button", { name: "Copy full commit" }),
+    ).not.toBeVisible();
+    await userEvent.click(source.getByText("Technical details"));
+    expect(
+      source.getByRole("button", { name: "Copy full commit" }),
+    ).toBeVisible();
+  });
   it("announces clipboard failure without exposing the rejected error", async () => {
     const user = userEvent.setup();
     mount();
     await screen.findByText("Translation content");
+    await user.click(
+      within(screen.getByRole("region", { name: "Source context" })).getByText(
+        "Technical details",
+      ),
+    );
     vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(
       new Error("private clipboard error"),
     );
@@ -662,6 +732,11 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
     const user = userEvent.setup();
     mount();
     await screen.findByText("Translation content");
+    await user.click(
+      within(screen.getByRole("region", { name: "Source context" })).getByText(
+        "Technical details",
+      ),
+    );
     const copy = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
     await user.click(
       within(screen.getByRole("region", { name: "Source context" })).getByRole(
@@ -801,7 +876,7 @@ describe("Phase 5 scalar proposal tracer RED", () => {
       within(published).getByText(/<img src=x onerror=bad\(\)>/),
     ).toBeVisible();
     expect(within(pending).getByText(pendingText)).toBeVisible();
-    expect(within(pending).getByText("Draft")).toBeVisible();
+    expect(within(pending).getByText("Pending", { exact: true })).toBeVisible();
   });
 
   it("keeps text browser-local until Save and discards it on Cancel", async () => {
@@ -917,6 +992,33 @@ describe("Phase 5 scalar proposal tracer RED", () => {
 });
 
 describe("Phase 5 complete review controls", () => {
+  it("routes approved branch changes to history without offering legacy submission", async () => {
+    const data = detailFixture();
+    const fresh = proposalProjection(data, "Approved commit");
+    data.approval_commits_enabled = true;
+    data.pending_change = {
+      version: 7,
+      state: "approved",
+      reconciliation_required: false,
+      updated_by: fresh.updated_by,
+      updated_at: fresh.updated_at,
+      values: fresh.pending,
+    };
+    vi.mocked(getTranslationGroup).mockResolvedValue({
+      data,
+      error: undefined,
+    });
+    mount("admin");
+    expect(
+      await screen.findByText(/Each approval queues a separate commit/),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Review for submission" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "View change-set history" }),
+    ).toHaveAttribute("href", "/products/product/change-sets/history");
+  });
   it.each(["viewer", "translator"] as const)(
     "keeps submission controls hidden for %s with an Approved proposal",
     async (role) => {
@@ -1291,7 +1393,7 @@ describe("Phase 5 complete review controls", () => {
     });
     const pending = screen.getByRole("region", { name: "Pending proposal" });
     expect(within(published).getAllByText("Approved")[0]).toBeVisible();
-    expect(within(pending).getByText("Draft")).toBeVisible();
+    expect(within(pending).getByText("Pending", { exact: true })).toBeVisible();
     expect(within(pending).getByText("Pending draft")).toBeVisible();
     await user.click(
       screen.getByRole("button", { name: "Reject translation" }),

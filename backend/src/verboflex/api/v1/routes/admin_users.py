@@ -12,6 +12,7 @@ from verboflex.schemas.admin_users import (
     AdminUserCreateRequest,
     AdminUserCredentialResponse,
     AdminUserListResponse,
+    AdminUserProductsResponse,
     AdminUserResponse,
     AdminUserUpdateRequest,
 )
@@ -22,10 +23,13 @@ from verboflex.services.admin_users import (
     AdminUserConflict,
     AdminUserInputError,
     AdminUserNotFound,
+    AdminUserProductConflict,
+    AdminUserProductUnavailable,
     AdminUserRecord,
     CreatedAdminUser,
     InvalidAdminUserCursor,
     create_admin_user,
+    list_admin_user_products,
     list_admin_users,
 )
 from verboflex.services.admin_users import (
@@ -40,6 +44,7 @@ from verboflex.services.admin_users import (
 from verboflex.services.admin_users import (
     update_admin_user as update_admin_user_service,
 )
+from verboflex.services.products import InvalidProductCursor
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 AdminPrincipal = Annotated[Principal, Depends(require_roles(RoleName.ADMIN))]
@@ -80,6 +85,11 @@ def _raise_lifecycle_error(error: Exception) -> NoReturn:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User unavailable",
+        ) from error
+    if isinstance(error, AdminUserProductConflict):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Product access changed or unavailable",
         ) from error
     if isinstance(error, AdminUserConflict):
         raise HTTPException(
@@ -160,6 +170,7 @@ async def create_user(
             email=payload.email,
             display_name=payload.display_name,
             roles=frozenset(payload.roles),
+            product_assignments=payload.product_assignments,
         )
     except AdminUserAuthorityError as error:
         raise HTTPException(
@@ -170,6 +181,11 @@ async def create_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="User could not be created",
+        ) from error
+    except AdminUserProductUnavailable as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Selected products unavailable",
         ) from error
     except AdminUserInputError as error:
         raise HTTPException(
@@ -199,6 +215,33 @@ LIFECYCLE_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 
 
+@router.get(
+    "/{user_id}/products",
+    operation_id="list_admin_user_products",
+    response_model=AdminUserProductsResponse,
+    responses={code: {"model": ErrorResponse} for code in (401, 403, 404, 422)},
+)
+async def list_user_products(
+    user_id: UUID,
+    principal: AdminPrincipal,
+    session: AdminSession,
+    response: Response,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: Annotated[str | None, Query(max_length=2048)] = None,
+) -> AdminUserProductsResponse:
+    """Read explicit access before editing; hidden pages are never implicit removals."""
+    try:
+        result = list_admin_user_products(
+            session, actor_id=principal.user_id, target_id=user_id, limit=limit, cursor=cursor
+        )
+    except InvalidProductCursor as error:
+        raise HTTPException(422, "Invalid cursor") from error
+    except (AdminUserAuthorityError, AdminUserNotFound, AdminUserInputError) as error:
+        _raise_lifecycle_error(error)
+    response.headers["Cache-Control"] = "no-store"
+    return result
+
+
 @router.patch(
     "/{user_id}",
     operation_id="update_admin_user",
@@ -219,6 +262,7 @@ async def update_user(
             target_id=user_id,
             display_name=payload.display_name,
             roles=frozenset(payload.roles),
+            product_assignments=payload.product_assignments,
         )
     except (
         AdminUserAuthorityError,

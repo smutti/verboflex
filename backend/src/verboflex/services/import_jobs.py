@@ -2698,6 +2698,15 @@ async def _process_import(
     factory: sessionmaker[Session],
     adapter: ReadAdapters,
 ) -> ImportProcessingResult:
+    from verboflex.localization.code_keys.catalog import CodeSourceConfig
+    from verboflex.localization.code_keys.join import join_code_translations
+    from verboflex.localization.code_keys.process import extract_catalog_isolated
+
+    config = None
+    if any(side.role == "keys" for side in identity.repository_sides):
+        with factory() as session:
+            config = session.get_one(ProductRepositoryMapping, identity.mapping_id).code_source
+    code_config = CodeSourceConfig.model_validate(config) if config is not None else None
     references: list[ImportSourceReferenceRecord] = []
     source_contents: dict[tuple[RepositoryRole, str], bytes] = {}
     for side in identity.repository_sides:
@@ -2715,6 +2724,7 @@ async def _process_import(
                 branch=side.source_branch,
                 adapter=adapter,
                 localization_root=side.localization_root,
+                code_sources=code_config is not None and side.role == "keys",
             )
         for source_file in snapshot.files:
             source_contents[(side.role, source_file.path)] = source_file.content
@@ -2743,6 +2753,7 @@ async def _process_import(
         )
     if not canonical_import_enabled:
         return ImportProcessingResult(references=durable_references)
+    code_catalog: dict[str, object] | None = None
     if parser_inputs:
         from verboflex.localization.duplicate_diagnostics import inspect_duplicate_keys
         from verboflex.services.duplicate_reports import store_report
@@ -2784,7 +2795,24 @@ async def _process_import(
                     sources=source_summaries,
                     execution_id=identity.execution_id,
                 )
-        parse_result = parse_canonical_mapping_quarantining_duplicates(parser_inputs)
+        if code_config is not None:
+            catalog = extract_catalog_isolated(
+                {path: data for (role, path), data in source_contents.items() if role == "keys"},
+                code_config,
+            )
+            if not catalog.keys:
+                raise ValueError("Empty code catalog cannot replace an active dataset")
+            joined = join_code_translations(catalog, parser_inputs)
+            parse_result = joined.result
+            code_catalog = {
+                "catalog": catalog.model_dump(mode="json"),
+                "config": code_config.model_dump(mode="json"),
+                "missing_keys": list(joined.missing_keys),
+                "orphan_keys": list(joined.orphan_keys),
+                "missing_base_keys": list(joined.missing_base_keys),
+            }
+        else:
+            parse_result = parse_canonical_mapping_quarantining_duplicates(parser_inputs)
         if not parse_result.issues and not report.complete:
             parse_result = CanonicalParseResult(
                 issues=(
@@ -2812,6 +2840,7 @@ async def _process_import(
         identity=identity,
         references=durable_references,
         result=parse_result,
+        code_catalog=code_catalog,
     )
     if manifest is None:
         raise ValueError("canonical import execution is stale")
@@ -2893,7 +2922,8 @@ def _confirmed_parser_inputs(
     expected_roles = {"direct"} if mapping.topology == "direct" else {"keys", "translations"}
     if (
         {side.role for side in identity.repository_sides} != expected_roles
-        or {candidate.repository_side for candidate in candidates} != expected_roles
+        or {candidate.repository_side for candidate in candidates}
+        != ({"translations"} if mapping.code_source is not None else expected_roles)
         or len({candidate.id for candidate in candidates}) != len(candidates)
     ):
         return ()

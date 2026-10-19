@@ -492,7 +492,7 @@ describe("session transitions", () => {
     });
   });
 
-  it("refresh failure signs out without retaining a stale identity", async () => {
+  it("a temporary refresh failure preserves the existing session", async () => {
     issueTokenMock.mockResolvedValue({
       data: {
         access_token: "ordinary-memory-token",
@@ -519,8 +519,7 @@ describe("session transitions", () => {
       await result.current.restoreSession().catch(() => undefined);
     });
 
-    expect(result.current.state).toEqual({ status: "signed_out" });
-    expect(result.current.state).not.toHaveProperty("principal");
+    expect(result.current.state.status).toBe("authenticated");
     expect(readCurrentUserMock).toHaveBeenCalledOnce();
   });
 
@@ -539,6 +538,9 @@ describe("session transitions", () => {
     refreshAccessTokenMock.mockResolvedValue({
       data: authority,
       error: authority === undefined ? { detail: "No session" } : undefined,
+      response: new Response(null, {
+        status: authority === undefined ? 401 : 200,
+      }),
     } as Awaited<ReturnType<typeof refreshAccessToken>>);
     const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
 
@@ -547,7 +549,14 @@ describe("session transitions", () => {
     });
 
     expect(readCurrentUserMock).not.toHaveBeenCalled();
-    expect(result.current.state).toEqual({ status: "signed_out" });
+    expect(result.current.state).toEqual(
+      authority === undefined
+        ? { status: "signed_out" }
+        : {
+            status: "password_change_required",
+            accessToken: authority.access_token,
+          },
+    );
   });
 
   it("fails closed when restored authority has no matching identity", async () => {
@@ -563,6 +572,7 @@ describe("session transitions", () => {
     readCurrentUserMock.mockResolvedValue({
       data: undefined,
       error: { detail: "Identity unavailable" },
+      response: new Response(null, { status: 401 }),
     });
     const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
 

@@ -1709,6 +1709,96 @@ test("four-step configuration reuses repositories, exposes both topologies, and 
   await expectNoCredentialResidue(page);
 });
 
+test("new user product assignments remain usable at narrow widths and enlarged text", async ({
+  page,
+}, testInfo) => {
+  const state = defaultState();
+  const first = product({
+    id: "00000000-0000-4000-8000-000000000010",
+    name: "Synthetic Mobile",
+  });
+  const second = product({
+    id: "00000000-0000-4000-8000-000000000011",
+    name: "Synthetic Portal With A Long Product Name",
+  });
+  state.products = [
+    first,
+    second,
+    product({ id: "inactive", is_active: false, name: "Inactive Product" }),
+  ];
+  await installAdminApi(page, state);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+
+  for (const viewport of [
+    { width: 1440, height: 900, zoom: 1 },
+    { width: 320, height: 720, zoom: 1 },
+    { width: 320, height: 720, zoom: 2 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/admin/users");
+    await page.evaluate((zoom) => {
+      document.documentElement.style.fontSize = zoom === 2 ? "200%" : "";
+    }, viewport.zoom);
+    await page.getByRole("button", { name: "Add user" }).click();
+    const dialog = page.getByRole("dialog", { name: "Add user", exact: true });
+    await dialog.getByLabel("Corporate email").fill("new.person@example.com");
+    await dialog.getByLabel("Display name").fill("New Person");
+    await dialog
+      .getByRole("combobox", { name: first.name })
+      .selectOption("translator");
+    await dialog
+      .getByRole("combobox", { name: second.name })
+      .selectOption("product_owner");
+    await expect(
+      dialog.getByRole("combobox", { name: "Inactive Product" }),
+    ).toHaveCount(0);
+    await expectNoPageOverflow(page);
+    expect(
+      await dialog.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    const box = await dialog.boundingBox();
+    expect(box?.y).toBeGreaterThanOrEqual(0);
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(
+      viewport.height,
+    );
+    await dialog
+      .getByRole("button", { name: "Create user" })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: testInfo.outputPath(
+        `product-access-${viewport.width}-${viewport.zoom}.png`,
+      ),
+    });
+    const submitted = page.waitForRequest(
+      (request) =>
+        request.url().endsWith("/api/v1/admin/users") &&
+        request.method() === "POST",
+    );
+    await dialog.getByRole("button", { name: "Create user" }).click();
+    expect((await submitted).postDataJSON()).toEqual({
+      email: "new.person@example.com",
+      display_name: "New Person",
+      roles: ["viewer"],
+      product_assignments: [
+        { product_id: first.id, role: "translator" },
+        { product_id: second.id, role: "product_owner" },
+      ],
+    });
+    const credentialDialog = page.getByRole("dialog", {
+      name: "Temporary password created",
+    });
+    await expect(credentialDialog.getByLabel("Temporary password")).toHaveText(
+      temporaryPassword,
+    );
+    await credentialDialog
+      .getByRole("button", { name: "I saved the password" })
+      .click();
+    await expectNoCredentialResidue(page);
+  }
+});
+
 test("100/101 exact branches stay fail-closed at 200 percent zoom", async ({
   page,
 }) => {
@@ -4578,5 +4668,134 @@ test("deployment-like Phase 3 import, recovery, watchdog, and rewrite journeys u
       unlinkSync(sentinel);
     }
     cleanupPhase3SmokeFixtures(fixture);
+  }
+});
+
+test("existing user product roles can be edited at narrow widths and enlarged text", async ({
+  page,
+}, testInfo) => {
+  const state = defaultState();
+  const account = {
+    id: "00000000-0000-4000-8000-000000000021",
+    display_name: "Existing Person",
+    email: "existing.person@example.com",
+    is_active: true,
+    must_change_password: false,
+    roles: ["viewer"],
+  };
+  state.users.push(account);
+  const initial = [
+    {
+      product_id: "00000000-0000-4000-8000-000000000031",
+      name: "Synthetic Mobile",
+      is_active: true,
+      role: "translator" as string | null,
+      version: "00000000-0000-4000-8000-000000000041" as string | null,
+    },
+    {
+      product_id: "00000000-0000-4000-8000-000000000032",
+      name: "Synthetic Portal With A Long Product Name",
+      is_active: true,
+      role: "product_owner" as string | null,
+      version: "00000000-0000-4000-8000-000000000042" as string | null,
+    },
+    {
+      product_id: "00000000-0000-4000-8000-000000000033",
+      name: "Synthetic Shared Catalog",
+      is_active: true,
+      role: null as string | null,
+      version: null as string | null,
+    },
+  ];
+  let memberships = initial.map((item) => ({ ...item }));
+  await installAdminApi(page, state);
+  await page.route(`**/api/v1/admin/users/${account.id}**`, async (route) => {
+    if (route.request().method() === "GET") {
+      return json(route, { items: memberships, next_cursor: null });
+    }
+    const body = requestBody(route) as {
+      product_assignments: Array<{
+        product_id: string;
+        role: string | null;
+        expected_version: string | null;
+      }>;
+    };
+    for (const change of body.product_assignments) {
+      const member = memberships.find(
+        (item) => item.product_id === change.product_id,
+      )!;
+      expect(change.expected_version).toBe(member.version);
+      member.role = change.role;
+      member.version =
+        change.role === null ? null : "00000000-0000-4000-8000-000000000099";
+    }
+    return json(route, account);
+  });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const viewport of [
+    { width: 1440, height: 900, zoom: 1 },
+    { width: 320, height: 720, zoom: 1 },
+    { width: 320, height: 720, zoom: 2 },
+  ]) {
+    memberships = initial.map((item) => ({ ...item }));
+    await page.setViewportSize(viewport);
+    await page.goto("/admin/users");
+    await page.evaluate((zoom) => {
+      document.documentElement.style.fontSize = zoom === 2 ? "200%" : "";
+    }, viewport.zoom);
+    await page
+      .getByRole("button", { name: "Edit Existing Person" })
+      .first()
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "Edit Existing Person",
+      exact: true,
+    });
+    await expect(
+      dialog.getByRole("combobox", { name: initial[0].name }),
+    ).toHaveValue("translator");
+    await expect(
+      dialog.getByRole("combobox", { name: initial[1].name }),
+    ).toHaveValue("product_owner");
+    await dialog
+      .getByRole("combobox", { name: initial[0].name })
+      .selectOption("product_manager_reviewer");
+    await dialog
+      .getByRole("combobox", { name: initial[1].name })
+      .selectOption("none");
+    await dialog
+      .getByRole("combobox", { name: initial[2].name })
+      .selectOption("product_owner");
+    await expectNoPageOverflow(page);
+    expect(
+      await dialog.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    await dialog
+      .getByRole("button", { name: "Save user" })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: testInfo.outputPath(
+        `edit-product-access-${viewport.width}-${viewport.zoom}.png`,
+      ),
+    });
+    await dialog.getByRole("button", { name: "Save user" }).click();
+    await expect(dialog).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Edit Existing Person" })
+      .first()
+      .click();
+    await expect(
+      dialog.getByRole("combobox", { name: initial[0].name }),
+    ).toHaveValue("product_manager_reviewer");
+    await expect(
+      dialog.getByRole("combobox", { name: initial[1].name }),
+    ).toHaveValue("none");
+    await expect(
+      dialog.getByRole("combobox", { name: initial[2].name }),
+    ).toHaveValue("product_owner");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expectNoCredentialResidue(page);
   }
 });

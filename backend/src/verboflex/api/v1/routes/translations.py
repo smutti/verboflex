@@ -180,6 +180,8 @@ def _detail_response(detail: TranslationGroupDetail) -> TranslationGroupDetailRe
             PendingTranslationDetailResponse(
                 version=pending.version,
                 state=pending.state,
+                target_branch=pending.target_branch,
+                target_integrated=pending.target_integrated,
                 reconciliation_required=pending.reconciliation_required,
                 updated_by=pending.updated_by,
                 updated_at=pending.updated_at,
@@ -329,6 +331,8 @@ def search_translation_collection(
                     PendingTranslationSummaryResponse(
                         version=item.pending_change.version,
                         state=item.pending_change.state,
+                        target_branch=item.pending_change.target_branch,
+                        target_integrated=item.pending_change.target_integrated,
                         reconciliation_required=item.pending_change.reconciliation_required,
                         value_count=item.pending_change.value_count,
                     )
@@ -406,4 +410,8 @@ def get_translation_group_detail(
         ) from error
     except Exception as error:
         _service_unavailable(error)
-    return _detail_response(access.group)
+    from verboflex.services.branch_workflow import workflow_for
+
+    response = _detail_response(access.group)
+    response.approval_commits_enabled = workflow_for(session, access.product_id) is not None
+    return response

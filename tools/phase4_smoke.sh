@@ -163,6 +163,11 @@ if [ "${PHASE4_PROFILE:-4}" = 7 ]; then
   step fixture-copy compose cp "$PHASE4_SCRIPT_DIR/phase6_smoke.py" backend:/tmp/phase6_smoke.py
   "$BACKEND_ROOT/.venv/bin/python" "$PHASE4_SCRIPT_DIR/phase7_smoke.py" configure "$SMOKE_RUNTIME_DIR/fixture.json" "$SMOKE_PROJECT" "$SMOKE_ENV_FILE" "$SMOKE_OVERRIDE_FILE" "$SMOKE_BACKEND_URL" "$SMOKE_FRONTEND_URL"
 fi
+if [ "${BRANCH_WORKFLOW_SMOKE_ONLY:-0}" = 1 ]; then
+  step approval-branch "$BACKEND_ROOT/.venv/bin/python" "$PHASE4_SCRIPT_DIR/phase7_smoke.py" branch-workflow "$SMOKE_RUNTIME_DIR/fixture.json"
+  printf 'approval branch smoke: PASS\n'
+  exit 0
+fi
 if [ "${PHASE4_PROFILE:-4}" = 6 ]; then
   worker_verify() {
     compose exec -T worker python -c "$(<"$PHASE4_DRIVER")" "$1" <"$SMOKE_RUNTIME_DIR/fixture.json" >"$SMOKE_RUNTIME_DIR/worker-$1.json"
@@ -201,12 +206,21 @@ if [ "${PHASE4_PROFILE:-4}" = 7 ]; then
   step scheduler start_smoke_scheduler
   step fault-scenarios "$BACKEND_ROOT/.venv/bin/python" "$PHASE4_SCRIPT_DIR/phase4_smoke.py" bounded "$BACKEND_ROOT/.venv/bin/python" "$PHASE4_SCRIPT_DIR/phase7_smoke.py" faults "$SMOKE_RUNTIME_DIR/fixture.json"
   step provider-audit "$BACKEND_ROOT/.venv/bin/python" "$PHASE4_SCRIPT_DIR/phase7_smoke.py" audit "$SMOKE_RUNTIME_DIR/fixture.json"
+  step approval-branch "$BACKEND_ROOT/.venv/bin/python" "$PHASE4_SCRIPT_DIR/phase7_smoke.py" branch-workflow "$SMOKE_RUNTIME_DIR/fixture.json"
 else
   step provider-audit "$BACKEND_ROOT/.venv/bin/python" "$PHASE4_DRIVER" audit "$SMOKE_PROVIDER_AUDIT_FILE"
 fi
 step redis-redaction verify_redis_boundary
 step redis-content compose exec -T backend python -c "$(<"$PHASE4_DRIVER")" redis-content
 step log-redaction verify_no_sensitive_surfaces
+if [ "${PHASE4_PROFILE:-4}" = 7 ]; then
+  step code-capture "$BACKEND_ROOT/.venv/bin/python" "$PHASE4_SCRIPT_DIR/code_capture_smoke.py" "$SMOKE_RUNTIME_DIR/fixture.json"
+fi
+if [ "${BRANCH_WORKFLOW_SMOKE_ONLY:-0}" = 1 ]; then
+  step approval-branch "$BACKEND_ROOT/.venv/bin/python" "$PHASE4_SCRIPT_DIR/phase7_smoke.py" branch-workflow "$SMOKE_RUNTIME_DIR/fixture.json"
+  printf 'approval branch smoke: PASS\n'
+  exit 0
+fi
 if [ "${PHASE4_PROFILE:-4}" = 6 ]; then
   PHASE6_EVIDENCE=$("$BACKEND_ROOT/.venv/bin/python" - "$SMOKE_RUNTIME_DIR" <<'PY'
 import json, sys

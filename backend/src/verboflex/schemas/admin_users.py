@@ -3,8 +3,9 @@
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from verboflex.schemas.product_team import ProductRole
 from verboflex.schemas.users import RoleName
 
 
@@ -13,20 +14,76 @@ def _ordered_unique_roles(roles: list[RoleName]) -> list[RoleName]:
     return [role for role in RoleName if role in selected]
 
 
+class AdminUserProductAssignment(BaseModel):
+    """One initial product membership for a newly created account."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    role: ProductRole
+
+
 class AdminUserCreateRequest(BaseModel):
-    """Create one immutable corporate-email identity with additive roles."""
+    """Create one identity with global roles and optional product memberships."""
 
     model_config = ConfigDict(extra="forbid")
 
     email: Annotated[str, Field(min_length=1, max_length=320)]
     display_name: Annotated[str, Field(min_length=1, max_length=200)]
     roles: Annotated[list[RoleName], Field(min_length=1, max_length=4)]
+    product_assignments: list[AdminUserProductAssignment] = Field(
+        default_factory=list, max_length=100
+    )
+
+    @field_validator("product_assignments")
+    @classmethod
+    def unique_products(
+        cls, assignments: list[AdminUserProductAssignment]
+    ) -> list[AdminUserProductAssignment]:
+        if len({assignment.product_id for assignment in assignments}) != len(assignments):
+            raise ValueError("Select each product only once")
+        return assignments
 
     @field_validator("roles")
     @classmethod
     def collapse_duplicate_roles(cls, roles: list[RoleName]) -> list[RoleName]:
         """Treat submitted role names as a set while preserving fixed enum order."""
         return _ordered_unique_roles(roles)
+
+
+class AdminUserProductChange(BaseModel):
+    """One explicit membership change, guarded by the version shown to the admin."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    role: ProductRole | None
+    expected_version: UUID | None
+
+    @model_validator(mode="after")
+    def removal_requires_version(self) -> AdminUserProductChange:
+        if self.role is None and self.expected_version is None:
+            raise ValueError("Removing access requires the current membership version")
+        return self
+
+
+class AdminUserProductAccess(BaseModel):
+    """One non-deleted product and the selected account's explicit membership."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    name: str
+    is_active: bool
+    role: ProductRole | None
+    version: UUID | None
+
+
+class AdminUserProductsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[AdminUserProductAccess] = Field(max_length=100)
+    next_cursor: str | None
 
 
 class AdminUserUpdateRequest(BaseModel):
@@ -36,6 +93,14 @@ class AdminUserUpdateRequest(BaseModel):
 
     display_name: Annotated[str, Field(min_length=1, max_length=200)]
     roles: Annotated[list[RoleName], Field(min_length=1, max_length=4)]
+    product_assignments: list[AdminUserProductChange] = Field(default_factory=list, max_length=100)
+
+    @field_validator("product_assignments")
+    @classmethod
+    def unique_products(cls, changes: list[AdminUserProductChange]) -> list[AdminUserProductChange]:
+        if len({change.product_id for change in changes}) != len(changes):
+            raise ValueError("Select each product only once")
+        return changes
 
     @field_validator("roles")
     @classmethod

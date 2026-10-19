@@ -4,6 +4,7 @@ from verboflex.models.audit import AuditEntry
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.authoring import AuthoringRequest
 from verboflex.models.bitbucket_connection import BitbucketConnection
+from verboflex.models.branch_workflow import BranchFile, BranchJob, BranchWorkflow
 from verboflex.models.duplicate_report import (
     DuplicateGroupRow,
     DuplicateOccurrenceRow,
@@ -39,6 +40,8 @@ from verboflex.models.review import (
     TranslationProposalValue,
 )
 from verboflex.models.role import Role, user_roles_table
+from verboflex.models.screenshot import ScreenshotJob
+from verboflex.models.source_fallback import SourceFallbackPolicy, SourceFallbackText
 from verboflex.models.submission import (
     ChangeSet,
     ChangeSetEvent,
@@ -65,6 +68,12 @@ from verboflex.models.translation_constraint import TranslationConstraint
 from verboflex.models.user import User
 
 __all__ = [
+    "SourceFallbackPolicy",
+    "SourceFallbackText",
+    "BranchFile",
+    "BranchJob",
+    "BranchWorkflow",
+    "ScreenshotJob",
     "ProductMember",
     "ProductTeamEvent",
     "AuthoringRequest",

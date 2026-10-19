@@ -286,6 +286,14 @@ const forbiddenWireShapes = [
 
 const phaseThreeAdminOperationIds = new Map([
   [
+    "GET /api/v1/admin/products/{product_id}/source-fallback",
+    "get_admin_source_fallback",
+  ],
+  [
+    "PUT /api/v1/admin/products/{product_id}/source-fallback",
+    "update_admin_source_fallback",
+  ],
+  [
     "GET /api/v1/admin/bitbucket/repositories",
     "list_admin_bitbucket_repositories",
   ],
@@ -420,6 +428,7 @@ const phaseThreeAdminOperationIds = new Map([
     "discover_admin_repository_sources",
   ],
   ["GET /api/v1/admin/users", "list_admin_users"],
+  ["GET /api/v1/admin/users/{user_id}/products", "list_admin_user_products"],
   ["POST /api/v1/admin/users", "create_admin_user"],
   ["PATCH /api/v1/admin/users/{user_id}", "update_admin_user"],
   ["POST /api/v1/admin/users/{user_id}/deactivate", "deactivate_admin_user"],
@@ -431,6 +440,30 @@ const phaseThreeAdminOperationIds = new Map([
 ]);
 
 const phaseFiveTranslationOperationIds = new Map([
+  [
+    "GET /api/v1/translations/{group_id}/code-context",
+    "getTranslationCodeContext",
+  ],
+  [
+    "GET /api/v1/translations/{group_id}/screenshots",
+    "listTranslationScreenshots",
+  ],
+  [
+    "GET /api/v1/translations/{group_id}/screenshots/{job_id}",
+    "getTranslationScreenshot",
+  ],
+  [
+    "GET /api/v1/translations/{group_id}/screenshots/{job_id}/image",
+    "getTranslationScreenshotImage",
+  ],
+  [
+    "PUT /api/v1/translations/{group_id}/screenshots/{job_id}",
+    "requestTranslationScreenshot",
+  ],
+  [
+    "DELETE /api/v1/translations/{group_id}/screenshots/{job_id}",
+    "cancelTranslationScreenshot",
+  ],
   ["GET /api/v1/translations/keys", "searchTranslationKeys"],
   ["GET /api/v1/translations/options", "listTranslationOptions"],
   ["GET /api/v1/translations", "searchTranslations"],
@@ -738,7 +771,7 @@ describe("canonical generated API client", () => {
       }
     }
     expect(actualOperations).toEqual(phaseFiveTranslationOperationIds);
-    expect(new Set(actualOperations.values()).size).toBe(15);
+    expect(new Set(actualOperations.values()).size).toBe(21);
 
     for (const operation of phaseFiveTranslationOperationIds.values()) {
       expect(
@@ -950,6 +983,7 @@ describe("canonical generated API client", () => {
       "getAdminImport",
       "getAdminImportRewriteComparison",
       "confirmAdminImportRewriteBaseline",
+      "createBranchPullRequest",
     ]) {
       expect(
         generatedSdkSource.match(
@@ -958,7 +992,7 @@ describe("canonical generated API client", () => {
       ).toHaveLength(1);
     }
     expect(generatedSdkSource).not.toMatch(
-      /(?:cancel|schedule|bulk|attemptHistory|createBranch|createCommit|createPullRequest|mergePullRequest|approvePullRequest|declinePullRequest)/u,
+      /(?:cancel(?!TranslationScreenshot)|schedule|bulk|attemptHistory|createBranch(?!PullRequest\b)|createCommit|createPullRequest|mergePullRequest|approvePullRequest|declinePullRequest)/u,
     );
     expect(generatedTypesSource).not.toMatch(
       /(?:provider_body|provider_status_text|raw_authority|raw_source|source_bytes|stack_trace|task_id|attempt_history)/u,

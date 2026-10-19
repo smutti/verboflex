@@ -4,6 +4,7 @@ import type {
   AdminUserCreateRequest,
   AdminUserResponse,
   AdminUserUpdateRequest,
+  AdminUserProductChange,
   RoleName,
 } from "../../../api/client";
 import {
@@ -24,13 +25,17 @@ import {
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { CREATE_DEFAULT_ROLES, USER_ROLE_OPTIONS } from "./userRoles";
+import { UserProductAssignments } from "./UserProductAssignments";
 
 export type UserDialogResult =
   | { status: "success" }
   | { status: "conflict"; owner: "email" | "dialog" }
+  | { status: "products-unavailable" }
+  | { status: "products-conflict" }
   | { status: "error" };
 
 export interface UserDialogProps {
+  accessToken: string;
   currentUserId: string;
   onOpenChange: (open: boolean) => void;
   onSubmit: (
@@ -41,6 +46,7 @@ export interface UserDialogProps {
 }
 
 export function UserDialog({
+  accessToken,
   currentUserId,
   onOpenChange,
   onSubmit,
@@ -62,20 +68,23 @@ export function UserDialog({
     user?.roles ?? CREATE_DEFAULT_ROLES,
   );
   const [pending, setPending] = useState(false);
+  const [productAssignments, setProductAssignments] = useState<
+    AdminUserProductChange[]
+  >([]);
   const [roleError, setRoleError] = useState(false);
   const [emailConflict, setEmailConflict] = useState(false);
   const [fieldError, setFieldError] = useState<"email" | "display_name" | null>(
     null,
   );
   const [submissionError, setSubmissionError] = useState<
-    "conflict" | "generic" | null
+    "conflict" | "generic" | "products" | "products-conflict" | null
   >(null);
 
   const isEditing = user !== null;
   const isEditingSelf = user?.id === currentUserId;
 
   useEffect(() => {
-    if (submissionError === "conflict") {
+    if (submissionError !== null) {
       conflictRef.current?.focus();
     }
   }, [submissionError]);
@@ -127,11 +136,25 @@ export function UserDialog({
     setEmailConflict(false);
     setSubmissionError(null);
     const request = isEditing
-      ? ({ display_name: displayName, roles } satisfies AdminUserUpdateRequest)
+      ? ({
+          display_name: displayName,
+          roles,
+          ...(productAssignments.length > 0
+            ? { product_assignments: productAssignments }
+            : {}),
+        } satisfies AdminUserUpdateRequest)
       : ({
           email,
           display_name: displayName,
           roles,
+          ...(productAssignments.length > 0
+            ? {
+                product_assignments: productAssignments.flatMap(
+                  ({ product_id, role }) =>
+                    role === null ? [] : [{ product_id, role }],
+                ),
+              }
+            : {}),
         } satisfies AdminUserCreateRequest);
 
     let result: UserDialogResult;
@@ -157,24 +180,33 @@ export function UserDialog({
       }
       return;
     }
-    setSubmissionError("generic");
+    setSubmissionError(
+      result.status === "products-unavailable"
+        ? "products"
+        : result.status === "products-conflict"
+          ? "products-conflict"
+          : "generic",
+    );
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
+        <DialogHeader className="min-w-0">
+          <DialogTitle className="[overflow-wrap:anywhere]">
             {isEditing ? `Edit ${user.display_name}` : "Add user"}
           </DialogTitle>
           <DialogDescription>
             {isEditing
-              ? "Update the display name and additive roles for this account."
-              : "Create an internal account with a fixed set of additive roles."}
+              ? "Update this account's display name, global roles and product access."
+              : "Create an internal account and choose their product access."}
           </DialogDescription>
         </DialogHeader>
 
-        <form className="grid gap-5" onSubmit={(event) => void submit(event)}>
+        <form
+          className="grid min-w-0 gap-5 [overflow-wrap:anywhere]"
+          onSubmit={(event) => void submit(event)}
+        >
           {submissionError !== null ? (
             <Alert
               ref={conflictRef}
@@ -186,15 +218,19 @@ export function UserDialog({
               <AlertDescription id={conflictId}>
                 {submissionError === "conflict"
                   ? "This user changed in another session or the administrator role must be preserved."
-                  : "Your entries are still here. Review them and try again."}
+                  : submissionError === "products-conflict"
+                    ? "Product access changed in another session, or a product or account is no longer available. No changes were saved. Reopen this form to review current roles before trying again."
+                    : submissionError === "products"
+                      ? "One or more selected products are no longer available. Remove their assignments or reopen this form to refresh the list. No account was created."
+                      : "Your entries are still here. Review them and try again."}
               </AlertDescription>
             </Alert>
           ) : null}
 
           {isEditing ? (
-            <div className="grid gap-2">
+            <div className="grid min-w-0 grid-cols-1 gap-2">
               <span className="text-sm font-medium">Corporate email</span>
-              <p className="break-words text-sm [overflow-wrap:anywhere]">
+              <p className="min-w-0 text-sm [overflow-wrap:anywhere]">
                 {user.email}
               </p>
               <p className="text-sm text-muted-foreground">
@@ -267,11 +303,15 @@ export function UserDialog({
             tabIndex={roleError ? -1 : undefined}
             aria-labelledby={roleGroupId}
             aria-describedby={roleError ? roleErrorId : undefined}
-            className="grid gap-3 rounded-lg border p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="grid min-w-0 gap-3 rounded-lg border p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <legend id={roleGroupId} className="px-1 text-sm font-medium">
               Roles
             </legend>
+            <p className="text-sm text-muted-foreground">
+              Administrator grants access to all products. Other global roles
+              require a separate product assignment.
+            </p>
             {USER_ROLE_OPTIONS.map((option) => {
               const checkboxId = `${roleGroupId}-${option.value}`;
               const protectsSelfAdmin =
@@ -303,6 +343,14 @@ export function UserDialog({
               </p>
             ) : null}
           </fieldset>
+
+          <UserProductAssignments
+            accessToken={accessToken}
+            disabled={pending}
+            user={user}
+            value={productAssignments}
+            onChange={setProductAssignments}
+          />
 
           <DialogFooter>
             <Button

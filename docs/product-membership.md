@@ -3,6 +3,11 @@
 An administrator creates/configures products and appoints Product Owners in
 **Administration → Products → Team**. A Product Owner uses the product's **Team**
 page to add collaborators, change their operational role, or remove access.
+The page separates **Product Owner** from **Collaborators**, showing each person's
+name, email and role. Choose **Edit** beside a person to change their role or
+remove them; removal still requires confirmation. Administrators use
+**Assign Product Owner** to open the owner assignment form. The product navigation
+highlights the current **Strings**, **Change sets** or **Team** page.
 
 Each account has one role per product: Viewer, Translator, Reviewer or Product
 Owner. Owners have Reviewer capabilities, including review/submission, and can
@@ -14,7 +19,27 @@ recoverable by a global administrator; Team shows when no active owner remains.
 
 ## Add a collaborator
 
-Enter their email, display name and operational role. For a new account, Team
+Administrators can also create an account and assign several products at once in
+**Administration → Users → Add user**. Under **Product access**, choose one role
+per active product: Viewer, Translator, Product manager / reviewer, or Product
+Owner. Products default to **No access**. Use **Load more products** to reach later
+pages; up to 100 products can be assigned during account creation. Assignments
+are optional and independent of the global account roles. Only Administrator
+grants installation-wide access.
+
+Account creation and all selected memberships are one transaction. If any selected
+product has become inactive, deleted or unavailable, no account or memberships
+are created; remove that assignment or reopen the form to refresh the list. The
+temporary password is still shown only once after success.
+
+The administrator create endpoint accepts an optional `product_assignments` array
+of `{ "product_id": "<UUID>", "role": "translator" }` objects. Duplicate product
+IDs, unsupported roles and unavailable products are rejected. Each successful
+assignment records a `member.added` team event in the same transaction as the
+`user.created` audit event.
+
+Choose **Add collaborator**, enter their email, display name and operational role,
+then select **Add to team**. For a new account, Team
 shows a random temporary password once, with a copy button. Save it and share it
 privately with the recipient, together with their email and the application URL.
 A team refresh preserves the open password dialog; dismiss it with **I saved the
@@ -39,6 +64,35 @@ password was not saved, ask a global administrator to use the existing account
 password-reset action. A Product Owner cannot reset an existing account, even
 one they created. Role changes use the current membership version to reject
 stale forms; refresh the team after a conflict.
+
+## Edit product access from a user account
+
+Administrators can use **Administration → Users → Edit → Product access** to
+manage an existing account across products. Current roles are preselected;
+choose **No access** to remove a membership. The list includes inactive products,
+marked **(inactive)**, and excludes deleted products. An inactive product remains
+inaccessible to ordinary members until it is reactivated. Disabled accounts can
+lose memberships, but must be reactivated before receiving or changing roles.
+
+**Save user** applies profile fields, global roles and explicit product changes
+in one transaction. Up to 100 product changes can be saved together. Products on
+unloaded pages and unchanged roles are preserved. Cancel discards the form's
+changes. Membership edits take effect on the next authorized request and retain
+the same team audit events and version checks as the product's Team page.
+
+If another administrator or owner changes an affected membership, or a selected
+product is deleted, the entire save is rejected. Inputs remain visible; reopen
+the form to load current roles and review the changes again. No password is
+generated or reset by editing product access.
+
+`GET /api/v1/admin/users/{user_id}/products` returns a bounded product page with
+the account's current `role` and membership `version` (both null without access).
+The existing user PATCH endpoint accepts optional `product_assignments` changes:
+`{ "product_id": "<UUID>", "role": "translator", "expected_version": "<UUID>" }`.
+Use a null expected version only when granting absent access. A null role removes
+access and requires the current membership version. Omitted or empty changes
+leave all memberships untouched; duplicates, unsupported roles and stale versions
+are rejected by the API.
 
 ## Access and revocation
 

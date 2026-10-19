@@ -643,6 +643,7 @@ def test_revision_mapping_read_is_owned_cursor_faithful_and_mutation_free(
                 ],
                 "primary_source_branch": "active/main",
                 "primary_localization_root": None,
+                "code_source": None,
                 "translations_localization_root": None,
                 "translations_repository_id": None,
                 "translations_source_branch": None,
@@ -821,6 +822,7 @@ def test_direct_create_update_conflicts_and_noop_preserve_active_revision(
         "primary_repository_id": str(repository_id),
         "primary_source_branch": "main",
         "primary_localization_root": None,
+        "code_source": None,
         "translations_localization_root": None,
         "translations_repository_id": None,
         "translations_source_branch": None,
@@ -1152,6 +1154,7 @@ def test_separate_mapping_api_is_closed_versioned_and_topology_safe(
         "primary_repository_id": str(keys_repository_id),
         "primary_source_branch": "keys/main",
         "primary_localization_root": None,
+        "code_source": None,
         "translations_localization_root": None,
         "translations_repository_id": str(translations_repository_id),
         "translations_source_branch": "translations/main",
@@ -1870,3 +1873,66 @@ def test_parser_failure_api_projects_retained_dataset_and_safe_ordered_issues(
     assert first_body["dataset_status"] == "not_created"
     assert first_body["parser_issue_remaining_count"] == 0
     assert [issue["repository_side"] for issue in first_body["parser_issues"]] == ["direct"]
+
+
+def test_code_source_configuration_is_versioned_and_invalidates_preview(mapping_session_factory):
+    product_id, _active_id, _candidate_id = _seed_candidate(mapping_session_factory)
+    keys_repo = _seed_repository(mapping_session_factory)
+    translations_repo = _seed_repository(mapping_session_factory)
+    _configure_dependencies(
+        mapping_session_factory,
+        BranchAdapter(("keys/main", "translations/main", "release/1", "release/2")),
+    )
+    token = _create_authority(
+        mapping_session_factory, email="code-admin@example.com", roles=("admin",)
+    )
+    payload = _separate_payload(keys_repo, translations_repo)
+    payload["code_source"] = {
+        "resource_roots": ["Res.strings"],
+        "declaration_symbols": ["demo.Keys.*"],
+    }
+    created = asyncio.run(
+        _request("POST", path=_mapping_path(product_id), access_token=token, json_body=payload)
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["code_source"]["declaration_symbols"] == ["demo.Keys.*"]
+    mapping_id = UUID(body["id"])
+    with mapping_session_factory.begin() as session:
+        mapping = session.get_one(ProductRepositoryMapping, mapping_id)
+        assert mapping.code_source["resource_roots"] == ["Res.strings"]
+        mapping.selected_layout_candidate_id = uuid4()
+        mapping.selected_layout_version = 1
+    payload["expected_candidate_version"] = body["candidate_version"]
+    payload["code_source"] = {"resource_roots": ["Words.strings"]}
+    changed = asyncio.run(
+        _request(
+            "PATCH",
+            path=_mapping_path(product_id, mapping_id),
+            access_token=token,
+            json_body=payload,
+        )
+    )
+    assert changed.status_code == 200
+    assert changed.json()["candidate_version"] == body["candidate_version"] + 1
+    assert changed.json()["selected_layout_candidate_id"] is None
+    payload["expected_candidate_version"] = changed.json()["candidate_version"]
+    unchanged = asyncio.run(
+        _request(
+            "PATCH",
+            path=_mapping_path(product_id, mapping_id),
+            access_token=token,
+            json_body=payload,
+        )
+    )
+    assert unchanged.json()["candidate_version"] == changed.json()["candidate_version"]
+    payload["code_source"] = {"resource_roots": ["Res.strings"], "execute": "malicious"}
+    invalid = asyncio.run(
+        _request(
+            "PATCH",
+            path=_mapping_path(product_id, mapping_id),
+            access_token=token,
+            json_body=payload,
+        )
+    )
+    assert invalid.status_code == 422

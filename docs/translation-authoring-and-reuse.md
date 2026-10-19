@@ -38,6 +38,37 @@ an existing scalar to a plural, ICU/JSON plural dialects, Apple `.stringsdict` a
 XLIFF writeback are outside this release. Public GitHub projects support local
 creation/review; GitHub publication is still unavailable.
 
+## Qt source text and the base catalog
+
+Qt catalogs keep `<source>` and `<translation>` separately, including in the
+configured base-language file. The workspace displays embedded **Source text**
+separately from editable translations. The catalog locale does not establish the
+language of each source phrase: a project can mix Italian and English sources.
+Saving a translation preserves the source and its message identity. By default,
+**Needs translation** includes empty Qt translations even in the base catalog.
+
+Administrators can open **Product configuration → product overview → Source language
+settings**, enable **Use confirmed source text for the base language**, and select
+exact source phrases already written in that language. For those phrases only,
+empty scalar Qt translations display the source with **Using source text** and
+leave both search representations of **Needs translation**. The policy is scoped
+to the product and base locale, independent of mapping revisions and imports.
+Other products keep their own settings. Updates are audited, version checked,
+and invalidate existing search cursors.
+
+The selection is explicit: there is no language guessing or automatic translation.
+Foreign phrases, new or changed source text, plurals and length variants remain
+eligible for translation. An actual imported translation or a current proposal
+takes precedence over fallback. The policy never fills repository files, creates
+proposals, approves changes or opens pull requests. Saving an explicit translation
+still uses the regular review workflow. Disabling the policy restores the original
+empty-translation behavior. Product coverage continues to measure target languages,
+excluding the configured base locale.
+
+The multilingual built-stack smoke configures this policy through the administrator
+interface, verifies its persistence and filtering, then saves/reloads a translation
+for a foreign source without changing either imported field.
+
 ## Native plurals
 
 Android quantities come from Babel 2.17 / CLDR 46 cardinal categories. Qt forms

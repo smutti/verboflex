@@ -15,6 +15,7 @@ const PRODUCT_SECTIONS = [
   { label: "Team", slug: "team" },
   { label: "Repositories", slug: "repositories" },
   { label: "Translation sources", slug: "mappings" },
+  { label: "Approval branches", slug: "branches" },
   { label: "Preview and import", slug: "preview" },
 ] as const;
 

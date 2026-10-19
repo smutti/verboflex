@@ -13,6 +13,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../components/ui/tabs";
+import { TranslationScreenshots } from "./TranslationScreenshots";
 import { Discussion, type DiscussionDraftState } from "./Discussion";
 import { ActivityHistory } from "./ActivityHistory";
 import { TranslationReviewActions } from "./TranslationReviewActions";
@@ -55,6 +56,7 @@ function Context({
   const remote = context.input === detail ? context.remote : detail;
   const failure = context.input === detail && context.failure;
   const [retry, setRetry] = useState(0);
+  const [screenshotsOpen, setScreenshotsOpen] = useState(false);
   const version = Math.max(
     proposal?.version ?? 0,
     detail.pending_change?.version ?? 0,
@@ -138,6 +140,23 @@ function Context({
           />
         )}
       </section>
+      <details
+        className="rounded-md border p-3"
+        onToggle={(event) => setScreenshotsOpen(event.currentTarget.open)}
+      >
+        <summary className="cursor-pointer font-semibold">
+          Screenshots and code references
+        </summary>
+        {screenshotsOpen && (
+          <TranslationScreenshots
+            key={`${detail.id}:${accessToken}`}
+            accessToken={accessToken}
+            groupId={detail.id}
+            dirty={dirty}
+            proposalVersion={remote.pending_change?.version}
+          />
+        )}
+      </details>
       <Tabs
         defaultValue="comments"
         value={section === "review" ? "comments" : section}

@@ -53,6 +53,9 @@ FORBIDDEN_PROVIDER_TOKENS = {
     "wiki",
 }
 EXPECTED_MODEL_MODULES = {
+    "branch_workflow.py",
+    "source_fallback.py",
+    "screenshot.py",
     "audit.py",
     "authoring.py",
     "glossary.py",

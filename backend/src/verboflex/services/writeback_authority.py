@@ -26,7 +26,6 @@ from verboflex.localization.importing.core import (
     RepositorySide,
     canonical_selector_bytes,
 )
-from verboflex.localization.importing.registry import parse_canonical_snapshot
 from verboflex.localization.preview.core import (
     PreviewLayoutCandidate,
     layout_candidate_from_mapping,
@@ -40,6 +39,7 @@ from verboflex.localization.writing.core import (
     WriteInsert,
     WriteOperation,
 )
+from verboflex.localization.writing.parsing import inspect_writeback_snapshot
 from verboflex.models.bitbucket_connection import BitbucketConnection
 from verboflex.models.import_job import ImportExecution, ImportJob, ImportSourceReference
 from verboflex.models.preview_job import PreviewJob
@@ -289,7 +289,8 @@ def _capture_mapping(
     roles = {"direct"} if mapping.topology == "direct" else {"keys", "translations"}
     if (
         {side.role for side in mapping.sides} != roles
-        or {candidate.repository_side for candidate in candidates} != roles
+        or {candidate.repository_side for candidate in candidates}
+        != ({"translations"} if mapping.code_source is not None else roles)
         or len({candidate.id for candidate in candidates}) != len(candidates)
     ):
         raise _stale()
@@ -828,6 +829,6 @@ def build_source_file_snapshot(
         raise WritebackRejected(WritebackReason.STALE_BASIS)
     if parser_input.format not in {"android_xml", "qt_ts", "json", "ios_strings"}:
         raise WritebackRejected(WritebackReason.UNSUPPORTED_FORMAT)
-    if parse_canonical_snapshot(parser_input).issues:
+    if inspect_writeback_snapshot(parser_input).issues:
         raise WritebackRejected(WritebackReason.UNSUPPORTED_SHAPE)
     return snapshot

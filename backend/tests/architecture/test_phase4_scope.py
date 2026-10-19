@@ -74,6 +74,36 @@ def test_imports_cross_registry_boundary():
     inventory().validate_boundaries()
 
 
+def test_shared_moko_writer_can_inspect_without_bypassing_canonical_imports():
+    inventory().validate_boundaries(
+        {
+            "backend/src/verboflex/localization/writing/parsing.py": (
+                "from verboflex.localization.importing.android_xml "
+                "import AndroidXmlInspection, inspect_android_xml"
+            )
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "path,names",
+    [
+        ("localization/writing/parsing.py", "inspect_android_xml, parse_android_xml"),
+        ("localization/writing/other.py", "inspect_android_xml"),
+        ("api/v1/routes/example.py", "inspect_android_xml"),
+    ],
+)
+def test_shared_moko_inspection_exception_stays_scoped_to_writer(path, names):
+    with pytest.raises(ValueError, match="parser boundary bypass"):
+        inventory().validate_boundaries(
+            {
+                f"backend/src/verboflex/{path}": (
+                    f"from verboflex.localization.importing.android_xml import {names}"
+                )
+            }
+        )
+
+
 def test_phase5_editor_may_preview_graphemes_without_becoming_content_authority():
     inventory().validate_boundaries(
         {
@@ -132,6 +162,21 @@ def test_no_deferred_phase4_operations():
     module = inventory()
     assert module.TRANSLATION_ROUTE_INVENTORY == {
         ("/api/v1/translations/keys", "get"): "searchTranslationKeys",
+        ("/api/v1/translations/{group_id}/code-context", "get"): "getTranslationCodeContext",
+        ("/api/v1/translations/{group_id}/screenshots", "get"): "listTranslationScreenshots",
+        (
+            "/api/v1/translations/{group_id}/screenshots/{job_id}",
+            "put",
+        ): "requestTranslationScreenshot",
+        ("/api/v1/translations/{group_id}/screenshots/{job_id}", "get"): "getTranslationScreenshot",
+        (
+            "/api/v1/translations/{group_id}/screenshots/{job_id}",
+            "delete",
+        ): "cancelTranslationScreenshot",
+        (
+            "/api/v1/translations/{group_id}/screenshots/{job_id}/image",
+            "get",
+        ): "getTranslationScreenshotImage",
         ("/api/v1/translations/options", "get"): "listTranslationOptions",
         ("/api/v1/translations", "get"): "searchTranslations",
         ("/api/v1/translations/{translation_group_id}", "get"): "getTranslationGroup",

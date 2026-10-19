@@ -62,6 +62,30 @@ IMPORT_OPERATIONS = {
 }
 
 TRANSLATION_OPERATIONS = {
+    ("/api/v1/translations/{group_id}/code-context", "get"): (
+        "getTranslationCodeContext",
+        {"422", "429", "401", "503", "200", "409", "403", "404"},
+    ),
+    ("/api/v1/translations/{group_id}/screenshots", "get"): (
+        "listTranslationScreenshots",
+        {"422", "429", "401", "503", "200", "409", "403", "404"},
+    ),
+    ("/api/v1/translations/{group_id}/screenshots/{job_id}", "put"): (
+        "requestTranslationScreenshot",
+        {"422", "429", "401", "503", "409", "202", "404", "403"},
+    ),
+    ("/api/v1/translations/{group_id}/screenshots/{job_id}", "get"): (
+        "getTranslationScreenshot",
+        {"422", "429", "401", "503", "200", "409", "403", "404"},
+    ),
+    ("/api/v1/translations/{group_id}/screenshots/{job_id}", "delete"): (
+        "cancelTranslationScreenshot",
+        {"422", "429", "401", "503", "200", "409", "403", "404"},
+    ),
+    ("/api/v1/translations/{group_id}/screenshots/{job_id}/image", "get"): (
+        "getTranslationScreenshotImage",
+        {"422", "429", "401", "503", "200", "409", "403", "404"},
+    ),
     ("/api/v1/translations/keys", "get"): (
         "searchTranslationKeys",
         {"200", "401", "403", "422", "503"},
@@ -484,6 +508,11 @@ EXPECTED_OPERATIONS = {
         {"200", "401", "403", "404", "409", "422"},
         True,
     ),
+    ("/api/v1/admin/users/{user_id}/products", "get"): (
+        "list_admin_user_products",
+        {"200", "401", "403", "404", "422"},
+        True,
+    ),
     ("/api/v1/admin/users/{user_id}/deactivate", "post"): (
         "deactivate_admin_user",
         {"200", "401", "403", "404", "409", "422"},
@@ -788,6 +817,54 @@ EXPECTED_OPERATIONS.update(
             bearer,
         )
         for path, method, operation, success, bearer in TEAM_OPERATIONS
+    }
+)
+
+
+EXPECTED_OPERATIONS.update(
+    {
+        ("/api/v1/products/{product_id}/code-sources", "get"): (
+            "listProductCodeSources",
+            {"422", "429", "401", "503", "200", "409", "403", "404"},
+            True,
+        ),
+        ("/api/v1/localization-scopes/{scope_id}/code-keys", "get"): (
+            "listCodeKeys",
+            {"422", "429", "401", "503", "200", "409", "403", "404"},
+            True,
+        ),
+    }
+)
+
+
+# Keep independently configured source fallback and approval branches in the
+# exact inventory, including their currently published responses and security.
+EXPECTED_OPERATIONS.update(
+    {
+        ("/api/v1/admin/products/{product_id}/source-fallback", method): (
+            operation_id,
+            {"200", "401", "403", "404", "409", "422"},
+            True,
+        )
+        for method, operation_id in (
+            ("get", "get_admin_source_fallback"),
+            ("put", "update_admin_source_fallback"),
+        )
+    }
+)
+EXPECTED_OPERATIONS.update(
+    {
+        (f"/api/v1/products/{{product_id}}/branch-workflow{suffix}", method): (
+            operation_id,
+            {success, "422"},
+            True,
+        )
+        for suffix, method, operation_id, success in (
+            ("", "get", "getBranchWorkflow", "200"),
+            ("", "put", "configureBranchWorkflow", "200"),
+            ("/pull-request", "post", "createBranchPullRequest", "202"),
+            ("/jobs/{job_id}/retry", "post", "retryBranchChange", "202"),
+        )
     }
 )
 
@@ -1908,6 +1985,7 @@ def test_translation_schemas_are_closed_bounded_and_non_leaking() -> None:
 
     detail = schemas["TranslationGroupDetailResponse"]
     assert set(detail["properties"]) == {
+        "approval_commits_enabled",
         "source_context",
         "base_language",
         "explicit_maximum",
@@ -1928,7 +2006,12 @@ def test_translation_schemas_are_closed_bounded_and_non_leaking() -> None:
         "mutation_eligible",
         "review_eligible",
     }
-    assert set(detail["required"]) == set(detail["properties"]) - {"source_context"}
+    assert set(detail["required"]) == set(detail["properties"]) - {
+        "approval_commits_enabled",
+        "source_context",
+    }
+    assert detail["properties"]["approval_commits_enabled"]["type"] == "boolean"
+    assert detail["properties"]["approval_commits_enabled"]["default"] is False
     assert detail["properties"]["values"]["minItems"] == 1
     assert detail["properties"]["values"]["maxItems"] == 10_000
     assert _schema_references(detail["properties"]["pending_change"]) == {
@@ -3026,6 +3109,8 @@ def test_admin_user_openapi_keeps_temporary_credentials_on_one_time_responses_on
         reference = _response_schema(operation, success_code)
         if key in credential_paths:
             assert reference == "#/components/schemas/AdminUserCredentialResponse"
+        elif key == ("/api/v1/admin/users/{user_id}/products", "get"):
+            assert reference == "#/components/schemas/AdminUserProductsResponse"
         elif key != ("/api/v1/admin/users", "get"):
             assert reference == "#/components/schemas/AdminUserResponse"
 

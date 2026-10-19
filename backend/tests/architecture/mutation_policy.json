@@ -320,7 +320,7 @@
       "admin"
     ],
     "boundary": "role_dependency",
-    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+    "audit": "AuditEntry user.updated and ProductTeamEvent for explicit membership changes"
   },
   "reset_admin_user_password": {
     "method": "POST",
@@ -357,6 +357,15 @@
     ],
     "boundary": "role_dependency",
     "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+  },
+  "update_admin_source_fallback": {
+    "method": "PUT",
+    "path": "/api/v1/admin/products/{product_id}/source-fallback",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "role_dependency",
+    "audit": "AuditEntry product.updated"
   },
   "update_admin_product_candidate": {
     "method": "PATCH",
@@ -554,5 +563,58 @@
     ],
     "boundary": "current_product_membership",
     "audit": "ProductTeamEvent and user.created audit event; never credentials"
+  },
+  "requestTranslationScreenshot": {
+    "method": "PUT",
+    "path": "/api/v1/translations/{group_id}/screenshots/{job_id}",
+    "roles": [
+      "admin",
+      "viewer",
+      "translator",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_product_membership_and_capture_owner",
+    "audit": "ScreenshotJob actor, immutable request identity and durable state"
+  },
+  "cancelTranslationScreenshot": {
+    "method": "DELETE",
+    "path": "/api/v1/translations/{group_id}/screenshots/{job_id}",
+    "roles": [
+      "admin",
+      "viewer",
+      "translator",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_product_membership_and_capture_owner",
+    "audit": "ScreenshotJob actor, immutable request identity and durable state"
+  },
+  "configureBranchWorkflow": {
+    "method": "PUT",
+    "path": "/api/v1/products/{product_id}/branch-workflow",
+    "roles": [
+      "admin"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "AuditEntry branch actions and immutable BranchJob approval snapshot"
+  },
+  "createBranchPullRequest": {
+    "method": "POST",
+    "path": "/api/v1/products/{product_id}/branch-workflow/pull-request",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "AuditEntry branch actions and immutable BranchJob approval snapshot"
+  },
+  "retryBranchChange": {
+    "method": "POST",
+    "path": "/api/v1/products/{product_id}/branch-workflow/jobs/{job_id}/retry",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "AuditEntry branch actions and immutable BranchJob approval snapshot"
   }
 }

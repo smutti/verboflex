@@ -11,7 +11,6 @@ from verboflex.localization.importing.core import (
     CanonicalValue,
     canonical_selector_bytes,
 )
-from verboflex.localization.importing.registry import parse_canonical_snapshot
 from verboflex.localization.writing import android_xml, ios_strings, json, qt_ts
 from verboflex.localization.writing.core import (
     RenderedFile,
@@ -23,6 +22,7 @@ from verboflex.localization.writing.core import (
     WriteOperation,
     apply_byte_edits,
 )
+from verboflex.localization.writing.parsing import inspect_writeback_snapshot
 
 
 def _identity(value: CanonicalValue | WriteEdit) -> tuple[str, str, bytes]:
@@ -78,16 +78,22 @@ def _render_edits(
         raise WritebackRejected(WritebackReason.UNSUPPORTED_FORMAT)
     if type(edits) is not tuple or len(edits) > MAX_CANONICAL_VALUES:
         raise WritebackRejected(WritebackReason.LIMIT_EXCEEDED)
-    parsed = parse_canonical_snapshot(parser_input)
+    parsed = inspect_writeback_snapshot(parser_input)
     if parsed.issues:
         raise WritebackRejected(WritebackReason.UNSUPPORTED_SHAPE)
     originals = {_identity(value): value for value in parsed.values}
+    resource_positions: dict[str, set[int]] = {}
+    if parser_input.format == "android_xml":
+        for occurrence in parsed.values:
+            resource_positions.setdefault(occurrence.logical_key, set()).add(
+                occurrence.locator.position
+            )
     selected: dict[tuple[str, str, bytes], WriteEdit] = {}
     for edit in edits:
         if type(edit) is not WriteEdit:
             raise WritebackRejected(WritebackReason.INVALID_REPLACEMENT)
         identity = _identity(edit)
-        if identity in selected:
+        if identity in selected or len(resource_positions.get(edit.logical_key, ())) > 1:
             raise WritebackRejected(WritebackReason.AMBIGUOUS_LOCATOR)
         value = originals.get(identity)
         if value is None or value.locator != edit.locator:
@@ -113,7 +119,7 @@ def _render_edits(
     }[parser_input.format]
     spans = adapter.plan_edits(parser_input, changed)
     content = apply_byte_edits(parser_input.content, spans)
-    reparsed = parse_canonical_snapshot(replace(parser_input, content=content))
+    reparsed = inspect_writeback_snapshot(replace(parser_input, content=content))
     if reparsed.issues or tuple(map(_identity, reparsed.values)) != tuple(
         map(_identity, parsed.values)
     ):

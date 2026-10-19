@@ -6,6 +6,25 @@ protection: it fails if any component fails, is cancelled, or is skipped.
 Also require **Website checks**, which runs on every pull request and main push.
 The workflow does not deploy the application or contact real repositories.
 
+The code-key and screenshot tests use synthetic Kotlin/Java and localization fixtures.
+The built smoke also configures a separate code/translation mapping through HTTP,
+imports code-only keys, checks missing keys in the browser, saves a proposal and
+requests its screenshot through the real scheduler/Celery queue. A synthetic renderer
+replaces only the Android build boundary; it verifies the frozen commit IDs and
+selected translation in its PNG. The browser checks editing base-language resources
+in the translations repository, compact source context, visible waiting state, lazy
+generation, dirty-edit blocking, authenticated image loading, retry after one failed
+image request and reload.
+The `code-capture-e2e.json` receipt and browser screenshots join the smoke artifacts.
+The multilingual browser smoke also checks that **Needs translation** includes
+absent target entries alongside empty imported values, with matching language
+markers and an **Add translation** action. Run it with
+`backend/.venv/bin/python tools/dashboard_smoke.py --multilingual`; it creates and
+removes its own database and application containers with synthetic fixtures.
+Actual Compose rendering is a separate Android check, described in
+[the capture integration guide](code-keys-compose.md). It requires a reviewed,
+prewarmed runner image; the ordinary application CI does not build private Android apps.
+
 | Check | Coverage |
 | --- | --- |
 | Backend | Ruff, mypy, the complete pytest suite, migrations, disposable PostgreSQL 18, Redis 7 and a Celery worker; locked frontend tools and pinned fixtures for cross-language and historical regression checks |
@@ -43,12 +62,37 @@ Finish client generation before running frontend tests: generation replaces the
 client directory. Vitest uses two workers to avoid CPU contention in large DOM
 and accessibility tests; assertions and timeouts remain unchanged.
 
+The focused session-renewal browser regression uses synthetic HTTP responses and
+requires no backend or account credentials. After building, serve the frontend
+in one terminal with `cd frontend && npm exec vite -- preview --host 127.0.0.1
+--port 4179 --strictPort`. From the repository root in another terminal, run
+`PLAYWRIGHT_BASE_URL=http://127.0.0.1:4179 npm --prefix frontend run e2e --
+session-renewal.spec.ts`. It checks renewal after inactivity, preservation of
+unsaved form input, revoked-session redirects, retry after a temporary service
+failure and serialized refresh requests from two browser tabs. This focused
+browser check supplements the ordinary Vitest session regression tests.
+
 The frozen Phase 4 API-scope check uses a recorded GSD verdict bound to the exact
 plan contents in `tools/phase4_api_scope_receipt.json`. Any changed or added plan
 or coverage declaration requires rerunning and reviewing that workflow check.
 Application tests do not depend on a developer's private GSD installation path.
 The performance baseline is a SHA-256-checked source fixture, so a fresh public
 Git history does not need the original development commits.
+
+The smoke also verifies [approval commits](approval-branches.md): consecutive
+approvals become separate commits on one working branch, and a PR is created only
+after the explicit browser action. The scenario also configures approval branches
+through the admin interface and rejects a repeated approval without another commit.
+Its import source is the working branch: after reimporting an approval, the next
+approval creates a new commit and the earlier approval remains awaiting the PR
+destination. Reimporting alone must not report target integration.
+It checks 320-pixel and 200% zoom layouts and uses a synthetic Bitbucket provider.
+It also verifies the translation badges through pending, approved/awaiting-target
+and integrated states, using a real Celery check against synthetic target contents.
+Target verification must not create another commit or pull request.
+It also imports a shared MOKO catalog with unrelated duplicate keys, saves two
+approved edits as sequential commits, preserves every unrelated byte and verifies
+that no PR is opened for that product.
 
 ## Release boundary
 
@@ -82,3 +126,10 @@ require an up-to-date branch and resolved conversations, and disable force pushe
 and branch deletion. Keep the standard administrator recovery bypass. No independent
 reviewer is mandated for the single-maintainer repository. Workflows have read-only
 permissions by default; only the Pages deploy job receives Pages/OIDC write access.
+
+The local Mac relay has synthetic tests for authentication, revision/patch binding,
+request/output bounds and actual Seatbelt file/network restrictions (the latter runs
+only on macOS). Run `backend/.venv/bin/python -m pytest
+backend/tests/unit/localization/test_compose_macos.py`. A real private Android render
+remains a local integration check; no private Android source or translations belong
+in application CI fixtures.

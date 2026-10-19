@@ -312,3 +312,26 @@ def decode_submission_review(payload: bytes) -> PreparedSubmissionReview:
         return _review_proof(_decode(envelope["review"], _Budget()))
     except ValueError, TypeError, AttributeError, RecursionError, KeyError:
         raise _invalid() from None
+
+
+def encode_approval_snapshot(
+    value: CapturedWritebackAuthority | tuple[WriteEdit | WriteInsert, ...],
+) -> bytes:
+    """Closed snapshot for approval history; it is not ongoing write authorization."""
+    output = json.dumps(_encode(value, _Budget()), separators=(",", ":")).encode()
+    if len(output) > MAX_PAYLOAD_BYTES:
+        raise _invalid()
+    return output
+
+
+def decode_approval_snapshot(
+    payload: bytes,
+) -> CapturedWritebackAuthority | tuple[WriteEdit | WriteInsert, ...]:
+    if not isinstance(payload, bytes) or len(payload) > MAX_PAYLOAD_BYTES:
+        raise _invalid()
+    value = _decode(json.loads(payload, object_pairs_hook=_unique), _Budget())
+    if type(value) is CapturedWritebackAuthority:
+        return value
+    if type(value) is tuple and all(type(v) in (WriteEdit, WriteInsert) for v in value):
+        return value
+    raise _invalid()

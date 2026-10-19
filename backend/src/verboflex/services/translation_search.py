@@ -15,8 +15,9 @@ from sqlalchemy.sql.elements import TextClause
 
 from verboflex.auth.product_access import visible_product_sql
 from verboflex.localization.graphemes import grapheme_count
-from verboflex.services.product_summary import _WHITESPACE
+from verboflex.services.product_summary import _ACTIVE_MAPPING_SQL, _WHITESPACE
 from verboflex.services.signed_cursor import InvalidSignedCursor, SignedCursorCodec
+from verboflex.services.source_fallback import SOURCE_FALLBACK_SQL
 
 SEARCH_PAGE_SIZE = 50
 MAX_SEARCH_QUERY_CHARS = 256
@@ -26,7 +27,7 @@ MAX_OPTION_COUNT = 500
 MAX_GROUP_VALUE_COUNT = 10_000
 _ZERO_UUID = UUID(int=0)
 _AUTHORIZED_ACTIVE_PRODUCTS_SQL = (
-    "SELECT id, display_name, name_key FROM products "
+    "SELECT id, display_name, name_key, active_revision_id FROM products "
     "WHERE is_active AND deleted_at IS NULL /* product_access */"
 )
 
@@ -104,6 +105,8 @@ class PendingTranslationSummary:
     state: StateFilter
     reconciliation_required: bool
     value_count: int
+    target_branch: str | None = None
+    target_integrated: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,6 +249,8 @@ class PendingTranslationDetail:
     updated_by: UUID
     updated_at: datetime
     values: tuple[PendingTranslationValueDetail, ...]
+    target_branch: str | None = None
+    target_integrated: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,10 +338,13 @@ def _scope_digest(
         _scoped(
             text(
                 "SELECT product.id AS product_id, scope.id AS scope_id, "
-                "scope.active_execution_id, scope.dataset_version "
+                "scope.active_execution_id, scope.dataset_version, "
+                "coalesce((SELECT policy.version FROM source_fallback_policies policy "
+                "WHERE policy.product_id = product.id), 0) AS source_fallback_version "
                 f"FROM ({_AUTHORIZED_ACTIVE_PRODUCTS_SQL}) AS product "
                 "JOIN localization_scopes AS scope ON scope.product_id = product.id "
                 "WHERE scope.active_execution_id IS NOT NULL "
+                f"AND {_ACTIVE_MAPPING_SQL} "
                 "ORDER BY product.id, scope.id "
                 "FOR SHARE OF product, scope"
             ),
@@ -351,6 +359,7 @@ def _scope_digest(
                 str(row["scope_id"]),
                 str(row["active_execution_id"]),
                 row["dataset_version"],
+                row["source_fallback_version"],
             ]
             for row in rows
         ],
@@ -359,10 +368,12 @@ def _scope_digest(
         proposals = session.execute(
             _scoped(
                 text(f"""
-            SELECT proposal.id, proposal.version, proposal.state, proposal.reconciliation_required
+            SELECT proposal.id, proposal.version, proposal.state, proposal.reconciliation_required,
+                   proposal.target_branch, proposal.target_commit_hash
             FROM ({_AUTHORIZED_ACTIVE_PRODUCTS_SQL}) AS product
             JOIN localization_scopes AS scope ON scope.product_id = product.id
               AND scope.active_execution_id IS NOT NULL
+              AND {_ACTIVE_MAPPING_SQL}
             JOIN translation_keys AS key ON key.scope_id = scope.id AND key.product_id = product.id
             JOIN translation_proposals AS proposal ON proposal.translation_key_id = key.id
             WHERE (CAST(:product_id AS uuid) IS NULL OR product.id = :product_id)
@@ -516,6 +527,9 @@ _SOURCE_COMPARISON_SQL = """
     ) AS revisions
 """
 
+_FALLBACK = SOURCE_FALLBACK_SQL.format(
+    base_language="mapping.base_language", product_id="key.product_id"
+)
 _SEARCH_SQL = text(
     rf"""
 WITH authorized_products AS (
@@ -530,6 +544,11 @@ WITH authorized_products AS (
         scope.current_mapping_id AS mapping_id,
         scope.id AS scope_id,
         mapping.base_language,
+        bool_and(value.source_text IS NOT NULL AND value.translated_text IS NOT NULL
+            AND EXISTS (SELECT 1 FROM translation_value_locators AS embedded_locator
+                WHERE embedded_locator.value_id = value.id AND embedded_locator.format = 'qt_ts'
+                  AND embedded_locator.repository_side IN ('direct', 'translations')))
+            AS embedded_translation,
         casefold(key.raw_key COLLATE pg_unicode_fast) COLLATE "C" AS stable_key,
         value.language,
         CASE
@@ -557,7 +576,7 @@ WITH authorized_products AS (
         (array_agg(source_projection.source_text ORDER BY value.is_deleted, value.id))[1]
             AS source_text,
         bool_or(source_projection.source_changed) AS source_changed,
-        bool_or(NOT value.is_deleted AND
+        bool_or(NOT value.is_deleted AND NOT fallback.applies AND
             (value.translated_text IS NULL OR btrim(value.translated_text, :whitespace) = ''))
             AS needs_translation,
         (array_agg(value.translated_text ORDER BY value.is_deleted, value.id)
@@ -577,6 +596,7 @@ WITH authorized_products AS (
     JOIN localization_scopes AS scope
       ON scope.product_id = product.id
      AND scope.active_execution_id IS NOT NULL
+     AND {_ACTIVE_MAPPING_SQL}
     JOIN translation_keys AS key
       ON key.scope_id = scope.id
      AND key.product_id = product.id
@@ -584,6 +604,9 @@ WITH authorized_products AS (
       ON value.scope_id = scope.id
      AND value.translation_key_id = key.id
     LEFT JOIN product_repository_mappings AS mapping ON mapping.id = scope.current_mapping_id
+    CROSS JOIN LATERAL (SELECT coalesce((
+        {_FALLBACK}
+    ), false) AS applies) AS fallback
     LEFT JOIN LATERAL (
         SELECT key.id AS key_id, scope.id AS scope_id,
                value.language AS language, mapping.base_language,
@@ -668,7 +691,8 @@ WITH authorized_products AS (
     ) AS pending_work ON CAST(:work_status AS text) IS NOT NULL
     WHERE CAST(:work_status AS text) IS NULL OR (
         NOT raw_grouped.is_deleted AND raw_grouped.base_language IS NOT NULL
-        AND raw_grouped.language <> raw_grouped.base_language AND (
+        AND (raw_grouped.language <> raw_grouped.base_language
+            OR raw_grouped.embedded_translation) AND (
             (CAST(:work_status AS text) = 'source_changed' AND raw_grouped.source_changed)
             OR (CAST(:work_status AS text) = 'needs_review' AND proposal.state = 'draft'
                 AND NOT proposal.reconciliation_required AND pending_work.fresh)
@@ -701,10 +725,15 @@ SELECT page.*, validity.cursor_valid, mapping.base_language AS source_language,
            AS provenance_repository_name,
        proposal.version AS pending_version,
        proposal.state AS pending_state,
+       proposal.target_branch,
+       (proposal.state='approved' AND proposal.target_commit_hash IS NOT NULL) AS target_integrated,
        CASE WHEN proposal.id IS NULL THEN NULL ELSE
-           proposal.reconciliation_required
+           (proposal.reconciliation_required
            OR coalesce(pending_projection.basis_stale, false)
-           OR coalesce(pending_projection.pending_value_count, 0) <> page.value_count
+           OR coalesce(pending_projection.pending_value_count, 0) <> page.value_count)
+           AND NOT (proposal.state='approved' AND proposal.target_branch IS NOT NULL
+               AND pending_projection.pending_value_count = page.value_count
+               AND coalesce(pending_projection.matches_imported, false))
        END AS pending_reconciliation_required,
        pending_projection.pending_value_count,
        coalesce(discussion.comment_count, 0)::integer AS comment_count
@@ -719,12 +748,17 @@ LEFT JOIN translation_proposals AS proposal
 LEFT JOIN LATERAL (
     SELECT
         count(*)::integer AS pending_value_count,
+        bool_and(coalesce(NOT member.is_deleted
+            AND member.selector_version = pending.selector_version
+            AND member.selector_digest = pending.selector_digest
+            AND member.display_text = pending.proposed_text, false)) AS matches_imported,
         bool_or(
             latest.revision_number IS NULL
             OR pending.basis_revision_number <> latest.revision_number
             OR pending.basis_digest <> latest.revision_digest
         ) AS basis_stale
     FROM translation_proposal_values AS pending
+    LEFT JOIN translation_values AS member ON member.id=pending.translation_value_id
     LEFT JOIN LATERAL (
         SELECT revision.revision_number, revision.revision_digest
         FROM translation_value_revisions AS revision
@@ -761,6 +795,7 @@ WITH authorized_products AS (
     JOIN localization_scopes AS scope
       ON scope.product_id = product.id
      AND scope.active_execution_id IS NOT NULL
+     AND {_ACTIVE_MAPPING_SQL}
     CROSS JOIN LATERAL jsonb_each(scope.language_counts) AS counts
     WHERE (counts.value->>0)::bigint > 0
       AND (CAST(:product_id AS uuid) IS NULL OR product.id = CAST(:product_id AS uuid))
@@ -798,6 +833,7 @@ WITH authorized_products AS (
     JOIN localization_scopes AS scope
       ON scope.product_id = product.id
      AND scope.active_execution_id IS NOT NULL
+     AND {_ACTIVE_MAPPING_SQL}
     JOIN translation_keys AS key
       ON key.scope_id = scope.id
      AND key.product_id = product.id
@@ -913,6 +949,7 @@ WITH authorized_products AS (
     JOIN localization_scopes AS scope
       ON scope.product_id = product.id
      AND scope.active_execution_id IS NOT NULL
+     AND {_ACTIVE_MAPPING_SQL}
     JOIN translation_keys AS key
       ON key.scope_id = scope.id
      AND key.product_id = product.id
@@ -931,12 +968,14 @@ WITH authorized_products AS (
       )
 )
 SELECT proposal.version, proposal.state, proposal.reconciliation_required,
+       proposal.target_branch, proposal.target_commit_hash,
        proposal.updated_by, proposal.updated_at,
        pending.translation_value_id, pending.selector_version,
        pending.selector_digest, pending.basis_revision_number,
        pending.basis_digest, pending.proposed_text,
        current_value.id AS current_value_id,
        current_value.is_deleted AS current_value_deleted,
+       current_value.display_text AS current_text,
        current_value.effective_max_chars,
        latest.revision_number AS current_revision_number,
        latest.revision_digest AS current_revision_digest
@@ -976,6 +1015,7 @@ WITH source_anchor AS (
     FROM ({_AUTHORIZED_ACTIVE_PRODUCTS_SQL}) AS product
     JOIN localization_scopes AS scope ON scope.product_id = product.id
       AND scope.active_execution_id IS NOT NULL
+     AND {_ACTIVE_MAPPING_SQL}
     JOIN translation_keys AS key ON key.scope_id = scope.id AND key.product_id = product.id
     JOIN translation_values AS candidate ON candidate.translation_key_id = key.id
       AND candidate.scope_id = scope.id
@@ -1139,6 +1179,19 @@ def _pending_detail(
         or basis_stale
         or len(proposal_rows) != current_value_count
     )
+    integrated = first["state"] == "approved" and first["target_commit_hash"] is not None
+    if (
+        first["state"] == "approved"
+        and first["target_branch"] is not None
+        and len(proposal_rows) == current_value_count
+        and all(
+            row["current_value_id"] is not None
+            and not row["current_value_deleted"]
+            and row["current_text"] == row["proposed_text"]
+            for row in proposal_rows
+        )
+    ):
+        reconciliation_required = False
     values: list[PendingTranslationValueDetail] = []
     for row in proposal_rows:
         text_value = str(row["proposed_text"])
@@ -1174,6 +1227,8 @@ def _pending_detail(
         updated_by=UUID(str(first["updated_by"])),
         updated_at=cast(datetime, first["updated_at"]),
         values=tuple(values),
+        target_branch=first["target_branch"],
+        target_integrated=integrated,
     )
 
 
@@ -1424,6 +1479,8 @@ def search_translations(
                     state=cast(StateFilter, row["pending_state"]),
                     reconciliation_required=row["pending_reconciliation_required"],
                     value_count=row["pending_value_count"],
+                    target_branch=row["target_branch"],
+                    target_integrated=row["target_integrated"],
                 )
                 if row["pending_version"] is not None
                 else None

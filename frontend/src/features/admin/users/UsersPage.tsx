@@ -370,6 +370,12 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
         body: request,
       });
       if (result.data === undefined) {
+        if (
+          responseStatus(result) === 422 &&
+          result.error?.detail === "Selected products unavailable"
+        ) {
+          return { status: "products-unavailable" };
+        }
         return responseStatus(result) === 409
           ? { status: "conflict", owner: "email" }
           : { status: "error" };
@@ -389,6 +395,12 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
       body: request,
     });
     if (result.data === undefined) {
+      if (
+        responseStatus(result) === 409 &&
+        result.error?.detail === "Product access changed or unavailable"
+      ) {
+        return { status: "products-conflict" };
+      }
       return responseStatus(result) === 409
         ? { status: "conflict", owner: "dialog" }
         : { status: "error" };
@@ -608,6 +620,7 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
 
       {dialogOpen ? (
         <UserDialog
+          accessToken={accessToken}
           key={selectedUser?.id ?? "new-user"}
           open={dialogOpen}
           user={selectedUser}

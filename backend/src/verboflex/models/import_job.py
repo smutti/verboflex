@@ -18,6 +18,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -153,6 +154,10 @@ class ImportExecution(Base):
     """One immutable execution identity behind the stable logical import."""
 
     __tablename__ = "import_executions"
+
+    code_catalog: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
     __table_args__ = (
         CheckConstraint(
             "state IN ('queued', 'running', 'succeeded', 'failed')",

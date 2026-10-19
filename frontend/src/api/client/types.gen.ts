@@ -685,6 +685,7 @@ export type AdminMappingResponse = {
      * Candidate Version
      */
     candidate_version: number;
+    code_source?: CodeSourceConfig | null;
     /**
      * Default Target Branch
      */
@@ -1528,6 +1529,7 @@ export type AdminSeparateMappingWriteRequest = {
      * Allowed Target Branches
      */
     allowed_target_branches: Array<string>;
+    code_source?: CodeSourceConfig | null;
     /**
      * Default Target Branch
      */
@@ -1584,7 +1586,7 @@ export type AdminSourceFileResponse = {
 /**
  * AdminUserCreateRequest
  *
- * Create one immutable corporate-email identity with additive roles.
+ * Create one identity with global roles and optional product memberships.
  */
 export type AdminUserCreateRequest = {
     /**
@@ -1595,6 +1597,10 @@ export type AdminUserCreateRequest = {
      * Email
      */
     email: string;
+    /**
+     * Product Assignments
+     */
+    product_assignments?: Array<AdminUserProductAssignment>;
     /**
      * Roles
      */
@@ -1654,6 +1660,84 @@ export type AdminUserListResponse = {
 };
 
 /**
+ * AdminUserProductAccess
+ *
+ * One non-deleted product and the selected account's explicit membership.
+ */
+export type AdminUserProductAccess = {
+    /**
+     * Is Active
+     */
+    is_active: boolean;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Role
+     */
+    role: 'viewer' | 'translator' | 'product_manager_reviewer' | 'product_owner' | null;
+    /**
+     * Version
+     */
+    version: string | null;
+};
+
+/**
+ * AdminUserProductAssignment
+ *
+ * One initial product membership for a newly created account.
+ */
+export type AdminUserProductAssignment = {
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Role
+     */
+    role: 'viewer' | 'translator' | 'product_manager_reviewer' | 'product_owner';
+};
+
+/**
+ * AdminUserProductChange
+ *
+ * One explicit membership change, guarded by the version shown to the admin.
+ */
+export type AdminUserProductChange = {
+    /**
+     * Expected Version
+     */
+    expected_version: string | null;
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Role
+     */
+    role: 'viewer' | 'translator' | 'product_manager_reviewer' | 'product_owner' | null;
+};
+
+/**
+ * AdminUserProductsResponse
+ */
+export type AdminUserProductsResponse = {
+    /**
+     * Items
+     */
+    items: Array<AdminUserProductAccess>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
  * AdminUserResponse
  *
  * Ordinary internal-user projection with no credential material.
@@ -1695,6 +1779,10 @@ export type AdminUserUpdateRequest = {
      * Display Name
      */
     display_name: string;
+    /**
+     * Product Assignments
+     */
+    product_assignments?: Array<AdminUserProductChange>;
     /**
      * Roles
      */
@@ -1981,6 +2069,78 @@ export type BodyIssueToken = {
 };
 
 /**
+ * BranchChange
+ */
+export type BranchChange = {
+    /**
+     * Can Retry
+     */
+    can_retry: boolean;
+    /**
+     * Commit Hash
+     */
+    commit_hash: string | null;
+    /**
+     * Commit Url
+     */
+    commit_url: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Error Code
+     */
+    error_code: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'commit' | 'pull_request';
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Pr Url
+     */
+    pr_url: string | null;
+    /**
+     * Sequence
+     */
+    sequence: number;
+    /**
+     * State
+     */
+    state: 'queued' | 'running' | 'sending' | 'committed' | 'open' | 'merged' | 'declined' | 'blocked';
+};
+
+/**
+ * BranchMappingChoice
+ */
+export type BranchMappingChoice = {
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Repository
+     */
+    repository: string;
+    /**
+     * Source Branch
+     */
+    source_branch: string;
+    /**
+     * Workflow Id
+     */
+    workflow_id: string | null;
+};
+
+/**
  * BranchReceiptResponse
  */
 export type BranchReceiptResponse = {
@@ -1996,6 +2156,82 @@ export type BranchReceiptResponse = {
      * Name
      */
     name: string;
+};
+
+/**
+ * BranchWorkflowChoice
+ */
+export type BranchWorkflowChoice = {
+    /**
+     * Active
+     */
+    active: boolean;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Repository
+     */
+    repository: string;
+    /**
+     * Target Branch
+     */
+    target_branch: string;
+    /**
+     * Work Branch
+     */
+    work_branch: string;
+};
+
+/**
+ * BranchWorkflowResponse
+ */
+export type BranchWorkflowResponse = {
+    /**
+     * Available Mappings
+     */
+    available_mappings?: Array<BranchMappingChoice>;
+    /**
+     * Can Create Pr
+     */
+    can_create_pr?: boolean;
+    /**
+     * Can Publish
+     */
+    can_publish?: boolean;
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+    /**
+     * Items
+     */
+    items?: Array<BranchChange>;
+    /**
+     * Next Before
+     */
+    next_before?: number | null;
+    /**
+     * Repository
+     */
+    repository?: string | null;
+    /**
+     * Target Branch
+     */
+    target_branch?: string | null;
+    /**
+     * Work Branch
+     */
+    work_branch?: string | null;
+    /**
+     * Workflow Id
+     */
+    workflow_id?: string | null;
+    /**
+     * Workflows
+     */
+    workflows?: Array<BranchWorkflowChoice>;
 };
 
 /**
@@ -2550,6 +2786,191 @@ export type ChangeSetValuesPage = {
 };
 
 /**
+ * CodeCatalogEntry
+ */
+export type CodeCatalogEntry = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Missing Base
+     */
+    missing_base: boolean;
+    /**
+     * Missing Translation
+     */
+    missing_translation: boolean;
+};
+
+/**
+ * CodeCatalogPage
+ */
+export type CodeCatalogPage = {
+    /**
+     * Items
+     */
+    items: Array<CodeCatalogEntry>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+    /**
+     * Orphan Count
+     */
+    orphan_count: number;
+};
+
+/**
+ * CodeContextResponse
+ */
+export type CodeContextResponse = {
+    /**
+     * Capture Functions
+     */
+    capture_functions: Array<string>;
+    /**
+     * Code Commit
+     */
+    code_commit?: string | null;
+    /**
+     * Configured
+     */
+    configured: boolean;
+    /**
+     * Occurrences
+     */
+    occurrences: Array<CodeOccurrence>;
+    /**
+     * Occurrences Truncated
+     */
+    occurrences_truncated?: boolean;
+    /**
+     * Previews
+     */
+    previews: Array<CodePreview>;
+};
+
+/**
+ * CodeOccurrence
+ */
+export type CodeOccurrence = {
+    /**
+     * Column
+     */
+    column: number;
+    /**
+     * Function
+     */
+    function: string | null;
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Kind
+     */
+    kind: 'reference' | 'declaration' | 'call';
+    /**
+     * Line
+     */
+    line: number;
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Symbol
+     */
+    symbol: string;
+};
+
+/**
+ * CodePreview
+ */
+export type CodePreview = {
+    /**
+     * Annotation
+     */
+    annotation: string;
+    /**
+     * Evidence
+     */
+    evidence?: 'static_reference';
+    /**
+     * Function
+     */
+    function: string;
+    /**
+     * Keys
+     */
+    keys: Array<string>;
+    /**
+     * Line
+     */
+    line: number;
+    /**
+     * Path
+     */
+    path: string;
+};
+
+/**
+ * CodeSourceConfig
+ */
+export type CodeSourceConfig = {
+    compose?: ComposeCaptureConfig | null;
+    /**
+     * Declaration Symbols
+     */
+    declaration_symbols?: Array<string>;
+    /**
+     * Localization Calls
+     */
+    localization_calls?: Array<string>;
+    /**
+     * Resource Roots
+     */
+    resource_roots?: Array<string>;
+};
+
+/**
+ * CodeSourcePage
+ */
+export type CodeSourcePage = {
+    /**
+     * Items
+     */
+    items: Array<CodeSourceSummary>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * CodeSourceSummary
+ */
+export type CodeSourceSummary = {
+    /**
+     * Key Count
+     */
+    key_count: number;
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Missing Count
+     */
+    missing_count: number;
+    /**
+     * Scope Id
+     */
+    scope_id: string;
+};
+
+/**
  * CommentAnchorWindowResponse
  */
 export type CommentAnchorWindowResponse = {
@@ -2587,6 +3008,56 @@ export type CommitReceiptResponse = {
      * Parent
      */
     parent: string;
+};
+
+/**
+ * ComposeCaptureConfig
+ *
+ * Reviewed runner and callable fixture previews; no repository commands.
+ */
+export type ComposeCaptureConfig = {
+    /**
+     * Height Dp
+     */
+    height_dp?: number;
+    /**
+     * Module
+     */
+    module?: string;
+    /**
+     * Preview Functions
+     */
+    preview_functions: Array<string>;
+    /**
+     * Runner Profile
+     */
+    runner_profile: string;
+    /**
+     * Variant
+     */
+    variant?: string;
+    /**
+     * Width Dp
+     */
+    width_dp?: number;
+};
+
+/**
+ * ConfigureBranchWorkflow
+ */
+export type ConfigureBranchWorkflow = {
+    /**
+     * Mapping Id
+     */
+    mapping_id: string;
+    /**
+     * Target Branch
+     */
+    target_branch: string;
+    /**
+     * Work Branch
+     */
+    work_branch: string;
 };
 
 /**
@@ -3586,6 +4057,14 @@ export type PendingTranslationDetailResponse = {
      */
     state: 'draft' | 'approved' | 'rejected';
     /**
+     * Target Branch
+     */
+    target_branch?: string | null;
+    /**
+     * Target Integrated
+     */
+    target_integrated?: boolean;
+    /**
      * Updated At
      */
     updated_at: string;
@@ -3615,6 +4094,14 @@ export type PendingTranslationSummaryResponse = {
      * State
      */
     state: 'draft' | 'approved' | 'rejected';
+    /**
+     * Target Branch
+     */
+    target_branch?: string | null;
+    /**
+     * Target Integrated
+     */
+    target_integrated?: boolean;
     /**
      * Value Count
      */
@@ -4416,6 +4903,73 @@ export type SaveTranslationProposalValueRequest = {
 };
 
 /**
+ * ScreenshotPage
+ */
+export type ScreenshotPage = {
+    /**
+     * Items
+     */
+    items: Array<ScreenshotResponse>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * ScreenshotRequest
+ */
+export type ScreenshotRequest = {
+    /**
+     * Preview Function
+     */
+    preview_function: string;
+    /**
+     * Proposal Version
+     */
+    proposal_version?: number | null;
+    /**
+     * Theme
+     */
+    theme?: 'light' | 'dark';
+};
+
+/**
+ * ScreenshotResponse
+ */
+export type ScreenshotResponse = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Error Code
+     */
+    error_code: string | null;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Image Digest
+     */
+    image_digest: string | null;
+    /**
+     * Input Digest
+     */
+    input_digest: string;
+    request: ScreenshotRequest;
+    /**
+     * State
+     */
+    state: 'queued' | 'rendering' | 'succeeded' | 'failed' | 'cancelled' | 'expired';
+};
+
+/**
  * SelectedProposal
  */
 export type SelectedProposal = {
@@ -4427,6 +4981,58 @@ export type SelectedProposal = {
      * Proposal Id
      */
     proposal_id: string;
+};
+
+/**
+ * SourceFallbackResponse
+ */
+export type SourceFallbackResponse = {
+    /**
+     * Available Languages
+     */
+    available_languages: Array<string>;
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+    /**
+     * Language
+     */
+    language: string | null;
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Source Texts
+     */
+    source_texts: Array<string>;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * SourceFallbackWrite
+ */
+export type SourceFallbackWrite = {
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Language
+     */
+    language: string | null;
+    /**
+     * Source Texts
+     */
+    source_texts: Array<string>;
 };
 
 /**
@@ -4916,6 +5522,10 @@ export type TranslationErrorResponse = {
  */
 export type TranslationGroupDetailResponse = {
     /**
+     * Approval Commits Enabled
+     */
+    approval_commits_enabled?: boolean;
+    /**
      * Base Language
      */
     base_language: string | null;
@@ -5304,6 +5914,10 @@ export type TranslationLanguageSlot = {
      */
     text_truncated: boolean;
     /**
+     * Uses Source Fallback
+     */
+    uses_source_fallback?: boolean;
+    /**
      * Value Count
      */
     value_count: number;
@@ -5459,6 +6073,14 @@ export type TranslationProposalResponse = {
      * State
      */
     state: 'draft' | 'approved' | 'rejected';
+    /**
+     * Target Branch
+     */
+    target_branch?: string | null;
+    /**
+     * Target Integrated
+     */
+    target_integrated?: boolean;
     /**
      * Translation Group Id
      */
@@ -7857,6 +8479,98 @@ export type GetAdminProductReactivationEligibilityResponses = {
 
 export type GetAdminProductReactivationEligibilityResponse = GetAdminProductReactivationEligibilityResponses[keyof GetAdminProductReactivationEligibilityResponses];
 
+export type GetAdminSourceFallbackData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/source-fallback';
+};
+
+export type GetAdminSourceFallbackErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAdminSourceFallbackError = GetAdminSourceFallbackErrors[keyof GetAdminSourceFallbackErrors];
+
+export type GetAdminSourceFallbackResponses = {
+    /**
+     * Successful Response
+     */
+    200: SourceFallbackResponse;
+};
+
+export type GetAdminSourceFallbackResponse = GetAdminSourceFallbackResponses[keyof GetAdminSourceFallbackResponses];
+
+export type UpdateAdminSourceFallbackData = {
+    body: SourceFallbackWrite;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/source-fallback';
+};
+
+export type UpdateAdminSourceFallbackErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateAdminSourceFallbackError = UpdateAdminSourceFallbackErrors[keyof UpdateAdminSourceFallbackErrors];
+
+export type UpdateAdminSourceFallbackResponses = {
+    /**
+     * Successful Response
+     */
+    200: SourceFallbackResponse;
+};
+
+export type UpdateAdminSourceFallbackResponse = UpdateAdminSourceFallbackResponses[keyof UpdateAdminSourceFallbackResponses];
+
 export type GetAdminProductSummaryData = {
     body?: never;
     path: {
@@ -8406,6 +9120,57 @@ export type DeactivateAdminUserResponses = {
 
 export type DeactivateAdminUserResponse = DeactivateAdminUserResponses[keyof DeactivateAdminUserResponses];
 
+export type ListAdminUserProductsData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/users/{user_id}/products';
+};
+
+export type ListAdminUserProductsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ListAdminUserProductsError = ListAdminUserProductsErrors[keyof ListAdminUserProductsErrors];
+
+export type ListAdminUserProductsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminUserProductsResponse;
+};
+
+export type ListAdminUserProductsResponse = ListAdminUserProductsResponses[keyof ListAdminUserProductsResponses];
+
 export type ReactivateAdminUserData = {
     body?: never;
     path: {
@@ -8819,6 +9584,65 @@ export type ReadHealthResponses = {
 };
 
 export type ReadHealthResponse = ReadHealthResponses[keyof ReadHealthResponses];
+
+export type ListCodeKeysData = {
+    body?: never;
+    path: {
+        /**
+         * Scope Id
+         */
+        scope_id: string;
+    };
+    query?: {
+        /**
+         * After
+         */
+        after?: string | null;
+    };
+    url: '/api/v1/localization-scopes/{scope_id}/code-keys';
+};
+
+export type ListCodeKeysErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type ListCodeKeysError = ListCodeKeysErrors[keyof ListCodeKeysErrors];
+
+export type ListCodeKeysResponses = {
+    /**
+     * Successful Response
+     */
+    200: CodeCatalogPage;
+};
+
+export type ListCodeKeysResponse = ListCodeKeysResponses[keyof ListCodeKeysResponses];
 
 export type GetConsentApiV1McpAuthorizationRequestIdGetData = {
     body?: never;
@@ -9568,6 +10392,144 @@ export type ReviewAuthoringRequestResponses = {
 
 export type ReviewAuthoringRequestResponse = ReviewAuthoringRequestResponses[keyof ReviewAuthoringRequestResponses];
 
+export type GetBranchWorkflowData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: {
+        /**
+         * Before
+         */
+        before?: number | null;
+        /**
+         * Workflow Id
+         */
+        workflow_id?: string | null;
+    };
+    url: '/api/v1/products/{product_id}/branch-workflow';
+};
+
+export type GetBranchWorkflowErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetBranchWorkflowError = GetBranchWorkflowErrors[keyof GetBranchWorkflowErrors];
+
+export type GetBranchWorkflowResponses = {
+    /**
+     * Successful Response
+     */
+    200: BranchWorkflowResponse;
+};
+
+export type GetBranchWorkflowResponse = GetBranchWorkflowResponses[keyof GetBranchWorkflowResponses];
+
+export type ConfigureBranchWorkflowData = {
+    body: ConfigureBranchWorkflow;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/branch-workflow';
+};
+
+export type ConfigureBranchWorkflowErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConfigureBranchWorkflowError = ConfigureBranchWorkflowErrors[keyof ConfigureBranchWorkflowErrors];
+
+export type ConfigureBranchWorkflowResponses = {
+    /**
+     * Successful Response
+     */
+    200: BranchWorkflowResponse;
+};
+
+export type ConfigureBranchWorkflowResponse = ConfigureBranchWorkflowResponses[keyof ConfigureBranchWorkflowResponses];
+
+export type RetryBranchChangeData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/branch-workflow/jobs/{job_id}/retry';
+};
+
+export type RetryBranchChangeErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetryBranchChangeError = RetryBranchChangeErrors[keyof RetryBranchChangeErrors];
+
+export type RetryBranchChangeResponses = {
+    /**
+     * Successful Response
+     */
+    202: BranchWorkflowResponse;
+};
+
+export type RetryBranchChangeResponse = RetryBranchChangeResponses[keyof RetryBranchChangeResponses];
+
+export type CreateBranchPullRequestData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: {
+        /**
+         * Workflow Id
+         */
+        workflow_id?: string | null;
+    };
+    url: '/api/v1/products/{product_id}/branch-workflow/pull-request';
+};
+
+export type CreateBranchPullRequestErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateBranchPullRequestError = CreateBranchPullRequestErrors[keyof CreateBranchPullRequestErrors];
+
+export type CreateBranchPullRequestResponses = {
+    /**
+     * Successful Response
+     */
+    202: BranchWorkflowResponse;
+};
+
+export type CreateBranchPullRequestResponse = CreateBranchPullRequestResponses[keyof CreateBranchPullRequestResponses];
+
 export type GetChangeSetCandidatesData = {
     body?: never;
     path: {
@@ -10069,6 +11031,65 @@ export type GetChangeSetValuesResponses = {
 };
 
 export type GetChangeSetValuesResponse = GetChangeSetValuesResponses[keyof GetChangeSetValuesResponses];
+
+export type ListProductCodeSourcesData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: {
+        /**
+         * After
+         */
+        after?: string | null;
+    };
+    url: '/api/v1/products/{product_id}/code-sources';
+};
+
+export type ListProductCodeSourcesErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type ListProductCodeSourcesError = ListProductCodeSourcesErrors[keyof ListProductCodeSourcesErrors];
+
+export type ListProductCodeSourcesResponses = {
+    /**
+     * Successful Response
+     */
+    200: CodeSourcePage;
+};
+
+export type ListProductCodeSourcesResponse = ListProductCodeSourcesResponses[keyof ListProductCodeSourcesResponses];
 
 export type ListGlossaryTermsData = {
     body?: never;
@@ -11135,6 +12156,349 @@ export type ListTranslationOptionsResponses = {
 };
 
 export type ListTranslationOptionsResponse = ListTranslationOptionsResponses[keyof ListTranslationOptionsResponses];
+
+export type GetTranslationCodeContextData = {
+    body?: never;
+    path: {
+        /**
+         * Group Id
+         */
+        group_id: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{group_id}/code-context';
+};
+
+export type GetTranslationCodeContextErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetTranslationCodeContextError = GetTranslationCodeContextErrors[keyof GetTranslationCodeContextErrors];
+
+export type GetTranslationCodeContextResponses = {
+    /**
+     * Successful Response
+     */
+    200: CodeContextResponse;
+};
+
+export type GetTranslationCodeContextResponse = GetTranslationCodeContextResponses[keyof GetTranslationCodeContextResponses];
+
+export type ListTranslationScreenshotsData = {
+    body?: never;
+    path: {
+        /**
+         * Group Id
+         */
+        group_id: string;
+    };
+    query?: {
+        /**
+         * After
+         */
+        after?: string | null;
+    };
+    url: '/api/v1/translations/{group_id}/screenshots';
+};
+
+export type ListTranslationScreenshotsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type ListTranslationScreenshotsError = ListTranslationScreenshotsErrors[keyof ListTranslationScreenshotsErrors];
+
+export type ListTranslationScreenshotsResponses = {
+    /**
+     * Successful Response
+     */
+    200: ScreenshotPage;
+};
+
+export type ListTranslationScreenshotsResponse = ListTranslationScreenshotsResponses[keyof ListTranslationScreenshotsResponses];
+
+export type CancelTranslationScreenshotData = {
+    body?: never;
+    path: {
+        /**
+         * Group Id
+         */
+        group_id: string;
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{group_id}/screenshots/{job_id}';
+};
+
+export type CancelTranslationScreenshotErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type CancelTranslationScreenshotError = CancelTranslationScreenshotErrors[keyof CancelTranslationScreenshotErrors];
+
+export type CancelTranslationScreenshotResponses = {
+    /**
+     * Successful Response
+     */
+    200: ScreenshotResponse;
+};
+
+export type CancelTranslationScreenshotResponse = CancelTranslationScreenshotResponses[keyof CancelTranslationScreenshotResponses];
+
+export type GetTranslationScreenshotData = {
+    body?: never;
+    path: {
+        /**
+         * Group Id
+         */
+        group_id: string;
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{group_id}/screenshots/{job_id}';
+};
+
+export type GetTranslationScreenshotErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetTranslationScreenshotError = GetTranslationScreenshotErrors[keyof GetTranslationScreenshotErrors];
+
+export type GetTranslationScreenshotResponses = {
+    /**
+     * Successful Response
+     */
+    200: ScreenshotResponse;
+};
+
+export type GetTranslationScreenshotResponse = GetTranslationScreenshotResponses[keyof GetTranslationScreenshotResponses];
+
+export type RequestTranslationScreenshotData = {
+    body: ScreenshotRequest;
+    path: {
+        /**
+         * Group Id
+         */
+        group_id: string;
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{group_id}/screenshots/{job_id}';
+};
+
+export type RequestTranslationScreenshotErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type RequestTranslationScreenshotError = RequestTranslationScreenshotErrors[keyof RequestTranslationScreenshotErrors];
+
+export type RequestTranslationScreenshotResponses = {
+    /**
+     * Successful Response
+     */
+    202: ScreenshotResponse;
+};
+
+export type RequestTranslationScreenshotResponse = RequestTranslationScreenshotResponses[keyof RequestTranslationScreenshotResponses];
+
+export type GetTranslationScreenshotImageData = {
+    body?: never;
+    path: {
+        /**
+         * Group Id
+         */
+        group_id: string;
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{group_id}/screenshots/{job_id}/image';
+};
+
+export type GetTranslationScreenshotImageErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse | HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ErrorResponse;
+    /**
+     * Service Unavailable
+     */
+    503: ErrorResponse;
+};
+
+export type GetTranslationScreenshotImageError = GetTranslationScreenshotImageErrors[keyof GetTranslationScreenshotImageErrors];
+
+export type GetTranslationScreenshotImageResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type GetTranslationGroupData = {
     body?: never;

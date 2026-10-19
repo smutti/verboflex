@@ -157,6 +157,8 @@ def _response(projection: TranslationProposalProjection) -> TranslationProposalR
         language=projection.language,
         version=projection.version,
         state=projection.state,
+        target_branch=projection.target_branch,
+        target_integrated=projection.target_integrated,
         reconciliation_required=projection.reconciliation_required,
         published=[
             PublishedTranslationValueResponse(

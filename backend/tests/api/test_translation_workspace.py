@@ -157,6 +157,93 @@ def slots(body, index=0):
     return {slot["language"]: slot for slot in body["items"][index]["slots"]}
 
 
+def seed_qt_base_catalog(factory):
+    """Mixed source languages are not translations of the configured base locale."""
+    import hashlib
+
+    product, scope = SEARCH._seed_dataset(factory, name="Qt mixed source", base_language="it-IT")
+    ids = []
+    for index, source in enumerate(("Operazione completata", "Open the message")):
+        group = SEARCH._add_group(
+            factory,
+            product_id=product,
+            scope_id=scope,
+            raw_key=f"message-{index}",
+            language="it-IT",
+            values=({"source_text": source, "translated_text": "", "display_text": ""},),
+        )
+        with factory.begin() as session:
+            value = session.get_one(TranslationValue, group)
+            value.selector_bytes = json.dumps(
+                {"version": 1, "kind": "scalar", "fields": {}}
+            ).encode()
+            value.selector_digest = hashlib.sha256(value.selector_bytes).hexdigest()
+            session.get_one(TranslationValueLocator, group).format = "qt_ts"
+            WORK.revision(session, value, source=source, number=1)
+        ids.append(group)
+    return product, ids
+
+
+def test_qt_base_catalog_keeps_mixed_sources_separate_and_empty_translations_actionable(factory):
+    token = WORK.authority(factory)
+    product, groups = seed_qt_base_catalog(factory)
+    filters = dict(product_id=product, language="it-IT", work_status="needs_translation")
+    response = request(token, **filters)
+    assert response.status_code == 200, response.text
+    assert [item["source_text"] for item in response.json()["items"]] == [
+        "Operazione completata",
+        "Open the message",
+    ]
+    for item, group in zip(response.json()["items"], groups, strict=True):
+        slot = item["slots"][0]
+        assert slot["effective_text"] == ""
+        assert slot["matches_filters"]
+        assert slot["editable"] and slot["edit_field"] == "translated_text"
+        assert slot["group_id"] == str(group)
+    assert len(WORK.request(token, **filters).json()["items"]) == 2
+    # Searching the embedded source must still find the empty Italian translation.
+    assert request(token, **filters, q="Open the message").json()["items"][0]["source_text"] == (
+        "Open the message"
+    )
+    member = WORK.request(token, f"/{groups[1]}").json()["values"][0]
+    saved = asyncio.run(
+        SUPPORT.SUPPORT._request(
+            "PUT",
+            f"/api/v1/translations/{groups[1]}/proposal",
+            token=token,
+            json={
+                "expected_version": 0,
+                "values": [
+                    {
+                        "translation_value_id": member["id"],
+                        "selector_version": member["selector_version"],
+                        "selector_digest": member["selector_digest"],
+                        "basis_revision_number": member["history"][0]["revision_number"],
+                        "basis_digest": member["history"][0]["revision_digest"],
+                        "proposed_text": "Apri il messaggio",
+                    }
+                ],
+            },
+        )
+    )
+    assert saved.status_code == 200, saved.text
+    assert len(request(token, **filters).json()["items"]) == 1
+    assert len(WORK.request(token, **filters).json()["items"]) == 1
+    translated = request(token, product_id=product, q="Open the message").json()["items"][0]
+    assert translated["source_text"] == "Open the message"
+    assert translated["slots"][0]["effective_text"] == "Apri il messaggio"
+    assert request(token, product_id=product, language="it-IT", work_status="needs_review").json()[
+        "items"
+    ]
+    # Rejected/stale proposals cannot hide a missing translation.
+    with factory.begin() as session:
+        session.scalar(select(TranslationProposal)).state = "rejected"
+    assert len(request(token, **filters).json()["items"]) == 2
+    with factory() as session:
+        value = session.get_one(TranslationValue, groups[1])
+        assert value.source_text == "Open the message" and value.translated_text == ""
+
+
 def test_scope_read_projection_tracks_commits_and_rolls_back_with_values(factory):
     _, scope_id, ids = seed_keys(factory, count=1)
     with factory() as session:
@@ -258,9 +345,20 @@ def test_fresh_complete_pending_text_and_imported_state_are_distinct(factory):
 @pytest.mark.parametrize(
     "format,kind", [("android_xml", "scalar"), ("json", "json_path"), ("ios_strings", "scalar")]
 )
-def test_direct_base_leaf_is_editable_and_save_preserves_exact_basis(factory, format, kind):
+@pytest.mark.parametrize("side", ["direct", "translations"])
+def test_base_leaf_is_editable_and_save_preserves_exact_basis(factory, format, kind, side):
     token = WORK.authority(factory)
-    product, _, source = WORK.seed(factory, format=format, kind=kind)
+    product, target, source = WORK.seed(
+        factory, format=format, kind=kind, separate=side == "translations"
+    )
+    if side == "translations":
+        # Code-only keys have no base text; the base locale lives alongside
+        # the target locales in the translations repository.
+        with factory.begin() as session:
+            base_locator = session.get_one(TranslationValueLocator, source)
+            target_locator = session.get_one(TranslationValueLocator, target)
+            for field in ("repository_side", "repository_id", "source_reference_position", "path"):
+                setattr(base_locator, field, getattr(target_locator, field))
     base = slots(request(token, product_id=product).json())["en"]
     assert base["editable"] and base["edit_field"] == "source_text"
     assert base["group_id"] == str(source)
@@ -318,19 +416,34 @@ def test_direct_base_leaf_is_editable_and_save_preserves_exact_basis(factory, fo
             "en.lproj/Localizable.strings",
             "ios-strings:{locale}.lproj/Localizable.strings",
         ),
+        (
+            "android_xml",
+            b'<resources><string name="hello">Original</string></resources>',
+            "shared/moko-resources/base/strings.xml",
+            "shared/moko-resources",
+        ),
     ],
 )
+@pytest.mark.parametrize("side", ["direct", "translations"])
 def test_pure_writer_changes_base_source_leaf_preserving_identity(
-    factory, format, content, path, layout
+    factory, format, content, path, layout, side
 ):
     writer = importlib.import_module("tests.unit.localization.writing._support")
     from verboflex.localization.importing.registry import parse_canonical_snapshot
 
-    source = writer.snapshot(content, format=format, path=path, layout_identity=layout)
+    source = writer.snapshot(
+        content, format=format, path=path, layout_identity=layout, repository_side=side
+    )
     before = parse_canonical_snapshot(source.parser_input)
     assert not before.issues
     selected = next(value for value in before.values if value.logical_key == "hello")
-    assert selected.source_text == "Original" and selected.translated_text is None
+    assert selected.display_text == "Original"
+    if side == "direct":
+        assert selected.source_text == "Original" and selected.translated_text is None
+    else:
+        # Parsing a translations-side file happens before the code-key join
+        # promotes the base locale to source_text in the imported dataset.
+        assert selected.translated_text == "Original"
     rendered = writer.render(source, writer.edit(source, "hello", "Updated source"))
     from dataclasses import replace
 
@@ -339,8 +452,10 @@ def test_pure_writer_changes_base_source_leaf_preserving_identity(
     assert [(v.logical_key, v.language, v.selector) for v in before.values] == [
         (v.logical_key, v.language, v.selector) for v in after.values
     ]
-    assert next(v for v in after.values if v.logical_key == "hello").source_text == "Updated source"
-    assert all(v.source_text == "Unchanged" for v in after.values if v.logical_key == "keep")
+    assert (
+        next(v for v in after.values if v.logical_key == "hello").display_text == "Updated source"
+    )
+    assert all(v.display_text == "Unchanged" for v in after.values if v.logical_key == "keep")
 
 
 def test_embedded_source_and_keys_side_cannot_be_used_as_mutation_targets(factory):
@@ -850,3 +965,128 @@ def test_retired_member_does_not_disable_live_member_or_enter_saved_proposal(fac
     assert not reloaded["pending_change"]["reconciliation_required"]
     with factory() as session:
         assert session.get_one(TranslationValue, group).is_deleted
+
+
+def test_needs_translation_includes_absent_locales_and_empty_imported_values(factory):
+    token = WORK.authority(factory)
+    product, _, ids = seed_keys(factory, count=3)
+    with factory.begin() as session:
+        session.execute(
+            delete(TranslationValue).where(
+                TranslationValue.id.in_(
+                    [
+                        ids[0, "fr"],
+                        ids[1, "it"],
+                    ]
+                )
+            )
+        )
+        empty = session.get_one(TranslationValue, ids[2, "fr"])
+        empty.translated_text = empty.display_text = ""
+    filters = dict(product_id=product, work_status="needs_translation")
+    response = request(token, **filters)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [item["raw_key"] for item in body["items"]] == ["key-000", "key-001", "key-002"]
+    french = slots(body)["fr"]
+    assert french["kind"] == "absent" and french["matches_filters"]
+    assert french["group_id"] is None and not french["editable"]
+    assert french["read_only_reason"] == "absent"
+    assert not slots(body)["en"]["matches_filters"]
+    assert not slots(body)["it"]["matches_filters"]
+    assert slots(body, 1)["it"]["matches_filters"]
+    assert slots(body, 2)["fr"]["kind"] == "imported"
+    assert slots(body, 2)["fr"]["matches_filters"]
+    assert [
+        item["raw_key"] for item in request(token, **filters, language="fr").json()["items"]
+    ] == ["key-000", "key-002"]
+    assert [
+        item["raw_key"]
+        for item in request(token, **filters, visible_languages=["it"]).json()["items"]
+    ] == ["key-001"]
+    assert request(token, **filters, language="en").json()["items"] == []
+    assert request(token, **filters, visible_languages=["es"]).json()["items"] == []
+    assert request(token, **filters, language="fr", visible_languages=["en"]).json()["items"]
+    for condition in ({"state": "draft"}, {"violation": "no_max"}):
+        assert [
+            item["raw_key"] for item in request(token, **filters, **condition).json()["items"]
+        ] == ["key-002"]
+    for query in ("key-000", "en 0"):
+        found = request(token, **filters, q=query).json()
+        assert [item["raw_key"] for item in found["items"]] == ["key-000"]
+        assert slots(found)["fr"]["matches_filters"]
+    assert request(token, **filters, q="it 1").json()["items"] == []
+    assert request(token, **filters, deleted="deleted").json()["items"] == []
+    assert len(request(token, **filters, deleted="all").json()["items"]) == 3
+
+
+def test_absent_translation_queue_does_not_reintroduce_tombstones_or_foreign_locales(factory):
+    token = WORK.authority(factory)
+    product, _, ids = seed_keys(factory, count=2)
+    other, other_scope = SEARCH._seed_dataset(factory, name="Other locales")
+    SEARCH._add_group(
+        factory,
+        product_id=other,
+        scope_id=other_scope,
+        raw_key="other",
+        language="de",
+        values=({"display_text": "German", "translated_text": "German"},),
+    )
+    with factory.begin() as session:
+        deleted = session.get_one(TranslationValue, ids[0, "fr"])
+        deleted.is_deleted = True
+        deleted.deleted_at = datetime.now(UTC)
+        key = session.get_one(TranslationKey, deleted.translation_key_id)
+        key.is_deleted = True
+        key.deleted_at = datetime.now(UTC)
+        removed = session.get_one(TranslationValue, ids[1, "fr"])
+        removed.is_deleted = True
+        removed.deleted_at = datetime.now(UTC)
+    for mode in ("active", "all", "deleted"):
+        assert (
+            request(
+                token, product_id=product, work_status="needs_translation", deleted=mode
+            ).json()["items"]
+            == []
+        )
+    assert (
+        request(token, work_status="needs_translation", visible_languages=["de"]).json()["items"]
+        == []
+    )
+
+
+def test_absent_translation_queue_paginates_unique_keys_and_keeps_authority(factory):
+    token = WORK.authority(factory)
+    product, _, ids = seed_keys(factory, count=62)
+    with factory.begin() as session:
+        session.execute(
+            delete(TranslationValue).where(
+                TranslationValue.id.in_(
+                    [
+                        value
+                        for (index, language), value in ids.items()
+                        if language == "fr" and index < 61
+                    ]
+                )
+            )
+        )
+    filters = dict(
+        product_id=product, work_status="needs_translation", visible_languages=["en", "fr", "it"]
+    )
+    first_response = request(token, **filters)
+    assert first_response.status_code == 200, first_response.text
+    first = first_response.json()
+    assert len(first["items"]) == 50 and first["next_cursor"]
+    second = request(token, **filters, cursor=first["next_cursor"]).json()
+    assert len(second["items"]) == 11 and second["next_cursor"] is None
+    items = first["items"] + second["items"]
+    assert len({item["translation_key_id"] for item in items}) == 61
+    assert [item["raw_key"] for item in items] == [f"key-{index:03d}" for index in range(61)]
+    assert all(
+        next(slot for slot in item["slots"] if slot["language"] == "fr")["matches_filters"]
+        for item in items
+    )
+    assert request(token, **filters, cursor=first["next_cursor"], language="it").status_code == 422
+    with factory.begin() as session:
+        session.get_one(Product, product).is_active = False
+    assert request(token, **filters).json()["items"] == []

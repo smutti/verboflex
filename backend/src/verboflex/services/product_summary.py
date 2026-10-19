@@ -1,4 +1,4 @@
-"""Read-only, set-based coverage of the retained successful import baselines."""
+"""Read-only coverage of configured sources and their retained successful imports."""
 
 import json
 from uuid import UUID
@@ -21,7 +21,14 @@ _QT_UNFINISHED = json.dumps(
     [{"kind": "qt_ts:translation", "fields": [{"name": "status", "value": "unfinished"}]}]
 )
 
-_SUMMARY_SQL = text("""
+# Keep retained baselines only while their repository/branch identity is configured.
+_ACTIVE_MAPPING_SQL = """EXISTS (
+    SELECT 1 FROM product_repository_mappings AS active_mapping
+    WHERE active_mapping.revision_id = product.active_revision_id
+      AND active_mapping.identity_key = scope.mapping_identity_key
+)"""
+
+_SUMMARY_SQL = text(f"""
 WITH product AS (
     SELECT id, active_revision_id FROM products
     WHERE id = :product_id AND deleted_at IS NULL
@@ -40,6 +47,7 @@ WITH product AS (
     JOIN import_executions AS execution
       ON execution.id = scope.active_execution_id AND execution.import_job_id = job.id
     WHERE product.active_revision_id IS NOT NULL AND execution.state = 'succeeded'
+      AND {_ACTIVE_MAPPING_SQL}
 ), live_groups AS (
     SELECT scope.id AS scope_id, key.id AS key_id, value.language, scope.base_language,
            bool_or(value.source_text IS NOT NULL) AS has_source,

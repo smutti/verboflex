@@ -20,6 +20,7 @@ import { Skeleton } from "./components/ui/skeleton";
 import { AdminAccessDenied } from "./features/admin/AdminAccessDenied";
 import { BitbucketConnectionPage } from "./features/admin/bitbucket/BitbucketConnectionPage";
 import { ProductMappingsPage } from "./features/admin/mappings/ProductMappingsPage";
+import { ApprovalBranchesPage } from "./features/admin/mappings/ApprovalBranchesPage";
 import { ProductPreviewPage } from "./features/admin/previews/ProductPreviewPage";
 import { ProductDetailLayout } from "./features/admin/products/ProductDetailLayout";
 import { ProductOverviewPage } from "./features/admin/products/ProductOverviewPage";
@@ -56,6 +57,7 @@ export type AdminRouteState =
 
 export interface SessionRoutesProps {
   state: SessionState;
+  onRetrySession?: () => void;
   loginElement: ReactNode;
   changePasswordElement: ReactNode;
   mcpConsentElement?: ReactNode;
@@ -115,6 +117,7 @@ function AdminRouteContent({
 
 export function SessionRoutes({
   state,
+  onRetrySession,
   loginElement,
   changePasswordElement,
   mcpConsentElement,
@@ -130,6 +133,21 @@ export function SessionRoutes({
   adminRouteState = { status: "ready" },
   accessDeniedElement,
 }: SessionRoutesProps) {
+  if (state.status === "session_unavailable") {
+    return (
+      <main className="flex min-h-screen items-center justify-center px-6">
+        <Alert className="max-w-md">
+          <AlertTitle>We could not check your session</AlertTitle>
+          <AlertDescription>
+            Check your connection and try again.
+            <Button onClick={onRetrySession} className="mt-4">
+              Try again
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </main>
+    );
+  }
   if (state.status === "checking_session") {
     return (
       <main className="flex min-h-screen items-center justify-center px-6">
@@ -269,6 +287,19 @@ function ProductMappingsRoute({ accessToken }: { accessToken: string }) {
   );
 }
 
+function ApprovalBranchesRoute({ accessToken }: { accessToken: string }) {
+  const productId = useParams<"productId">().productId ?? "";
+  return (
+    <ProductDetailLayout hideTitle>
+      <ApprovalBranchesPage
+        key={`${productId}:${accessToken}`}
+        accessToken={accessToken}
+        productId={productId}
+      />
+    </ProductDetailLayout>
+  );
+}
+
 function ProductRepositoriesRoute({ accessToken }: { accessToken: string }) {
   const productId = useParams<"productId">().productId ?? "";
   return (
@@ -323,6 +354,10 @@ export function AdminApplicationRoutes({
         element={<ProductMappingsRoute accessToken={accessToken} />}
       />
       <Route
+        path="products/:productId/branches"
+        element={<ApprovalBranchesRoute accessToken={accessToken} />}
+      />
+      <Route
         path="products/:productId/preview"
         element={
           <ProductDetailLayout hideTitle>
@@ -350,7 +385,7 @@ export function AdminApplicationRoutes({
 }
 
 export function AppRouter() {
-  const { logout, state } = useSession();
+  const { logout, restoreSession, state } = useSession();
   const authenticatedShellProps =
     state.status === "authenticated"
       ? {
@@ -363,6 +398,7 @@ export function AppRouter() {
   return (
     <SessionRoutes
       state={state}
+      onRetrySession={() => void restoreSession()}
       loginElement={<LoginPage />}
       changePasswordElement={<ChangePasswordPage />}
       mcpConsentElement={

@@ -877,3 +877,52 @@ def test_source_discovery_includes_only_lowercase_xliff_suffixes() -> None:
     assert ".xlf" in _CANDIDATE_SUFFIXES
     assert ".xliff" in _CANDIDATE_SUFFIXES
     assert ".XLF" not in _CANDIDATE_SUFFIXES
+
+
+def test_code_source_traverses_android_package_directories_beyond_locale_budget():
+    from verboflex.services.repository_discovery import discover_repository_sources_for_record
+
+    class PackageTree:
+        async def resolve_repository_branch(self, _session, **kwargs):
+            return BitbucketBranch(name="main", commit_hash="a" * 40)
+
+        async def list_repository_source_page(self, _session, **kwargs):
+            root = kwargs["directory_path"]
+            if root == "app/src/main":
+                entries = tuple(
+                    BitbucketSourceEntry(
+                        f"{root}/package{i}",
+                        "directory",
+                        None,
+                        (),
+                    )
+                    for i in range(55)
+                )
+            else:
+                entries = (
+                    BitbucketSourceEntry(f"{root}/Screen.kt", "file", 30, ()),
+                    BitbucketSourceEntry(f"{root}/ignore.xml", "file", 30, ()),
+                )
+            return BitbucketSourcePage(entries, None)
+
+        async def read_repository_source_file(self, _session, **kwargs):
+            assert kwargs["path"].endswith(".kt")
+            return b"fun title() = Res.strings.title"
+
+    snapshot = asyncio.run(
+        discover_repository_sources_for_record(
+            object(),
+            repository=RepositoryRecord(
+                id=uuid4(),
+                workspace="synthetic",
+                repository_slug="app",
+                descriptive_name=None,
+            ),
+            branch="main",
+            adapter=PackageTree(),
+            localization_root="app/src/main",
+            code_sources=True,
+        )
+    )
+    assert len(snapshot.files) == 55
+    assert snapshot.commit_hash == "a" * 40

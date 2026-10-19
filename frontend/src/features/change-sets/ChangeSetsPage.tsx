@@ -26,6 +26,7 @@ import {
 import { ChangeSetWorkspace } from "./ChangeSetWorkspace";
 import { ChangeSetContext, useChangeSetWorkspace } from "./changeSetContext";
 import { ChangeSetHistory } from "./ChangeSetHistory";
+import { BranchWorkflowPanel } from "./BranchWorkflowPanel";
 import { consumeSubmissionEntry, peekSubmissionEntry } from "./submissionEntry";
 type Filters = NonNullable<GetChangeSetCandidatesData["query"]>;
 export function ChangeSetsPage({ accessToken }: { accessToken: string }) {
@@ -46,39 +47,41 @@ export function ChangeSetsPage({ accessToken }: { accessToken: string }) {
 function WorkspaceTabs() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { productId } = useChangeSetWorkspace();
+  const { productId, accessToken } = useChangeSetWorkspace();
   const location = useLocation();
   const history =
     params.get("tab") === "history" || location.pathname.endsWith("/history");
   return (
-    <div className="grid min-w-0 gap-(--space-lg)">
-      <nav
-        aria-label="Change set views"
-        className="flex flex-wrap gap-(--space-sm)"
-      >
-        <Button
-          variant={history ? "outline" : "default"}
-          aria-current={!history ? "page" : undefined}
-          onClick={() =>
-            navigate(`/products/${encodeURIComponent(productId)}/change-sets`)
-          }
+    <BranchWorkflowPanel key={`${productId}:${accessToken}`}>
+      <div className="grid min-w-0 gap-(--space-lg)">
+        <nav
+          aria-label="Change set views"
+          className="flex flex-wrap gap-(--space-sm)"
         >
-          Pending changes
-        </Button>
-        <Button
-          variant={history ? "default" : "outline"}
-          aria-current={history ? "page" : undefined}
-          onClick={() =>
-            navigate(
-              `/products/${encodeURIComponent(productId)}/change-sets/history`,
-            )
-          }
-        >
-          Submission history
-        </Button>
-      </nav>
-      {history ? <ChangeSetHistory /> : <CandidateList />}
-    </div>
+          <Button
+            variant={history ? "outline" : "default"}
+            aria-current={!history ? "page" : undefined}
+            onClick={() =>
+              navigate(`/products/${encodeURIComponent(productId)}/change-sets`)
+            }
+          >
+            Pending changes
+          </Button>
+          <Button
+            variant={history ? "default" : "outline"}
+            aria-current={history ? "page" : undefined}
+            onClick={() =>
+              navigate(
+                `/products/${encodeURIComponent(productId)}/change-sets/history`,
+              )
+            }
+          >
+            Submission history
+          </Button>
+        </nav>
+        {history ? <ChangeSetHistory /> : <CandidateList />}
+      </div>
+    </BranchWorkflowPanel>
   );
 }
 function CandidateList() {

@@ -28,6 +28,7 @@ from verboflex.localization.preview.core import (
 )
 from verboflex.localization.writing.core import SourceFileAuthority, WritebackRejected, WriteInsert
 from verboflex.models.authoring import AuthoringRequest
+from verboflex.models.import_job import ImportExecution
 from verboflex.models.product import Product
 from verboflex.models.repository import Repository
 from verboflex.models.translation import (
@@ -194,7 +195,15 @@ def resolve_file(
         raise AuthoringError("Destination unavailable", 404)
     ref = refs[0]
     if mapping.topology == "separate" and data.parent_key_id is None:
-        raise AuthoringError("Create the source key in the keys repository, then refresh")
+        from verboflex.localization.code_keys.catalog import CodeKeyCatalog
+
+        execution = session.get_one(ImportExecution, scope.active_execution_id)
+        catalog = execution.code_catalog
+        if (
+            catalog is None
+            or data.key not in CodeKeyCatalog.model_validate(catalog["catalog"]).keys
+        ):
+            raise AuthoringError("Create the source key in the keys repository, then refresh")
     parser = confirmed_file_parser_input(
         layouts,
         repository_side=ref.repository_side,
@@ -444,6 +453,8 @@ def transition(
     scope = _scope(session, product, row.scope_id)
     if row.version != expected_version:
         raise AuthoringError("This draft changed. Reload before continuing", 409)
+    if state is not None and row.state == state:
+        raise AuthoringError("This draft is already in the requested state", 409)
     if state is None:
         record_audit(session, actor_id=actor_id, action="authoring.deleted", entity_id=row.id)
         session.delete(row)
@@ -470,6 +481,26 @@ def transition(
         entity_id=row.id,
     )
     session.flush()
+    if state == "approved":
+        from verboflex.localization.writing.core import WritebackRejected
+        from verboflex.services.branch_workflow import (
+            BranchWorkflowError,
+            new_authoring_activity,
+            queue_approval,
+        )
+
+        try:
+            queue_approval(
+                session,
+                product_id=product_id,
+                actor_id=actor_id,
+                proposal_id=row.id,
+                version=row.version,
+                activity_id=new_authoring_activity(row.id, row.version),
+                label=f"{data.key} ({data.language})",
+            )
+        except (BranchWorkflowError, WritebackRejected) as error:
+            raise AuthoringError(str(error), 409) from error
     return response(row, scope)
 
 

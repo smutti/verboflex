@@ -15,6 +15,7 @@ from verboflex.api.v1.routes import (
     admin_workspace,
     auth,
     authoring,
+    branch_workflow,
     comments,
     dashboard,
     glossary,
@@ -23,6 +24,8 @@ from verboflex.api.v1.routes import (
     product_team,
     product_workspace,
     reuse,
+    screenshots,
+    source_fallback,
     submissions,
     system,
     translation_constraints,
@@ -32,6 +35,8 @@ from verboflex.api.v1.routes import (
 )
 
 api_router = APIRouter()
+api_router.include_router(screenshots.router)
+api_router.include_router(source_fallback.router)
 api_router.include_router(product_team.router)
 api_router.include_router(product_workspace.router)
 api_router.include_router(authoring.router)
@@ -39,6 +44,7 @@ api_router.include_router(reuse.router)
 api_router.include_router(glossary.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(submissions.router)
+api_router.include_router(branch_workflow.router)
 api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)

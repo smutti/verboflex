@@ -102,6 +102,7 @@ def _seed_dataset(
     name: str = "Mobile",
     active: bool = True,
     separate: bool = False,
+    base_language: str = "en",
 ) -> tuple[UUID, UUID]:
     product_id = uuid4()
     revision_id = uuid4()
@@ -151,7 +152,7 @@ def _seed_dataset(
             revision_id=revision_id,
             topology="separate" if separate else "direct",
             identity_key=f'["direct","{repository_id}","main"]',
-            base_language="en",
+            base_language=base_language,
             sides=[
                 ProductMappingRepositorySide(
                     role="translations" if separate else "direct",

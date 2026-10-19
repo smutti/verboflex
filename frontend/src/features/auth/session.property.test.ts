@@ -26,6 +26,7 @@ const principalArbitrary: fc.Arbitrary<CurrentUserResponse> = fc.record({
 
 const eventArbitrary: fc.Arbitrary<SessionEvent> = fc.oneof(
   fc.constant({ type: "check_session" as const }),
+  fc.constant({ type: "session_unavailable" as const }),
   fc.constant({ type: "sign_out" as const }),
   fc.record({
     type: fc.constant("restrict" as const),

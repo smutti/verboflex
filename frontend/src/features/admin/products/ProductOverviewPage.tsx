@@ -27,6 +27,7 @@ import { Button } from "../../../components/ui/button";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { ProductDetailLayout } from "./ProductDetailLayout";
 import { ProductDeleteDialog } from "./ProductDeleteDialog";
+import { SourceFallbackSettings } from "./SourceFallbackSettings";
 
 export interface ProductOverviewPageProps {
   accessToken: string;
@@ -576,6 +577,11 @@ export function ProductOverviewPage({
           </p>
         ) : null}
 
+        <SourceFallbackSettings
+          key={`source-${accessToken}-${loadState.productId}`}
+          accessToken={accessToken}
+          productId={loadState.productId}
+        />
         <LocalizationSummary
           key={JSON.stringify([accessToken, loadState.productId])}
           accessToken={accessToken}

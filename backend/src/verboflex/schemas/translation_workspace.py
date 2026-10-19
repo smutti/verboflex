@@ -56,6 +56,7 @@ class TranslationLanguageSlot(ClosedTranslationModel):
     group_id: UUID | None
     matches_filters: bool
     effective_text: Preview | None
+    uses_source_fallback: bool = False
     text_truncated: bool
     preview_kind: Literal["scalar", "aggregate", "context", "absent"]
     value_count: Annotated[int, Field(ge=0)]

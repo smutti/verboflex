@@ -102,6 +102,8 @@ class TranslationProposal(Base):
     reconciliation_required: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+    target_branch: Mapped[str | None] = mapped_column(String(255))
+    target_commit_hash: Mapped[str | None] = mapped_column(String(40))
     created_by: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),

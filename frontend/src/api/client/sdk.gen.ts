@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, type Options as Options2, type RequestResult, type ServerSentEventsResult, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { AddProductMemberData, AddProductMemberErrors, AddProductMemberResponses, ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ConfirmAdminActiveRevisionRevalidationData, ConfirmAdminActiveRevisionRevalidationErrors, ConfirmAdminActiveRevisionRevalidationResponses, ConfirmAdminImportRewriteBaselineData, ConfirmAdminImportRewriteBaselineErrors, ConfirmAdminImportRewriteBaselineResponses, ConfirmAdminPreviewJobData, ConfirmAdminPreviewJobErrors, ConfirmAdminPreviewJobResponses, ConnectAdminBitbucketOauthData, ConnectAdminBitbucketOauthErrors, ConnectAdminBitbucketOauthResponses, ConnectAdminGithubRepositoryData, ConnectAdminGithubRepositoryErrors, ConnectAdminGithubRepositoryResponses, ConnectionsApiV1McpConnectionsGetData, ConnectionsApiV1McpConnectionsGetResponses, CreateAdminActiveRevisionRevalidationJobData, CreateAdminActiveRevisionRevalidationJobErrors, CreateAdminActiveRevisionRevalidationJobResponses, CreateAdminCandidateMappingData, CreateAdminCandidateMappingErrors, CreateAdminCandidateMappingResponses, CreateAdminPreviewJobData, CreateAdminPreviewJobErrors, CreateAdminPreviewJobResponses, CreateAdminProductData, CreateAdminProductErrors, CreateAdminProductResponses, CreateAdminRepositoryData, CreateAdminRepositoryErrors, CreateAdminRepositoryResponses, CreateAdminUserData, CreateAdminUserErrors, CreateAdminUserResponses, CreateSubmissionBatchData, CreateSubmissionBatchErrors, CreateSubmissionBatchResponses, CreateSubmissionReviewData, CreateSubmissionReviewErrors, CreateSubmissionReviewResponses, CreateTranslationCommentData, CreateTranslationCommentErrors, CreateTranslationCommentResponses, DeactivateAdminProductData, DeactivateAdminProductErrors, DeactivateAdminProductResponses, DeactivateAdminUserData, DeactivateAdminUserErrors, DeactivateAdminUserResponses, DeleteAdminProductData, DeleteAdminProductErrors, DeleteAdminProductResponses, DeleteGlossaryTermData, DeleteGlossaryTermErrors, DeleteGlossaryTermResponses, DeleteTranslationCommentData, DeleteTranslationCommentErrors, DeleteTranslationCommentResponses, DeleteTranslationConstraintData, DeleteTranslationConstraintErrors, DeleteTranslationConstraintResponses, DiscardAuthoringRequestData, DiscardAuthoringRequestErrors, DiscardAuthoringRequestResponses, DisconnectApiV1McpConnectionsGrantIdDeleteData, DisconnectApiV1McpConnectionsGrantIdDeleteErrors, DisconnectApiV1McpConnectionsGrantIdDeleteResponses, DiscoverAdminRepositorySourcesData, DiscoverAdminRepositorySourcesErrors, DiscoverAdminRepositorySourcesResponses, FinalizeChangeSetData, FinalizeChangeSetErrors, FinalizeChangeSetResponses, GetAdminActiveRevisionRevalidationJobData, GetAdminActiveRevisionRevalidationJobErrors, GetAdminActiveRevisionRevalidationJobResponses, GetAdminBitbucketStatusData, GetAdminBitbucketStatusErrors, GetAdminBitbucketStatusResponses, GetAdminBitbucketWorkspaceData, GetAdminBitbucketWorkspaceErrors, GetAdminBitbucketWorkspaceResponses, GetAdminImportData, GetAdminImportDuplicatesData, GetAdminImportDuplicatesErrors, GetAdminImportDuplicatesResponses, GetAdminImportErrors, GetAdminImportResponses, GetAdminImportRewriteComparisonData, GetAdminImportRewriteComparisonErrors, GetAdminImportRewriteComparisonResponses, GetAdminLatestActiveRevisionRevalidationJobData, GetAdminLatestActiveRevisionRevalidationJobErrors, GetAdminLatestActiveRevisionRevalidationJobResponses, GetAdminLatestCandidatePreviewJobData, GetAdminLatestCandidatePreviewJobErrors, GetAdminLatestCandidatePreviewJobResponses, GetAdminPreviewDuplicatesData, GetAdminPreviewDuplicatesErrors, GetAdminPreviewDuplicatesResponses, GetAdminPreviewJobData, GetAdminPreviewJobErrors, GetAdminPreviewJobResponses, GetAdminProductData, GetAdminProductErrors, GetAdminProductReactivationEligibilityData, GetAdminProductReactivationEligibilityErrors, GetAdminProductReactivationEligibilityResponses, GetAdminProductResponses, GetAdminProductSummaryData, GetAdminProductSummaryErrors, GetAdminProductSummaryResponses, GetAdminRepositoryBranchData, GetAdminRepositoryBranchErrors, GetAdminRepositoryBranchResponses, GetAdminRepositoryData, GetAdminRepositoryErrors, GetAdminRepositoryResponses, GetAuthoringDestinationsData, GetAuthoringDestinationsErrors, GetAuthoringDestinationsResponses, GetAuthoringPluralFormsData, GetAuthoringPluralFormsErrors, GetAuthoringPluralFormsResponses, GetChangeSetActivityData, GetChangeSetActivityErrors, GetChangeSetActivityResponses, GetChangeSetCandidatesData, GetChangeSetCandidatesErrors, GetChangeSetCandidatesResponses, GetChangeSetData, GetChangeSetErrors, GetChangeSetFilesData, GetChangeSetFilesErrors, GetChangeSetFilesResponses, GetChangeSetItemsData, GetChangeSetItemsErrors, GetChangeSetItemsResponses, GetChangeSetResponses, GetChangeSetValuesData, GetChangeSetValuesErrors, GetChangeSetValuesResponses, GetConsentApiV1McpAuthorizationRequestIdGetData, GetConsentApiV1McpAuthorizationRequestIdGetErrors, GetConsentApiV1McpAuthorizationRequestIdGetResponses, GetPersonalDashboardData, GetPersonalDashboardErrors, GetPersonalDashboardResponses, GetProductAccessData, GetProductAccessErrors, GetProductAccessResponses, GetProductTeamData, GetProductTeamErrors, GetProductTeamResponses, GetSubmissionBatchByKeyData, GetSubmissionBatchByKeyErrors, GetSubmissionBatchByKeyResponses, GetSubmissionBatchData, GetSubmissionBatchErrors, GetSubmissionBatchResponses, GetSubmissionReviewData, GetSubmissionReviewErrors, GetSubmissionReviewFilesData, GetSubmissionReviewFilesErrors, GetSubmissionReviewFilesResponses, GetSubmissionReviewResponses, GetSubmissionReviewValuesData, GetSubmissionReviewValuesErrors, GetSubmissionReviewValuesResponses, GetTranslationCommentAnchorData, GetTranslationCommentAnchorErrors, GetTranslationCommentAnchorResponses, GetTranslationGroupData, GetTranslationGroupErrors, GetTranslationGroupResponses, GetTranslationSuggestionsData, GetTranslationSuggestionsErrors, GetTranslationSuggestionsResponses, GetUnreadNotificationCountData, GetUnreadNotificationCountErrors, GetUnreadNotificationCountResponses, IssueTokenData, IssueTokenErrors, IssueTokenResponses, ListAdminBitbucketRepositoriesData, ListAdminBitbucketRepositoriesErrors, ListAdminBitbucketRepositoriesResponses, ListAdminCandidateMappingsData, ListAdminCandidateMappingsErrors, ListAdminCandidateMappingsResponses, ListAdminProductsData, ListAdminProductsErrors, ListAdminProductsResponses, ListAdminPublishedMappingImportsData, ListAdminPublishedMappingImportsErrors, ListAdminPublishedMappingImportsResponses, ListAdminRepositoriesData, ListAdminRepositoriesErrors, ListAdminRepositoriesResponses, ListAdminRepositoryBranchesData, ListAdminRepositoryBranchesErrors, ListAdminRepositoryBranchesResponses, ListAdminRevisionMappingsData, ListAdminRevisionMappingsErrors, ListAdminRevisionMappingsResponses, ListAdminUsersData, ListAdminUsersErrors, ListAdminUsersResponses, ListAuthoringRequestsData, ListAuthoringRequestsErrors, ListAuthoringRequestsResponses, ListChangeSetsData, ListChangeSetsErrors, ListChangeSetsResponses, ListGlossaryTermsData, ListGlossaryTermsErrors, ListGlossaryTermsResponses, ListMyActivityData, ListMyActivityErrors, ListMyActivityResponses, ListNotificationsData, ListNotificationsErrors, ListNotificationsResponses, ListProductWorkspacesData, ListProductWorkspacesErrors, ListProductWorkspacesResponses, ListProjectUpdatesData, ListProjectUpdatesErrors, ListProjectUpdatesResponses, ListRecentNotificationsData, ListRecentNotificationsErrors, ListRecentNotificationsResponses, ListTranslationCommentsData, ListTranslationCommentsErrors, ListTranslationCommentsResponses, ListTranslationCommentVersionsData, ListTranslationCommentVersionsErrors, ListTranslationCommentVersionsResponses, ListTranslationOptionsData, ListTranslationOptionsErrors, ListTranslationOptionsResponses, ListTranslationReviewActivityData, ListTranslationReviewActivityErrors, ListTranslationReviewActivityResponses, LogoutData, LogoutErrors, LogoutResponses, MarkNotificationReadByCommentData, MarkNotificationReadByCommentErrors, MarkNotificationReadByCommentResponses, MarkNotificationReadData, MarkNotificationReadErrors, MarkNotificationReadResponses, MatchGlossaryTermsData, MatchGlossaryTermsErrors, MatchGlossaryTermsResponses, PostConsentApiV1McpAuthorizationRequestIdPostData, PostConsentApiV1McpAuthorizationRequestIdPostErrors, PostConsentApiV1McpAuthorizationRequestIdPostResponses, PublishAdminProductCandidateData, PublishAdminProductCandidateErrors, PublishAdminProductCandidateResponses, PutTranslationConstraintData, PutTranslationConstraintErrors, PutTranslationConstraintResponses, ReactivateAdminProductData, ReactivateAdminProductErrors, ReactivateAdminProductResponses, ReactivateAdminUserData, ReactivateAdminUserErrors, ReactivateAdminUserResponses, ReadCurrentUserData, ReadCurrentUserErrors, ReadCurrentUserResponses, ReadHealthData, ReadHealthErrors, ReadHealthResponses, ReadSystemStatusData, ReadSystemStatusErrors, ReadSystemStatusResponses, ReconcileChangeSetData, ReconcileChangeSetErrors, ReconcileChangeSetResponses, ReconnectAdminBitbucketOauthData, ReconnectAdminBitbucketOauthErrors, ReconnectAdminBitbucketOauthResponses, RefreshAccessTokenData, RefreshAccessTokenErrors, RefreshAccessTokenResponses, RemoveProductMemberData, RemoveProductMemberErrors, RemoveProductMemberResponses, ResetAdminUserPasswordData, ResetAdminUserPasswordErrors, ResetAdminUserPasswordResponses, ResolveTranslationSuggestionData, ResolveTranslationSuggestionErrors, ResolveTranslationSuggestionResponses, RetryChangeSetData, RetryChangeSetErrors, RetryChangeSetResponses, ReviewAuthoringRequestData, ReviewAuthoringRequestErrors, ReviewAuthoringRequestResponses, RevokeAdminBitbucketConnectionLocallyData, RevokeAdminBitbucketConnectionLocallyErrors, RevokeAdminBitbucketConnectionLocallyResponses, SaveAuthoringRequestData, SaveAuthoringRequestErrors, SaveAuthoringRequestResponses, SaveGlossaryTermData, SaveGlossaryTermErrors, SaveGlossaryTermResponses, SaveTranslationProposalData, SaveTranslationProposalErrors, SaveTranslationProposalResponses, SearchMentionUsersData, SearchMentionUsersErrors, SearchMentionUsersResponses, SearchTranslationKeysData, SearchTranslationKeysErrors, SearchTranslationKeysResponses, SearchTranslationsData, SearchTranslationsErrors, SearchTranslationsResponses, SelectAdminBitbucketRepositoryData, SelectAdminBitbucketRepositoryErrors, SelectAdminBitbucketRepositoryResponses, SetProductMemberData, SetProductMemberErrors, SetProductMemberResponses, StartAdminPublishedMappingImportData, StartAdminPublishedMappingImportErrors, StartAdminPublishedMappingImportResponses, StreamNotificationInvalidationsData, StreamNotificationInvalidationsErrors, StreamNotificationInvalidationsResponse, StreamNotificationInvalidationsResponses, TransitionTranslationProposalData, TransitionTranslationProposalErrors, TransitionTranslationProposalResponses, UpdateAdminBitbucketWorkspaceData, UpdateAdminBitbucketWorkspaceErrors, UpdateAdminBitbucketWorkspaceResponses, UpdateAdminCandidateMappingData, UpdateAdminCandidateMappingErrors, UpdateAdminCandidateMappingResponses, UpdateAdminProductCandidateData, UpdateAdminProductCandidateErrors, UpdateAdminProductCandidateResponses, UpdateAdminUserData, UpdateAdminUserErrors, UpdateAdminUserResponses, UpdateTranslationCommentData, UpdateTranslationCommentErrors, UpdateTranslationCommentResponses } from './types.gen';
+import type { AddProductMemberData, AddProductMemberErrors, AddProductMemberResponses, CancelTranslationScreenshotData, CancelTranslationScreenshotErrors, CancelTranslationScreenshotResponses, ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ConfigureBranchWorkflowData, ConfigureBranchWorkflowErrors, ConfigureBranchWorkflowResponses, ConfirmAdminActiveRevisionRevalidationData, ConfirmAdminActiveRevisionRevalidationErrors, ConfirmAdminActiveRevisionRevalidationResponses, ConfirmAdminImportRewriteBaselineData, ConfirmAdminImportRewriteBaselineErrors, ConfirmAdminImportRewriteBaselineResponses, ConfirmAdminPreviewJobData, ConfirmAdminPreviewJobErrors, ConfirmAdminPreviewJobResponses, ConnectAdminBitbucketOauthData, ConnectAdminBitbucketOauthErrors, ConnectAdminBitbucketOauthResponses, ConnectAdminGithubRepositoryData, ConnectAdminGithubRepositoryErrors, ConnectAdminGithubRepositoryResponses, ConnectionsApiV1McpConnectionsGetData, ConnectionsApiV1McpConnectionsGetResponses, CreateAdminActiveRevisionRevalidationJobData, CreateAdminActiveRevisionRevalidationJobErrors, CreateAdminActiveRevisionRevalidationJobResponses, CreateAdminCandidateMappingData, CreateAdminCandidateMappingErrors, CreateAdminCandidateMappingResponses, CreateAdminPreviewJobData, CreateAdminPreviewJobErrors, CreateAdminPreviewJobResponses, CreateAdminProductData, CreateAdminProductErrors, CreateAdminProductResponses, CreateAdminRepositoryData, CreateAdminRepositoryErrors, CreateAdminRepositoryResponses, CreateAdminUserData, CreateAdminUserErrors, CreateAdminUserResponses, CreateBranchPullRequestData, CreateBranchPullRequestErrors, CreateBranchPullRequestResponses, CreateSubmissionBatchData, CreateSubmissionBatchErrors, CreateSubmissionBatchResponses, CreateSubmissionReviewData, CreateSubmissionReviewErrors, CreateSubmissionReviewResponses, CreateTranslationCommentData, CreateTranslationCommentErrors, CreateTranslationCommentResponses, DeactivateAdminProductData, DeactivateAdminProductErrors, DeactivateAdminProductResponses, DeactivateAdminUserData, DeactivateAdminUserErrors, DeactivateAdminUserResponses, DeleteAdminProductData, DeleteAdminProductErrors, DeleteAdminProductResponses, DeleteGlossaryTermData, DeleteGlossaryTermErrors, DeleteGlossaryTermResponses, DeleteTranslationCommentData, DeleteTranslationCommentErrors, DeleteTranslationCommentResponses, DeleteTranslationConstraintData, DeleteTranslationConstraintErrors, DeleteTranslationConstraintResponses, DiscardAuthoringRequestData, DiscardAuthoringRequestErrors, DiscardAuthoringRequestResponses, DisconnectApiV1McpConnectionsGrantIdDeleteData, DisconnectApiV1McpConnectionsGrantIdDeleteErrors, DisconnectApiV1McpConnectionsGrantIdDeleteResponses, DiscoverAdminRepositorySourcesData, DiscoverAdminRepositorySourcesErrors, DiscoverAdminRepositorySourcesResponses, FinalizeChangeSetData, FinalizeChangeSetErrors, FinalizeChangeSetResponses, GetAdminActiveRevisionRevalidationJobData, GetAdminActiveRevisionRevalidationJobErrors, GetAdminActiveRevisionRevalidationJobResponses, GetAdminBitbucketStatusData, GetAdminBitbucketStatusErrors, GetAdminBitbucketStatusResponses, GetAdminBitbucketWorkspaceData, GetAdminBitbucketWorkspaceErrors, GetAdminBitbucketWorkspaceResponses, GetAdminImportData, GetAdminImportDuplicatesData, GetAdminImportDuplicatesErrors, GetAdminImportDuplicatesResponses, GetAdminImportErrors, GetAdminImportResponses, GetAdminImportRewriteComparisonData, GetAdminImportRewriteComparisonErrors, GetAdminImportRewriteComparisonResponses, GetAdminLatestActiveRevisionRevalidationJobData, GetAdminLatestActiveRevisionRevalidationJobErrors, GetAdminLatestActiveRevisionRevalidationJobResponses, GetAdminLatestCandidatePreviewJobData, GetAdminLatestCandidatePreviewJobErrors, GetAdminLatestCandidatePreviewJobResponses, GetAdminPreviewDuplicatesData, GetAdminPreviewDuplicatesErrors, GetAdminPreviewDuplicatesResponses, GetAdminPreviewJobData, GetAdminPreviewJobErrors, GetAdminPreviewJobResponses, GetAdminProductData, GetAdminProductErrors, GetAdminProductReactivationEligibilityData, GetAdminProductReactivationEligibilityErrors, GetAdminProductReactivationEligibilityResponses, GetAdminProductResponses, GetAdminProductSummaryData, GetAdminProductSummaryErrors, GetAdminProductSummaryResponses, GetAdminRepositoryBranchData, GetAdminRepositoryBranchErrors, GetAdminRepositoryBranchResponses, GetAdminRepositoryData, GetAdminRepositoryErrors, GetAdminRepositoryResponses, GetAdminSourceFallbackData, GetAdminSourceFallbackErrors, GetAdminSourceFallbackResponses, GetAuthoringDestinationsData, GetAuthoringDestinationsErrors, GetAuthoringDestinationsResponses, GetAuthoringPluralFormsData, GetAuthoringPluralFormsErrors, GetAuthoringPluralFormsResponses, GetBranchWorkflowData, GetBranchWorkflowErrors, GetBranchWorkflowResponses, GetChangeSetActivityData, GetChangeSetActivityErrors, GetChangeSetActivityResponses, GetChangeSetCandidatesData, GetChangeSetCandidatesErrors, GetChangeSetCandidatesResponses, GetChangeSetData, GetChangeSetErrors, GetChangeSetFilesData, GetChangeSetFilesErrors, GetChangeSetFilesResponses, GetChangeSetItemsData, GetChangeSetItemsErrors, GetChangeSetItemsResponses, GetChangeSetResponses, GetChangeSetValuesData, GetChangeSetValuesErrors, GetChangeSetValuesResponses, GetConsentApiV1McpAuthorizationRequestIdGetData, GetConsentApiV1McpAuthorizationRequestIdGetErrors, GetConsentApiV1McpAuthorizationRequestIdGetResponses, GetPersonalDashboardData, GetPersonalDashboardErrors, GetPersonalDashboardResponses, GetProductAccessData, GetProductAccessErrors, GetProductAccessResponses, GetProductTeamData, GetProductTeamErrors, GetProductTeamResponses, GetSubmissionBatchByKeyData, GetSubmissionBatchByKeyErrors, GetSubmissionBatchByKeyResponses, GetSubmissionBatchData, GetSubmissionBatchErrors, GetSubmissionBatchResponses, GetSubmissionReviewData, GetSubmissionReviewErrors, GetSubmissionReviewFilesData, GetSubmissionReviewFilesErrors, GetSubmissionReviewFilesResponses, GetSubmissionReviewResponses, GetSubmissionReviewValuesData, GetSubmissionReviewValuesErrors, GetSubmissionReviewValuesResponses, GetTranslationCodeContextData, GetTranslationCodeContextErrors, GetTranslationCodeContextResponses, GetTranslationCommentAnchorData, GetTranslationCommentAnchorErrors, GetTranslationCommentAnchorResponses, GetTranslationGroupData, GetTranslationGroupErrors, GetTranslationGroupResponses, GetTranslationScreenshotData, GetTranslationScreenshotErrors, GetTranslationScreenshotImageData, GetTranslationScreenshotImageErrors, GetTranslationScreenshotImageResponses, GetTranslationScreenshotResponses, GetTranslationSuggestionsData, GetTranslationSuggestionsErrors, GetTranslationSuggestionsResponses, GetUnreadNotificationCountData, GetUnreadNotificationCountErrors, GetUnreadNotificationCountResponses, IssueTokenData, IssueTokenErrors, IssueTokenResponses, ListAdminBitbucketRepositoriesData, ListAdminBitbucketRepositoriesErrors, ListAdminBitbucketRepositoriesResponses, ListAdminCandidateMappingsData, ListAdminCandidateMappingsErrors, ListAdminCandidateMappingsResponses, ListAdminProductsData, ListAdminProductsErrors, ListAdminProductsResponses, ListAdminPublishedMappingImportsData, ListAdminPublishedMappingImportsErrors, ListAdminPublishedMappingImportsResponses, ListAdminRepositoriesData, ListAdminRepositoriesErrors, ListAdminRepositoriesResponses, ListAdminRepositoryBranchesData, ListAdminRepositoryBranchesErrors, ListAdminRepositoryBranchesResponses, ListAdminRevisionMappingsData, ListAdminRevisionMappingsErrors, ListAdminRevisionMappingsResponses, ListAdminUserProductsData, ListAdminUserProductsErrors, ListAdminUserProductsResponses, ListAdminUsersData, ListAdminUsersErrors, ListAdminUsersResponses, ListAuthoringRequestsData, ListAuthoringRequestsErrors, ListAuthoringRequestsResponses, ListChangeSetsData, ListChangeSetsErrors, ListChangeSetsResponses, ListCodeKeysData, ListCodeKeysErrors, ListCodeKeysResponses, ListGlossaryTermsData, ListGlossaryTermsErrors, ListGlossaryTermsResponses, ListMyActivityData, ListMyActivityErrors, ListMyActivityResponses, ListNotificationsData, ListNotificationsErrors, ListNotificationsResponses, ListProductCodeSourcesData, ListProductCodeSourcesErrors, ListProductCodeSourcesResponses, ListProductWorkspacesData, ListProductWorkspacesErrors, ListProductWorkspacesResponses, ListProjectUpdatesData, ListProjectUpdatesErrors, ListProjectUpdatesResponses, ListRecentNotificationsData, ListRecentNotificationsErrors, ListRecentNotificationsResponses, ListTranslationCommentsData, ListTranslationCommentsErrors, ListTranslationCommentsResponses, ListTranslationCommentVersionsData, ListTranslationCommentVersionsErrors, ListTranslationCommentVersionsResponses, ListTranslationOptionsData, ListTranslationOptionsErrors, ListTranslationOptionsResponses, ListTranslationReviewActivityData, ListTranslationReviewActivityErrors, ListTranslationReviewActivityResponses, ListTranslationScreenshotsData, ListTranslationScreenshotsErrors, ListTranslationScreenshotsResponses, LogoutData, LogoutErrors, LogoutResponses, MarkNotificationReadByCommentData, MarkNotificationReadByCommentErrors, MarkNotificationReadByCommentResponses, MarkNotificationReadData, MarkNotificationReadErrors, MarkNotificationReadResponses, MatchGlossaryTermsData, MatchGlossaryTermsErrors, MatchGlossaryTermsResponses, PostConsentApiV1McpAuthorizationRequestIdPostData, PostConsentApiV1McpAuthorizationRequestIdPostErrors, PostConsentApiV1McpAuthorizationRequestIdPostResponses, PublishAdminProductCandidateData, PublishAdminProductCandidateErrors, PublishAdminProductCandidateResponses, PutTranslationConstraintData, PutTranslationConstraintErrors, PutTranslationConstraintResponses, ReactivateAdminProductData, ReactivateAdminProductErrors, ReactivateAdminProductResponses, ReactivateAdminUserData, ReactivateAdminUserErrors, ReactivateAdminUserResponses, ReadCurrentUserData, ReadCurrentUserErrors, ReadCurrentUserResponses, ReadHealthData, ReadHealthErrors, ReadHealthResponses, ReadSystemStatusData, ReadSystemStatusErrors, ReadSystemStatusResponses, ReconcileChangeSetData, ReconcileChangeSetErrors, ReconcileChangeSetResponses, ReconnectAdminBitbucketOauthData, ReconnectAdminBitbucketOauthErrors, ReconnectAdminBitbucketOauthResponses, RefreshAccessTokenData, RefreshAccessTokenErrors, RefreshAccessTokenResponses, RemoveProductMemberData, RemoveProductMemberErrors, RemoveProductMemberResponses, RequestTranslationScreenshotData, RequestTranslationScreenshotErrors, RequestTranslationScreenshotResponses, ResetAdminUserPasswordData, ResetAdminUserPasswordErrors, ResetAdminUserPasswordResponses, ResolveTranslationSuggestionData, ResolveTranslationSuggestionErrors, ResolveTranslationSuggestionResponses, RetryBranchChangeData, RetryBranchChangeErrors, RetryBranchChangeResponses, RetryChangeSetData, RetryChangeSetErrors, RetryChangeSetResponses, ReviewAuthoringRequestData, ReviewAuthoringRequestErrors, ReviewAuthoringRequestResponses, RevokeAdminBitbucketConnectionLocallyData, RevokeAdminBitbucketConnectionLocallyErrors, RevokeAdminBitbucketConnectionLocallyResponses, SaveAuthoringRequestData, SaveAuthoringRequestErrors, SaveAuthoringRequestResponses, SaveGlossaryTermData, SaveGlossaryTermErrors, SaveGlossaryTermResponses, SaveTranslationProposalData, SaveTranslationProposalErrors, SaveTranslationProposalResponses, SearchMentionUsersData, SearchMentionUsersErrors, SearchMentionUsersResponses, SearchTranslationKeysData, SearchTranslationKeysErrors, SearchTranslationKeysResponses, SearchTranslationsData, SearchTranslationsErrors, SearchTranslationsResponses, SelectAdminBitbucketRepositoryData, SelectAdminBitbucketRepositoryErrors, SelectAdminBitbucketRepositoryResponses, SetProductMemberData, SetProductMemberErrors, SetProductMemberResponses, StartAdminPublishedMappingImportData, StartAdminPublishedMappingImportErrors, StartAdminPublishedMappingImportResponses, StreamNotificationInvalidationsData, StreamNotificationInvalidationsErrors, StreamNotificationInvalidationsResponse, StreamNotificationInvalidationsResponses, TransitionTranslationProposalData, TransitionTranslationProposalErrors, TransitionTranslationProposalResponses, UpdateAdminBitbucketWorkspaceData, UpdateAdminBitbucketWorkspaceErrors, UpdateAdminBitbucketWorkspaceResponses, UpdateAdminCandidateMappingData, UpdateAdminCandidateMappingErrors, UpdateAdminCandidateMappingResponses, UpdateAdminProductCandidateData, UpdateAdminProductCandidateErrors, UpdateAdminProductCandidateResponses, UpdateAdminSourceFallbackData, UpdateAdminSourceFallbackErrors, UpdateAdminSourceFallbackResponses, UpdateAdminUserData, UpdateAdminUserErrors, UpdateAdminUserResponses, UpdateTranslationCommentData, UpdateTranslationCommentErrors, UpdateTranslationCommentResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -468,6 +468,28 @@ export const getAdminProductReactivationEligibility = <ThrowOnError extends bool
 });
 
 /**
+ * Get Policy
+ */
+export const getAdminSourceFallback = <ThrowOnError extends boolean = false>(options: Options<GetAdminSourceFallbackData, ThrowOnError>): RequestResult<GetAdminSourceFallbackResponses, GetAdminSourceFallbackErrors, ThrowOnError> => (options.client ?? client).get<GetAdminSourceFallbackResponses, GetAdminSourceFallbackErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/products/{product_id}/source-fallback',
+    ...options
+});
+
+/**
+ * Update Policy
+ */
+export const updateAdminSourceFallback = <ThrowOnError extends boolean = false>(options: Options<UpdateAdminSourceFallbackData, ThrowOnError>): RequestResult<UpdateAdminSourceFallbackResponses, UpdateAdminSourceFallbackErrors, ThrowOnError> => (options.client ?? client).put<UpdateAdminSourceFallbackResponses, UpdateAdminSourceFallbackErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/products/{product_id}/source-fallback',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * Get Admin Product Summary
  *
  * Read logical source strings and imported target-language coverage.
@@ -601,6 +623,17 @@ export const deactivateAdminUser = <ThrowOnError extends boolean = false>(option
 });
 
 /**
+ * List User Products
+ *
+ * Read explicit access before editing; hidden pages are never implicit removals.
+ */
+export const listAdminUserProducts = <ThrowOnError extends boolean = false>(options: Options<ListAdminUserProductsData, ThrowOnError>): RequestResult<ListAdminUserProductsResponses, ListAdminUserProductsErrors, ThrowOnError> => (options.client ?? client).get<ListAdminUserProductsResponses, ListAdminUserProductsErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/admin/users/{user_id}/products',
+    ...options
+});
+
+/**
  * Reactivate User
  *
  * Reactivate one account with a fresh temporary password.
@@ -699,6 +732,15 @@ export const listProjectUpdates = <ThrowOnError extends boolean = false>(options
  * Return the constant public liveness payload.
  */
 export const readHealth = <ThrowOnError extends boolean = false>(options?: Options<ReadHealthData, ThrowOnError>): RequestResult<ReadHealthResponses, ReadHealthErrors, ThrowOnError> => (options?.client ?? client).get<ReadHealthResponses, ReadHealthErrors, ThrowOnError>({ url: '/api/v1/health', ...options });
+
+/**
+ * Code Keys
+ */
+export const listCodeKeys = <ThrowOnError extends boolean = false>(options: Options<ListCodeKeysData, ThrowOnError>): RequestResult<ListCodeKeysResponses, ListCodeKeysErrors, ThrowOnError> => (options.client ?? client).get<ListCodeKeysResponses, ListCodeKeysErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/localization-scopes/{scope_id}/code-keys',
+    ...options
+});
 
 /**
  * Get Consent
@@ -875,6 +917,46 @@ export const reviewAuthoringRequest = <ThrowOnError extends boolean = false>(opt
 });
 
 /**
+ * Get Workflow
+ */
+export const getBranchWorkflow = <ThrowOnError extends boolean = false>(options: Options<GetBranchWorkflowData, ThrowOnError>): RequestResult<GetBranchWorkflowResponses, GetBranchWorkflowErrors, ThrowOnError> => (options.client ?? client).get<GetBranchWorkflowResponses, GetBranchWorkflowErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/products/{product_id}/branch-workflow',
+    ...options
+});
+
+/**
+ * Put Workflow
+ */
+export const configureBranchWorkflow = <ThrowOnError extends boolean = false>(options: Options<ConfigureBranchWorkflowData, ThrowOnError>): RequestResult<ConfigureBranchWorkflowResponses, ConfigureBranchWorkflowErrors, ThrowOnError> => (options.client ?? client).put<ConfigureBranchWorkflowResponses, ConfigureBranchWorkflowErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/products/{product_id}/branch-workflow',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Retry
+ */
+export const retryBranchChange = <ThrowOnError extends boolean = false>(options: Options<RetryBranchChangeData, ThrowOnError>): RequestResult<RetryBranchChangeResponses, RetryBranchChangeErrors, ThrowOnError> => (options.client ?? client).post<RetryBranchChangeResponses, RetryBranchChangeErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/products/{product_id}/branch-workflow/jobs/{job_id}/retry',
+    ...options
+});
+
+/**
+ * Create Pr
+ */
+export const createBranchPullRequest = <ThrowOnError extends boolean = false>(options: Options<CreateBranchPullRequestData, ThrowOnError>): RequestResult<CreateBranchPullRequestResponses, CreateBranchPullRequestErrors, ThrowOnError> => (options.client ?? client).post<CreateBranchPullRequestResponses, CreateBranchPullRequestErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/products/{product_id}/branch-workflow/pull-request',
+    ...options
+});
+
+/**
  * Candidates
  */
 export const getChangeSetCandidates = <ThrowOnError extends boolean = false>(options: Options<GetChangeSetCandidatesData, ThrowOnError>): RequestResult<GetChangeSetCandidatesResponses, GetChangeSetCandidatesErrors, ThrowOnError> => (options.client ?? client).get<GetChangeSetCandidatesResponses, GetChangeSetCandidatesErrors, ThrowOnError>({
@@ -973,6 +1055,15 @@ export const retryChangeSet = <ThrowOnError extends boolean = false>(options: Op
 export const getChangeSetValues = <ThrowOnError extends boolean = false>(options: Options<GetChangeSetValuesData, ThrowOnError>): RequestResult<GetChangeSetValuesResponses, GetChangeSetValuesErrors, ThrowOnError> => (options.client ?? client).get<GetChangeSetValuesResponses, GetChangeSetValuesErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/products/{product_id}/change-sets/{change_set_id}/values',
+    ...options
+});
+
+/**
+ * Code Sources
+ */
+export const listProductCodeSources = <ThrowOnError extends boolean = false>(options: Options<ListProductCodeSourcesData, ThrowOnError>): RequestResult<ListProductCodeSourcesResponses, ListProductCodeSourcesErrors, ThrowOnError> => (options.client ?? client).get<ListProductCodeSourcesResponses, ListProductCodeSourcesErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/products/{product_id}/code-sources',
     ...options
 });
 
@@ -1202,6 +1293,64 @@ export const searchTranslationKeys = <ThrowOnError extends boolean = false>(opti
 export const listTranslationOptions = <ThrowOnError extends boolean = false>(options?: Options<ListTranslationOptionsData, ThrowOnError>): RequestResult<ListTranslationOptionsResponses, ListTranslationOptionsErrors, ThrowOnError> => (options?.client ?? client).get<ListTranslationOptionsResponses, ListTranslationOptionsErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/translations/options',
+    ...options
+});
+
+/**
+ * Code Context
+ */
+export const getTranslationCodeContext = <ThrowOnError extends boolean = false>(options: Options<GetTranslationCodeContextData, ThrowOnError>): RequestResult<GetTranslationCodeContextResponses, GetTranslationCodeContextErrors, ThrowOnError> => (options.client ?? client).get<GetTranslationCodeContextResponses, GetTranslationCodeContextErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/translations/{group_id}/code-context',
+    ...options
+});
+
+/**
+ * Screenshots
+ */
+export const listTranslationScreenshots = <ThrowOnError extends boolean = false>(options: Options<ListTranslationScreenshotsData, ThrowOnError>): RequestResult<ListTranslationScreenshotsResponses, ListTranslationScreenshotsErrors, ThrowOnError> => (options.client ?? client).get<ListTranslationScreenshotsResponses, ListTranslationScreenshotsErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/translations/{group_id}/screenshots',
+    ...options
+});
+
+/**
+ * Cancel
+ */
+export const cancelTranslationScreenshot = <ThrowOnError extends boolean = false>(options: Options<CancelTranslationScreenshotData, ThrowOnError>): RequestResult<CancelTranslationScreenshotResponses, CancelTranslationScreenshotErrors, ThrowOnError> => (options.client ?? client).delete<CancelTranslationScreenshotResponses, CancelTranslationScreenshotErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/translations/{group_id}/screenshots/{job_id}',
+    ...options
+});
+
+/**
+ * Screenshot
+ */
+export const getTranslationScreenshot = <ThrowOnError extends boolean = false>(options: Options<GetTranslationScreenshotData, ThrowOnError>): RequestResult<GetTranslationScreenshotResponses, GetTranslationScreenshotErrors, ThrowOnError> => (options.client ?? client).get<GetTranslationScreenshotResponses, GetTranslationScreenshotErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/translations/{group_id}/screenshots/{job_id}',
+    ...options
+});
+
+/**
+ * Request Screenshot
+ */
+export const requestTranslationScreenshot = <ThrowOnError extends boolean = false>(options: Options<RequestTranslationScreenshotData, ThrowOnError>): RequestResult<RequestTranslationScreenshotResponses, RequestTranslationScreenshotErrors, ThrowOnError> => (options.client ?? client).put<RequestTranslationScreenshotResponses, RequestTranslationScreenshotErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/translations/{group_id}/screenshots/{job_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Screenshot Image
+ */
+export const getTranslationScreenshotImage = <ThrowOnError extends boolean = false>(options: Options<GetTranslationScreenshotImageData, ThrowOnError>): RequestResult<GetTranslationScreenshotImageResponses, GetTranslationScreenshotImageErrors, ThrowOnError> => (options.client ?? client).get<GetTranslationScreenshotImageResponses, GetTranslationScreenshotImageErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/translations/{group_id}/screenshots/{job_id}/image',
     ...options
 });
 

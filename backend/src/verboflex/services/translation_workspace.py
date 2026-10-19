@@ -24,6 +24,7 @@ from verboflex.schemas.translation_workspace import (
 from verboflex.schemas.translations import TranslationLanguageOptionResponse
 from verboflex.services.product_summary import _WHITESPACE
 from verboflex.services.signed_cursor import InvalidSignedCursor, SignedCursorCodec
+from verboflex.services.source_fallback import SOURCE_FALLBACK_SQL
 from verboflex.services.translation_search import (
     _SOURCE_COMPARISON_SQL,
     _SOURCE_RECORDS_SQL,
@@ -37,7 +38,9 @@ _CURRENT = f"""
     SELECT scope.id AS scope_id, product.id AS product_id, product.display_name AS product_name,
            scope.current_revision_id, scope.active_execution_id, scope.dataset_version,
            scope.read_version, scope.language_counts,
-           mapping.base_language
+           mapping.base_language,
+           coalesce((SELECT policy.version FROM source_fallback_policies AS policy
+               WHERE policy.product_id = product.id), 0) AS source_fallback_version
     FROM products AS product
     JOIN localization_scopes AS scope ON scope.product_id = product.id
         AND scope.current_revision_id = product.active_revision_id
@@ -76,6 +79,9 @@ SELECT coalesce((SELECT jsonb_agg(code ORDER BY is_base DESC, code COLLATE "C")
 
 # Imported and pending predicates remain separate. Only complete, current pending
 # membership may replace text; one member from another scope/language fails closed.
+_FALLBACK = SOURCE_FALLBACK_SQL.format(
+    base_language="current.base_language", product_id="current.product_id"
+)
 _KEY_PAGE = text(rf"""
 WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
     SELECT key.id AS key_id, current.scope_id, current.product_id, current.product_name,
@@ -102,8 +108,9 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
             OR (:violation = 'within_limit' AND value.effective_max_chars IS NOT NULL
                 AND NOT value.is_over_limit)
             OR (:violation = 'no_max' AND value.effective_max_chars IS NULL))) AS limit_matches,
-        bool_or(NOT value.is_deleted AND
+        bool_or(NOT value.is_deleted AND NOT fallback.applies AND
             btrim(coalesce(value.translated_text, ''), :whitespace) = '') AS imported_empty,
+        bool_or(fallback.applies) AS uses_source_fallback,
         bool_or(source_projection.source_changed) AS source_changed,
         (array_agg(source_projection.source_text ORDER BY value.is_deleted, value.id)
             FILTER (WHERE source_projection.source_text IS NOT NULL))[1] AS source_text,
@@ -119,9 +126,11 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
         bool_or((:deleted <> 'active' OR NOT value.is_deleted) AND
             casefold(value.display_text COLLATE pg_unicode_fast) LIKE :partial ESCAPE '\')
             AS text_partial,
-        (array_agg(left(value.display_text, 1024) ORDER BY value.is_deleted, value.id))[1]
+        (array_agg(left(CASE WHEN fallback.applies THEN value.source_text
+            ELSE value.display_text END, 1024) ORDER BY value.is_deleted, value.id))[1]
             AS imported_text,
-        bool_or(length(value.display_text) > 1024) AS imported_truncated,
+        bool_or(length(CASE WHEN fallback.applies THEN value.source_text
+            ELSE value.display_text END) > 1024) AS imported_truncated,
         bool_or(locator.repository_side = 'keys') AS keys_side,
         bool_and(coalesce(locator.value_id IS NOT NULL
             AND locator.import_execution_id = current.active_execution_id, false)) AS provenance_ok,
@@ -142,10 +151,14 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
                 WHERE locator.format = 'android_xml'
                   AND node->>'kind' IN ('android_xml:text', 'android_xml:tail', 'android_xml:cdata')
             )) AS shape_ok,
-        bool_and(locator.repository_side = 'direct'
+        bool_and(locator.repository_side IN ('direct', 'translations')
             AND locator.format IN ('android_xml', 'json', 'ios_strings')
             AND value.source_text IS NOT NULL AND value.translated_text IS NULL) AS source_leaf,
-        bool_and(value.translated_text IS NOT NULL) AS translation_leaf
+        bool_and(value.translated_text IS NOT NULL) AS translation_leaf,
+        bool_and(coalesce(locator.format = 'qt_ts'
+            AND locator.repository_side IN ('direct', 'translations')
+            AND value.source_text IS NOT NULL AND value.translated_text IS NOT NULL, false))
+            AS embedded_translation
     FROM current
     JOIN translation_keys AS key
       ON key.scope_id = current.scope_id AND key.product_id = current.product_id
@@ -153,6 +166,9 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
       ON value.translation_key_id = key.id AND value.scope_id = current.scope_id
     LEFT JOIN translation_value_locators AS locator
       ON locator.value_id = value.id AND locator.translation_key_id = key.id
+    CROSS JOIN LATERAL (SELECT coalesce((
+        {_FALLBACK}
+    ), false) AS applies) AS fallback
     LEFT JOIN LATERAL (
         SELECT key.id AS key_id, current.scope_id, value.language, current.base_language,
                (key.is_deleted OR value.is_deleted) AS is_deleted,
@@ -177,10 +193,14 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
              current.base_language, value.language
 ), effective AS MATERIALIZED (
     SELECT aggregate.*, proposal.version AS pending_version, proposal.state AS pending_state,
+        proposal.target_branch,
+        (proposal.state = 'approved' AND proposal.target_commit_hash IS NOT NULL)
+            AS target_integrated,
         pending.value_count AS pending_value_count,
         pending.over_limit_count AS pending_over_limit_count,
-        (proposal.reconciliation_required OR NOT coalesce(pending.fresh, false))
-            AS pending_reconciliation_required,
+        ((proposal.reconciliation_required OR NOT coalesce(pending.fresh, false))
+            AND NOT (proposal.state = 'approved' AND proposal.target_branch IS NOT NULL
+                AND coalesce(pending.matches_imported, false))) AS pending_reconciliation_required,
         (proposal.state <> 'rejected' AND NOT proposal.reconciliation_required
             AND coalesce(pending.fresh, false)) AS use_pending,
         pending.first_text AS pending_text, pending.text_truncated AS pending_truncated,
@@ -199,6 +219,9 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
       ON proposal.translation_key_id = aggregate.key_id AND proposal.language = aggregate.language
     LEFT JOIN LATERAL (
         SELECT count(*)::integer AS value_count,
+            count(*) = aggregate.value_count AND bool_and(coalesce(
+                NOT member.is_deleted AND member.display_text = pending.proposed_text, false))
+                AS matches_imported,
             count(*) FILTER (WHERE member.effective_max_chars IS NOT NULL
                 AND pending.grapheme_count > member.effective_max_chars)
                 ::integer AS over_limit_count,
@@ -239,7 +262,8 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
                OR (:deleted = 'deleted' AND is_deleted))
           AND state_matches AND limit_matches
           AND (CAST(:work_status AS text) IS NULL OR (
-            NOT has_deleted AND base_language IS NOT NULL AND language <> base_language AND (
+            NOT has_deleted AND base_language IS NOT NULL
+            AND (language <> base_language OR embedded_translation) AND (
                 (:work_status = 'needs_translation' AND empty)
                 OR (:work_status = 'needs_review' AND pending_state = 'draft'
                     AND NOT pending_reconciliation_required)
@@ -250,6 +274,8 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
         (array_agg(source_text ORDER BY is_deleted, language)
             FILTER (WHERE source_text IS NOT NULL))[1] AS source_text,
         bool_or(source_truncated) AS source_truncated,
+        coalesce(bool_or(NOT :has_query OR stable_key LIKE :partial ESCAPE '\'
+            OR source_partial), false) AS text_matches,
         bool_and(is_deleted) AS is_deleted,
         CASE WHEN NOT :has_query THEN 3
             WHEN bool_or(stable_key = :query OR source_exact) THEN 0
@@ -262,6 +288,25 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
                 OR (:deleted = 'deleted' AND bool_and(is_deleted))), false) AS matches
     FROM ranked GROUP BY key_id, scope_id
     HAVING bool_or(source_text IS NOT NULL)
+), absent_matches AS MATERIALIZED (
+    -- A missing target has no value identity. Match it through its live source
+    -- and this scope's supported locales, without inventing a group or state.
+    SELECT context.key_id, context.scope_id, language.code AS language, context.rank
+    FROM contexts AS context
+    JOIN current ON current.scope_id = context.scope_id
+    CROSS JOIN LATERAL unnest(CASE WHEN CAST(:language AS text) IS NOT NULL
+        THEN ARRAY[CAST(:language AS text)] ELSE CAST(:languages AS text[]) END) AS language(code)
+    WHERE :work_status = 'needs_translation' AND :deleted <> 'deleted'
+      AND CAST(:state AS text) IS NULL AND CAST(:violation AS text) IS NULL
+      AND context.text_matches AND NOT context.is_deleted
+      AND language.code <> context.language
+      AND coalesce((current.language_counts->language.code->>0)::bigint, 0) > 0
+      -- Retained deleted values remain tombstones, not newly absent work.
+      AND NOT EXISTS (
+          SELECT 1 FROM translation_values AS existing
+          WHERE existing.translation_key_id = context.key_id
+            AND existing.scope_id = context.scope_id AND existing.language = language.code
+      )
 ), matching AS (
     SELECT key_id, scope_id, min(rank) AS rank FROM (
         SELECT key_id, scope_id, rank FROM ranked
@@ -273,6 +318,8 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
             OR (CAST(:language AS text) IS NULL AND language = ANY(:languages)))
           AND NOT EXISTS (SELECT 1 FROM ranked AS imported WHERE imported.key_id=context.key_id
                 AND imported.scope_id=context.scope_id AND imported.language=context.language)
+        UNION ALL
+        SELECT key_id, scope_id, rank FROM absent_matches
     ) AS matches GROUP BY key_id, scope_id
 ), ordered AS (
     SELECT matching.*, casefold(key.raw_key COLLATE pg_unicode_fast) COLLATE "C" AS stable_key
@@ -301,10 +348,15 @@ LEFT JOIN LATERAL (
             WHEN language.code = context.language THEN 'source_context' ELSE 'absent' END,
         'group_id', slot.group_id,
         'matches_filters', (CAST(:language AS text) IS NULL OR language.code = :language)
-            AND coalesce(slot.matches, language.code = context.language AND context.matches, false),
+            AND (coalesce(slot.matches, language.code = context.language AND context.matches, false)
+                OR EXISTS (SELECT 1 FROM absent_matches AS missing
+                    WHERE missing.key_id = page.key_id AND missing.scope_id = page.scope_id
+                      AND missing.language = language.code)),
         'effective_text', CASE WHEN slot.group_id IS NULL THEN
             CASE WHEN language.code=context.language THEN context.source_text END
             WHEN slot.use_pending THEN slot.pending_text ELSE slot.imported_text END,
+        'uses_source_fallback', coalesce(slot.uses_source_fallback
+            AND NOT coalesce(slot.use_pending, false), false),
         'text_truncated', coalesce(CASE WHEN slot.group_id IS NULL THEN
             language.code=context.language AND context.source_truncated
             WHEN slot.use_pending THEN slot.pending_truncated
@@ -317,6 +369,7 @@ LEFT JOIN LATERAL (
         'states', coalesce(slot.states, ARRAY[]::text[]),
         'pending_change', CASE WHEN slot.pending_version IS NULL THEN NULL ELSE jsonb_build_object(
             'version', slot.pending_version, 'state', slot.pending_state,
+            'target_branch', slot.target_branch, 'target_integrated', slot.target_integrated,
             'reconciliation_required', slot.pending_reconciliation_required,
             'value_count', slot.pending_value_count) END,
         'comment_count', (SELECT count(*) FROM translation_comments AS comment

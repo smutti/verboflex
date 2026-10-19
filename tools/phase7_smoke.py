@@ -1272,6 +1272,102 @@ def audit(h: Harness) -> None:
         assert observed == expected and expected > 0
 
 
+
+def branch_workflow_smoke(h: Harness) -> None:
+    """Real API, worker and TLS provider: commits first, PR only from the browser."""
+    slug = "phase7-approval-branch"
+    control = json.loads(h.control_path.read_text())
+    repositories = dict(control.get("repositories", {}))
+    repositories[slug] = {"fixture": "json"}
+    branches = dict(control.get("branches", {}))
+    branches[slug] = {"feature/verboflex": "2" * 40, "master": p6.HEAD}
+    h.control(repositories=repositories, branches=branches, write_faults={})
+    seeded = h.db("seed-extra", {"actor_id": h.fixture["actor_id"], "scenarios": [
+        {"name": "approval-branch", "mappings": [{"slug": slug, "branch": "feature/verboflex"}]}
+    ]})
+    scenario = seeded["scenarios"][0]
+    # The control is an external-force override on every read; seed once, then
+    # allow ordinary commits to advance the persistent fixture branch.
+    branches.pop(slug)
+    h.control(branches=branches)
+    product = scenario["product"]
+    h.browser({"name": "approval-branch-config", "action": "configure-branches", "product": product,
+        "mapping": scenario["mappings"][0]["mapping"], "work_branch": "feature/verboflex", "target_branch": "master"})
+    h.compose("up", "-d", "scheduler")
+    h.prepare(scenario, replacement="First approved translation")
+    endpoint = f"/products/{product}/branch-workflow"
+    first = h.wait(lambda: h.api(endpoint), lambda d: d["items"] and (any(i["state"] == "blocked" for i in d["items"]) or all(
+        item["state"] == "committed" for item in d["items"])), seconds=120)
+    assert all(i["state"] == "committed" for i in first["items"]), first
+    assert h.graph()["repositories"][slug]["counters"]["pull_request"]["effects"] == 0
+    group = h.api(f"/translations?product_id={product}&language=it&page_size=50&q=P6%20old")["items"][0]
+    # Reimport the approval from the same branch used for review and commits.
+    refreshed = h.api(f"/admin/products/{product}/published/mappings/{scenario['mappings'][0]['mapping']}/imports", "POST")
+    refreshed = h.wait(lambda: h.api(f"/admin/products/{product}/imports/{refreshed['id']}"),
+        lambda j: j["state"] not in ("queued", "running"), seconds=120)
+    assert refreshed["state"] == "current", refreshed
+    detail = h.api(f"/translations/{group['id']}")
+    assert detail["pending_change"]["state"] == "approved"
+    assert not detail["pending_change"]["reconciliation_required"]
+    assert not detail["pending_change"]["target_integrated"]
+    assert all(v["translated_text"] == "First approved translation" for v in detail["values"])
+    saved = h.api(f"/translations/{group['id']}/proposal", "PUT", {
+        "expected_version": detail["pending_change"]["version"],
+        "values": [{"translation_value_id": v["id"], "proposed_text": "Second approved translation",
+            "selector_version": v["selector_version"], "selector_digest": v["selector_digest"],
+            "basis_revision_number": v["history"][0]["revision_number"],
+            "basis_digest": v["history"][0]["revision_digest"]} for v in detail["values"]],
+    })
+    approval_url = f"/translations/{group['id']}/proposal/state"
+    approval_payload = {"expected_version": saved["version"], "target_state": "approved"}
+    h.api(approval_url, "POST", approval_payload)
+    # A lost response or double-click must not enqueue another commit.
+    h.api(approval_url, "POST", approval_payload, expected=409)
+    second = h.wait(lambda: h.api(endpoint), lambda d: d["items"][0]["state"] in ("committed", "blocked"), seconds=120)
+    assert second["items"][0]["state"] == "committed", second
+    assert len(second["items"]) == len(first["items"]) + 1
+    assert second["items"][0]["commit_hash"] not in {i["commit_hash"] for i in first["items"]}
+    assert h.graph()["repositories"][slug]["counters"]["pull_request"]["effects"] == 0
+    h.browser({"name": "translation-awaiting", "action": "translation-status", "product": product,
+        "group": group["id"], "status": "approved"})
+    h.browser({"name": "approval-branch", "action": "branch-workflow", "product": product})
+    published = h.wait(lambda: h.api(endpoint), lambda d: d["items"][0]["state"] in ("open", "blocked"), seconds=120)
+    assert published["items"][0]["state"] == "open", published
+    effects = h.graph()["repositories"][slug]["counters"]
+    assert effects["pull_request"]["effects"] == 1
+    assert effects["commit"]["effects"] == len(second["items"])
+    # Simulate target integration at the provider boundary, then let the real
+    # scheduler/worker verify the approved values. PR status alone is not used.
+    target_head = second["items"][0]["commit_hash"]
+    control = json.loads(h.control_path.read_text())
+    h.control(branches={**control.get("branches", {}), slug: {"master": target_head}})
+    h.wait(lambda: h.api(f"/translations/{group['id']}"),
+        lambda d: d["pending_change"]["target_integrated"], seconds=150)
+    h.browser({"name": "translation-integrated", "action": "translation-status", "product": product,
+        "group": group["id"], "status": "integrated"})
+    detail = h.api(f"/translations/{group['id']}")
+    h.api(f"/translations/{group['id']}/proposal", "PUT", {
+        "expected_version": detail["pending_change"]["version"],
+        "values": [{"translation_value_id": v["id"], "proposed_text": "Next pending translation",
+            "selector_version": v["selector_version"], "selector_digest": v["selector_digest"],
+            "basis_revision_number": v["history"][0]["revision_number"],
+            "basis_digest": v["history"][0]["revision_digest"]} for v in detail["values"]],
+    })
+    h.browser({"name": "translation-pending", "action": "translation-status", "product": product,
+        "group": group["id"], "status": "pending"})
+    assert h.graph()["repositories"][slug]["counters"] == effects
+    write_json(h.runtime / "branch-workflow-evidence.json", {
+        "commits": len(second["items"]), "pull_requests": 1,
+        "approval_snapshots": True, "sequential_commits": True, "explicit_pr": True,
+        "browser_configuration": True, "duplicate_approval_rejected": True,
+        "target_badge_lifecycle": True, "integration_does_not_publish": True,
+        "working_branch": "feature/verboflex", "target": "master",
+        "imports_working_branch": True, "reimport_preserves_approval": True,
+    })
+    destination = Path(h.fixture["evidence_dir"])
+    destination.mkdir(parents=True, exist_ok=True)
+    write_json(destination / "branch-workflow-evidence.json", json.loads((h.runtime / "branch-workflow-evidence.json").read_text()))
+
 def main() -> None:
     global STAGE
     STAGE = sys.argv[1]
@@ -1296,6 +1392,12 @@ def main() -> None:
         )
         result["localization_unchanged"] = True
         write_json(harness.runtime / "happy-evidence.json", result)
+    elif STAGE == "branch-workflow":
+        harness = Harness(Path(sys.argv[2]))
+        branch_workflow_smoke(harness)
+        from shared_moko_smoke import run
+
+        run(harness)
     elif STAGE == "faults":
         run_faults(Harness(Path(sys.argv[2])))
     elif STAGE == "audit":
