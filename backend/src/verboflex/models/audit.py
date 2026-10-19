@@ -30,6 +30,7 @@ AUDIT_ACTIONS = (
     "user.password_changed",
     "user.deactivated",
     "user.reactivated",
+    "user.deleted",
     "constraint.updated",
     "constraint.deleted",
     "preview.requested",

@@ -24,6 +24,10 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         CheckConstraint(
+            "deleted_at IS NULL OR (NOT is_active AND NOT must_change_password)",
+            name="deleted_account_disabled",
+        ),
+        CheckConstraint(
             r"email = lower(btrim(email, E' \t\n\r\f\v'))",
             name="email_normalized",
         ),
@@ -42,6 +46,7 @@ class User(Base):
     token_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

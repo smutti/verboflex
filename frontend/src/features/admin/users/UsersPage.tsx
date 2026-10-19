@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createAdminUser,
   deactivateAdminUser,
+  deleteAdminUser,
   listAdminUsers,
   reactivateAdminUser,
   resetAdminUserPassword,
@@ -62,8 +63,8 @@ export interface UsersPageProps {
 
 type LoadState = "loading" | "ready" | "error";
 type StatusFilter = "all" | "active" | "inactive";
-type LifecycleAction = "reset" | "deactivate" | "reactivate";
-type LifecycleError = "conflict" | "generic" | null;
+type LifecycleAction = "reset" | "deactivate" | "reactivate" | "delete";
+type LifecycleError = "conflict" | "generic" | "rate-limit" | null;
 
 interface LifecycleTarget {
   action: LifecycleAction;
@@ -165,12 +166,33 @@ const LIFECYCLE_COPY: Record<
       return t("Reactivate user");
     },
   },
+  delete: {
+    title: (displayName) => t("Delete {{v0}}?", { v0: displayName }),
+    body: () =>
+      t(
+        "This permanently removes the account and its access. Existing contributions and activity history are kept with an anonymous identity. This account cannot be reactivated.",
+      ),
+    get confirmLabel() {
+      return t("Delete user");
+    },
+  },
 };
 
 function lifecycleErrorCopy(
   error: Exclude<LifecycleError, null>,
   action: LifecycleAction,
 ) {
+  if (action === "delete") {
+    if (error === "conflict")
+      return t(
+        "This account is active. Deactivate it before deleting it, then refresh the list.",
+      );
+    if (error === "rate-limit")
+      return t("Too many deletion attempts. Wait before trying again.");
+    return t(
+      "We could not confirm the deletion. Refresh the list before trying again.",
+    );
+  }
   switch (error) {
     case "conflict":
       return action === "deactivate"
@@ -181,6 +203,7 @@ function lifecycleErrorCopy(
             "This user changed in another session or administrator authority must be preserved.",
           );
     case "generic":
+    case "rate-limit":
       return t("The current user state is unchanged. Try again.");
   }
 }
@@ -246,17 +269,31 @@ function UserActions({
               </DropdownMenuItem>
             </>
           ) : (
-            <DropdownMenuItem
-              onSelect={() =>
-                onLifecycle({
-                  action: "reactivate",
-                  returnFocus: actionTriggerRef.current!,
-                  user,
-                })
-              }
-            >
-              {t("Reactivate user")}
-            </DropdownMenuItem>
+            <>
+              <DropdownMenuItem
+                onSelect={() =>
+                  onLifecycle({
+                    action: "reactivate",
+                    returnFocus: actionTriggerRef.current!,
+                    user,
+                  })
+                }
+              >
+                {t("Reactivate user")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={() =>
+                  onLifecycle({
+                    action: "delete",
+                    returnFocus: actionTriggerRef.current!,
+                    user,
+                  })
+                }
+              >
+                {t("Delete user")}
+              </DropdownMenuItem>
+            </>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
@@ -281,6 +318,8 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
   const [lifecyclePending, setLifecyclePending] = useState(false);
   const [lifecycleError, setLifecycleError] = useState<LifecycleError>(null);
   const lifecycleErrorRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const [deletionComplete, setDeletionComplete] = useState(false);
   const [temporaryCredential, setTemporaryCredential] =
     useState<TemporaryCredential | null>(null);
 
@@ -442,7 +481,29 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
     };
 
     try {
-      if (target.action === "deactivate") {
+      if (target.action === "delete") {
+        const result = await deleteAdminUser(options);
+        const status = responseStatus(result);
+        if (status !== 204 && status !== 404) {
+          setLifecycleError(
+            status === 409
+              ? "conflict"
+              : status === 429
+                ? "rate-limit"
+                : "generic",
+          );
+          return;
+        }
+        // Invalidate list requests that started before the deletion completed.
+        loadGeneration.current += 1;
+        setLoadingMore(false);
+        setUsers((current) =>
+          current.filter((user) => user.id !== target.user.id),
+        );
+        setDeletionComplete(true);
+        setLifecycleTarget(null);
+        queueMicrotask(() => titleRef.current?.focus());
+      } else if (target.action === "deactivate") {
         const result = await deactivateAdminUser(options);
         if (result.data === undefined) {
           setLifecycleError(
@@ -489,7 +550,12 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
     <section className="grid min-w-0 gap-8" aria-labelledby="admin-users-title">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="grid min-w-0 gap-2">
-          <h1 id="admin-users-title" className="text-display font-semibold">
+          <h1
+            ref={titleRef}
+            tabIndex={-1}
+            id="admin-users-title"
+            className="text-display font-semibold"
+          >
             {t("Users")}
           </h1>
         </div>
@@ -502,6 +568,8 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
           {t("Add user")}
         </Button>
       </div>
+
+      {deletionComplete ? <p role="status">{t("User deleted.")}</p> : null}
 
       {loadState === "loading" ? (
         <div className="grid gap-4" role="status" aria-live="polite">
@@ -667,6 +735,11 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
                 {LIFECYCLE_COPY[lifecycleTarget.action].body(
                   lifecycleTarget.user.display_name,
                 )}
+                {lifecycleTarget.action === "delete" ? (
+                  <span className="mt-2 block break-all font-medium">
+                    {lifecycleTarget.user.email}
+                  </span>
+                ) : null}
               </AlertDialogDescription>
             </AlertDialogHeader>
 
@@ -690,7 +763,8 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
               <Button
                 type="button"
                 variant={
-                  lifecycleTarget.action === "deactivate"
+                  lifecycleTarget.action === "deactivate" ||
+                  lifecycleTarget.action === "delete"
                     ? "destructive"
                     : "default"
                 }

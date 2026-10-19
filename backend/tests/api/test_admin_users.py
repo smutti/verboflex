@@ -519,6 +519,7 @@ def test_every_admin_user_endpoint_uses_the_same_bearer_and_admin_guard_without_
         ("POST", f"{ADMIN_USERS_PATH}/{target_id}/reset-password", None),
         ("POST", f"{ADMIN_USERS_PATH}/{target_id}/deactivate", None),
         ("POST", f"{ADMIN_USERS_PATH}/{target_id}/reactivate", None),
+        ("DELETE", f"{ADMIN_USERS_PATH}/{target_id}", None),
     )
 
     for method, path, body in operations:

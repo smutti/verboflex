@@ -85,6 +85,14 @@ out of automatic translation with `translate="no"`, `notranslate` and the Google
 translation meta tag. Headless Chromium does not exercise an external translation
 service; extensions that ignore these page directives require a manual check.
 
+The focused account-removal browser check uses the same preview server:
+`PLAYWRIGHT_BASE_URL=http://127.0.0.1:4179 npm --prefix frontend run e2e --
+user-deletion.spec.ts`. Synthetic responses exercise deactivation, cancellation,
+explicit deletion confirmation, the 204 response, focus restoration and reload on
+desktop and 320-pixel screens. Real PostgreSQL API tests additionally verify
+permissions, historical references, credential revocation, email reuse,
+reactivation races and migration rollback protection.
+
 The frozen Phase 4 API-scope check uses a recorded GSD verdict bound to the exact
 plan contents in `tools/phase4_api_scope_receipt.json`. Any changed or added plan
 or coverage declaration requires rerunning and reviewing that workflow check.

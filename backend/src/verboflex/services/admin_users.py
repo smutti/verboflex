@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_, select, text, update
+from sqlalchemy import and_, delete, func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -23,6 +23,7 @@ from verboflex.auth.passwords import (
     validate_password_for_user,
 )
 from verboflex.models.auth_session import AuthSession
+from verboflex.models.mcp_oauth import McpAuthorizationRequest, McpGrant
 from verboflex.models.product import Product
 from verboflex.models.product_member import ProductMember, ProductTeamEvent
 from verboflex.models.role import Role
@@ -147,7 +148,12 @@ def _load_current_admin(session: Session, actor_id: UUID, *, lock: bool) -> User
     if lock:
         statement = statement.with_for_update()
     actor = session.execute(statement).scalar_one_or_none()
-    if actor is None or not actor.is_active or actor.must_change_password:
+    if (
+        actor is None
+        or actor.deleted_at is not None
+        or not actor.is_active
+        or actor.must_change_password
+    ):
         raise AdminUserAuthorityError("administrator authority unavailable")
     try:
         roles = _ordered_roles(actor.roles)
@@ -160,7 +166,11 @@ def _load_current_admin(session: Session, actor_id: UUID, *, lock: bool) -> User
 
 def _load_target_user(session: Session, target_id: UUID) -> User:
     target = session.execute(
-        select(User).where(User.id == target_id).options(selectinload(User.roles)).with_for_update()
+        select(User)
+        .where(User.id == target_id, User.deleted_at.is_(None))
+        .options(selectinload(User.roles))
+        .execution_options(populate_existing=True)
+        .with_for_update()
     ).scalar_one_or_none()
     if target is None:
         raise AdminUserNotFound("user unavailable")
@@ -170,7 +180,7 @@ def _load_target_user(session: Session, target_id: UUID) -> User:
 def _load_target_user_by_email(session: Session, normalized_email: str) -> User:
     target = session.execute(
         select(User)
-        .where(User.email == normalized_email)
+        .where(User.email == normalized_email, User.deleted_at.is_(None))
         .options(selectinload(User.roles))
         .with_for_update()
     ).scalar_one_or_none()
@@ -382,7 +392,8 @@ def list_admin_user_products(
         raise AdminUserInputError("invalid page size")
     with session.begin():
         _load_current_admin(session, actor_id, lock=False)
-        if session.get(User, target_id) is None:
+        target = session.get(User, target_id, populate_existing=True)
+        if target is None or target.deleted_at is not None:
             raise AdminUserNotFound("user unavailable")
         position = (
             decode_product_cursor(cursor, status=None, name_filter=None)
@@ -593,6 +604,41 @@ def _deactivate_user_under_admin_authority_lock(
     return _to_record(target)
 
 
+def delete_admin_user(session: Session, *, actor_id: UUID, target_id: UUID) -> None:
+    """Remove an inactive account's identity/access, retaining historical foreign keys.
+
+    The tombstone email is deliberately not a valid email address, so it cannot
+    collide with provisioned accounts or be used to sign in. The old address can
+    subsequently belong to a new UUID, without inheriting any previous authority.
+    """
+    with session.begin():
+        _lock_admin_authority(session)
+        _load_current_admin(session, actor_id, lock=True)
+        target = _load_target_user(session, target_id)
+        if target.is_active or target.id == actor_id:
+            raise AdminUserConflict("user lifecycle conflict")
+        now = datetime.now(UTC)
+        record_audit(session, actor_id=actor_id, action="user.deleted", entity_id=target.id)
+        target.deleted_at = now
+        target.email = f"deleted:{target.id}"
+        target.display_name = "Deleted user"
+        target.hashed_password = hash_password(secrets.token_urlsafe(32))
+        target.must_change_password = False
+        target.token_version += 1
+        target.roles = []
+        _revoke_live_sessions(session, target.id, revoked_at=now)
+        session.execute(
+            update(McpGrant)
+            .where(McpGrant.user_id == target.id, McpGrant.revoked_at.is_(None))
+            .values(revoked_at=now)
+        )
+        session.execute(
+            delete(McpAuthorizationRequest).where(McpAuthorizationRequest.user_id == target.id)
+        )
+        session.execute(delete(ProductMember).where(ProductMember.user_id == target.id))
+        session.flush()
+
+
 def reactivate_admin_user(
     session: Session,
     *,
@@ -622,7 +668,9 @@ def replace_user_password(
     normalized_email = normalize_email(email)
     with session.begin():
         user = session.execute(
-            select(User).where(User.email == normalized_email).with_for_update()
+            select(User)
+            .where(User.email == normalized_email, User.deleted_at.is_(None))
+            .with_for_update()
         ).scalar_one_or_none()
         if user is None:
             raise ResetPasswordError("reset refused: account unavailable")
@@ -708,7 +756,7 @@ def list_admin_users(
     position = _decode_cursor(cursor) if cursor is not None else None
     with session.begin():
         _load_current_admin(session, actor_id, lock=False)
-        statement = select(User).options(selectinload(User.roles))
+        statement = select(User).where(User.deleted_at.is_(None)).options(selectinload(User.roles))
         if position is not None:
             statement = statement.where(
                 or_(
