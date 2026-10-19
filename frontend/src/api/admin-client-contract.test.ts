@@ -428,6 +428,7 @@ const phaseThreeAdminOperationIds = new Map([
     "discover_admin_repository_sources",
   ],
   ["GET /api/v1/admin/users", "list_admin_users"],
+  ["GET /api/v1/admin/users/{user_id}/products", "list_admin_user_products"],
   ["POST /api/v1/admin/users", "create_admin_user"],
   ["PATCH /api/v1/admin/users/{user_id}", "update_admin_user"],
   ["POST /api/v1/admin/users/{user_id}/deactivate", "deactivate_admin_user"],

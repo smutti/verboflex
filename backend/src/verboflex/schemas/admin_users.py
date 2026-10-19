@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from verboflex.schemas.product_team import ProductRole
 from verboflex.schemas.users import RoleName
@@ -51,6 +51,41 @@ class AdminUserCreateRequest(BaseModel):
         return _ordered_unique_roles(roles)
 
 
+class AdminUserProductChange(BaseModel):
+    """One explicit membership change, guarded by the version shown to the admin."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    role: ProductRole | None
+    expected_version: UUID | None
+
+    @model_validator(mode="after")
+    def removal_requires_version(self) -> AdminUserProductChange:
+        if self.role is None and self.expected_version is None:
+            raise ValueError("Removing access requires the current membership version")
+        return self
+
+
+class AdminUserProductAccess(BaseModel):
+    """One non-deleted product and the selected account's explicit membership."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    name: str
+    is_active: bool
+    role: ProductRole | None
+    version: UUID | None
+
+
+class AdminUserProductsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[AdminUserProductAccess] = Field(max_length=100)
+    next_cursor: str | None
+
+
 class AdminUserUpdateRequest(BaseModel):
     """The only ordinary fields an administrator may change."""
 
@@ -58,6 +93,14 @@ class AdminUserUpdateRequest(BaseModel):
 
     display_name: Annotated[str, Field(min_length=1, max_length=200)]
     roles: Annotated[list[RoleName], Field(min_length=1, max_length=4)]
+    product_assignments: list[AdminUserProductChange] = Field(default_factory=list, max_length=100)
+
+    @field_validator("product_assignments")
+    @classmethod
+    def unique_products(cls, changes: list[AdminUserProductChange]) -> list[AdminUserProductChange]:
+        if len({change.product_id for change in changes}) != len(changes):
+            raise ValueError("Select each product only once")
+        return changes
 
     @field_validator("roles")
     @classmethod

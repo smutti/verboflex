@@ -1660,6 +1660,34 @@ export type AdminUserListResponse = {
 };
 
 /**
+ * AdminUserProductAccess
+ *
+ * One non-deleted product and the selected account's explicit membership.
+ */
+export type AdminUserProductAccess = {
+    /**
+     * Is Active
+     */
+    is_active: boolean;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Role
+     */
+    role: 'viewer' | 'translator' | 'product_manager_reviewer' | 'product_owner' | null;
+    /**
+     * Version
+     */
+    version: string | null;
+};
+
+/**
  * AdminUserProductAssignment
  *
  * One initial product membership for a newly created account.
@@ -1673,6 +1701,40 @@ export type AdminUserProductAssignment = {
      * Role
      */
     role: 'viewer' | 'translator' | 'product_manager_reviewer' | 'product_owner';
+};
+
+/**
+ * AdminUserProductChange
+ *
+ * One explicit membership change, guarded by the version shown to the admin.
+ */
+export type AdminUserProductChange = {
+    /**
+     * Expected Version
+     */
+    expected_version: string | null;
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Role
+     */
+    role: 'viewer' | 'translator' | 'product_manager_reviewer' | 'product_owner' | null;
+};
+
+/**
+ * AdminUserProductsResponse
+ */
+export type AdminUserProductsResponse = {
+    /**
+     * Items
+     */
+    items: Array<AdminUserProductAccess>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
 };
 
 /**
@@ -1717,6 +1779,10 @@ export type AdminUserUpdateRequest = {
      * Display Name
      */
     display_name: string;
+    /**
+     * Product Assignments
+     */
+    product_assignments?: Array<AdminUserProductChange>;
     /**
      * Roles
      */
@@ -9053,6 +9119,57 @@ export type DeactivateAdminUserResponses = {
 };
 
 export type DeactivateAdminUserResponse = DeactivateAdminUserResponses[keyof DeactivateAdminUserResponses];
+
+export type ListAdminUserProductsData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/users/{user_id}/products';
+};
+
+export type ListAdminUserProductsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type ListAdminUserProductsError = ListAdminUserProductsErrors[keyof ListAdminUserProductsErrors];
+
+export type ListAdminUserProductsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminUserProductsResponse;
+};
+
+export type ListAdminUserProductsResponse = ListAdminUserProductsResponses[keyof ListAdminUserProductsResponses];
 
 export type ReactivateAdminUserData = {
     body?: never;

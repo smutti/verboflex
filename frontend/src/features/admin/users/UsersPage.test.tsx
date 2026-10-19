@@ -17,12 +17,14 @@ import {
   deactivateAdminUser,
   listAdminUsers,
   listAdminProducts,
+  listAdminUserProducts,
   reactivateAdminUser,
   resetAdminUserPassword,
   updateAdminUser,
   type AdminUserCredentialResponse,
   type AdminUserResponse,
   type AdminProductResponse,
+  type AdminUserProductAccess,
 } from "../../../api/client";
 import { TemporaryPasswordDialog } from "./TemporaryPasswordDialog";
 import { UserDialog } from "./UserDialog";
@@ -63,6 +65,7 @@ vi.mock("../../../api/client", async (importOriginal) => {
     deactivateAdminUser: vi.fn(),
     listAdminUsers: vi.fn(),
     listAdminProducts: vi.fn(),
+    listAdminUserProducts: vi.fn(),
     reactivateAdminUser: vi.fn(),
     resetAdminUserPassword: vi.fn(),
     updateAdminUser: vi.fn(),
@@ -73,6 +76,7 @@ const createAdminUserMock = vi.mocked(createAdminUser);
 const deactivateAdminUserMock = vi.mocked(deactivateAdminUser);
 const listAdminUsersMock = vi.mocked(listAdminUsers);
 const listAdminProductsMock = vi.mocked(listAdminProducts);
+const listAdminUserProductsMock = vi.mocked(listAdminUserProducts);
 const reactivateAdminUserMock = vi.mocked(reactivateAdminUser);
 const resetAdminUserPasswordMock = vi.mocked(resetAdminUserPassword);
 const updateAdminUserMock = vi.mocked(updateAdminUser);
@@ -116,6 +120,20 @@ const productBeta: AdminProductResponse = {
   ...productAlpha,
   id: "00000000-0000-4000-8000-000000000011",
   name: "Synthetic Beta",
+};
+const assignedAlpha: AdminUserProductAccess = {
+  product_id: productAlpha.id,
+  name: productAlpha.name,
+  is_active: true,
+  role: "translator",
+  version: "00000000-0000-4000-8000-000000000101",
+};
+const assignedBeta: AdminUserProductAccess = {
+  ...assignedAlpha,
+  product_id: productBeta.id,
+  name: productBeta.name,
+  role: "product_owner",
+  version: "00000000-0000-4000-8000-000000000102",
 };
 
 function ok<T>(data: T, status = 200) {
@@ -186,6 +204,10 @@ async function chooseRowAction(userName: string, actionName: string) {
 
 describe("administrator users page tracer", () => {
   beforeEach(() => {
+    listAdminUserProductsMock.mockReset();
+    listAdminUserProductsMock.mockResolvedValue(
+      ok({ items: [], next_cursor: null }),
+    );
     listAdminProductsMock.mockReset();
     listAdminProductsMock.mockResolvedValue(
       ok({ items: [], next_cursor: null }),
@@ -363,11 +385,204 @@ describe("administrator users page tracer", () => {
     );
   });
 
-  it("does not load or submit initial product assignments when editing an account", async () => {
+  it("loads current roles and saves explicit additions, changes and removals with the account", async () => {
+    const unassigned: AdminUserProductAccess = {
+      ...assignedAlpha,
+      product_id: "00000000-0000-4000-8000-000000000012",
+      name: "Synthetic Gamma",
+      role: null,
+      version: null,
+    };
+    listAdminUserProductsMock.mockResolvedValue(
+      ok({
+        items: [assignedAlpha, assignedBeta, unassigned],
+        next_cursor: null,
+      }),
+    );
+    updateAdminUserMock.mockResolvedValue(ok(translator));
     renderUsers();
-    await openEditDialog(translator.display_name);
-    expect(screen.queryByText("Product access")).not.toBeInTheDocument();
+    const user = await openEditDialog(translator.display_name);
+    const alpha = await screen.findByRole("combobox", {
+      name: assignedAlpha.name,
+    });
+    const beta = screen.getByRole("combobox", { name: assignedBeta.name });
+    expect(alpha).toHaveValue("translator");
+    expect(beta).toHaveValue("product_owner");
+    await user.selectOptions(alpha, "product_manager_reviewer");
+    await user.selectOptions(beta, "none");
+    expect(beta).toHaveValue("none");
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: unassigned.name }),
+      "product_owner",
+    );
+    expect(updateAdminUserMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Save user" }));
+    expect(updateAdminUserMock).toHaveBeenCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: { user_id: translator.id },
+      body: {
+        display_name: translator.display_name,
+        roles: translator.roles,
+        product_assignments: [
+          {
+            product_id: assignedAlpha.product_id,
+            role: "product_manager_reviewer",
+            expected_version: assignedAlpha.version,
+          },
+          {
+            product_id: assignedBeta.product_id,
+            role: null,
+            expected_version: assignedBeta.version,
+          },
+          {
+            product_id: unassigned.product_id,
+            role: "product_owner",
+            expected_version: null,
+          },
+        ],
+      },
+    });
     expect(listAdminProductsMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("preserves edits and membership versions while retrying another product page", async () => {
+    listAdminUserProductsMock
+      .mockResolvedValueOnce(
+        ok({ items: [assignedAlpha], next_cursor: "next-products" }),
+      )
+      .mockResolvedValueOnce(failure())
+      .mockResolvedValueOnce(ok({ items: [assignedBeta], next_cursor: null }));
+    updateAdminUserMock.mockResolvedValue(ok(translator));
+    renderUsers();
+    const user = await openEditDialog(translator.display_name);
+    const alpha = await screen.findByRole("combobox", {
+      name: assignedAlpha.name,
+    });
+    await user.selectOptions(alpha, "viewer");
+    await user.click(
+      screen.getByRole("button", { name: "Load more products" }),
+    );
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Retry loading more products",
+      }),
+    );
+    expect(
+      await screen.findByRole("combobox", { name: assignedBeta.name }),
+    ).toHaveValue("product_owner");
+    expect(alpha).toHaveValue("viewer");
+    expect(listAdminUserProductsMock).toHaveBeenLastCalledWith({
+      auth: "memory-only-admin-bearer",
+      path: { user_id: translator.id },
+      query: { cursor: "next-products", limit: 50 },
+      signal: expect.any(AbortSignal),
+    });
+    await user.click(screen.getByRole("button", { name: "Save user" }));
+    expect(
+      updateAdminUserMock.mock.calls[0][0]?.body?.product_assignments,
+    ).toEqual([
+      {
+        product_id: assignedAlpha.product_id,
+        role: "viewer",
+        expected_version: assignedAlpha.version,
+      },
+    ]);
+  });
+
+  it("does not rewrite unchanged roles or undo a membership when product loading fails", async () => {
+    listAdminUserProductsMock
+      .mockResolvedValueOnce(failure())
+      .mockResolvedValueOnce(
+        ok({ items: [assignedAlpha], next_cursor: "unloaded" }),
+      );
+    updateAdminUserMock.mockResolvedValue(ok(translator));
+    renderUsers();
+    const user = await openEditDialog(translator.display_name);
+    await user.click(
+      await screen.findByRole("button", { name: "Retry loading products" }),
+    );
+    const alpha = await screen.findByRole("combobox", {
+      name: assignedAlpha.name,
+    });
+    await user.selectOptions(alpha, "none");
+    await user.selectOptions(alpha, "translator");
+    await user.click(screen.getByRole("button", { name: "Save user" }));
+    expect(updateAdminUserMock.mock.calls[0][0]?.body).toEqual({
+      display_name: translator.display_name,
+      roles: translator.roles,
+    });
+  });
+
+  it("retains account and product edits on conflicts and loads current roles when reopened", async () => {
+    listAdminUserProductsMock
+      .mockResolvedValueOnce(ok({ items: [assignedAlpha], next_cursor: null }))
+      .mockResolvedValueOnce(
+        ok({
+          items: [
+            { ...assignedAlpha, role: "viewer", version: "current-version" },
+          ],
+          next_cursor: null,
+        }),
+      );
+    updateAdminUserMock.mockResolvedValue(
+      conflict("Product access changed or unavailable"),
+    );
+    renderUsers();
+    const user = await openEditDialog(translator.display_name);
+    const alpha = await screen.findByRole("combobox", {
+      name: assignedAlpha.name,
+    });
+    await user.selectOptions(alpha, "product_owner");
+    await user.type(
+      screen.getByRole("textbox", { name: "Display name" }),
+      " draft",
+    );
+    await user.click(screen.getByRole("button", { name: "Save user" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("No changes were saved");
+    expect(alert).toHaveFocus();
+    expect(alpha).toHaveValue("product_owner");
+    expect(screen.getByRole("textbox", { name: "Display name" })).toHaveValue(
+      `${translator.display_name} draft`,
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await openEditDialog(translator.display_name);
+    expect(
+      await screen.findByRole("combobox", { name: assignedAlpha.name }),
+    ).toHaveValue("viewer");
+  });
+
+  it("allows removing an inactive account's membership on an inactive product", async () => {
+    listAdminUsersMock.mockResolvedValue(
+      ok({ items: [currentAdmin, inactiveViewer], next_cursor: null }),
+    );
+    listAdminUserProductsMock.mockResolvedValue(
+      ok({
+        items: [{ ...assignedAlpha, is_active: false }],
+        next_cursor: null,
+      }),
+    );
+    updateAdminUserMock.mockResolvedValue(ok(inactiveViewer));
+    renderUsers();
+    const user = await openEditDialog(inactiveViewer.display_name);
+    const alpha = await screen.findByRole("combobox", {
+      name: `${assignedAlpha.name} (inactive)`,
+    });
+    expect(
+      within(alpha).getByRole("option", { name: "Product Owner" }),
+    ).toBeDisabled();
+    await user.selectOptions(alpha, "none");
+    await user.click(screen.getByRole("button", { name: "Save user" }));
+    expect(
+      updateAdminUserMock.mock.calls[0][0]?.body?.product_assignments,
+    ).toEqual([
+      {
+        product_id: assignedAlpha.product_id,
+        role: null,
+        expected_version: assignedAlpha.version,
+      },
+    ]);
   });
 
   it("renders an approved stable loading state while the first API page is pending", () => {

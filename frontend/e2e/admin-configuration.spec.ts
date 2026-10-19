@@ -4670,3 +4670,132 @@ test("deployment-like Phase 3 import, recovery, watchdog, and rewrite journeys u
     cleanupPhase3SmokeFixtures(fixture);
   }
 });
+
+test("existing user product roles can be edited at narrow widths and enlarged text", async ({
+  page,
+}, testInfo) => {
+  const state = defaultState();
+  const account = {
+    id: "00000000-0000-4000-8000-000000000021",
+    display_name: "Existing Person",
+    email: "existing.person@example.com",
+    is_active: true,
+    must_change_password: false,
+    roles: ["viewer"],
+  };
+  state.users.push(account);
+  const initial = [
+    {
+      product_id: "00000000-0000-4000-8000-000000000031",
+      name: "Synthetic Mobile",
+      is_active: true,
+      role: "translator" as string | null,
+      version: "00000000-0000-4000-8000-000000000041" as string | null,
+    },
+    {
+      product_id: "00000000-0000-4000-8000-000000000032",
+      name: "Synthetic Portal With A Long Product Name",
+      is_active: true,
+      role: "product_owner" as string | null,
+      version: "00000000-0000-4000-8000-000000000042" as string | null,
+    },
+    {
+      product_id: "00000000-0000-4000-8000-000000000033",
+      name: "Synthetic Shared Catalog",
+      is_active: true,
+      role: null as string | null,
+      version: null as string | null,
+    },
+  ];
+  let memberships = initial.map((item) => ({ ...item }));
+  await installAdminApi(page, state);
+  await page.route(`**/api/v1/admin/users/${account.id}**`, async (route) => {
+    if (route.request().method() === "GET") {
+      return json(route, { items: memberships, next_cursor: null });
+    }
+    const body = requestBody(route) as {
+      product_assignments: Array<{
+        product_id: string;
+        role: string | null;
+        expected_version: string | null;
+      }>;
+    };
+    for (const change of body.product_assignments) {
+      const member = memberships.find(
+        (item) => item.product_id === change.product_id,
+      )!;
+      expect(change.expected_version).toBe(member.version);
+      member.role = change.role;
+      member.version =
+        change.role === null ? null : "00000000-0000-4000-8000-000000000099";
+    }
+    return json(route, account);
+  });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const viewport of [
+    { width: 1440, height: 900, zoom: 1 },
+    { width: 320, height: 720, zoom: 1 },
+    { width: 320, height: 720, zoom: 2 },
+  ]) {
+    memberships = initial.map((item) => ({ ...item }));
+    await page.setViewportSize(viewport);
+    await page.goto("/admin/users");
+    await page.evaluate((zoom) => {
+      document.documentElement.style.fontSize = zoom === 2 ? "200%" : "";
+    }, viewport.zoom);
+    await page
+      .getByRole("button", { name: "Edit Existing Person" })
+      .first()
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "Edit Existing Person",
+      exact: true,
+    });
+    await expect(
+      dialog.getByRole("combobox", { name: initial[0].name }),
+    ).toHaveValue("translator");
+    await expect(
+      dialog.getByRole("combobox", { name: initial[1].name }),
+    ).toHaveValue("product_owner");
+    await dialog
+      .getByRole("combobox", { name: initial[0].name })
+      .selectOption("product_manager_reviewer");
+    await dialog
+      .getByRole("combobox", { name: initial[1].name })
+      .selectOption("none");
+    await dialog
+      .getByRole("combobox", { name: initial[2].name })
+      .selectOption("product_owner");
+    await expectNoPageOverflow(page);
+    expect(
+      await dialog.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    await dialog
+      .getByRole("button", { name: "Save user" })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: testInfo.outputPath(
+        `edit-product-access-${viewport.width}-${viewport.zoom}.png`,
+      ),
+    });
+    await dialog.getByRole("button", { name: "Save user" }).click();
+    await expect(dialog).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Edit Existing Person" })
+      .first()
+      .click();
+    await expect(
+      dialog.getByRole("combobox", { name: initial[0].name }),
+    ).toHaveValue("product_manager_reviewer");
+    await expect(
+      dialog.getByRole("combobox", { name: initial[1].name }),
+    ).toHaveValue("none");
+    await expect(
+      dialog.getByRole("combobox", { name: initial[2].name }),
+    ).toHaveValue("product_owner");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expectNoCredentialResidue(page);
+  }
+});

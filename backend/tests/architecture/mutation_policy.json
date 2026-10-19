@@ -320,7 +320,7 @@
       "admin"
     ],
     "boundary": "role_dependency",
-    "audit": "AuditEntry; confirmation rows retain confirmed_by/confirmed_at"
+    "audit": "AuditEntry user.updated and ProductTeamEvent for explicit membership changes"
   },
   "reset_admin_user_password": {
     "method": "POST",

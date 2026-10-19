@@ -395,6 +395,12 @@ export function UsersPage({ accessToken, currentUserId }: UsersPageProps) {
       body: request,
     });
     if (result.data === undefined) {
+      if (
+        responseStatus(result) === 409 &&
+        result.error?.detail === "Product access changed or unavailable"
+      ) {
+        return { status: "products-conflict" };
+      }
       return responseStatus(result) === 409
         ? { status: "conflict", owner: "dialog" }
         : { status: "error" };

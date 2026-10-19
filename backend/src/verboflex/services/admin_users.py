@@ -27,8 +27,17 @@ from verboflex.models.product import Product
 from verboflex.models.product_member import ProductMember, ProductTeamEvent
 from verboflex.models.role import Role
 from verboflex.models.user import User
-from verboflex.schemas.admin_users import AdminUserProductAssignment
+from verboflex.schemas.admin_users import (
+    AdminUserProductAccess,
+    AdminUserProductAssignment,
+    AdminUserProductChange,
+    AdminUserProductsResponse,
+)
+from verboflex.schemas.product_team import MemberInput
 from verboflex.schemas.users import RoleName
+from verboflex.services.products import _CursorPosition as ProductCursorPosition
+from verboflex.services.products import _decode_cursor as decode_product_cursor
+from verboflex.services.products import _encode_cursor as encode_product_cursor
 
 ADMIN_AUTHORITY_LOCK_KEY = 0x564552424F464C58
 DEFAULT_ADMIN_USER_PAGE_SIZE = 50
@@ -52,6 +61,10 @@ class AdminUserInputError(ValueError):
 
 class AdminUserProductUnavailable(AdminUserInputError):
     """Raised when an initial product assignment can no longer be granted."""
+
+
+class AdminUserProductConflict(AdminUserConflict):
+    """An explicit membership edit no longer matches current team authority."""
 
 
 class AdminUserNotFound(LookupError):
@@ -356,6 +369,105 @@ def create_admin_user(
     return result
 
 
+def list_admin_user_products(
+    session: Session,
+    *,
+    actor_id: UUID,
+    target_id: UUID,
+    limit: int = 50,
+    cursor: str | None = None,
+) -> AdminUserProductsResponse:
+    """Page all non-deleted products with current membership versions for one account."""
+    if not 1 <= limit <= 100:
+        raise AdminUserInputError("invalid page size")
+    with session.begin():
+        _load_current_admin(session, actor_id, lock=False)
+        if session.get(User, target_id) is None:
+            raise AdminUserNotFound("user unavailable")
+        position = (
+            decode_product_cursor(cursor, status=None, name_filter=None)
+            if cursor is not None
+            else None
+        )
+        statement = (
+            select(Product, ProductMember)
+            .outerjoin(
+                ProductMember,
+                and_(
+                    ProductMember.product_id == Product.id,
+                    ProductMember.user_id == target_id,
+                    ProductMember.active.is_(True),
+                ),
+            )
+            .where(Product.deleted_at.is_(None))
+        )
+        if position is not None:
+            statement = statement.where(
+                or_(
+                    Product.name_key > position.name_key,
+                    and_(Product.name_key == position.name_key, Product.id > position.product_id),
+                )
+            )
+        rows = list(
+            session.execute(statement.order_by(Product.name_key, Product.id).limit(limit + 1))
+        )
+        page = rows[:limit]
+        return AdminUserProductsResponse(
+            items=[
+                AdminUserProductAccess(
+                    product_id=product.id,
+                    name=product.display_name,
+                    is_active=product.is_active,
+                    role=member.role if member else None,
+                    version=member.version if member else None,
+                )
+                for product, member in page
+            ],
+            next_cursor=(
+                encode_product_cursor(
+                    ProductCursorPosition(page[-1][0].name_key, page[-1][0].id, None, None)
+                )
+                if len(rows) > limit
+                else None
+            ),
+        )
+
+
+def _update_product_assignments(
+    session: Session,
+    *,
+    actor_id: UUID,
+    target: User,
+    changes: Sequence[AdminUserProductChange],
+) -> None:
+    # Team operations share this service's authority lock; import after initialization.
+    from verboflex.services.product_team import TeamError, remove_member, set_member
+
+    if len(changes) > 100 or len({change.product_id for change in changes}) != len(changes):
+        raise AdminUserInputError("invalid product assignments")
+    try:
+        for change in sorted(changes, key=lambda item: item.product_id):
+            if change.role is None:
+                if change.expected_version is None:
+                    raise AdminUserInputError("membership version required")
+                remove_member(
+                    session, change.product_id, actor_id, target.id, change.expected_version
+                )
+            else:
+                set_member(
+                    session,
+                    change.product_id,
+                    actor_id,
+                    MemberInput(
+                        email=target.email,
+                        role=change.role,
+                        expected_version=change.expected_version,
+                    ),
+                )
+    except TeamError as error:
+        raise AdminUserProductConflict("product access changed or unavailable") from error
+
+
 def update_admin_user(
     session: Session,
     *,
@@ -363,6 +475,7 @@ def update_admin_user(
     target_id: UUID,
     display_name: str,
     roles: frozenset[RoleName],
+    product_assignments: Sequence[AdminUserProductChange] = (),
 ) -> AdminUserRecord:
     """Update the approved mutable fields while preserving global authority invariants."""
     normalized_display_name = _normalize_display_name(display_name)
@@ -383,6 +496,9 @@ def update_admin_user(
             target,
             prospective_roles=roles,
             prospective_active=target.is_active,
+        )
+        _update_product_assignments(
+            session, actor_id=actor_id, target=target, changes=product_assignments
         )
 
         roles_changed = current_roles != roles

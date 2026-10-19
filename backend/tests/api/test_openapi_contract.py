@@ -508,6 +508,11 @@ EXPECTED_OPERATIONS = {
         {"200", "401", "403", "404", "409", "422"},
         True,
     ),
+    ("/api/v1/admin/users/{user_id}/products", "get"): (
+        "list_admin_user_products",
+        {"200", "401", "403", "404", "422"},
+        True,
+    ),
     ("/api/v1/admin/users/{user_id}/deactivate", "post"): (
         "deactivate_admin_user",
         {"200", "401", "403", "404", "409", "422"},
@@ -3104,6 +3109,8 @@ def test_admin_user_openapi_keeps_temporary_credentials_on_one_time_responses_on
         reference = _response_schema(operation, success_code)
         if key in credential_paths:
             assert reference == "#/components/schemas/AdminUserCredentialResponse"
+        elif key == ("/api/v1/admin/users/{user_id}/products", "get"):
+            assert reference == "#/components/schemas/AdminUserProductsResponse"
         elif key != ("/api/v1/admin/users", "get"):
             assert reference == "#/components/schemas/AdminUserResponse"
 
