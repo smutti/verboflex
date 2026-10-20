@@ -1,7 +1,9 @@
 # On-demand Compose rendering on Linux
 
-The web API records a frozen capture request. The scheduler dispatches it to the
-dedicated `screenshots` Celery queue. Its worker calls the authenticated private
+The web API records a frozen capture request and immediately dispatches its UUID
+to the dedicated `screenshots` Celery queue after the database commit. If the send
+fails, the request stays queued: the scheduler retries jobs waiting at least 30
+seconds, checking every 10 seconds. Its worker calls the authenticated private
 relay in `tools/compose_capture_service.py`; only the relay can access Docker.
 The relay must run on an internal network without published ports and without
 application, database, OAuth or Maven credentials.

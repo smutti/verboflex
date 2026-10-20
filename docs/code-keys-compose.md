@@ -163,6 +163,12 @@ workers. Do not configure the bare `compose_capture.py` command as the productio
 worker adapter. Its explicit `--development-workspace` option is for trusted local
 validation only and does not establish production container isolation.
 
+The API dispatches the job UUID to Celery immediately after committing its frozen
+snapshot. A failed broker send still returns the accepted durable job; the scheduler
+recovers queued jobs after 30 seconds, checking every 10 seconds. Retrying a queued
+request ID may resend that UUID, but the worker's database claim prevents duplicate
+renders. Requests that fail validation or roll back are never dispatched.
+
 `VERBOFLEX_SCREENSHOT_TIMEOUT_SECONDS` defaults to 900. Disconnected queues recover
 through durable dispatch. Interrupted renders terminate as failed; a new user request
 starts a new capture. Cancelled jobs cannot publish late results. A build already
