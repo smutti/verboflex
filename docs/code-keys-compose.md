@@ -81,6 +81,11 @@ strings/plurals/arrays for the selected locale with base-language fallback, and 
 `update<Variant>ScreenshotTest --rerun --offline --build-cache`. It uses fresh
 reference output and rejects zero/multiple images or an invalid PNG. It never checks
 generated images into either repository. Arbitrary non-Android selectors are rejected.
+The generated Kotlin wrapper is deterministic for a given preview function, locale,
+theme and device size. Translation text, proposal versions and import IDs do not
+change that source, allowing Gradle to reuse its compiled output across text edits.
+Each request still rebuilds the resource overlay and forces the screenshot task;
+compiled-code reuse never substitutes a previous PNG for a new render.
 The resource overlay preserves text and selectors; it does not recreate rich-text
 spans from a translation file. Such screens need a reviewed application-specific
 fixture adapter before their typography can be treated as representative.
@@ -124,6 +129,16 @@ For 1953, settings evaluation requires `artifactory_consumer_user` and
 `artifactory_consumer_key` even offline. In its prepared base image, set the corresponding
 `ORG_GRADLE_PROJECT_…` environment variables to the non-secret placeholder `offline`;
 all artifacts must already be cached. Do not copy real credentials into the runner.
+
+Prepare the build cache with the exact application revision, final reviewed fixture
+patch, runner version and capture variant that will be deployed. Use synthetic
+translation values with the same resource keys, selectors and locale directories as
+the imported catalog; a one-key fixture can produce different resource symbols and
+miss the application's Kotlin compilation cache. Include each commonly used preview,
+locale, theme and device size when warming the screenshot wrapper. Freeze the prepared
+cache into a new digest-pinned image, verify it with a fresh isolated render, then
+update only the intended runner profile. Measure complete screenshot requests before
+and after with identical frozen inputs and unchanged runner resource limits.
 
 Code discovery allows at most 200 listing pages, 5,000 entries, 500 source files,
 12 repository path segments, 1 MiB per file and 20 MiB total. The pinned Kotlin

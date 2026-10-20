@@ -1,5 +1,7 @@
 """Portable, closed capture bundle consumed inside the Android runner sandbox."""
 
+import hashlib
+import json
 import re
 from collections import defaultdict
 from typing import Annotated, Literal, cast
@@ -42,7 +44,19 @@ class CaptureBundle(BaseModel):
         return locale
 
 
-def preview_source(bundle: CaptureBundle, nonce: str) -> str:
+def preview_source(bundle: CaptureBundle, nonce: str | None = None) -> str:
+    """Keep the wrapper stable across text edits so Gradle can reuse compiled code."""
+    if nonce is None:
+        # Only settings emitted into Kotlin belong here. Translation values and
+        # proposal/import identities affect resources, not the compiled wrapper.
+        identity = (
+            bundle.request.preview_function,
+            bundle.language,
+            bundle.request.theme,
+            bundle.capture.width_dp,
+            bundle.capture.height_dp,
+        )
+        nonce = hashlib.sha256(json.dumps(identity).encode()).hexdigest()[:32]
     if not re.fullmatch(r"[a-f0-9]{32}", nonce):
         raise ValueError("Invalid render identity")
     function = bundle.request.preview_function

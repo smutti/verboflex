@@ -17,7 +17,6 @@ import tarfile
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from uuid import uuid4
 
 from verboflex.localization.code_keys.capture import (
     CaptureBundle,
@@ -97,7 +96,7 @@ def capture(
     generated.mkdir(parents=True, exist_ok=True)
     source = test_sources / "kotlin/verboflex/capture/Capture.kt"
     source.parent.mkdir(parents=True, exist_ok=True)
-    source.write_text(preview_source(bundle, uuid4().hex))
+    source.write_text(preview_source(bundle))
     locale = "b+" + bundle.language.replace("-", "+")
     for folder in ("values", f"values-{locale}"):
         resources = generated / "res" / folder
