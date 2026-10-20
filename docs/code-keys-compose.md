@@ -151,12 +151,17 @@ running may continue until completion or its timeout.
 
 ## User flow and access
 
-Open a translation's **Screenshots and code references**, choose a registered preview
-and appearance, save pending edits, then select **Generate screenshot**. The request
+Open a translation detail. Translation content and review actions appear on the left;
+**Screenshots** appears on the right, or below the review content on narrow screens.
+Existing personal captures load automatically. When no screenshot is available, the
+sidebar shows a compact empty state. Open **Screenshot options** to choose a registered
+preview and appearance, save pending edits, then select **Generate screenshot**. The request
 freezes code and translation commits, import execution, locale, fixture configuration
 and the selected saved proposal version. Other strings use their imported values.
 Each new request renders again; retrying the same request ID returns the same job.
-The latest personal capture is restored when reopening the panel.
+The latest personal capture is restored when reopening the detail. A warning identifies
+captures from an older proposal version or when there are unsaved edits. Opening the
+detail or changing a proposal never starts a new render automatically.
 
 The panel distinguishes request acceptance, queueing, rendering and image loading.
 While waiting it shows a spinner and elapsed time, including time in the queue;
@@ -166,9 +171,13 @@ and reopen the panel without starting another build. A recovered status connecti
 clears its warning automatically; image loading can be retried without rendering
 again. Render failures have readable explanations and allow another request.
 
-Source context shows the repository, branch and file, with a line number only when
-available. Format and import commit are behind **Technical details**. Code references
-are also collapsed so the screenshot controls and result remain prominent.
+**Technical details and history** is collapsed by default and contains the raw key,
+maximum-length configuration, source context, value metadata and revision history.
+The translation itself keeps the effective character limit visible alongside the
+proposal. Source context shows the repository, branch and file, with a line number
+only when available. Format and import commit are behind **Technical details**.
+Code references are under **Screenshot options**. Activity history still loads only
+when explicitly requested.
 
 When code-only keys use a separate translations repository, its base-language
 resource leaves are editable as source text, just like a direct repository's base

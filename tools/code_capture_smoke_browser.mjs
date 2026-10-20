@@ -37,13 +37,13 @@ try {
     if (request.method() === "PUT" && /\/screenshots\//.test(request.url())) puts++;
   });
   await page.goto(`${fixture.frontend}/products/${proof.product}/strings/${proof.group}`);
+  await page.getByText("Technical details and history", { exact: true }).click();
   const source = page.getByRole("region", { name: "Source context", exact: true });
   await expect(source.getByText("res/values-it/strings.xml", { exact: true })).toBeVisible();
   await expect(source.getByRole("button", { name: "Copy full commit", exact: true })).toBeHidden();
   await source.getByText("Technical details", { exact: true }).click();
   await expect(source.getByRole("button", { name: "Copy full commit", exact: true })).toBeVisible();
   await source.getByText("Technical details", { exact: true }).click();
-  await page.getByText("Screenshots and code references", { exact: true }).click();
   const section = page.getByRole("region", { name: "Compose screenshots" });
   await expect(section.getByRole("button", { name: "Generate screenshot", exact: true })).toBeEnabled();
   if (puts !== 0) throw new Error("eager capture");
@@ -84,7 +84,6 @@ try {
   await page.screenshot({ path: join(fixture.evidence_dir, "code-capture-width320.png"), fullPage: true });
   stage = "reload";
   await page.reload();
-  await page.getByText("Screenshots and code references", { exact: true }).click();
   await expect(image).toBeVisible();
   expect(puts).toBe(1);
   proof.browser = { catalog: true, base_source_edit: true, compact_source_context: true, capture_loading: true, dirty_save_guard: true, image_loaded: true, reconnect: true, reload: true, width320: true };

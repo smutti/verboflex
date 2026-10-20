@@ -1,5 +1,6 @@
 import { displayLanguage, t, useUiLanguage } from "@/i18n";
 import { TranslationStatusBadge } from "./TranslationStatusBadge";
+import { ImageIcon } from "lucide-react";
 import { rolesForProduct } from "../auth/productRoles";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -96,11 +97,22 @@ const kindNames = {
   json_path: "JSON path",
 };
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({
+  title,
+  children,
+  icon,
+}: {
+  title: string;
+  children: ReactNode;
+  icon?: ReactNode;
+}) {
   useUiLanguage();
   return (
     <section aria-label={title} className={sectionClass}>
-      <h2 className="text-heading font-semibold">{title}</h2>
+      <h2 className="flex items-center gap-2 text-heading font-semibold">
+        {icon}
+        {title}
+      </h2>
       {children}
     </section>
   );
@@ -230,9 +242,15 @@ function TranslationHistory({ value }: { value: TranslationValueResponse }) {
 function TranslationValueCard({
   value,
   detail,
+  pending,
+  savedChange,
 }: {
   value: TranslationValueResponse;
   detail: TranslationGroupDetailResponse;
+  pending?: TranslationProposalResponse["pending"][number];
+  savedChange:
+    | TranslationProposalResponse
+    | TranslationGroupDetailResponse["pending_change"];
 }) {
   useUiLanguage();
   return (
@@ -241,14 +259,12 @@ function TranslationValueCard({
       aria-label={`${kindNames[value.selector_kind]} ${value.id}`}
       className="min-w-0 space-y-(--space-md) border-b pb-(--space-lg) last:border-0"
     >
-      <h3 className="text-heading font-semibold">
-        {kindNames[value.selector_kind]}
-      </h3>
+      {(detail.values.length > 1 || value.selector_kind !== "scalar") && (
+        <h3 className="text-label font-semibold">
+          {kindNames[value.selector_kind]}
+        </h3>
+      )}
       <dl className="grid min-w-0 gap-(--space-sm)">
-        <div>
-          <dt className="text-label font-semibold">{t("Value ID")}</dt>
-          <dd className="font-mono wrap-anywhere">{value.id}</dd>
-        </div>
         {value.selector_fields?.map((field) => (
           <div key={field.name}>
             <dt className="text-label font-semibold">
@@ -268,7 +284,6 @@ function TranslationValueCard({
           </div>
         )}
       </dl>
-      <p>{reviewStateLabel(value.review_state)}</p>
       {value.is_deleted && (
         <>
           <Badge variant="outline">{t("Deleted in source")}</Badge>
@@ -279,9 +294,14 @@ function TranslationValueCard({
         </>
       )}
       <div>
-        <h4 className="font-semibold">{t("Source text")}</h4>
+        <h3 className="text-label text-muted-foreground">
+          {t("Source text")}
+          {detail.base_language && (
+            <> · {displayLanguage(detail.base_language)}</>
+          )}
+        </h3>
         <p
-          className="whitespace-pre-wrap wrap-anywhere"
+          className="mt-2 whitespace-pre-wrap text-heading wrap-anywhere"
           lang={detail.base_language ?? undefined}
           dir="auto"
         >
@@ -290,39 +310,74 @@ function TranslationValueCard({
             : value.source_text || t("Empty source text")}
         </p>
       </div>
-      <div>
-        <h4 className="font-semibold">{t("Translated text")}</h4>
-        <div className="space-y-(--space-sm)">
-          <p className="text-label font-semibold">
-            {t("Published translation")}
-          </p>
+      {savedChange && (
+        <section
+          aria-label={t("Pending proposal")}
+          className="space-y-3 rounded-md border bg-muted p-4"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-label font-semibold">
+              {savedChange.target_integrated
+                ? t("Translation")
+                : t("Saved change")}{" "}
+              · {displayLanguage(detail.language, detail.language_label)}
+            </h3>
+            <TranslationStatusBadge proposal={savedChange} />
+          </div>
           <p
-            data-testid={`target-${value.id}`}
-            className="whitespace-pre-wrap wrap-anywhere"
+            className="whitespace-pre-wrap text-heading font-semibold wrap-anywhere"
             lang={detail.language}
             dir="auto"
           >
-            {value.translated_text || t("Empty translation")}
+            {pending
+              ? pending.text || t("Empty pending translation")
+              : t("Pending value unavailable")}
           </p>
-        </div>
-      </div>
-      {value.structure.length > 0 && (
-        <details>
-          <summary className="min-h-[44px] cursor-pointer">
-            {t("Format structure")}
-          </summary>
-          <pre className="whitespace-pre-wrap wrap-anywhere text-body">
-            {JSON.stringify(value.structure, null, 2)}
-          </pre>
-        </details>
+          {pending && (
+            <p
+              className={
+                pending.is_over_limit ? "text-warning" : "text-muted-foreground"
+              }
+            >
+              {t("Actual: ")}
+              {pending.grapheme_count}
+              {t(" · Maximum:")} {pending.maximum ?? t("None")}
+            </p>
+          )}
+        </section>
       )}
-      <p>
-        {t("Actual: ")}
-        {value.constraint.actual} {t(" characters · Maximum:")}{" "}
-        {value.constraint.maximum ?? t("None")}
-      </p>
-      <p>{lengthStatusLabel(value.constraint)}</p>
-      <TranslationHistory value={value} />
+      <section
+        aria-label={t("Published translation")}
+        className="space-y-(--space-sm)"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-label text-muted-foreground">
+            {t("Published translation")} ·{" "}
+            {displayLanguage(detail.language, detail.language_label)}
+          </h3>
+          <Badge variant="outline">
+            {reviewStateLabel(value.review_state)}
+          </Badge>
+        </div>
+        <p
+          data-testid={`target-${value.id}`}
+          className={`whitespace-pre-wrap wrap-anywhere ${savedChange ? "" : "text-heading font-semibold"}`}
+          lang={detail.language}
+          dir="auto"
+        >
+          {value.translated_text || t("Empty translation")}
+        </p>
+      </section>
+      {!savedChange && (
+        <>
+          <p>
+            {t("Actual: ")}
+            {value.constraint.actual} {t(" characters · Maximum:")}{" "}
+            {value.constraint.maximum ?? t("None")}
+          </p>
+          <p>{lengthStatusLabel(value.constraint)}</p>
+        </>
+      )}
     </article>
   );
 }
@@ -355,7 +410,6 @@ function LoadedDetail({
     draft: NonNullable<TranslationsWorkspaceContext["activeDraft"]>;
   } | null>(null);
   const [editFailure, setEditFailure] = useState(false);
-  const [screenshotsOpen, setScreenshotsOpen] = useState(false);
   const [dialog, setDialog] = useState<{
     mode: ConstraintMutationMode;
     trigger: HTMLButtonElement;
@@ -438,7 +492,9 @@ function LoadedDetail({
         ? t("Add language override")
         : t("Set max length");
   const over = detail.values.filter(
-    (v) => v.constraint.status === "over_limit",
+    (v) =>
+      pendingById.get(v.id)?.is_over_limit ??
+      v.constraint.status === "over_limit",
   ).length;
   const partial = detail.values.some(
     (v) =>
@@ -460,25 +516,17 @@ function LoadedDetail({
   return (
     <>
       <header className="space-y-(--space-sm)">
-        <p className="font-mono wrap-anywhere">{detail.raw_key}</p>
-        <p>
-          {displayLanguage(detail.language, detail.language_label)} (
-          {detail.language})
+        <p className="font-semibold">{detail.product_name}</p>
+        <p className="text-muted-foreground">
+          {detail.base_language && (
+            <>{displayLanguage(detail.base_language)} → </>
+          )}
+          {displayLanguage(detail.language, detail.language_label)}
         </p>
         {detail.is_deleted && (
           <Badge variant="outline">{t("Deleted in source")}</Badge>
         )}
       </header>
-      {partial && (
-        <Alert>
-          <AlertTitle>
-            {t("Some source or history metadata is unavailable")}
-          </AlertTitle>
-          <AlertDescription>
-            {t("The available translation content remains readable.")}
-          </AlertDescription>
-        </Alert>
-      )}
       {over > 0 && (
         <Alert className="border-warning bg-warning/10 text-warning">
           <AlertTitle>
@@ -492,7 +540,10 @@ function LoadedDetail({
           </AlertDescription>
         </Alert>
       )}
-      <div className="grid min-w-0 gap-(--space-xl) xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
+      <div
+        data-testid="translation-review-layout"
+        className="grid min-w-0 items-start gap-(--space-lg) md:grid-cols-[minmax(0,1.1fr)_minmax(16rem,1fr)]"
+      >
         <div className="min-w-0 space-y-(--space-xl)">
           <Section title={t("Translation content")}>
             {editFailure && (
@@ -502,63 +553,22 @@ function LoadedDetail({
                 </AlertTitle>
               </Alert>
             )}
-            {!activeDraft && (
-              <section
-                aria-label={t("Published translation")}
-                className="space-y-(--space-md)"
-              >
-                <div className="flex flex-wrap items-center gap-(--space-sm)">
-                  <h3 className="text-heading font-semibold">
-                    {t("Published translation")}
-                  </h3>
-                  <Badge variant="outline">
-                    {reviewStateLabel(detail.state_summary)}
-                  </Badge>
-                </div>
-                {detail.values.map((value) => (
-                  <TranslationValueCard
-                    key={value.id}
-                    value={value}
-                    detail={detail}
-                  />
-                ))}
-              </section>
-            )}
-            {pendingState !== null && !activeDraft && (
-              <section
-                aria-label={t("Pending proposal")}
-                className="space-y-(--space-md) rounded-md border p-(--space-md)"
-              >
-                <div className="flex flex-wrap items-center gap-(--space-sm)">
-                  <h3 className="text-heading font-semibold">
-                    {(proposal ?? detail.pending_change)?.target_integrated
-                      ? t("Translation")
-                      : t("Saved change")}
-                  </h3>
-                  <TranslationStatusBadge
-                    proposal={proposal ?? detail.pending_change!}
-                  />
-                  {reconciliationRequired && (
-                    <Badge variant="outline">{t("Needs reconciliation")}</Badge>
-                  )}
-                </div>
-                {detail.values.map((value) => (
-                  <div key={value.id} className="space-y-(--space-xs)">
-                    <p className="text-label font-semibold">{value.id}</p>
-                    <p
-                      className="whitespace-pre-wrap wrap-anywhere"
-                      lang={detail.language}
-                      dir="auto"
-                    >
-                      {pendingById.get(value.id)?.text ||
-                        t("Empty pending translation")}
-                    </p>
-                  </div>
-                ))}
-              </section>
+            {!activeDraft &&
+              detail.values.map((value) => (
+                <TranslationValueCard
+                  key={value.id}
+                  value={value}
+                  detail={detail}
+                  pending={pendingById.get(value.id)}
+                  savedChange={proposal ?? detail.pending_change}
+                />
+              ))}
+            {reconciliationRequired && (
+              <Badge variant="outline">{t("Needs reconciliation")}</Badge>
             )}
             {canPropose && !activeDraft && (
               <Button
+                variant="outline"
                 className={actionClass}
                 onClick={(event) => {
                   setEditReturnFocusTo(event.currentTarget);
@@ -615,6 +625,44 @@ function LoadedDetail({
                 }}
               />
             )}
+            <div className="space-y-3 border-t pt-4">
+              {canSubmitReview && !detail.approval_commits_enabled && (
+                <Button
+                  className={actionClass}
+                  onClick={(event) => {
+                    const enter = () => {
+                      setSubmissionEntry({
+                        principalId: context.principal.id,
+                        accessToken: context.accessToken,
+                        productId: detail.product_id,
+                        translationGroupId: detail.id,
+                        expectedVersion: pendingVersion,
+                      });
+                      navigate(`/products/${detail.product_id}/change-sets`);
+                    };
+                    context.runDraftGuardedAction(() => {
+                      // Let the accepted discard clear the global route guard before navigation.
+                      if (activeDraft?.dirty) window.setTimeout(enter, 0);
+                      else enter();
+                    }, event.currentTarget);
+                  }}
+                >
+                  {t("Review for submission")}
+                </Button>
+              )}
+              <TranslationReviewActions
+                detail={detail}
+                proposal={proposal}
+                accessToken={context.accessToken}
+                principal={context.principal}
+                dirty={activeDraft?.dirty ?? false}
+                onChanged={(fresh) => {
+                  setProposal(fresh);
+                  context.setActiveDraft(null);
+                  invalidateSearchSnapshot();
+                }}
+              />
+            </div>
           </Section>
           {exactCommentRequested ? (
             <ExactCommentTarget
@@ -637,31 +685,40 @@ function LoadedDetail({
               }}
             />
           )}
-          <ActivityHistory
-            key={`${detail.id}:${detail.language}`}
-            accessToken={context.accessToken}
-            translationGroupId={detail.id}
-            language={detail.language}
-          />
         </div>
-        <aside className="min-w-0 space-y-(--space-xl)">
-          <details
-            className="min-w-0 rounded-lg border bg-secondary p-(--space-lg)"
-            onToggle={(event) => setScreenshotsOpen(event.currentTarget.open)}
+        <aside className="min-w-0" aria-label={t("Screenshots")}>
+          <Section
+            title={t("Screenshots")}
+            icon={
+              <ImageIcon aria-hidden="true" className="size-5 text-primary" />
+            }
           >
-            <summary className="cursor-pointer font-semibold">
-              {t("Screenshots and code references")}
-            </summary>
-            {screenshotsOpen && (
-              <TranslationScreenshots
-                key={`${detail.id}:${context.accessToken}`}
-                accessToken={context.accessToken}
-                groupId={detail.id}
-                dirty={Boolean(activeDraft?.dirty)}
-                proposalVersion={pendingVersion || undefined}
-              />
-            )}
-          </details>
+            <TranslationScreenshots
+              key={`${detail.id}:${context.accessToken}`}
+              accessToken={context.accessToken}
+              groupId={detail.id}
+              dirty={Boolean(activeDraft?.dirty)}
+              proposalVersion={pendingVersion || undefined}
+            />
+          </Section>
+        </aside>
+      </div>
+      <details className="min-w-0 rounded-lg border bg-secondary p-(--space-lg)">
+        <summary className="min-h-[44px] cursor-pointer font-semibold">
+          {t("Technical details and history")}
+        </summary>
+        <div className="space-y-(--space-xl) pt-4">
+          <p className="font-mono wrap-anywhere">{detail.raw_key}</p>
+          {partial && (
+            <Alert>
+              <AlertTitle>
+                {t("Some source or history metadata is unavailable")}
+              </AlertTitle>
+              <AlertDescription>
+                {t("The available translation content remains readable.")}
+              </AlertDescription>
+            </Alert>
+          )}
           <Section title={t("Maximum length")}>
             {canMutate && (
               <div className="flex flex-wrap gap-(--space-sm)">
@@ -726,7 +783,46 @@ function LoadedDetail({
               </div>
             ))}
           </Section>
+          <Section title={t("Value details")}>
+            {detail.values.map((value) => (
+              <div
+                key={value.id}
+                className="min-w-0 space-y-3 border-b pb-4 last:border-0"
+              >
+                <p className="font-semibold">
+                  {kindNames[value.selector_kind]}
+                </p>
+                <p className="font-mono wrap-anywhere">
+                  {t("Value ID")}: {value.id}
+                </p>
+                {value.structure.length > 0 && (
+                  <details>
+                    <summary className="min-h-[44px] cursor-pointer">
+                      {t("Format structure")}
+                    </summary>
+                    <pre className="whitespace-pre-wrap text-body wrap-anywhere">
+                      {JSON.stringify(value.structure, null, 2)}
+                    </pre>
+                  </details>
+                )}
+                <TranslationHistory value={value} />
+              </div>
+            ))}
+          </Section>
+          <ActivityHistory
+            key={`${detail.id}:${detail.language}`}
+            accessToken={context.accessToken}
+            translationGroupId={detail.id}
+            language={detail.language}
+          />
           <Section title={t("Review context")}>
+            {detail.approval_commits_enabled && (
+              <p>
+                {t(
+                  "Each approval queues a separate commit on the working branch. Open a pull request from Change sets when ready.",
+                )}
+              </p>
+            )}
             <Badge variant="outline">
               {reviewStateLabel(detail.state_summary)}
             </Badge>
@@ -748,52 +844,9 @@ function LoadedDetail({
             >
               {t("View change-set history")}
             </Link>
-            {detail.approval_commits_enabled && (
-              <p>
-                {t(
-                  "Each approval queues a separate commit on the working branch. Open a pull request from Change sets when ready.",
-                )}
-              </p>
-            )}
-            {canSubmitReview && !detail.approval_commits_enabled && (
-              <Button
-                className={actionClass}
-                onClick={(event) => {
-                  const enter = () => {
-                    setSubmissionEntry({
-                      principalId: context.principal.id,
-                      accessToken: context.accessToken,
-                      productId: detail.product_id,
-                      translationGroupId: detail.id,
-                      expectedVersion: pendingVersion,
-                    });
-                    navigate(`/products/${detail.product_id}/change-sets`);
-                  };
-                  context.runDraftGuardedAction(() => {
-                    // Let the accepted discard clear the global route guard before navigation.
-                    if (activeDraft?.dirty) window.setTimeout(enter, 0);
-                    else enter();
-                  }, event.currentTarget);
-                }}
-              >
-                {t("Review for submission")}
-              </Button>
-            )}
-            <TranslationReviewActions
-              detail={detail}
-              proposal={proposal}
-              accessToken={context.accessToken}
-              principal={context.principal}
-              dirty={activeDraft?.dirty ?? false}
-              onChanged={(fresh) => {
-                setProposal(fresh);
-                context.setActiveDraft(null);
-                invalidateSearchSnapshot();
-              }}
-            />
           </Section>
-        </aside>
-      </div>
+        </div>
+      </details>
       {dialog && (
         <MaximumLengthDialog
           accessToken={context.accessToken}
