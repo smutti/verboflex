@@ -290,6 +290,92 @@ describe("Compose screenshots", () => {
     expect(api.requestTranslationScreenshot).not.toHaveBeenCalled();
   });
 
+  it("marks an older capture as stale after saving or editing without generating automatically", async () => {
+    api.listTranslationScreenshots.mockResolvedValue({
+      data: {
+        items: [{ ...job, request: { ...job.request, proposal_version: 4 } }],
+      },
+    });
+    const view = render(
+      <TranslationScreenshots
+        accessToken="token"
+        groupId="group"
+        dirty={false}
+        proposalVersion={4}
+      />,
+    );
+    expect(await screen.findByRole("img")).toBeVisible();
+    expect(
+      screen.queryByText(/This screenshot does not show your latest changes/),
+    ).toBeNull();
+    view.rerender(
+      <TranslationScreenshots
+        accessToken="token"
+        groupId="group"
+        dirty={false}
+        proposalVersion={5}
+      />,
+    );
+    expect(
+      screen.getByText(/This screenshot does not show your latest changes/),
+    ).toBeVisible();
+    view.rerender(
+      <TranslationScreenshots
+        accessToken="token"
+        groupId="group"
+        dirty
+        proposalVersion={4}
+      />,
+    );
+    expect(
+      screen.getByText(/This screenshot does not show your latest changes/),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Generate screenshot" }),
+    ).toBeDisabled();
+    expect(api.requestTranslationScreenshot).not.toHaveBeenCalled();
+  });
+
+  it("keeps generation explicit and preview configuration collapsed when no screenshot exists", async () => {
+    render(
+      <TranslationScreenshots
+        accessToken="token"
+        groupId="group"
+        dirty={false}
+      />,
+    );
+    expect(await screen.findByText("No screenshot available")).toBeVisible();
+    expect(screen.getByLabelText("Screen preview")).not.toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Generate screenshot" }),
+    ).toBeEnabled();
+    await userEvent.click(screen.getByText("Screenshot options"));
+    expect(screen.getByLabelText("Screen preview")).toBeVisible();
+    expect(api.requestTranslationScreenshot).not.toHaveBeenCalled();
+  });
+
+  it("shows a compact unavailable state without offering generation for an unconfigured product", async () => {
+    api.getTranslationCodeContext.mockResolvedValue({
+      data: { configured: false },
+    });
+    render(
+      <TranslationScreenshots
+        accessToken="token"
+        groupId="group"
+        dirty={false}
+      />,
+    );
+    expect(
+      await screen.findByText(
+        "Screenshots are not available for this translation.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Generate screenshot" }),
+    ).toBeNull();
+    expect(api.requestTranslationScreenshot).not.toHaveBeenCalled();
+  });
+
   it("retries the completed image on reconnect without rendering again", async () => {
     api.listTranslationScreenshots.mockResolvedValue({
       data: { items: [job], next_cursor: null },

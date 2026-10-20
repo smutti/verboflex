@@ -240,17 +240,11 @@ afterEach(() => {
 });
 
 describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/partial", () => {
-  it("offers lazy screenshots on a direct translation URL", async () => {
-    const user = userEvent.setup();
+  it("loads existing screenshot context immediately and keeps technical information collapsed", async () => {
     mountProduct();
-    const summary = await screen.findByText("Screenshots and code references", {
-      exact: true,
-    });
-    expect(getTranslationCodeContext).not.toHaveBeenCalled();
-    await user.click(summary);
     expect(
       await screen.findByText(
-        "No application code repository is configured for this translation.",
+        "Screenshots are not available for this translation.",
       ),
     ).toBeVisible();
     expect(getTranslationCodeContext).toHaveBeenCalledWith(
@@ -259,6 +253,19 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
         path: { group_id: "opaque-group" },
       }),
     );
+    expect(listTranslationScreenshots).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByText("Technical details and history").closest("details"),
+    ).not.toHaveAttribute("open");
+    expect(screen.getByText("menu.<script>bad()</script>")).not.toBeVisible();
+    const content = screen.getByRole("region", { name: "Translation content" });
+    const screenshots = screen.getByRole("complementary", {
+      name: "Screenshots",
+    });
+    expect(
+      content.compareDocumentPosition(screenshots) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
   it("loads a direct exact-comment URL without walking ordinary discussion pages", async () => {
     const target = {
@@ -442,6 +449,8 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
         level: 1,
       });
       expect(title).toHaveFocus();
+      expect(screen.getByText("menu.<script>bad()</script>")).not.toBeVisible();
+      await userEvent.click(screen.getByText("Technical details and history"));
       expect(screen.getByText("menu.<script>bad()</script>")).toBeVisible();
       expect(screen.getByTestId("target-value-1")).toHaveTextContent(
         "<img src=x onerror=bad()>",
@@ -568,6 +577,7 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
     expect(screen.getByText("No source text available")).toBeVisible();
     expect(screen.getAllByText("Deleted in source").length).toBeGreaterThan(0);
     expect(screen.getAllByText("No max length").length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByText("Technical details and history"));
     expect(
       screen.getByText(/Some source or history metadata is unavailable/),
     ).toBeVisible();
@@ -628,6 +638,9 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
       error: undefined,
     });
     mount();
+    await userEvent.click(
+      await screen.findByText("Technical details and history"),
+    );
     const source = within(
       await screen.findByRole("region", { name: "Source context" }),
     );
@@ -649,6 +662,7 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
     const user = userEvent.setup();
     mount();
     await screen.findByText("Translation content");
+    await user.click(screen.getByText("Technical details and history"));
     await user.click(
       within(screen.getByRole("region", { name: "Source context" })).getByText(
         "Technical details",
@@ -675,6 +689,9 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
       error: undefined,
     });
     mount("admin");
+    await userEvent.click(
+      await screen.findByText("Technical details and history"),
+    );
     await userEvent.click(
       await screen.findByRole("button", { name: "Remove language override" }),
     );
@@ -732,6 +749,7 @@ describe("Translation detail — SRCH-06 SRCH-07 CONS-03, populated/long-text/pa
     const user = userEvent.setup();
     mount();
     await screen.findByText("Translation content");
+    await user.click(screen.getByText("Technical details and history"));
     await user.click(
       within(screen.getByRole("region", { name: "Source context" })).getByText(
         "Technical details",
@@ -992,6 +1010,39 @@ describe("Phase 5 scalar proposal tracer RED", () => {
 });
 
 describe("Phase 5 complete review controls", () => {
+  it("places review actions with the proposal and evaluates its length instead of the old published text", async () => {
+    const data = detailFixture();
+    const fresh = proposalProjection(data, "Save");
+    data.pending_change = {
+      version: 1,
+      state: "draft",
+      reconciliation_required: false,
+      updated_by: fresh.updated_by,
+      updated_at: fresh.updated_at,
+      values: fresh.pending.map((value) => ({ ...value, maximum: 5 })),
+    };
+    vi.mocked(getTranslationGroup).mockResolvedValue({
+      data,
+      error: undefined,
+    });
+    mount("admin");
+    const content = within(
+      await screen.findByRole("region", { name: "Translation content" }),
+    );
+    expect(
+      content.getByRole("button", { name: "Approve translation" }),
+    ).toBeEnabled();
+    expect(
+      within(
+        content.getByRole("region", { name: "Pending proposal" }),
+      ).getByText("Actual: 4 · Maximum: 5"),
+    ).toBeVisible();
+    expect(screen.queryByText(/This translation can remain Draft/)).toBeNull();
+    expect(
+      screen.getByText("Technical details and history").closest("details"),
+    ).not.toHaveAttribute("open");
+  });
+
   it("routes approved branch changes to history without offering legacy submission", async () => {
     const data = detailFixture();
     const fresh = proposalProjection(data, "Approved commit");
@@ -1009,6 +1060,9 @@ describe("Phase 5 complete review controls", () => {
       error: undefined,
     });
     mount("admin");
+    await userEvent.click(
+      await screen.findByText("Technical details and history"),
+    );
     expect(
       await screen.findByText(/Each approval queues a separate commit/),
     ).toBeVisible();
@@ -1505,6 +1559,7 @@ describe("Phase 5 complete activity history", () => {
     mount();
     await screen.findByText("Translation content");
     expect(listTranslationReviewActivity).not.toHaveBeenCalled();
+    await user.click(screen.getByText("Technical details and history"));
     await user.click(
       screen.getByRole("button", { name: "Show activity history" }),
     );
@@ -1535,6 +1590,7 @@ describe("Phase 5 complete activity history", () => {
         error: undefined,
       } as never);
     mount();
+    await user.click(await screen.findByText("Technical details and history"));
     await user.click(
       await screen.findByRole("button", { name: "Show activity history" }),
     );
@@ -1571,6 +1627,7 @@ describe("Phase 5 complete activity history", () => {
         error: undefined,
       } as never);
     mount();
+    await user.click(await screen.findByText("Technical details and history"));
     await user.click(
       await screen.findByRole("button", { name: "Show activity history" }),
     );

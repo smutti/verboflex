@@ -1,6 +1,6 @@
 import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import { useEffect, useState } from "react";
-import { LoaderCircle } from "lucide-react";
+import { ImageIcon, LoaderCircle, Maximize2 } from "lucide-react";
 import {
   cancelTranslationScreenshot,
   getTranslationCodeContext,
@@ -177,6 +177,10 @@ export function TranslationScreenshots({
     ...new Set((context?.previews ?? []).map((p) => p.function)),
   ].filter((name) => context?.capture_functions.includes(name));
   const preview = selected || available[0] || "";
+  const stale =
+    job?.state === "succeeded" &&
+    (dirty ||
+      (job.request.proposal_version ?? null) !== (proposalVersion ?? null));
   async function capture() {
     if (dirty || busy || active(job) || !preview) return;
     const request = pending ?? {
@@ -236,7 +240,10 @@ export function TranslationScreenshots({
     }
   }
   return (
-    <section aria-label={t("Compose screenshots")} className="space-y-4 pt-4">
+    <section
+      aria-label={t("Compose screenshots")}
+      className="min-w-0 space-y-4"
+    >
       {error && (
         <p role="alert">
           {t(error)}{" "}
@@ -245,16 +252,28 @@ export function TranslationScreenshots({
           </Button>
         </p>
       )}
-      {!context && !error && <p role="status">{t("Loading code context…")}</p>}
+      {!context && !error && <p role="status">{t("Loading screenshots…")}</p>}
       {context && !context.configured && (
-        <p>
-          {t(
-            "No application code repository is configured for this translation.",
-          )}
-        </p>
+        <p>{t("Screenshots are not available for this translation.")}</p>
       )}
       {context?.configured && (
         <>
+          {!job && !busy && (
+            <div className="space-y-2 rounded-md bg-muted p-4 text-center">
+              <ImageIcon
+                aria-hidden="true"
+                className="mx-auto size-7 text-muted-foreground"
+              />
+              <p className="font-semibold">{t("No screenshot available")}</p>
+              <p className="text-sm text-muted-foreground">
+                {available.length > 0
+                  ? t(
+                      "Generate a screenshot to see the saved translation in context.",
+                    )
+                  : t("Screenshots are not available for this translation.")}
+              </p>
+            </div>
+          )}
           {(busy || active(job)) && (
             <div className="space-y-2 rounded-md border bg-muted p-4">
               <p
@@ -301,8 +320,25 @@ export function TranslationScreenshots({
                       ? t("Screenshot cancelled. You can generate another one.")
                       : t("This screenshot has expired. Generate a new one.")}
               </p>
+              {stale && (
+                <p className="rounded-md bg-warning/10 p-3 text-sm text-warning">
+                  {t(
+                    "This screenshot does not show your latest changes. Save your translation and generate a new screenshot to update it.",
+                  )}
+                </p>
+              )}
               {job.state === "succeeded" && image?.jobId === job.id && (
                 <>
+                  <Button
+                    variant="outline"
+                    className="h-auto min-h-[44px] whitespace-normal"
+                    asChild
+                  >
+                    <a href={image.url} target="_blank" rel="noreferrer">
+                      <Maximize2 aria-hidden="true" />
+                      {t("Open screenshot full size")}
+                    </a>
+                  </Button>
                   <a
                     href={image.url}
                     target="_blank"
@@ -314,7 +350,7 @@ export function TranslationScreenshots({
                       alt={t(
                         "Compose screen preview with the selected translations",
                       )}
-                      className="h-auto w-full rounded-md border"
+                      className="mx-auto h-auto max-h-[36rem] max-w-full rounded-md border object-contain"
                     />
                   </a>
                   <p className="text-xs text-muted-foreground">
@@ -329,62 +365,69 @@ export function TranslationScreenshots({
               )}
             </div>
           )}
-          <details className="text-sm">
-            <summary className="cursor-pointer text-muted-foreground">
-              {t("Code references (")}
-              {context.occurrences.length}
-              {context.occurrences_truncated ? "+" : ""})
+          <details className="min-w-0 text-sm">
+            <summary className="min-h-[44px] cursor-pointer text-muted-foreground">
+              {t("Screenshot options")}
             </summary>
-            <ul className="space-y-1 pt-2">
-              {context.occurrences.map((item, index) => (
-                <li
-                  className="wrap-anywhere"
-                  key={`${item.path}:${item.line}:${index}`}
-                >
-                  {item.path}:{item.line} ·{" "}
-                  {item.function?.split(".").pop() ?? item.symbol}
-                </li>
-              ))}
-            </ul>
-            {context.occurrences_truncated && (
-              <p>{t("Showing the first 100 references.")}</p>
-            )}
-          </details>
-          {available.length === 0 ? (
-            <p>
-              {t(
-                "No callable Compose preview is registered for this key. Ask the project administrator to register a fixture preview.",
-              )}
-            </p>
-          ) : (
-            <>
-              <Label className="grid gap-2">
-                {t("Screen preview")}
-                <select
-                  className="rounded-md border bg-background p-2"
-                  value={preview}
-                  onChange={(e) => setSelected(e.target.value)}
-                  disabled={busy || active(job) || pending !== null}
-                >
-                  {available.map((name) => (
-                    <option key={name} value={name}>
-                      {name.split(".").pop()}
-                    </option>
+            <div className="space-y-4 pt-2">
+              <details className="text-sm">
+                <summary className="cursor-pointer text-muted-foreground">
+                  {t("Code references (")}
+                  {context.occurrences.length}
+                  {context.occurrences_truncated ? "+" : ""})
+                </summary>
+                <ul className="space-y-1 pt-2">
+                  {context.occurrences.map((item, index) => (
+                    <li
+                      className="wrap-anywhere"
+                      key={`${item.path}:${item.line}:${index}`}
+                    >
+                      {item.path}:{item.line} ·{" "}
+                      {item.function?.split(".").pop() ?? item.symbol}
+                    </li>
                   ))}
-                </select>
-              </Label>
-              <Label className="grid gap-2">
-                {t("Appearance")}
-                <select
-                  className="rounded-md border bg-background p-2"
-                  value={theme}
-                  onChange={(e) => setTheme(e.target.value as "light" | "dark")}
-                  disabled={busy || active(job) || pending !== null}
-                >
-                  <option value="light">{t("Light")}</option>
-                  <option value="dark">{t("Dark")}</option>
-                </select>
-              </Label>
+                </ul>
+                {context.occurrences_truncated && (
+                  <p>{t("Showing the first 100 references.")}</p>
+                )}
+              </details>
+              {available.length > 0 && (
+                <>
+                  <Label className="grid gap-2">
+                    {t("Screen preview")}
+                    <select
+                      className="rounded-md border bg-background p-2"
+                      value={preview}
+                      onChange={(e) => setSelected(e.target.value)}
+                      disabled={busy || active(job) || pending !== null}
+                    >
+                      {available.map((name) => (
+                        <option key={name} value={name}>
+                          {name.split(".").pop()}
+                        </option>
+                      ))}
+                    </select>
+                  </Label>
+                  <Label className="grid gap-2">
+                    {t("Appearance")}
+                    <select
+                      className="rounded-md border bg-background p-2"
+                      value={theme}
+                      onChange={(e) =>
+                        setTheme(e.target.value as "light" | "dark")
+                      }
+                      disabled={busy || active(job) || pending !== null}
+                    >
+                      <option value="light">{t("Light")}</option>
+                      <option value="dark">{t("Dark")}</option>
+                    </select>
+                  </Label>
+                </>
+              )}
+            </div>
+          </details>
+          {available.length > 0 && (
+            <>
               {dirty && (
                 <p>
                   {t(

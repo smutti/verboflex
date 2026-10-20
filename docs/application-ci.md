@@ -12,7 +12,7 @@ imports code-only keys, checks missing keys in the browser, saves a proposal and
 requests its screenshot through the real scheduler/Celery queue. A synthetic renderer
 replaces only the Android build boundary; it verifies the frozen commit IDs and
 selected translation in its PNG. The browser checks editing base-language resources
-in the translations repository, compact source context, visible waiting state, lazy
+in the translations repository, collapsible source context, visible waiting state, explicit
 generation, dirty-edit blocking, authenticated image loading, retry after one failed
 image request and reload.
 The `code-capture-e2e.json` receipt and browser screenshots join the smoke artifacts.
@@ -92,6 +92,14 @@ explicit deletion confirmation, the 204 response, focus restoration and reload o
 desktop and 320-pixel screens. Real PostgreSQL API tests additionally verify
 permissions, historical references, credential revocation, email reuse,
 reactivation races and migration rollback protection.
+
+The focused translation-detail browser check uses the same preview server:
+`PLAYWRIGHT_BASE_URL=http://127.0.0.1:4179 npm --prefix frontend run e2e --
+translation-detail-review.spec.ts`. Synthetic records and an authenticated image
+fixture verify the review column, screenshots on the right, mobile stacking at 320
+pixels, the empty/unconfigured states, collapsed technical metadata, on-demand
+activity, viewer permissions, dirty-edit warnings and restoration without rendering.
+The Vitest suite also checks saved-proposal length and stale capture versions.
 
 The frozen Phase 4 API-scope check uses a recorded GSD verdict bound to the exact
 plan contents in `tools/phase4_api_scope_receipt.json`. Any changed or added plan

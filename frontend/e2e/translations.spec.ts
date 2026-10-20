@@ -390,6 +390,9 @@ for (const width of [320, 375, 768, 1024, 1440]) {
     await expect
       .soft(page.getByRole("alert").filter({ hasText: "cannot be approved" }))
       .toHaveCSS("color", "rgb(180, 83, 9)");
+    await page
+      .getByText("Technical details and history", { exact: true })
+      .click();
     await page.getByRole("button", { name: "Add language override" }).click();
     const dialog = page.getByRole("dialog");
     await expect
@@ -573,6 +576,9 @@ for (const viewport of [
       await expect(
         page.getByRole("heading", { name: "Translation details", exact: true }),
       ).toBeVisible();
+      await page
+        .getByText("Technical details and history", { exact: true })
+        .click();
       await expect(page.getByText("Pending change: None")).toBeVisible();
       await expect(page.getByText("Comments: No comments yet")).toBeVisible();
       await expect(page.getByTestId("target-value-group-50")).toContainText(
@@ -610,6 +616,9 @@ for (const viewport of [
       state.paginate = false;
       await page.goto("/translations");
       await page.getByRole("link", { name: /Open details/ }).click();
+      await page
+        .getByText("Technical details and history", { exact: true })
+        .click();
       await page.getByRole("button", { name: "Add language override" }).click();
       const field = page.getByRole("spinbutton", {
         name: "Maximum characters",
@@ -713,6 +722,9 @@ for (const viewport of [
             exact: true,
           }),
         ).toBeFocused();
+        await page
+          .getByText("Technical details and history", { exact: true })
+          .click();
         await expect(page.getByText("Pending change: None")).toBeVisible();
         await expect(page.getByText("Comments: No comments yet")).toBeVisible();
         await expect(
