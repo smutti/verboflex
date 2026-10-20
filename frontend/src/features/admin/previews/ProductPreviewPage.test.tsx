@@ -2204,7 +2204,7 @@ describe("administrator product preview and publication page", () => {
     const error = await screen.findByRole("alert", {
       name: "Base language required",
     });
-    expect(error).toHaveFocus();
+    await waitFor(() => expect(error).toHaveFocus());
     expect(baseLanguage).toHaveTextContent("it");
     expect(
       screen.getByRole("region", {
@@ -2235,7 +2235,7 @@ describe("administrator product preview and publication page", () => {
     const error = await screen.findByRole("alert", {
       name: "Preview not confirmed",
     });
-    expect(error).toHaveFocus();
+    await waitFor(() => expect(error).toHaveFocus());
     expect(baseLanguage).toHaveTextContent("it");
     expect(screen.queryByText("Confirmed")).not.toBeInTheDocument();
     expect(
@@ -2624,7 +2624,7 @@ describe("administrator product preview and publication page", () => {
       "Validation did not complete. Try again.",
     );
     expect(recoveryStatus).not.toHaveTextContent("must-not-render");
-    expect(runAgain).toHaveFocus();
+    await waitFor(() => expect(runAgain).toHaveFocus());
 
     await userEvent.click(runAgain);
     expect(
@@ -2746,7 +2746,7 @@ describe("administrator product preview and publication page", () => {
         }),
       ).toHaveTextContent("Validation status is unavailable. Try again."),
     );
-    expect(runAgain).toHaveFocus();
+    await waitFor(() => expect(runAgain).toHaveFocus());
     expect(
       screen.getByText("Status unavailable").closest("[role='alert']"),
     ).not.toHaveTextContent("provider_token");
@@ -2815,7 +2815,7 @@ describe("administrator product preview and publication page", () => {
         }),
       ).toHaveTextContent("Automatic updates paused. Try again."),
     );
-    expect(runAgain).toHaveFocus();
+    await waitFor(() => expect(runAgain).toHaveFocus());
     expect(getActiveRevalidationMock).not.toHaveBeenCalled();
 
     await userEvent.click(runAgain);
@@ -2826,7 +2826,7 @@ describe("administrator product preview and publication page", () => {
         }),
       ).toHaveTextContent("Validation did not complete. Try again."),
     );
-    expect(runAgain).toHaveFocus();
+    await waitFor(() => expect(runAgain).toHaveFocus());
 
     await userEvent.click(runAgain);
     expect(
@@ -3014,12 +3014,14 @@ describe("administrator product preview and publication page", () => {
     await waitFor(() =>
       expect(confirmActiveRevalidationMock).toHaveBeenCalledOnce(),
     );
-    resolveConfirmation(failure({ detail: "provider_token=must-not-render" }));
+    await act(async () => {
+      resolveConfirmation(failure({ detail: "provider_token=must-not-render" }));
+    });
     const rejected = (await screen.findByText("Preview not confirmed")).closest(
       "[role='alert']",
     );
     expect(rejected).not.toHaveTextContent("provider_token");
-    expect(rejected).toHaveFocus();
+    await waitFor(() => expect(rejected).toHaveFocus());
 
     await userEvent.click(runAgain);
 
@@ -3031,7 +3033,7 @@ describe("administrator product preview and publication page", () => {
       await screen.findByText("Preview not confirmed")
     ).closest("[role='alert']");
     expect(rejectedAgain).toBeVisible();
-    expect(rejectedAgain).toHaveFocus();
+    await waitFor(() => expect(rejectedAgain).toHaveFocus());
     expect(confirmActiveRevalidationMock).toHaveBeenCalledTimes(2);
   });
 

@@ -1476,8 +1476,8 @@ def test_phase2_forbidden_bypasses_are_absent() -> None:
     admin_routes = _admin_route_functions()
     # Phase 4 adds five import/review routes, four read-only diagnostic children,
     # one product deletion route, four pickers, GitHub import and product summary.
-    # User editing adds one bounded, administrator-only product membership read.
-    assert len(admin_routes) == 34 + 5 + 4 + 1 + 4 + 2 + 1
+    # User editing adds one bounded membership read; deletion adds one admin-only mutation.
+    assert len(admin_routes) == 34 + 5 + 4 + 1 + 4 + 2 + 1 + 1
     for path, function in admin_routes:
         annotations = {
             ast.unparse(argument.annotation)

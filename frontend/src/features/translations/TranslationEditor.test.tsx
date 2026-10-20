@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import {
+  act,
   cleanup,
   render,
   screen,
@@ -250,16 +251,18 @@ describe("TranslationEditor", () => {
     await user.click(save);
     await user.click(save);
     expect(saveTranslationProposal).toHaveBeenCalledTimes(1);
-    rejectFirst(new Error("private failure"));
+    await act(async () => {
+      rejectFirst(new Error("private failure"));
+    });
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveFocus();
+    await waitFor(() => expect(alert).toHaveFocus());
     expect(alert).toHaveTextContent("Translation was not saved");
     expect(screen.getByRole("textbox", { name: /quantity one/i })).toHaveValue(
       "私の完全な値",
     );
     await user.click(save);
     await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
-    expect(trigger).toHaveFocus();
+    await waitFor(() => expect(trigger).toHaveFocus());
     expect(saveTranslationProposal).toHaveBeenLastCalledWith(
       expect.objectContaining({
         auth: "token",

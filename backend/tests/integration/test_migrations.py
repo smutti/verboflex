@@ -231,10 +231,14 @@ def assert_complete_schema(engine: Engine) -> None:
         "is_active",
         "must_change_password",
         "token_version",
+        "deleted_at",
         "created_at",
         "updated_at",
     }
-    assert all(user_columns[name]["nullable"] is False for name in user_columns)
+    assert user_columns["deleted_at"]["nullable"] is True
+    assert all(
+        user_columns[name]["nullable"] is False for name in user_columns if name != "deleted_at"
+    )
 
     session_columns = {column["name"]: column for column in inspector.get_columns("auth_sessions")}
     assert set(session_columns) == {
@@ -2602,9 +2606,7 @@ def test_workspace_migration_only_backfills_an_unambiguous_workspace(
     config, engine = migrated_database
     command.upgrade(config, "0028_review_workspace")
     with engine.begin() as connection:
-        connection.execute(
-            text("UPDATE bitbucket_connections SET generation = 17 WHERE id = 1")
-        )
+        connection.execute(text("UPDATE bitbucket_connections SET generation = 17 WHERE id = 1"))
         for index, workspace in enumerate(workspaces):
             connection.execute(
                 text(
