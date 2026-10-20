@@ -139,6 +139,10 @@ locale, theme and device size when warming the screenshot wrapper. Freeze the pr
 cache into a new digest-pinned image, verify it with a fresh isolated render, then
 update only the intended runner profile. Measure complete screenshot requests before
 and after with identical frozen inputs and unchanged runner resource limits.
+The Linux runner reads dependency artifacts and metadata directly from the immutable
+image through `GRADLE_RO_DEP_CACHE`. Other Gradle caches remain private writable copies
+per render. This avoids copying `caches/modules-2` for every screenshot without adding
+a writable shared host mount; see [the Linux deployment guide](compose-linux-runner.md).
 
 Code discovery allows at most 200 listing pages, 5,000 entries, 500 source files,
 12 repository path segments, 1 MiB per file and 20 MiB total. The pinned Kotlin

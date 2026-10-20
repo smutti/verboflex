@@ -7,11 +7,14 @@ FROM ${CAPTURE_BASE_IMAGE}
 USER root
 COPY backend/src /opt/verboflex/src
 COPY tools/compose_capture.py /opt/verboflex/compose_capture.py
+COPY tools/compose_capture_cache.py /opt/verboflex/compose_capture_cache.py
 COPY docker/compose-runner-entrypoint.sh /opt/verboflex/entrypoint.sh
 RUN test -x /opt/venv/bin/python \
     && test -d /opt/android-sdk \
     && test -d /opt/gradle-cache \
+    && test -d /opt/gradle-cache/caches/modules-2 \
     && test ! -e /opt/gradle-cache/gradle.properties \
+    && find /opt/gradle-cache/caches/modules-2 -type f \( -name '*.lock' -o -name gc.properties \) -delete \
     && chmod 755 /opt/verboflex/entrypoint.sh
 ENV PYTHONPATH=/opt/verboflex/src \
     PYTHONDONTWRITEBYTECODE=1 \

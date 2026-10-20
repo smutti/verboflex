@@ -35,6 +35,8 @@ relay, since bind paths are interpreted by the host Docker daemon.
    downloaded inside a disposable warm-up container are not retained in its image.
    Keep only the needed Gradle caches and wrapper distribution; omit daemon logs, init scripts,
    credentials and `gradle.properties` from the cache.
+   Keep `caches/modules-2` intact: the runner uses it as Gradle's shared read-only
+   dependency cache, including compatible artifact and metadata formats.
 4. Build `docker/compose-prewarmed.Dockerfile` using that private context. Supply
    `TOOLCHAIN_IMAGE` and `BACKEND_IMAGE` by registry digest, or unique local tags
    bound to verified image IDs (BuildKit does not accept a bare image ID in `FROM`).
@@ -44,6 +46,14 @@ relay, since bind paths are interpreted by the host Docker daemon.
    reviewed prewarmed image reference. Register the resulting runner's full image
    ID (`sha256:` plus 64 hex digits) or registry digest in the private operator
    profile. Mutable tags fail.
+   The runner image removes dependency-cache lock files and `gc.properties` during
+   preparation. At runtime `GRADLE_RO_DEP_CACHE` points to
+   `/opt/gradle-cache/caches` in that immutable, read-only image. Dependency artifacts
+   and metadata are shared directly between containers rather than copied into each
+   tmpfs. Gradle creates any writable dependency state in the private user home.
+   Compiler/transform caches, task-output caches and the wrapper distribution are
+   still copied to each request's private `GRADLE_USER_HOME`; they are not shared
+   writable directories. See [Gradle's dependency-cache documentation](https://docs.gradle.org/current/userguide/dependency_caching.html#sec:shared-readonly-cache).
 6. Build `docker/compose-relay.Dockerfile` with the current backend image, and
    configure its private profile/token/exchange mounts. Give the worker only a copy
    of the relay token and `tools/compose_capture_http.py`, never the Docker socket.
@@ -85,3 +95,8 @@ Run the synthetic runner/relay tests in `backend/tests/unit/localization/` and
 verify a real queued capture through the authenticated API after deployment.
 Confirm the returned image dimensions, anonymous image denial and offline container
 restrictions. Keep private source, images and deployment credentials out of Git.
+When changing the cache layout, verify a fresh offline render before switching the
+profile: dependency paths can affect application-specific build plugins or cache
+entries. Compare identical frozen inputs, PNG digests and unchanged CPU/memory limits,
+reporting queue time separately from generation. Refresh the image to update shared
+dependencies; never mutate the seed while renders are using it.
