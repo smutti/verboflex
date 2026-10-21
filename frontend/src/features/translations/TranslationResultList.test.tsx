@@ -346,13 +346,18 @@ describe("TranslationResultList window virtualization", () => {
     const props = { ...defaults(), items: many(), nextCursor: "next" };
     mount(props);
     await screen.findAllByRole("listitem");
+    await waitFor(() => {
+      const measuredOptions = vi
+        .mocked(useWindowVirtualizer)
+        .mock.calls.at(-1)![0];
+      expect(measuredOptions.scrollMargin).toBe(400);
+    });
     const options = vi.mocked(useWindowVirtualizer).mock.calls.at(-1)![0];
     expect(options.count).toBe(100);
     expect(options.estimateSize(0)).toBe(284);
     expect(options.overscan).toBe(8);
     expect(options.useFlushSync).toBe(false);
     expect(options.getItemKey!(0)).toBe("product:scope:key-0");
-    expect(options.scrollMargin).toBe(400);
     const instance = vi.mocked(useWindowVirtualizer).mock.results.at(-1)!.value;
     expect(instance.scrollElement).toBe(window);
     const list = screen.getByRole("list", { name: "Translation results" });
