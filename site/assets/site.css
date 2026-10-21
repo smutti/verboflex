@@ -2205,3 +2205,231 @@ html:not(.js) .reset-button {
     padding: 18px 20px 22px;
   }
 }
+
+/* Compose feature: an HTML illustration, separate from real app captures. */
+.compose-section {
+  padding-top: 24px;
+  padding-bottom: 96px;
+}
+.compose-heading {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  align-items: end;
+  gap: 64px;
+  margin-bottom: 38px;
+}
+.compose-heading h2 em {
+  color: var(--green);
+  font-style: normal;
+}
+.compose-heading > div > p:not(.eyebrow) {
+  margin-bottom: 22px;
+  font-size: 0.95rem;
+}
+.compose-illustration {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--white);
+}
+.compose-panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.compose-input {
+  min-width: 0;
+  background: var(--deep);
+  color: var(--paper);
+  padding: 30px 36px;
+}
+.compose-panel-label {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+}
+.compose-input .compose-panel-label {
+  color: #c2d6c9;
+}
+.compose-input pre {
+  margin: 30px 0;
+  font-family: var(--mono);
+  font-size: clamp(0.74rem, 1.1vw, 0.95rem);
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #e4efde;
+}
+.compose-proposal {
+  padding: 22px 24px;
+  border: 1px solid #507464;
+  border-radius: 8px;
+  background: #214c40;
+}
+.compose-proposal > span {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: var(--lime);
+  margin-bottom: 12px;
+}
+.compose-proposal > strong {
+  display: block;
+  font-size: 1.35rem;
+  font-weight: 500;
+}
+.compose-proposal p {
+  font-size: 0.72rem;
+  color: #c2d6c9;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+.compose-output {
+  min-width: 0;
+  padding: 30px 36px;
+  background: var(--mint);
+}
+.compose-tag {
+  border: 1px solid #b6cdbd;
+  border-radius: 20px;
+  padding: 3px 8px;
+}
+.compose-phone {
+  max-width: 320px;
+  margin: 26px auto 0;
+  background: white;
+  border: 1px solid #c7d6cb;
+  border-radius: 14px;
+  box-shadow: 0 14px 30px #133e3510;
+  overflow: hidden;
+  color: #111827;
+  font-size: 0.82rem;
+}
+.compose-phone-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.compose-phone-body {
+  padding: 24px 22px 20px;
+}
+.compose-shop {
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  color: #0f766e;
+}
+.compose-phone h3 {
+  font-size: 1.3rem;
+  margin: 16px 0 12px;
+  letter-spacing: -0.025em;
+}
+.compose-phone p {
+  color: #6b7280;
+  font-size: 0.74rem;
+  line-height: 1.7;
+}
+.compose-order,
+.compose-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 24px;
+}
+.compose-order small {
+  display: block;
+  color: #6b7280;
+  margin-top: 3px;
+}
+.compose-total {
+  border-top: 1px solid #e5e7eb;
+  padding-top: 16px;
+}
+.compose-highlight {
+  margin-top: 26px;
+  border: 1px dashed #0f766e;
+  border-radius: 9px;
+  padding: 4px;
+}
+.compose-screen-button {
+  display: block;
+  border-radius: 6px;
+  padding: 11px 5px;
+  text-align: center;
+  color: white;
+  background: #0f766e;
+  font-weight: 600;
+}
+.compose-highlight-note {
+  display: block;
+  text-align: center;
+  font-size: 0.6rem;
+  color: #0f766e;
+  font-family: var(--mono);
+  margin-top: 4px;
+}
+.compose-illustration figcaption {
+  padding: 17px 30px;
+  color: var(--muted);
+  font-size: 0.73rem;
+  border-top: 1px solid var(--line);
+}
+.compose-benefits {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 36px;
+  margin-top: 36px;
+}
+.compose-benefits h3 {
+  font-size: 1.12rem;
+  margin-bottom: 12px;
+}
+.compose-benefits p {
+  font-size: 0.83rem;
+  line-height: 1.8;
+}
+.compose-requirement {
+  font-size: 0.76rem;
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 900px) {
+  .compose-heading {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .compose-input,
+  .compose-output {
+    padding: 24px;
+  }
+}
+@media (max-width: 640px) {
+  .compose-section {
+    padding-block: 0 64px;
+  }
+  .compose-panels,
+  .compose-benefits {
+    grid-template-columns: 1fr;
+  }
+  .compose-benefits {
+    gap: 26px;
+  }
+  .compose-input,
+  .compose-output {
+    padding: 24px 18px;
+  }
+  .compose-proposal,
+  .compose-phone-body {
+    padding: 20px 16px;
+  }
+  .compose-illustration figcaption {
+    padding: 18px;
+  }
+}

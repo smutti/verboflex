@@ -3,14 +3,14 @@
 COPY = {
     "en": {
         "title": "VerboFlex — The right words. In every product.",
-        "description": "Search, translate and approve your product strings. VerboFlex connects your team’s work to repositories, with context, length limits and review.",
-        "nav": ["Product", "How it works", "Integrations", "Guide"],
+        "description": "Translate and review product strings with screenshots generated from your Android Compose code. VerboFlex connects words, screen context and repository review.",
+        "nav": ["Product", "Compose screenshots", "How it works", "Guide"],
         "skip": "Skip to content",
         "menu": "Menu",
         "guide": "User guide",
         "eyebrow": "OPEN SOURCE LOCALIZATION",
         "headline": "The right words.<br><em>In every product.</em>",
-        "intro": "From repositories to the people behind the words. Search, translate and approve your product strings in one shared workspace. Self-hosted. Apache 2.0.",
+        "intro": "From repositories to the people behind the words. Search, translate and approve your product strings in one shared workspace. See saved translations in screenshots generated from your Compose previews. Self-hosted. Apache 2.0.",
         "primary": "Explore the demo",
         "secondary": "See how to get started",
         "hero_note": "For translators, reviewers and developers.",
@@ -55,7 +55,7 @@ COPY = {
             [
                 "02",
                 "Translate in context",
-                "Compare languages, fill missing translations and add keys. Edit native plurals, reuse suggestions and check your glossary.",
+                "Compare languages, edit native plurals and reuse suggestions. Generate a screenshot from a configured Compose preview to see your saved wording on screen.",
             ],
             [
                 "03",
@@ -76,7 +76,7 @@ COPY = {
             ],
             [
                 "Approve",
-                "Compare proposals, check length limits and approve or reject changes.",
+                "Compare proposals, check length limits and inspect a Compose screenshot before approving or rejecting changes.",
             ],
             [
                 "Send",
@@ -111,6 +111,10 @@ COPY = {
         "faq_title": "Before you start",
         "faqs": [
             [
+                "Where do Compose screenshots come from?",
+                "VerboFlex renders a registered preview from your Android application code with the saved translation. Your team configures the preview and runner once; translators can then request screenshots from the translation detail. The image shows the fixture’s example screen state.",
+            ],
+            [
                 "Do translators need to know Git?",
                 "No. An administrator sets up the sources. You can then find, edit and discuss text in the UI; sending changes to the repository is a later step.",
             ],
@@ -132,7 +136,7 @@ COPY = {
         "footer": "Translations, in your team’s workflow.",
         "footer_note": "Real app screenshots · sample data · October 2026.",
         "guide_title": "Your guide, from sign-in to review.",
-        "guide_description": "The essential steps to work in VerboFlex, connect repositories and use Codex or Claude Code.",
+        "guide_description": "Translate, generate screenshots from Compose previews, review changes and connect repositories or assistants to VerboFlex.",
         "guide_label": "PRACTICAL GUIDE",
         "guide_toc": "In this guide",
         "back": "Back to the product",
@@ -140,6 +144,7 @@ COPY = {
             ["start", "First steps"],
             ["connect", "Connect a product"],
             ["translate", "Translate"],
+            ["compose-screenshots", "Compose screenshots"],
             ["review", "Review and submit"],
             ["refresh", "Updates and conflicts"],
             ["dashboard", "Dashboard"],
