@@ -1,6 +1,6 @@
 # Public-content evidence
 
-Checked against application source on 2026-10-11. This file is for maintainers and is not copied to the public artifact. Recheck affected claims when the application changes.
+Compose screenshot claims checked against main commit `6ca943d` on 2026-10-21; other claims checked on 2026-10-11. This file is for maintainers and is not copied to the public artifact. Recheck affected claims when the application changes.
 
 | Public claim                                                                   | Source                                                                                                                                                                                                                                                                 |
 | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -45,3 +45,21 @@ match percentages are source similarity, not quality or approval scores.
 - Filter shortcuts and same-language matching: `frontend/src/features/translations/TranslationFilters.tsx`.
 - Empty values and missing entries are distinct; new entries require mapped files: `docs/translation-authoring-and-reuse.md`.
 - Pending state filtering and selection before submission: `frontend/src/features/change-sets/ChangeSetReviewPage.tsx`.
+
+## Compose screenshots
+
+The landing page’s code-to-screen illustration is HTML with synthetic Northstar
+checkout content, not a capture or a running renderer. The existing seven gallery
+images remain real application captures. The website never calls a capture service.
+
+| Public claim | Source |
+| --- | --- |
+| Generate screenshots from registered, zero-argument Android Compose previews | [Capture integration](../docs/code-keys-compose.md), [runner](../tools/compose_capture.py) |
+| Apply the selected saved proposal; freeze code and translation revisions | [Screenshot service](../backend/src/verboflex/services/screenshots.py) |
+| Review text on the left, screenshots on the right; mobile stacking; technical disclosure | [TranslationDetailPage](../frontend/src/features/translations/TranslationDetailPage.tsx) |
+| Explicit generation, dirty-edit guard, stale version warning, authenticated images, light/dark selection and full-size image | [TranslationScreenshots](../frontend/src/features/translations/TranslationScreenshots.tsx) |
+| Prepared runner and fixture state required; no arbitrary live app/device capture | [Integration limitations](../docs/code-keys-compose.md), [Linux setup](../docs/compose-linux-runner.md) |
+
+Do not describe this as live rendering, automatic capture after every edit, instant
+rendering, support for every Compose target, or a guarantee that a registered key
+appears in every fixture. Screenshot generation does not approve or submit changes.

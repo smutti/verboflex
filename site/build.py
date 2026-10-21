@@ -28,8 +28,8 @@ def document(body: str, *, guide: bool, base_url: str) -> str:
     description = C["guide_description"] if guide else C["description"]
     urls = [
         "index.html#product",
+        "index.html#compose-screenshots",
         "index.html#workflow",
-        "index.html#integrations",
         "guide.html",
     ]
     nav = "".join(
@@ -147,6 +147,48 @@ def gallery() -> str:
       </div><div class="screenshot-grid">{shots}</div></section>"""
 
 
+def compose_showcase() -> str:
+    code = escape("""@Preview
+@Composable
+fun CheckoutPreview() {
+    CheckoutScreen(
+        confirmLabel = stringResource(
+            R.string.confirm_order
+        )
+    )
+}""")
+    return f"""
+<section id="compose-screenshots" class="section container compose-section" aria-labelledby="compose-title">
+  <div class="compose-heading">
+    <div><p class="eyebrow">NEW · SCREENSHOTS FROM COMPOSE CODE</p><h2 id="compose-title">See your translation.<br><em>In the screen it belongs to.</em></h2></div>
+    <div><p>Generate screenshots directly from your Android Compose previews, with your saved translation applied. Review wording, wrapping and spacing beside the text before you approve.</p><a class="text-link" href="guide.html#compose-screenshots">Explore the screenshot workflow {arrow()}</a></div>
+  </div>
+  <figure class="compose-illustration">
+    <div class="compose-panels">
+      <div class="compose-input">
+        <div class="compose-panel-label"><span>01 / APPLICATION CODE</span><span>Checkout.kt</span></div>
+        <pre><code>{code}</code></pre>
+        <div class="compose-proposal"><span>02 / SAVED TRANSLATION · ITALIAN</span><strong lang="it">Conferma ordine</strong><p>confirm_order <span aria-hidden="true">·</span> 15 / 24 characters</p></div>
+      </div>
+      <div class="compose-output">
+        <div class="compose-panel-label"><span>03 / SCREEN CONTEXT</span><span class="compose-tag">Compose preview</span></div>
+        <div class="compose-phone" lang="it">
+          <div class="compose-phone-top"><span aria-hidden="true">←</span><strong>Il tuo ordine</strong><span aria-hidden="true">⋯</span></div>
+          <div class="compose-phone-body"><span class="compose-shop">NORTHSTAR / DEMO</span><h3>Pronto per partire?</h3><p>Controlla il tuo ordine prima di confermare.</p><div class="compose-order"><span>Pass giornaliero<small>1 persona</small></span><strong>€ 12,00</strong></div><div class="compose-total"><span>Totale</span><strong>€ 12,00</strong></div><div class="compose-highlight"><span class="compose-screen-button">Conferma ordine</span><span class="compose-highlight-note">confirm_order</span></div></div>
+        </div>
+      </div>
+    </div>
+    <figcaption>Illustrated workflow with sample data. In VerboFlex, the configured Compose runner generates the actual screenshot from your application code.</figcaption>
+  </figure>
+  <div class="compose-benefits">
+    <div><h3>Save. Generate. Review.</h3><p>Save your wording, choose a registered preview and request a screenshot. Generation runs in the background.</p></div>
+    <div><h3>Text left. Screenshot right.</h3><p>Keep the source, proposal and review actions together. Open the screenshot at full size when you need a closer look.</p></div>
+    <div><h3>Know when to regenerate.</h3><p>Older captures and unsaved changes are flagged. Generate again after saving to inspect the latest proposal.</p></div>
+  </div>
+  <p class="compose-requirement">For configured Android Compose projects. Your team registers a callable preview and prepares a capture runner. <a href="guide.html#compose-setup">See developer setup</a>.</p>
+</section>"""
+
+
 def landing() -> str:
     features = "".join(
         f'<article><span class="feature-number">{n}</span><h3>{title}</h3><p>{text}</p></article>'
@@ -166,9 +208,10 @@ def landing() -> str:
     )
     return f"""
 <section class="hero container">
-  <div class="hero-copy"><p class="eyebrow"><span class="live-dot" aria-hidden="true"></span>{C["eyebrow"]}</p><h1>{C["headline"]}</h1><p class="hero-intro">{C["intro"]}</p><div class="hero-actions"><a class="button" href="#demo">{C["primary"]} <span aria-hidden="true">↓</span></a><a class="text-link" href="#screenshots">See the workspace {arrow()}</a></div><p class="hero-note">{C["hero_note"]}</p></div>
+  <div class="hero-copy"><p class="eyebrow"><span class="live-dot" aria-hidden="true"></span>{C["eyebrow"]}</p><h1>{C["headline"]}</h1><p class="hero-intro">{C["intro"]}</p><div class="hero-actions"><a class="button" href="#demo">{C["primary"]} <span aria-hidden="true">↓</span></a><a class="text-link" href="#compose-screenshots">See Compose screenshots {arrow()}</a></div><p class="hero-note">{C["hero_note"]}</p></div>
   <div class="word-orbit" aria-hidden="true"><div class="orbit-ring"></div><div class="orbit-center">Aa<span>One shared meaning.</span></div><span class="word word-one">Hello<span>English</span></span><span class="word word-two">Ciao<span>Italiano</span></span><span class="word word-three">こんにちは<span>日本語</span></span><span class="word word-four">Bonjour<span>Français</span></span><span class="orbit-spark">✳</span><span class="orbit-coordinate">Words that travel.</span></div>
 </section>
+{compose_showcase()}
 {demo()}
 <section id="product" class="section container"><div class="section-heading"><p class="eyebrow">{C["section_label"]}</p><h2>{C["features_title"]}</h2></div><div class="feature-grid">{features}</div></section>
 {gallery()}

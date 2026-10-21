@@ -1,6 +1,6 @@
 # Product website
 
-The English-only VerboFlex website explains the product and its workflows. It contains a landing page, a practical user guide, a synthetic interactive demo, a favicon and a social sharing card. It has no application connection, analytics, remote fonts or runtime dependencies.
+The English-only VerboFlex website explains the product and its workflows. It contains a landing page, a practical user guide, a Compose code-to-screen feature illustration, a synthetic interactive demo, a favicon and a social sharing card. It has no application connection, analytics, remote fonts or runtime dependencies.
 
 ## Preview and check
 
@@ -49,6 +49,10 @@ node site/tests/render-social.mjs
 python3 site/build.py
 python3 site/check.py
 ```
+
+The Compose feature is an accessible HTML illustration with sample data, explicitly
+labelled separately from the real captures. Its guide section covers reviewer steps
+and links to developer setup; it never runs Compose or calls the application.
 
 Use only synthetic products in application captures. See `SCREENSHOTS.md` for the capture checklist. The seven gallery images are real UI screenshots; the separate interactive demo is illustrative and is not a pixel-for-pixel reproduction. Keep claims aligned with `SOURCE-MAP.md`, including GitHub and XLIFF limitations. Do not imply a hosted signup, automatic machine translation or tested large-scale throughput.
 
