@@ -2,7 +2,6 @@
 
 import asyncio
 import base64
-import json
 import logging
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
@@ -24,7 +23,6 @@ from verboflex.localization.code_keys.catalog import CodeSourceConfig, extract_c
 from verboflex.localization.code_keys.join import join_code_translations
 from verboflex.localization.importing.core import CanonicalParserInput
 from verboflex.main import app
-from verboflex.models.import_job import ImportExecution
 from verboflex.models.product_member import ProductMember
 from verboflex.models.screenshot import ScreenshotJob
 from verboflex.models.translation import TranslationValue
@@ -41,30 +39,31 @@ PNG = base64.b64decode(
 
 
 @pytest.fixture
-def capture_data(activation_session_factory, monkeypatch):  # noqa: F811
+def capture_data(activation_session_factory, monkeypatch, request):  # noqa: F811
     factory = activation_session_factory
     # Synthetic API tests must never publish jobs to an external broker.
     monkeypatch.setattr(screenshot_tasks.app, "send_task", lambda *args, **kwargs: None)
     with factory.begin() as session:
         session.execute(delete(ScreenshotJob))
     identity, keys_repo, translations_repo = _seed_running_separate_import(factory)
-    config = CodeSourceConfig.model_validate(
-        {
-            "compose": {
-                "runner_profile": "synthetic",
-                "preview_functions": ["demo.PreviewScreen"],
-            }
+    config_data = {
+        "compose": {
+            "runner_profile": "synthetic",
+            "preview_functions": ["demo.PreviewScreen"],
         }
-    )
-    catalog = extract_catalog(
-        {
-            "app/Screen.kt": b"""package demo
+    }
+    source = b"""package demo
 fun Screen() = Res.strings.title
 @Preview @Composable fun PreviewScreen() { Screen() }
 """
-        },
-        config,
-    )
+    if getattr(request, "param", False):
+        config_data["compose"]["preview_functions"].append("demo.ClosedPreview")
+        config_data["preview_scenarios"] = [
+            {"preview_function": "demo.PreviewScreen", "label": "Dialog open", "keys": ["title"]}
+        ]
+        source += b"@Preview @Composable fun ClosedPreview() { Screen() }\n"
+    config = CodeSourceConfig.model_validate(config_data)
+    catalog = extract_catalog({"app/Screen.kt": source}, config)
     joined = join_code_translations(
         catalog,
         (
@@ -164,21 +163,11 @@ def _capture_client(factory, principal, *, before_commit=None):
     )
 
 
+@pytest.mark.parametrize("capture_data", [True], indirect=True)
 def test_explicit_scenario_is_enforced_by_api_and_location_follows_image_authority(
     capture_data, monkeypatch
 ):
     factory, identity, principal, group_id = capture_data
-    with factory.begin() as session:
-        execution = session.get_one(ImportExecution, identity.execution_id)
-        data = json.loads(json.dumps(execution.code_catalog))
-        data["catalog"]["previews"].append(
-            {**data["catalog"]["previews"][0], "function": "demo.ClosedPreview"}
-        )
-        data["config"]["compose"]["preview_functions"].append("demo.ClosedPreview")
-        data["config"]["preview_scenarios"] = [
-            {"preview_function": "demo.PreviewScreen", "label": "Dialog open", "keys": ["title"]}
-        ]
-        execution.code_catalog = data
     monkeypatch.setattr(screenshot_tasks, "render", lambda inputs: PNG)
     receipt = ScreenshotLocation(
         status="found", regions=[ScreenshotRegion(x=0.1, y=0.2, width=0.3, height=0.1)]
