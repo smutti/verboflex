@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from verboflex.core.config import get_settings
 from verboflex.db.session import SessionFactory
+from verboflex.localization.code_keys.locations import locate_text
 from verboflex.models.screenshot import ScreenshotJob
 from verboflex.services.screenshots import authority_current, encode_inputs
 from verboflex.worker.celery_app import app
@@ -41,7 +42,10 @@ def render(inputs: dict[str, object]) -> bytes:
     with tempfile.TemporaryDirectory(prefix="verboflex-capture-") as directory:
         request = Path(directory) / "input.json"
         output = Path(directory) / "image.png"
-        request.write_bytes(encode_inputs(inputs))
+        # Location metadata belongs to the worker, keeping existing reviewed runners compatible.
+        request.write_bytes(
+            encode_inputs({key: value for key, value in inputs.items() if key != "target_key"})
+        )
         # The deployment command is a trusted isolation adapter. It must start a
         # sandbox/remote runner, never execute repository code in this process.
         environment = {name: os.environ[name] for name in ("PATH", "TMPDIR") if name in os.environ}
@@ -87,6 +91,7 @@ def execute_capture(job_id: UUID, factory: sessionmaker[Session] = SessionFactor
         row.state, row.updated_at = "rendering", datetime.now(UTC)
         inputs = dict(row.inputs)
     image: bytes | None = None
+    location: dict[str, object] | None = None
     failure: str | None = None
     try:
         image = render(inputs)
@@ -95,6 +100,11 @@ def execute_capture(job_id: UUID, factory: sessionmaker[Session] = SessionFactor
     except Exception:
         # Build logs may contain repository secrets; keep the public error closed.
         failure = "render_failed"
+    if image is not None and failure is None:
+        try:
+            location = locate_text(image, inputs).model_dump(mode="json")
+        except Exception:
+            location = {"status": "unavailable", "regions": []}
     with factory.begin() as session:
         row = session.scalar(
             select(ScreenshotJob).where(ScreenshotJob.id == job_id).with_for_update()
@@ -108,8 +118,10 @@ def execute_capture(job_id: UUID, factory: sessionmaker[Session] = SessionFactor
         if failure is None and image is not None:
             row.state, row.image = "succeeded", image
             row.image_digest = hashlib.sha256(image).hexdigest()
+            row.location = location
         else:
             row.state, row.image = "failed", None
+            row.location = None
 
 
 @app.task(name="verboflex.screenshot.run", acks_late=True, reject_on_worker_lost=True)  # type: ignore[untyped-decorator]
@@ -148,6 +160,7 @@ def reconcile_screenshots() -> None:
         for row in rows:
             if row.expires_at <= now:
                 row.state, row.image, row.inputs = "expired", None, {}
+                row.location = None
             elif row.state == "rendering" and row.updated_at < now - timedelta(
                 seconds=settings.screenshot_timeout_seconds + 120,
             ):

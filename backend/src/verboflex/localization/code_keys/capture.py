@@ -35,6 +35,7 @@ class CaptureBundle(BaseModel):
     capture: ComposeCaptureConfig
     request: ScreenshotRequest
     values: Annotated[list[CaptureValue], Field(max_length=20000)]
+    target_key: Annotated[str, Field(max_length=255)] | None = None
 
     @field_validator("language", "base_language")
     @classmethod

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 from typing import cast
 from uuid import UUID
@@ -32,6 +33,7 @@ from verboflex.schemas.screenshots import (
     CodeContextResponse,
     CodeSourcePage,
     CodeSourceSummary,
+    ScreenScenario,
     ScreenshotRequest,
 )
 from verboflex.services.translation_search import TranslationGroupDetail
@@ -131,6 +133,40 @@ def _catalog(session: Session, scope: LocalizationScope) -> tuple[CodeKeyCatalog
     )
 
 
+def screen_scenarios(
+    catalog: CodeKeyCatalog, config: CodeSourceConfig, key: str
+) -> list[ScreenScenario]:
+    if config.compose is None:
+        return []
+    known = {preview.function for preview in catalog.previews}
+    explicit = [scenario for scenario in config.preview_scenarios if key in scenario.keys]
+    if explicit:
+        return [
+            ScreenScenario(
+                preview_function=scenario.preview_function, label=scenario.label, explicit=True
+            )
+            for scenario in explicit
+            if scenario.preview_function in known
+        ]
+    labels = {scenario.preview_function: scenario.label for scenario in config.preview_scenarios}
+    functions = dict.fromkeys(
+        preview.function
+        for preview in catalog.previews
+        if key in preview.keys and preview.function in config.compose.preview_functions
+    )
+    return [
+        ScreenScenario(
+            preview_function=function,
+            label=labels.get(function)
+            or re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", function.rsplit(".", 1)[-1])
+            .removesuffix(" Preview")
+            .strip(),
+            explicit=False,
+        )
+        for function in functions
+    ]
+
+
 def context(session: Session, principal: Principal, group_id: UUID) -> CodeContextResponse:
     group = _group(session, principal, group_id)
     scope = _scope_for_group(session, group)
@@ -157,6 +193,7 @@ def context(session: Session, principal: Principal, group_id: UUID) -> CodeConte
         occurrences_truncated=len(occurrences) > 100,
         capture_functions=list(config.compose.preview_functions) if config.compose else [],
         code_commit=code.commit_hash if code else None,
+        scenarios=screen_scenarios(catalog, config, group.raw_key),
     )
 
 
@@ -206,7 +243,8 @@ def _snapshot(
         capture is None
         or request.preview_function not in capture.preview_functions
         or not matches
-        or not any(group.raw_key in item.keys for item in matches)
+        or request.preview_function
+        not in {item.preview_function for item in screen_scenarios(catalog, config, group.raw_key)}
     ):
         raise ScreenshotError("Capture preview is unavailable", 409)
     if group.is_deleted:
@@ -264,6 +302,7 @@ def _snapshot(
         raise ScreenshotError("Preview keys need imported translations or base text", 409)
     payload: dict[str, object] = {
         "version": 1,
+        "target_key": group.raw_key,
         "code_repository_id": code[0][1],
         "code_commit": code[0][2],
         "translations_repository_id": translations[0][1],
@@ -427,6 +466,8 @@ def get_capture(
         raise ScreenshotError("Screenshot unavailable", 404)
     if row.expires_at <= datetime.now(UTC):
         row.state, row.image, row.inputs = "expired", None, {}
+        row.location = None
     elif not authority_current(session, row):
         row.state, row.image, row.error_code = "failed", None, "source_or_access_changed"
+        row.location = None
     return row

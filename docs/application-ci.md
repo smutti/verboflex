@@ -102,6 +102,12 @@ fixture verify the review column, screenshots on the right, mobile stacking at 3
 pixels, the empty/unconfigured states, collapsed technical metadata, on-demand
 activity, viewer permissions, dirty-edit warnings and restoration without rendering.
 The Vitest suite also checks saved-proposal length and stale capture versions.
+It also verifies named screenshot scenarios, automatic selection for a key, and
+text-position toggles without another render. Browser checks verify normalized
+outline alignment at 320, 768 and 1440 pixels. Synthetic backend tests enforce
+scenario selection at the API boundary and cover OCR ambiguity, multiline text,
+timeouts, absent engines, access revocation and receipt expiration. Real OCR uses
+the optional bundled Tesseract models; the Android renderer/cache contract is unchanged.
 
 The frozen Phase 4 API-scope check uses a recorded GSD verdict bound to the exact
 plan contents in `tools/phase4_api_scope_receipt.json`. Any changed or added plan

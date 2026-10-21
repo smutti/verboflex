@@ -68,6 +68,34 @@ reflection and arbitrary property indirection are not resolved. A listed key may
 be visible in a particular fixture. Parameterized and custom multi-preview annotations
 need a dedicated zero-argument registered preview for this first integration.
 
+### Named screen scenarios
+
+For dialogs, sheets, success messages or validation errors, provide a preview whose
+fixture state already makes the relevant text visible. In the mapping editor, add
+**Screen scenarios**, select each registered function, give it a reviewer-facing
+name and list the exact visible keys. Names are project metadata and are shown as
+entered. Publish and import the mapping after validating its preview.
+
+For example, alongside `compose` in `code_source`:
+
+```json
+"preview_scenarios": [
+  {
+    "preview_function": "com.example.screens.RegisterPreview",
+    "label": "Registration — dialog open",
+    "keys": ["privacy_notice", "terms_notice"]
+  }
+]
+```
+
+The function must also appear in `compose.preview_functions`. Preview validation
+rejects functions and keys absent from the imported code. When a key has explicit
+scenarios, only those scenarios are offered and accepted by the screenshot API;
+the first matching scenario in configuration order is the default. A key can belong
+to several scenarios. Keys without explicit scenarios retain static-reference
+discovery with readable function names. Static discovery does not prove visibility.
+No runtime navigation, click automation or arbitrary repository commands are added.
+
 The Android module must apply `com.android.compose.screenshot` **0.0.1-alpha16** when
 `-Pverboflex.capture=true`, enable `android.experimental.enableScreenshotTest`, add
 `com.android.tools.screenshot:screenshot-validation-api:0.0.1-alpha16` and `ui-tooling`
@@ -179,14 +207,41 @@ running may continue until completion or its timeout.
 Open a translation detail. Translation content and review actions appear on the left;
 **Screenshots** appears on the right, or below the review content on narrow screens.
 Existing personal captures load automatically. When no screenshot is available, the
-sidebar shows a compact empty state. Open **Screenshot options** to choose a registered
-preview and appearance, save pending edits, then select **Generate screenshot**. The request
+sidebar shows a compact empty state. Choose a **Screen scenario** above the image and,
+if needed, open **Screenshot options** to change appearance. Save pending edits,
+then select **Generate screenshot**. The request
 freezes code and translation commits, import execution, locale, fixture configuration
 and the selected saved proposal version. Other strings use their imported values.
 Each new request renders again; retrying the same request ID returns the same job.
 The latest personal capture is restored when reopening the detail. A warning identifies
 captures from an older proposal version or when there are unsaved edits. Opening the
 detail or changing a proposal never starts a new render automatically.
+
+New captures can outline the selected text using **Show position / Hide position**.
+The outline scales with the displayed image, including mobile widths, and never
+changes the PNG or starts another render. It is hidden when the translation draft
+or saved proposal is newer than the image. The captured scenario remains labelled
+even when a different scenario is selected for the next capture.
+
+Text location is an optional local OCR step in the Celery screenshot worker, after
+rendering. It uses the frozen selected translation (including base fallback), a
+single-threaded Tesseract process with a five-second limit, and bounded TSV output.
+The standard backend image includes English, Italian, German, Spanish, French and
+Dutch models. Other locales, older captures, missing engines and timeouts report
+position unavailable while preserving the screenshot. No image or OCR text is sent
+to an external service; only normalized rectangles and a status are retained.
+
+A location requires a complete, high-confidence text match. Multiple occurrences,
+or identical effective text under another key in the frozen catalog, are ambiguous
+and receive no outline. Hidden, clipped, formatted or poorly recognized text may
+not be located. These are text-recognition results, not Compose semantic node IDs;
+the system does not invent positions or automatically scroll. Location receipts
+share the image's access checks, immutable job identity and seven-day expiration.
+Toggling the outline never changes the compiled preview or Gradle cache identity.
+
+For development outside Docker, install Tesseract and the corresponding language
+models to exercise real OCR. Unit/API tests use synthetic text and bounded OCR
+receipts and do not require the engine. See [Tesseract TSV output](https://tesseract-ocr.github.io/tessdoc/Command-Line-Usage.html#tsv-output-currently-available-in-305-dev-in-master-branch-on-github).
 
 The panel distinguishes request acceptance, queueing, rendering and image loading.
 While waiting it shows a spinner and elapsed time, including time in the queue;

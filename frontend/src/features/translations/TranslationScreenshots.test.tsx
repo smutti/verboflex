@@ -336,7 +336,7 @@ describe("Compose screenshots", () => {
     expect(api.requestTranslationScreenshot).not.toHaveBeenCalled();
   });
 
-  it("keeps generation explicit and preview configuration collapsed when no screenshot exists", async () => {
+  it("keeps generation explicit, the scenario visible and technical options collapsed", async () => {
     render(
       <TranslationScreenshots
         accessToken="token"
@@ -345,13 +345,82 @@ describe("Compose screenshots", () => {
       />,
     );
     expect(await screen.findByText("No screenshot available")).toBeVisible();
-    expect(screen.getByLabelText("Screen preview")).not.toBeVisible();
+    expect(screen.getByLabelText("Screen scenario")).toBeVisible();
+    expect(screen.getByLabelText("Appearance")).not.toBeVisible();
     expect(
       screen.getByRole("button", { name: "Generate screenshot" }),
     ).toBeEnabled();
     await userEvent.click(screen.getByText("Screenshot options"));
-    expect(screen.getByLabelText("Screen preview")).toBeVisible();
+    expect(screen.getByLabelText("Appearance")).toBeVisible();
     expect(api.requestTranslationScreenshot).not.toHaveBeenCalled();
+  });
+
+  it("defaults to the explicit open-dialog scenario and locates its text without another capture", async () => {
+    api.getTranslationCodeContext.mockResolvedValue({
+      data: {
+        configured: true,
+        occurrences: [],
+        previews: [
+          { function: "demo.LoginPreview" },
+          { function: "demo.RegisterPreview" },
+        ],
+        capture_functions: ["demo.LoginPreview", "demo.RegisterPreview"],
+        scenarios: [
+          {
+            preview_function: "demo.RegisterPreview",
+            label: "Registration — dialog open",
+            explicit: true,
+          },
+        ],
+      },
+    });
+    api.requestTranslationScreenshot.mockResolvedValue({
+      data: {
+        ...job,
+        request: { preview_function: "demo.RegisterPreview" },
+        location: {
+          status: "found",
+          regions: [{ x: 0.2, y: 0.7, width: 0.4, height: 0.05 }],
+        },
+      },
+    });
+    const user = userEvent.setup();
+    const view = render(
+      <TranslationScreenshots
+        accessToken="token"
+        groupId="group"
+        dirty={false}
+      />,
+    );
+    expect(
+      await screen.findByRole("combobox", { name: "Screen scenario" }),
+    ).toHaveValue("demo.RegisterPreview");
+    expect(
+      screen.queryByRole("option", { name: "LoginPreview" }),
+    ).not.toBeInTheDocument();
+    expect(api.requestTranslationScreenshot).not.toHaveBeenCalled();
+    await user.click(
+      screen.getByRole("button", { name: "Generate screenshot" }),
+    );
+    expect(
+      api.requestTranslationScreenshot.mock.calls[0][0].body.preview_function,
+    ).toBe("demo.RegisterPreview");
+    const outline = await screen.findByRole("img", {
+      name: "Text position in screenshot",
+    });
+    expect(outline.querySelector("rect")).toHaveAttribute("y", "0.7");
+    await user.click(screen.getByRole("button", { name: "Hide position" }));
+    expect(
+      screen.queryByRole("img", { name: "Text position in screenshot" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show position" }));
+    expect(api.requestTranslationScreenshot).toHaveBeenCalledTimes(1);
+    view.rerender(
+      <TranslationScreenshots accessToken="token" groupId="group" dirty />,
+    );
+    expect(
+      screen.queryByRole("img", { name: "Text position in screenshot" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a compact unavailable state without offering generation for an unconfigured product", async () => {

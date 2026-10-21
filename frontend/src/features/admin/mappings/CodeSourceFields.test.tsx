@@ -44,3 +44,52 @@ it("lets administrators type multiple functions and previews without losing sepa
     "demo.SettingsPreview",
   ]);
 });
+
+it("configures named scenarios and clears them when capture is disabled", async () => {
+  const saved = vi.fn();
+  function Editor() {
+    const [config, setConfig] = useState<CodeSourceConfig | null>({
+      compose: {
+        runner_profile: "synthetic",
+        preview_functions: ["demo.RegisterPreview"],
+      },
+    });
+    return (
+      <CodeSourceFields
+        value={config}
+        onChange={(value) => {
+          saved(value);
+          setConfig(value);
+        }}
+      />
+    );
+  }
+  render(<Editor />);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Add scenario" }));
+  await user.type(
+    screen.getByLabelText("Scenario name"),
+    "Registration — dialog open",
+  );
+  await user.selectOptions(
+    screen.getByLabelText("Callable preview function"),
+    "demo.RegisterPreview",
+  );
+  await user.type(
+    screen.getByLabelText("Visible keys (one per line)"),
+    "privacy_notice\nterms_notice",
+  );
+  expect(saved.mock.lastCall?.[0].preview_scenarios).toEqual([
+    {
+      preview_function: "demo.RegisterPreview",
+      label: "Registration — dialog open",
+      keys: ["privacy_notice", "terms_notice"],
+    },
+  ]);
+  await user.click(
+    screen.getByRole("checkbox", {
+      name: "Enable on-demand Compose screenshots",
+    }),
+  );
+  expect(saved.mock.lastCall?.[0].preview_scenarios).toEqual([]);
+});

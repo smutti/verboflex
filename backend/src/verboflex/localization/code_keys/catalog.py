@@ -11,7 +11,7 @@ from typing import Annotated, Literal
 
 import tree_sitter_java
 import tree_sitter_kotlin
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from tree_sitter import Language, Node, Parser, Tree
 
 from verboflex.integrations.bitbucket.urls import validate_repository_relative_path
@@ -49,6 +49,31 @@ class ComposeCaptureConfig(BaseModel):
         return names
 
 
+class PreviewScenario(BaseModel):
+    """Reviewed visible keys for a named, already registered screen state."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    preview_function: Annotated[str, Field(min_length=1, max_length=512)]
+    label: Annotated[str, Field(min_length=1, max_length=120)]
+    keys: Annotated[tuple[str, ...], Field(min_length=1, max_length=500)]
+
+    @field_validator("label")
+    @classmethod
+    def label_text(cls, value: str) -> str:
+        if not value.strip() or any(ord(c) < 32 for c in value):
+            raise ValueError("A scenario needs a readable label")
+        return value.strip()
+
+    @field_validator("keys")
+    @classmethod
+    def key_names(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if len(set(values)) != len(values) or any(
+            not value or len(value) > 255 or not value.isidentifier() for value in values
+        ):
+            raise ValueError("Invalid or duplicate scenario keys")
+        return values
+
+
 class CodeSourceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -56,6 +81,17 @@ class CodeSourceConfig(BaseModel):
     declaration_symbols: Annotated[tuple[str, ...], Field(max_length=100)] = ()
     localization_calls: Annotated[tuple[str, ...], Field(max_length=20)] = ()
     compose: ComposeCaptureConfig | None = None
+    preview_scenarios: Annotated[tuple[PreviewScenario, ...], Field(max_length=100)] = ()
+
+    @model_validator(mode="after")
+    def registered_scenarios(self) -> CodeSourceConfig:
+        functions = [scenario.preview_function for scenario in self.preview_scenarios]
+        if len(set(functions)) != len(functions) or any(
+            self.compose is None or function not in self.compose.preview_functions
+            for function in functions
+        ):
+            raise ValueError("Scenarios must use distinct registered preview functions")
+        return self
 
     @field_validator("resource_roots", "declaration_symbols", "localization_calls")
     @classmethod
@@ -476,8 +512,14 @@ def extract_catalog(files: dict[str, bytes], config: CodeSourceConfig) -> CodeKe
             if len(occurrences) > MAX_KEYS:
                 raise ValueError("Code key budget exceeded")
     occurrences.sort(key=lambda item: (item.path, item.line, item.column, item.key))
-    return CodeKeyCatalog(
+    catalog = CodeKeyCatalog(
         keys=tuple(sorted({item.key for item in occurrences})),
         occurrences=tuple(occurrences),
         previews=_previews(sources, occurrences),
     )
+    for scenario in config.preview_scenarios:
+        if scenario.preview_function not in {preview.function for preview in catalog.previews}:
+            raise ValueError("Scenario preview is absent from the imported code")
+        if not set(scenario.keys).issubset(catalog.keys):
+            raise ValueError("Scenario keys are absent from the imported code")
+    return catalog

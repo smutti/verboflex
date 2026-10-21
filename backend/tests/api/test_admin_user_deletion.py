@@ -309,7 +309,8 @@ def test_deleted_identity_cannot_be_enabled_and_migration_cannot_resurrect_it(
         command.downgrade(config, "0050_source_fallback")
     with factory() as session:
         assert (
-            session.scalar(text("SELECT version_num FROM alembic_version")) == "0051_user_deletion"
+            session.scalar(text("SELECT version_num FROM alembic_version"))
+            == "0052_screenshot_location"
         )
         assert session.get_one(User, target_id).deleted_at is not None
 

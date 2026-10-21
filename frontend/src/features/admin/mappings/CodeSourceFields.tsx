@@ -4,6 +4,7 @@ import { useState, type ChangeEvent, type FocusEvent } from "react";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import { Button } from "../../../components/ui/button";
 
 const symbols = (value: string) =>
   value
@@ -125,6 +126,7 @@ export function CodeSourceFields({
               onCheckedChange={(checked) =>
                 onChange({
                   ...value,
+                  preview_scenarios: [],
                   compose: checked
                     ? {
                         runner_profile: "",
@@ -202,6 +204,99 @@ export function CodeSourceFields({
                   "Register previews with fixture data and configure the isolated runner on the server. Screenshots are rendered only when requested.",
                 )}
               </p>
+              <fieldset className="space-y-4 rounded-md border p-3">
+                <legend className="px-1 font-medium">
+                  {t("Screen scenarios")}
+                </legend>
+                <p className="text-sm text-muted-foreground">
+                  {t(
+                    "Name each screen state and list the keys visible in it. The first matching scenario is selected automatically.",
+                  )}
+                </p>
+                {(value.preview_scenarios ?? []).map((scenario, index) => {
+                  const update = (changes: Partial<typeof scenario>) =>
+                    onChange({
+                      ...value,
+                      preview_scenarios: value.preview_scenarios!.map(
+                        (item, position) =>
+                          position === index ? { ...item, ...changes } : item,
+                      ),
+                    });
+                  return (
+                    <fieldset
+                      key={index}
+                      className="space-y-3 rounded-md border p-3"
+                    >
+                      <legend className="px-1 text-sm">
+                        {t("Scenario {{number}}", { number: index + 1 })}
+                      </legend>
+                      <Label className="grid gap-2">
+                        {t("Scenario name")}
+                        <Input
+                          value={scenario.label}
+                          maxLength={120}
+                          onChange={(e) => update({ label: e.target.value })}
+                          placeholder={t("Registration — dialog open")}
+                        />
+                      </Label>
+                      <Label className="grid gap-2">
+                        {t("Callable preview function")}
+                        <select
+                          className="min-w-0 max-w-full rounded-md border bg-background p-2"
+                          value={scenario.preview_function}
+                          onChange={(e) =>
+                            update({ preview_function: e.target.value })
+                          }
+                        >
+                          <option value="">{t("Select a preview")}</option>
+                          {value.compose!.preview_functions.map((name) => (
+                            <option key={name} value={name}>
+                              {name}
+                            </option>
+                          ))}
+                        </select>
+                      </Label>
+                      <SymbolField
+                        label={t("Visible keys (one per line)")}
+                        multiline
+                        values={scenario.keys}
+                        placeholder="privacy_notice"
+                        onChange={(keys) => update({ keys })}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          onChange({
+                            ...value,
+                            preview_scenarios: value.preview_scenarios!.filter(
+                              (_, position) => position !== index,
+                            ),
+                          })
+                        }
+                      >
+                        {t("Remove scenario")}
+                      </Button>
+                    </fieldset>
+                  );
+                })}
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={(value.preview_scenarios?.length ?? 0) >= 100}
+                  onClick={() =>
+                    onChange({
+                      ...value,
+                      preview_scenarios: [
+                        ...(value.preview_scenarios ?? []),
+                        { preview_function: "", label: "", keys: [] },
+                      ],
+                    })
+                  }
+                >
+                  {t("Add scenario")}
+                </Button>
+              </fieldset>
             </div>
           )}
         </>

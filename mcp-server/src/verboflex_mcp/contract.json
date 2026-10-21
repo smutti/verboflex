@@ -435,6 +435,15 @@
               "title": "Localization Calls",
               "type": "array"
             },
+            "preview_scenarios": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PreviewScenario"
+              },
+              "maxItems": 100,
+              "title": "Preview Scenarios",
+              "type": "array"
+            },
             "resource_roots": {
               "default": [
                 "Res.strings"
@@ -500,6 +509,40 @@
             "preview_functions"
           ],
           "title": "ComposeCaptureConfig",
+          "type": "object"
+        },
+        "PreviewScenario": {
+          "additionalProperties": false,
+          "description": "Reviewed visible keys for a named, already registered screen state.",
+          "properties": {
+            "keys": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 500,
+              "minItems": 1,
+              "title": "Keys",
+              "type": "array"
+            },
+            "label": {
+              "maxLength": 120,
+              "minLength": 1,
+              "title": "Label",
+              "type": "string"
+            },
+            "preview_function": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Preview Function",
+              "type": "string"
+            }
+          },
+          "required": [
+            "preview_function",
+            "label",
+            "keys"
+          ],
+          "title": "PreviewScenario",
           "type": "object"
         }
       },
@@ -4176,6 +4219,15 @@
               "title": "Localization Calls",
               "type": "array"
             },
+            "preview_scenarios": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PreviewScenario"
+              },
+              "maxItems": 100,
+              "title": "Preview Scenarios",
+              "type": "array"
+            },
             "resource_roots": {
               "default": [
                 "Res.strings"
@@ -4241,6 +4293,40 @@
             "preview_functions"
           ],
           "title": "ComposeCaptureConfig",
+          "type": "object"
+        },
+        "PreviewScenario": {
+          "additionalProperties": false,
+          "description": "Reviewed visible keys for a named, already registered screen state.",
+          "properties": {
+            "keys": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 500,
+              "minItems": 1,
+              "title": "Keys",
+              "type": "array"
+            },
+            "label": {
+              "maxLength": 120,
+              "minLength": 1,
+              "title": "Label",
+              "type": "string"
+            },
+            "preview_function": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Preview Function",
+              "type": "string"
+            }
+          },
+          "required": [
+            "preview_function",
+            "label",
+            "keys"
+          ],
+          "title": "PreviewScenario",
           "type": "object"
         }
       },

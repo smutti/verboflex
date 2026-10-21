@@ -1,6 +1,6 @@
 import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import { useEffect, useState } from "react";
-import { ImageIcon, LoaderCircle, Maximize2 } from "lucide-react";
+import { ImageIcon, LoaderCircle } from "lucide-react";
 import {
   cancelTranslationScreenshot,
   getTranslationCodeContext,
@@ -13,6 +13,7 @@ import {
 } from "../../api/client";
 import { Button } from "../../components/ui/button";
 import { Label } from "../../components/ui/label";
+import { ScreenshotImage } from "./ScreenshotImage";
 
 const active = (job: ScreenshotResponse | null) =>
   job?.state === "queued" || job?.state === "rendering";
@@ -173,10 +174,18 @@ export function TranslationScreenshots({
       if (url) URL.revokeObjectURL(url);
     };
   }, [accessToken, groupId, jobId, jobState, retry]);
-  const available = [
+  const legacy = [
     ...new Set((context?.previews ?? []).map((p) => p.function)),
   ].filter((name) => context?.capture_functions.includes(name));
-  const preview = selected || available[0] || "";
+  const scenarios =
+    context?.scenarios ??
+    legacy.map((name) => ({
+      preview_function: name,
+      label: name.split(".").pop() ?? name,
+      explicit: false,
+    }));
+  const available = scenarios.map((scenario) => scenario.preview_function);
+  const preview = available.includes(selected) ? selected : available[0] || "";
   const stale =
     job?.state === "succeeded" &&
     (dirty ||
@@ -258,6 +267,26 @@ export function TranslationScreenshots({
       )}
       {context?.configured && (
         <>
+          {scenarios.length > 0 && (
+            <Label className="grid gap-2">
+              {t("Screen scenario")}
+              <select
+                className="min-h-[44px] min-w-0 max-w-full rounded-md border bg-background p-2"
+                value={preview}
+                onChange={(e) => setSelected(e.target.value)}
+                disabled={busy || active(job) || pending !== null}
+              >
+                {scenarios.map((scenario) => (
+                  <option
+                    key={scenario.preview_function}
+                    value={scenario.preview_function}
+                  >
+                    {scenario.label}
+                  </option>
+                ))}
+              </select>
+            </Label>
+          )}
           {!job && !busy && (
             <div className="space-y-2 rounded-md bg-muted p-4 text-center">
               <ImageIcon
@@ -329,30 +358,26 @@ export function TranslationScreenshots({
               )}
               {job.state === "succeeded" && image?.jobId === job.id && (
                 <>
-                  <Button
-                    variant="outline"
-                    className="h-auto min-h-[44px] whitespace-normal"
-                    asChild
-                  >
-                    <a href={image.url} target="_blank" rel="noreferrer">
-                      <Maximize2 aria-hidden="true" />
-                      {t("Open screenshot full size")}
-                    </a>
-                  </Button>
-                  <a
-                    href={image.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label={t("Open screenshot full size")}
-                  >
-                    <img
-                      src={image.url}
-                      alt={t(
-                        "Compose screen preview with the selected translations",
-                      )}
-                      className="mx-auto h-auto max-h-[36rem] max-w-full rounded-md border object-contain"
-                    />
-                  </a>
+                  {job.request.preview_function !== preview && (
+                    <p className="text-sm font-medium">
+                      {t("Captured scenario: {{scenario}}", {
+                        scenario:
+                          scenarios.find(
+                            (scenario) =>
+                              scenario.preview_function ===
+                              job.request.preview_function,
+                          )?.label ??
+                          job.request.preview_function.split(".").pop() ??
+                          "",
+                      })}
+                    </p>
+                  )}
+                  <ScreenshotImage
+                    key={job.id}
+                    url={image.url}
+                    location={job.location}
+                    stale={stale}
+                  />
                   <p className="text-xs text-muted-foreground">
                     {job.request.proposal_version
                       ? t("Saved proposal version {{v0}}", {
@@ -393,21 +418,6 @@ export function TranslationScreenshots({
               </details>
               {available.length > 0 && (
                 <>
-                  <Label className="grid gap-2">
-                    {t("Screen preview")}
-                    <select
-                      className="rounded-md border bg-background p-2"
-                      value={preview}
-                      onChange={(e) => setSelected(e.target.value)}
-                      disabled={busy || active(job) || pending !== null}
-                    >
-                      {available.map((name) => (
-                        <option key={name} value={name}>
-                          {name.split(".").pop()}
-                        </option>
-                      ))}
-                    </select>
-                  </Label>
                   <Label className="grid gap-2">
                     {t("Appearance")}
                     <select
