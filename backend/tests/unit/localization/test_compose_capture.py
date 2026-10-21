@@ -110,6 +110,7 @@ def test_default_wrapper_is_stable_across_translation_and_proposal_changes():
     changed.request.proposal_version = 2
     changed.import_execution_id = "next-synthetic-import"
     changed.translations_commit = "c" * 40
+    changed.target_key = "another_visible_key"
     assert preview_source(original) == preview_source(changed)
     assert resource_overlay(original) != resource_overlay(changed)
 
@@ -234,7 +235,8 @@ out = Path(a.output)
         ),
     )
     if output == "valid":
-        validate_png(screenshot_tasks.render({"synthetic": True}))
+        # Existing strict runner adapters never receive worker-only OCR metadata.
+        validate_png(screenshot_tasks.render({"synthetic": True, "target_key": "title"}))
     else:
         with pytest.raises(ValueError):
             screenshot_tasks.render({"synthetic": True})

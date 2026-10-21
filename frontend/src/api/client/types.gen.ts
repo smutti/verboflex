@@ -2849,6 +2849,10 @@ export type CodeContextResponse = {
      * Previews
      */
     previews: Array<CodePreview>;
+    /**
+     * Scenarios
+     */
+    scenarios?: Array<ScreenScenario>;
 };
 
 /**
@@ -2928,6 +2932,10 @@ export type CodeSourceConfig = {
      * Localization Calls
      */
     localization_calls?: Array<string>;
+    /**
+     * Preview Scenarios
+     */
+    preview_scenarios?: Array<PreviewScenario>;
     /**
      * Resource Roots
      */
@@ -4141,6 +4149,26 @@ export type PluralFormsResponse = {
 };
 
 /**
+ * PreviewScenario
+ *
+ * Reviewed visible keys for a named, already registered screen state.
+ */
+export type PreviewScenario = {
+    /**
+     * Keys
+     */
+    keys: Array<string>;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Preview Function
+     */
+    preview_function: string;
+};
+
+/**
  * ProductAccess
  */
 export type ProductAccess = {
@@ -4903,6 +4931,38 @@ export type SaveTranslationProposalValueRequest = {
 };
 
 /**
+ * ScreenScenario
+ */
+export type ScreenScenario = {
+    /**
+     * Explicit
+     */
+    explicit: boolean;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Preview Function
+     */
+    preview_function: string;
+};
+
+/**
+ * ScreenshotLocation
+ */
+export type ScreenshotLocation = {
+    /**
+     * Regions
+     */
+    regions?: Array<ScreenshotRegion>;
+    /**
+     * Status
+     */
+    status: 'found' | 'not_found' | 'ambiguous' | 'unavailable';
+};
+
+/**
  * ScreenshotPage
  */
 export type ScreenshotPage = {
@@ -4914,6 +4974,28 @@ export type ScreenshotPage = {
      * Next Cursor
      */
     next_cursor: string | null;
+};
+
+/**
+ * ScreenshotRegion
+ */
+export type ScreenshotRegion = {
+    /**
+     * Height
+     */
+    height: number;
+    /**
+     * Width
+     */
+    width: number;
+    /**
+     * X
+     */
+    x: number;
+    /**
+     * Y
+     */
+    y: number;
 };
 
 /**
@@ -4962,6 +5044,7 @@ export type ScreenshotResponse = {
      * Input Digest
      */
     input_digest: string;
+    location?: ScreenshotLocation | null;
     request: ScreenshotRequest;
     /**
      * State

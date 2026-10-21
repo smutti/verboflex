@@ -35,7 +35,7 @@ ADMIN_DATABASE_URL = os.environ.get(
     "VERBOFLEX_TEST_POSTGRES_ADMIN_URL",
     "postgresql://postgres@127.0.0.1:55432/postgres",
 )
-EXPECTED_HEAD = "0051_user_deletion"
+EXPECTED_HEAD = "0052_screenshot_location"
 REVIEW_TABLES = {
     "translation_proposals",
     "translation_proposal_values",

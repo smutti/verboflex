@@ -26,7 +26,7 @@ from verboflex.main import app
 from verboflex.models.product_member import ProductMember
 from verboflex.models.screenshot import ScreenshotJob
 from verboflex.models.translation import TranslationValue
-from verboflex.schemas.screenshots import ScreenshotRequest
+from verboflex.schemas.screenshots import ScreenshotLocation, ScreenshotRegion, ScreenshotRequest
 from verboflex.schemas.users import RoleName
 from verboflex.services import screenshots
 from verboflex.services.import_jobs import ImportSourceReferenceRecord, finish_import_execution
@@ -39,30 +39,31 @@ PNG = base64.b64decode(
 
 
 @pytest.fixture
-def capture_data(activation_session_factory, monkeypatch):  # noqa: F811
+def capture_data(activation_session_factory, monkeypatch, request):  # noqa: F811
     factory = activation_session_factory
     # Synthetic API tests must never publish jobs to an external broker.
     monkeypatch.setattr(screenshot_tasks.app, "send_task", lambda *args, **kwargs: None)
     with factory.begin() as session:
         session.execute(delete(ScreenshotJob))
     identity, keys_repo, translations_repo = _seed_running_separate_import(factory)
-    config = CodeSourceConfig.model_validate(
-        {
-            "compose": {
-                "runner_profile": "synthetic",
-                "preview_functions": ["demo.PreviewScreen"],
-            }
+    config_data = {
+        "compose": {
+            "runner_profile": "synthetic",
+            "preview_functions": ["demo.PreviewScreen"],
         }
-    )
-    catalog = extract_catalog(
-        {
-            "app/Screen.kt": b"""package demo
+    }
+    source = b"""package demo
 fun Screen() = Res.strings.title
 @Preview @Composable fun PreviewScreen() { Screen() }
 """
-        },
-        config,
-    )
+    if getattr(request, "param", False):
+        config_data["compose"]["preview_functions"].append("demo.ClosedPreview")
+        config_data["preview_scenarios"] = [
+            {"preview_function": "demo.PreviewScreen", "label": "Dialog open", "keys": ["title"]}
+        ]
+        source += b"@Preview @Composable fun ClosedPreview() { Screen() }\n"
+    config = CodeSourceConfig.model_validate(config_data)
+    catalog = extract_catalog({"app/Screen.kt": source}, config)
     joined = join_code_translations(
         catalog,
         (
@@ -160,6 +161,71 @@ def _capture_client(factory, principal, *, before_commit=None):
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app, raise_app_exceptions=False), base_url="http://test"
     )
+
+
+@pytest.mark.parametrize("capture_data", [True], indirect=True)
+def test_explicit_scenario_is_enforced_by_api_and_location_follows_image_authority(
+    capture_data, monkeypatch
+):
+    factory, identity, principal, group_id = capture_data
+    monkeypatch.setattr(screenshot_tasks, "render", lambda inputs: PNG)
+    receipt = ScreenshotLocation(
+        status="found", regions=[ScreenshotRegion(x=0.1, y=0.2, width=0.3, height=0.1)]
+    )
+
+    def locate(image, inputs):
+        assert image == PNG and inputs["target_key"] == "title"
+        return receipt
+
+    monkeypatch.setattr(screenshot_tasks, "locate_text", locate)
+
+    async def exercise():
+        async with _capture_client(factory, principal) as client:
+            base = f"/api/v1/translations/{group_id}"
+            response = await client.get(base + "/code-context")
+            assert response.json()["scenarios"] == [
+                {"preview_function": "demo.PreviewScreen", "label": "Dialog open", "explicit": True}
+            ]
+            denied = await client.put(
+                base + f"/screenshots/{uuid4()}", json={"preview_function": "demo.ClosedPreview"}
+            )
+            assert denied.status_code == 409
+            job_id = uuid4()
+            path = base + f"/screenshots/{job_id}"
+            assert (
+                await client.put(path, json={"preview_function": "demo.PreviewScreen"})
+            ).status_code == 202
+            screenshot_tasks.execute_capture(job_id, factory)
+            assert (await client.get(path)).json()["location"] == receipt.model_dump(mode="json")
+            with factory.begin() as session:
+                session.get_one(
+                    ProductMember, (identity.product_id, principal.user_id)
+                ).active = False
+            assert (await client.get(path)).status_code == 404
+            assert (await client.get(path + "/image")).status_code == 404
+
+    asyncio.run(exercise())
+
+
+def test_location_unavailable_keeps_valid_png_and_expiry_clears_receipt(capture_data, monkeypatch):
+    factory, _, principal, group_id = capture_data
+    job = _request(factory, principal, group_id)
+    monkeypatch.setattr(screenshot_tasks, "render", lambda inputs: PNG)
+    monkeypatch.setattr(
+        screenshot_tasks, "locate_text", lambda *_: ScreenshotLocation(status="unavailable")
+    )
+    screenshot_tasks.execute_capture(job.id, factory)
+    with factory.begin() as session:
+        row = session.get_one(ScreenshotJob, job.id)
+        assert (
+            row.state == "succeeded"
+            and row.image == PNG
+            and row.location["status"] == "unavailable"
+        )
+        row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    with factory.begin() as session:
+        row = screenshots.get_capture(session, principal, group_id, job.id)
+        assert row.state == "expired" and row.location is None
 
 
 def test_api_dispatches_committed_uuid_and_duplicate_delivery_renders_once(

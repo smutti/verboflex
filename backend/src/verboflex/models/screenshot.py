@@ -36,6 +36,7 @@ class ScreenshotJob(Base):
     input_digest: Mapped[str] = mapped_column(String(64))
     image: Mapped[bytes | None] = mapped_column(LargeBinary)
     image_digest: Mapped[str | None] = mapped_column(String(64))
+    location: Mapped[dict[str, object] | None] = mapped_column(JSONB)
     error_code: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

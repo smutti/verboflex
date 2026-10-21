@@ -98,6 +98,10 @@ const capture = {
   created_at: "2026-10-20T10:00:00Z",
   expires_at: "2026-10-27T10:00:00Z",
   error_code: null,
+  location: {
+    status: "found",
+    regions: [{ x: 0.315, y: 0.553, width: 0.37, height: 0.035 }],
+  },
 };
 const screenshot = `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="520" viewBox="0 0 360 520">
 <rect width="360" height="520" fill="#f8fafc"/><rect width="360" height="64" fill="#fff"/>
@@ -169,6 +173,16 @@ async function setup(
               ],
         capture_functions:
           state === "unconfigured" ? [] : ["demo.SettingsPreview"],
+        scenarios:
+          state === "unconfigured"
+            ? []
+            : [
+                {
+                  preview_function: "demo.SettingsPreview",
+                  label: "Profile settings",
+                  explicit: true,
+                },
+              ],
       },
       [`${base}/screenshots`]: {
         items: state === "ready" ? [capture] : [],
@@ -200,7 +214,9 @@ for (const width of [320, 768, 1440]) {
       name: "Screenshots",
       exact: true,
     });
-    const image = screenshots.getByRole("img");
+    const image = screenshots.getByAltText(
+      "Compose screen preview with the selected translations",
+    );
     await expect(image).toBeVisible();
     await expect
       .poll(() =>
@@ -237,6 +253,26 @@ for (const width of [320, 768, 1440]) {
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
+    const marker = screenshots.getByRole("img", {
+      name: "Text position in screenshot",
+    });
+    await expect(marker).toBeVisible();
+    const imageBox = (await image.boundingBox())!;
+    const markerBox = (await marker.locator("rect").first().boundingBox())!;
+    // SVG boundingBox includes the outer six-pixel halo around the text rectangle.
+    expect(
+      Math.abs(markerBox.x + 3 - (imageBox.x + imageBox.width * 0.315)),
+    ).toBeLessThan(1);
+    expect(
+      Math.abs(markerBox.y + 3 - (imageBox.y + imageBox.height * 0.553)),
+    ).toBeLessThan(1);
+    expect(Math.abs(markerBox.width - 6 - imageBox.width * 0.37)).toBeLessThan(
+      1,
+    );
+    await screenshots.getByRole("button", { name: "Hide position" }).click();
+    await expect(marker).toHaveCount(0);
+    await screenshots.getByRole("button", { name: "Show position" }).click();
+    expect(requests.captures).toBe(0);
     await page.screenshot({
       path: testInfo.outputPath(`review-${width}.png`),
       fullPage: true,
@@ -295,7 +331,9 @@ test("unsaved edits disable generation and flag the saved image as stale", async
 }) => {
   const requests = await setup(page, "ready");
   await page.goto("/translations/review-group");
-  await expect(page.getByRole("img")).toBeVisible();
+  await expect(
+    page.getByAltText("Compose screen preview with the selected translations"),
+  ).toBeVisible();
   await page
     .getByRole("button", { name: "Edit translation", exact: true })
     .click();
