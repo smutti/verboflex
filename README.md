@@ -43,7 +43,8 @@ For a live portal walkthrough, import [VerboFlex Demo](https://github.com/smutti
 | Bitbucket Cloud | Yes              | Eligible formats       | Branch / commit / pull request |
 | Public GitHub   | Yes              | Eligible formats       | Not yet supported              |
 
-Private GitHub repositories are not supported. Android XML, Qt `.ts`, JSON and Apple `.strings` support eligible edits; XLIFF supports import and reading. File structure and source provenance determine whether an individual value is editable.
+Private GitHub repositories are not supported. Android XML, Qt `.ts`, JSON, Apple `.strings` and HTML email templates support eligible edits; XLIFF supports import and reading. File structure and source provenance determine whether an individual value is editable.
+See [HTML email templates](docs/html-email-templates.md) for folder collections, filename locales, protected text editing and new language files.
 
 ## Screenshots from Compose code
 

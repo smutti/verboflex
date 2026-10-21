@@ -3027,6 +3027,11 @@ def _path_belongs_to_confirmed_layout(candidate: PreviewLayoutCandidate, path: s
     new files and structures the read-only preview grammar cannot represent.
     """
     layout = candidate.layout_identity
+    if candidate.format == "html":
+        root = layout.removeprefix("html:")
+        return path.lower().endswith((".html", ".htm")) and (
+            root == "." or path.startswith(root + "/")
+        )
     if candidate.format == "android_xml":
         if layout.rsplit("/", 1)[-1] == "moko-resources":
             return moko_resource_root(path) == layout

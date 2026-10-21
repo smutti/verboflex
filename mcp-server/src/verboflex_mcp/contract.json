@@ -1295,7 +1295,8 @@
                 "android_xml",
                 "qt_ts",
                 "json",
-                "ios_strings"
+                "ios_strings",
+                "html"
               ],
               "title": "Format",
               "type": "string"
@@ -2739,7 +2740,8 @@
                 "android_xml",
                 "qt_ts",
                 "json",
-                "ios_strings"
+                "ios_strings",
+                "html"
               ],
               "title": "Format",
               "type": "string"

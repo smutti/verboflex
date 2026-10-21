@@ -18,7 +18,7 @@ from verboflex.services.signed_cursor import (
     SignedCursorCodec,
 )
 
-FORMATS = ("android_xml", "qt_ts", "json", "ios_strings", "xliff")
+FORMATS = ("android_xml", "qt_ts", "json", "ios_strings", "xliff", "html")
 FUZZ = settings(max_examples=300, deadline=None)
 
 

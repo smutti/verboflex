@@ -1,7 +1,9 @@
+import { HtmlLanguageForm } from "./HtmlLanguageForm";
 import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   createBranchPullRequest,
+  discardHtmlLanguage,
   getBranchWorkflow,
   retryBranchChange,
   type BranchWorkflowResponse,
@@ -237,6 +239,14 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
               )}
             </div>
           )}
+          {data.can_add_html_language && data.workflow_id && (
+            <HtmlLanguageForm
+              accessToken={accessToken}
+              productId={productId}
+              workflowId={data.workflow_id}
+              onCreated={() => setReload((value) => value + 1)}
+            />
+          )}
           {!items.length && (
             <p>
               {t(
@@ -262,7 +272,9 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                         : undefined
                     }
                   >
-                    {states[item.state]}
+                    {item.kind === "html_language" && item.state === "declined"
+                      ? t("Discarded")
+                      : states[item.state]}
                   </p>
                   <time
                     className="text-sm text-muted-foreground"
@@ -299,6 +311,30 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                   >
                     {t("Open pull request")}
                   </a>
+                )}
+                {item.kind === "html_language" && item.can_retry && (
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      setFailure(false);
+                      try {
+                        const result = await discardHtmlLanguage({
+                          auth: accessToken,
+                          path: { product_id: productId, job_id: item.id },
+                        });
+                        if (!result.data) throw new Error("unavailable");
+                        setReload((value) => value + 1);
+                      } catch {
+                        setFailure(true);
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    {t("Discard unsent request")}
+                  </Button>
                 )}
                 {item.can_retry && (
                   <Button

@@ -703,3 +703,61 @@ def test_rebase_diff_and_file_verification_is_read_only_and_rejects_unapproved_c
         assert provider.commit_posts == provider.branch_posts == 0
 
     asyncio.run(with_provider(provider, exercise))
+
+
+@pytest.mark.parametrize("reported_status", ["added", "modified"])
+def test_new_html_file_requires_added_diff_evidence(reported_status):
+    item = CommitFile(
+        "mail/Welcome-FR-BE.html",
+        b"<html><p>Bonjour</p></html>",
+        hashlib.sha256(b"").hexdigest(),
+        new_file=True,
+    )
+    intent = CommitIntent(branch_intent(), "f" * 64, (item,), initialize_language=True)
+
+    class AddedProvider(Provider):
+        def __call__(self, request):
+            if f"/src/{PARENT}/" in request.url.path:
+                return self.reply(404)
+            response = super().__call__(request)
+            if request.method == "GET" and "/diffstat/" in request.url.path:
+                payload = response.json()
+                for entry in payload["values"]:
+                    entry["status"] = reported_status
+                    entry["old"] = None if reported_status == "added" else entry["old"]
+                return self.reply(payload=payload)
+            return response
+
+    provider = AddedProvider(intent)
+
+    async def exercise(adapter):
+        result = await adapter.create_commit(object(), intent=intent)
+        assert result.state == ("verified" if reported_status == "added" else "conflict")
+        assert provider.commit_posts == 1
+
+    asyncio.run(with_provider(provider, exercise))
+
+
+def test_new_html_file_never_overwrites_an_existing_unimported_path():
+    item = CommitFile(
+        "mail/Welcome-FR-BE.html",
+        b"<html><p>Bonjour</p></html>",
+        hashlib.sha256(b"").hexdigest(),
+        new_file=True,
+    )
+    intent = CommitIntent(branch_intent(), "f" * 64, (item,), initialize_language=True)
+
+    class ExistingFileProvider(Provider):
+        def __call__(self, request):
+            if f"/src/{PARENT}/" in request.url.path:
+                return self.reply(payload={"type": "commit_file", "path": item.path})
+            return super().__call__(request)
+
+    provider = ExistingFileProvider(intent)
+
+    async def exercise(adapter):
+        result = await adapter.create_commit(object(), intent=intent)
+        assert (result.state, result.code) == ("not_sent", "file_exists")
+        assert provider.commit_posts == 0
+
+    asyncio.run(with_provider(provider, exercise))

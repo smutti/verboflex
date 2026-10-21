@@ -15,6 +15,7 @@ from verboflex.db.session import get_db_session
 from verboflex.models.branch_workflow import BranchJob, BranchWorkflow
 from verboflex.models.product_mapping import ProductMappingRepositorySide, ProductRepositoryMapping
 from verboflex.models.repository import Repository
+from verboflex.models.translation import LocalizationScope, TranslationValueLocator
 from verboflex.schemas.branch_workflow import (
     BranchChange,
     BranchMappingChoice,
@@ -128,11 +129,12 @@ def get_workflow(
             f"https://bitbucket.org/{quote(repository.workspace, safe='')}/"
             f"{quote(repository.repository_slug, safe='')}"
         )
+        current_mapping = active_mapping(session, workflow)
         items = [
             BranchChange(
                 id=j.id,
                 sequence=j.sequence,
-                kind=cast(Literal["commit", "pull_request"], j.kind),
+                kind=cast(Literal["commit", "pull_request", "html_language"], j.kind),
                 state=cast(
                     Literal[
                         "queued",
@@ -165,6 +167,23 @@ def get_workflow(
             work_branch=workflow.work_branch,
             target_branch=workflow.target_branch,
             can_publish=can_publish,
+            can_add_html_language=can_publish
+            and current_mapping is not None
+            and session.scalar(
+                select(TranslationValueLocator.value_id)
+                .join(
+                    LocalizationScope,
+                    LocalizationScope.active_execution_id
+                    == TranslationValueLocator.import_execution_id,
+                )
+                .where(
+                    LocalizationScope.product_id == product_id,
+                    LocalizationScope.current_mapping_id == current_mapping.id,
+                    TranslationValueLocator.format == "html",
+                )
+                .limit(1)
+            )
+            is not None,
             can_create_pr=can_publish
             and active_mapping(session, workflow) is not None
             and pending is None

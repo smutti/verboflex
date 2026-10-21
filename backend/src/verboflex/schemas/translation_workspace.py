@@ -34,7 +34,7 @@ class TranslationKeySearchQuery(TranslationSearchQuery):
 
 class TranslationWorkspaceProvenance(ClosedTranslationModel):
     repository_side: Literal["direct", "keys", "translations"]
-    format: Literal["android_xml", "qt_ts", "json", "ios_strings", "xliff"]
+    format: Literal["android_xml", "qt_ts", "json", "ios_strings", "xliff", "html"]
     repository_name: Preview
     branch: Preview
     path: Preview

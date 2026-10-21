@@ -140,6 +140,7 @@ const FORMAT_LABELS: Record<
     return t("Qt TS");
   },
   xliff: "XLIFF",
+  html: "HTML",
 };
 
 const BLOCKER_LABELS: Record<PublicationBlocker, string> = {

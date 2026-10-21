@@ -222,6 +222,31 @@
         "unit.duplicate-identity",
         "unit.missing-source-target"
       ]
+    },
+    "html": {
+      "categories": [
+        "boundary",
+        "empty",
+        "encoding",
+        "escaped",
+        "malformed",
+        "markup",
+        "unicode",
+        "valid"
+      ],
+      "supported_constructs": [
+        "document.balanced-html",
+        "filename.locale-suffix",
+        "text.entities",
+        "text.inline-nodes",
+        "text.template-variables"
+      ],
+      "rejected_constructs": [
+        "document.unbalanced-tags",
+        "document.unsupported-encoding",
+        "filename.missing-locale",
+        "text.reserved-marker"
+      ]
     }
   },
   "limits": {

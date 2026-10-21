@@ -108,6 +108,10 @@ TRANSLATION_ROUTE_INVENTORY = {
     ("/api/v1/translations", "get"): "searchTranslations",
     ("/api/v1/translations/{translation_group_id}", "get"): "getTranslationGroup",
     (
+        "/api/v1/translations/{translation_group_id}/html-preview",
+        "get",
+    ): "getHtmlTemplatePreview",
+    (
         "/api/v1/translations/{translation_group_id}/constraints/{language}",
         "put",
     ): "putTranslationConstraint",

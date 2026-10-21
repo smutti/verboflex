@@ -1,4 +1,5 @@
 import { t, useUiLanguage } from "@/i18n";
+import { HtmlTemplatePreview } from "./HtmlTemplatePreview";
 import { TranslationSuggestions } from "./TranslationSuggestions";
 import type { ReuseQuery } from "../../api/client";
 import { useEffect, useRef, useState } from "react";
@@ -75,6 +76,7 @@ export function writableTranslationDetail(
       android_xml: ["scalar", "android_quantity", "android_array_item"],
       json: ["scalar", "json_path"],
       ios_strings: ["scalar"],
+      html: ["scalar"],
       qt_ts: ["scalar", "qt_numerus", "qt_length_variant"],
     };
     if (!kinds[provenance.format]?.includes(value.selector_kind)) return false;
@@ -380,7 +382,7 @@ export function TranslationEditor({
     sourceText &&
     sourceText.length <= 4096 &&
     format &&
-    ["android_xml", "qt_ts", "json", "ios_strings"].includes(format) &&
+    ["android_xml", "qt_ts", "json", "ios_strings", "html"].includes(format) &&
     focused.selector_kind !== "qt_length_variant" &&
     focused.source_resolution !== "ambiguous" &&
     focused.source_resolution !== "unmatched"
@@ -407,6 +409,13 @@ export function TranslationEditor({
         void save();
       }}
     >
+      {format === "html" && (
+        <HtmlTemplatePreview
+          accessToken={accessToken}
+          groupId={draft.translationGroupId}
+          text={draft.values[focusedIndex]?.text ?? ""}
+        />
+      )}
       {!bilingual && !compact && (
         <section
           aria-label={t("Published translation")}

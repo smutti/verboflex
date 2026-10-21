@@ -134,13 +134,14 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
         bool_or(locator.repository_side = 'keys') AS keys_side,
         bool_and(coalesce(locator.value_id IS NOT NULL
             AND locator.import_execution_id = current.active_execution_id, false)) AS provenance_ok,
-        bool_and(coalesce(locator.format IN ('android_xml', 'json', 'ios_strings', 'qt_ts'), false))
+        bool_and(coalesce(
+            locator.format IN ('android_xml', 'json', 'ios_strings', 'qt_ts', 'html'), false))
             AS format_ok,
         bool_and(coalesce(
             (locator.format = 'android_xml' AND value.selector_kind IN
                 ('scalar', 'android_quantity', 'android_array_item'))
             OR (locator.format = 'json' AND value.selector_kind IN ('json_path', 'scalar'))
-            OR (locator.format = 'ios_strings' AND value.selector_kind = 'scalar')
+            OR (locator.format IN ('ios_strings', 'html') AND value.selector_kind = 'scalar')
             OR (locator.format = 'qt_ts' AND value.translated_text IS NOT NULL
                 AND value.selector_kind IN ('scalar', 'qt_numerus', 'qt_length_variant')),
             false)) AND NOT bool_or(EXISTS (
@@ -152,7 +153,7 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
                   AND node->>'kind' IN ('android_xml:text', 'android_xml:tail', 'android_xml:cdata')
             )) AS shape_ok,
         bool_and(locator.repository_side IN ('direct', 'translations')
-            AND locator.format IN ('android_xml', 'json', 'ios_strings')
+            AND locator.format IN ('android_xml', 'json', 'ios_strings', 'html')
             AND value.source_text IS NOT NULL AND value.translated_text IS NULL) AS source_leaf,
         bool_and(value.translated_text IS NOT NULL) AS translation_leaf,
         bool_and(coalesce(locator.format = 'qt_ts'

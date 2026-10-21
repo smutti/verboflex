@@ -13,7 +13,7 @@ class ReuseQuery(ClosedModel):
     source_text: Annotated[str, Field(min_length=1, max_length=4096)]
     source_language: Annotated[str, Field(min_length=2, max_length=32)]
     target_language: Annotated[str, Field(min_length=2, max_length=32)]
-    format: Literal["android_xml", "qt_ts", "json", "ios_strings"]
+    format: Literal["android_xml", "qt_ts", "json", "ios_strings", "html"]
     selector_kind: Literal[
         "scalar", "android_quantity", "android_array_item", "qt_numerus", "json_path"
     ]

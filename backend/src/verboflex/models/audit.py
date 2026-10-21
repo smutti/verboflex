@@ -10,6 +10,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from verboflex.db.base import Base
 
 AUDIT_ACTIONS = (
+    "html.language_requested",
+    "html.language_discarded",
     "branch.configured",
     "branch.approval_queued",
     "branch.pr_requested",
