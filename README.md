@@ -33,6 +33,7 @@ For a live portal walkthrough, import [VerboFlex Demo](https://github.com/smutti
 - Fill missing translations, add keys in existing files and edit native Android/Qt plural forms.
 - Reuse exact or similar translations from the same product and consult glossary hints.
 - Save drafts, discuss changes with comments and mentions, and approve or reject proposals.
+- Generate screenshots from configured Android Compose previews to review saved translations in their screen context.
 - Refresh from repositories and reconcile proposals when their source changes.
 - Prepare approved changes for Bitbucket Cloud pull requests.
 - Connect assistants through the HTTP MCP server with OAuth, using the same user roles.
@@ -43,6 +44,19 @@ For a live portal walkthrough, import [VerboFlex Demo](https://github.com/smutti
 | Public GitHub   | Yes              | Eligible formats       | Not yet supported              |
 
 Private GitHub repositories are not supported. Android XML, Qt `.ts`, JSON and Apple `.strings` support eligible edits; XLIFF supports import and reading. File structure and source provenance determine whether an individual value is editable.
+
+## Screenshots from Compose code
+
+Generate a screenshot from a registered Android Compose preview with the saved
+translation applied. Review the source, proposal and character limit on the left,
+with the screenshot on the right. Older images are flagged after edits so reviewers
+know when to save and generate again.
+
+Your team prepares a callable preview and capture runner; generation runs on request
+in the background. The image shows the preview’s fixture state, not a live device.
+See the [visual walkthrough](https://smutti.github.io/verboflex/#compose-screenshots),
+[reviewer guide](https://smutti.github.io/verboflex/guide.html#compose-screenshots)
+and [developer setup](docs/code-keys-compose.md).
 
 ## Application and operations
 

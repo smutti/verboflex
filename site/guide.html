@@ -9,7 +9,8 @@
   <ol class="steps-list">
     <li>
       <strong>Open your product.</strong> Search the product list and compare
-      supported languages and coverage. Open its Strings workspace to start translating.
+      supported languages and coverage. Open its Strings workspace to start
+      translating.
     </li>
     <li>
       <strong>Open Strings.</strong> Search for a key or text and choose the
@@ -155,7 +156,8 @@
     excludes deleted entries. An absent entry has no imported approval state or
     length status, so clear those filters when looking for missing entries.
     Product coverage counts missing key-language pairs from the latest import;
-    the search groups results by key and also considers current translation drafts.
+    the search groups results by key and also considers current translation
+    drafts.
   </p>
   <p>
     Use <strong>Needs translation</strong>, then select an
@@ -196,7 +198,8 @@
     The match percentage describes source similarity, not translation quality.
     Check the suggestion’s origin and adapt placeholders and wording before
     saving. Reviewers and administrators can manage terms through
-    <strong>Glossary</strong> in the product workspace; its hints remain advisory.
+    <strong>Glossary</strong> in the product workspace; its hints remain
+    advisory.
   </p>
   <h3>Understand length limits</h3>
   <p>
@@ -206,8 +209,93 @@
     strings again.
   </p>
 </section>
+<section id="compose-screenshots">
+  <p class="eyebrow">04 / REVIEW IN CONTEXT</p>
+  <h2>Generate screenshots from your Compose code.</h2>
+  <p>
+    For configured Android projects, VerboFlex renders a registered Compose
+    preview with your saved translation. Inspect how the wording fits the screen
+    alongside the source text, proposal and character limit.
+  </p>
+  <ol class="steps-list">
+    <li>
+      <strong>Open a translation detail.</strong> Translation content and review
+      actions are on the left; screenshots are on the right. On a narrow screen,
+      screenshots follow the review content. Existing personal captures load
+      automatically.
+    </li>
+    <li>
+      <strong>Save your translation.</strong> Screenshots use saved text.
+      Unsaved edits must be saved before requesting a new capture.
+    </li>
+    <li>
+      <strong>Choose the screen.</strong> Open
+      <strong>Screenshot options</strong> to choose an available preview and its
+      light or dark appearance.
+    </li>
+    <li>
+      <strong>Select Generate screenshot.</strong> VerboFlex renders the
+      selected preview in the background. Queueing, rendering and elapsed time
+      remain visible; generation can take several minutes. You can leave and
+      return to the result.
+    </li>
+    <li>
+      <strong>Review the result.</strong> Open the image at full size to inspect
+      wrapping and spacing. Approve or reject the proposal using the usual
+      review actions. Generating an image does not approve or publish the
+      translation.
+    </li>
+  </ol>
+  <h3>Match the image to your proposal</h3>
+  <p>
+    A capture uses fixed code and translation revisions and the selected saved
+    proposal version. Other strings use their imported translations. When you
+    edit the text or save a newer proposal, the old image stays available with a
+    warning. Save and generate again to review the new wording. Opening the page
+    or saving a draft never starts a render automatically.
+  </p>
+  <p>
+    If there is no screenshot, the translation remains available for review.
+    When generation is unavailable, ask your administrator whether the product
+    has a registered preview and a configured runner. Technical source
+    references and revision history remain under
+    <strong>Technical details and history</strong>.
+  </p>
+  <h3 id="compose-setup">Developer setup</h3>
+  <p>
+    Register a callable, zero-argument
+    <code>@Preview @Composable</code> function that supplies an example screen
+    state. Configure the application-code mapping, connect the translation
+    resources and prepare the Android capture runner and dedicated background
+    worker. Code and translations can use separate repositories.
+  </p>
+  <p>
+    The image represents that preview’s fixture state. Live navigation, network
+    responses and device services need an explicit fixture; this is not a
+    recording of a running device. A key linked to a preview may not be visible
+    in every fixture state. The integration currently targets Android Compose
+    previews.
+  </p>
+  <p>
+    <a
+      class="text-link"
+      href="https://github.com/smutti/verboflex/blob/main/docs/code-keys-compose.md"
+      >Read the Compose integration guide</a
+    >
+    and
+    <a
+      href="https://github.com/smutti/verboflex/blob/main/docs/compose-linux-runner.md"
+      >prepare a Linux capture runner</a
+    >.
+  </p>
+  <aside class="callout">
+    The <a href="index.html#compose-screenshots">website illustration</a> uses
+    synthetic data. Screenshot generation happens in your VerboFlex
+    installation, with access controlled by your product membership.
+  </aside>
+</section>
 <section id="review">
-  <p class="eyebrow">04 / FOR REVIEWERS</p>
+  <p class="eyebrow">05 / FOR REVIEWERS</p>
   <h2>Approve first. Submit when ready.</h2>
   <p>
     Products configured for <strong>approval commits</strong> save each approved
@@ -218,11 +306,12 @@
     the configured destination. Later approvals also update an open PR.
   </p>
   <p>
-    Administrators configure each source in <strong>Product configuration →
-    Approval branches</strong>. The <strong>Working branch</strong> receives the
-    approval commits; the <strong>PR destination</strong> receives the proposed
-    merge only when requested. Products with multiple sources have separate
-    branch histories to select in Change sets.
+    Administrators configure each source in
+    <strong>Product configuration → Approval branches</strong>. The
+    <strong>Working branch</strong> receives the approval commits; the
+    <strong>PR destination</strong> receives the proposed merge only when
+    requested. Products with multiple sources have separate branch histories to
+    select in Change sets.
   </p>
   <p>Other products use the reviewed change-set workflow below.</p>
   <div class="state-flow" aria-label="Review workflow">
@@ -233,7 +322,9 @@
   <ol class="steps-list">
     <li>
       <strong>Compare the proposal.</strong> Review the current text, proposed
-      text, comments and length constraints.
+      text, comments and length constraints. For configured Compose projects,
+      <a href="#compose-screenshots">generate a screenshot</a> to inspect the
+      saved translation in its screen context.
     </li>
     <li>
       <strong>Make a decision.</strong> A reviewer or administrator can approve
@@ -269,7 +360,7 @@
   </aside>
 </section>
 <section id="refresh">
-  <p class="eyebrow">05 / WHEN SOURCE FILES CHANGE</p>
+  <p class="eyebrow">06 / WHEN SOURCE FILES CHANGE</p>
   <h2>Refresh, then resolve what changed.</h2>
   <p>
     Refresh imports the latest configured source state in the background. A
@@ -310,7 +401,7 @@
   </p>
 </section>
 <section id="dashboard">
-  <p class="eyebrow">06 / YOUR DAILY STARTING POINT</p>
+  <p class="eyebrow">07 / YOUR DAILY STARTING POINT</p>
   <h2>Pick up where your team left off.</h2>
   <p>
     Your dashboard brings together notifications, your recent operations and
@@ -319,15 +410,15 @@
     activity.
   </p>
   <p>
-    Product cards show source keys, supported languages, missing translations and
-    overall coverage. Administrators can open the product overview for coverage
-    by language.
+    Product cards show source keys, supported languages, missing translations
+    and overall coverage. Administrators can open the product overview for
+    coverage by language.
     <strong>Coverage measures available translations, not approval.</strong> A
     fully populated language may still need review.
   </p>
 </section>
 <section id="roles">
-  <p class="eyebrow">07 / ACCESS</p>
+  <p class="eyebrow">08 / ACCESS</p>
   <h2>Permissions follow the person.</h2>
   <p>
     Users have internal accounts and can hold multiple roles. The API enforces
@@ -369,7 +460,7 @@
   </div>
 </section>
 <section id="mcp">
-  <p class="eyebrow">08 / CONNECT YOUR ASSISTANT</p>
+  <p class="eyebrow">09 / CONNECT YOUR ASSISTANT</p>
   <h2>Use Codex or Claude Code with OAuth.</h2>
   <p>
     Ask your administrator for the installation’s MCP URL. The examples below
@@ -424,7 +515,7 @@ codex mcp login verboflex-oauth --scopes verboflex:read</code></pre>
   </aside>
 </section>
 <section id="operations">
-  <p class="eyebrow">09 / FOR INSTALLATION OWNERS</p>
+  <p class="eyebrow">10 / FOR INSTALLATION OWNERS</p>
   <h2>Run the application separately from this site.</h2>
   <p>
     GitHub Pages hosts this static website and guide. VerboFlex itself needs a
@@ -490,28 +581,26 @@ codex mcp login verboflex-oauth --scopes verboflex:read</code></pre>
   </p>
 </section>
 <section id="help">
-  <p class="eyebrow">10 / WHEN SOMETHING NEEDS ATTENTION</p>
+  <p class="eyebrow">11 / WHEN SOMETHING NEEDS ATTENTION</p>
   <h2>Find the next useful step.</h2>
   <details>
-    <summary>
-      How do I change the interface language?
-    </summary>
+    <summary>How do I change the interface language?</summary>
     <p>
       Use the flag next to your profile, the flag on the sign-in page, or
       <strong>Profile → Interface language</strong>. Choose English, Italian,
       German, Spanish, French or Dutch. On your first visit, VerboFlex uses a
-      supported browser language, falling back to English. Your manual choice
-      is remembered in this browser and takes effect immediately, including in
+      supported browser language, falling back to English. Your manual choice is
+      remembered in this browser and takes effect immediately, including in
       other open tabs. Changing the interface language preserves unsaved edits.
       Workspace language selectors choose the translation content you work on.
     </p>
     <p>
       Product names, branch names and translation values keep their original
-      text. If a browser extension translates them, use your
-      browser's translation controls to show the original page, turn off
-      automatic translation for this site and reload. VerboFlex requests that
-      browsers preserve the original page, including filters and translation
-      values; extensions that ignore this request may still rewrite it.
+      text. If a browser extension translates them, use your browser's
+      translation controls to show the original page, turn off automatic
+      translation for this site and reload. VerboFlex requests that browsers
+      preserve the original page, including filters and translation values;
+      extensions that ignore this request may still rewrite it.
     </p>
   </details>
   <details>
