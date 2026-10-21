@@ -1,5 +1,6 @@
 """Real Git snapshot checkout and fail-closed archive extraction, using local fixtures."""
 
+import base64
 import hashlib
 import importlib.util
 import json
@@ -11,6 +12,8 @@ import tarfile
 from pathlib import Path
 
 import pytest
+
+from verboflex.localization.code_keys.capture import CaptureBundle
 
 ROOT = Path(__file__).resolve().parents[4]
 spec = importlib.util.spec_from_file_location(
@@ -89,6 +92,69 @@ def test_capture_checkout_rejects_archive_symlink_escape(tmp_path):
     with pytest.raises(tarfile.AbsoluteLinkError):
         runner.checkout(repo, git(repo, "rev-parse", "HEAD"), target)
     assert not (target / "escape").exists()
+
+
+def test_text_edits_reuse_wrapper_but_always_render_fresh_output(tmp_path):
+    bundle = CaptureBundle.model_validate(
+        {
+            "version": 1,
+            "code_repository_id": "synthetic-app",
+            "code_commit": "a" * 40,
+            "translations_repository_id": "synthetic-strings",
+            "translations_commit": "b" * 40,
+            "import_execution_id": "synthetic-import",
+            "language": "it",
+            "base_language": "en",
+            "capture": {
+                "runner_profile": "synthetic",
+                "module": ":app",
+                "variant": "Debug",
+                "preview_functions": ["demo.HomePreview"],
+            },
+            "request": {"preview_function": "demo.HomePreview", "theme": "light"},
+            "values": [
+                {
+                    "key": "title",
+                    "language": "it",
+                    "selector": {"kind": "scalar", "fields": {}},
+                    "text": "First synthetic text",
+                }
+            ],
+        }
+    )
+    module = tmp_path / "app"
+    module.mkdir()
+    reference = module / "src/screenshotTestDebug/reference"
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7n8AAAAASUVORK5CYII="
+    )
+    sources, overlays = [], []
+
+    def build(command, workspace):
+        assert workspace == tmp_path
+        assert command[1:3] == [":app:updateDebugScreenshotTest", "--rerun"]
+        assert "--offline" in command and "--build-cache" in command
+        assert not reference.exists()
+        sources.append(
+            (module / "src/screenshotTest/kotlin/verboflex/capture/Capture.kt").read_text()
+        )
+        overlays.append(
+            (module / "build/verboflex-capture/res/values-b+it/verboflex.xml").read_bytes()
+        )
+        reference.mkdir(parents=True)
+        (reference / "fresh.png").write_bytes(png)
+
+    output = tmp_path / "output.png"
+    runner.capture(tmp_path, bundle, output, run_build=build)
+    bundle.values[0].text = "Revised synthetic text"
+    bundle.request.proposal_version = 2
+    runner.capture(tmp_path, bundle, output, run_build=build)
+    assert sources[0] == sources[1]
+    assert overlays[0] != overlays[1]
+    assert output.read_bytes() == png
+    # Even with a compiled wrapper and a previous reference, no new image is a failure.
+    with pytest.raises(ValueError, match="newly rendered preview"):
+        runner.capture(tmp_path, bundle, output, run_build=lambda *_: None)
 
 
 def test_container_exchange_is_private_on_host_and_readable_with_restrictive_umask(

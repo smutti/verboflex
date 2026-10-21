@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import cast
 from uuid import UUID
@@ -37,6 +38,7 @@ from verboflex.services.translation_search import TranslationGroupDetail
 
 MAX_INPUT_BYTES = 4 * 1024 * 1024
 ACTIVE_STATES = ("queued", "rendering")
+logger = logging.getLogger(__name__)
 
 
 class ScreenshotError(ValueError):
@@ -286,6 +288,23 @@ def encode_inputs(inputs: dict[str, object]) -> bytes:
     return json.dumps(inputs, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
         "ascii"
     )
+
+
+def enqueue_capture(job_id: UUID) -> None:
+    """Best-effort dispatch after commit; the reconciler recovers missed sends."""
+    from verboflex.worker.celery_app import app
+
+    try:
+        app.send_task(
+            "verboflex.screenshot.run",
+            args=[str(job_id)],
+            queue="screenshots",
+            serializer="json",
+            retry=False,
+        )
+    except Exception:
+        # Keep the durable request queued and omit broker details/credentials.
+        logger.warning("Immediate screenshot dispatch failed for job %s; recovery pending", job_id)
 
 
 def request_capture(

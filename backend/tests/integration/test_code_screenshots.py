@@ -2,12 +2,13 @@
 
 import asyncio
 import base64
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import httpx
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, event, select
 
 from tests.integration.test_translation_import_activation import (
     _seed_running_separate_import,
@@ -38,8 +39,10 @@ PNG = base64.b64decode(
 
 
 @pytest.fixture
-def capture_data(activation_session_factory):  # noqa: F811
+def capture_data(activation_session_factory, monkeypatch):  # noqa: F811
     factory = activation_session_factory
+    # Synthetic API tests must never publish jobs to an external broker.
+    monkeypatch.setattr(screenshot_tasks.app, "send_task", lambda *args, **kwargs: None)
     with factory.begin() as session:
         session.execute(delete(ScreenshotJob))
     identity, keys_repo, translations_repo = _seed_running_separate_import(factory)
@@ -142,6 +145,147 @@ def _request(factory, principal, group_id, job_id=None, **kwargs):
             ScreenshotRequest(preview_function="demo.PreviewScreen", **kwargs),
             runner_enabled=True,
         )
+
+
+def _capture_client(factory, principal, *, before_commit=None):
+    def database():
+        with factory() as session:
+            if before_commit is not None:
+                event.listen(session, "before_commit", before_commit)
+            yield session
+
+    app.dependency_overrides[get_db_session] = database
+    app.dependency_overrides[get_current_principal] = lambda: principal
+    app.dependency_overrides[get_settings] = lambda: Settings(screenshot_runner_command=["runner"])
+    return httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app, raise_app_exceptions=False), base_url="http://test"
+    )
+
+
+def test_api_dispatches_committed_uuid_and_duplicate_delivery_renders_once(
+    capture_data, monkeypatch
+):
+    factory, identity, principal, group_id = capture_data
+    job_id = uuid4()
+    sent, rendered = [], []
+
+    def send(task, **options):
+        # A separate transaction must see the snapshot before Celery receives it.
+        with factory() as session:
+            row = session.get_one(ScreenshotJob, job_id)
+            assert row.state == "queued"
+            assert row.inputs["import_execution_id"] == str(identity.execution_id)
+        sent.append((task, options))
+
+    monkeypatch.setattr(screenshot_tasks.app, "send_task", send)
+    monkeypatch.setattr(screenshot_tasks, "render", lambda inputs: rendered.append(inputs) or PNG)
+
+    async def exercise():
+        async with _capture_client(factory, principal) as client:
+            path = f"/api/v1/translations/{group_id}/screenshots/{job_id}"
+            body = {"preview_function": "demo.PreviewScreen"}
+            for _ in range(2):
+                response = await client.put(path, json=body)
+                assert response.status_code == 202 and response.json()["state"] == "queued"
+            assert (
+                sent
+                == [
+                    (
+                        "verboflex.screenshot.run",
+                        {
+                            "args": [str(job_id)],
+                            "queue": "screenshots",
+                            "serializer": "json",
+                            "retry": False,
+                        },
+                    )
+                ]
+                * 2
+            )
+            assert rendered == []
+            conflict = await client.put(path, json={**body, "theme": "dark"})
+            assert conflict.status_code == 409 and len(sent) == 2
+            for _ in sent:
+                screenshot_tasks.execute_capture(job_id, factory)
+            assert len(rendered) == 1
+            completed = await client.put(path, json=body)
+            assert completed.status_code == 202 and completed.json()["state"] == "succeeded"
+            assert len(sent) == 2
+            with factory.begin() as session:
+                session.get_one(
+                    ProductMember, (identity.product_id, principal.user_id)
+                ).active = False
+            denied = await client.put(path, json=body)
+            assert denied.status_code == 404 and len(sent) == 2
+
+    asyncio.run(exercise())
+
+
+def test_api_broker_failure_keeps_accepted_job_for_reconciliation(
+    capture_data, monkeypatch, caplog
+):
+    factory, _, principal, group_id = capture_data
+    job_id = uuid4()
+    # Alembic disables pre-existing loggers while preparing this test database.
+    monkeypatch.setattr(screenshots.logger, "disabled", False)
+    caplog.set_level(logging.WARNING, logger=screenshots.__name__)
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError("synthetic-private-broker-credentials")
+
+    monkeypatch.setattr(screenshot_tasks.app, "send_task", unavailable)
+
+    async def exercise():
+        async with _capture_client(factory, principal) as client:
+            response = await client.put(
+                f"/api/v1/translations/{group_id}/screenshots/{job_id}",
+                json={"preview_function": "demo.PreviewScreen"},
+            )
+            assert response.status_code == 202 and response.json()["state"] == "queued"
+            assert "synthetic-private" not in response.text
+
+    asyncio.run(exercise())
+    assert "recovery pending" in caplog.text
+    assert "synthetic-private" not in caplog.text
+    with factory.begin() as session:
+        row = session.get_one(ScreenshotJob, job_id)
+        assert row.state == "queued" and row.error_code is None
+        row.updated_at = datetime.now(UTC) - timedelta(seconds=31)
+
+    sent, rendered = [], []
+    monkeypatch.setattr(screenshot_tasks, "SessionFactory", factory)
+    monkeypatch.setattr(screenshot_tasks.app, "send_task", lambda *args, **kw: sent.append(kw))
+    monkeypatch.setattr(screenshot_tasks, "render", lambda inputs: rendered.append(inputs) or PNG)
+    screenshot_tasks.reconcile_screenshots.run()
+    screenshot_tasks.reconcile_screenshots.run()
+    assert sent == [{"args": [str(job_id)], "queue": "screenshots"}]
+    screenshot_tasks.execute_capture(job_id, factory)
+    assert len(rendered) == 1
+    with factory() as session:
+        assert session.get_one(ScreenshotJob, job_id).state == "succeeded"
+
+
+def test_api_rollback_never_dispatches(capture_data, monkeypatch):
+    factory, _, principal, group_id = capture_data
+    job_id = uuid4()
+    sent = []
+    monkeypatch.setattr(screenshot_tasks.app, "send_task", lambda *args, **kw: sent.append(kw))
+
+    def fail_commit(session):
+        raise RuntimeError("synthetic commit failure")
+
+    async def exercise():
+        async with _capture_client(factory, principal, before_commit=fail_commit) as client:
+            response = await client.put(
+                f"/api/v1/translations/{group_id}/screenshots/{job_id}",
+                json={"preview_function": "demo.PreviewScreen"},
+            )
+            assert response.status_code == 500
+
+    asyncio.run(exercise())
+    assert sent == []
+    with factory() as session:
+        assert session.get(ScreenshotJob, job_id) is None
 
 
 def test_snapshot_is_immutable_idempotent_and_not_rendered_by_http(capture_data, monkeypatch):

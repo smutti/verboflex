@@ -119,9 +119,14 @@ def request_screenshot(
                 body,
                 runner_enabled=bool(settings.screenshot_runner_command),
             )
-            return ScreenshotResponse.model_validate(row)
+            response = ScreenshotResponse.model_validate(row)
     except service.ScreenshotError as error:
         raise _error(error) from error
+    # The worker must see the committed snapshot, even if it starts immediately.
+    # Retrying a queued request may resend its UUID; the worker claims it once.
+    if response.state == "queued":
+        service.enqueue_capture(response.id)
+    return response
 
 
 @router.get(

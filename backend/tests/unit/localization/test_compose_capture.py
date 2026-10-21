@@ -99,6 +99,39 @@ def test_registered_preview_and_nonce_are_required():
     data.request.preview_function = "demo.Unregistered"
     with pytest.raises(ValueError):
         preview_source(data, "a" * 32)
+    with pytest.raises(ValueError):
+        preview_source(data)
+
+
+def test_default_wrapper_is_stable_across_translation_and_proposal_changes():
+    original = bundle([value("First synthetic text")])
+    changed = original.model_copy(deep=True)
+    changed.values[0].text = "Revised synthetic text"
+    changed.request.proposal_version = 2
+    changed.import_execution_id = "next-synthetic-import"
+    changed.translations_commit = "c" * 40
+    assert preview_source(original) == preview_source(changed)
+    assert resource_overlay(original) != resource_overlay(changed)
+
+
+@pytest.mark.parametrize("setting", ["preview", "language", "theme", "width", "height"])
+def test_default_wrapper_changes_with_render_settings(setting):
+    original = bundle()
+    changed = original.model_copy(deep=True)
+    if setting == "preview":
+        changed.capture = changed.capture.model_copy(
+            update={"preview_functions": (*changed.capture.preview_functions, "demo.OtherPreview")}
+        )
+        changed.request.preview_function = "demo.OtherPreview"
+    elif setting == "language":
+        changed.language = "de"
+    elif setting == "theme":
+        changed.request.theme = "light"
+    elif setting == "width":
+        changed.capture = changed.capture.model_copy(update={"width_dp": 640})
+    else:
+        changed.capture = changed.capture.model_copy(update={"height_dp": 480})
+    assert preview_source(original) != preview_source(changed)
 
 
 def test_native_parser_isolated_success_and_bad_source():

@@ -9,7 +9,9 @@ The workflow does not deploy the application or contact real repositories.
 The code-key and screenshot tests use synthetic Kotlin/Java and localization fixtures.
 The built smoke also configures a separate code/translation mapping through HTTP,
 imports code-only keys, checks missing keys in the browser, saves a proposal and
-requests its screenshot through the real scheduler/Celery queue. A synthetic renderer
+requests its screenshot through the real Celery queue. PostgreSQL/API regressions
+also cover dispatch after commit, rollback without dispatch, duplicate delivery and
+durable scheduler recovery after a failed broker send. A synthetic renderer
 replaces only the Android build boundary; it verifies the frozen commit IDs and
 selected translation in its PNG. The browser checks editing base-language resources
 in the translations repository, collapsible source context, visible waiting state, explicit
