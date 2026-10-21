@@ -47,7 +47,8 @@ try {
   const section = page.getByRole("region", { name: "Compose screenshots" });
   await expect(section.getByRole("button", { name: "Generate screenshot", exact: true })).toBeEnabled();
   if (puts !== 0) throw new Error("eager capture");
-  await expect(section.getByLabel("Screen preview")).toHaveValue("demo.ScreenPreview");
+  await expect(section.getByLabel("Screen scenario")).toHaveValue("demo.ScreenPreview");
+  await expect(section.getByLabel("Screen scenario").locator("option:checked")).toHaveText("Account settings");
   stage = "proposal";
   await page.getByRole("button", { name: "Edit translation", exact: true }).click();
   await page.locator('textarea[id^="translation-proposal-"]').first().fill("Saved on demand");

@@ -116,6 +116,13 @@ def setup(h, *, repository_prefix="code-e2e"):
                     "runner_profile": "synthetic-e2e",
                     "preview_functions": ["demo.ScreenPreview"],
                 },
+                "preview_scenarios": [
+                    {
+                        "preview_function": "demo.ScreenPreview",
+                        "label": "Account settings",
+                        "keys": ["title"],
+                    }
+                ],
             },
         },
         expected=201,
