@@ -132,6 +132,90 @@ def test_html_preview_and_api_variable_protection(html_api):
     assert response.status_code == 200, response.text
 
 
+def test_html_image_refresh_after_connection_revalidation_and_reactivation(html_api):
+    from verboflex.models.bitbucket_connection import BitbucketConnection
+    from verboflex.models.product import ProductRevision
+    from verboflex.models.product_mapping import ProductRepositoryMapping
+    from verboflex.services import preview_jobs, publication
+    from verboflex.worker import preview_tasks
+
+    client, seed, factory = html_api
+    with factory.begin() as session:
+        session.get_one(BitbucketConnection, 1).generation += 1
+        mapping = session.get_one(ProductRepositoryMapping, seed.mapping_id)
+        revision = session.get_one(ProductRevision, mapping.revision_id)
+        revision_id, version = revision.id, revision.version
+        selected_id = mapping.selected_layout_candidate_id
+    with factory() as session:
+        publication.deactivate_product(session, actor_id=seed.actor_id, product_id=seed.product_id)
+    with factory() as session:
+        job = preview_jobs.create_or_reuse_active_revision_revalidation_job(
+            session,
+            actor_id=seed.actor_id,
+            product_id=seed.product_id,
+            active_revision_id=revision_id,
+            mapping_id=seed.mapping_id,
+            expected_active_revision_version=version,
+            commits={"direct": "a" * 40},
+            enqueuer=lambda _: None,
+        )
+    preview_jobs.execute_preview_job(
+        factory,
+        job_id=job.id,
+        processor=lambda identity: preview_tasks.process_preview(
+            identity,
+            factory=factory,
+            adapter=seed.adapter,
+        ),
+    )
+    with factory() as session:
+        completed = preview_jobs.get_active_revision_revalidation_job(session, job_id=job.id)
+    assert completed.state == "succeeded"
+    with factory() as session:
+        preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=job.id,
+            preview_digest=completed.result["digest"],
+            layout_candidate_id=selected_id,
+            layout_candidate_version=1,
+            base_language="en",
+            actor_id=seed.actor_id,
+        )
+    with factory() as session:
+        publication.reactivate_product(
+            session,
+            actor_id=seed.actor_id,
+            product_id=seed.product_id,
+            active_revision_id=revision_id,
+            expected_active_version=version,
+        )
+    # Reactivation must not immediately invalidate the evidence just confirmed.
+    assert _run(factory, seed.product_id, seed.mapping_id).state == "current"
+    preview = client.get(f"/api/v1/translations/{seed.value_ids[0]}/html-preview")
+    assert preview.status_code == 200
+    assert image_data_uri(PNG) in preview.json()["document"]
+    assert preview.json()["missing_images"] == 0
+    # Active products still cannot create or reconfirm revalidation jobs.
+    with factory() as session, pytest.raises(preview_jobs.PreviewJobConflict):
+        preview_jobs.confirm_active_revision_revalidation(
+            session,
+            job_id=job.id,
+            preview_digest=completed.result["digest"],
+            layout_candidate_id=selected_id,
+            layout_candidate_version=1,
+            base_language="en",
+            actor_id=seed.actor_id,
+        )
+    with factory.begin() as session:
+        session.get_one(BitbucketConnection, 1).generation += 1
+    with factory() as session:
+        assert not preview_jobs.is_current_preview_confirmation(
+            session,
+            session.get_one(ProductRevision, revision_id),
+            session.get_one(ProductRepositoryMapping, seed.mapping_id),
+        )
+
+
 def test_new_html_language_is_a_durable_commit_without_pr(html_api):
     client, seed, factory = html_api
     endpoint = f"/api/v1/products/{seed.product_id}/html-languages"

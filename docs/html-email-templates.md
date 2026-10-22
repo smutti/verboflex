@@ -49,6 +49,11 @@ files. Migration
 `0054_html_preview_images` stores this derived snapshot on the import execution;
 its downgrade removes only the reproducible image cache.
 
+After reconnecting the repository provider, renew the project's preview
+confirmation through the normal deactivate, revalidate and reactivate flow.
+The completed confirmation remains valid for subsequent imports after
+reactivation; another connection change still invalidates it.
+
 Only text spans are writable. Tags, comments, attributes, links, styles and
 surrounding whitespace remain byte-for-byte unchanged. Entered `<`, `>` and `&`
 are encoded as text. Template variables such as `{{first_name}}` must retain their

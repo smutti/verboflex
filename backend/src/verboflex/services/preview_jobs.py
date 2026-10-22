@@ -1331,7 +1331,9 @@ def active_revision_revalidation_is_current(
         connection = _current_connection(session, row, for_update=True)
         if (
             connection is not None
-            and _current_failure_code(session, row, for_update=True) is None
+            # Completed confirmation remains authority after reactivation. New
+            # jobs and confirmation requests still require an inactive product.
+            and _current_failure_code(session, row, for_update=True, allow_reactivated=True) is None
             and _confirmation_job_is_latest(session, row)
             and _current_identity_matches(row, revision, mapping, connection)
             and _active_confirmed_layout_matches(sidecar, row=row, mapping=mapping)
@@ -1595,8 +1597,11 @@ def _current_failure_code(
     row: PreviewJob,
     *,
     for_update: bool,
+    allow_reactivated: bool = False,
 ) -> PreviewJobErrorCode | None:
-    revision = _current_revision(session, row, for_update=for_update)
+    revision = _current_revision(
+        session, row, for_update=for_update, allow_reactivated=allow_reactivated
+    )
     if revision is None:
         return "stale_candidate"
     connection = _current_connection(session, row, for_update=for_update)
@@ -1633,6 +1638,7 @@ def _current_revision(
     row: PreviewJob,
     *,
     for_update: bool,
+    allow_reactivated: bool = False,
 ) -> ProductRevision | None:
     product_statement = select(Product).where(Product.id == row.product_id)
     if for_update:
@@ -1644,7 +1650,7 @@ def _current_revision(
         pointer_is_current = product.candidate_revision_id == row.candidate_revision_id
     elif row.revision_scope == "active_revalidation":
         pointer_is_current = (
-            not product.is_active
+            (allow_reactivated or not product.is_active)
             and product.candidate_revision_id is None
             and product.active_revision_id == row.candidate_revision_id
         )
