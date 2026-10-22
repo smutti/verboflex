@@ -46,6 +46,9 @@ import {
 } from "./router";
 
 vi.mock("./api/client", () => ({
+  listHtmlTemplates: vi
+    .fn()
+    .mockResolvedValue({ data: { items: [], next_cursor: null } }),
   getBranchWorkflow: vi.fn().mockResolvedValue({ data: { enabled: false } }),
   getPersonalDashboard: vi.fn().mockResolvedValue({
     data: {

@@ -183,3 +183,33 @@ export function saveTranslationPreferences(
   persistPreferences(storage, principalId, preferences, productScope);
   return preferences;
 }
+
+export type EmailWorkspaceView = "email" | "strings";
+
+function key(principalId: string, productId: string) {
+  return `verboflex.project-editor.v1.${encodeURIComponent(principalId)}.${encodeURIComponent(productId)}`;
+}
+
+export function loadEmailWorkspaceView(
+  principalId: string,
+  productId: string,
+): EmailWorkspaceView | null {
+  try {
+    const value = localStorage.getItem(key(principalId, productId));
+    return value === "email" || value === "strings" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveEmailWorkspaceView(
+  principalId: string,
+  productId: string,
+  view: EmailWorkspaceView,
+) {
+  try {
+    localStorage.setItem(key(principalId, productId), view);
+  } catch {
+    /* Storage is optional. */
+  }
+}

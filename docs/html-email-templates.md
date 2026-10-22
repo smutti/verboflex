@@ -15,18 +15,48 @@ in the ordinary import preview.
 The importer exposes visible text fragments, including the document title and
 text split by inline elements. It assigns internal identities from the relative
 template name and structural address; it never inserts localization keys into HTML.
-In Strings, choose **View template** beside a language to open its HTML context.
+Projects containing HTML open **Email editor** in the Strings workspace. Choose
+a template from the sidebar (or the template selector on smaller screens), select
+its filename language, then click visible email text to edit it in the adjacent
+source/translation panel. Keyboard users can focus text and press Enter or Space,
+use **Previous**/**Next**, or open **Email texts**. Document titles have a separate
+selectable control above the canvas. Variable-only fragments are excluded from
+the text navigation; variables inside sentences appear as locked chips between
+editable text segments. HTML structure is never exposed as an editable field.
+
+The interactive canvas includes every fragment's saved proposal and previews the
+selected fragment's unsaved text immediately. **Save draft** uses the ordinary
+proposal endpoint, including revision checks, conflict recovery and permissions.
+Changing template, language, selected text or view asks users to resolve unsaved
+edits first. **Review and comments** opens the existing translation detail page.
+Viewers can select and inspect text but cannot save it.
+
+**Project view** switches between **Email editor** and **String list**. This choice
+is remembered for each user/project in that browser; translation text is never
+persisted in browser storage. Projects without HTML keep their usual string list.
+Template identity includes the imported scope and relative subfolder. Large
+catalogs offer **Load more templates** after each 200 filename-language entries.
+The complete editor document limits combined UTF-8 fragment text to 2 MiB,
+including pending proposals, before loading it into application memory.
+
+In **String list**, choose **View template** beside a language to open its HTML context.
 The translation detail page displays **HTML template preview** automatically in
 the right-hand column used for screenshots, including for read-only viewers.
 On narrow screens it follows the translation content. The email canvas scales to
 fit the panel while keeping its original layout.
 
-The selected body fragment is highlighted; document-title fragments appear above
+In that individual detail preview, the selected body fragment is highlighted; document-title fragments appear above
 the email. The preview uses the latest saved proposal for the selected fragment
 and updates immediately with its unsaved text, without saving or generating a
 screenshot. Other fragments show imported content, not their pending proposals.
 Loading failures offer a retry without blocking the editor. Scripts, forms,
 external styles and external images cannot load.
+The interactive canvas also disables scripts and navigation. Its sandbox allows
+same-origin DOM access only so the parent application can attach selection
+listeners; source templates supply no executable code. An explicit content security
+policy limits images to the worker's embedded raster snapshots. Both the template
+catalog and complete editor document require fresh product access and read only
+the current imported database snapshot. They never contact repository providers.
 Inline styles remain visible, so the preview is useful for text context but is not
 an email-client rendering certification.
 

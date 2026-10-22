@@ -1,5 +1,6 @@
 """Passive preview markup only; never used to serialize repository files."""
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from html import escape
@@ -84,7 +85,9 @@ _SUPPRESS = frozenset({"script", "iframe", "object", "template", "noscript"})
 
 
 class _PassiveHtml(HTMLParser):
-    def __init__(self, template_path: str, images: Mapping[str, str]) -> None:
+    def __init__(
+        self, template_path: str, images: Mapping[str, str], markers: frozenset[str]
+    ) -> None:
         super().__init__(convert_charrefs=False)
         self.template_path = template_path
         self.images = images
@@ -93,6 +96,7 @@ class _PassiveHtml(HTMLParser):
         self.parts: list[str] = []
         self.suppressed = 0
         self.in_style = False
+        self.markers = markers
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in _SUPPRESS:
@@ -139,7 +143,16 @@ class _PassiveHtml(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         if not self.suppressed:
-            self.parts.append(data if self.in_style else escape(data, quote=False))
+            safe = data if self.in_style else escape(data, quote=False)
+            # HTMLParser treats title contents as RCDATA. Preserve only the
+            # caller-owned placeholders there, not arbitrary source markup.
+            if not self.in_style:
+                safe = re.sub(
+                    r"&lt;!--([^<>]*?)--&gt;",
+                    lambda match: f"<!--{match[1]}-->" if match[1] in self.markers else match[0],
+                    safe,
+                )
+            self.parts.append(safe)
 
     def handle_entityref(self, name: str) -> None:
         if not self.suppressed:
@@ -151,14 +164,18 @@ class _PassiveHtml(HTMLParser):
 
     def handle_comment(self, data: str) -> None:
         # Only the application-owned editing placeholder survives preview sanitization.
-        if data == "VERBOFLEX-SELECTED-TEXT" and not self.suppressed:
-            self.parts.append("<!--VERBOFLEX-SELECTED-TEXT-->")
+        if data in self.markers and not self.suppressed:
+            self.parts.append(f"<!--{data}-->")
 
 
 def passive_html_preview(
-    document: str, *, template_path: str = "", images: Mapping[str, str] | None = None
+    document: str,
+    *,
+    template_path: str = "",
+    images: Mapping[str, str] | None = None,
+    markers: frozenset[str] = frozenset({"VERBOFLEX-SELECTED-TEXT"}),
 ) -> HtmlPreview:
-    parser = _PassiveHtml(template_path, images or {})
+    parser = _PassiveHtml(template_path, images or {}, markers)
     parser.feed(document)
     parser.close()
     return HtmlPreview(document="".join(parser.parts), missing_images=parser.missing_images)

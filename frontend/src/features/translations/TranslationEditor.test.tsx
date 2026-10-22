@@ -403,13 +403,19 @@ describe("TranslationConflictDialog", () => {
 });
 
 describe("compact cells", () => {
-  it.each(["direct", "translations"] as const)(
-    "initializes %s base leaves from actual source text and never fills empty Qt targets",
-    (side) => {
+  it.each([
+    ["direct", "json"],
+    ["translations", "json"],
+    ["direct", "html"],
+    ["translations", "html"],
+  ] as const)(
+    "initializes %s %s base leaves from actual source text and never fills empty Qt targets",
+    (side, format) => {
       const source = detail();
       source.language = "en";
       source.values = [source.values[0]];
-      source.values[0].selector_kind = "json_path";
+      source.values[0].selector_kind =
+        format === "html" ? "scalar" : "json_path";
       source.values[0].translated_text = null;
       source.values[0].source_text = "Real base value";
       source.values[0].display_text = "Real base value";
@@ -418,8 +424,8 @@ describe("compact cells", () => {
         repository_name: "Repo",
         repository_side: side,
         branch: "main",
-        path: "en.json",
-        format: "json",
+        path: format === "html" ? "Welcome-EN.html" : "en.json",
+        format,
         commit_hash: "a",
         execution_id: "e",
         line: null,

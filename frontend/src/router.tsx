@@ -39,6 +39,7 @@ import { ChangeSetsLayout } from "./features/change-sets/ChangeSetWorkspace";
 import { ChangeSetReviewPage } from "./features/change-sets/ChangeSetReviewPage";
 import { ChangeSetDetailPage } from "./features/change-sets/ChangeSetDetailPage";
 import { TranslationSearchPage } from "./features/translations/TranslationSearchPage";
+import { ProductStringsPage } from "./features/translations/ProductStringsPage";
 import { TranslationDetailPage } from "./features/translations/TranslationDetailPage";
 import { TranslationsWorkspace } from "./features/translations/TranslationsWorkspace";
 import {
@@ -251,7 +252,7 @@ export function ProductApplicationRoutes({
         }
       >
         <Route index element={<Navigate replace to="strings" />} />
-        <Route path="strings" element={<TranslationSearchPage />} />
+        <Route path="strings" element={<ProductStringsPage />} />
         <Route
           path="team"
           element={<ProductTeamPage accessToken={accessToken} />}

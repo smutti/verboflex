@@ -392,3 +392,147 @@ def test_preview_images_follow_product_access_and_are_not_public(html_api):
     response = client.get(endpoint)
     assert response.status_code == 404
     assert "data:image" not in response.text
+
+
+def _save_email_text(client, group_id, text):
+    endpoint = f"/api/v1/translations/{group_id}"
+    detail = client.get(endpoint).json()
+    value = detail["values"][0]
+    revision = value["history"][0]
+    return client.put(
+        endpoint + "/proposal",
+        json={
+            "expected_version": (detail["pending_change"] or {}).get("version", 0),
+            "values": [
+                {
+                    "translation_value_id": value["id"],
+                    "selector_version": value["selector_version"],
+                    "selector_digest": value["selector_digest"],
+                    "basis_revision_number": revision["revision_number"],
+                    "basis_digest": revision["revision_digest"],
+                    "proposed_text": text,
+                }
+            ],
+        },
+    )
+
+
+def test_email_editor_catalog_and_pending_fragments_are_read_only(html_api):
+    client, seed, factory = html_api
+    document = (
+        b"<html><head><title>Welcome</title></head><body>"
+        b'<img src="/images/logo.png"><p>Hello <b>{{name}}</b></p>'
+        b'<a href="https://example.test" onclick="alert(1)">Open account</a>'
+        b"<script>alert(1)</script></body></html>"
+    )
+    seed.adapter.files.update(
+        {
+            "mail/Welcome-EN.html": document,
+            "mail/Welcome-IT.html": document.replace(b"Hello", b"Ciao"),
+            "mail/nested/Welcome-EN.html": document,
+        }
+    )
+    seed.adapter.commit_hashes = ["b" * 40]
+    assert _run(factory, seed.product_id, seed.mapping_id).state == "current"
+    requests = list(seed.adapter.requests)
+    catalog = client.get(f"/api/v1/products/{seed.product_id}/html-templates")
+    assert catalog.status_code == 200, catalog.text
+    items = catalog.json()["items"]
+    assert {(item["name"], item["language"]) for item in items} == {
+        ("Welcome", "en"),
+        ("Welcome", "it"),
+        ("nested/Welcome", "en"),
+    }
+    assert catalog.json()["next_cursor"] is None
+    target = next(item for item in items if item["language"] == "it")
+    endpoint = f"/api/v1/translations/{target['group_id']}/html-editor"
+    preview = client.get(endpoint)
+    assert preview.status_code == 200, preview.text
+    data = preview.json()
+    assert data["path"] == "mail/Welcome-IT.html"
+    assert data["language"] == "it"
+    assert len(data["fragments"]) == 4
+    assert {f["element"] for f in data["fragments"]} == {"title", "p", "b", "a"}
+    assert all(f["marker"] in data["document"] for f in data["fragments"])
+    assert image_data_uri(PNG) in data["document"]
+    assert "onclick" not in data["document"]
+    assert "href=" not in data["document"]
+    assert "script" not in data["document"]
+    editable = [f for f in data["fragments"] if f["element"] in {"p", "a"}]
+    for fragment in editable:
+        result = _save_email_text(client, fragment["group_id"], "Test & <literal>")
+        assert result.status_code == 200, result.text
+    fresh = client.get(endpoint).json()
+    assert all(
+        f["text"] == "Test & <literal>" for f in fresh["fragments"] if f["element"] in {"p", "a"}
+    )
+    assert "<literal>" not in fresh["document"]
+    source = next(item for item in items if item["name"] == "Welcome" and item["language"] == "en")
+    source_doc = client.get(f"/api/v1/translations/{source['group_id']}/html-editor").json()
+    assert "Test & <literal>" not in [f["text"] for f in source_doc["fragments"]]
+    assert seed.adapter.requests == requests
+    with factory() as session:
+        assert session.scalars(select(BranchJob)).all() == []
+
+
+@pytest.mark.parametrize("role", ["translator", "viewer"])
+def test_email_editor_permissions_rechecked_for_every_read(html_api, role):
+    client, seed, factory = html_api
+    catalog = f"/api/v1/products/{seed.product_id}/html-templates"
+    document = f"/api/v1/translations/{seed.value_ids[0]}/html-editor"
+    with factory.begin() as session:
+        session.get(User, seed.actor_id).roles = [
+            session.scalar(select(Role).where(Role.name == role))
+        ]
+        mirror_fixture_role(session, seed.actor_id)
+    assert client.get(catalog).status_code == 200
+    assert client.get(document).status_code == 200
+    if role == "viewer":
+        assert _save_email_text(client, seed.value_ids[0], "Hello {{name}}").status_code == 403
+    assert client.get(f"/api/v1/products/{uuid4()}/html-templates").status_code == 404
+    with factory.begin() as session:
+        session.get(User, seed.actor_id).is_active = False
+    for endpoint in (catalog, document):
+        result = client.get(endpoint)
+        assert result.status_code == 404
+        assert "data:image" not in result.text
+        assert "Welcome" not in result.text
+
+
+def test_email_editor_hides_inactive_products_and_deleted_fragments(html_api):
+    from verboflex.models.product import Product
+
+    client, seed, factory = html_api
+    endpoint = f"/api/v1/translations/{seed.value_ids[0]}/html-editor"
+    with factory.begin() as session:
+        session.get(Product, seed.product_id).is_active = False
+    assert client.get(endpoint).status_code == 404
+    assert client.get(f"/api/v1/products/{seed.product_id}/html-templates").status_code == 404
+
+
+def test_email_catalog_pages_without_silently_dropping_templates(html_api):
+    client, seed, factory = html_api
+    seed.adapter.files.update({f"mail/Message-{i}-EN.html": HTML for i in range(201)})
+    seed.adapter.commit_hashes = ["b" * 40]
+    assert _run(factory, seed.product_id, seed.mapping_id).state == "current"
+    endpoint = f"/api/v1/products/{seed.product_id}/html-templates"
+    first = client.get(endpoint).json()
+    assert len(first["items"]) == 200
+    assert first["next_cursor"]
+    second = client.get(endpoint, params={"after": first["next_cursor"]}).json()
+    assert len(second["items"]) == 2
+    assert second["next_cursor"] is None
+    assert len({item["group_id"] for item in first["items"] + second["items"]}) == 202
+
+
+def test_email_editor_bounds_pending_text_before_loading_the_document(html_api, monkeypatch):
+    from verboflex.services import html_editor
+
+    client, seed, _ = html_api
+    monkeypatch.setattr(html_editor, "MAX_EDITOR_TEXT_BYTES", 48)
+    group_id = seed.value_ids[0]
+    endpoint = f"/api/v1/translations/{group_id}/html-editor"
+    assert client.get(endpoint).status_code == 200
+    result = _save_email_text(client, group_id, "é" * 30 + " {{name}}")
+    assert result.status_code == 200, result.text
+    assert client.get(endpoint).status_code == 404

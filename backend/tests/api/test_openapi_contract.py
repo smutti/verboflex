@@ -62,6 +62,10 @@ IMPORT_OPERATIONS = {
 }
 
 TRANSLATION_OPERATIONS = {
+    ("/api/v1/translations/{translation_group_id}/html-editor", "get"): (
+        "getHtmlEditorDocument",
+        {"200", "401", "403", "404", "409", "422"},
+    ),
     ("/api/v1/translations/{translation_group_id}/html-preview", "get"): (
         "getHtmlTemplatePreview",
         {"200", "401", "403", "404", "409", "422"},
@@ -220,6 +224,11 @@ def test_dashboard_contract_is_closed_discriminated_and_has_no_actor_input() -> 
 
 
 EXPECTED_OPERATIONS = {
+    ("/api/v1/products/{product_id}/html-templates", "get"): (
+        "listHtmlTemplates",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
     ("/api/v1/products/{product_id}/html-languages", "post"): (
         "createHtmlLanguage",
         {"202", "401", "403", "404", "409", "422"},

@@ -107,6 +107,14 @@ sandbox restrictions and fit at desktop and mobile widths. Backend image tests
 cover pinned commits, path normalization, budgets, access revocation and refresh
 without changing translation revisions or saved proposals.
 The Vitest suite also checks saved-proposal length and stale capture versions.
+The focused `email-template-editor.spec.ts` uses the same preview server and
+synthetic HTTP fixtures. It checks click/keyboard selection in the email canvas,
+protected variables, escaped live text, embedded images, saved proposals across
+fragments and reload, base-language editing, dirty-language guards, viewer access
+and fit at 320, 768 and 1440 pixels. Vitest additionally covers per-user/project
+view preferences, conflicts, failed saves and stale language responses. Real API
+tests cover current-scope catalog pagination, pending text across a document,
+permission revocation and inactive products without repository I/O.
 It also verifies named screenshot scenarios, automatic selection for a key, and
 text-position toggles without another render. Browser checks verify normalized
 outline alignment at 320, 768 and 1440 pixels. Synthetic backend tests enforce

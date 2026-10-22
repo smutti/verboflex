@@ -209,3 +209,16 @@ def test_worker_budgets_count_unique_images_across_templates(monkeypatch):
     )
     assert set(result["direct"]) == {"a.png", "b.png"}
     assert adapter.read_repository_source_file.call_count == 2
+
+
+def test_editor_markers_survive_title_rcdata_without_allowing_source_markup():
+    result = passive_html_preview(
+        "<html><head><title><!--APP-TITLE-->&lt;script&gt;bad&lt;/script&gt;</title></head>"
+        "<body><!--APP-BODY--><!--UNTRUSTED--><script><!--APP-BODY--></script></body></html>",
+        markers=frozenset({"APP-TITLE", "APP-BODY"}),
+    )
+    assert result.document.count("<!--APP-TITLE-->") == 1
+    assert result.document.count("<!--APP-BODY-->") == 1
+    assert "UNTRUSTED" not in result.document
+    assert "<script>" not in result.document
+    assert "&lt;script&gt;bad&lt;/script&gt;" in result.document

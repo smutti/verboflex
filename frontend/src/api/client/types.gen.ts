@@ -3736,6 +3736,66 @@ export type HealthResponse = {
 };
 
 /**
+ * HtmlEditorDocument
+ */
+export type HtmlEditorDocument = {
+    /**
+     * Document
+     */
+    document: string;
+    /**
+     * Execution Id
+     */
+    execution_id: string;
+    /**
+     * Fragments
+     */
+    fragments: Array<HtmlEditorFragment>;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Missing Images
+     */
+    missing_images: number;
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Product Id
+     */
+    product_id: string;
+};
+
+/**
+ * HtmlEditorFragment
+ */
+export type HtmlEditorFragment = {
+    /**
+     * Element
+     */
+    element: string;
+    /**
+     * Group Id
+     */
+    group_id: string;
+    /**
+     * Marker
+     */
+    marker: string;
+    /**
+     * Position
+     */
+    position: number;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
  * HtmlLanguageJobResponse
  */
 export type HtmlLanguageJobResponse = {
@@ -3747,6 +3807,50 @@ export type HtmlLanguageJobResponse = {
      * State
      */
     state: string;
+};
+
+/**
+ * HtmlTemplateCatalog
+ */
+export type HtmlTemplateCatalog = {
+    /**
+     * Items
+     */
+    items: Array<HtmlTemplateOption>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * HtmlTemplateOption
+ */
+export type HtmlTemplateOption = {
+    /**
+     * Base Language
+     */
+    base_language: string | null;
+    /**
+     * Group Id
+     */
+    group_id: string;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Scope Id
+     */
+    scope_id: string;
 };
 
 /**
@@ -11590,6 +11694,57 @@ export type DiscardHtmlLanguageResponses = {
 
 export type DiscardHtmlLanguageResponse = DiscardHtmlLanguageResponses[keyof DiscardHtmlLanguageResponses];
 
+export type ListHtmlTemplatesData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: {
+        /**
+         * After
+         */
+        after?: string | null;
+    };
+    url: '/api/v1/products/{product_id}/html-templates';
+};
+
+export type ListHtmlTemplatesErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Source or operation changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListHtmlTemplatesError = ListHtmlTemplatesErrors[keyof ListHtmlTemplatesErrors];
+
+export type ListHtmlTemplatesResponses = {
+    /**
+     * Successful Response
+     */
+    200: HtmlTemplateCatalog;
+};
+
+export type ListHtmlTemplatesResponse = ListHtmlTemplatesResponses[keyof ListHtmlTemplatesResponses];
+
 export type ResolveTranslationSuggestionData = {
     body: ReuseResolve;
     path: {
@@ -13304,6 +13459,52 @@ export type PutTranslationConstraintResponses = {
 };
 
 export type PutTranslationConstraintResponse = PutTranslationConstraintResponses[keyof PutTranslationConstraintResponses];
+
+export type GetHtmlEditorDocumentData = {
+    body?: never;
+    path: {
+        /**
+         * Translation Group Id
+         */
+        translation_group_id: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{translation_group_id}/html-editor';
+};
+
+export type GetHtmlEditorDocumentErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Source or operation changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetHtmlEditorDocumentError = GetHtmlEditorDocumentErrors[keyof GetHtmlEditorDocumentErrors];
+
+export type GetHtmlEditorDocumentResponses = {
+    /**
+     * Successful Response
+     */
+    200: HtmlEditorDocument;
+};
+
+export type GetHtmlEditorDocumentResponse = GetHtmlEditorDocumentResponses[keyof GetHtmlEditorDocumentResponses];
 
 export type GetHtmlTemplatePreviewData = {
     body?: never;

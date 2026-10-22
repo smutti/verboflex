@@ -23,6 +23,13 @@ from verboflex.localization.writing.core import WritebackRejected
 from verboflex.models.import_job import ImportExecution
 from verboflex.models.translation import TranslationValue, TranslationValueLocator
 from verboflex.services.branch_workflow import BranchWorkflowError
+from verboflex.services.html_editor import (
+    HtmlEditorDocument,
+    HtmlEditorUnavailable,
+    HtmlTemplateCatalog,
+    editor_document,
+    list_templates,
+)
 from verboflex.services.html_languages import (
     CreateHtmlLanguage,
     discard_language_job,
@@ -43,6 +50,49 @@ router = APIRouter(
     },
 )
 Db = Annotated[Session, Depends(get_db_session, use_cache=False)]
+
+
+@router.get(
+    "/products/{product_id}/html-templates",
+    response_model=HtmlTemplateCatalog,
+    operation_id="listHtmlTemplates",
+)
+def list_html_templates(
+    product_id: UUID, principal: CurrentPrincipal, session: Db, after: UUID | None = None
+) -> HtmlTemplateCatalog:
+    try:
+        return list_templates(
+            session, product_id=product_id, actor_id=principal.user_id, after=after
+        )
+    except HtmlEditorUnavailable:
+        raise HTTPException(404, "Product unavailable") from None
+
+
+@router.get(
+    "/translations/{translation_group_id}/html-editor",
+    response_model=HtmlEditorDocument,
+    operation_id="getHtmlEditorDocument",
+)
+def get_editor_document(
+    translation_group_id: UUID, principal: CurrentPrincipal, session: Db
+) -> HtmlEditorDocument:
+    try:
+        access = resolve_translation_group_access(
+            session,
+            principal=principal,
+            translation_group_id=translation_group_id,
+            mode=TranslationGroupAccessMode.READ,
+        )
+        if access.group.is_deleted or len(access.group.values) != 1:
+            raise HtmlEditorUnavailable
+        return editor_document(
+            session,
+            group_id=translation_group_id,
+            product_id=access.product_id,
+            language=access.group.language,
+        )
+    except HtmlEditorUnavailable, TranslationGroupAccessUnavailable, TranslationGroupActionDenied:
+        raise HTTPException(404, "HTML editor unavailable") from None
 
 
 class HtmlTemplatePreviewResponse(BaseModel):
