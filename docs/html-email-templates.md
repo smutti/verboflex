@@ -15,9 +15,18 @@ in the ordinary import preview.
 The importer exposes visible text fragments, including the document title and
 text split by inline elements. It assigns internal identities from the relative
 template name and structural address; it never inserts localization keys into HTML.
-Edit a fragment in Strings and open **HTML template preview** to see the imported
-template with the current edit. Other unsaved or pending proposals are not shown
-in this preview. Scripts, forms, external styles and external images cannot load.
+In Strings, choose **View template** beside a language to open its HTML context.
+The translation detail page displays **HTML template preview** automatically in
+the right-hand column used for screenshots, including for read-only viewers.
+On narrow screens it follows the translation content. The email canvas scales to
+fit the panel while keeping its original layout.
+
+The selected body fragment is highlighted; document-title fragments appear above
+the email. The preview uses the latest saved proposal for the selected fragment
+and updates immediately with its unsaved text, without saving or generating a
+screenshot. Other fragments show imported content, not their pending proposals.
+Loading failures offer a retry without blocking the editor. Scripts, forms,
+external styles and external images cannot load.
 Inline styles remain visible, so the preview is useful for text context but is not
 an email-client rendering certification.
 

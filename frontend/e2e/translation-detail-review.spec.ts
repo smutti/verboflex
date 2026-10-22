@@ -119,6 +119,7 @@ async function setup(
   page: Page,
   state: "ready" | "empty" | "unconfigured",
   role = "admin",
+  record = detail,
 ) {
   const requests = { captures: 0, activity: 0, authenticatedImages: 0 };
   await page.route("**/api/v1/**", async (route) => {
@@ -152,7 +153,7 @@ async function setup(
         products: [{ id: "review-product", name: "Demo Mobile" }],
         languages: [{ code: "it", label: "Italian" }],
       },
-      [base]: detail,
+      [base]: record,
       [`${base}/comments`]: { items: [], older_cursor: null },
       [`${base}/activity`]: { items: [], next_cursor: null },
       [`${base}/code-context`]: {
@@ -348,3 +349,94 @@ test("unsaved edits disable generation and flag the saved image as stale", async
   ).toBeDisabled();
   expect(requests.captures).toBe(0);
 });
+
+for (const width of [320, 1440]) {
+  test(`HTML replaces screenshots and previews live text at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const html = structuredClone(detail);
+    html.product_name = "Demo email templates";
+    html.raw_key =
+      "Welcome::/html[0]/body[0]/table[0]/tbody[0]/tr[0]/td[0]/p[0]/text[0]";
+    html.values[0].provenance!.format = "html";
+    html.values[0].provenance!.path = "templates/Welcome-IT.html";
+    const requests = await setup(page, "unconfigured", "translator", html);
+    let previews = 0;
+    await page.route(
+      "**/api/v1/translations/review-group/html-preview",
+      async (route) => {
+        expect(route.request().headers().authorization).toBe(
+          "Bearer synthetic-review-token",
+        );
+        previews++;
+        await route.fulfill({
+          json: {
+            path: "templates/Welcome-IT.html",
+            marker: "<!--SELECTED-->",
+            document: `<html><head><title>Welcome</title></head><body style="margin:0;background:#f1f5f9;font-family:Arial,sans-serif">
+          <table width="600" style="margin:20px auto;background:white;border-collapse:collapse"><tbody><tr><td style="padding:32px">
+            <p style="color:#0f766e;font-weight:bold;font-size:20px">DEMO HOME</p>
+            <h1 style="font-size:28px;color:#0f172a">Benvenuto a casa</h1>
+            <p style="line-height:1.6;color:#475569">Le impostazioni della tua casa sono pronte. Puoi aggiornarle in qualsiasi momento.</p>
+            <p style="padding:16px;background:#0f766e;color:white;text-align:center"><!--SELECTED--></p>
+            <hr style="border:0;border-top:1px solid #e2e8f0;margin-top:40px">
+            <p style="font-size:12px;color:#64748b">Messaggio dimostrativo per le traduzioni.</p>
+          </td></tr></tbody></table>
+          <script>parent.document.body.dataset.previewEscaped = 'yes';</script>
+          <img src="https://example.test/blocked.png">
+        </body></html>`,
+          },
+        });
+      },
+    );
+    let imageRequests = 0;
+    await page.route("https://example.test/**", (route) => {
+      imageRequests++;
+      return route.abort();
+    });
+    await page.goto("/translations/review-group");
+    const panel = page.getByRole("complementary", {
+      name: "HTML template preview",
+      exact: true,
+    });
+    const iframe = panel.locator("iframe");
+    const frame = page.frameLocator('iframe[title="HTML template preview"]');
+    await expect(iframe).toBeVisible();
+    await expect(frame.locator("mark")).toHaveText(text);
+    await expect(
+      frame.getByRole("heading", { name: "Benvenuto a casa" }),
+    ).toBeVisible();
+    await expect(iframe).toHaveAttribute("sandbox", "");
+    await expect(page.locator("body")).not.toHaveAttribute(
+      "data-preview-escaped",
+    );
+    expect(imageRequests).toBe(0);
+    const previewBox = (await iframe.boundingBox())!;
+    const panelBox = (await panel.boundingBox())!;
+    expect(previewBox.width).toBeLessThanOrEqual(panelBox.width);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page
+      .getByRole("button", { name: "Edit translation", exact: true })
+      .click();
+    await page
+      .getByRole("textbox", { name: "Proposed translation", exact: true })
+      .fill("Apri le impostazioni <sicure>");
+    await expect(frame.locator("mark")).toHaveText(
+      "Apri le impostazioni <sicure>",
+    );
+    await expect(frame.locator("sicure")).toHaveCount(0);
+    expect(previews).toBe(1);
+    expect(requests.captures).toBe(0);
+    await iframe.scrollIntoViewIfNeeded();
+    await expect(frame.locator("mark")).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath(`html-preview-${width}.png`),
+      fullPage: true,
+    });
+  });
+}

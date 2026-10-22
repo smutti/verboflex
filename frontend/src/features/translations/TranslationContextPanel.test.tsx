@@ -1,8 +1,9 @@
 import "@testing-library/jest-dom/vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  getHtmlTemplatePreview,
   getTranslationGroup,
   type TranslationGroupDetailResponse,
   type TranslationProposalResponse,
@@ -13,6 +14,7 @@ import { completeTranslationDetail } from "./translationDetailAuthority";
 const mounts = vi.hoisted(() => vi.fn());
 vi.mock("../../api/client", async (original) => ({
   ...(await original<typeof import("../../api/client")>()),
+  getHtmlTemplatePreview: vi.fn(),
   getTranslationGroup: vi.fn(),
 }));
 vi.mock("./Discussion", () => ({
@@ -109,6 +111,7 @@ const props = () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 describe("selected translation context", () => {
   it("refreshes server eligibility after a reviewer's first inline save without reopening", async () => {
@@ -402,4 +405,49 @@ describe("selected translation context", () => {
       ),
     ).toBe(false);
   });
+});
+
+beforeEach(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+});
+
+it("shows HTML in the context area and updates with the selected draft", async () => {
+  const html = structuredClone(detail);
+  html.values[0].provenance = { format: "html" } as NonNullable<
+    (typeof html.values)[0]["provenance"]
+  >;
+  vi.mocked(getHtmlTemplatePreview).mockResolvedValue({
+    data: {
+      document: "<html><body><p><!--SELECTED--></p></body></html>",
+      marker: "<!--SELECTED-->",
+      path: "Welcome-FR.html",
+    },
+  } as never);
+  const view = render(<TranslationContextPanel {...props()} detail={html} />);
+  const frame = await screen.findByTitle("HTML template preview");
+  expect(frame).toBeVisible();
+  expect(frame.getAttribute("srcdoc")).toContain(">Target</mark>");
+  expect(
+    screen.queryByText("Screenshots and code references"),
+  ).not.toBeInTheDocument();
+  view.rerender(
+    <TranslationContextPanel
+      {...props()}
+      detail={html}
+      draftText="New draft"
+      dirty
+    />,
+  );
+  expect(frame.getAttribute("srcdoc")).toContain(">New draft</mark>");
+  view.rerender(
+    <TranslationContextPanel {...props()} detail={html} draftText="" dirty />,
+  );
+  expect(frame.getAttribute("srcdoc")).not.toContain(">Target</mark>");
+  expect(getHtmlTemplatePreview).toHaveBeenCalledTimes(1);
 });

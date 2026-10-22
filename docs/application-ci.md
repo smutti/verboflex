@@ -101,6 +101,8 @@ translation-detail-review.spec.ts`. Synthetic records and an authenticated image
 fixture verify the review column, screenshots on the right, mobile stacking at 320
 pixels, the empty/unconfigured states, collapsed technical metadata, on-demand
 activity, viewer permissions, dirty-edit warnings and restoration without rendering.
+HTML fixtures additionally verify the visible email preview, saved and live text,
+fragment highlighting, sandbox restrictions and fit at desktop and mobile widths.
 The Vitest suite also checks saved-proposal length and stale capture versions.
 It also verifies named screenshot scenarios, automatic selection for a key, and
 text-position toggles without another render. Browser checks verify normalized

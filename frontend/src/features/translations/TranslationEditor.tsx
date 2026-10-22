@@ -1,5 +1,4 @@
 import { t, useUiLanguage } from "@/i18n";
-import { HtmlTemplatePreview } from "./HtmlTemplatePreview";
 import { TranslationSuggestions } from "./TranslationSuggestions";
 import type { ReuseQuery } from "../../api/client";
 import { useEffect, useRef, useState } from "react";
@@ -410,11 +409,11 @@ export function TranslationEditor({
       }}
     >
       {format === "html" && (
-        <HtmlTemplatePreview
-          accessToken={accessToken}
-          groupId={draft.translationGroupId}
-          text={draft.values[focusedIndex]?.text ?? ""}
-        />
+        <p className="text-sm text-muted-foreground">
+          {t(
+            "Edit text only. HTML tags, links and template variables are protected.",
+          )}
+        </p>
       )}
       {!bilingual && !compact && (
         <section
