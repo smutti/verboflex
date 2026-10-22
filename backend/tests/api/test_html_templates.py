@@ -20,23 +20,31 @@ from tests.integration.test_preview_jobs import (
     preview_session_factory as preview_session_factory,
 )
 from tests.legacy_product_fixtures import mirror_fixture_role
+from tests.unit.localization.test_html_images import PNG
 from verboflex.auth.principal import Principal, get_current_principal
 from verboflex.db.session import get_db_session
+from verboflex.localization.html_images import image_data_uri
 from verboflex.main import app
 from verboflex.models.branch_workflow import BranchJob
+from verboflex.models.import_job import ImportExecution
 from verboflex.models.role import Role
 from verboflex.models.translation import TranslationValue
 from verboflex.models.user import User
 from verboflex.schemas.users import RoleName
 from verboflex.worker import import_tasks
 
-HTML = b'<!DOCTYPE html><html><body><p class="fixed">Welcome {{name}}</p></body></html>'
+HTML = (
+    b'<!DOCTYPE html><html><body><img src="/images/logo.png">'
+    b'<p class="fixed">Welcome {{name}}</p></body></html>'
+)
 
 
 @pytest.fixture
 def html_api(preview_session_factory, monkeypatch):
     factory = preview_session_factory
-    adapter = RefreshSource(files={"mail/Welcome-EN.html": HTML}, commit_hashes=["a" * 40])
+    adapter = RefreshSource(
+        files={"mail/Welcome-EN.html": HTML, "images/logo.png": PNG}, commit_hashes=["a" * 40]
+    )
     product_id, mapping_id = _published_confirmation(factory, adapter)
     monkeypatch.setattr(import_tasks, "SessionFactory", factory)
     monkeypatch.setattr(import_tasks, "create_repository_read_adapters", lambda _: adapter)
@@ -96,6 +104,12 @@ def test_html_preview_and_api_variable_protection(html_api):
     assert preview.status_code == 200, preview.text
     assert '<p class="fixed">' in preview.json()["document"]
     assert "{{name}}" not in preview.json()["document"]
+    assert image_data_uri(PNG) in preview.json()["document"]
+    assert preview.json()["missing_images"] == 0
+    # Preview requests must not contact the repository.
+    requests = list(seed.adapter.requests)
+    assert client.get(group + "/html-preview").status_code == 200
+    assert seed.adapter.requests == requests
     detail = client.get(group).json()
     value = detail["values"][0]
     latest = value["history"][0]
@@ -218,3 +232,79 @@ def test_html_language_existing_or_foreign_scope_is_rejected(html_api):
         client.post(endpoint, json={"workflow_id": str(uuid4()), "language": "it"}).status_code
         == 409
     )
+
+
+def test_image_snapshot_refresh_keeps_translation_revisions_and_saved_proposal(html_api):
+    client, seed, factory = html_api
+    group = f"/api/v1/translations/{seed.value_ids[0]}"
+    detail = client.get(group).json()
+    value = detail["values"][0]
+    revision = value["history"][0]
+    response = client.put(
+        group + "/proposal",
+        json={
+            "expected_version": 0,
+            "values": [
+                {
+                    "translation_value_id": value["id"],
+                    "selector_version": value["selector_version"],
+                    "selector_digest": value["selector_digest"],
+                    "basis_revision_number": revision["revision_number"],
+                    "basis_digest": revision["revision_digest"],
+                    "proposed_text": "Hello {{name}}",
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200
+    seed.adapter.files["images/logo.png"] = PNG + b"different-image-version"
+    seed.adapter.commit_hashes = ["b" * 40]
+    before = client.get(group + "/html-preview").json()
+    assert image_data_uri(PNG) in before["document"]
+    assert _run(factory, seed.product_id, seed.mapping_id).state == "current"
+    after = client.get(group + "/html-preview").json()
+    assert image_data_uri(seed.adapter.files["images/logo.png"]) in after["document"]
+    current = client.get(group).json()
+    assert current["values"][0]["history"] == value["history"]
+    assert current["pending_change"]["values"][0]["text"] == "Hello {{name}}"
+    assert current["pending_change"]["version"] == 1
+    with factory() as session:
+        executions = session.scalars(
+            select(ImportExecution).where(ImportExecution.state == "succeeded")
+        ).all()
+        assert len(executions) == 2
+        assert all(execution.html_preview_images is not None for execution in executions)
+
+
+def test_legacy_imports_report_missing_images_until_refresh(html_api, monkeypatch):
+    client, seed, factory = html_api
+    from unittest.mock import AsyncMock
+
+    from verboflex.services import html_preview_images
+
+    # Simulate the previous worker during staging, respecting terminal immutability.
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            html_preview_images, "collect_html_preview_images", AsyncMock(return_value=None)
+        )
+        assert _run(factory, seed.product_id, seed.mapping_id).state == "current"
+    preview = client.get(f"/api/v1/translations/{seed.value_ids[0]}/html-preview")
+    assert preview.status_code == 200
+    assert preview.json()["missing_images"] == 1
+    assert "data:image/" not in preview.json()["document"]
+    # A refresh at the same commit upgrades old previews without repository changes.
+    assert _run(factory, seed.product_id, seed.mapping_id).state == "current"
+    refreshed = client.get(f"/api/v1/translations/{seed.value_ids[0]}/html-preview")
+    assert refreshed.json()["missing_images"] == 0
+    assert image_data_uri(PNG) in refreshed.json()["document"]
+
+
+def test_preview_images_follow_product_access_and_are_not_public(html_api):
+    client, seed, factory = html_api
+    endpoint = f"/api/v1/translations/{seed.value_ids[0]}/html-preview"
+    assert client.get(endpoint).status_code == 200
+    with factory.begin() as session:
+        session.get(User, seed.actor_id).is_active = False
+    response = client.get(endpoint)
+    assert response.status_code == 404
+    assert "data:image" not in response.text

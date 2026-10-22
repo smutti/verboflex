@@ -3762,6 +3762,10 @@ export type HtmlTemplatePreviewResponse = {
      */
     marker: string;
     /**
+     * Missing Images
+     */
+    missing_images?: number;
+    /**
      * Path
      */
     path: string;

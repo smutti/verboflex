@@ -20,6 +20,7 @@ from verboflex.auth.translation_access import (
 from verboflex.db.session import get_db_session
 from verboflex.localization.html_preview import passive_html_preview
 from verboflex.localization.writing.core import WritebackRejected
+from verboflex.models.import_job import ImportExecution
 from verboflex.models.translation import TranslationValue, TranslationValueLocator
 from verboflex.services.branch_workflow import BranchWorkflowError
 from verboflex.services.html_languages import (
@@ -49,6 +50,7 @@ class HtmlTemplatePreviewResponse(BaseModel):
     document: Annotated[str, Field(max_length=2_097_152)]
     marker: str
     path: str
+    missing_images: Annotated[int, Field(ge=0)] = 0
 
 
 @router.get(
@@ -111,8 +113,16 @@ def get_preview(
         lambda match: texts.get(match[1], ""),
         skeleton,
     )
+    execution = session.get(ImportExecution, anchor.import_execution_id)
+    images = (
+        (execution.html_preview_images or {}).get(anchor.repository_side, {}) if execution else {}
+    )
+    preview = passive_html_preview(document, template_path=anchor.path, images=images)
     return HtmlTemplatePreviewResponse(
-        document=passive_html_preview(document), marker=marker, path=anchor.path
+        document=preview.document,
+        marker=marker,
+        path=anchor.path,
+        missing_images=preview.missing_images,
     )
 
 

@@ -42,6 +42,7 @@ it("escapes edited text and sandboxes the imported template", async () => {
   expect(frame).toHaveAttribute("sandbox", "");
   expect(frame).toHaveAttribute("referrerpolicy", "no-referrer");
   expect(frame.getAttribute("srcdoc")).toContain("default-src 'none'");
+  expect(frame.getAttribute("srcdoc")).toContain("img-src data:;");
   expect(frame.getAttribute("srcdoc")).toContain(
     "&lt;img src=x&gt; &amp; {{name}}",
   );
@@ -144,4 +145,23 @@ it("shows document titles without injecting highlight markup into the title", as
   );
   expect(frame.getAttribute("srcdoc")).not.toContain("<mark");
   expect(screen.getByText("Hello & welcome")).toBeVisible();
+});
+
+it("reports missing repository images while keeping the template readable", async () => {
+  api.getHtmlTemplatePreview.mockResolvedValue({
+    data: {
+      document:
+        "<html><body><img alt='Missing logo'><p><!--SELECTED--></p></body></html>",
+      marker: "<!--SELECTED-->",
+      path: "Welcome-IT.html",
+      missing_images: 1,
+    },
+  });
+  render(
+    <HtmlTemplatePreview accessToken="token" groupId="group" text="Welcome" />,
+  );
+  expect(await screen.findByTitle("HTML template preview")).toBeVisible();
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "Some repository images are unavailable.",
+  );
 });

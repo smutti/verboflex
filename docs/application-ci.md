@@ -102,7 +102,10 @@ fixture verify the review column, screenshots on the right, mobile stacking at 3
 pixels, the empty/unconfigured states, collapsed technical metadata, on-demand
 activity, viewer permissions, dirty-edit warnings and restoration without rendering.
 HTML fixtures additionally verify the visible email preview, saved and live text,
-fragment highlighting, sandbox restrictions and fit at desktop and mobile widths.
+fragment highlighting, embedded repository images, blocked external image requests,
+sandbox restrictions and fit at desktop and mobile widths. Backend image tests
+cover pinned commits, path normalization, budgets, access revocation and refresh
+without changing translation revisions or saved proposals.
 The Vitest suite also checks saved-proposal length and stale capture versions.
 It also verifies named screenshot scenarios, automatic selection for a key, and
 text-position toggles without another render. Browser checks verify normalized

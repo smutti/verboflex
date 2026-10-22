@@ -8,7 +8,7 @@ import {
 import { t, useUiLanguage } from "@/i18n";
 import { Button } from "@/components/ui/button";
 
-const policy = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'">`;
+const policy = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">`;
 
 // HTML groups contain one text fragment. A current edit wins over the latest
 // saved proposal, which wins over the imported text (including an empty edit).
@@ -173,9 +173,16 @@ export function HtmlTemplatePreview({
           </p>
         )}
       </div>
+      {(preview?.missing_images ?? 0) > 0 && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {t(
+            "Some repository images are unavailable. Refresh the project source or check their paths.",
+          )}
+        </p>
+      )}
       <p className="text-xs text-muted-foreground">
         {t(
-          "Preview shows imported content with your current edit. External images are disabled.",
+          "Preview shows imported content with your current edit and repository images. External images are disabled.",
         )}
       </p>
     </div>

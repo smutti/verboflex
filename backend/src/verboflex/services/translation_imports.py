@@ -82,6 +82,7 @@ def stage_translation_parse(
     references: tuple[ImportSourceReferenceRecord, ...],
     result: CanonicalParseResult,
     code_catalog: dict[str, object] | None = None,
+    html_preview_images: dict[str, dict[str, str]] | None = None,
     correlation_references: Mapping[CorrelationIdentity, str] | None = None,
 ) -> StagedParseManifest | None:
     """Persist one immutable inactive parse result for an exact running execution."""
@@ -99,6 +100,7 @@ def stage_translation_parse(
             return None
         mapping, job, execution = authority
         execution.code_catalog = code_catalog
+        execution.html_preview_images = html_preview_images
         validated_references = _validate_references(identity=identity, references=references)
         reference_by_locator = {
             (reference.repository_side, reference.path): reference
@@ -267,11 +269,20 @@ def staged_manifest_digest(
         ],
     )
 
-    catalog = session.get_one(ImportExecution, identity.execution_id).code_catalog
-    if catalog is None:
-        return digest
-    encoded = json.dumps(catalog, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-    return hashlib.sha256((digest + encoded).encode("ascii")).hexdigest()
+    execution = session.get_one(ImportExecution, identity.execution_id)
+    if execution.code_catalog is not None:
+        encoded = json.dumps(
+            execution.code_catalog, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        )
+        digest = hashlib.sha256((digest + encoded).encode("ascii")).hexdigest()
+    if execution.html_preview_images is not None:
+        encoded = json.dumps(
+            execution.html_preview_images, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        )
+        digest = hashlib.sha256(
+            (digest + "html-preview-images:" + encoded).encode("ascii")
+        ).hexdigest()
+    return digest
 
 
 def require_complete_staged_manifest(

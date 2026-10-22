@@ -30,6 +30,25 @@ external styles and external images cannot load.
 Inline styles remain visible, so the preview is useful for text context but is not
 an email-client rendering certification.
 
+Repository images in `<img src>` and legacy `background` attributes are collected
+by the Celery import worker at the same commit as the template. `/images/logo.png`
+is relative to the repository root; `../images/logo.png` is relative to the HTML
+file, including folders outside the selected localization root. PNG, JPEG, GIF
+and WebP images are embedded in the authorized preview as data URLs. The browser
+never contacts the repository provider or receives its credentials. SVG files, remote
+`src` URLs, source-provided `src` data URLs and paths escaping the repository are excluded.
+CSS background images and `srcset` are not imported.
+
+Existing projects need a source refresh to populate image snapshots. Missing,
+unsupported or oversized images do not block text editing; missing local raster
+images show an unavailable-images notice. Limits are 128 unique image reads and
+8 MiB of image data per import, 512 KiB per image, and 1 MiB of embedded image
+characters per rendered document. Image-only changes leave translation text,
+proposals and revision identity intact; preview generation never writes repository
+files. Migration
+`0054_html_preview_images` stores this derived snapshot on the import execution;
+its downgrade removes only the reproducible image cache.
+
 Only text spans are writable. Tags, comments, attributes, links, styles and
 surrounding whitespace remain byte-for-byte unchanged. Entered `<`, `>` and `&`
 are encoded as text. Template variables such as `{{first_name}}` must retain their

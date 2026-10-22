@@ -1,7 +1,22 @@
 """Passive preview markup only; never used to serialize repository files."""
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from html import escape
 from html.parser import HTMLParser
+
+from verboflex.localization.html_images import (
+    MAX_PREVIEW_IMAGE_CHARACTERS,
+    is_image_data_uri,
+    repository_image_path,
+)
+
+
+@dataclass(frozen=True)
+class HtmlPreview:
+    document: str
+    missing_images: int
+
 
 _TAGS = frozenset(
     {
@@ -69,8 +84,12 @@ _SUPPRESS = frozenset({"script", "iframe", "object", "template", "noscript"})
 
 
 class _PassiveHtml(HTMLParser):
-    def __init__(self) -> None:
+    def __init__(self, template_path: str, images: Mapping[str, str]) -> None:
         super().__init__(convert_charrefs=False)
+        self.template_path = template_path
+        self.images = images
+        self.missing_images = 0
+        self.image_characters = 0
         self.parts: list[str] = []
         self.suppressed = 0
         self.in_style = False
@@ -87,6 +106,22 @@ class _PassiveHtml(HTMLParser):
             for name, value in attrs
             if name in _ATTRIBUTES and value is not None
         )
+        for name, value in attrs:
+            if value is None or not (name == "background" or (tag == "img" and name == "src")):
+                continue
+            path = repository_image_path(self.template_path, value)
+            if path is None:
+                continue
+            uri = self.images.get(path)
+            if (
+                uri is not None
+                and is_image_data_uri(uri)
+                and self.image_characters + len(uri) <= MAX_PREVIEW_IMAGE_CHARACTERS
+            ):
+                attributes += f' {name}="{uri}"'
+                self.image_characters += len(uri)
+            else:
+                self.missing_images += 1
         self.parts.append(f"<{tag}{attributes}>")
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
@@ -120,8 +155,10 @@ class _PassiveHtml(HTMLParser):
             self.parts.append("<!--VERBOFLEX-SELECTED-TEXT-->")
 
 
-def passive_html_preview(document: str) -> str:
-    parser = _PassiveHtml()
+def passive_html_preview(
+    document: str, *, template_path: str = "", images: Mapping[str, str] | None = None
+) -> HtmlPreview:
+    parser = _PassiveHtml(template_path, images or {})
     parser.feed(document)
     parser.close()
-    return "".join(parser.parts)
+    return HtmlPreview(document="".join(parser.parts), missing_images=parser.missing_images)

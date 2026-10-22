@@ -137,7 +137,7 @@ def test_preview_removes_navigation_and_active_markup_without_touching_source() 
         '<a href="https://example.test">Link</a><img src="https://example.test/image" alt="Image">'
         "<script>alert(1)</script><p><!--VERBOFLEX-SELECTED-TEXT--></p></body></html>"
     )
-    preview = passive_html_preview(raw)
+    preview = passive_html_preview(raw).document
     assert "http-equiv" not in preview and "href=" not in preview and "src=" not in preview
     assert "onload" not in preview and "<script" not in preview and "alert(1)" not in preview
     assert "<a>Link</a>" in preview and "p {color:red}" in preview

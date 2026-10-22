@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import type { TranslationGroupDetailResponse } from "../src/api/client";
 
@@ -362,6 +363,23 @@ for (const width of [320, 1440]) {
     html.values[0].provenance!.format = "html";
     html.values[0].provenance!.path = "templates/Welcome-IT.html";
     const requests = await setup(page, "unconfigured", "translator", html);
+    // Exercise the same parent policy as the deployed nginx application.
+    const productionPolicy = readFileSync(
+      new URL("../../docker/frontend.nginx.conf", import.meta.url),
+      "utf8",
+    ).match(/add_header Content-Security-Policy "([^"]+)"/)![1];
+    await page.route("**/translations/review-group", async (route) => {
+      if (new URL(route.request().url()).pathname.startsWith("/api/"))
+        return route.fallback();
+      const response = await route.fetch();
+      await route.fulfill({
+        response,
+        headers: {
+          ...response.headers(),
+          "content-security-policy": productionPolicy,
+        },
+      });
+    });
     let previews = 0;
     await page.route(
       "**/api/v1/translations/review-group/html-preview",
@@ -376,6 +394,7 @@ for (const width of [320, 1440]) {
             marker: "<!--SELECTED-->",
             document: `<html><head><title>Welcome</title></head><body style="margin:0;background:#f1f5f9;font-family:Arial,sans-serif">
           <table width="600" style="margin:20px auto;background:white;border-collapse:collapse"><tbody><tr><td style="padding:32px">
+            <img alt="Repository logo" width="48" height="48" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWq0AAAAASUVORK5CYII=">
             <p style="color:#0f766e;font-weight:bold;font-size:20px">DEMO HOME</p>
             <h1 style="font-size:28px;color:#0f172a">Benvenuto a casa</h1>
             <p style="line-height:1.6;color:#475569">Le impostazioni della tua casa sono pronte. Puoi aggiornarle in qualsiasi momento.</p>
@@ -404,6 +423,13 @@ for (const width of [320, 1440]) {
     const frame = page.frameLocator('iframe[title="HTML template preview"]');
     await expect(iframe).toBeVisible();
     await expect(frame.locator("mark")).toHaveText(text);
+    const logo = frame.getByAltText("Repository logo");
+    await expect(logo).toBeVisible();
+    await expect
+      .poll(() =>
+        logo.evaluate((image: HTMLImageElement) => image.naturalWidth),
+      )
+      .toBe(1);
     await expect(
       frame.getByRole("heading", { name: "Benvenuto a casa" }),
     ).toBeVisible();
