@@ -70,6 +70,7 @@ The application is a React/Vite frontend and FastAPI backend with PostgreSQL, Re
 | Container services              | [`docker-compose.yml`](docker-compose.yml), [`docker-compose.prod.yml`](docker-compose.prod.yml) |
 | Configuration example           | [`.env.example`](.env.example)                                                                   |
 | MCP OAuth and local stdio setup | [`mcp-server/README.md`](mcp-server/README.md)                                                   |
+| Remote MCP deployment and troubleshooting | [`docs/mcp-deployment.md`](docs/mcp-deployment.md) |
 | Backup and restore              | [`docs/backup-restore.md`](docs/backup-restore.md)                                               |
 | Database maintenance            | [`docs/database-maintenance.md`](docs/database-maintenance.md)                                   |
 | Public GitHub imports           | [`docs/github-imports.md`](docs/github-imports.md)                                               |
