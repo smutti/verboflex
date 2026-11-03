@@ -16,7 +16,7 @@ from tree_sitter import Language, Node, Parser, Tree
 
 from verboflex.integrations.bitbucket.urls import validate_repository_relative_path
 
-MAX_FILES = 500
+MAX_FILES = 5_000
 MAX_FILE_BYTES = 1_048_576
 MAX_TOTAL_BYTES = 20_971_520
 MAX_NODES = 250_000

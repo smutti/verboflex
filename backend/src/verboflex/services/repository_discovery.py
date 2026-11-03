@@ -24,6 +24,7 @@ from verboflex.integrations.bitbucket.urls import (
     validate_repository_relative_path,
 )
 from verboflex.integrations.readers import RepositoryReadAdapters
+from verboflex.localization.code_keys.catalog import MAX_FILES as MAX_CODE_SOURCE_FILES
 from verboflex.services.repositories import RepositoryRecord, get_repository
 
 DEFAULT_BRANCH_PAGE_SIZE = 50
@@ -146,6 +147,8 @@ SOURCE_DISCOVERY_BUDGET = SourceDiscoveryBudget(
     max_file_bytes=1_048_576,
     max_total_bytes=20_971_520,
 )
+# Leave room for package directories and non-source files in multi-module apps.
+MAX_CODE_SOURCE_ENTRIES = 20_000
 _CANDIDATE_SUFFIXES = (".xml", ".ts", ".json", ".strings", ".xlf", ".xliff", ".html", ".htm")
 
 
@@ -322,7 +325,10 @@ async def discover_repository_sources_for_record(
                     raise BitbucketProviderReadError(kind="invalid_source")
                 seen_paths.add(path)
                 entry_count += 1
-                if entry_count > SOURCE_DISCOVERY_BUDGET.max_entries:
+                max_entries = (
+                    MAX_CODE_SOURCE_ENTRIES if code_sources else SOURCE_DISCOVERY_BUDGET.max_entries
+                )
+                if entry_count > max_entries:
                     raise BitbucketProviderReadError(kind="limit_exceeded")
                 if len(path.split("/")) > SOURCE_DISCOVERY_BUDGET.max_depth:
                     raise BitbucketProviderReadError(kind="limit_exceeded")
@@ -338,7 +344,12 @@ async def discover_repository_sources_for_record(
                     if entry.size > SOURCE_DISCOVERY_BUDGET.max_file_bytes:
                         raise BitbucketProviderReadError(kind="limit_exceeded")
                     candidate_entries.append((path, entry.size))
-                    if len(candidate_entries) > SOURCE_DISCOVERY_BUDGET.max_candidate_files:
+                    max_files = (
+                        MAX_CODE_SOURCE_FILES
+                        if code_sources
+                        else SOURCE_DISCOVERY_BUDGET.max_candidate_files
+                    )
+                    if len(candidate_entries) > max_files:
                         raise BitbucketProviderReadError(kind="limit_exceeded")
             if page.next_url is None:
                 break

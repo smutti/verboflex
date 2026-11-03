@@ -718,6 +718,96 @@ def test_hostile_source_reads_fail_closed_without_returning_provider_bytes(
     asyncio.run(exercise())
 
 
+@pytest.mark.parametrize(
+    ("code_sources", "file_count", "succeeds"),
+    [(True, 5_000, True), (True, 5_001, False), (False, 501, False)],
+)
+def test_code_file_budget_supports_multiple_modules_without_relaxing_locale_limit(
+    code_sources: bool, file_count: int, succeeds: bool
+) -> None:
+    from verboflex.services.repository_discovery import discover_repository_sources_for_record
+
+    suffix = "kt" if code_sources else "json"
+    paths = [
+        f"{'app' if index < 500 else 'shared'}/src/main/File{index}.{suffix}"
+        for index in range(file_count)
+    ]
+    entries = [
+        BitbucketSourceEntry(path=f"package{index}", kind="directory", size=None)
+        for index in range(20)
+    ] + [BitbucketSourceEntry(path=path, kind="file", size=2) for path in paths]
+    raw_reads: list[str] = []
+
+    class MultiModuleAdapter:
+        async def resolve_repository_branch(self, *_args: Any, **_kwargs: Any) -> Any:
+            return BitbucketBranch(name="main", commit_hash="a" * 40)
+
+        async def list_repository_source_page(self, *_args: Any, **kwargs: Any) -> Any:
+            offset = int(kwargs.get("next_url") or 0)
+            batch = entries[offset : offset + 100]
+            return BitbucketSourcePage(
+                entries=tuple(batch),
+                next_url=str(offset + 100) if offset + 100 < len(entries) else None,
+            )
+
+        async def read_repository_source_file(self, *_args: Any, **kwargs: Any) -> bytes:
+            raw_reads.append(kwargs["path"])
+            return b"{}"
+
+    async def exercise() -> None:
+        operation = discover_repository_sources_for_record(
+            object(),
+            repository=_repository(),
+            branch="main",
+            adapter=MultiModuleAdapter(),
+            code_sources=code_sources,
+        )
+        if succeeds:
+            snapshot = await operation
+            assert [file.path for file in snapshot.files] == sorted(paths)
+            assert snapshot.total_bytes == file_count * 2
+            assert raw_reads == sorted(paths)
+        else:
+            with pytest.raises(BitbucketProviderReadError) as captured:
+                await operation
+            assert captured.value.kind == "limit_exceeded"
+            assert not raw_reads
+
+    asyncio.run(exercise())
+
+
+def test_code_entry_budget_rejects_excess_unrelated_files_before_raw_reads() -> None:
+    from verboflex.services.repository_discovery import discover_repository_sources_for_record
+
+    class OversizedTree:
+        async def resolve_repository_branch(self, *_args: Any, **_kwargs: Any) -> Any:
+            return BitbucketBranch(name="main", commit_hash="a" * 40)
+
+        async def list_repository_source_page(self, *_args: Any, **_kwargs: Any) -> Any:
+            return BitbucketSourcePage(
+                entries=tuple(
+                    BitbucketSourceEntry(path=f"docs/{index}.txt", kind="file", size=0)
+                    for index in range(20_001)
+                ),
+                next_url=None,
+            )
+
+        async def read_repository_source_file(self, *_args: Any, **_kwargs: Any) -> bytes:
+            pytest.fail("An oversized tree must fail before source files are read")
+
+    with pytest.raises(BitbucketProviderReadError) as captured:
+        asyncio.run(
+            discover_repository_sources_for_record(
+                object(),
+                repository=_repository(),
+                branch="main",
+                adapter=OversizedTree(),
+                code_sources=True,
+            )
+        )
+    assert captured.value.kind == "limit_exceeded"
+
+
 def test_every_source_traversal_budget_blocks_instead_of_truncating() -> None:
     """Exact page, entry, depth, candidate, single-file and aggregate limits are closed."""
     try:

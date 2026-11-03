@@ -5,6 +5,26 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from verboflex.localization.code_keys.catalog import CodeSourceConfig, extract_catalog
+from verboflex.localization.code_keys.process import extract_catalog_isolated
+
+
+def test_isolated_catalog_includes_all_modules_at_source_file_limit() -> None:
+    files = {
+        f"{'app' if index < 500 else 'shared'}/src/main/Screen{index}.kt": (
+            f"fun screen{index}() = Res.strings.title_{index}\n".encode()
+        )
+        for index in range(5_000)
+    }
+    catalog = extract_catalog_isolated(files, CodeSourceConfig())
+    assert set(catalog.keys) == {f"title_{index}" for index in range(5_000)}
+    assert {occurrence.path for occurrence in catalog.occurrences} == set(files)
+
+
+@pytest.mark.parametrize("extract", [extract_catalog, extract_catalog_isolated])
+def test_oversized_code_catalog_is_rejected_before_parsing(extract) -> None:
+    files = {f"Screen{index}.kt": b"invalid Kotlin" for index in range(5_001)}
+    with pytest.raises(ValueError, match="Code source budget exceeded"):
+        extract(files, CodeSourceConfig())
 
 
 @pytest.mark.parametrize(

@@ -7,6 +7,12 @@ Also require **Website checks**, which runs on every pull request and main push.
 The workflow does not deploy the application or contact real repositories.
 
 The code-key and screenshot tests use synthetic Kotlin/Java and localization fixtures.
+Synthetic discovery and isolated-parser regressions cover applications with up to
+5,000 source files across modules, reject larger catalogs without partial results,
+and retain the separate 500-file limit for localization catalogs.
+Code traversal allows 20,000 total entries so package directories and unrelated
+files do not consume the source-file allowance; localization traversal remains
+limited to 5,000 entries.
 The built smoke also configures a separate code/translation mapping through HTTP,
 imports code-only keys, checks missing keys in the browser, saves a proposal and
 requests its screenshot through the real Celery queue. PostgreSQL/API regressions

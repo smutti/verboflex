@@ -172,7 +172,7 @@ image through `GRADLE_RO_DEP_CACHE`. Other Gradle caches remain private writable
 per render. This avoids copying `caches/modules-2` for every screenshot without adding
 a writable shared host mount; see [the Linux deployment guide](compose-linux-runner.md).
 
-Code discovery allows at most 200 listing pages, 5,000 entries, 500 source files,
+Code discovery allows at most 200 listing pages, 20,000 entries, 5,000 source files,
 12 repository path segments, 1 MiB per file and 20 MiB total. The pinned Kotlin
 grammar rejects some otherwise valid one-line class members without a semicolon;
 put the closing brace on a new line or use an explicit semicolon. A grammar error
