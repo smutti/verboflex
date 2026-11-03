@@ -38,6 +38,7 @@ import {
   TranslationEditor,
 } from "./TranslationEditor";
 import { TranslationReviewActions } from "./TranslationReviewActions";
+import { HtmlTranslationPreview } from "./HtmlTemplatePreview";
 import { TranslationScreenshots } from "./TranslationScreenshots";
 import { TranslationConflictDialog } from "./TranslationConflictDialog";
 import { ActivityHistory } from "./ActivityHistory";
@@ -426,6 +427,7 @@ function LoadedDetail({
     () => proposal?.pending ?? detail.pending_change?.values ?? [],
     [detail.pending_change?.values, proposal?.pending],
   );
+  const isHtml = detail.values[0]?.provenance?.format === "html";
   const pendingState = proposal?.state ?? detail.pending_change?.state ?? null;
   const pendingVersion =
     proposal?.version ?? detail.pending_change?.version ?? 0;
@@ -686,20 +688,32 @@ function LoadedDetail({
             />
           )}
         </div>
-        <aside className="min-w-0" aria-label={t("Screenshots")}>
+        <aside
+          className="min-w-0"
+          aria-label={isHtml ? t("HTML template preview") : t("Screenshots")}
+        >
           <Section
-            title={t("Screenshots")}
+            title={isHtml ? t("HTML template preview") : t("Screenshots")}
             icon={
               <ImageIcon aria-hidden="true" className="size-5 text-primary" />
             }
           >
-            <TranslationScreenshots
-              key={`${detail.id}:${context.accessToken}`}
-              accessToken={context.accessToken}
-              groupId={detail.id}
-              dirty={Boolean(activeDraft?.dirty)}
-              proposalVersion={pendingVersion || undefined}
-            />
+            {isHtml ? (
+              <HtmlTranslationPreview
+                accessToken={context.accessToken}
+                detail={detail}
+                draftText={activeDraft?.values[0]?.text}
+                proposal={proposal}
+              />
+            ) : (
+              <TranslationScreenshots
+                key={`${detail.id}:${context.accessToken}`}
+                accessToken={context.accessToken}
+                groupId={detail.id}
+                dirty={Boolean(activeDraft?.dirty)}
+                proposalVersion={pendingVersion || undefined}
+              />
+            )}
           </Section>
         </aside>
       </div>

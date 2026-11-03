@@ -2835,12 +2835,26 @@ async def _process_import(
                 ),
             )
         )
+    from verboflex.services.html_preview_images import collect_html_preview_images
+
+    html_preview_images = None
+    if not parse_result.issues:
+        html_preview_images = await collect_html_preview_images(
+            factory,
+            identity=identity,
+            adapter=adapter,
+            parser_inputs=parser_inputs,
+            commits={
+                reference.repository_side: reference.commit_hash for reference in durable_references
+            },
+        )
     manifest = stage_translation_parse(
         factory,
         identity=identity,
         references=durable_references,
         result=parse_result,
         code_catalog=code_catalog,
+        html_preview_images=html_preview_images,
     )
     if manifest is None:
         raise ValueError("canonical import execution is stale")
@@ -3027,6 +3041,11 @@ def _path_belongs_to_confirmed_layout(candidate: PreviewLayoutCandidate, path: s
     new files and structures the read-only preview grammar cannot represent.
     """
     layout = candidate.layout_identity
+    if candidate.format == "html":
+        root = layout.removeprefix("html:")
+        return path.lower().endswith((".html", ".htm")) and (
+            root == "." or path.startswith(root + "/")
+        )
     if candidate.format == "android_xml":
         if layout.rsplit("/", 1)[-1] == "moko-resources":
             return moko_resource_root(path) == layout

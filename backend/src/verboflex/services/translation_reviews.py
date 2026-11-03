@@ -18,6 +18,7 @@ from verboflex.auth.translation_access import (
     resolve_translation_group_access,
 )
 from verboflex.localization.graphemes import grapheme_count
+from verboflex.localization.html import valid_html_replacement
 from verboflex.models.product import Product
 from verboflex.models.review import ReviewActivity, TranslationProposal, TranslationProposalValue
 from verboflex.models.translation import (
@@ -667,6 +668,19 @@ def save_translation_proposal(
                 latest=latest,
             )
         )
+
+    for item in attempted:
+        current = current_by_id[item.translation_value_id]
+        if current.locator is not None and current.locator.format == "html":
+            basis_text = (
+                current.translated_text
+                if current.translated_text is not None
+                else current.source_text
+            )
+            if not valid_html_replacement(basis_text or "", item.proposed_text):
+                raise TranslationProposalInputInvalid(
+                    "HTML text must retain template variables and cannot be empty"
+                )
 
     now = datetime.now(UTC)
     if proposal is None:

@@ -943,7 +943,7 @@ export type AdminPreviewLayoutCandidateResponse = {
     /**
      * Format
      */
-    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'xliff';
+    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'xliff' | 'html';
     /**
      * Id
      */
@@ -2099,7 +2099,7 @@ export type BranchChange = {
     /**
      * Kind
      */
-    kind: 'commit' | 'pull_request';
+    kind: 'commit' | 'pull_request' | 'html_language';
     /**
      * Label
      */
@@ -2192,6 +2192,10 @@ export type BranchWorkflowResponse = {
      * Available Mappings
      */
     available_mappings?: Array<BranchMappingChoice>;
+    /**
+     * Can Add Html Language
+     */
+    can_add_html_language?: boolean;
     /**
      * Can Create Pr
      */
@@ -2442,7 +2446,7 @@ export type ChangeSetFileResponse = {
     /**
      * Format
      */
-    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | null;
+    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'html' | null;
     /**
      * Id
      */
@@ -3066,6 +3070,26 @@ export type ConfigureBranchWorkflow = {
      * Work Branch
      */
     work_branch: string;
+};
+
+/**
+ * CreateHtmlLanguage
+ */
+export type CreateHtmlLanguage = {
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Translations
+     */
+    translations?: {
+        [key: string]: string;
+    };
+    /**
+     * Workflow Id
+     */
+    workflow_id: string;
 };
 
 /**
@@ -3709,6 +3733,146 @@ export type HealthResponse = {
      * Status
      */
     status: 'ok';
+};
+
+/**
+ * HtmlEditorDocument
+ */
+export type HtmlEditorDocument = {
+    /**
+     * Document
+     */
+    document: string;
+    /**
+     * Execution Id
+     */
+    execution_id: string;
+    /**
+     * Fragments
+     */
+    fragments: Array<HtmlEditorFragment>;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Missing Images
+     */
+    missing_images: number;
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Product Id
+     */
+    product_id: string;
+};
+
+/**
+ * HtmlEditorFragment
+ */
+export type HtmlEditorFragment = {
+    /**
+     * Element
+     */
+    element: string;
+    /**
+     * Group Id
+     */
+    group_id: string;
+    /**
+     * Marker
+     */
+    marker: string;
+    /**
+     * Position
+     */
+    position: number;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
+ * HtmlLanguageJobResponse
+ */
+export type HtmlLanguageJobResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * State
+     */
+    state: string;
+};
+
+/**
+ * HtmlTemplateCatalog
+ */
+export type HtmlTemplateCatalog = {
+    /**
+     * Items
+     */
+    items: Array<HtmlTemplateOption>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * HtmlTemplateOption
+ */
+export type HtmlTemplateOption = {
+    /**
+     * Base Language
+     */
+    base_language: string | null;
+    /**
+     * Group Id
+     */
+    group_id: string;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Scope Id
+     */
+    scope_id: string;
+};
+
+/**
+ * HtmlTemplatePreviewResponse
+ */
+export type HtmlTemplatePreviewResponse = {
+    /**
+     * Document
+     */
+    document: string;
+    /**
+     * Marker
+     */
+    marker: string;
+    /**
+     * Missing Images
+     */
+    missing_images?: number;
+    /**
+     * Path
+     */
+    path: string;
 };
 
 /**
@@ -4422,7 +4586,7 @@ export type ReuseQuery = {
     /**
      * Format
      */
-    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings';
+    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'html';
     /**
      * Fuzzy
      */
@@ -6205,7 +6369,7 @@ export type TranslationProvenanceResponse = {
     /**
      * Format
      */
-    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'xliff';
+    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'xliff' | 'html';
     /**
      * Line
      */
@@ -6454,7 +6618,7 @@ export type TranslationWorkspaceProvenance = {
     /**
      * Format
      */
-    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'xliff';
+    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'xliff' | 'html';
     /**
      * Path
      */
@@ -11434,6 +11598,153 @@ export type SaveGlossaryTermResponses = {
 
 export type SaveGlossaryTermResponse = SaveGlossaryTermResponses[keyof SaveGlossaryTermResponses];
 
+export type CreateHtmlLanguageData = {
+    body: CreateHtmlLanguage;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/html-languages';
+};
+
+export type CreateHtmlLanguageErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Source or operation changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateHtmlLanguageError = CreateHtmlLanguageErrors[keyof CreateHtmlLanguageErrors];
+
+export type CreateHtmlLanguageResponses = {
+    /**
+     * Successful Response
+     */
+    202: HtmlLanguageJobResponse;
+};
+
+export type CreateHtmlLanguageResponse = CreateHtmlLanguageResponses[keyof CreateHtmlLanguageResponses];
+
+export type DiscardHtmlLanguageData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/html-languages/{job_id}';
+};
+
+export type DiscardHtmlLanguageErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Source or operation changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DiscardHtmlLanguageError = DiscardHtmlLanguageErrors[keyof DiscardHtmlLanguageErrors];
+
+export type DiscardHtmlLanguageResponses = {
+    /**
+     * Successful Response
+     */
+    200: HtmlLanguageJobResponse;
+};
+
+export type DiscardHtmlLanguageResponse = DiscardHtmlLanguageResponses[keyof DiscardHtmlLanguageResponses];
+
+export type ListHtmlTemplatesData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: {
+        /**
+         * After
+         */
+        after?: string | null;
+    };
+    url: '/api/v1/products/{product_id}/html-templates';
+};
+
+export type ListHtmlTemplatesErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Source or operation changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListHtmlTemplatesError = ListHtmlTemplatesErrors[keyof ListHtmlTemplatesErrors];
+
+export type ListHtmlTemplatesResponses = {
+    /**
+     * Successful Response
+     */
+    200: HtmlTemplateCatalog;
+};
+
+export type ListHtmlTemplatesResponse = ListHtmlTemplatesResponses[keyof ListHtmlTemplatesResponses];
+
 export type ResolveTranslationSuggestionData = {
     body: ReuseResolve;
     path: {
@@ -13148,6 +13459,98 @@ export type PutTranslationConstraintResponses = {
 };
 
 export type PutTranslationConstraintResponse = PutTranslationConstraintResponses[keyof PutTranslationConstraintResponses];
+
+export type GetHtmlEditorDocumentData = {
+    body?: never;
+    path: {
+        /**
+         * Translation Group Id
+         */
+        translation_group_id: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{translation_group_id}/html-editor';
+};
+
+export type GetHtmlEditorDocumentErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Source or operation changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetHtmlEditorDocumentError = GetHtmlEditorDocumentErrors[keyof GetHtmlEditorDocumentErrors];
+
+export type GetHtmlEditorDocumentResponses = {
+    /**
+     * Successful Response
+     */
+    200: HtmlEditorDocument;
+};
+
+export type GetHtmlEditorDocumentResponse = GetHtmlEditorDocumentResponses[keyof GetHtmlEditorDocumentResponses];
+
+export type GetHtmlTemplatePreviewData = {
+    body?: never;
+    path: {
+        /**
+         * Translation Group Id
+         */
+        translation_group_id: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{translation_group_id}/html-preview';
+};
+
+export type GetHtmlTemplatePreviewErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Source or operation changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetHtmlTemplatePreviewError = GetHtmlTemplatePreviewErrors[keyof GetHtmlTemplatePreviewErrors];
+
+export type GetHtmlTemplatePreviewResponses = {
+    /**
+     * Successful Response
+     */
+    200: HtmlTemplatePreviewResponse;
+};
+
+export type GetHtmlTemplatePreviewResponse = GetHtmlTemplatePreviewResponses[keyof GetHtmlTemplatePreviewResponses];
 
 export type SaveTranslationProposalData = {
     body: SaveTranslationProposalRequest;

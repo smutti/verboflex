@@ -83,6 +83,11 @@ def _authorize(session: Session, workflow: BranchWorkflow, job: BranchJob) -> No
         or membership_stamp(session, job.actor_id, product.id) != job.membership
     ):
         raise BranchWorkflowError("authority_changed")
+    if job.kind == "html_language":
+        from verboflex.services.html_languages import language_authority
+
+        language_authority(session, workflow, job)
+        return
     if job.authority is not None:
         captured = decode_approval_snapshot(job.authority)
         if not isinstance(captured, CapturedWritebackAuthority):
@@ -138,9 +143,11 @@ def _intent(workflow: BranchWorkflow, job: BranchJob) -> CommitIntent | PullRequ
                 base64.b64decode(str(f["content"]), validate=True),
                 str(f["before"]),
                 tuple(cast(list[str], f["attributes"])),
+                bool(f.get("new_file", False)),
             )
             for f in files
         ),
+        initialize_language=job.kind == "html_language",
     )
 
 
@@ -180,6 +187,18 @@ async def _prepare(
         if target.name != workflow.target_branch or target.commit_hash == head.commit_hash:
             raise BranchWorkflowError("no_changes")
         data["target_head"] = target.commit_hash
+    elif job.kind == "html_language":
+        from verboflex.services.html_languages import prepare_language_files
+
+        data["files"] = await prepare_language_files(
+            factory,
+            workflow,
+            job,
+            reads,
+            head=head.commit_hash,
+            workspace=workspace,
+            slug=slug,
+        )
     else:
         if job.authority is None:
             raise BranchWorkflowError("invalid_snapshot")
@@ -307,6 +326,8 @@ def _record(
             job.state, job.commit_hash, job.error_code = "committed", receipt.commit_hash, None
             assert job.intent is not None
             for f in cast(list[dict[str, object]], job.intent["files"]):
+                if job.kind == "html_language":
+                    continue
                 row = _branch_file(s, workflow.id, str(f["path"]))
                 if row is None:
                     row = BranchFile(workflow_id=workflow.id, path=str(f["path"]))

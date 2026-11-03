@@ -13,6 +13,10 @@ _COMPLEX = re.compile(r"\{[^{}]*[,{]|\{\{")
 
 
 def argument_contract(text: str, format: str) -> tuple[tuple[str, int], ...]:
+    if format == "html":
+        from verboflex.localization.html import html_variables
+
+        return html_variables(text)
     text = text.replace("%%", "")
     if format == "qt_ts":
         tokens = _QT.findall(text)
@@ -34,6 +38,10 @@ def argument_contract(text: str, format: str) -> tuple[tuple[str, int], ...]:
 
 
 def compatible_arguments(source: str, target: str, format: str) -> bool:
+    if format == "html":
+        from verboflex.localization.html import valid_html_replacement
+
+        return valid_html_replacement(source, target)
     # ICU / nested interpolation requires its own parser and runtime profile.
     # Decline these suggestions instead of treating unrecognized arguments as empty.
     if format != "qt_ts" and (_COMPLEX.search(source) or _COMPLEX.search(target)):

@@ -33,7 +33,9 @@ array, such as `["menu", "actions"]`; those parent objects must already exist.
 Writers insert only the new resource and reparse the result to verify that existing
 values and the requested identities remain intact.
 
-Files, file templates, source-key creation in a separate keys repository, converting
+The separate [HTML template workflow](html-email-templates.md) can create language
+files from existing source templates. For the key-based formats above, new files,
+file templates, source-key creation in a separate keys repository, converting
 an existing scalar to a plural, ICU/JSON plural dialects, Apple `.stringsdict` and
 XLIFF writeback are outside this release. Public GitHub projects support local
 creation/review; GitHub publication is still unavailable.

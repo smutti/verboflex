@@ -827,7 +827,7 @@ def build_source_file_snapshot(
     snapshot = SourceFileSnapshot(authority, parser_input, metadata.attributes)
     if parser_input.repository_side == "keys":
         raise WritebackRejected(WritebackReason.STALE_BASIS)
-    if parser_input.format not in {"android_xml", "qt_ts", "json", "ios_strings"}:
+    if parser_input.format not in {"android_xml", "qt_ts", "json", "ios_strings", "html"}:
         raise WritebackRejected(WritebackReason.UNSUPPORTED_FORMAT)
     if inspect_writeback_snapshot(parser_input).issues:
         raise WritebackRejected(WritebackReason.UNSUPPORTED_SHAPE)

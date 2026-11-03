@@ -1,0 +1,33 @@
+{
+  "format": "html",
+  "categories": [
+    "boundary",
+    "empty",
+    "encoding",
+    "escaped",
+    "malformed",
+    "markup",
+    "unicode",
+    "valid"
+  ],
+  "supported": [
+    "Welcome-EN.html"
+  ],
+  "suffixes": [
+    ".html",
+    ".htm"
+  ],
+  "safety": "Bounded balanced HTML, UTF-8, protected byte spans, filename locale",
+  "limits": {
+    "file_bytes": 1048576,
+    "aggregate_bytes": 20971520,
+    "files": 500,
+    "values": 5000,
+    "depth": 12,
+    "issues": 5,
+    "issue_message": 256,
+    "path": 4096,
+    "coordinate": 2147483647,
+    "html_element_depth": 64
+  }
+}

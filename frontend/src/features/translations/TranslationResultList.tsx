@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-virtual";
 import { Link } from "react-router-dom";
 import {
+  PanelsTopLeft,
   MessageSquare,
   History,
   CheckCircle2,
@@ -716,6 +717,34 @@ export function TranslationResultList({
                           </div>
                         </div>
                         <div className="col-span-2 flex min-w-0 flex-wrap items-start justify-end px-1 xl:col-span-1">
+                          {onOpenContext &&
+                            slot.group_id &&
+                            slot.provenance?.format === "html" && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                className="min-h-[44px]"
+                                aria-label={t("View HTML template for {{v0}}", {
+                                  v0: label,
+                                })}
+                                onClick={(event) =>
+                                  onOpenContext({
+                                    groupId: slot.group_id,
+                                    language: slot.language,
+                                    section: "source",
+                                    trigger: event.currentTarget,
+                                    item,
+                                    slot,
+                                  })
+                                }
+                              >
+                                <PanelsTopLeft
+                                  aria-hidden="true"
+                                  className="size-4"
+                                />
+                                {t("View template")}
+                              </Button>
+                            )}
                           {onOpenContext &&
                             actions.map(
                               ({ section, label: actionLabel, Icon }) => (

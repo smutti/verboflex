@@ -156,7 +156,7 @@ def destinations(session: Session, *, product_id: UUID, actor_id: UUID) -> Autho
                 content=b"",
                 base_language=mapping.base_language,
             )
-            if parser is None or parser.format == "xliff":
+            if parser is None or parser.format in {"xliff", "html"}:
                 continue
             repository = session.get(Repository, ref.repository_id)
             assert repository is not None

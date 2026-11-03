@@ -33,6 +33,7 @@ from verboflex.localization.importing.core import (
     canonical_selector_bytes,
     canonical_value_order,
 )
+from verboflex.localization.importing.html import compatible_html_peers, parse_html
 from verboflex.localization.importing.ios_strings import inspect_ios_strings, parse_ios_strings
 from verboflex.localization.importing.json import inspect_json_localization, parse_json_localization
 from verboflex.localization.importing.qt_ts import inspect_qt_ts, parse_qt_ts
@@ -56,6 +57,7 @@ _ADAPTERS: MappingProxyType[CanonicalFormat, CanonicalParser] = MappingProxyType
         "json": parse_json_localization,
         "ios_strings": parse_ios_strings,
         "xliff": parse_xliff,
+        "html": parse_html,
     }
 )
 _REPOSITORY_SIDE_ORDER = {"direct": 0, "keys": 1, "translations": 2}
@@ -158,6 +160,9 @@ def parse_canonical_mapping(
         {(parser_input.repository_side, parser_input.path) for parser_input in ordered_inputs}
     ) != len(ordered_inputs):
         return _failure(first, code="duplicate_key")
+
+    if not compatible_html_peers(ordered_inputs):
+        return _failure(first, code="ambiguous_structure")
 
     effective_inputs = prefer_explicit_ios_base_inputs(ordered_inputs)
     sides = {parser_input.repository_side for parser_input in effective_inputs}

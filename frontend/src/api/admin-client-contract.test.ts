@@ -442,6 +442,14 @@ const phaseThreeAdminOperationIds = new Map([
 
 const phaseFiveTranslationOperationIds = new Map([
   [
+    "GET /api/v1/translations/{translation_group_id}/html-editor",
+    "getHtmlEditorDocument",
+  ],
+  [
+    "GET /api/v1/translations/{translation_group_id}/html-preview",
+    "getHtmlTemplatePreview",
+  ],
+  [
     "GET /api/v1/translations/{group_id}/code-context",
     "getTranslationCodeContext",
   ],
@@ -772,7 +780,7 @@ describe("canonical generated API client", () => {
       }
     }
     expect(actualOperations).toEqual(phaseFiveTranslationOperationIds);
-    expect(new Set(actualOperations.values()).size).toBe(21);
+    expect(new Set(actualOperations.values()).size).toBe(23);
 
     for (const operation of phaseFiveTranslationOperationIds.values()) {
       expect(

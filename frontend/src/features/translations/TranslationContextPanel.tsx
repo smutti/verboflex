@@ -15,6 +15,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../components/ui/tabs";
+import { HtmlTranslationPreview } from "./HtmlTemplatePreview";
 import { TranslationScreenshots } from "./TranslationScreenshots";
 import { Discussion, type DiscussionDraftState } from "./Discussion";
 import { ActivityHistory } from "./ActivityHistory";
@@ -32,6 +33,7 @@ interface Props {
   accessToken: string;
   principal: { id: string; roles: readonly RoleName[] };
   dirty: boolean;
+  draftText?: string;
   proposal?: TranslationProposalResponse | null;
   onReviewed: (projection: TranslationProposalResponse) => void;
 }
@@ -41,6 +43,7 @@ function Context({
   accessToken,
   principal,
   dirty,
+  draftText,
   proposal,
   onReviewed,
   section,
@@ -149,23 +152,35 @@ function Context({
           />
         )}
       </section>
-      <details
-        className="rounded-md border p-3"
-        onToggle={(event) => setScreenshotsOpen(event.currentTarget.open)}
-      >
-        <summary className="cursor-pointer font-semibold">
-          {t("Screenshots and code references")}
-        </summary>
-        {screenshotsOpen && (
-          <TranslationScreenshots
-            key={`${detail.id}:${accessToken}`}
+      {remote.values[0]?.provenance?.format === "html" ? (
+        <section aria-label={t("HTML template preview")} className="space-y-3">
+          <h3 className="font-semibold">{t("HTML template preview")}</h3>
+          <HtmlTranslationPreview
             accessToken={accessToken}
-            groupId={detail.id}
-            dirty={dirty}
-            proposalVersion={remote.pending_change?.version}
+            detail={remote}
+            draftText={draftText}
+            proposal={proposal}
           />
-        )}
-      </details>
+        </section>
+      ) : (
+        <details
+          className="rounded-md border p-3"
+          onToggle={(event) => setScreenshotsOpen(event.currentTarget.open)}
+        >
+          <summary className="cursor-pointer font-semibold">
+            {t("Screenshots and code references")}
+          </summary>
+          {screenshotsOpen && (
+            <TranslationScreenshots
+              key={`${detail.id}:${accessToken}`}
+              accessToken={accessToken}
+              groupId={detail.id}
+              dirty={dirty}
+              proposalVersion={remote.pending_change?.version}
+            />
+          )}
+        </details>
+      )}
       <Tabs
         defaultValue="comments"
         value={section === "review" ? "comments" : section}

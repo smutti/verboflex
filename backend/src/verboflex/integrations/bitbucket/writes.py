@@ -79,6 +79,7 @@ class CommitFile:
     content: bytes = field(repr=False)
     before_sha256: str
     attributes: tuple[str, ...] = ()
+    new_file: bool = False
 
     @property
     def sha256(self) -> str:
@@ -90,12 +91,17 @@ class CommitIntent:
     branch: BranchIntent
     manifest_digest: str
     files: tuple[CommitFile, ...]
+    initialize_language: bool = False
 
     @property
     def message(self) -> str:
         return (
-            "VerboFlex approved translations\n\n"
-            f"VerboFlex-Change-Set: {self.branch.context.change_set_id}\n"
+            (
+                "VerboFlex initialize HTML language\n\n"
+                if self.initialize_language
+                else "VerboFlex approved translations\n\n"
+            )
+            + f"VerboFlex-Change-Set: {self.branch.context.change_set_id}\n"
             f"VerboFlex-Manifest: {self.manifest_digest}\n"
         )
 
@@ -643,6 +649,26 @@ class BitbucketWriteAdapter:
             if existing.commit_hash != intent.branch.parent:
                 return await self.reconcile_commit(session, intent=intent)
             context = intent.branch.context
+            # A new language may only add files. Prove absence at the immutable
+            # parent before sending; post-commit diff verification is too late
+            # to protect a pre-existing file omitted from an import selection.
+            for item in intent.files:
+                if not item.new_file:
+                    continue
+                path = "/".join(quote(part, safe="") for part in item.path.split("/"))
+                metadata_url = (
+                    f"{self._base(context)}/src/{intent.branch.parent}/{path}?format=meta"
+                )
+                metadata = await self._wire(
+                    session,
+                    context=context,
+                    operation=Operation.READ_METADATA,
+                    method="GET",
+                    url=metadata_url,
+                    expected_url=metadata_url,
+                )
+                if metadata.status != 404:
+                    return WriteOutcome("not_sent", "file_exists")
             url = self._base(context) + "/src"
             sent = True
             reply = await self._wire(
@@ -739,6 +765,7 @@ class BitbucketWriteAdapter:
         """Verify the complete diff and bytes at immutable heads; never perform a write."""
         context = intent.branch.context
         expected = {item.path for item in intent.files if item.sha256 != item.before_sha256}
+        additions = {item.path for item in intent.files if item.new_file}
         query = urlencode({"pagelen": 100, "renames": "false", "topic": "false"})
         first = f"{self._base(context)}/diffstat/{commit}..{intent.branch.parent}?{query}"
         url = first
@@ -766,17 +793,26 @@ class BitbucketWriteAdapter:
                 raise _WireError("unknown", "invalid_provider_response")
             pages.observe(page, number=number, count=len(values))
             for value in values:
-                if not isinstance(value, dict) or value.get("status") != "modified":
+                if not isinstance(value, dict) or value.get("status") not in {"modified", "added"}:
                     raise _WireError("conflict", "changed_files_mismatch")
                 old, new = value.get("old"), value.get("new")
                 path = new.get("path") if isinstance(new, dict) else None
                 if (
-                    not isinstance(old, dict)
-                    or old.get("type") != "commit_file"
-                    or not isinstance(new, dict)
+                    not isinstance(new, dict)
                     or new.get("type") != "commit_file"
                     or not isinstance(path, str)
-                    or old.get("path") != path
+                    or (
+                        (path in additions and (value.get("status") != "added" or old is not None))
+                        or (
+                            path not in additions
+                            and (
+                                value.get("status") != "modified"
+                                or not isinstance(old, dict)
+                                or old.get("type") != "commit_file"
+                                or old.get("path") != path
+                            )
+                        )
+                    )
                     or path not in expected
                     or path in paths
                     or len(paths) >= MAX_FILES
@@ -981,6 +1017,8 @@ class BitbucketWriteAdapter:
                 or type(item.content) is not bytes
                 or len(item.content) > MAX_FILE_BYTES
                 or item.attributes not in ((), ("binary",))
+                or type(item.new_file) is not bool
+                or (item.new_file and item.before_sha256 != hashlib.sha256(b"").hexdigest())
                 or not isinstance(item.before_sha256, str)
                 or not re.fullmatch(r"[0-9a-f]{64}", item.before_sha256)
             ):

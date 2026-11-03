@@ -32,7 +32,16 @@ def test_xliff_pipeline_contract_is_closed_end_to_end() -> None:
     from verboflex.schemas.translations import TranslationProvenanceResponse
     from verboflex.services.repository_discovery import _CANDIDATE_SUFFIXES
 
-    assert _CANDIDATE_SUFFIXES[-2:] == (".xlf", ".xliff")
+    assert _CANDIDATE_SUFFIXES == (
+        ".xml",
+        ".ts",
+        ".json",
+        ".strings",
+        ".xlf",
+        ".xliff",
+        ".html",
+        ".htm",
+    )
     assert "'xliff'" in _FORMAT_CHECK
     preview_format = AdminPreviewLayoutCandidateResponse.model_json_schema()["properties"]["format"]
     provenance_format = TranslationProvenanceResponse.model_json_schema()["properties"]["format"]

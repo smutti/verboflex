@@ -43,7 +43,8 @@ For a live portal walkthrough, import [VerboFlex Demo](https://github.com/smutti
 | Bitbucket Cloud | Yes              | Eligible formats       | Branch / commit / pull request |
 | Public GitHub   | Yes              | Eligible formats       | Not yet supported              |
 
-Private GitHub repositories are not supported. Android XML, Qt `.ts`, JSON and Apple `.strings` support eligible edits; XLIFF supports import and reading. File structure and source provenance determine whether an individual value is editable.
+Private GitHub repositories are not supported. Android XML, Qt `.ts`, JSON, Apple `.strings` and HTML email templates support eligible edits; XLIFF supports import and reading. File structure and source provenance determine whether an individual value is editable.
+See [HTML email templates](docs/html-email-templates.md) for folder collections, filename locales, protected text editing and new language files.
 
 ## Screenshots from Compose code
 
@@ -69,6 +70,7 @@ The application is a React/Vite frontend and FastAPI backend with PostgreSQL, Re
 | Container services              | [`docker-compose.yml`](docker-compose.yml), [`docker-compose.prod.yml`](docker-compose.prod.yml) |
 | Configuration example           | [`.env.example`](.env.example)                                                                   |
 | MCP OAuth and local stdio setup | [`mcp-server/README.md`](mcp-server/README.md)                                                   |
+| Remote MCP deployment and troubleshooting | [`docs/mcp-deployment.md`](docs/mcp-deployment.md) |
 | Backup and restore              | [`docs/backup-restore.md`](docs/backup-restore.md)                                               |
 | Database maintenance            | [`docs/database-maintenance.md`](docs/database-maintenance.md)                                   |
 | Public GitHub imports           | [`docs/github-imports.md`](docs/github-imports.md)                                               |

@@ -1,4 +1,5 @@
-import { t, useUiLanguage } from "@/i18n";
+import { displayLanguage, t, useUiLanguage } from "@/i18n";
+import { HtmlTextInput } from "./HtmlTextInput";
 import { TranslationSuggestions } from "./TranslationSuggestions";
 import type { ReuseQuery } from "../../api/client";
 import { useEffect, useRef, useState } from "react";
@@ -75,6 +76,7 @@ export function writableTranslationDetail(
       android_xml: ["scalar", "android_quantity", "android_array_item"],
       json: ["scalar", "json_path"],
       ios_strings: ["scalar"],
+      html: ["scalar"],
       qt_ts: ["scalar", "qt_numerus", "qt_length_variant"],
     };
     if (!kinds[provenance.format]?.includes(value.selector_kind)) return false;
@@ -142,7 +144,7 @@ export function createActiveTranslationDraft(
       const sourceLeaf =
         value.provenance !== null &&
         ["direct", "translations"].includes(value.provenance.repository_side) &&
-        ["android_xml", "json", "ios_strings"].includes(
+        ["android_xml", "json", "ios_strings", "html"].includes(
           value.provenance.format,
         ) &&
         value.translated_text === null;
@@ -250,6 +252,8 @@ export interface TranslationEditorProps {
   bilingual?: boolean;
   compact?: boolean;
   continuing?: boolean;
+  email?: boolean;
+  onSavingChange?: (saving: boolean) => void;
 }
 
 export function TranslationEditor({
@@ -264,6 +268,8 @@ export function TranslationEditor({
   bilingual = false,
   compact = false,
   continuing = false,
+  email = false,
+  onSavingChange,
 }: TranslationEditorProps) {
   useUiLanguage();
   const [saving, setSaving] = useState(false);
@@ -321,6 +327,7 @@ export function TranslationEditor({
     const requestGeneration = ++generation.current;
     active.current = controller;
     setSaving(true);
+    onSavingChange?.(true);
     setFailure(null);
     try {
       const result = await saveTranslationProposal({
@@ -362,6 +369,7 @@ export function TranslationEditor({
     } catch {
       if (mounted.current && !controller.signal.aborted) setFailure("general");
     } finally {
+      onSavingChange?.(false);
       if (mounted.current && generation.current === requestGeneration) {
         active.current = null;
         setSaving(false);
@@ -380,7 +388,7 @@ export function TranslationEditor({
     sourceText &&
     sourceText.length <= 4096 &&
     format &&
-    ["android_xml", "qt_ts", "json", "ios_strings"].includes(format) &&
+    ["android_xml", "qt_ts", "json", "ios_strings", "html"].includes(format) &&
     focused.selector_kind !== "qt_length_variant" &&
     focused.source_resolution !== "ambiguous" &&
     focused.source_resolution !== "unmatched"
@@ -407,6 +415,13 @@ export function TranslationEditor({
         void save();
       }}
     >
+      {format === "html" && !email && (
+        <p className="text-sm text-muted-foreground">
+          {t(
+            "Edit text only. HTML tags, links and template variables are protected.",
+          )}
+        </p>
+      )}
       {!bilingual && !compact && (
         <section
           aria-label={t("Published translation")}
@@ -477,7 +492,7 @@ export function TranslationEditor({
         )}
       <div
         className={
-          reuseQuery
+          reuseQuery && !email
             ? "grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_19rem]"
             : ""
         }
@@ -500,7 +515,11 @@ export function TranslationEditor({
           )}
           {draft.values.map((value, index) => {
             const id = `translation-proposal-${draft.translationGroupId}-${index}`;
-            const label = selectorLabel(value, index);
+            const label = email
+              ? t("Translation · {{v0}}", {
+                  v0: displayLanguage(draft.language),
+                })
+              : selectorLabel(value, index);
             const member = draft.detail.values.find(
               (entry) => entry.id === value.translationValueId,
             );
@@ -548,28 +567,43 @@ export function TranslationEditor({
                 )}
                 <div className="min-w-0 space-y-2">
                   <Label htmlFor={id}>{label}</Label>
-                  <Textarea
-                    ref={index === 0 ? firstField : undefined}
-                    id={id}
-                    value={value.text}
-                    onFocus={() => setFocusedIndex(index)}
-                    disabled={
-                      saving || continuing || !draft.detail.mutation_eligible
-                    }
-                    lang={draft.language}
-                    dir="auto"
-                    aria-invalid={value.overage > 0}
-                    aria-describedby={`${id}-length`}
-                    className={cn(
-                      "whitespace-pre-wrap",
-                      detail ? "min-h-36" : "min-h-24",
-                      value.overage > 0 &&
-                        "border-destructive bg-red-50 focus-visible:border-destructive focus-visible:ring-destructive/30 dark:bg-red-950/30",
-                    )}
-                    onChange={(event) =>
-                      changeValue(index, event.currentTarget.value)
-                    }
-                  />
+                  {email && format === "html" ? (
+                    <HtmlTextInput
+                      id={id}
+                      value={value.text}
+                      inputRef={index === 0 ? firstField : undefined}
+                      onChange={(text) => changeValue(index, text)}
+                      disabled={
+                        saving || continuing || !draft.detail.mutation_eligible
+                      }
+                      language={draft.language}
+                      invalid={value.overage > 0}
+                      describedBy={`${id}-length`}
+                    />
+                  ) : (
+                    <Textarea
+                      ref={index === 0 ? firstField : undefined}
+                      id={id}
+                      value={value.text}
+                      onFocus={() => setFocusedIndex(index)}
+                      disabled={
+                        saving || continuing || !draft.detail.mutation_eligible
+                      }
+                      lang={draft.language}
+                      dir="auto"
+                      aria-invalid={value.overage > 0}
+                      aria-describedby={`${id}-length`}
+                      className={cn(
+                        "whitespace-pre-wrap",
+                        detail ? "min-h-36" : "min-h-24",
+                        value.overage > 0 &&
+                          "border-destructive bg-red-50 focus-visible:border-destructive focus-visible:ring-destructive/30 dark:bg-red-950/30",
+                      )}
+                      onChange={(event) =>
+                        changeValue(index, event.currentTarget.value)
+                      }
+                    />
+                  )}
                   {value.text === "" && <p>{t("Empty pending translation")}</p>}
                   <p
                     id={`${id}-length`}
@@ -602,15 +636,17 @@ export function TranslationEditor({
             );
           })}
         </section>
-        <TranslationSuggestions
-          key={`${draft.translationGroupId}:${focusedIndex}`}
-          accessToken={accessToken}
-          productId={draft.productId}
-          query={reuseQuery}
-          currentText={draft.values[focusedIndex]?.text ?? ""}
-          disabled={saving || continuing || !draft.detail.mutation_eligible}
-          onUse={(text) => changeValue(focusedIndex, text)}
-        />
+        {!email && (
+          <TranslationSuggestions
+            key={`${draft.translationGroupId}:${focusedIndex}`}
+            accessToken={accessToken}
+            productId={draft.productId}
+            query={reuseQuery}
+            currentText={draft.values[focusedIndex]?.text ?? ""}
+            disabled={saving || continuing || !draft.detail.mutation_eligible}
+            onUse={(text) => changeValue(focusedIndex, text)}
+          />
+        )}
       </div>
       {bilingual && !compact && (
         <p className="text-label text-muted-foreground">
@@ -643,7 +679,7 @@ export function TranslationEditor({
           disabled={saving || continuing}
           onClick={onStop}
         >
-          {compact ? t("Cancel") : t("Stop editing translation")}
+          {compact || email ? t("Cancel") : t("Stop editing translation")}
         </Button>
         <Button
           type="submit"
@@ -651,7 +687,11 @@ export function TranslationEditor({
           disabled={saving || continuing || !draft.detail.mutation_eligible}
           aria-busy={saving}
         >
-          {compact ? t("Save") : t("Save translation")}
+          {email
+            ? t("Save draft")
+            : compact
+              ? t("Save")
+              : t("Save translation")}
         </Button>
       </div>
     </form>

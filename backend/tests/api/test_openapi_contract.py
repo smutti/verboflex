@@ -62,6 +62,14 @@ IMPORT_OPERATIONS = {
 }
 
 TRANSLATION_OPERATIONS = {
+    ("/api/v1/translations/{translation_group_id}/html-editor", "get"): (
+        "getHtmlEditorDocument",
+        {"200", "401", "403", "404", "409", "422"},
+    ),
+    ("/api/v1/translations/{translation_group_id}/html-preview", "get"): (
+        "getHtmlTemplatePreview",
+        {"200", "401", "403", "404", "409", "422"},
+    ),
     ("/api/v1/translations/{group_id}/code-context", "get"): (
         "getTranslationCodeContext",
         {"422", "429", "401", "503", "200", "409", "403", "404"},
@@ -216,6 +224,21 @@ def test_dashboard_contract_is_closed_discriminated_and_has_no_actor_input() -> 
 
 
 EXPECTED_OPERATIONS = {
+    ("/api/v1/products/{product_id}/html-templates", "get"): (
+        "listHtmlTemplates",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
+    ("/api/v1/products/{product_id}/html-languages", "post"): (
+        "createHtmlLanguage",
+        {"202", "401", "403", "404", "409", "422"},
+        True,
+    ),
+    ("/api/v1/products/{product_id}/html-languages/{job_id}", "delete"): (
+        "discardHtmlLanguage",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
     ("/api/v1/dashboard/my-activity", "get"): (
         "listMyActivity",
         {"200", "401", "403", "422", "429", "503"},
@@ -2129,6 +2152,7 @@ def test_translation_schemas_are_closed_bounded_and_non_leaking() -> None:
         "json",
         "ios_strings",
         "xliff",
+        "html",
     ]
     assert provenance["properties"]["branch"]["maxLength"] == 255
     assert provenance["properties"]["path"]["maxLength"] == 4096
@@ -3177,5 +3201,5 @@ def test_openapi_exposes_xliff_in_preview_and_translation_formats() -> None:
     preview = schemas["AdminPreviewLayoutCandidateResponse"]["properties"]["format"]
     provenance = schemas["TranslationProvenanceResponse"]["properties"]["format"]
 
-    assert preview["enum"] == ["android_xml", "qt_ts", "json", "ios_strings", "xliff"]
-    assert provenance["enum"] == ["android_xml", "qt_ts", "json", "ios_strings", "xliff"]
+    assert preview["enum"] == ["android_xml", "qt_ts", "json", "ios_strings", "xliff", "html"]
+    assert provenance["enum"] == ["android_xml", "qt_ts", "json", "ios_strings", "xliff", "html"]

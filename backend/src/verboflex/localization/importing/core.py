@@ -10,7 +10,7 @@ from typing import Literal, Protocol, TypeGuard, get_args
 
 from verboflex.localization.preview.core import normalize_preview_locale
 
-CanonicalFormat = Literal["android_xml", "qt_ts", "json", "ios_strings", "xliff"]
+CanonicalFormat = Literal["android_xml", "qt_ts", "json", "ios_strings", "xliff", "html"]
 RepositorySide = Literal["direct", "keys", "translations"]
 SelectorKind = Literal[
     "scalar",
@@ -29,6 +29,8 @@ IssueCode = Literal[
     "base_language_required",
 ]
 StructureKind = Literal[
+    "html:document",
+    "html:text",
     "android_xml:string",
     "android_xml:plurals",
     "android_xml:string_array",
