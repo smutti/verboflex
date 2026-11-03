@@ -54,6 +54,9 @@ curl --fail --show-error --max-time 15 \
 curl --fail --show-error --max-time 15 \
   https://verboflex.example.org/.well-known/oauth-protected-resource/mcp
 curl --include --show-error --max-time 15 https://verboflex.example.org/mcp
+curl --include --show-error --max-time 15 \
+  'https://verboflex.example.org/mcp/authorize?request=synthetic-routing-probe'
+curl --include --show-error --max-time 15 https://verboflex.example.org/mcp/connections
 ```
 
 Both discovery requests must return HTTP 200 with JSON. Their issuer,
@@ -61,6 +64,16 @@ authorization server and resource URLs must use the public origin; the resource
 must end in `/mcp`. The unauthenticated MCP request must return HTTP 401 with a
 `WWW-Authenticate` header pointing to the resource metadata. This challenge is
 expected: access requires a user's OAuth authorization.
+
+Both browser routes must return HTTP 200 with HTML. In a fresh browser session,
+`/mcp/authorize?request=synthetic-routing-probe` must display the VerboFlex sign-in
+page, preserving the request parameter. This synthetic request checks routing only;
+start a new connection from Claude to obtain a valid authorization request.
+
+If these pages return a JSON 404 while discovery works, check the **outer reverse
+proxy** as well as the frontend proxy. Route only the exact `/mcp` resource to the
+API; a prefix rule matching all `/mcp/*` paths incorrectly captures the consent and
+connected-apps pages. Keep those pages on the frontend.
 
 If discovery still returns `MCP is not configured`, the running backend has not
 received the setting. Check the environment file, project and services being
