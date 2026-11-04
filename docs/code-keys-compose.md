@@ -34,6 +34,27 @@ The catalog is stored on its import execution, covered by the canonical staging
 digest, and becomes visible only with that execution's atomic activation. Code
 locations are separate from localization file locators and can never be write targets.
 
+### Reusing immutable source downloads
+
+For larger applications, set `VERBOFLEX_REPOSITORY_SOURCE_CACHE_DIRECTORY` to a
+private temporary directory such as `/tmp/verboflex-source-cache`. Recreate the
+API and worker containers after changing the deployment environment. An empty
+setting disables caching. Workers in the same container share validated raw files
+between layout preview and import, reducing repeated Bitbucket requests.
+
+Entries are bound to the exact provider URL, commit and current credential. They
+are valid for 15 minutes; expired entries are removed on cache access. The cache
+retains at most 6,000 files, 1 MiB per file and 64 MiB of content, with a 128 MiB
+SQLite database ceiling. Its directory and database are private to the service
+user. Credentials are never stored in the cache. Cache failures fall back to the
+normal provider read, and source/parser budgets still apply to cached files.
+
+Branch heads, trees and errors are not cached. Every hit checks the current local
+credential authority before returning bytes; live repository access is checked
+before the first hit in each adapter and again after at most 15 seconds. Product
+permissions, publication checks and atomic import activation remain in the API
+and job services. A reconnected or renewed credential cannot reuse older entries.
+
 ## Registering a screen
 
 Compose screenshots render a callable, zero-argument fixture preview in the Android

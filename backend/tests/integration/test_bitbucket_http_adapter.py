@@ -854,3 +854,116 @@ def test_ancestry_and_diffstat_incomplete_or_ambiguous_results_fail_closed(
         await adapter.aclose()
 
     asyncio.run(exercise())
+
+
+def test_source_cache_reuses_only_exact_authorized_commits_between_adapters(tmp_path):
+    from verboflex.integrations.bitbucket.client import BitbucketHttpAdapter
+    from verboflex.integrations.bitbucket.source_cache import SourceFileCache
+
+    requests = []
+    authority = FakeCredentialLeaseAuthority()
+
+    def provider(request):
+        requests.append(request)
+        content = b"synthetic source" if "/src/" in request.url.path else b"{}"
+        return httpx.Response(
+            200,
+            content=content,
+            headers={"x-oauth-scopes": "pullrequest:write", "content-type": "application/json"},
+        )
+
+    async def exercise():
+        async def read(commit="a" * 40, repository="mobile"):
+            adapter = BitbucketHttpAdapter(
+                settings=Settings(),
+                credential_leases=authority,
+                source_cache=SourceFileCache(tmp_path / "cache"),
+                transport=httpx.MockTransport(provider),
+            )
+            try:
+                return await adapter.read_repository_source_file(
+                    object(),
+                    workspace="synthetic",
+                    repository_slug=repository,
+                    commit_hash=commit,
+                    path="Screen.kt",
+                    max_bytes=100,
+                )
+            finally:
+                await adapter.aclose()
+
+        assert await read() == b"synthetic source"
+        assert await read() == b"synthetic source"
+        assert len(requests) == 2
+        assert "/src/" in requests[0].url.path
+        assert requests[1].url.path.endswith("/synthetic/mobile")
+        assert await read(commit="b" * 40) == b"synthetic source"
+        assert await read(repository="other") == b"synthetic source"
+        authority.generation += 1
+        assert await read() == b"synthetic source"
+        assert all("/src/" in request.url.path for request in requests[2:])
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("failure", ["provider_revoked", "lease_revoked", "budget"])
+def test_cached_source_still_checks_provider_access_generation_and_byte_budget(tmp_path, failure):
+    from verboflex.integrations.bitbucket.client import (
+        BitbucketHttpAdapter,
+        BitbucketProviderReadError,
+    )
+    from verboflex.integrations.bitbucket.source_cache import SourceFileCache
+
+    authority = FakeCredentialLeaseAuthority()
+    primed = False
+    raw_reads = []
+
+    def provider(request):
+        if "/src/" in request.url.path:
+            raw_reads.append(request)
+            return httpx.Response(
+                200, content=b"synthetic source", headers={"x-oauth-scopes": "pullrequest:write"}
+            )
+        if primed and failure == "provider_revoked":
+            return httpx.Response(403)
+        if primed and failure == "lease_revoked":
+            authority.generation += 1
+        return httpx.Response(200, json={}, headers={"x-oauth-scopes": "pullrequest:write"})
+
+    async def exercise():
+        nonlocal primed
+        for limit in (100, 1 if failure == "budget" else 100):
+            adapter = BitbucketHttpAdapter(
+                settings=Settings(),
+                credential_leases=authority,
+                source_cache=SourceFileCache(tmp_path / "cache"),
+                transport=httpx.MockTransport(provider),
+            )
+            operation = adapter.read_repository_source_file(
+                object(),
+                workspace="synthetic",
+                repository_slug="mobile",
+                commit_hash="a" * 40,
+                path="Screen.kt",
+                max_bytes=limit,
+            )
+            try:
+                if not primed:
+                    assert await operation == b"synthetic source"
+                    primed = True
+                else:
+                    with pytest.raises(BitbucketProviderReadError) as captured:
+                        await operation
+                    assert (
+                        captured.value.kind
+                        == {
+                            "provider_revoked": "permission_denied",
+                            "lease_revoked": "reauthorization_required",
+                            "budget": "limit_exceeded",
+                        }[failure]
+                    )
+            finally:
+                await adapter.aclose()
+        assert len(raw_reads) == 1
+
+    asyncio.run(exercise())

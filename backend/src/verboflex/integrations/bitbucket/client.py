@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal, Protocol, cast
@@ -12,6 +14,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from verboflex.core.config import Settings
+from verboflex.integrations.bitbucket.source_cache import SourceFileCache
 from verboflex.integrations.bitbucket.urls import (
     PHASE_3_READ_OPERATIONS,
     PHASE_8_WRITE_OPERATIONS,
@@ -190,7 +193,7 @@ class BitbucketCredentialLeaseAuthority(Protocol):
 class BitbucketHttpAdapter:
     """Own one pooled client and expose only explicit repository-read capabilities."""
 
-    __slots__ = ("_client", "_credential_leases")
+    __slots__ = ("_cache_authorizations", "_client", "_credential_leases", "_source_cache")
 
     def __init__(
         self,
@@ -198,6 +201,7 @@ class BitbucketHttpAdapter:
         settings: Settings,
         credential_leases: BitbucketCredentialLeaseAuthority,
         transport: httpx.AsyncBaseTransport | None = None,
+        source_cache: SourceFileCache | None = None,
     ) -> None:
         timeout = httpx.Timeout(
             connect=float(settings.bitbucket_http_connect_timeout_seconds),
@@ -217,6 +221,8 @@ class BitbucketHttpAdapter:
             trust_env=False,
         )
         self._credential_leases = credential_leases
+        self._source_cache = source_cache
+        self._cache_authorizations: dict[tuple[int, str, str], float] = {}
 
     async def list_workspace_repositories(
         self,
@@ -611,6 +617,7 @@ class BitbucketHttpAdapter:
             url=url,
             max_bytes=max_bytes,
             expect_json=False,
+            source_repository=(workspace, repository_slug),
         )
 
     @classmethod
@@ -884,12 +891,40 @@ class BitbucketHttpAdapter:
         url: str,
         max_bytes: int,
         expect_json: bool,
+        source_repository: tuple[str, str] | None = None,
     ) -> bytes:
         validated_url = validate_bitbucket_api_url(url, operation=operation)
         failure_kind: ProviderFailureKind | None = None
         try:
             lease = self._credential_leases.acquire_repository_read_lease(session)
             self._credential_leases.require_current_repository_read_lease(session, lease)
+            cache_key = None
+            if source_repository is not None and self._source_cache is not None:
+                cache_key = hashlib.sha256(
+                    f"{lease.generation}\n{lease.access_token}\n{validated_url}".encode()
+                ).hexdigest()
+                cached = self._source_cache.get(cache_key)
+                if cached is not None:
+                    authorization = (lease.generation, *source_repository)
+                    now = time.monotonic()
+                    if self._cache_authorizations.get(authorization, 0) <= now:
+                        await self.read_repository_metadata(
+                            session,
+                            workspace=source_repository[0],
+                            repository_slug=source_repository[1],
+                        )
+                        self._cache_authorizations = {
+                            key: expires
+                            for key, expires in self._cache_authorizations.items()
+                            if expires > now
+                        }
+                        if len(self._cache_authorizations) >= 128:
+                            self._cache_authorizations.clear()
+                        self._cache_authorizations[authorization] = now + 15
+                    self._credential_leases.require_current_repository_read_lease(session, lease)
+                    if len(cached) > max_bytes:
+                        raise BitbucketProviderReadError(kind="limit_exceeded")
+                    return cached
             async with self._client.stream(
                 "GET",
                 validated_url,
@@ -976,7 +1011,10 @@ class BitbucketHttpAdapter:
                             provider_status=response.status_code,
                         )
             self._credential_leases.require_current_repository_read_lease(session, lease)
-            return b"".join(chunks)
+            content = b"".join(chunks)
+            if cache_key is not None and self._source_cache is not None:
+                self._source_cache.put(cache_key, content)
+            return content
         except BitbucketProviderReadError as error:
             if error.operation is None:
                 error.operation = operation

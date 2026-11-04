@@ -13,6 +13,8 @@ and retain the separate 500-file limit for localization catalogs.
 Code traversal allows 20,000 total entries so package directories and unrelated
 files do not consume the source-file allowance; localization traversal remains
 limited to 5,000 entries.
+Synthetic source-cache tests cover reuse across adapters, expiry, byte/entry
+budgets, private filesystem access, credential changes and revoked provider access.
 The built smoke also configures a separate code/translation mapping through HTTP,
 imports code-only keys, checks missing keys in the browser, saves a proposal and
 requests its screenshot through the real Celery queue. PostgreSQL/API regressions
