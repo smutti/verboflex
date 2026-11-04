@@ -15,6 +15,8 @@ files do not consume the source-file allowance; localization traversal remains
 limited to 5,000 entries.
 Synthetic source-cache tests cover reuse across adapters, expiry, byte/entry
 budgets, private filesystem access, credential changes and revoked provider access.
+Initial-import PostgreSQL regressions verify that multi-row inserts batch the
+database's read-projection triggers while preserving language counts and provenance.
 The built smoke also configures a separate code/translation mapping through HTTP,
 imports code-only keys, checks missing keys in the browser, saves a proposal and
 requests its screenshot through the real Celery queue. PostgreSQL/API regressions

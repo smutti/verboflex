@@ -1486,7 +1486,7 @@ def test_initial_activation_batches_values_without_per_value_database_roundtrips
     identity, repository_id = _seed_running_direct_import(factory)
     content = (
         "<resources>"
-        + "".join(f'<string name="key{i}">Text {i}</string>' for i in range(500))
+        + "".join(f'<string name="key{i}">Text {i}</string>' for i in range(1001))
         + "</resources>"
     ).encode()
     result = parse_canonical_mapping(
@@ -1522,7 +1522,14 @@ def test_initial_activation_batches_values_without_per_value_database_roundtrips
     finally:
         event.remove(engine, "before_cursor_execute", observed)
     with factory() as session:
-        assert session.scalar(select(func.count()).select_from(TranslationValue)) == 500
+        assert session.scalar(select(func.count()).select_from(TranslationValue)) == 1001
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        assert scope.language_counts == {"en": [1001, 1001]}
+        # Executemany can look batched to SQLAlchemy while firing PostgreSQL's
+        # statement-level read projections once per row. Bound the actual work.
+        assert scope.read_version < 20
     assert len(statements) < 150, f"Per-value database work: {len(statements)} statements"
 
 
