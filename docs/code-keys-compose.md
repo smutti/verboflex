@@ -88,6 +88,10 @@ conservatively combined; runtime branches, navigation state, dependency injectio
 reflection and arbitrary property indirection are not resolved. A listed key may not
 be visible in a particular fixture. Parameterized and custom multi-preview annotations
 need a dedicated zero-argument registered preview for this first integration.
+The index also recognizes annotated Kotlin functions with visibility modifiers
+and nested lambda bodies, retaining their original source locations. Private
+previews still need a reviewed fixture adapter that makes them callable inside
+the renderer's disposable checkout.
 
 ### Named screen scenarios
 

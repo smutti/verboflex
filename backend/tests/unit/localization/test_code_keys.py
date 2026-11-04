@@ -103,6 +103,43 @@ class Screen {
     assert catalog.keys == ("cancel", "login_title")
 
 
+@pytest.mark.parametrize("modifier", ["private", "internal", "public", "protected"])
+def test_annotated_visibility_function_with_nested_lambda_preserves_evidence(modifier) -> None:
+    source = f'''package demo
+// Synthetic accented text: caffè; private fun Ignored() = Res.strings.comment
+val ignored = "private fun Hidden() = Res.strings.string_literal"
+@Preview(name = "Light", showBackground = true)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+{modifier} fun AccountPreview() {{
+  Theme {{
+    AccountContent(state = AccountState(),)
+  }}
+}}
+@Composable
+private fun AccountContent(state: AccountState) {{
+  Text(Res.strings.account_title)
+}}
+'''.encode()
+    catalog = extract_catalog({"Screen.kt": source}, CodeSourceConfig())
+    assert catalog.keys == ("account_title",)
+    assert len(catalog.previews) == 2
+    assert all(preview.function == "demo.AccountPreview" for preview in catalog.previews)
+    assert all(preview.keys == ("account_title",) for preview in catalog.previews)
+    assert all(preview.line == 4 for preview in catalog.previews)
+    assert catalog.occurrences[0].function == "demo.AccountContent"
+    assert catalog.occurrences[0].line == 14
+    assert catalog.occurrences[0].column == 8
+
+
+def test_incomplete_visibility_function_is_rejected() -> None:
+    with pytest.raises(ValueError, match="Incomplete code syntax"):
+        extract_catalog(
+            {"Screen.kt": b"@Preview\nprivate fun Broken() { Theme { Res.strings.title\n"},
+            CodeSourceConfig(),
+        )
+
+
 def test_selected_constants_and_configured_calls() -> None:
     catalog = extract_catalog(
         {

@@ -201,10 +201,36 @@ def _expand(name: str, source: _Source) -> str:
     return source.imports.get(first, first) + (dot + rest if dot else "")
 
 
+def _kotlin_function_tree(parser: Parser, content: bytes, tree: Tree) -> Tree:
+    """Recover visibility modifiers misread as infix calls by the Kotlin grammar."""
+    normalized: bytearray | None = None
+    for node in _walk(tree.root_node):
+        if node.type != "infix_expression" or len(node.named_children) < 2:
+            continue
+        modifier, keyword = node.named_children[:2]
+        if (
+            modifier.type == keyword.type == "identifier"
+            and _text(modifier) in {"private", "internal", "public", "protected"}
+            and _text(keyword) == "fun"
+            and content[modifier.end_byte : keyword.start_byte].isspace()
+        ):
+            # These tokens can only begin a declaration, not a valid infix call.
+            # Blank the modifier only in the parser input; keep byte offsets,
+            # comments, strings and every resource reference unchanged.
+            if normalized is None:
+                normalized = bytearray(content)
+            normalized[modifier.start_byte : modifier.end_byte] = b" " * (
+                modifier.end_byte - modifier.start_byte
+            )
+    return parser.parse(bytes(normalized)) if normalized is not None else tree
+
+
 def _source(path: str, content: bytes) -> _Source:
     grammar = tree_sitter_java if path.endswith(".java") else tree_sitter_kotlin
     parser = Parser(Language(grammar.language()))
     tree = parser.parse(content)
+    if path.endswith(".kt"):
+        tree = _kotlin_function_tree(parser, content, tree)
     root = tree.root_node
     if root.has_error:
         raise ValueError(f"Incomplete code syntax: {path}")
