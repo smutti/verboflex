@@ -804,13 +804,18 @@ def _insert_initial_dataset(
                 )
             )
             created.append(value_id)
-        # Explicit multi-row statements also batch PostgreSQL's statement-level
-        # read-projection triggers. Executemany fires them once for every row.
+        # RETURNING selects SQLAlchemy's cached insertmanyvalues path, batching
+        # PostgreSQL's statement-level projections without recompiling every row.
+        # Only return scalar IDs, so no second ORM object graph is retained.
         if keys:
-            session.execute(insert(TranslationKey).values(keys))
-        session.execute(insert(TranslationValue).values(values))
-        session.execute(insert(TranslationValueRevision).values(revisions))
-        session.execute(insert(TranslationValueLocator).values(locators))
+            session.execute(insert(TranslationKey).returning(TranslationKey.id), keys).close()
+        session.execute(insert(TranslationValue).returning(TranslationValue.id), values).close()
+        session.execute(
+            insert(TranslationValueRevision).returning(TranslationValueRevision.id), revisions
+        ).close()
+        session.execute(
+            insert(TranslationValueLocator).returning(TranslationValueLocator.value_id), locators
+        ).close()
     deleted_keys = [key_id for key_id, deleted in all_deleted.items() if deleted]
     for offset in range(0, len(deleted_keys), 500):
         session.execute(

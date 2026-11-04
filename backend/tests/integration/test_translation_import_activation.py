@@ -1506,9 +1506,12 @@ def test_initial_activation_batches_values_without_per_value_database_roundtrips
         factory, identity=identity, repository_id=repository_id, result=result
     )
     statements = []
+    cacheable_inserts = []
 
     def observed(_connection, _cursor, statement, _parameters, _context, _executemany):
         statements.append(statement.split()[0])
+        if statement.startswith("INSERT INTO translation_"):
+            cacheable_inserts.append(_context.compiled.cache_key is not None)
 
     engine = factory.kw["bind"]
     event.listen(engine, "before_cursor_execute", observed)
@@ -1531,6 +1534,7 @@ def test_initial_activation_batches_values_without_per_value_database_roundtrips
         # statement-level read projections once per row. Bound the actual work.
         assert scope.read_version < 20
     assert len(statements) < 150, f"Per-value database work: {len(statements)} statements"
+    assert cacheable_inserts and all(cacheable_inserts), "Each batch must reuse compiled SQL"
 
 
 def test_activation_advances_dataset_and_baseline_to_the_same_execution(
