@@ -76,7 +76,8 @@ class AdminImportBaselineResponse(BaseModel):
     imported_at: datetime
     source_references: Annotated[
         list[AdminImportSourceReferenceResponse],
-        Field(max_length=500),
+        # One application catalog plus its separate localization catalog.
+        Field(max_length=5_500),
     ]
 
 

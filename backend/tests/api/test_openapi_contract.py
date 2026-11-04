@@ -1430,7 +1430,7 @@ def test_import_schema_literals_requirements_and_bounds_are_frozen() -> None:
     assert source["properties"]["size_bytes"]["maximum"] == 1_048_576
     assert source["properties"]["path"]["maxLength"] == 4096
     assert set(baseline["required"]) == set(baseline["properties"])
-    assert baseline["properties"]["source_references"]["maxItems"] == 500
+    assert baseline["properties"]["source_references"]["maxItems"] == 5_500
 
     assert set(comparison["required"]) == set(comparison["properties"])
     assert comparison["properties"]["topology"]["enum"] == ["direct", "separate"]
