@@ -1537,6 +1537,74 @@ def test_initial_activation_batches_values_without_per_value_database_roundtrips
     assert cacheable_inserts and all(cacheable_inserts), "Each batch must reuse compiled SQL"
 
 
+def test_unchanged_refresh_batches_provenance_without_changing_history(
+    activation_session_factory,
+):
+    from sqlalchemy import event, func
+
+    factory = activation_session_factory
+    identity, repository_id = _seed_running_direct_import(factory)
+    content = (
+        "<resources>"
+        + "".join(f'<string name="key{i}">Text {i}</string>' for i in range(1001))
+        + "</resources>"
+    ).encode()
+    result = parse_canonical_mapping(
+        (
+            CanonicalParserInput(
+                format="android_xml",
+                repository_side="direct",
+                path="res/values/strings.xml",
+                content=content,
+                layout_identity="res",
+                layout_version=1,
+                base_language="en",
+            ),
+        )
+    )
+    _reconcile_staged_result(
+        factory,
+        identity=identity,
+        repository_id=repository_id,
+        result=result,
+        path="res/values/strings.xml",
+    )
+    with factory() as session:
+        prior_ids = set(session.scalars(select(TranslationValue.id)))
+        scope = session.scalar(select(LocalizationScope))
+        prior_version = scope.read_version
+    refreshed = _start_refresh_execution(factory, identity)
+    statements = []
+
+    def observed(_connection, _cursor, statement, _parameters, _context, _executemany):
+        if statement.startswith("UPDATE translation_value_locators"):
+            statements.append(statement)
+
+    engine = factory.kw["bind"]
+    event.listen(engine, "before_cursor_execute", observed)
+    try:
+        _reconcile_staged_result(
+            factory,
+            identity=refreshed,
+            repository_id=repository_id,
+            result=result,
+            path="res/values/strings.xml",
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", observed)
+    with factory() as session:
+        assert set(session.scalars(select(TranslationValue.id))) == prior_ids
+        assert session.scalar(select(func.count()).select_from(TranslationValueRevision)) == 1001
+        locators = tuple(session.scalars(select(TranslationValueLocator)))
+        assert len(locators) == 1001
+        assert all(locator.import_execution_id == refreshed.execution_id for locator in locators)
+        assert all(locator.source_commit_hash == "a" * 40 for locator in locators)
+        scope = session.scalar(select(LocalizationScope))
+        assert scope.language_counts == {"en": [1001, 1001]}
+        assert scope.read_version - prior_version < 20
+    assert len(statements) == 3
+
+
 def test_activation_advances_dataset_and_baseline_to_the_same_execution(
     activation_session_factory: sessionmaker[Session],
 ) -> None:

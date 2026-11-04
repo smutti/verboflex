@@ -436,6 +436,7 @@ def reconcile_canonical_translations(
     updated_value_ids: list[UUID] = []
     tombstoned_value_ids: list[UUID] = []
     affected_value_ids: set[UUID] = set()
+    unchanged_locator_ids: list[UUID] = []
 
     for staged in staged_values:
         reference = reference_by_position.get(staged.source_reference_position)
@@ -575,15 +576,21 @@ def reconcile_canonical_translations(
                 affected_value_ids.add(value.id)
 
         seen_value_ids.add(value.id)
-        _upsert_locator(
+        unchanged_locator = _upsert_locator(
             session,
             value=value,
             identity=identity,
             staged=staged,
             reference=reference,
         )
+        if unchanged_locator:
+            unchanged_locator_ids.append(value.id)
         if (staged.position + 1) % 500 == 0:
+            _advance_unchanged_locators(session, identity, unchanged_locator_ids)
+            unchanged_locator_ids.clear()
             session.flush()
+
+    _advance_unchanged_locators(session, identity, unchanged_locator_ids)
 
     for key in existing_keys:
         for value in key.values:
@@ -1087,7 +1094,8 @@ def _upsert_locator(
     identity: ImportExecutionIdentity,
     staged: StagedTranslationValue,
     reference: ImportSourceReference,
-) -> None:
+) -> bool:
+    """Return true when unchanged source metadata only needs new execution ownership."""
     locator = value.locator
     if locator is None:
         locator = TranslationValueLocator(
@@ -1109,7 +1117,21 @@ def _upsert_locator(
         )
         value.locator = locator
         session.add(locator)
-        return
+        return False
+    if (
+        locator.source_reference_position == reference.position
+        and locator.repository_side == staged.repository_side
+        and locator.repository_id == staged.repository_id
+        and locator.configured_branch == staged.configured_branch
+        and locator.source_commit_hash == reference.commit_hash
+        and locator.format == staged.format
+        and locator.path == staged.path
+        and locator.position == staged.locator_position
+        and locator.structural_address == staged.structural_address
+        and locator.line == staged.line
+        and locator.column == staged.column
+    ):
+        return True
     locator.import_job_id = identity.import_id
     locator.import_execution_id = identity.execution_id
     locator.source_reference_position = reference.position
@@ -1123,6 +1145,20 @@ def _upsert_locator(
     locator.structural_address = staged.structural_address
     locator.line = staged.line
     locator.column = staged.column
+    return False
+
+
+def _advance_unchanged_locators(
+    session: Session, identity: ImportExecutionIdentity, value_ids: list[UUID]
+) -> None:
+    """Batch provenance-only refreshes and synchronize already loaded ORM locators."""
+    if value_ids:
+        session.execute(
+            update(TranslationValueLocator)
+            .where(TranslationValueLocator.value_id.in_(value_ids))
+            .values(import_job_id=identity.import_id, import_execution_id=identity.execution_id)
+            .execution_options(synchronize_session="fetch")
+        )
 
 
 def _tombstone_reference(

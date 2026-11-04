@@ -20,6 +20,8 @@ budgets, private filesystem access, credential changes and revoked provider acce
 Initial-import PostgreSQL regressions verify that multi-row inserts batch the
 database's read-projection triggers and reuse compiled SQL while preserving
 language counts and provenance.
+Unchanged refresh regressions also bound PostgreSQL read-projection updates while
+advancing source provenance to the new execution and preserving value history.
 The built smoke also configures a separate code/translation mapping through HTTP,
 imports code-only keys, checks missing keys in the browser, saves a proposal and
 requests its screenshot through the real Celery queue. PostgreSQL/API regressions
