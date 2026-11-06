@@ -1477,7 +1477,7 @@ describe("administrator product configuration tracer", () => {
       expect(router.state.location.pathname).toBe("/admin/users"),
     );
     expect(
-      screen.getByRole("heading", { name: "Users destination" }),
+      await screen.findByRole("heading", { name: "Users destination" }),
     ).toBeVisible();
   });
 
@@ -3276,7 +3276,9 @@ describe("administrator product configuration tracer", () => {
     expect(
       screen.queryByRole("textbox", { name: /glob|path|file|locale|format/i }),
     ).not.toBeInTheDocument();
-    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    expect(
+      screen.getAllByRole("checkbox", { name: /^Allow target / }),
+    ).toHaveLength(1);
   });
 
   it("confirms topology changes before clearing direct values and exposes explicit separate sides", async () => {

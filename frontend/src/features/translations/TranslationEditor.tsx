@@ -274,7 +274,10 @@ export function TranslationEditor({
   useUiLanguage();
   const [saving, setSaving] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(0);
-  const [failure, setFailure] = useState<"general" | "conflict" | null>(null);
+  const [messageError, setMessageError] = useState("");
+  const [failure, setFailure] = useState<
+    "general" | "conflict" | "message" | null
+  >(null);
   const active = useRef<AbortController | null>(null);
   const generation = useRef(0);
   const mounted = useRef(true);
@@ -358,6 +361,16 @@ export function TranslationEditor({
           result.error as TranslationProposalConflictResponse,
           draft,
         );
+        return;
+      }
+      if (
+        result.response?.status === 422 &&
+        result.error &&
+        "detail" in result.error &&
+        typeof result.error.detail === "string"
+      ) {
+        setMessageError(result.error.detail);
+        setFailure("message");
         return;
       }
       if (!result.data || !isCompleteFreshProjection(result.data, draft))
@@ -604,6 +617,39 @@ export function TranslationEditor({
                       }
                     />
                   )}
+                  {member?.message_contract && (
+                    <div className="space-y-2 text-sm">
+                      <p>
+                        {t("Parameters and markup are checked when saving.")}
+                      </p>
+                      <div
+                        aria-label={t("Required message tokens")}
+                        className="flex flex-wrap gap-2"
+                      >
+                        {member.message_contract.tokens.map(
+                          (token, tokenIndex) => (
+                            <Button
+                              key={tokenIndex}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={saving || continuing}
+                              onClick={() =>
+                                changeValue(index, value.text + token)
+                              }
+                            >
+                              <code>{token}</code>
+                            </Button>
+                          ),
+                        )}
+                      </div>
+                      {member.message_contract.rich_text && (
+                        <pre className="whitespace-pre-wrap break-words rounded border bg-muted p-2">
+                          {member.message_contract.source}
+                        </pre>
+                      )}
+                    </div>
+                  )}
                   {value.text === "" && <p>{t("Empty pending translation")}</p>}
                   <p
                     id={`${id}-length`}
@@ -661,6 +707,7 @@ export function TranslationEditor({
               : t("Translation was not saved")}
           </AlertTitle>
           <AlertDescription>
+            {failure === "message" && <p>{t(messageError)}</p>}
             {failure === "conflict"
               ? t(
                   "Compare your version with the latest saved version, reconcile the differences, then save again.",

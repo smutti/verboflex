@@ -466,3 +466,111 @@ for (const width of [320, 1440]) {
     });
   });
 }
+
+for (const width of [390, 1440]) {
+  test(`web capture selects the exact nested value and viewport at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const webDetail = structuredClone(detail);
+    webDetail.raw_key = "NAME";
+    const member = webDetail.values[0];
+    member.selector_kind = "json_path";
+    member.selector_fields = [{ name: "parents", value: ["SITE"] }];
+    member.provenance!.format = "json";
+    member.provenance!.path = "src/assets/i18n/it.json";
+    member.message_contract = {
+      syntax: "ngx_translate",
+      source: "Name",
+      tokens: [],
+      rich_text: false,
+    };
+    await setup(page, "empty", "admin", webDetail);
+    const base = "/api/v1/translations/review-group";
+    await page.route(`**${base}/code-context`, (route) =>
+      route.fulfill({
+        json: {
+          configured: true,
+          engine: "web",
+          occurrences: [],
+          previews: [],
+          capture_functions: [],
+          web_targets: [
+            {
+              value_id: "review-value",
+              runtime_key: "SITE.NAME",
+              json_path: ["SITE", "NAME"],
+              scenario_ids: ["sites.list"],
+            },
+            {
+              value_id: "another-value",
+              runtime_key: "TENANT.NAME",
+              json_path: ["TENANT", "NAME"],
+              scenario_ids: ["tenant.create.open"],
+            },
+          ],
+          scenarios: [
+            { scenario_id: "sites.list", label: "Sites list", explicit: true },
+            {
+              scenario_id: "tenant.create.open",
+              label: "Create tenant",
+              explicit: true,
+            },
+          ],
+          diagnostics: [],
+        },
+      }),
+    );
+    let body: Record<string, unknown> | null = null;
+    await page.route(`**${base}/screenshots/*`, (route) => {
+      if (route.request().method() === "PUT")
+        body = route.request().postDataJSON();
+      return route.fulfill({
+        json: { ...capture, request: body, state: "succeeded" },
+      });
+    });
+    // Registered after the job route so images retain their authenticated boundary.
+    await page.route(`**${base}/screenshots/*/image`, (route) =>
+      route.fulfill({ contentType: "image/svg+xml", body: screenshot }),
+    );
+    await page.goto("/translations/review-group");
+    const region = page.getByRole("region", { name: "Web screenshots" });
+    await region
+      .getByRole("combobox", { name: "Translation value", exact: true })
+      .selectOption("another-value");
+    await expect(
+      region.getByRole("combobox", { name: "Screen scenario" }),
+    ).toHaveValue("tenant.create.open");
+    await region
+      .getByRole("combobox", { name: "Translation value", exact: true })
+      .selectOption("review-value");
+    await region
+      .getByRole("combobox", { name: "Viewport", exact: true })
+      .selectOption("mobile");
+    await region.getByRole("button", { name: /Generate screenshot/ }).click();
+    await expect
+      .poll(() => body)
+      .toEqual({
+        engine: "web",
+        scenario_id: "sites.list",
+        target_value_id: "review-value",
+        viewport: "mobile",
+        theme: "light",
+        proposal_version: 2,
+      });
+    await expect(
+      region.getByText("Screenshot ready", { exact: true }),
+    ).toBeVisible();
+    await region
+      .getByRole("combobox", { name: "Viewport", exact: true })
+      .selectOption("desktop");
+    await expect(
+      region.getByText(/does not show your latest changes/),
+    ).toBeVisible();
+    await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
+    await page.screenshot({
+      path: testInfo.outputPath(`web-capture-${width}.png`),
+      fullPage: true,
+    });
+  });
+}

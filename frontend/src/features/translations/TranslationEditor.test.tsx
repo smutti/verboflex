@@ -131,6 +131,46 @@ afterEach(() => {
 });
 
 describe("TranslationEditor", () => {
+  it("inserts protected web tokens and preserves the draft after an API contract error", async () => {
+    const source = detail();
+    source.values = [source.values[0]];
+    source.values[0].message_contract = {
+      source: "Hello {{ name }}",
+      tokens: ["{{ name }}"],
+      rich_text: false,
+    };
+    const onSaved = vi.fn();
+    function WebEditor() {
+      const [draft, setDraft] = useState(() =>
+        createActiveTranslationDraft(source, "person"),
+      );
+      return (
+        <TranslationEditor
+          accessToken="token"
+          draft={draft}
+          onDraftChange={setDraft}
+          onSaved={onSaved}
+          onStop={vi.fn()}
+        />
+      );
+    }
+    vi.mocked(saveTranslationProposal).mockResolvedValue({
+      error: { detail: "Translation parameters must match the source" },
+      response: { status: 422 },
+    } as never);
+    render(<WebEditor />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "{{ name }}" }));
+    const field = screen.getByRole("textbox", { name: /quantity one/i });
+    expect(field).toHaveValue("公開一{{ name }}");
+    await user.click(screen.getByRole("button", { name: "Save translation" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Translation parameters must match the source",
+    );
+    expect(field).toHaveValue("公開一{{ name }}");
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
   it("shows split-source context without guessing unequal plural pairs and confirms saving only on success", async () => {
     const source = detail();
     source.values[0].source_resolution = "matched";

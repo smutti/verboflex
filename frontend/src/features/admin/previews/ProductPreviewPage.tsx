@@ -793,6 +793,18 @@ function PreviewJobView({
 
   return (
     <div className="grid gap-6">
+      {!!result?.excluded_files?.length && (
+        <details className="rounded-md border p-3">
+          <summary>{t("Files excluded by the localization profile")}</summary>
+          <ul className="pt-2 text-sm">
+            {result.excluded_files.map((path) => (
+              <li key={path} className="break-all">
+                {path}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {t(announcement)}
       </div>

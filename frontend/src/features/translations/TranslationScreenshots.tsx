@@ -10,6 +10,7 @@ import {
   requestTranslationScreenshot,
   type CodeContextResponse,
   type ScreenshotResponse,
+  type ScreenshotRequest,
 } from "../../api/client";
 import { Button } from "../../components/ui/button";
 import { Label } from "../../components/ui/label";
@@ -81,11 +82,11 @@ export function TranslationScreenshots({
     null,
   );
   const [retry, setRetry] = useState(0);
+  const [targetId, setTargetId] = useState("");
+  const [viewport, setViewport] = useState<"desktop" | "mobile">("desktop");
   const [pending, setPending] = useState<{
     id: string;
-    preview: string;
-    theme: "light" | "dark";
-    version?: number;
+    body: ScreenshotRequest;
   } | null>(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -177,27 +178,51 @@ export function TranslationScreenshots({
   const legacy = [
     ...new Set((context?.previews ?? []).map((p) => p.function)),
   ].filter((name) => context?.capture_functions.includes(name));
-  const scenarios =
+  const web = context?.engine === "web";
+  const targets = context?.web_targets ?? [];
+  const target =
+    targets.find((item) => item.value_id === targetId) ?? targets[0];
+  const scenarios = (
     context?.scenarios ??
     legacy.map((name) => ({
       preview_function: name,
       label: name.split(".").pop() ?? name,
       explicit: false,
-    }));
-  const available = scenarios.map((scenario) => scenario.preview_function);
+      scenario_id: null,
+    }))
+  ).filter(
+    (scenario) =>
+      !web || target?.scenario_ids.includes(scenario.scenario_id ?? ""),
+  );
+  const available = scenarios.map((scenario) =>
+    web ? scenario.scenario_id! : scenario.preview_function!,
+  );
   const preview = available.includes(selected) ? selected : available[0] || "";
   const stale =
     job?.state === "succeeded" &&
     (dirty ||
+      (web &&
+        (job.request.target_value_id !== target?.value_id ||
+          job.request.viewport !== viewport ||
+          job.request.scenario_id !== preview)) ||
       (job.request.proposal_version ?? null) !== (proposalVersion ?? null));
   async function capture() {
     if (dirty || busy || active(job) || !preview) return;
-    const request = pending ?? {
-      id: crypto.randomUUID(),
-      preview,
-      theme,
-      version: proposalVersion,
-    };
+    const body: ScreenshotRequest = web
+      ? {
+          engine: "web",
+          scenario_id: preview,
+          target_value_id: target?.value_id,
+          viewport,
+          theme: "light",
+          proposal_version: proposalVersion ?? null,
+        }
+      : {
+          preview_function: preview,
+          theme,
+          proposal_version: proposalVersion ?? null,
+        };
+    const request = pending ?? { id: crypto.randomUUID(), body };
     setPending(request);
     setBusy(true);
     setError("");
@@ -206,11 +231,7 @@ export function TranslationScreenshots({
       const result = await requestTranslationScreenshot({
         auth: accessToken,
         path: { group_id: groupId, job_id: request.id },
-        body: {
-          preview_function: request.preview,
-          theme: request.theme,
-          proposal_version: request.version ?? null,
-        },
+        body: request.body,
       });
       if (!result.data) {
         if (
@@ -250,7 +271,7 @@ export function TranslationScreenshots({
   }
   return (
     <section
-      aria-label={t("Compose screenshots")}
+      aria-label={t(web ? "Web screenshots" : "Compose screenshots")}
       className="min-w-0 space-y-4"
     >
       {error && (
@@ -267,6 +288,39 @@ export function TranslationScreenshots({
       )}
       {context?.configured && (
         <>
+          {web && targets.length > 0 && (
+            <>
+              <Label className="grid gap-2">
+                {t("Translation value")}
+                <select
+                  className="min-h-[44px] min-w-0 max-w-full rounded-md border bg-background p-2"
+                  value={target?.value_id ?? ""}
+                  disabled={busy || active(job) || pending !== null}
+                  onChange={(e) => setTargetId(e.target.value)}
+                >
+                  {targets.map((item) => (
+                    <option key={item.value_id} value={item.value_id}>
+                      {JSON.stringify(item.json_path)}
+                    </option>
+                  ))}
+                </select>
+              </Label>
+              <Label className="grid gap-2">
+                {t("Viewport")}
+                <select
+                  className="min-h-[44px] rounded-md border bg-background p-2"
+                  value={viewport}
+                  disabled={busy || active(job) || pending !== null}
+                  onChange={(e) =>
+                    setViewport(e.target.value as "desktop" | "mobile")
+                  }
+                >
+                  <option value="desktop">{t("Desktop")}</option>
+                  <option value="mobile">{t("Mobile")}</option>
+                </select>
+              </Label>
+            </>
+          )}
           {scenarios.length > 0 && (
             <Label className="grid gap-2">
               {t("Screen scenario")}
@@ -278,8 +332,8 @@ export function TranslationScreenshots({
               >
                 {scenarios.map((scenario) => (
                   <option
-                    key={scenario.preview_function}
-                    value={scenario.preview_function}
+                    key={scenario.scenario_id ?? scenario.preview_function}
+                    value={scenario.scenario_id ?? scenario.preview_function}
                   >
                     {scenario.label}
                   </option>
@@ -358,16 +412,24 @@ export function TranslationScreenshots({
               )}
               {job.state === "succeeded" && image?.jobId === job.id && (
                 <>
-                  {job.request.preview_function !== preview && (
+                  {(job.request.scenario_id ?? job.request.preview_function) !==
+                    preview && (
                     <p className="text-sm font-medium">
                       {t("Captured scenario: {{scenario}}", {
                         scenario:
                           scenarios.find(
                             (scenario) =>
-                              scenario.preview_function ===
-                              job.request.preview_function,
+                              (scenario.scenario_id ??
+                                scenario.preview_function) ===
+                              (job.request.scenario_id ??
+                                job.request.preview_function),
                           )?.label ??
-                          job.request.preview_function.split(".").pop() ??
+                          (
+                            job.request.scenario_id ??
+                            job.request.preview_function
+                          )
+                            ?.split(".")
+                            .pop() ??
                           "",
                       })}
                     </p>
@@ -395,6 +457,13 @@ export function TranslationScreenshots({
               {t("Screenshot options")}
             </summary>
             <div className="space-y-4 pt-2">
+              {(context.diagnostics?.length ?? 0) > 0 && (
+                <ul>
+                  {context.diagnostics?.map((message) => (
+                    <li key={message}>{message}</li>
+                  ))}
+                </ul>
+              )}
               <details className="text-sm">
                 <summary className="cursor-pointer text-muted-foreground">
                   {t("Code references (")}
@@ -416,7 +485,7 @@ export function TranslationScreenshots({
                   <p>{t("Showing the first 100 references.")}</p>
                 )}
               </details>
-              {available.length > 0 && (
+              {!web && available.length > 0 && (
                 <>
                   <Label className="grid gap-2">
                     {t("Appearance")}

@@ -1,3 +1,5 @@
+import type { JsonCatalogProfile } from "../../../api/client";
+import { WebProfileFields } from "./WebProfileFields";
 import { t, useUiLanguage } from "@/i18n";
 import {
   useCallback,
@@ -83,6 +85,7 @@ type MappingConflictField =
 
 interface MappingDraftFingerprintInput {
   codeSource?: CodeSourceConfig | null;
+  webProfile?: string;
   primaryRoot?: string;
   translationsRoot?: string;
   allowedTargetBranches: string[];
@@ -109,6 +112,7 @@ function mappingDraftFingerprint(input: MappingDraftFingerprintInput) {
           primarySourceBranch: input.directSourceBranch,
           primaryRoot: input.primaryRoot ?? "",
           translationsRoot: "",
+          webProfile: input.webProfile ?? "",
           topology: input.topology,
           translationsRepositoryId: null,
           translationsSourceBranch: null,
@@ -159,6 +163,9 @@ function savedMappingFingerprint(mapping: AdminMappingResponse | null) {
     primaryRoot: mapping.primary_localization_root ?? "",
     translationsRoot: mapping.translations_localization_root ?? "",
     codeSource: mapping.code_source ?? null,
+    webProfile: mapping.localization_profile
+      ? JSON.stringify(mapping.localization_profile, null, 2)
+      : "",
   });
 }
 
@@ -436,6 +443,7 @@ export function ProductMappingsPage({
   const [versionState, setVersionState] = useState<
     "error" | "loading" | "ready" | "published"
   >("loading");
+  const [webProfile, setWebProfile] = useState("");
   const [codeSource, setCodeSource] = useState<CodeSourceConfig | null>(null);
   const [topology, setTopology] = useState<Topology>("direct");
   const [pendingTopology, setPendingTopology] = useState<Topology | null>(null);
@@ -474,6 +482,7 @@ export function ProductMappingsPage({
         primaryRoot,
         translationsRoot,
         codeSource,
+        webProfile,
         allowedTargetBranches,
         defaultTargetBranch,
         directRepositoryId,
@@ -488,6 +497,7 @@ export function ProductMappingsPage({
       primaryRoot,
       translationsRoot,
       codeSource,
+      webProfile,
       allowedTargetBranches,
       defaultTargetBranch,
       directRepositoryId,
@@ -728,6 +738,7 @@ export function ProductMappingsPage({
 
   function clearMappingSelection() {
     setCodeSource(null);
+    setWebProfile("");
     setPrimaryRoot("");
     setTranslationsRoot("");
     setDirectRepositoryId("");
@@ -766,6 +777,11 @@ export function ProductMappingsPage({
   }
 
   function beginEdit(mapping: AdminMappingResponse) {
+    setWebProfile(
+      mapping.localization_profile
+        ? JSON.stringify(mapping.localization_profile, null, 2)
+        : "",
+    );
     setCodeSource(mapping.code_source ?? null);
     setPrimaryRoot(mapping.primary_localization_root ?? "");
     setTranslationsRoot(mapping.translations_localization_root ?? "");
@@ -848,11 +864,23 @@ export function ProductMappingsPage({
       return false;
     }
 
+    let localizationProfile: JsonCatalogProfile | null = null;
+    try {
+      localizationProfile = webProfile.trim()
+        ? (JSON.parse(webProfile) as JsonCatalogProfile)
+        : null;
+    } catch {
+      setFormError({ kind: "invalid" });
+      return false;
+    }
     const body:
       AdminDirectMappingWriteRequest | AdminSeparateMappingWriteRequest =
       topology === "direct"
         ? {
             topology: "direct",
+            ...(localizationProfile
+              ? { localization_profile: localizationProfile }
+              : {}),
             repository_id: directRepositoryId,
             source_branch: directSourceBranch,
             ...(primaryRoot ? { localization_root: primaryRoot } : {}),
@@ -1391,6 +1419,9 @@ export function ProductMappingsPage({
                 </div>
               </details>
 
+              {topology === "direct" && (
+                <WebProfileFields value={webProfile} onChange={setWebProfile} />
+              )}
               {topology === "separate" && (
                 <CodeSourceFields value={codeSource} onChange={setCodeSource} />
               )}
