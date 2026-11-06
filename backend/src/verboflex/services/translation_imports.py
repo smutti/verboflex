@@ -82,6 +82,7 @@ def stage_translation_parse(
     references: tuple[ImportSourceReferenceRecord, ...],
     result: CanonicalParseResult,
     code_catalog: dict[str, object] | None = None,
+    web_context: dict[str, object] | None = None,
     html_preview_images: dict[str, dict[str, str]] | None = None,
     correlation_references: Mapping[CorrelationIdentity, str] | None = None,
 ) -> StagedParseManifest | None:
@@ -99,6 +100,7 @@ def stage_translation_parse(
         if authority is None:
             return None
         mapping, job, execution = authority
+        execution.web_context = web_context
         execution.code_catalog = code_catalog
         execution.html_preview_images = html_preview_images
         validated_references = _validate_references(identity=identity, references=references)
@@ -275,6 +277,11 @@ def staged_manifest_digest(
             execution.code_catalog, sort_keys=True, separators=(",", ":"), ensure_ascii=True
         )
         digest = hashlib.sha256((digest + encoded).encode("ascii")).hexdigest()
+    if execution.web_context is not None:
+        encoded = json.dumps(
+            execution.web_context, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        )
+        digest = hashlib.sha256((digest + "web-context:" + encoded).encode("ascii")).hexdigest()
     if execution.html_preview_images is not None:
         encoded = json.dumps(
             execution.html_preview_images, sort_keys=True, separators=(",", ":"), ensure_ascii=True

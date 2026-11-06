@@ -170,6 +170,11 @@ def screen_scenarios(
 def context(session: Session, principal: Principal, group_id: UUID) -> CodeContextResponse:
     group = _group(session, principal, group_id)
     scope = _scope_for_group(session, group)
+    execution = session.get_one(ImportExecution, scope.active_execution_id)
+    if execution.web_context is not None:
+        from verboflex.services.web_screenshots import web_context
+
+        return web_context(session, group, execution.web_context)
     try:
         catalog, config = _catalog(session, scope)
     except ScreenshotError:
@@ -236,6 +241,10 @@ def _snapshot(
     scope: LocalizationScope,
     request: ScreenshotRequest,
 ) -> dict[str, object]:
+    if request.engine == "web":
+        from verboflex.services.web_screenshots import web_snapshot
+
+        return web_snapshot(session, group, scope, request)
     catalog, config = _catalog(session, scope)
     capture = config.compose
     matches = [item for item in catalog.previews if item.function == request.preview_function]
@@ -311,7 +320,7 @@ def _snapshot(
         "language": group.language,
         "base_language": group.base_language,
         "capture": capture.model_dump(mode="json"),
-        "request": request.model_dump(mode="json"),
+        "request": request.as_payload(),
         "values": values,
     }
     try:
@@ -363,12 +372,12 @@ def request_capture(
         if (
             existing.actor_id != principal.user_id
             or existing.group_id != group_id
-            or existing.request != request.model_dump(mode="json")
+            or existing.request != request.as_payload()
         ):
             raise ScreenshotError("Screenshot request identity already used", 409)
         return get_capture(session, principal, group_id, existing.id)
     if not runner_enabled:
-        raise ScreenshotError("Compose capture runner is not configured", 503)
+        raise ScreenshotError("Capture runner is not configured", 503)
     session.execute(select(Product.id).where(Product.id == group.product_id).with_for_update())
     now = datetime.now(UTC)
     product_running = (
@@ -419,7 +428,7 @@ def request_capture(
         execution_id=scope.active_execution_id,
         membership_stamp=membership_stamp(session, principal.user_id, group.product_id),
         state="queued",
-        request=request.model_dump(mode="json"),
+        request=request.as_payload(),
         inputs=inputs,
         input_digest=hashlib.sha256(encode_inputs(inputs)).hexdigest(),
         image=None,
@@ -467,7 +476,9 @@ def get_capture(
     if row.expires_at <= datetime.now(UTC):
         row.state, row.image, row.inputs = "expired", None, {}
         row.location = None
+        row.receipt = None
     elif not authority_current(session, row):
         row.state, row.image, row.error_code = "failed", None, "source_or_access_changed"
         row.location = None
+        row.receipt = None
     return row

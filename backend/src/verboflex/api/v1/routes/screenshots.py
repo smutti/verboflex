@@ -117,7 +117,11 @@ def request_screenshot(
                 group_id,
                 job_id,
                 body,
-                runner_enabled=bool(settings.screenshot_runner_command),
+                runner_enabled=bool(
+                    settings.web_screenshot_runner_command
+                    if body.engine == "web"
+                    else settings.screenshot_runner_command
+                ),
             )
             response = ScreenshotResponse.model_validate(row)
     except service.ScreenshotError as error:

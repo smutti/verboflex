@@ -290,8 +290,18 @@ def _closed_result(
     raw_result: Mapping[str, object],
 ) -> dict[str, object]:
     """Validate the exact pre-detector result envelope before persistence or projection."""
-    if set(raw_result) != _PREVIEW_RESULT_FIELDS:
+    if set(raw_result) - {"excluded_files"} != _PREVIEW_RESULT_FIELDS:
         raise ValueError("preview result rejected")
+    excluded = raw_result.get("excluded_files", [])
+    if (
+        not isinstance(excluded, list)
+        or len(excluded) > 5000
+        or any(
+            not isinstance(path, str) or len(path) > 4096 or ".." in path.split("/")
+            for path in excluded
+        )
+    ):
+        raise ValueError("preview exclusions rejected")
     detector_version = raw_result.get("detector_version")
     digest = raw_result.get("digest")
     layout_candidates = raw_result.get("layout_candidates")
@@ -313,6 +323,7 @@ def _closed_result(
         "detector_version": detector_version,
         "digest": complete_digest,
         "layout_candidates": candidates,
+        **({"excluded_files": excluded} if "excluded_files" in raw_result else {}),
     }
 
 
@@ -477,6 +488,8 @@ def _canonical_identity(
         "repository_sides": repository_sides,
         "topology": mapping.topology,
     }
+    if mapping.localization_profile is not None:
+        payload["localization_profile"] = mapping.localization_profile
     encoded = json.dumps(
         payload,
         ensure_ascii=True,
@@ -507,6 +520,8 @@ def _active_revalidation_identity(
         "revision_scope": "active_revalidation",
         "topology": mapping.topology,
     }
+    if mapping.localization_profile is not None:
+        payload["localization_profile"] = mapping.localization_profile
     encoded = json.dumps(
         payload,
         ensure_ascii=True,

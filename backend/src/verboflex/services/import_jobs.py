@@ -2701,7 +2701,14 @@ async def _process_import(
     from verboflex.localization.code_keys.catalog import CodeSourceConfig
     from verboflex.localization.code_keys.join import join_code_translations
     from verboflex.localization.code_keys.process import extract_catalog_isolated
+    from verboflex.localization.web.config import JsonCatalogProfile, select_catalogs
 
+    with factory() as session:
+        profile_data = session.get_one(
+            ProductRepositoryMapping, identity.mapping_id
+        ).localization_profile
+    profile = JsonCatalogProfile.model_validate(profile_data) if profile_data else None
+    web_context = None
     config = None
     if any(side.role == "keys" for side in identity.repository_sides):
         with factory() as session:
@@ -2725,8 +2732,26 @@ async def _process_import(
                 adapter=adapter,
                 localization_root=side.localization_root,
                 code_sources=code_config is not None and side.role == "keys",
+                selected_paths=profile.catalog_paths(side.localization_root) if profile else None,
             )
-        for source_file in snapshot.files:
+        selected = select_catalogs(snapshot.files, profile, side.localization_root)
+        if profile is not None and profile.web_capture is not None:
+            from verboflex.services.web_imports import collect_web_context
+
+            with factory() as session:
+                mapping = session.get_one(ProductRepositoryMapping, identity.mapping_id)
+                web_context, _web_files = await collect_web_context(
+                    session,
+                    profile=profile,
+                    repository=repository,
+                    branch=side.source_branch,
+                    commit=snapshot.commit_hash,
+                    adapter=adapter,
+                    root=side.localization_root,
+                    catalogs=selected,
+                    base_language=mapping.base_language or "und",
+                )
+        for source_file in selected:
             source_contents[(side.role, source_file.path)] = source_file.content
             references.append(
                 ImportSourceReferenceRecord(
@@ -2854,6 +2879,7 @@ async def _process_import(
         references=durable_references,
         result=parse_result,
         code_catalog=code_catalog,
+        web_context=web_context,
         html_preview_images=html_preview_images,
     )
     if manifest is None:

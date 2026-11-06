@@ -247,6 +247,8 @@ def _seed_running_direct_import(
     factory: sessionmaker[Session],
     *,
     base_language: str = "en",
+    localization_profile: dict[str, object] | None = None,
+    localization_root: str | None = None,
 ) -> tuple[import_jobs.ImportExecutionIdentity, UUID]:
     product_id = uuid4()
     revision_id = uuid4()
@@ -288,11 +290,13 @@ def _seed_running_direct_import(
                 topology="direct",
                 identity_key=f'["direct","{repository_id}","main"]',
                 base_language=base_language,
+                localization_profile=localization_profile,
                 sides=[
                     ProductMappingRepositorySide(
                         role="direct",
                         repository_id=repository_id,
                         source_branch="main",
+                        localization_root=localization_root,
                     )
                 ],
                 allowed_targets=[ProductMappingAllowedTarget(branch="main", is_default=True)],

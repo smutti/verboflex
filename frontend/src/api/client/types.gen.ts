@@ -395,6 +395,7 @@ export type AdminDirectMappingWriteRequest = {
      * Expected Candidate Version
      */
     expected_candidate_version: number;
+    localization_profile?: JsonCatalogProfile | null;
     /**
      * Localization Root
      */
@@ -694,6 +695,7 @@ export type AdminMappingResponse = {
      * Id
      */
     id: string;
+    localization_profile?: JsonCatalogProfile | null;
     /**
      * Primary Localization Root
      */
@@ -920,6 +922,10 @@ export type AdminPreviewJobResultResponse = {
      * Digest
      */
     digest: string;
+    /**
+     * Excluded Files
+     */
+    excluded_files?: Array<string>;
     /**
      * Layout Candidates
      */
@@ -2842,6 +2848,14 @@ export type CodeContextResponse = {
      */
     configured: boolean;
     /**
+     * Diagnostics
+     */
+    diagnostics?: Array<string>;
+    /**
+     * Engine
+     */
+    engine?: 'compose' | 'web';
+    /**
      * Occurrences
      */
     occurrences: Array<CodeOccurrence>;
@@ -2857,6 +2871,10 @@ export type CodeContextResponse = {
      * Scenarios
      */
     scenarios?: Array<ScreenScenario>;
+    /**
+     * Web Targets
+     */
+    web_targets?: Array<WebCaptureTarget>;
 };
 
 /**
@@ -3912,6 +3930,31 @@ export type ImportParserIssue = {
      * Repository Side
      */
     repository_side: 'direct' | 'keys' | 'translations';
+};
+
+/**
+ * JsonCatalogProfile
+ */
+export type JsonCatalogProfile = {
+    /**
+     * Files
+     */
+    files: {
+        [key: string]: string;
+    };
+    /**
+     * Rich Text Paths
+     */
+    rich_text_paths?: Array<Array<string>>;
+    /**
+     * Syntax
+     */
+    syntax?: 'ngx_translate';
+    /**
+     * Version
+     */
+    version?: 1;
+    web_capture?: WebCaptureConfig | null;
 };
 
 /**
@@ -5109,7 +5152,11 @@ export type ScreenScenario = {
     /**
      * Preview Function
      */
-    preview_function: string;
+    preview_function?: string;
+    /**
+     * Scenario Id
+     */
+    scenario_id?: string | null;
 };
 
 /**
@@ -5167,17 +5214,33 @@ export type ScreenshotRegion = {
  */
 export type ScreenshotRequest = {
     /**
+     * Engine
+     */
+    engine?: 'compose' | 'web';
+    /**
      * Preview Function
      */
-    preview_function: string;
+    preview_function?: string | null;
     /**
      * Proposal Version
      */
     proposal_version?: number | null;
     /**
+     * Scenario Id
+     */
+    scenario_id?: string | null;
+    /**
+     * Target Value Id
+     */
+    target_value_id?: string | null;
+    /**
      * Theme
      */
     theme?: 'light' | 'dark';
+    /**
+     * Viewport
+     */
+    viewport?: 'desktop' | 'mobile';
 };
 
 /**
@@ -5209,6 +5272,7 @@ export type ScreenshotResponse = {
      */
     input_digest: string;
     location?: ScreenshotLocation | null;
+    receipt?: WebCaptureReceipt | null;
     request: ScreenshotRequest;
     /**
      * State
@@ -6563,6 +6627,7 @@ export type TranslationValueResponse = {
      * Is Deleted
      */
     is_deleted: boolean;
+    message_contract?: WebMessageContract | null;
     provenance: TranslationProvenanceResponse | null;
     /**
      * Review State
@@ -6681,6 +6746,143 @@ export type ValidationError = {
      * Error Type
      */
     type: string;
+};
+
+/**
+ * WebCaptureConfig
+ */
+export type WebCaptureConfig = {
+    /**
+     * Application Root
+     */
+    application_root?: string | null;
+    /**
+     * Catalog Url Prefix
+     */
+    catalog_url_prefix?: string;
+    /**
+     * Manifest Path
+     */
+    manifest_path: string;
+    /**
+     * Marker
+     */
+    marker?: string;
+    /**
+     * Runner Profile
+     */
+    runner_profile: string;
+    /**
+     * Source Excludes
+     */
+    source_excludes?: Array<string>;
+    /**
+     * Source Roots
+     */
+    source_roots?: Array<string>;
+};
+
+/**
+ * WebCaptureReceipt
+ */
+export type WebCaptureReceipt = {
+    /**
+     * Commit
+     */
+    commit: string;
+    /**
+     * Engine
+     */
+    engine: 'web';
+    /**
+     * Image Digest
+     */
+    image_digest: string;
+    /**
+     * Input Digest
+     */
+    input_digest: string;
+    /**
+     * Language
+     */
+    language: string;
+    location: ScreenshotLocation;
+    /**
+     * Manifest Digest
+     */
+    manifest_digest: string;
+    /**
+     * Render Id
+     */
+    render_id: string;
+    /**
+     * Rendered At
+     */
+    rendered_at: string;
+    /**
+     * Scenario Id
+     */
+    scenario_id: string;
+    /**
+     * Source Digest
+     */
+    source_digest: string;
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Version
+     */
+    version: 1;
+    /**
+     * Viewport
+     */
+    viewport: 'desktop' | 'mobile';
+};
+
+/**
+ * WebCaptureTarget
+ */
+export type WebCaptureTarget = {
+    /**
+     * Json Path
+     */
+    json_path: Array<string>;
+    /**
+     * Runtime Key
+     */
+    runtime_key: string;
+    /**
+     * Scenario Ids
+     */
+    scenario_ids: Array<string>;
+    /**
+     * Value Id
+     */
+    value_id: string;
+};
+
+/**
+ * WebMessageContract
+ */
+export type WebMessageContract = {
+    /**
+     * Rich Text
+     */
+    rich_text: boolean;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Syntax
+     */
+    syntax?: 'ngx_translate';
+    /**
+     * Tokens
+     */
+    tokens: Array<string>;
 };
 
 /**

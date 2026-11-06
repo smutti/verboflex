@@ -160,7 +160,15 @@ class TranslationHistoryResponse(ClosedTranslationModel):
     execution_id: UUID
 
 
+class WebMessageContract(ClosedTranslationModel):
+    syntax: Literal["ngx_translate"] = "ngx_translate"
+    source: BoundedText
+    tokens: list[str]
+    rich_text: bool
+
+
 class TranslationValueResponse(ClosedTranslationModel):
+    message_contract: WebMessageContract | None = None
     id: UUID
     selector_version: Literal[1]
     selector_kind: Literal[

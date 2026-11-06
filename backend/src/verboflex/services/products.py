@@ -260,6 +260,7 @@ def _clone_active_revision_graph(
                 identity_key=active_mapping.identity_key,
                 base_language=active_mapping.base_language,
                 code_source=active_mapping.code_source,
+                localization_profile=active_mapping.localization_profile,
                 selected_layout_candidate_id=active_mapping.selected_layout_candidate_id,
                 selected_layout_version=active_mapping.selected_layout_version,
                 confirmed_preview_job_id=None,

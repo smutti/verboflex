@@ -669,6 +669,16 @@ def save_translation_proposal(
             )
         )
 
+    from verboflex.localization.web.messages import WebMessageInvalid
+    from verboflex.services.web_messages import validate_replacements
+
+    try:
+        validate_replacements(
+            session, {item.translation_value_id: item.proposed_text for item in attempted}
+        )
+    except WebMessageInvalid as error:
+        raise TranslationProposalInputInvalid(str(error)) from error
+
     for item in attempted:
         current = current_by_id[item.translation_value_id]
         if current.locator is not None and current.locator.format == "html":
@@ -994,6 +1004,15 @@ def transition_translation_proposal(
     if not complete:
         raise ProposalReviewBlocked("translation proposal review blocked")
     if transition.target_state == "approved":
+        from verboflex.localization.web.messages import WebMessageInvalid
+        from verboflex.services.web_messages import validate_replacements
+
+        try:
+            validate_replacements(
+                session, {item.translation_value_id: item.proposed_text for item in proposal.values}
+            )
+        except WebMessageInvalid as error:
+            raise ProposalReviewBlocked(str(error)) from error
         current_by_id = {value.id: value for value in current_values}
         stale_basis = proposal.reconciliation_required or any(
             item.translation_value_id not in current_by_id

@@ -331,6 +331,7 @@ def save(
     product = _product(session, product_id, actor_id, "write")
     scope = _scope(session, product, data.scope_id)
     _, ref, parser = resolve_file(session, scope, data)
+    _validate_web_authoring(session, scope, data)
     ops = operations(data, parser.format)
     _existing(session, scope, ref, data, ops)
     # Family identity includes the destination and selector shape, never proposed text.
@@ -581,6 +582,7 @@ def reconcile_authoring(session: Session, scope_id: UUID) -> None:
 def validate_complete(
     session: Session, scope: LocalizationScope, data: AuthoringInput, format: str
 ) -> None:
+    _validate_web_authoring(session, scope, data)
     if data.kind == "plural":
         try:
             required = {form for form, _ in plural_forms(format, data.language)}
@@ -647,3 +649,15 @@ def validate_complete(
     ).maximum
     if maximum is not None and any(grapheme_count(f.text) > maximum for f in data.forms):
         raise AuthoringError("Translation exceeds its character limit")
+
+
+def _validate_web_authoring(
+    session: Session, scope: LocalizationScope, data: AuthoringInput
+) -> None:
+    from verboflex.localization.web.messages import WebMessageInvalid
+    from verboflex.services.web_messages import validate_authoring
+
+    try:
+        validate_authoring(session, scope, data)
+    except WebMessageInvalid as error:
+        raise AuthoringError(str(error)) from error

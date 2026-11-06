@@ -210,6 +210,7 @@ def test_confirmed_layout_path_rejects_mismatched_template_grammar():
 async def test_worker_rejects_execution_lost_between_parse_and_staging(monkeypatch):
     identity = SimpleNamespace(
         execution_id=uuid4(),
+        mapping_id=uuid4(),
         import_id=uuid4(),
         sequence=1,
         repository_sides=(
@@ -252,7 +253,9 @@ async def test_worker_rejects_execution_lost_between_parse_and_staging(monkeypat
     stage = Mock(return_value=None)
     monkeypatch.setattr(imports, "stage_translation_parse", stage)
     factory = Mock()
-    factory.return_value.__enter__ = Mock(return_value=Mock())
+    factory.return_value.__enter__ = Mock(
+        return_value=Mock(get_one=Mock(return_value=SimpleNamespace(localization_profile=None)))
+    )
     factory.return_value.__exit__ = Mock(return_value=False)
     diagnostic_session = Mock()
     diagnostic_session.scalar.return_value = None
@@ -272,6 +275,7 @@ async def test_worker_rejects_execution_lost_between_parse_and_staging(monkeypat
 async def test_worker_stages_unique_values_when_duplicate_keys_are_quarantined(monkeypatch):
     identity = SimpleNamespace(
         execution_id=uuid4(),
+        mapping_id=uuid4(),
         import_id=uuid4(),
         sequence=1,
         repository_sides=(
@@ -308,7 +312,9 @@ async def test_worker_stages_unique_values_when_duplicate_keys_are_quarantined(m
     stage = Mock(return_value=SimpleNamespace(digest="manifest"))
     monkeypatch.setattr(imports, "stage_translation_parse", stage)
     factory = Mock()
-    factory.return_value.__enter__ = Mock(return_value=Mock())
+    factory.return_value.__enter__ = Mock(
+        return_value=Mock(get_one=Mock(return_value=SimpleNamespace(localization_profile=None)))
+    )
     factory.return_value.__exit__ = Mock(return_value=False)
     diagnostic_session = Mock()
     diagnostic_session.scalar.return_value = None

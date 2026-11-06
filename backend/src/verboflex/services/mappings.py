@@ -19,6 +19,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from verboflex.audit.ledger import record_audit
 from verboflex.integrations.bitbucket.urls import validate_localization_root
 from verboflex.localization.code_keys.catalog import CodeSourceConfig
+from verboflex.localization.web.config import JsonCatalogProfile
 from verboflex.models.product import Product, ProductRevision
 from verboflex.models.product_mapping import (
     ProductMappingAllowedTarget,
@@ -84,6 +85,7 @@ class MappingRecord:
     selected_layout_version: int | None
     candidate_version: int
     code_source: CodeSourceConfig | None = None
+    localization_profile: JsonCatalogProfile | None = None
     primary_localization_root: str | None = None
     translations_localization_root: str | None = None
 
@@ -311,6 +313,9 @@ def _record(
         id=mapping.id,
         revision_id=mapping.revision_id,
         topology=topology,
+        localization_profile=JsonCatalogProfile.model_validate(mapping.localization_profile)
+        if mapping.localization_profile
+        else None,
         code_source=CodeSourceConfig.model_validate(mapping.code_source)
         if mapping.code_source is not None
         else None,
@@ -648,6 +653,7 @@ async def create_direct_mapping(
     default_target_branch: object,
     adapter: BranchAdapters,
     localization_root: str | None = None,
+    localization_profile: JsonCatalogProfile | None = None,
 ) -> MappingRecord:
     """Create one exact direct mapping and advance its candidate once."""
     exact_source = _exact_branch(source_branch)
@@ -684,6 +690,9 @@ async def create_direct_mapping(
                 id=mapping_id,
                 revision_id=candidate.id,
                 topology="direct",
+                localization_profile=localization_profile.model_dump(mode="json")
+                if localization_profile
+                else None,
                 identity_key=identity_key,
                 sides=_side_rows((("direct", repository_id, exact_source, root),)),
                 allowed_targets=_target_rows(targets, default_target=default_target),
@@ -710,6 +719,7 @@ async def update_direct_mapping(
     default_target_branch: object,
     adapter: BranchAdapters,
     localization_root: str | None = None,
+    localization_profile: JsonCatalogProfile | None = None,
 ) -> MappingRecord:
     """Replace one direct candidate mapping or preserve a semantic no-op."""
     exact_source = _exact_branch(source_branch)
@@ -747,6 +757,7 @@ async def update_direct_mapping(
                 and current.primary_repository_id == repository_id
                 and current.primary_source_branch == exact_source
                 and current.primary_localization_root == root
+                and current.localization_profile == localization_profile
                 and current.allowed_target_branches == targets
                 and current.default_target_branch == default_target
             ):
@@ -762,6 +773,9 @@ async def update_direct_mapping(
                 raise MappingConflict("mapping unavailable")
             mapping.topology = "direct"
             mapping.code_source = None
+            mapping.localization_profile = (
+                localization_profile.model_dump(mode="json") if localization_profile else None
+            )
             mapping.identity_key = identity_key
             mapping.selected_layout_candidate_id = None
             mapping.selected_layout_version = None
@@ -932,6 +946,7 @@ async def update_separate_mapping(
             if duplicate is not None:
                 raise MappingConflict("mapping unavailable")
             mapping.topology = "separate"
+            mapping.localization_profile = None
             mapping.code_source = (
                 code_source.model_dump(mode="json") if code_source is not None else None
             )

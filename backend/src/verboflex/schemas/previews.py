@@ -110,6 +110,9 @@ class AdminPreviewJobResultResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    excluded_files: Annotated[
+        list[str], Field(max_length=5000, exclude_if=lambda value: not value)
+    ] = []
     detector_version: Annotated[str, Field(min_length=1, max_length=64)]
     digest: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     layout_candidates: Annotated[

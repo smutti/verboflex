@@ -410,8 +410,15 @@ def get_translation_group_detail(
         ) from error
     except Exception as error:
         _service_unavailable(error)
+    from verboflex.schemas.translations import WebMessageContract
     from verboflex.services.branch_workflow import workflow_for
+    from verboflex.services.web_messages import describe_contract, has_web_profile
 
     response = _detail_response(access.group)
+    if response.values and has_web_profile(session, response.values[0].id):
+        for member in response.values:
+            contract = describe_contract(session, member.id)
+            if contract is not None:
+                member.message_contract = WebMessageContract.model_validate(contract)
     response.approval_commits_enabled = workflow_for(session, access.product_id) is not None
     return response

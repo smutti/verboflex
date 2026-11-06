@@ -588,6 +588,15 @@ def _capture(
         pending_map = {item.translation_value_id: item for item in pending}
         if set(pending_map) != {value.id for value in values}:
             raise _stale()
+        from verboflex.localization.web.messages import WebMessageInvalid
+        from verboflex.services.web_messages import validate_replacements
+
+        try:
+            validate_replacements(
+                session, {item.translation_value_id: item.proposed_text for item in pending}
+            )
+        except WebMessageInvalid as error:
+            raise WritebackRejected(WritebackReason.INVALID_REPLACEMENT) from error
         mapping = mappings[scope.id]
         rules: tuple[TranslationConstraint, ...] = _bounded(
             session,

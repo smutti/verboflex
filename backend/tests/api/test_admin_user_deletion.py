@@ -310,7 +310,7 @@ def test_deleted_identity_cannot_be_enabled_and_migration_cannot_resurrect_it(
     with factory() as session:
         assert (
             session.scalar(text("SELECT version_num FROM alembic_version"))
-            == "0054_html_preview_images"
+            == "0055_web_localization"
         )
         assert session.get_one(User, target_id).deleted_at is not None
 

@@ -137,7 +137,10 @@ def test_provider_integration_contains_no_dynamic_or_mutating_http_verbs() -> No
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
                 continue
-            if node.func.attr in {"put", "patch", "delete"}:
+            if node.func.attr in {"put", "patch", "delete"} and not (
+                source_path.name == "client.py"
+                and ast.unparse(node.func) == "self._source_cache.put"
+            ):
                 violations.append(f"{source_path.name}:{node.lineno}:{node.func.attr}")
             if node.func.attr in {"request", "stream"}:
                 if not node.args or not isinstance(node.args[0], ast.Constant):

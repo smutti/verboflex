@@ -2066,6 +2066,7 @@ def test_translation_schemas_are_closed_bounded_and_non_leaking() -> None:
         "source_value_id",
         "source_resolution",
         "source_comparison",
+        "message_contract",
     }
     assert value["properties"]["id"]["format"] == "uuid"
     assert value["properties"]["selector_version"]["const"] == 1
@@ -2654,7 +2655,12 @@ def test_admin_preview_openapi_is_closed_current_and_source_free() -> None:
         "finished_at",
     }
     assert result["additionalProperties"] is False
-    assert set(result["properties"]) == {"detector_version", "digest", "layout_candidates"}
+    assert set(result["properties"]) == {
+        "detector_version",
+        "digest",
+        "layout_candidates",
+        "excluded_files",
+    }
     assert result["properties"]["layout_candidates"]["maxItems"] == 500
     assert layout_candidate["additionalProperties"] is False
     assert set(layout_candidate["properties"]) == {
