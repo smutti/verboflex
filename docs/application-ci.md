@@ -14,6 +14,9 @@ viewports. Web parser and renderer dependencies are locked in `tools/web-runtime
 Synthetic discovery and isolated-parser regressions cover applications with up to
 5,000 source files across modules, reject larger catalogs without partial results,
 and retain the separate 500-file limit for localization catalogs.
+The web import regression also exercises provider-owned credential transactions:
+reading mapping settings must finish before the worker reads the scenario manifest
+and application sources, so Bitbucket can acquire and recheck its credential lease.
 Code traversal allows 20,000 total entries so package directories and unrelated
 files do not consume the source-file allowance; localization traversal remains
 limited to 5,000 entries.
