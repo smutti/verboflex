@@ -5,6 +5,26 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from verboflex.localization.code_keys.catalog import CodeSourceConfig, extract_catalog
+from verboflex.localization.code_keys.process import extract_catalog_isolated
+
+
+def test_isolated_catalog_includes_all_modules_at_source_file_limit() -> None:
+    files = {
+        f"{'app' if index < 500 else 'shared'}/src/main/Screen{index}.kt": (
+            f"fun screen{index}() = Res.strings.title_{index}\n".encode()
+        )
+        for index in range(5_000)
+    }
+    catalog = extract_catalog_isolated(files, CodeSourceConfig())
+    assert set(catalog.keys) == {f"title_{index}" for index in range(5_000)}
+    assert {occurrence.path for occurrence in catalog.occurrences} == set(files)
+
+
+@pytest.mark.parametrize("extract", [extract_catalog, extract_catalog_isolated])
+def test_oversized_code_catalog_is_rejected_before_parsing(extract) -> None:
+    files = {f"Screen{index}.kt": b"invalid Kotlin" for index in range(5_001)}
+    with pytest.raises(ValueError, match="Code source budget exceeded"):
+        extract(files, CodeSourceConfig())
 
 
 @pytest.mark.parametrize(
@@ -81,6 +101,43 @@ class Screen {
         CodeSourceConfig(resource_roots=("demo.resources.Res.strings",)),
     )
     assert catalog.keys == ("cancel", "login_title")
+
+
+@pytest.mark.parametrize("modifier", ["private", "internal", "public", "protected"])
+def test_annotated_visibility_function_with_nested_lambda_preserves_evidence(modifier) -> None:
+    source = f'''package demo
+// Synthetic accented text: caffè; private fun Ignored() = Res.strings.comment
+val ignored = "private fun Hidden() = Res.strings.string_literal"
+@Preview(name = "Light", showBackground = true)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+{modifier} fun AccountPreview() {{
+  Theme {{
+    AccountContent(state = AccountState(),)
+  }}
+}}
+@Composable
+private fun AccountContent(state: AccountState) {{
+  Text(Res.strings.account_title)
+}}
+'''.encode()
+    catalog = extract_catalog({"Screen.kt": source}, CodeSourceConfig())
+    assert catalog.keys == ("account_title",)
+    assert len(catalog.previews) == 2
+    assert all(preview.function == "demo.AccountPreview" for preview in catalog.previews)
+    assert all(preview.keys == ("account_title",) for preview in catalog.previews)
+    assert all(preview.line == 4 for preview in catalog.previews)
+    assert catalog.occurrences[0].function == "demo.AccountContent"
+    assert catalog.occurrences[0].line == 14
+    assert catalog.occurrences[0].column == 8
+
+
+def test_incomplete_visibility_function_is_rejected() -> None:
+    with pytest.raises(ValueError, match="Incomplete code syntax"):
+        extract_catalog(
+            {"Screen.kt": b"@Preview\nprivate fun Broken() { Theme { Res.strings.title\n"},
+            CodeSourceConfig(),
+        )
 
 
 def test_selected_constants_and_configured_calls() -> None:

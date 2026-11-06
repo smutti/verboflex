@@ -1,0 +1,26 @@
+{
+  "NAV": {
+    "SITES": "Siti"
+  },
+  "SITE": {
+    "SEARCH": "Cerca siti",
+    "NAME": "Nome",
+    "ADDRESS": "Indirizzo"
+  },
+  "TENANT": {
+    "LIST": "Inquilini",
+    "CREATE": "Crea inquilino",
+    "EMAIL": "Email",
+    "FIRST_NAME": "Nome"
+  },
+  "VALIDATE": {
+    "MAX_LENGTH": "Usa al massimo {{ value.requiredLength }} caratteri."
+  },
+  "GLOBAL": {
+    "CANCEL": "Annulla",
+    "SAVE": "Salva"
+  },
+  "OTHER": {
+    "NAME": "Untouched"
+  }
+}

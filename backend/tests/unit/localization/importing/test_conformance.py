@@ -29,6 +29,7 @@ _LIMITS = {
     "coordinate": 2_147_483_647,
 }
 _FORMAT_CATEGORIES = {
+    "html": {"boundary", "empty", "encoding", "escaped", "malformed", "markup", "unicode", "valid"},
     "android_xml": {
         "valid",
         "empty",
@@ -105,6 +106,13 @@ _CONSTRUCTS = {
 
 def _input(format_name: str, *, content: bytes | None = None, **overrides: object) -> Any:
     definitions: dict[str, dict[str, object]] = {
+        "html": {
+            "repository_side": "direct",
+            "path": "mail/Welcome-EN.html",
+            "content": (_FIXTURES / "html" / "Welcome-EN.html").read_bytes(),
+            "layout_identity": "html:mail",
+            "base_language": "en",
+        },
         "android_xml": {
             "repository_side": "direct",
             "path": "app/src/main/res/values/strings.xml",

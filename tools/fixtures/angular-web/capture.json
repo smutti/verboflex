@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "sites.list",
+      "label": "Sites list",
+      "route": "#/sites",
+      "ready": "[data-capture-ready]",
+      "actions": [],
+      "targets": [
+        {
+          "key": "SITE.NAME",
+          "selector": "[data-key=\"SITE.NAME\"]"
+        },
+        {
+          "key": "NAV.SITES",
+          "selector": "h1[data-key=\"NAV.SITES\"]"
+        },
+        {
+          "key": "SITE.SEARCH",
+          "selector": "#search-site",
+          "attribute": "placeholder"
+        }
+      ],
+      "responses": [
+        {
+          "path": "/api/profile",
+          "method": "GET",
+          "body": {
+            "name": "Synthetic reviewer",
+            "betaUser": true
+          }
+        },
+        {
+          "path": "/api/sites",
+          "method": "GET",
+          "body": [
+            {
+              "name": "Garden House",
+              "address": "1 Sample Street"
+            },
+            {
+              "name": "Lake House",
+              "address": "2 Example Road"
+            }
+          ]
+        },
+        {
+          "path": "/api/tenants",
+          "method": "GET",
+          "body": []
+        }
+      ]
+    },
+    {
+      "id": "tenant.create.open",
+      "label": "Tenant create open",
+      "route": "#/sites/demo/tenants",
+      "ready": "[data-capture-ready]",
+      "actions": [
+        {
+          "action": "click",
+          "selector": "#create-tenant"
+        },
+        {
+          "action": "assert_enabled",
+          "selector": "#save"
+        }
+      ],
+      "targets": [
+        {
+          "key": "TENANT.CREATE",
+          "selector": "[data-key=\"TENANT.CREATE\"]"
+        },
+        {
+          "key": "GLOBAL.SAVE",
+          "selector": "#save"
+        },
+        {
+          "key": "GLOBAL.CANCEL",
+          "selector": "#close"
+        }
+      ],
+      "responses": [
+        {
+          "path": "/api/profile",
+          "method": "GET",
+          "body": {
+            "name": "Synthetic reviewer",
+            "betaUser": true
+          }
+        },
+        {
+          "path": "/api/sites",
+          "method": "GET",
+          "body": [
+            {
+              "name": "Garden House",
+              "address": "1 Sample Street"
+            },
+            {
+              "name": "Lake House",
+              "address": "2 Example Road"
+            }
+          ]
+        },
+        {
+          "path": "/api/tenants",
+          "method": "GET",
+          "body": []
+        }
+      ]
+    },
+    {
+      "id": "tenant.create.validation",
+      "label": "Tenant create validation",
+      "route": "#/sites/demo/tenants",
+      "ready": "[data-capture-ready]",
+      "actions": [
+        {
+          "action": "click",
+          "selector": "#create-tenant"
+        },
+        {
+          "action": "fill",
+          "selector": "#first-name",
+          "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        },
+        {
+          "action": "blur",
+          "selector": "#first-name"
+        },
+        {
+          "action": "assert_disabled",
+          "selector": "#save"
+        }
+      ],
+      "targets": [
+        {
+          "key": "VALIDATE.MAX_LENGTH",
+          "selector": "#first-name-validator"
+        }
+      ],
+      "responses": [
+        {
+          "path": "/api/profile",
+          "method": "GET",
+          "body": {
+            "name": "Synthetic reviewer",
+            "betaUser": true
+          }
+        },
+        {
+          "path": "/api/sites",
+          "method": "GET",
+          "body": [
+            {
+              "name": "Garden House",
+              "address": "1 Sample Street"
+            },
+            {
+              "name": "Lake House",
+              "address": "2 Example Road"
+            }
+          ]
+        },
+        {
+          "path": "/api/tenants",
+          "method": "GET",
+          "body": []
+        }
+      ]
+    }
+  ]
+}

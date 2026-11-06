@@ -1299,6 +1299,12 @@ function ResolvedSearch({
                       selectedContext.groupId &&
                       context.activeDraft.dirty)
                   }
+                  draftText={
+                    context.activeDraft?.translationGroupId ===
+                    selectedContext.groupId
+                      ? context.activeDraft.values[0]?.text
+                      : undefined
+                  }
                   proposal={proposalOverrides.get(selectedContext.groupId)}
                   onReviewed={(projection) => {
                     if (

@@ -160,6 +160,7 @@ def _assert_phase3_provider_tree(source: str | ast.Module) -> None:
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
         and node.func.attr.casefold() in {"post", "put", "patch", "delete"}
+        and ast.unparse(node.func) != "self._source_cache.put"
     ]
     assert direct_mutations == []
     assert not {

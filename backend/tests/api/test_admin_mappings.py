@@ -1936,3 +1936,50 @@ def test_code_source_configuration_is_versioned_and_invalidates_preview(mapping_
         )
     )
     assert invalid.status_code == 422
+
+
+def test_web_profile_roundtrip_and_candidate_invalidation(mapping_session_factory):  # noqa: F811
+    product_id, active_id, _ = _seed_candidate(mapping_session_factory)
+    repository_id = _seed_repository(mapping_session_factory)
+    _configure_dependencies(
+        mapping_session_factory, BranchAdapter(("main", "release/1", "release/2"))
+    )
+    token = _create_authority(
+        mapping_session_factory, email="web-admin@example.test", roles=("admin",)
+    )
+    before = _active_snapshot(mapping_session_factory, product_id=product_id, active_id=active_id)
+    payload = {
+        **_direct_payload(repository_id),
+        "localization_root": "src/assets/i18n",
+        "localization_profile": {
+            "files": {"en": "en.json", "it": "it.json"},
+            "web_capture": {
+                "manifest_path": "capture.json",
+                "source_roots": ["src/app"],
+                "runner_profile": "synthetic",
+            },
+        },
+    }
+    created = asyncio.run(
+        _request("POST", path=_mapping_path(product_id), access_token=token, json_body=payload)
+    )
+    assert created.status_code == 201, created.text
+    data = created.json()
+    assert data["localization_profile"]["files"] == {"en": "en.json", "it": "it.json"}
+    payload["expected_candidate_version"] = data["candidate_version"]
+    payload["localization_profile"]["web_capture"]["runner_profile"] = "changed"
+    updated = asyncio.run(
+        _request(
+            "PATCH",
+            path=_mapping_path(product_id, UUID(data["id"])),
+            access_token=token,
+            json_body=payload,
+        )
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["candidate_version"] == data["candidate_version"] + 1
+    assert updated.json()["selected_layout_candidate_id"] is None
+    assert (
+        _active_snapshot(mapping_session_factory, product_id=product_id, active_id=active_id)
+        == before
+    )

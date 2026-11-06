@@ -1389,7 +1389,11 @@ def _assert_guarded_provider_transports() -> None:
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
                 continue
-            if node.func.attr in {"put", "patch", "delete"}:
+            # SourceFileCache.put writes the bounded local immutable cache, not HTTP.
+            local_cache_write = (
+                path.name == "client.py" and ast.unparse(node.func) == "self._source_cache.put"
+            )
+            if node.func.attr in {"put", "patch", "delete"} and not local_cache_write:
                 provider_violations.append(f"{path.name}:{node.lineno}:{node.func.attr}")
             if node.func.attr in {"request", "stream"}:
                 method = node.args[0] if node.args else None

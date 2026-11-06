@@ -138,7 +138,7 @@ class TranslationProvenanceResponse(ClosedTranslationModel):
     repository_side: Literal["direct", "keys", "translations"]
     branch: Annotated[str, Field(min_length=1, max_length=255)]
     path: Annotated[str, Field(min_length=1, max_length=4096)]
-    format: Literal["android_xml", "qt_ts", "json", "ios_strings", "xliff"]
+    format: Literal["android_xml", "qt_ts", "json", "ios_strings", "xliff", "html"]
     commit_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
     execution_id: UUID
     line: Annotated[int | None, Field(ge=1, le=2_147_483_647)]
@@ -160,7 +160,15 @@ class TranslationHistoryResponse(ClosedTranslationModel):
     execution_id: UUID
 
 
+class WebMessageContract(ClosedTranslationModel):
+    syntax: Literal["ngx_translate"] = "ngx_translate"
+    source: BoundedText
+    tokens: list[str]
+    rich_text: bool
+
+
 class TranslationValueResponse(ClosedTranslationModel):
+    message_contract: WebMessageContract | None = None
     id: UUID
     selector_version: Literal[1]
     selector_kind: Literal[

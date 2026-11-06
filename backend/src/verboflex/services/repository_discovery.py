@@ -24,6 +24,7 @@ from verboflex.integrations.bitbucket.urls import (
     validate_repository_relative_path,
 )
 from verboflex.integrations.readers import RepositoryReadAdapters
+from verboflex.localization.code_keys.catalog import MAX_FILES as MAX_CODE_SOURCE_FILES
 from verboflex.services.repositories import RepositoryRecord, get_repository
 
 DEFAULT_BRANCH_PAGE_SIZE = 50
@@ -146,7 +147,9 @@ SOURCE_DISCOVERY_BUDGET = SourceDiscoveryBudget(
     max_file_bytes=1_048_576,
     max_total_bytes=20_971_520,
 )
-_CANDIDATE_SUFFIXES = (".xml", ".ts", ".json", ".strings", ".xlf", ".xliff")
+# Leave room for package directories and non-source files in multi-module apps.
+MAX_CODE_SOURCE_ENTRIES = 20_000
+_CANDIDATE_SUFFIXES = (".xml", ".ts", ".json", ".strings", ".xlf", ".xliff", ".html", ".htm")
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +163,7 @@ class RepositorySourceSnapshot:
     commit_hash: str
     files: tuple[RepositorySourceFile, ...]
     total_bytes: int
+    excluded_paths: tuple[str, ...] = ()
 
 
 def normalize_repository_relative_path(path: str) -> str:
@@ -278,18 +282,25 @@ async def discover_repository_sources_for_record(
     adapter: ReadAdapters,
     localization_root: str | None = None,
     code_sources: bool = False,
+    commit_hash: str | None = None,
+    selected_paths: set[str] | None = None,
+    web_sources: bool = False,
+    excluded_roots: tuple[str, ...] = (),
 ) -> RepositorySourceSnapshot:
     """Resolve one branch and read every candidate under the immutable A-03 budget."""
     root = validate_localization_root(localization_root) if localization_root is not None else None
-    resolved = await source_adapter(adapter, repository.provider).resolve_repository_branch(
-        session,
-        workspace=repository.workspace,
-        repository_slug=repository.repository_slug,
-        branch=branch,
-    )
-    if resolved.name != branch:
-        raise BitbucketProviderReadError(kind="invalid_source")
+    if commit_hash is None:
+        resolved = await source_adapter(adapter, repository.provider).resolve_repository_branch(
+            session,
+            workspace=repository.workspace,
+            repository_slug=repository.repository_slug,
+            branch=branch,
+        )
+        if resolved.name != branch:
+            raise BitbucketProviderReadError(kind="invalid_source")
+        commit_hash = resolved.commit_hash
 
+    excluded_paths: list[str] = []
     pages = 0
     entry_count = 0
     seen_paths: set[str] = set()
@@ -302,13 +313,13 @@ async def discover_repository_sources_for_record(
         while True:
             # Android package trees commonly exceed 50 directories even under
             # src/main. Keep byte/file/depth budgets, with bounded extra traversal.
-            if pages >= (200 if code_sources else SOURCE_DISCOVERY_BUDGET.max_pages):
+            if pages >= (200 if code_sources or web_sources else SOURCE_DISCOVERY_BUDGET.max_pages):
                 raise BitbucketProviderReadError(kind="limit_exceeded")
             page = await source_adapter(adapter, repository.provider).list_repository_source_page(
                 session,
                 workspace=repository.workspace,
                 repository_slug=repository.repository_slug,
-                commit_hash=resolved.commit_hash,
+                commit_hash=commit_hash,
                 directory_path=directory_path,
                 next_url=next_url,
                 max_depth=(SOURCE_DISCOVERY_BUDGET.max_depth if recursively_list_root else None),
@@ -322,23 +333,65 @@ async def discover_repository_sources_for_record(
                     raise BitbucketProviderReadError(kind="invalid_source")
                 seen_paths.add(path)
                 entry_count += 1
-                if entry_count > SOURCE_DISCOVERY_BUDGET.max_entries:
+                max_entries = (
+                    MAX_CODE_SOURCE_ENTRIES
+                    if code_sources or web_sources
+                    else SOURCE_DISCOVERY_BUDGET.max_entries
+                )
+                if entry_count > max_entries:
                     raise BitbucketProviderReadError(kind="limit_exceeded")
                 if len(path.split("/")) > SOURCE_DISCOVERY_BUDGET.max_depth:
                     raise BitbucketProviderReadError(kind="limit_exceeded")
+                if any(
+                    path == excluded or path.startswith(excluded + "/")
+                    for excluded in excluded_roots
+                ):
+                    continue
+                if web_sources and (
+                    any(
+                        part
+                        in {
+                            "node_modules",
+                            "dist",
+                            "generated",
+                            "tests",
+                            "test",
+                            "e2e",
+                            ".git",
+                            ".angular",
+                        }
+                        for part in path.split("/")
+                    )
+                    or path.endswith((".spec.ts", ".test.ts"))
+                ):
+                    continue
                 if entry.kind == "directory":
                     if not recursively_list_root:
                         directories.append(path)
                     continue
                 if entry.size is None:
                     raise BitbucketProviderReadError(kind="invalid_source")
-                if path.casefold().endswith(
-                    (".kt", ".java") if code_sources else _CANDIDATE_SUFFIXES
+                if selected_paths is not None and path not in selected_paths:
+                    excluded_paths.append(path)
+                suffixes = (
+                    (".kt", ".java")
+                    if code_sources
+                    else (".ts", ".html")
+                    if web_sources
+                    else _CANDIDATE_SUFFIXES
+                )
+                if path.casefold().endswith(suffixes) and (
+                    selected_paths is None or path in selected_paths
                 ):
                     if entry.size > SOURCE_DISCOVERY_BUDGET.max_file_bytes:
                         raise BitbucketProviderReadError(kind="limit_exceeded")
                     candidate_entries.append((path, entry.size))
-                    if len(candidate_entries) > SOURCE_DISCOVERY_BUDGET.max_candidate_files:
+                    max_files = (
+                        MAX_CODE_SOURCE_FILES
+                        if code_sources or web_sources
+                        else SOURCE_DISCOVERY_BUDGET.max_candidate_files
+                    )
+                    if len(candidate_entries) > max_files:
                         raise BitbucketProviderReadError(kind="limit_exceeded")
             if page.next_url is None:
                 break
@@ -354,7 +407,7 @@ async def discover_repository_sources_for_record(
             session,
             workspace=repository.workspace,
             repository_slug=repository.repository_slug,
-            commit_hash=resolved.commit_hash,
+            commit_hash=commit_hash,
             path=path,
             max_bytes=min(SOURCE_DISCOVERY_BUDGET.max_file_bytes, remaining),
         )
@@ -367,9 +420,10 @@ async def discover_repository_sources_for_record(
         files.append(RepositorySourceFile(path=path, content=content))
 
     return RepositorySourceSnapshot(
-        commit_hash=resolved.commit_hash,
+        commit_hash=commit_hash,
         files=tuple(files),
         total_bytes=total_bytes,
+        excluded_paths=tuple(sorted(excluded_paths)),
     )
 
 
@@ -381,6 +435,7 @@ async def discover_live_repository_sources(
     adapter: ReadAdapters,
     localization_root: str | None = None,
     code_sources: bool = False,
+    selected_paths: set[str] | None = None,
 ) -> RepositorySourceSnapshot:
     """Resolve one registered repository before any commit-bound provider read."""
     repository = get_repository(session, repository_id=repository_id)
@@ -391,4 +446,5 @@ async def discover_live_repository_sources(
         adapter=adapter,
         localization_root=localization_root,
         code_sources=code_sources,
+        selected_paths=selected_paths,
     )

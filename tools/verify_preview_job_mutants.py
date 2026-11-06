@@ -81,7 +81,7 @@ MUTATIONS = (
     Mutation(
         "result-envelope-allows-extra-fields",
         "src/verboflex/services/preview_jobs.py",
-        "    if set(raw_result) != _PREVIEW_RESULT_FIELDS:\n"
+        "    if set(raw_result) - {\"excluded_files\"} != _PREVIEW_RESULT_FIELDS:\n"
         '        raise ValueError("preview result rejected")',
         "    if not _PREVIEW_RESULT_FIELDS.issubset(raw_result):\n"
         '        raise ValueError("preview result rejected")',

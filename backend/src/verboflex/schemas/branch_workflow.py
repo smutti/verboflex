@@ -18,7 +18,7 @@ class ConfigureBranchWorkflow(ClosedModel):
 class BranchChange(ClosedModel):
     id: UUID
     sequence: int
-    kind: Literal["commit", "pull_request"]
+    kind: Literal["commit", "pull_request", "html_language"]
     state: Literal[
         "queued", "running", "sending", "committed", "open", "merged", "declined", "blocked"
     ]
@@ -55,6 +55,7 @@ class BranchWorkflowResponse(ClosedModel):
     work_branch: str | None = None
     target_branch: str | None = None
     can_publish: bool = False
+    can_add_html_language: bool = False
     can_create_pr: bool = False
     items: list[BranchChange] = []
     next_before: int | None = None

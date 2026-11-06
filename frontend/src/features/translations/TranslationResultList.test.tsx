@@ -860,3 +860,24 @@ it.each([true, false])(
     expect(corrected).not.toHaveClass("border-destructive");
   },
 );
+
+it("opens the correct HTML template and locale from a visible action", async () => {
+  const item = group(0);
+  item.slots[1].provenance = { format: "html" } as NonNullable<
+    (typeof item.slots)[1]["provenance"]
+  >;
+  const onOpenContext = vi.fn();
+  mount({ ...defaults(), items: [item], onOpenContext });
+  const button = await screen.findByRole("button", {
+    name: "View HTML template for literal.[0] (fr)",
+  });
+  expect(button).toHaveTextContent("View template");
+  await userEvent.click(button);
+  expect(onOpenContext).toHaveBeenCalledWith(
+    expect.objectContaining({
+      groupId: "fr-0",
+      language: "fr",
+      section: "source",
+    }),
+  );
+});

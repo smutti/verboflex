@@ -45,7 +45,10 @@ class Settings(BaseSettings):
     bitbucket_http_read_timeout_seconds: Literal[10] = 10
     bitbucket_http_write_timeout_seconds: Literal[10] = 10
     bitbucket_http_pool_timeout_seconds: Literal[3] = 3
+    repository_source_cache_directory: str | None = None
     screenshot_runner_command: list[str] = Field(default_factory=list)
+    web_screenshot_runner_command: list[str] = Field(default_factory=list)
+    web_extractor_command: list[str] = Field(default_factory=list)
     screenshot_timeout_seconds: int = Field(default=900, ge=30, le=1800)
 
     preview_soft_time_limit_seconds: int = Field(default=60, gt=0, le=300)

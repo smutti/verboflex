@@ -17,6 +17,7 @@ from verboflex.localization.duplicate_diagnostics import inspect_duplicate_keys
 from verboflex.localization.importing.core import CanonicalParserInput
 from verboflex.localization.moko_layout import moko_layout
 from verboflex.localization.preview.registry import detect_preview_layouts
+from verboflex.localization.web.config import JsonCatalogProfile, select_catalogs
 from verboflex.models.preview_job import PreviewJob
 from verboflex.models.product_mapping import ProductRepositoryMapping
 from verboflex.services.duplicate_reports import store_report
@@ -44,11 +45,17 @@ async def _process_preview(
 ) -> dict[str, object]:
     with factory() as session:
         mapping = session.get_one(ProductRepositoryMapping, identity.mapping_id)
+        profile = (
+            JsonCatalogProfile.model_validate(mapping.localization_profile)
+            if mapping.localization_profile
+            else None
+        )
         code_config = (
             CodeSourceConfig.model_validate(mapping.code_source)
             if mapping.code_source is not None
             else None
         )
+    excluded_files: list[str] = []
     candidates: list[dict[str, object]] = []
     diagnostic_inputs: list[CanonicalParserInput] = []
     diagnostic_sources: list[dict[str, str]] = []
@@ -61,7 +68,13 @@ async def _process_preview(
                 adapter=adapter,
                 localization_root=side.localization_root,
                 code_sources=code_config is not None and side.role == "keys",
+                **(
+                    {"selected_paths": profile.catalog_paths(side.localization_root)}
+                    if profile
+                    else {}
+                ),
             )
+        excluded_files.extend(getattr(snapshot, "excluded_paths", ()))
         if snapshot.commit_hash != side.commit_hash:
             raise ValueError("preview commit changed during discovery")
         if code_config is not None and side.role == "keys":
@@ -81,7 +94,8 @@ async def _process_preview(
                 commit_hash=side.commit_hash,
             )
         )
-        for file in snapshot.files:
+        files = select_catalogs(snapshot.files, profile, side.localization_root)
+        for file in files:
             layout = moko_layout(file.path)
             if layout is not None:
                 diagnostic_inputs.append(
@@ -97,7 +111,7 @@ async def _process_preview(
                 )
         candidates.extend(
             detect_preview_layouts(
-                snapshot.files,
+                files,
                 repository_side=side.role,
             ).to_mappings()
         )
@@ -135,6 +149,7 @@ async def _process_preview(
         "detector_version": identity.detector_version,
         "digest": identity.input_digest,
         "layout_candidates": candidates,
+        **({"excluded_files": excluded_files} if profile else {}),
     }
 
 

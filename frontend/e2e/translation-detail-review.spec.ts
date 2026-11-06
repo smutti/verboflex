@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import type { TranslationGroupDetailResponse } from "../src/api/client";
 
@@ -119,6 +120,7 @@ async function setup(
   page: Page,
   state: "ready" | "empty" | "unconfigured",
   role = "admin",
+  record = detail,
 ) {
   const requests = { captures: 0, activity: 0, authenticatedImages: 0 };
   await page.route("**/api/v1/**", async (route) => {
@@ -152,7 +154,7 @@ async function setup(
         products: [{ id: "review-product", name: "Demo Mobile" }],
         languages: [{ code: "it", label: "Italian" }],
       },
-      [base]: detail,
+      [base]: record,
       [`${base}/comments`]: { items: [], older_cursor: null },
       [`${base}/activity`]: { items: [], next_cursor: null },
       [`${base}/code-context`]: {
@@ -348,3 +350,227 @@ test("unsaved edits disable generation and flag the saved image as stale", async
   ).toBeDisabled();
   expect(requests.captures).toBe(0);
 });
+
+for (const width of [320, 1440]) {
+  test(`HTML replaces screenshots and previews live text at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const html = structuredClone(detail);
+    html.product_name = "Demo email templates";
+    html.raw_key =
+      "Welcome::/html[0]/body[0]/table[0]/tbody[0]/tr[0]/td[0]/p[0]/text[0]";
+    html.values[0].provenance!.format = "html";
+    html.values[0].provenance!.path = "templates/Welcome-IT.html";
+    const requests = await setup(page, "unconfigured", "translator", html);
+    // Exercise the same parent policy as the deployed nginx application.
+    const productionPolicy = readFileSync(
+      new URL("../../docker/frontend.nginx.conf", import.meta.url),
+      "utf8",
+    ).match(/add_header Content-Security-Policy "([^"]+)"/)![1];
+    await page.route("**/translations/review-group", async (route) => {
+      if (new URL(route.request().url()).pathname.startsWith("/api/"))
+        return route.fallback();
+      const response = await route.fetch();
+      await route.fulfill({
+        response,
+        headers: {
+          ...response.headers(),
+          "content-security-policy": productionPolicy,
+        },
+      });
+    });
+    let previews = 0;
+    await page.route(
+      "**/api/v1/translations/review-group/html-preview",
+      async (route) => {
+        expect(route.request().headers().authorization).toBe(
+          "Bearer synthetic-review-token",
+        );
+        previews++;
+        await route.fulfill({
+          json: {
+            path: "templates/Welcome-IT.html",
+            marker: "<!--SELECTED-->",
+            document: `<html><head><title>Welcome</title></head><body style="margin:0;background:#f1f5f9;font-family:Arial,sans-serif">
+          <table width="600" style="margin:20px auto;background:white;border-collapse:collapse"><tbody><tr><td style="padding:32px">
+            <img alt="Repository logo" width="48" height="48" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWq0AAAAASUVORK5CYII=">
+            <p style="color:#0f766e;font-weight:bold;font-size:20px">DEMO HOME</p>
+            <h1 style="font-size:28px;color:#0f172a">Benvenuto a casa</h1>
+            <p style="line-height:1.6;color:#475569">Le impostazioni della tua casa sono pronte. Puoi aggiornarle in qualsiasi momento.</p>
+            <p style="padding:16px;background:#0f766e;color:white;text-align:center"><!--SELECTED--></p>
+            <hr style="border:0;border-top:1px solid #e2e8f0;margin-top:40px">
+            <p style="font-size:12px;color:#64748b">Messaggio dimostrativo per le traduzioni.</p>
+          </td></tr></tbody></table>
+          <script>parent.document.body.dataset.previewEscaped = 'yes';</script>
+          <img src="https://example.test/blocked.png">
+        </body></html>`,
+          },
+        });
+      },
+    );
+    let imageRequests = 0;
+    await page.route("https://example.test/**", (route) => {
+      imageRequests++;
+      return route.abort();
+    });
+    await page.goto("/translations/review-group");
+    const panel = page.getByRole("complementary", {
+      name: "HTML template preview",
+      exact: true,
+    });
+    const iframe = panel.locator("iframe");
+    const frame = page.frameLocator('iframe[title="HTML template preview"]');
+    await expect(iframe).toBeVisible();
+    await expect(frame.locator("mark")).toHaveText(text);
+    const logo = frame.getByAltText("Repository logo");
+    await expect(logo).toBeVisible();
+    await expect
+      .poll(() =>
+        logo.evaluate((image: HTMLImageElement) => image.naturalWidth),
+      )
+      .toBe(1);
+    await expect(
+      frame.getByRole("heading", { name: "Benvenuto a casa" }),
+    ).toBeVisible();
+    await expect(iframe).toHaveAttribute("sandbox", "");
+    await expect(page.locator("body")).not.toHaveAttribute(
+      "data-preview-escaped",
+    );
+    expect(imageRequests).toBe(0);
+    const previewBox = (await iframe.boundingBox())!;
+    const panelBox = (await panel.boundingBox())!;
+    expect(previewBox.width).toBeLessThanOrEqual(panelBox.width);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page
+      .getByRole("button", { name: "Edit translation", exact: true })
+      .click();
+    await page
+      .getByRole("textbox", { name: "Proposed translation", exact: true })
+      .fill("Apri le impostazioni <sicure>");
+    await expect(frame.locator("mark")).toHaveText(
+      "Apri le impostazioni <sicure>",
+    );
+    await expect(frame.locator("sicure")).toHaveCount(0);
+    expect(previews).toBe(1);
+    expect(requests.captures).toBe(0);
+    await iframe.scrollIntoViewIfNeeded();
+    await expect(frame.locator("mark")).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath(`html-preview-${width}.png`),
+      fullPage: true,
+    });
+  });
+}
+
+for (const width of [390, 1440]) {
+  test(`web capture selects the exact nested value and viewport at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const webDetail = structuredClone(detail);
+    webDetail.raw_key = "NAME";
+    const member = webDetail.values[0];
+    member.selector_kind = "json_path";
+    member.selector_fields = [{ name: "parents", value: ["SITE"] }];
+    member.provenance!.format = "json";
+    member.provenance!.path = "src/assets/i18n/it.json";
+    member.message_contract = {
+      syntax: "ngx_translate",
+      source: "Name",
+      tokens: [],
+      rich_text: false,
+    };
+    await setup(page, "empty", "admin", webDetail);
+    const base = "/api/v1/translations/review-group";
+    await page.route(`**${base}/code-context`, (route) =>
+      route.fulfill({
+        json: {
+          configured: true,
+          engine: "web",
+          occurrences: [],
+          previews: [],
+          capture_functions: [],
+          web_targets: [
+            {
+              value_id: "review-value",
+              runtime_key: "SITE.NAME",
+              json_path: ["SITE", "NAME"],
+              scenario_ids: ["sites.list"],
+            },
+            {
+              value_id: "another-value",
+              runtime_key: "TENANT.NAME",
+              json_path: ["TENANT", "NAME"],
+              scenario_ids: ["tenant.create.open"],
+            },
+          ],
+          scenarios: [
+            { scenario_id: "sites.list", label: "Sites list", explicit: true },
+            {
+              scenario_id: "tenant.create.open",
+              label: "Create tenant",
+              explicit: true,
+            },
+          ],
+          diagnostics: [],
+        },
+      }),
+    );
+    let body: Record<string, unknown> | null = null;
+    await page.route(`**${base}/screenshots/*`, (route) => {
+      if (route.request().method() === "PUT")
+        body = route.request().postDataJSON();
+      return route.fulfill({
+        json: { ...capture, request: body, state: "succeeded" },
+      });
+    });
+    // Registered after the job route so images retain their authenticated boundary.
+    await page.route(`**${base}/screenshots/*/image`, (route) =>
+      route.fulfill({ contentType: "image/svg+xml", body: screenshot }),
+    );
+    await page.goto("/translations/review-group");
+    const region = page.getByRole("region", { name: "Web screenshots" });
+    await region
+      .getByRole("combobox", { name: "Translation value", exact: true })
+      .selectOption("another-value");
+    await expect(
+      region.getByRole("combobox", { name: "Screen scenario" }),
+    ).toHaveValue("tenant.create.open");
+    await region
+      .getByRole("combobox", { name: "Translation value", exact: true })
+      .selectOption("review-value");
+    await region
+      .getByRole("combobox", { name: "Viewport", exact: true })
+      .selectOption("mobile");
+    await region.getByRole("button", { name: /Generate screenshot/ }).click();
+    await expect
+      .poll(() => body)
+      .toEqual({
+        engine: "web",
+        scenario_id: "sites.list",
+        target_value_id: "review-value",
+        viewport: "mobile",
+        theme: "light",
+        proposal_version: 2,
+      });
+    await expect(
+      region.getByText("Screenshot ready", { exact: true }),
+    ).toBeVisible();
+    await region
+      .getByRole("combobox", { name: "Viewport", exact: true })
+      .selectOption("desktop");
+    await expect(
+      region.getByText(/does not show your latest changes/),
+    ).toBeVisible();
+    await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
+    await page.screenshot({
+      path: testInfo.outputPath(`web-capture-${width}.png`),
+      fullPage: true,
+    });
+  });
+}

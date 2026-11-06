@@ -181,6 +181,14 @@ def test_no_deferred_phase4_operations():
         ("/api/v1/translations", "get"): "searchTranslations",
         ("/api/v1/translations/{translation_group_id}", "get"): "getTranslationGroup",
         (
+            "/api/v1/translations/{translation_group_id}/html-editor",
+            "get",
+        ): "getHtmlEditorDocument",
+        (
+            "/api/v1/translations/{translation_group_id}/html-preview",
+            "get",
+        ): "getHtmlTemplatePreview",
+        (
             "/api/v1/translations/{translation_group_id}/constraints/{language}",
             "put",
         ): "putTranslationConstraint",

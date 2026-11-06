@@ -6,7 +6,26 @@ protection: it fails if any component fails, is cancelled, or is skipped.
 Also require **Website checks**, which runs on every pull request and main push.
 The workflow does not deploy the application or contact real repositories.
 
-The code-key and screenshot tests use synthetic Kotlin/Java and localization fixtures.
+The code-key and screenshot tests use synthetic Kotlin/Java, Angular and localization fixtures.
+The backend job installs the bounded TypeScript/Angular parser and runs the real
+[web capture smoke](angular-web-localization.md) through PostgreSQL, Redis, Celery,
+an offline Angular build and Chromium for three scenarios, two languages and two
+viewports. Web parser and renderer dependencies are locked in `tools/web-runtime`.
+Synthetic discovery and isolated-parser regressions cover applications with up to
+5,000 source files across modules, reject larger catalogs without partial results,
+and retain the separate 500-file limit for localization catalogs.
+Code traversal allows 20,000 total entries so package directories and unrelated
+files do not consume the source-file allowance; localization traversal remains
+limited to 5,000 entries.
+The administrator's successful-import response accepts up to 5,500 source
+references: 5,000 application files and 500 separate localization files.
+Synthetic source-cache tests cover reuse across adapters, expiry, byte/entry
+budgets, private filesystem access, credential changes and revoked provider access.
+Initial-import PostgreSQL regressions verify that multi-row inserts batch the
+database's read-projection triggers and reuse compiled SQL while preserving
+language counts and provenance.
+Unchanged refresh regressions also bound PostgreSQL read-projection updates while
+advancing source provenance to the new execution and preserving value history.
 The built smoke also configures a separate code/translation mapping through HTTP,
 imports code-only keys, checks missing keys in the browser, saves a proposal and
 requests its screenshot through the real Celery queue. PostgreSQL/API regressions
@@ -47,12 +66,14 @@ Use Docker, Node 24 and uv 0.11.12. The backend requires Python 3.14.7 or a late
 ```sh
 uv sync --project backend --locked
 npm ci --prefix frontend
+npm ci --prefix tools/web-runtime --ignore-scripts
 npm --prefix frontend run api:check
 backend/.venv/bin/python mcp-server/generate_contract.py --check
 npm --prefix frontend run lint
 npm --prefix frontend run build
 npm --prefix frontend test -- --run
 backend/.venv/bin/python tools/ci_backend.py --artifacts /tmp/verboflex-backend-evidence
+backend/.venv/bin/python tools/web_capture_smoke.py --artifacts /tmp/verboflex-web-evidence
 (cd backend && uv run --locked mypy src && uv run --locked ruff check src tests)
 uv sync --project mcp-server --locked
 uv run --project mcp-server pytest mcp-server/tests
@@ -101,7 +122,20 @@ translation-detail-review.spec.ts`. Synthetic records and an authenticated image
 fixture verify the review column, screenshots on the right, mobile stacking at 320
 pixels, the empty/unconfigured states, collapsed technical metadata, on-demand
 activity, viewer permissions, dirty-edit warnings and restoration without rendering.
+HTML fixtures additionally verify the visible email preview, saved and live text,
+fragment highlighting, embedded repository images, blocked external image requests,
+sandbox restrictions and fit at desktop and mobile widths. Backend image tests
+cover pinned commits, path normalization, budgets, access revocation and refresh
+without changing translation revisions or saved proposals.
 The Vitest suite also checks saved-proposal length and stale capture versions.
+The focused `email-template-editor.spec.ts` uses the same preview server and
+synthetic HTTP fixtures. It checks click/keyboard selection in the email canvas,
+protected variables, escaped live text, embedded images, saved proposals across
+fragments and reload, base-language editing, dirty-language guards, viewer access
+and fit at 320, 768 and 1440 pixels. Vitest additionally covers per-user/project
+view preferences, conflicts, failed saves and stale language responses. Real API
+tests cover current-scope catalog pagination, pending text across a document,
+permission revocation and inactive products without repository I/O.
 It also verifies named screenshot scenarios, automatic selection for a key, and
 text-position toggles without another render. Browser checks verify normalized
 outline alignment at 320, 768 and 1440 pixels. Synthetic backend tests enforce
@@ -170,3 +204,13 @@ only on macOS). Run `backend/.venv/bin/python -m pytest
 backend/tests/unit/localization/test_compose_macos.py`. A real private Android render
 remains a local integration check; no private Android source or translations belong
 in application CI fixtures.
+
+## Angular web capture
+
+The backend job also builds the pinned synthetic Angular image and runs the renderer
+negative tests inside a container with networking disabled. A real Celery worker then
+captures three scenarios in two languages at two viewport sizes, using saved text
+from the API. Unique render receipts and authenticated PNG digests are checked.
+Dependency preparation is separate from the offline application builds. This gate
+requires no private repository or provider credentials. See the
+[web onboarding guide](angular-web-localization.md) for profiles and runner setup.

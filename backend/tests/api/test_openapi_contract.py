@@ -62,6 +62,14 @@ IMPORT_OPERATIONS = {
 }
 
 TRANSLATION_OPERATIONS = {
+    ("/api/v1/translations/{translation_group_id}/html-editor", "get"): (
+        "getHtmlEditorDocument",
+        {"200", "401", "403", "404", "409", "422"},
+    ),
+    ("/api/v1/translations/{translation_group_id}/html-preview", "get"): (
+        "getHtmlTemplatePreview",
+        {"200", "401", "403", "404", "409", "422"},
+    ),
     ("/api/v1/translations/{group_id}/code-context", "get"): (
         "getTranslationCodeContext",
         {"422", "429", "401", "503", "200", "409", "403", "404"},
@@ -216,6 +224,21 @@ def test_dashboard_contract_is_closed_discriminated_and_has_no_actor_input() -> 
 
 
 EXPECTED_OPERATIONS = {
+    ("/api/v1/products/{product_id}/html-templates", "get"): (
+        "listHtmlTemplates",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
+    ("/api/v1/products/{product_id}/html-languages", "post"): (
+        "createHtmlLanguage",
+        {"202", "401", "403", "404", "409", "422"},
+        True,
+    ),
+    ("/api/v1/products/{product_id}/html-languages/{job_id}", "delete"): (
+        "discardHtmlLanguage",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
     ("/api/v1/dashboard/my-activity", "get"): (
         "listMyActivity",
         {"200", "401", "403", "422", "429", "503"},
@@ -1407,7 +1430,7 @@ def test_import_schema_literals_requirements_and_bounds_are_frozen() -> None:
     assert source["properties"]["size_bytes"]["maximum"] == 1_048_576
     assert source["properties"]["path"]["maxLength"] == 4096
     assert set(baseline["required"]) == set(baseline["properties"])
-    assert baseline["properties"]["source_references"]["maxItems"] == 500
+    assert baseline["properties"]["source_references"]["maxItems"] == 5_500
 
     assert set(comparison["required"]) == set(comparison["properties"])
     assert comparison["properties"]["topology"]["enum"] == ["direct", "separate"]
@@ -2043,6 +2066,7 @@ def test_translation_schemas_are_closed_bounded_and_non_leaking() -> None:
         "source_value_id",
         "source_resolution",
         "source_comparison",
+        "message_contract",
     }
     assert value["properties"]["id"]["format"] == "uuid"
     assert value["properties"]["selector_version"]["const"] == 1
@@ -2129,6 +2153,7 @@ def test_translation_schemas_are_closed_bounded_and_non_leaking() -> None:
         "json",
         "ios_strings",
         "xliff",
+        "html",
     ]
     assert provenance["properties"]["branch"]["maxLength"] == 255
     assert provenance["properties"]["path"]["maxLength"] == 4096
@@ -2630,7 +2655,12 @@ def test_admin_preview_openapi_is_closed_current_and_source_free() -> None:
         "finished_at",
     }
     assert result["additionalProperties"] is False
-    assert set(result["properties"]) == {"detector_version", "digest", "layout_candidates"}
+    assert set(result["properties"]) == {
+        "detector_version",
+        "digest",
+        "layout_candidates",
+        "excluded_files",
+    }
     assert result["properties"]["layout_candidates"]["maxItems"] == 500
     assert layout_candidate["additionalProperties"] is False
     assert set(layout_candidate["properties"]) == {
@@ -3177,5 +3207,5 @@ def test_openapi_exposes_xliff_in_preview_and_translation_formats() -> None:
     preview = schemas["AdminPreviewLayoutCandidateResponse"]["properties"]["format"]
     provenance = schemas["TranslationProvenanceResponse"]["properties"]["format"]
 
-    assert preview["enum"] == ["android_xml", "qt_ts", "json", "ios_strings", "xliff"]
-    assert provenance["enum"] == ["android_xml", "qt_ts", "json", "ios_strings", "xliff"]
+    assert preview["enum"] == ["android_xml", "qt_ts", "json", "ios_strings", "xliff", "html"]
+    assert provenance["enum"] == ["android_xml", "qt_ts", "json", "ios_strings", "xliff", "html"]

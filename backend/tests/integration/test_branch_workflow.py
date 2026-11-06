@@ -69,7 +69,7 @@ class Remote(PreparedSource):
         assert intent.branch.parent == self.head
         assert intent.branch.context.source_branch == self.work_branch
         assert all(
-            hashlib.sha256(self.versions[self.head][f.path]).hexdigest() == f.before_sha256
+            hashlib.sha256(self.versions[self.head].get(f.path, b"")).hexdigest() == f.before_sha256
             for f in intent.files
         )
         current = dict(self.versions[self.head])

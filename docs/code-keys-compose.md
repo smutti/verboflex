@@ -13,6 +13,8 @@ actual base and localized text. The extractor also supports explicitly selected
 Kotlin constants, Java static-final constants, single-string enum entries and
 configured calls with statically resolvable keys. Synthetic tests cover those forms.
 
+Web applications use a separate [Angular localization profile and web runner](angular-web-localization.md). Both engines share authenticated screenshot jobs, cancellation, expiry and stale-proposal checks. Existing Compose requests and version 1 runner bundles retain their original shape; web requests select an exact JSON value, scenario and viewport.
+
 ## Import and editing
 
 Run layout preview and confirm the translations layout/base language, then publish
@@ -33,6 +35,27 @@ catalog. Creation or renaming of code identifiers belongs in the application rep
 The catalog is stored on its import execution, covered by the canonical staging
 digest, and becomes visible only with that execution's atomic activation. Code
 locations are separate from localization file locators and can never be write targets.
+
+### Reusing immutable source downloads
+
+For larger applications, set `VERBOFLEX_REPOSITORY_SOURCE_CACHE_DIRECTORY` to a
+private temporary directory such as `/tmp/verboflex-source-cache`. Recreate the
+API and worker containers after changing the deployment environment. An empty
+setting disables caching. Workers in the same container share validated raw files
+between layout preview and import, reducing repeated Bitbucket requests.
+
+Entries are bound to the exact provider URL, commit and current credential. They
+are valid for 15 minutes; expired entries are removed on cache access. The cache
+retains at most 6,000 files, 1 MiB per file and 64 MiB of content, with a 128 MiB
+SQLite database ceiling. Its directory and database are private to the service
+user. Credentials are never stored in the cache. Cache failures fall back to the
+normal provider read, and source/parser budgets still apply to cached files.
+
+Branch heads, trees and errors are not cached. Every hit checks the current local
+credential authority before returning bytes; live repository access is checked
+before the first hit in each adapter and again after at most 15 seconds. Product
+permissions, publication checks and atomic import activation remain in the API
+and job services. A reconnected or renewed credential cannot reuse older entries.
 
 ## Registering a screen
 
@@ -67,6 +90,10 @@ conservatively combined; runtime branches, navigation state, dependency injectio
 reflection and arbitrary property indirection are not resolved. A listed key may not
 be visible in a particular fixture. Parameterized and custom multi-preview annotations
 need a dedicated zero-argument registered preview for this first integration.
+The index also recognizes annotated Kotlin functions with visibility modifiers
+and nested lambda bodies, retaining their original source locations. Private
+previews still need a reviewed fixture adapter that makes them callable inside
+the renderer's disposable checkout.
 
 ### Named screen scenarios
 
@@ -172,7 +199,7 @@ image through `GRADLE_RO_DEP_CACHE`. Other Gradle caches remain private writable
 per render. This avoids copying `caches/modules-2` for every screenshot without adding
 a writable shared host mount; see [the Linux deployment guide](compose-linux-runner.md).
 
-Code discovery allows at most 200 listing pages, 5,000 entries, 500 source files,
+Code discovery allows at most 200 listing pages, 20,000 entries, 5,000 source files,
 12 repository path segments, 1 MiB per file and 20 MiB total. The pinned Kotlin
 grammar rejects some otherwise valid one-line class members without a semicolon;
 put the closing brace on a new line or use an explicit semicolon. A grammar error

@@ -261,6 +261,16 @@
               "title": "Expected Candidate Version",
               "type": "integer"
             },
+            "localization_profile": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/JsonCatalogProfile"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "localization_root": {
               "anyOf": [
                 {
@@ -511,6 +521,59 @@
           "title": "ComposeCaptureConfig",
           "type": "object"
         },
+        "JsonCatalogProfile": {
+          "additionalProperties": false,
+          "properties": {
+            "files": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "maxProperties": 100,
+              "minProperties": 1,
+              "title": "Files",
+              "type": "object"
+            },
+            "rich_text_paths": {
+              "default": [],
+              "items": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "maxItems": 100,
+              "title": "Rich Text Paths",
+              "type": "array"
+            },
+            "syntax": {
+              "const": "ngx_translate",
+              "default": "ngx_translate",
+              "title": "Syntax",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "default": 1,
+              "title": "Version",
+              "type": "integer"
+            },
+            "web_capture": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WebCaptureConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "files"
+          ],
+          "title": "JsonCatalogProfile",
+          "type": "object"
+        },
         "PreviewScenario": {
           "additionalProperties": false,
           "description": "Reviewed visible keys for a named, already registered screen state.",
@@ -543,6 +606,72 @@
             "keys"
           ],
           "title": "PreviewScenario",
+          "type": "object"
+        },
+        "WebCaptureConfig": {
+          "additionalProperties": false,
+          "properties": {
+            "application_root": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Application Root"
+            },
+            "catalog_url_prefix": {
+              "default": "/assets/i18n/",
+              "pattern": "^/(?:[a-zA-Z0-9_-]+/)+$",
+              "title": "Catalog Url Prefix",
+              "type": "string"
+            },
+            "manifest_path": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Manifest Path",
+              "type": "string"
+            },
+            "marker": {
+              "default": "_",
+              "pattern": "^[a-zA-Z_$][a-zA-Z0-9_$]{0,63}$",
+              "title": "Marker",
+              "type": "string"
+            },
+            "runner_profile": {
+              "pattern": "^[a-zA-Z0-9_-]{1,64}$",
+              "title": "Runner Profile",
+              "type": "string"
+            },
+            "source_excludes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 30,
+              "title": "Source Excludes",
+              "type": "array"
+            },
+            "source_roots": {
+              "default": [
+                "src/app"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 10,
+              "minItems": 1,
+              "title": "Source Roots",
+              "type": "array"
+            }
+          },
+          "required": [
+            "manifest_path",
+            "runner_profile"
+          ],
+          "title": "WebCaptureConfig",
           "type": "object"
         }
       },
@@ -1295,7 +1424,8 @@
                 "android_xml",
                 "qt_ts",
                 "json",
-                "ios_strings"
+                "ios_strings",
+                "html"
               ],
               "title": "Format",
               "type": "string"
@@ -2739,7 +2869,8 @@
                 "android_xml",
                 "qt_ts",
                 "json",
-                "ios_strings"
+                "ios_strings",
+                "html"
               ],
               "title": "Format",
               "type": "string"
@@ -4045,6 +4176,16 @@
               "title": "Expected Candidate Version",
               "type": "integer"
             },
+            "localization_profile": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/JsonCatalogProfile"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "localization_root": {
               "anyOf": [
                 {
@@ -4295,6 +4436,59 @@
           "title": "ComposeCaptureConfig",
           "type": "object"
         },
+        "JsonCatalogProfile": {
+          "additionalProperties": false,
+          "properties": {
+            "files": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "maxProperties": 100,
+              "minProperties": 1,
+              "title": "Files",
+              "type": "object"
+            },
+            "rich_text_paths": {
+              "default": [],
+              "items": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "maxItems": 100,
+              "title": "Rich Text Paths",
+              "type": "array"
+            },
+            "syntax": {
+              "const": "ngx_translate",
+              "default": "ngx_translate",
+              "title": "Syntax",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "default": 1,
+              "title": "Version",
+              "type": "integer"
+            },
+            "web_capture": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WebCaptureConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "files"
+          ],
+          "title": "JsonCatalogProfile",
+          "type": "object"
+        },
         "PreviewScenario": {
           "additionalProperties": false,
           "description": "Reviewed visible keys for a named, already registered screen state.",
@@ -4327,6 +4521,72 @@
             "keys"
           ],
           "title": "PreviewScenario",
+          "type": "object"
+        },
+        "WebCaptureConfig": {
+          "additionalProperties": false,
+          "properties": {
+            "application_root": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Application Root"
+            },
+            "catalog_url_prefix": {
+              "default": "/assets/i18n/",
+              "pattern": "^/(?:[a-zA-Z0-9_-]+/)+$",
+              "title": "Catalog Url Prefix",
+              "type": "string"
+            },
+            "manifest_path": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Manifest Path",
+              "type": "string"
+            },
+            "marker": {
+              "default": "_",
+              "pattern": "^[a-zA-Z_$][a-zA-Z0-9_$]{0,63}$",
+              "title": "Marker",
+              "type": "string"
+            },
+            "runner_profile": {
+              "pattern": "^[a-zA-Z0-9_-]{1,64}$",
+              "title": "Runner Profile",
+              "type": "string"
+            },
+            "source_excludes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 30,
+              "title": "Source Excludes",
+              "type": "array"
+            },
+            "source_roots": {
+              "default": [
+                "src/app"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 10,
+              "minItems": 1,
+              "title": "Source Roots",
+              "type": "array"
+            }
+          },
+          "required": [
+            "manifest_path",
+            "runner_profile"
+          ],
+          "title": "WebCaptureConfig",
           "type": "object"
         }
       },

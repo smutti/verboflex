@@ -155,6 +155,12 @@ class ImportExecution(Base):
 
     __tablename__ = "import_executions"
 
+    html_preview_images: Mapped[dict[str, dict[str, str]] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True, deferred=True
+    )
+    web_context: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True, deferred=True
+    )
     code_catalog: Mapped[dict[str, object] | None] = mapped_column(
         JSONB(none_as_null=True), nullable=True
     )

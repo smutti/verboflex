@@ -20,6 +20,7 @@ from verboflex.api.v1.routes import (
     dashboard,
     glossary,
     health,
+    html_templates,
     notifications,
     product_team,
     product_workspace,
@@ -35,6 +36,7 @@ from verboflex.api.v1.routes import (
 )
 
 api_router = APIRouter()
+api_router.include_router(html_templates.router)
 api_router.include_router(screenshots.router)
 api_router.include_router(source_fallback.router)
 api_router.include_router(product_team.router)

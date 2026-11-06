@@ -1341,8 +1341,18 @@ def branch_workflow_smoke(h: Harness) -> None:
     target_head = second["items"][0]["commit_hash"]
     control = json.loads(h.control_path.read_text())
     h.control(branches={**control.get("branches", {}), slug: {"master": target_head}})
-    h.wait(lambda: h.api(f"/translations/{group['id']}"),
-        lambda d: d["pending_change"]["target_integrated"], seconds=150)
+    try:
+        h.wait(lambda: h.api(f"/translations/{group['id']}"),
+            lambda d: d["pending_change"]["target_integrated"], seconds=150)
+    except AssertionError:
+        pending = h.api(f"/translations/{group['id']}")["pending_change"]
+        jobs = h.api(endpoint)["items"]
+        write_json(Path(h.fixture["evidence_dir"]) / "branch-target-timeout.json", {
+            "target_head": target_head,
+            "pending": {key: pending.get(key) for key in ("version", "state", "reconciliation_required", "target_integrated", "target_branch", "target_commit_hash")},
+            "jobs": [{key: job.get(key) for key in ("id", "kind", "state", "commit_hash", "error_code", "updated_at")} for job in jobs],
+        })
+        raise
     h.browser({"name": "translation-integrated", "action": "translation-status", "product": product,
         "group": group["id"], "status": "integrated"})
     detail = h.api(f"/translations/{group['id']}")

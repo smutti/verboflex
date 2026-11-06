@@ -2,6 +2,12 @@
 
 FROM ghcr.io/astral-sh/uv:0.11.12 AS uv
 
+FROM node:24.15.0-bookworm-slim AS web-parser
+WORKDIR /opt/web-runtime
+COPY tools/web-runtime/package.json tools/web-runtime/package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY tools/web-runtime/extract.mjs ./
+
 FROM python:3.14-slim AS builder
 
 ENV UV_COMPILE_BYTECODE=1 \
@@ -40,6 +46,10 @@ WORKDIR /app
 COPY --from=builder --chown=verboflex:verboflex /opt/venv /opt/venv
 COPY --from=builder --chown=verboflex:verboflex /app/alembic.ini /app/alembic.ini
 COPY --from=builder --chown=verboflex:verboflex /app/alembic /app/alembic
+
+COPY --from=web-parser /usr/local/bin/node /usr/local/bin/node
+COPY --from=web-parser /opt/web-runtime /opt/web-runtime
+ENV VERBOFLEX_WEB_EXTRACTOR_COMMAND='["node","--max-old-space-size=256","/opt/web-runtime/extract.mjs"]'
 
 USER verboflex
 EXPOSE 8000

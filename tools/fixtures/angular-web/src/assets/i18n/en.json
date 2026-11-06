@@ -1,0 +1,26 @@
+{
+  "NAV": {
+    "SITES": "Sites"
+  },
+  "SITE": {
+    "SEARCH": "Search sites",
+    "NAME": "Name",
+    "ADDRESS": "Address"
+  },
+  "TENANT": {
+    "LIST": "Tenants",
+    "CREATE": "Create tenant",
+    "EMAIL": "Email",
+    "FIRST_NAME": "First name"
+  },
+  "VALIDATE": {
+    "MAX_LENGTH": "Use at most {{ value.requiredLength }} characters."
+  },
+  "GLOBAL": {
+    "CANCEL": "Cancel",
+    "SAVE": "Save"
+  },
+  "OTHER": {
+    "NAME": "Untouched"
+  }
+}

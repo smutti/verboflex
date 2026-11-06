@@ -125,6 +125,12 @@ def _raise_proposal_error(error: Exception) -> NoReturn:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Translation unavailable",
         ) from error
+    from verboflex.localization.web.messages import WebMessageInvalid
+
+    if isinstance(error, TranslationProposalInputInvalid) and isinstance(
+        error.__cause__, WebMessageInvalid
+    ):
+        raise HTTPException(status_code=422, detail=str(error.__cause__)) from error
     if isinstance(error, TranslationProposalInputInvalid):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

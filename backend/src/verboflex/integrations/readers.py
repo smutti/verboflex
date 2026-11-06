@@ -2,6 +2,7 @@
 
 from verboflex.core.config import Settings
 from verboflex.integrations.bitbucket.client import BitbucketHttpAdapter, BitbucketProviderReadError
+from verboflex.integrations.bitbucket.source_cache import SourceFileCache
 from verboflex.integrations.github.client import GitHubHttpAdapter
 from verboflex.services.bitbucket_oauth import BitbucketOAuthService, BitbucketOAuthTokenExchange
 
@@ -30,7 +31,15 @@ def create_repository_read_adapters(settings: Settings) -> RepositoryReadAdapter
         oauth = BitbucketOAuthService(
             settings=settings, token_exchange=BitbucketOAuthTokenExchange()
         )
-        bitbucket = BitbucketHttpAdapter(settings=settings, credential_leases=oauth)
+        bitbucket = BitbucketHttpAdapter(
+            settings=settings,
+            credential_leases=oauth,
+            source_cache=(
+                SourceFileCache(settings.repository_source_cache_directory)
+                if settings.repository_source_cache_directory
+                else None
+            ),
+        )
     except ValueError:
         pass
     return RepositoryReadAdapters(bitbucket, GitHubHttpAdapter())

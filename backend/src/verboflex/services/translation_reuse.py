@@ -106,14 +106,45 @@ def _rows(
         "source_value_id": selected.source_value_id if selected else None,
         "target_value_id": selected.target_value_id if selected else None,
     }
+    from sqlalchemy import select
+
+    from verboflex.localization.web.messages import WebMessageInvalid
+    from verboflex.models.product_mapping import ProductRepositoryMapping
+    from verboflex.models.translation import LocalizationScope, TranslationValue
+    from verboflex.services.web_messages import validate_replacements
+
+    web = (
+        query.exclude_value_id is not None
+        and session.scalar(
+            select(ProductRepositoryMapping.localization_profile)
+            .join(
+                LocalizationScope,
+                LocalizationScope.current_mapping_id == ProductRepositoryMapping.id,
+            )
+            .join(TranslationValue, TranslationValue.scope_id == LocalizationScope.id)
+            .where(
+                TranslationValue.id == query.exclude_value_id,
+                LocalizationScope.product_id == product_id,
+            )
+        )
+        is not None
+    )
     result = []
     for row in session.execute(
         text(_BASE_SQL.format(score=score, predicate=predicate)), parameters
     ).mappings():
         source, target = row["source_text"], row["target_text"]
-        if not target.strip() or not compatible_arguments(query.source_text, target, query.format):
+        if not target.strip():
             continue
-        if not compatible_arguments(query.source_text, source, query.format):
+        if web and query.exclude_value_id is not None:
+            try:
+                validate_replacements(session, {query.exclude_value_id: target})
+                validate_replacements(session, {query.exclude_value_id: source})
+            except WebMessageInvalid:
+                continue
+        elif not compatible_arguments(
+            query.source_text, target, query.format
+        ) or not compatible_arguments(query.source_text, source, query.format):
             continue
         exact = source == query.source_text
         if not exact and (not query.fuzzy or len(query.source_text) < 5 or row["score"] < 0.45):

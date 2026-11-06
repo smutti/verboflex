@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -35,9 +36,12 @@ def validate_png(content: bytes) -> None:
         raise ValueError("Screenshot dimensions exceed limits")
 
 
-def render(inputs: dict[str, object]) -> bytes:
+def _render(
+    inputs: dict[str, object], *, web: bool = False
+) -> tuple[bytes, dict[str, object] | None]:
     settings = get_settings()
-    if not settings.screenshot_runner_command:
+    command = settings.web_screenshot_runner_command if web else settings.screenshot_runner_command
+    if not command:
         raise ValueError("Capture runner unavailable")
     with tempfile.TemporaryDirectory(prefix="verboflex-capture-") as directory:
         request = Path(directory) / "input.json"
@@ -53,7 +57,7 @@ def render(inputs: dict[str, object]) -> bytes:
         # It is never exposed as a diagnostic, so discard it without a disk spool.
         subprocess.run(
             [
-                *settings.screenshot_runner_command,
+                *command,
                 "--input",
                 str(request),
                 "--output",
@@ -72,7 +76,44 @@ def render(inputs: dict[str, object]) -> bytes:
             raise ValueError("Capture runner did not produce a bounded image")
         content = output.read_bytes()
         validate_png(content)
-        return content
+        receipt = None
+        if web:
+            from verboflex.schemas.screenshots import WebCaptureReceipt
+
+            metadata = output.with_suffix(".json")
+            if not metadata.is_file() or metadata.is_symlink() or metadata.stat().st_size > 131072:
+                raise ValueError("Web capture receipt unavailable")
+            verified = WebCaptureReceipt.model_validate_json(metadata.read_bytes())
+            if (
+                verified.input_digest != hashlib.sha256(request.read_bytes()).hexdigest()
+                or verified.image_digest != hashlib.sha256(content).hexdigest()
+            ):
+                raise ValueError("Web capture receipt mismatch")
+            request_data = cast(dict[str, object], inputs["request"])
+            if (
+                verified.commit != inputs["commit"]
+                or verified.scenario_id != request_data["scenario_id"]
+                or verified.language != inputs["language"]
+                or verified.viewport != request_data["viewport"]
+                or verified.source_digest != inputs["source_digest"]
+                or verified.manifest_digest != inputs["manifest_digest"]
+            ):
+                raise ValueError("Web receipt authority mismatch")
+            viewport = cast(dict[str, int], inputs["viewport"])
+            if struct.unpack(">II", content[16:24]) != (viewport["width"], viewport["height"]):
+                raise ValueError("Web image viewport mismatch")
+            receipt = verified.model_dump(mode="json")
+        return content, receipt
+
+
+def render(inputs: dict[str, object]) -> bytes:
+    return _render(inputs)[0]
+
+
+def render_web(inputs: dict[str, object]) -> tuple[bytes, dict[str, object]]:
+    image, receipt = _render(inputs, web=True)
+    assert receipt is not None
+    return image, receipt
 
 
 def execute_capture(job_id: UUID, factory: sessionmaker[Session] = SessionFactory) -> None:
@@ -93,14 +134,19 @@ def execute_capture(job_id: UUID, factory: sessionmaker[Session] = SessionFactor
     image: bytes | None = None
     location: dict[str, object] | None = None
     failure: str | None = None
+    receipt = None
     try:
-        image = render(inputs)
+        if inputs.get("engine") == "web":
+            image, receipt = render_web(inputs)
+            location = cast(dict[str, object], receipt["location"])
+        else:
+            image = render(inputs)
     except subprocess.TimeoutExpired:
         failure = "render_timeout"
     except Exception:
         # Build logs may contain repository secrets; keep the public error closed.
         failure = "render_failed"
-    if image is not None and failure is None:
+    if image is not None and failure is None and receipt is None:
         try:
             location = locate_text(image, inputs).model_dump(mode="json")
         except Exception:
@@ -119,9 +165,11 @@ def execute_capture(job_id: UUID, factory: sessionmaker[Session] = SessionFactor
             row.state, row.image = "succeeded", image
             row.image_digest = hashlib.sha256(image).hexdigest()
             row.location = location
+            row.receipt = receipt
         else:
             row.state, row.image = "failed", None
             row.location = None
+            row.receipt = None
 
 
 @app.task(name="verboflex.screenshot.run", acks_late=True, reject_on_worker_lost=True)  # type: ignore[untyped-decorator]
@@ -161,6 +209,7 @@ def reconcile_screenshots() -> None:
             if row.expires_at <= now:
                 row.state, row.image, row.inputs = "expired", None, {}
                 row.location = None
+                row.receipt = None
             elif row.state == "rendering" and row.updated_at < now - timedelta(
                 seconds=settings.screenshot_timeout_seconds + 120,
             ):

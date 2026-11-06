@@ -82,6 +82,8 @@ def stage_translation_parse(
     references: tuple[ImportSourceReferenceRecord, ...],
     result: CanonicalParseResult,
     code_catalog: dict[str, object] | None = None,
+    web_context: dict[str, object] | None = None,
+    html_preview_images: dict[str, dict[str, str]] | None = None,
     correlation_references: Mapping[CorrelationIdentity, str] | None = None,
 ) -> StagedParseManifest | None:
     """Persist one immutable inactive parse result for an exact running execution."""
@@ -98,7 +100,9 @@ def stage_translation_parse(
         if authority is None:
             return None
         mapping, job, execution = authority
+        execution.web_context = web_context
         execution.code_catalog = code_catalog
+        execution.html_preview_images = html_preview_images
         validated_references = _validate_references(identity=identity, references=references)
         reference_by_locator = {
             (reference.repository_side, reference.path): reference
@@ -267,11 +271,25 @@ def staged_manifest_digest(
         ],
     )
 
-    catalog = session.get_one(ImportExecution, identity.execution_id).code_catalog
-    if catalog is None:
-        return digest
-    encoded = json.dumps(catalog, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-    return hashlib.sha256((digest + encoded).encode("ascii")).hexdigest()
+    execution = session.get_one(ImportExecution, identity.execution_id)
+    if execution.code_catalog is not None:
+        encoded = json.dumps(
+            execution.code_catalog, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        )
+        digest = hashlib.sha256((digest + encoded).encode("ascii")).hexdigest()
+    if execution.web_context is not None:
+        encoded = json.dumps(
+            execution.web_context, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        )
+        digest = hashlib.sha256((digest + "web-context:" + encoded).encode("ascii")).hexdigest()
+    if execution.html_preview_images is not None:
+        encoded = json.dumps(
+            execution.html_preview_images, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        )
+        digest = hashlib.sha256(
+            (digest + "html-preview-images:" + encoded).encode("ascii")
+        ).hexdigest()
+    return digest
 
 
 def require_complete_staged_manifest(
@@ -425,6 +443,7 @@ def reconcile_canonical_translations(
     updated_value_ids: list[UUID] = []
     tombstoned_value_ids: list[UUID] = []
     affected_value_ids: set[UUID] = set()
+    unchanged_locator_ids: list[UUID] = []
 
     for staged in staged_values:
         reference = reference_by_position.get(staged.source_reference_position)
@@ -564,15 +583,21 @@ def reconcile_canonical_translations(
                 affected_value_ids.add(value.id)
 
         seen_value_ids.add(value.id)
-        _upsert_locator(
+        unchanged_locator = _upsert_locator(
             session,
             value=value,
             identity=identity,
             staged=staged,
             reference=reference,
         )
+        if unchanged_locator:
+            unchanged_locator_ids.append(value.id)
         if (staged.position + 1) % 500 == 0:
+            _advance_unchanged_locators(session, identity, unchanged_locator_ids)
+            unchanged_locator_ids.clear()
             session.flush()
+
+    _advance_unchanged_locators(session, identity, unchanged_locator_ids)
 
     for key in existing_keys:
         for value in key.values:
@@ -793,11 +818,18 @@ def _insert_initial_dataset(
                 )
             )
             created.append(value_id)
+        # RETURNING selects SQLAlchemy's cached insertmanyvalues path, batching
+        # PostgreSQL's statement-level projections without recompiling every row.
+        # Only return scalar IDs, so no second ORM object graph is retained.
         if keys:
-            session.execute(insert(TranslationKey), keys)
-        session.execute(insert(TranslationValue), values)
-        session.execute(insert(TranslationValueRevision), revisions)
-        session.execute(insert(TranslationValueLocator), locators)
+            session.execute(insert(TranslationKey).returning(TranslationKey.id), keys).close()
+        session.execute(insert(TranslationValue).returning(TranslationValue.id), values).close()
+        session.execute(
+            insert(TranslationValueRevision).returning(TranslationValueRevision.id), revisions
+        ).close()
+        session.execute(
+            insert(TranslationValueLocator).returning(TranslationValueLocator.value_id), locators
+        ).close()
     deleted_keys = [key_id for key_id, deleted in all_deleted.items() if deleted]
     for offset in range(0, len(deleted_keys), 500):
         session.execute(
@@ -1069,7 +1101,8 @@ def _upsert_locator(
     identity: ImportExecutionIdentity,
     staged: StagedTranslationValue,
     reference: ImportSourceReference,
-) -> None:
+) -> bool:
+    """Return true when unchanged source metadata only needs new execution ownership."""
     locator = value.locator
     if locator is None:
         locator = TranslationValueLocator(
@@ -1091,7 +1124,21 @@ def _upsert_locator(
         )
         value.locator = locator
         session.add(locator)
-        return
+        return False
+    if (
+        locator.source_reference_position == reference.position
+        and locator.repository_side == staged.repository_side
+        and locator.repository_id == staged.repository_id
+        and locator.configured_branch == staged.configured_branch
+        and locator.source_commit_hash == reference.commit_hash
+        and locator.format == staged.format
+        and locator.path == staged.path
+        and locator.position == staged.locator_position
+        and locator.structural_address == staged.structural_address
+        and locator.line == staged.line
+        and locator.column == staged.column
+    ):
+        return True
     locator.import_job_id = identity.import_id
     locator.import_execution_id = identity.execution_id
     locator.source_reference_position = reference.position
@@ -1105,6 +1152,20 @@ def _upsert_locator(
     locator.structural_address = staged.structural_address
     locator.line = staged.line
     locator.column = staged.column
+    return False
+
+
+def _advance_unchanged_locators(
+    session: Session, identity: ImportExecutionIdentity, value_ids: list[UUID]
+) -> None:
+    """Batch provenance-only refreshes and synchronize already loaded ORM locators."""
+    if value_ids:
+        session.execute(
+            update(TranslationValueLocator)
+            .where(TranslationValueLocator.value_id.in_(value_ids))
+            .values(import_job_id=identity.import_id, import_execution_id=identity.execution_id)
+            .execution_options(synchronize_session="fetch")
+        )
 
 
 def _tombstone_reference(

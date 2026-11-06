@@ -395,6 +395,7 @@ export type AdminDirectMappingWriteRequest = {
      * Expected Candidate Version
      */
     expected_candidate_version: number;
+    localization_profile?: JsonCatalogProfile | null;
     /**
      * Localization Root
      */
@@ -694,6 +695,7 @@ export type AdminMappingResponse = {
      * Id
      */
     id: string;
+    localization_profile?: JsonCatalogProfile | null;
     /**
      * Primary Localization Root
      */
@@ -921,6 +923,10 @@ export type AdminPreviewJobResultResponse = {
      */
     digest: string;
     /**
+     * Excluded Files
+     */
+    excluded_files?: Array<string>;
+    /**
      * Layout Candidates
      */
     layout_candidates: Array<AdminPreviewLayoutCandidateResponse>;
@@ -943,7 +949,7 @@ export type AdminPreviewLayoutCandidateResponse = {
     /**
      * Format
      */
-    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'xliff';
+    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'xliff' | 'html';
     /**
      * Id
      */
@@ -2099,7 +2105,7 @@ export type BranchChange = {
     /**
      * Kind
      */
-    kind: 'commit' | 'pull_request';
+    kind: 'commit' | 'pull_request' | 'html_language';
     /**
      * Label
      */
@@ -2192,6 +2198,10 @@ export type BranchWorkflowResponse = {
      * Available Mappings
      */
     available_mappings?: Array<BranchMappingChoice>;
+    /**
+     * Can Add Html Language
+     */
+    can_add_html_language?: boolean;
     /**
      * Can Create Pr
      */
@@ -2442,7 +2452,7 @@ export type ChangeSetFileResponse = {
     /**
      * Format
      */
-    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | null;
+    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'html' | null;
     /**
      * Id
      */
@@ -2838,6 +2848,14 @@ export type CodeContextResponse = {
      */
     configured: boolean;
     /**
+     * Diagnostics
+     */
+    diagnostics?: Array<string>;
+    /**
+     * Engine
+     */
+    engine?: 'compose' | 'web';
+    /**
      * Occurrences
      */
     occurrences: Array<CodeOccurrence>;
@@ -2853,6 +2871,10 @@ export type CodeContextResponse = {
      * Scenarios
      */
     scenarios?: Array<ScreenScenario>;
+    /**
+     * Web Targets
+     */
+    web_targets?: Array<WebCaptureTarget>;
 };
 
 /**
@@ -3066,6 +3088,26 @@ export type ConfigureBranchWorkflow = {
      * Work Branch
      */
     work_branch: string;
+};
+
+/**
+ * CreateHtmlLanguage
+ */
+export type CreateHtmlLanguage = {
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Translations
+     */
+    translations?: {
+        [key: string]: string;
+    };
+    /**
+     * Workflow Id
+     */
+    workflow_id: string;
 };
 
 /**
@@ -3712,6 +3754,146 @@ export type HealthResponse = {
 };
 
 /**
+ * HtmlEditorDocument
+ */
+export type HtmlEditorDocument = {
+    /**
+     * Document
+     */
+    document: string;
+    /**
+     * Execution Id
+     */
+    execution_id: string;
+    /**
+     * Fragments
+     */
+    fragments: Array<HtmlEditorFragment>;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Missing Images
+     */
+    missing_images: number;
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Product Id
+     */
+    product_id: string;
+};
+
+/**
+ * HtmlEditorFragment
+ */
+export type HtmlEditorFragment = {
+    /**
+     * Element
+     */
+    element: string;
+    /**
+     * Group Id
+     */
+    group_id: string;
+    /**
+     * Marker
+     */
+    marker: string;
+    /**
+     * Position
+     */
+    position: number;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
+ * HtmlLanguageJobResponse
+ */
+export type HtmlLanguageJobResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * State
+     */
+    state: string;
+};
+
+/**
+ * HtmlTemplateCatalog
+ */
+export type HtmlTemplateCatalog = {
+    /**
+     * Items
+     */
+    items: Array<HtmlTemplateOption>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * HtmlTemplateOption
+ */
+export type HtmlTemplateOption = {
+    /**
+     * Base Language
+     */
+    base_language: string | null;
+    /**
+     * Group Id
+     */
+    group_id: string;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Scope Id
+     */
+    scope_id: string;
+};
+
+/**
+ * HtmlTemplatePreviewResponse
+ */
+export type HtmlTemplatePreviewResponse = {
+    /**
+     * Document
+     */
+    document: string;
+    /**
+     * Marker
+     */
+    marker: string;
+    /**
+     * Missing Images
+     */
+    missing_images?: number;
+    /**
+     * Path
+     */
+    path: string;
+};
+
+/**
  * ImportDatasetStatus
  *
  * Closed relationship between the current import and canonical dataset.
@@ -3748,6 +3930,31 @@ export type ImportParserIssue = {
      * Repository Side
      */
     repository_side: 'direct' | 'keys' | 'translations';
+};
+
+/**
+ * JsonCatalogProfile
+ */
+export type JsonCatalogProfile = {
+    /**
+     * Files
+     */
+    files: {
+        [key: string]: string;
+    };
+    /**
+     * Rich Text Paths
+     */
+    rich_text_paths?: Array<Array<string>>;
+    /**
+     * Syntax
+     */
+    syntax?: 'ngx_translate';
+    /**
+     * Version
+     */
+    version?: 1;
+    web_capture?: WebCaptureConfig | null;
 };
 
 /**
@@ -4422,7 +4629,7 @@ export type ReuseQuery = {
     /**
      * Format
      */
-    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings';
+    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'html';
     /**
      * Fuzzy
      */
@@ -4945,7 +5152,11 @@ export type ScreenScenario = {
     /**
      * Preview Function
      */
-    preview_function: string;
+    preview_function?: string;
+    /**
+     * Scenario Id
+     */
+    scenario_id?: string | null;
 };
 
 /**
@@ -5003,17 +5214,33 @@ export type ScreenshotRegion = {
  */
 export type ScreenshotRequest = {
     /**
+     * Engine
+     */
+    engine?: 'compose' | 'web';
+    /**
      * Preview Function
      */
-    preview_function: string;
+    preview_function?: string | null;
     /**
      * Proposal Version
      */
     proposal_version?: number | null;
     /**
+     * Scenario Id
+     */
+    scenario_id?: string | null;
+    /**
+     * Target Value Id
+     */
+    target_value_id?: string | null;
+    /**
      * Theme
      */
     theme?: 'light' | 'dark';
+    /**
+     * Viewport
+     */
+    viewport?: 'desktop' | 'mobile';
 };
 
 /**
@@ -5045,6 +5272,7 @@ export type ScreenshotResponse = {
      */
     input_digest: string;
     location?: ScreenshotLocation | null;
+    receipt?: WebCaptureReceipt | null;
     request: ScreenshotRequest;
     /**
      * State
@@ -6205,7 +6433,7 @@ export type TranslationProvenanceResponse = {
     /**
      * Format
      */
-    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'xliff';
+    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'xliff' | 'html';
     /**
      * Line
      */
@@ -6399,6 +6627,7 @@ export type TranslationValueResponse = {
      * Is Deleted
      */
     is_deleted: boolean;
+    message_contract?: WebMessageContract | null;
     provenance: TranslationProvenanceResponse | null;
     /**
      * Review State
@@ -6454,7 +6683,7 @@ export type TranslationWorkspaceProvenance = {
     /**
      * Format
      */
-    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'xliff';
+    format: 'android_xml' | 'qt_ts' | 'json' | 'ios_strings' | 'xliff' | 'html';
     /**
      * Path
      */
@@ -6517,6 +6746,143 @@ export type ValidationError = {
      * Error Type
      */
     type: string;
+};
+
+/**
+ * WebCaptureConfig
+ */
+export type WebCaptureConfig = {
+    /**
+     * Application Root
+     */
+    application_root?: string | null;
+    /**
+     * Catalog Url Prefix
+     */
+    catalog_url_prefix?: string;
+    /**
+     * Manifest Path
+     */
+    manifest_path: string;
+    /**
+     * Marker
+     */
+    marker?: string;
+    /**
+     * Runner Profile
+     */
+    runner_profile: string;
+    /**
+     * Source Excludes
+     */
+    source_excludes?: Array<string>;
+    /**
+     * Source Roots
+     */
+    source_roots?: Array<string>;
+};
+
+/**
+ * WebCaptureReceipt
+ */
+export type WebCaptureReceipt = {
+    /**
+     * Commit
+     */
+    commit: string;
+    /**
+     * Engine
+     */
+    engine: 'web';
+    /**
+     * Image Digest
+     */
+    image_digest: string;
+    /**
+     * Input Digest
+     */
+    input_digest: string;
+    /**
+     * Language
+     */
+    language: string;
+    location: ScreenshotLocation;
+    /**
+     * Manifest Digest
+     */
+    manifest_digest: string;
+    /**
+     * Render Id
+     */
+    render_id: string;
+    /**
+     * Rendered At
+     */
+    rendered_at: string;
+    /**
+     * Scenario Id
+     */
+    scenario_id: string;
+    /**
+     * Source Digest
+     */
+    source_digest: string;
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Version
+     */
+    version: 1;
+    /**
+     * Viewport
+     */
+    viewport: 'desktop' | 'mobile';
+};
+
+/**
+ * WebCaptureTarget
+ */
+export type WebCaptureTarget = {
+    /**
+     * Json Path
+     */
+    json_path: Array<string>;
+    /**
+     * Runtime Key
+     */
+    runtime_key: string;
+    /**
+     * Scenario Ids
+     */
+    scenario_ids: Array<string>;
+    /**
+     * Value Id
+     */
+    value_id: string;
+};
+
+/**
+ * WebMessageContract
+ */
+export type WebMessageContract = {
+    /**
+     * Rich Text
+     */
+    rich_text: boolean;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Syntax
+     */
+    syntax?: 'ngx_translate';
+    /**
+     * Tokens
+     */
+    tokens: Array<string>;
 };
 
 /**
@@ -11434,6 +11800,153 @@ export type SaveGlossaryTermResponses = {
 
 export type SaveGlossaryTermResponse = SaveGlossaryTermResponses[keyof SaveGlossaryTermResponses];
 
+export type CreateHtmlLanguageData = {
+    body: CreateHtmlLanguage;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/html-languages';
+};
+
+export type CreateHtmlLanguageErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Source or operation changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateHtmlLanguageError = CreateHtmlLanguageErrors[keyof CreateHtmlLanguageErrors];
+
+export type CreateHtmlLanguageResponses = {
+    /**
+     * Successful Response
+     */
+    202: HtmlLanguageJobResponse;
+};
+
+export type CreateHtmlLanguageResponse = CreateHtmlLanguageResponses[keyof CreateHtmlLanguageResponses];
+
+export type DiscardHtmlLanguageData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/html-languages/{job_id}';
+};
+
+export type DiscardHtmlLanguageErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Source or operation changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DiscardHtmlLanguageError = DiscardHtmlLanguageErrors[keyof DiscardHtmlLanguageErrors];
+
+export type DiscardHtmlLanguageResponses = {
+    /**
+     * Successful Response
+     */
+    200: HtmlLanguageJobResponse;
+};
+
+export type DiscardHtmlLanguageResponse = DiscardHtmlLanguageResponses[keyof DiscardHtmlLanguageResponses];
+
+export type ListHtmlTemplatesData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: {
+        /**
+         * After
+         */
+        after?: string | null;
+    };
+    url: '/api/v1/products/{product_id}/html-templates';
+};
+
+export type ListHtmlTemplatesErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Source or operation changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListHtmlTemplatesError = ListHtmlTemplatesErrors[keyof ListHtmlTemplatesErrors];
+
+export type ListHtmlTemplatesResponses = {
+    /**
+     * Successful Response
+     */
+    200: HtmlTemplateCatalog;
+};
+
+export type ListHtmlTemplatesResponse = ListHtmlTemplatesResponses[keyof ListHtmlTemplatesResponses];
+
 export type ResolveTranslationSuggestionData = {
     body: ReuseResolve;
     path: {
@@ -13148,6 +13661,98 @@ export type PutTranslationConstraintResponses = {
 };
 
 export type PutTranslationConstraintResponse = PutTranslationConstraintResponses[keyof PutTranslationConstraintResponses];
+
+export type GetHtmlEditorDocumentData = {
+    body?: never;
+    path: {
+        /**
+         * Translation Group Id
+         */
+        translation_group_id: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{translation_group_id}/html-editor';
+};
+
+export type GetHtmlEditorDocumentErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Source or operation changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetHtmlEditorDocumentError = GetHtmlEditorDocumentErrors[keyof GetHtmlEditorDocumentErrors];
+
+export type GetHtmlEditorDocumentResponses = {
+    /**
+     * Successful Response
+     */
+    200: HtmlEditorDocument;
+};
+
+export type GetHtmlEditorDocumentResponse = GetHtmlEditorDocumentResponses[keyof GetHtmlEditorDocumentResponses];
+
+export type GetHtmlTemplatePreviewData = {
+    body?: never;
+    path: {
+        /**
+         * Translation Group Id
+         */
+        translation_group_id: string;
+    };
+    query?: never;
+    url: '/api/v1/translations/{translation_group_id}/html-preview';
+};
+
+export type GetHtmlTemplatePreviewErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Source or operation changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetHtmlTemplatePreviewError = GetHtmlTemplatePreviewErrors[keyof GetHtmlTemplatePreviewErrors];
+
+export type GetHtmlTemplatePreviewResponses = {
+    /**
+     * Successful Response
+     */
+    200: HtmlTemplatePreviewResponse;
+};
+
+export type GetHtmlTemplatePreviewResponse = GetHtmlTemplatePreviewResponses[keyof GetHtmlTemplatePreviewResponses];
 
 export type SaveTranslationProposalData = {
     body: SaveTranslationProposalRequest;

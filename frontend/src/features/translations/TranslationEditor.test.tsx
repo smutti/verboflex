@@ -131,6 +131,46 @@ afterEach(() => {
 });
 
 describe("TranslationEditor", () => {
+  it("inserts protected web tokens and preserves the draft after an API contract error", async () => {
+    const source = detail();
+    source.values = [source.values[0]];
+    source.values[0].message_contract = {
+      source: "Hello {{ name }}",
+      tokens: ["{{ name }}"],
+      rich_text: false,
+    };
+    const onSaved = vi.fn();
+    function WebEditor() {
+      const [draft, setDraft] = useState(() =>
+        createActiveTranslationDraft(source, "person"),
+      );
+      return (
+        <TranslationEditor
+          accessToken="token"
+          draft={draft}
+          onDraftChange={setDraft}
+          onSaved={onSaved}
+          onStop={vi.fn()}
+        />
+      );
+    }
+    vi.mocked(saveTranslationProposal).mockResolvedValue({
+      error: { detail: "Translation parameters must match the source" },
+      response: { status: 422 },
+    } as never);
+    render(<WebEditor />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "{{ name }}" }));
+    const field = screen.getByRole("textbox", { name: /quantity one/i });
+    expect(field).toHaveValue("公開一{{ name }}");
+    await user.click(screen.getByRole("button", { name: "Save translation" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Translation parameters must match the source",
+    );
+    expect(field).toHaveValue("公開一{{ name }}");
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
   it("shows split-source context without guessing unequal plural pairs and confirms saving only on success", async () => {
     const source = detail();
     source.values[0].source_resolution = "matched";
@@ -403,13 +443,19 @@ describe("TranslationConflictDialog", () => {
 });
 
 describe("compact cells", () => {
-  it.each(["direct", "translations"] as const)(
-    "initializes %s base leaves from actual source text and never fills empty Qt targets",
-    (side) => {
+  it.each([
+    ["direct", "json"],
+    ["translations", "json"],
+    ["direct", "html"],
+    ["translations", "html"],
+  ] as const)(
+    "initializes %s %s base leaves from actual source text and never fills empty Qt targets",
+    (side, format) => {
       const source = detail();
       source.language = "en";
       source.values = [source.values[0]];
-      source.values[0].selector_kind = "json_path";
+      source.values[0].selector_kind =
+        format === "html" ? "scalar" : "json_path";
       source.values[0].translated_text = null;
       source.values[0].source_text = "Real base value";
       source.values[0].display_text = "Real base value";
@@ -418,8 +464,8 @@ describe("compact cells", () => {
         repository_name: "Repo",
         repository_side: side,
         branch: "main",
-        path: "en.json",
-        format: "json",
+        path: format === "html" ? "Welcome-EN.html" : "en.json",
+        format,
         commit_hash: "a",
         execution_id: "e",
         line: null,

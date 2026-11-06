@@ -63,3 +63,7 @@ images remain real application captures. The website never calls a capture servi
 Do not describe this as live rendering, automatic capture after every edit, instant
 rendering, support for every Compose target, or a guarantee that a registered key
 appears in every fixture. Screenshot generation does not approve or submit changes.
+
+## Angular web capture
+
+The guide's Angular claims are supported by [web profiles and message validation](../docs/angular-web-localization.md), the [API/Celery capture integration](../backend/tests/integration/test_web_screenshots.py) and the [synthetic Angular scenarios](../tools/fixtures/angular-web/capture.json). Coverage is registered scenarios in English/Italian, light appearance and two viewports. It does not imply arbitrary website capture, live authentication, production backend calls or automatic translation. No private pilot images are included in the public site.

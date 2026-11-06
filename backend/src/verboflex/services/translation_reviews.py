@@ -18,6 +18,7 @@ from verboflex.auth.translation_access import (
     resolve_translation_group_access,
 )
 from verboflex.localization.graphemes import grapheme_count
+from verboflex.localization.html import valid_html_replacement
 from verboflex.models.product import Product
 from verboflex.models.review import ReviewActivity, TranslationProposal, TranslationProposalValue
 from verboflex.models.translation import (
@@ -668,6 +669,29 @@ def save_translation_proposal(
             )
         )
 
+    from verboflex.localization.web.messages import WebMessageInvalid
+    from verboflex.services.web_messages import validate_replacements
+
+    try:
+        validate_replacements(
+            session, {item.translation_value_id: item.proposed_text for item in attempted}
+        )
+    except WebMessageInvalid as error:
+        raise TranslationProposalInputInvalid(str(error)) from error
+
+    for item in attempted:
+        current = current_by_id[item.translation_value_id]
+        if current.locator is not None and current.locator.format == "html":
+            basis_text = (
+                current.translated_text
+                if current.translated_text is not None
+                else current.source_text
+            )
+            if not valid_html_replacement(basis_text or "", item.proposed_text):
+                raise TranslationProposalInputInvalid(
+                    "HTML text must retain template variables and cannot be empty"
+                )
+
     now = datetime.now(UTC)
     if proposal is None:
         previous_state: ReviewStateValue | None = None
@@ -980,6 +1004,15 @@ def transition_translation_proposal(
     if not complete:
         raise ProposalReviewBlocked("translation proposal review blocked")
     if transition.target_state == "approved":
+        from verboflex.localization.web.messages import WebMessageInvalid
+        from verboflex.services.web_messages import validate_replacements
+
+        try:
+            validate_replacements(
+                session, {item.translation_value_id: item.proposed_text for item in proposal.values}
+            )
+        except WebMessageInvalid as error:
+            raise ProposalReviewBlocked(str(error)) from error
         current_by_id = {value.id: value for value in current_values}
         stale_basis = proposal.reconciliation_required or any(
             item.translation_value_id not in current_by_id

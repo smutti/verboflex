@@ -11,7 +11,7 @@ from verboflex.localization.importing.core import (
     CanonicalValue,
     canonical_selector_bytes,
 )
-from verboflex.localization.writing import android_xml, ios_strings, json, qt_ts
+from verboflex.localization.writing import android_xml, html, ios_strings, json, qt_ts
 from verboflex.localization.writing.core import (
     RenderedFile,
     SourceFileSnapshot,
@@ -74,6 +74,7 @@ def _render_edits(
         "qt_ts",
         "json",
         "ios_strings",
+        "html",
     }:
         raise WritebackRejected(WritebackReason.UNSUPPORTED_FORMAT)
     if type(edits) is not tuple or len(edits) > MAX_CANONICAL_VALUES:
@@ -116,6 +117,7 @@ def _render_edits(
         "qt_ts": qt_ts,
         "json": json,
         "ios_strings": ios_strings,
+        "html": html,
     }[parser_input.format]
     spans = adapter.plan_edits(parser_input, changed)
     content = apply_byte_edits(parser_input.content, spans)

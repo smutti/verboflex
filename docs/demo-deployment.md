@@ -84,7 +84,7 @@ and pull requests.
 
 HTTP MCP is disabled in the generated environment. Enable it explicitly by setting
 `VERBOFLEX_MCP_PUBLIC_URL=https://demo.example.org/mcp`, recreating backend, worker
-and scheduler, and following the [MCP guide](../mcp-server/README.md).
+and scheduler, and following the [remote MCP deployment guide](mcp-deployment.md).
 
 ## Verify and operate
 

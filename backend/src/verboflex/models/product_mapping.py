@@ -33,6 +33,11 @@ class ProductRepositoryMapping(Base):
     __tablename__ = "product_repository_mappings"
     __table_args__ = (
         CheckConstraint(
+            "localization_profile IS NULL OR (topology = 'direct' "
+            "AND jsonb_typeof(localization_profile) = 'object')",
+            name="web_profile_direct",
+        ),
+        CheckConstraint(
             "code_source IS NULL OR "
             "(topology = 'separate' AND jsonb_typeof(code_source) = 'object')",
             name="code_source_separate",
@@ -104,6 +109,9 @@ class ProductRepositoryMapping(Base):
     topology: Mapped[str] = mapped_column(String(16), nullable=False)
     identity_key: Mapped[str] = mapped_column(String(1200), nullable=False)
     base_language: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    localization_profile: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
     code_source: Mapped[dict[str, object] | None] = mapped_column(
         JSONB(none_as_null=True), nullable=True
     )

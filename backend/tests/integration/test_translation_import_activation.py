@@ -247,6 +247,8 @@ def _seed_running_direct_import(
     factory: sessionmaker[Session],
     *,
     base_language: str = "en",
+    localization_profile: dict[str, object] | None = None,
+    localization_root: str | None = None,
 ) -> tuple[import_jobs.ImportExecutionIdentity, UUID]:
     product_id = uuid4()
     revision_id = uuid4()
@@ -288,11 +290,13 @@ def _seed_running_direct_import(
                 topology="direct",
                 identity_key=f'["direct","{repository_id}","main"]',
                 base_language=base_language,
+                localization_profile=localization_profile,
                 sides=[
                     ProductMappingRepositorySide(
                         role="direct",
                         repository_id=repository_id,
                         source_branch="main",
+                        localization_root=localization_root,
                     )
                 ],
                 allowed_targets=[ProductMappingAllowedTarget(branch="main", is_default=True)],
@@ -1486,7 +1490,7 @@ def test_initial_activation_batches_values_without_per_value_database_roundtrips
     identity, repository_id = _seed_running_direct_import(factory)
     content = (
         "<resources>"
-        + "".join(f'<string name="key{i}">Text {i}</string>' for i in range(500))
+        + "".join(f'<string name="key{i}">Text {i}</string>' for i in range(1001))
         + "</resources>"
     ).encode()
     result = parse_canonical_mapping(
@@ -1506,9 +1510,12 @@ def test_initial_activation_batches_values_without_per_value_database_roundtrips
         factory, identity=identity, repository_id=repository_id, result=result
     )
     statements = []
+    cacheable_inserts = []
 
     def observed(_connection, _cursor, statement, _parameters, _context, _executemany):
         statements.append(statement.split()[0])
+        if statement.startswith("INSERT INTO translation_"):
+            cacheable_inserts.append(_context.compiled.cache_key is not None)
 
     engine = factory.kw["bind"]
     event.listen(engine, "before_cursor_execute", observed)
@@ -1522,8 +1529,84 @@ def test_initial_activation_batches_values_without_per_value_database_roundtrips
     finally:
         event.remove(engine, "before_cursor_execute", observed)
     with factory() as session:
-        assert session.scalar(select(func.count()).select_from(TranslationValue)) == 500
+        assert session.scalar(select(func.count()).select_from(TranslationValue)) == 1001
+        scope = session.scalar(
+            select(LocalizationScope).where(LocalizationScope.product_id == identity.product_id)
+        )
+        assert scope.language_counts == {"en": [1001, 1001]}
+        # Executemany can look batched to SQLAlchemy while firing PostgreSQL's
+        # statement-level read projections once per row. Bound the actual work.
+        assert scope.read_version < 20
     assert len(statements) < 150, f"Per-value database work: {len(statements)} statements"
+    assert cacheable_inserts and all(cacheable_inserts), "Each batch must reuse compiled SQL"
+
+
+def test_unchanged_refresh_batches_provenance_without_changing_history(
+    activation_session_factory,
+):
+    from sqlalchemy import event, func
+
+    factory = activation_session_factory
+    identity, repository_id = _seed_running_direct_import(factory)
+    content = (
+        "<resources>"
+        + "".join(f'<string name="key{i}">Text {i}</string>' for i in range(1001))
+        + "</resources>"
+    ).encode()
+    result = parse_canonical_mapping(
+        (
+            CanonicalParserInput(
+                format="android_xml",
+                repository_side="direct",
+                path="res/values/strings.xml",
+                content=content,
+                layout_identity="res",
+                layout_version=1,
+                base_language="en",
+            ),
+        )
+    )
+    _reconcile_staged_result(
+        factory,
+        identity=identity,
+        repository_id=repository_id,
+        result=result,
+        path="res/values/strings.xml",
+    )
+    with factory() as session:
+        prior_ids = set(session.scalars(select(TranslationValue.id)))
+        scope = session.scalar(select(LocalizationScope))
+        prior_version = scope.read_version
+    refreshed = _start_refresh_execution(factory, identity)
+    statements = []
+
+    def observed(_connection, _cursor, statement, _parameters, _context, _executemany):
+        if statement.startswith("UPDATE translation_value_locators"):
+            statements.append(statement)
+
+    engine = factory.kw["bind"]
+    event.listen(engine, "before_cursor_execute", observed)
+    try:
+        _reconcile_staged_result(
+            factory,
+            identity=refreshed,
+            repository_id=repository_id,
+            result=result,
+            path="res/values/strings.xml",
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", observed)
+    with factory() as session:
+        assert set(session.scalars(select(TranslationValue.id))) == prior_ids
+        assert session.scalar(select(func.count()).select_from(TranslationValueRevision)) == 1001
+        locators = tuple(session.scalars(select(TranslationValueLocator)))
+        assert len(locators) == 1001
+        assert all(locator.import_execution_id == refreshed.execution_id for locator in locators)
+        assert all(locator.source_commit_hash == "a" * 40 for locator in locators)
+        scope = session.scalar(select(LocalizationScope))
+        assert scope.language_counts == {"en": [1001, 1001]}
+        assert scope.read_version - prior_version < 20
+    assert len(statements) == 3
 
 
 def test_activation_advances_dataset_and_baseline_to_the_same_execution(

@@ -19,6 +19,7 @@ import {
 } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  getHtmlTemplatePreview,
   getTranslationCommentAnchor,
   getTranslationCodeContext,
   listTranslationScreenshots,
@@ -39,6 +40,7 @@ import { consumeSubmissionEntry } from "../change-sets/submissionEntry";
 import { DirtyFormNavigationProvider } from "../../components/navigation/DirtyFormNavigationGuard";
 
 vi.mock("../../api/client", () => ({
+  getHtmlTemplatePreview: vi.fn(),
   getTranslationCodeContext: vi.fn(),
   listTranslationScreenshots: vi.fn(),
   getTranslationSuggestions: vi.fn().mockResolvedValue({ data: { items: [] } }),
@@ -1645,4 +1647,32 @@ describe("Phase 5 complete activity history", () => {
     );
     expect(await screen.findByText("after 1 مرحبا 中文")).toBeVisible();
   });
+});
+
+it("uses the screenshot column for a visible HTML preview, including for viewers", async () => {
+  const html = detailFixture();
+  html.values[0].provenance!.format = "html";
+  html.values[0].translated_text = "Welcome";
+  vi.mocked(getTranslationGroup).mockResolvedValue({ data: html } as never);
+  vi.mocked(getHtmlTemplatePreview).mockResolvedValue({
+    data: {
+      document: "<html><body><p><!--SELECTED--></p></body></html>",
+      marker: "<!--SELECTED-->",
+      path: "Welcome-IT.html",
+    },
+  } as never);
+  mount("viewer");
+  const frame = await screen.findByTitle("HTML template preview");
+  expect(
+    within(
+      screen.getByRole("complementary", { name: "HTML template preview" }),
+    ).getByTitle("HTML template preview"),
+  ).toBe(frame);
+  expect(frame).toBeVisible();
+  expect(frame.getAttribute("srcdoc")).toContain(">Welcome</mark>");
+  expect(getTranslationCodeContext).not.toHaveBeenCalled();
+  expect(listTranslationScreenshots).not.toHaveBeenCalled();
+  expect(
+    screen.queryByRole("button", { name: "Edit translation" }),
+  ).not.toBeInTheDocument();
 });

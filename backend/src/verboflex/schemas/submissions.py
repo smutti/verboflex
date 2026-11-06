@@ -236,7 +236,7 @@ class ChangeSetFileResponse(ClosedModel):
     attributes: list[Literal["binary"]]
     changed_values: int
     source: ChangeSetSource | None
-    format: Literal["android_xml", "qt_ts", "json", "ios_strings"] | None
+    format: Literal["android_xml", "qt_ts", "json", "ios_strings", "html"] | None
 
 
 class BranchReceiptResponse(ClosedModel):

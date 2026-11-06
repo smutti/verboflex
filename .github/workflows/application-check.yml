@@ -33,6 +33,7 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --prefix tools/web-runtime --ignore-scripts
       # Architecture checks parse and execute frontend ownership contracts.
       - run: npm ci --prefix frontend
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -50,6 +51,8 @@ jobs:
           uv run --locked mypy src
       - name: Complete suite with disposable database, broker and worker
         run: backend/.venv/bin/python tools/ci_backend.py --artifacts "$RUNNER_TEMP/backend-evidence"
+      - name: Real Angular capture through Celery
+        run: backend/.venv/bin/python tools/web_capture_smoke.py --artifacts "$RUNNER_TEMP/backend-evidence/web"
       - name: Test evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

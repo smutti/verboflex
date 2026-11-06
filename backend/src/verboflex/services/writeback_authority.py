@@ -588,6 +588,15 @@ def _capture(
         pending_map = {item.translation_value_id: item for item in pending}
         if set(pending_map) != {value.id for value in values}:
             raise _stale()
+        from verboflex.localization.web.messages import WebMessageInvalid
+        from verboflex.services.web_messages import validate_replacements
+
+        try:
+            validate_replacements(
+                session, {item.translation_value_id: item.proposed_text for item in pending}
+            )
+        except WebMessageInvalid as error:
+            raise WritebackRejected(WritebackReason.INVALID_REPLACEMENT) from error
         mapping = mappings[scope.id]
         rules: tuple[TranslationConstraint, ...] = _bounded(
             session,
@@ -827,7 +836,7 @@ def build_source_file_snapshot(
     snapshot = SourceFileSnapshot(authority, parser_input, metadata.attributes)
     if parser_input.repository_side == "keys":
         raise WritebackRejected(WritebackReason.STALE_BASIS)
-    if parser_input.format not in {"android_xml", "qt_ts", "json", "ios_strings"}:
+    if parser_input.format not in {"android_xml", "qt_ts", "json", "ios_strings", "html"}:
         raise WritebackRejected(WritebackReason.UNSUPPORTED_FORMAT)
     if inspect_writeback_snapshot(parser_input).issues:
         raise WritebackRejected(WritebackReason.UNSUPPORTED_SHAPE)
