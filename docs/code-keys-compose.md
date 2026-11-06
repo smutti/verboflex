@@ -13,6 +13,8 @@ actual base and localized text. The extractor also supports explicitly selected
 Kotlin constants, Java static-final constants, single-string enum entries and
 configured calls with statically resolvable keys. Synthetic tests cover those forms.
 
+Web applications use a separate [Angular localization profile and web runner](angular-web-localization.md). Both engines share authenticated screenshot jobs, cancellation, expiry and stale-proposal checks. Existing Compose requests and version 1 runner bundles retain their original shape; web requests select an exact JSON value, scenario and viewport.
+
 ## Import and editing
 
 Run layout preview and confirm the translations layout/base language, then publish

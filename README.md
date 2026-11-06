@@ -33,7 +33,7 @@ For a live portal walkthrough, import [VerboFlex Demo](https://github.com/smutti
 - Fill missing translations, add keys in existing files and edit native Android/Qt plural forms.
 - Reuse exact or similar translations from the same product and consult glossary hints.
 - Save drafts, discuss changes with comments and mentions, and approve or reject proposals.
-- Generate screenshots from configured Android Compose previews to review saved translations in their screen context.
+- Generate screenshots from configured Android Compose previews or Angular web scenarios to review saved translations in their screen context.
 - Refresh from repositories and reconcile proposals when their source changes.
 - Prepare approved changes for Bitbucket Cloud pull requests.
 - Connect assistants through the HTTP MCP server with OAuth, using the same user roles.
@@ -74,6 +74,7 @@ The application is a React/Vite frontend and FastAPI backend with PostgreSQL, Re
 | Backup and restore              | [`docs/backup-restore.md`](docs/backup-restore.md)                                               |
 | Database maintenance            | [`docs/database-maintenance.md`](docs/database-maintenance.md)                                   |
 | Public GitHub imports           | [`docs/github-imports.md`](docs/github-imports.md)                                               |
+| Angular JSON and web screenshots | [`docs/angular-web-localization.md`](docs/angular-web-localization.md) |
 | Kotlin/Java keys and Compose screenshots | [`docs/code-keys-compose.md`](docs/code-keys-compose.md) |
 
 ## Run your own workspace

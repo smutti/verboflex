@@ -76,7 +76,8 @@ async function dirtyEntry(mapping) {
   proof.keyboard.push({dirty_editor:true,keep_editing_focus:true,discard_navigation:true,overlay_unmounted:true,route_focus_preserved:true});save();
 }
 async function login(role="admin") {
-  const user=fixture.users[role];check(user);await page.goto(`${frontend}/login`);
+  const user=fixture.users[role];check(user);
+  await page.goto(`${frontend}/login`);
   await page.getByRole("textbox",{name:"Email"}).fill(user.email);
   await page.getByLabel("Password",{exact:true}).fill(user.password);
   for(let attempt=0;attempt<2;attempt++){
@@ -319,6 +320,10 @@ try {
 }catch(error){
   const lines=Array.from(String(error?.stack??"").matchAll(/\.mjs:(\d+):\d+/g),match=>match[1]).join("-");
   proof.failure={stage,lines,error_name:/^[A-Za-z]+$/.test(error?.name??"")?error.name:"Error"};
+  if(page){
+    proof.failure.page=await page.evaluate(()=>({path:location.pathname,language:document.documentElement.lang,headings:[...document.querySelectorAll("h1,h2")].map(el=>el.textContent),labels:[...document.querySelectorAll("label")].map(el=>el.textContent)})).catch(()=>null);
+    await page.screenshot({path:join(evidence,"phase7-failure.png"),mask:[page.locator("input,textarea")]}).catch(()=>undefined);
+  }
   save();
   console.error(`phase7 smoke failed: ${stage}${lines?"-lines"+lines:""}`);
   process.exitCode=1;

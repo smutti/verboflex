@@ -37,7 +37,7 @@ export async function openNativeZoomBrowser({runtimeDir=tmpdir()}={}) {
     const extension = join(root,"extension"); mkdirSync(extension,{mode:0o700});
     writeFileSync(join(extension,"manifest.json"),JSON.stringify({manifest_version:3,name:"VerboFlex isolated zoom proof",version:"1.0.0",permissions:["tabs"],background:{service_worker:"worker.js"}}),{mode:0o600});
     writeFileSync(join(extension,"worker.js"),"chrome.runtime.onInstalled.addListener(() => {});",{mode:0o600});
-    launching=chromium.launchPersistentContext(join(root,"profile"),{channel:"chromium",headless:true,handleSIGINT:false,handleSIGTERM:false,handleSIGHUP:false,viewport:{width:1440,height:900},reducedMotion:"no-preference",args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
+    launching=chromium.launchPersistentContext(join(root,"profile"),{channel:"chromium",headless:true,locale:"en-US",handleSIGINT:false,handleSIGTERM:false,handleSIGHUP:false,viewport:{width:1440,height:900},reducedMotion:"no-preference",args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
     context = await launching;
     const worker = context.serviceWorkers()[0] ?? await context.waitForEvent("serviceworker",{timeout:15000});
     return {context,

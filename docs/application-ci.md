@@ -6,7 +6,11 @@ protection: it fails if any component fails, is cancelled, or is skipped.
 Also require **Website checks**, which runs on every pull request and main push.
 The workflow does not deploy the application or contact real repositories.
 
-The code-key and screenshot tests use synthetic Kotlin/Java and localization fixtures.
+The code-key and screenshot tests use synthetic Kotlin/Java, Angular and localization fixtures.
+The backend job installs the bounded TypeScript/Angular parser and runs the real
+[web capture smoke](angular-web-localization.md) through PostgreSQL, Redis, Celery,
+an offline Angular build and Chromium for three scenarios, two languages and two
+viewports. Web parser and renderer dependencies are locked in `tools/web-runtime`.
 Synthetic discovery and isolated-parser regressions cover applications with up to
 5,000 source files across modules, reject larger catalogs without partial results,
 and retain the separate 500-file limit for localization catalogs.
@@ -62,12 +66,14 @@ Use Docker, Node 24 and uv 0.11.12. The backend requires Python 3.14.7 or a late
 ```sh
 uv sync --project backend --locked
 npm ci --prefix frontend
+npm ci --prefix tools/web-runtime --ignore-scripts
 npm --prefix frontend run api:check
 backend/.venv/bin/python mcp-server/generate_contract.py --check
 npm --prefix frontend run lint
 npm --prefix frontend run build
 npm --prefix frontend test -- --run
 backend/.venv/bin/python tools/ci_backend.py --artifacts /tmp/verboflex-backend-evidence
+backend/.venv/bin/python tools/web_capture_smoke.py --artifacts /tmp/verboflex-web-evidence
 (cd backend && uv run --locked mypy src && uv run --locked ruff check src tests)
 uv sync --project mcp-server --locked
 uv run --project mcp-server pytest mcp-server/tests
@@ -198,3 +204,13 @@ only on macOS). Run `backend/.venv/bin/python -m pytest
 backend/tests/unit/localization/test_compose_macos.py`. A real private Android render
 remains a local integration check; no private Android source or translations belong
 in application CI fixtures.
+
+## Angular web capture
+
+The backend job also builds the pinned synthetic Angular image and runs the renderer
+negative tests inside a container with networking disabled. A real Celery worker then
+captures three scenarios in two languages at two viewport sizes, using saved text
+from the API. Unique render receipts and authenticated PNG digests are checked.
+Dependency preparation is separate from the offline application builds. This gate
+requires no private repository or provider credentials. See the
+[web onboarding guide](angular-web-localization.md) for profiles and runner setup.
