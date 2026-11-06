@@ -1,0 +1,9 @@
+{
+  "name": "angular-synthetic",
+  "lockfile_sha256": "aedc29951089f6153bbcd1c1a2cfe81f371555113a659201a5624cfffdb2d33b",
+  "build_args": [
+    "node_modules/@angular/cli/bin/ng.js",
+    "build"
+  ],
+  "dist": "dist/browser"
+}

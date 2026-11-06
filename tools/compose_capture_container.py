@@ -14,7 +14,7 @@ from pathlib import Path
 from uuid import uuid4
 
 
-def capture_output(command: list[str], timeout: float) -> bytes:
+def capture_output(command: list[str], timeout: float, *, max_bytes: int = 8 * 1024 * 1024) -> bytes:
     """Bound even hostile stdout without giving repository code a host write mount."""
     deadline = time.monotonic() + timeout
     data = bytearray()
@@ -36,7 +36,7 @@ def capture_output(command: list[str], timeout: float) -> bytes:
                     if not block:
                         break
                     data.extend(block)
-                    if len(data) > 8 * 1024 * 1024:
+                    if len(data) > max_bytes:
                         raise ValueError("Container output exceeds its limit")
             if process.wait(timeout=max(0, deadline - time.monotonic())) != 0:
                 raise subprocess.CalledProcessError(process.returncode, command)

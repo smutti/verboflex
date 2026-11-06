@@ -1,0 +1,19 @@
+{
+  "name": "verboflex-angular-capture-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "scripts": { "build": "node node_modules/@angular/cli/bin/ng.js build" },
+  "dependencies": {
+    "@angular/animations": "17.3.12", "@angular/common": "17.3.12",
+    "@angular/compiler": "17.3.12", "@angular/core": "17.3.12",
+    "@angular/forms": "17.3.12", "@angular/platform-browser": "17.3.12",
+    "@angular/router": "17.3.12", "@ngx-translate/core": "15.0.0",
+    "@ngx-translate/http-loader": "8.0.0", "rxjs": "7.8.2",
+    "tslib": "2.8.1", "zone.js": "0.14.10"
+  },
+  "devDependencies": {
+    "@angular-devkit/build-angular": "17.3.17", "@angular/cli": "17.3.17",
+    "@angular/compiler-cli": "17.3.12", "typescript": "5.4.5", "node": "20.20.0"
+  }
+}
