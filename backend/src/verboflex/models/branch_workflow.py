@@ -45,7 +45,9 @@ class BranchJob(Base):
     __tablename__ = "branch_jobs"
     __table_args__ = (
         UniqueConstraint("activity_id"),
-        CheckConstraint("kind IN ('commit','pull_request','html_language')", name="kind"),
+        CheckConstraint(
+            "kind IN ('commit','pull_request','html_language','language')", name="kind"
+        ),
         CheckConstraint(
             "state IN ('queued','running','sending','committed','open',"
             "'merged','declined','blocked')",

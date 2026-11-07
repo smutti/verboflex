@@ -212,8 +212,21 @@ in application CI fixtures.
 
 The backend job also builds the pinned synthetic Angular image and runs the renderer
 negative tests inside a container with networking disabled. A real Celery worker then
-captures three scenarios in two languages at two viewport sizes, using saved text
+captures three scenarios in two existing languages and a newly created third
+language at two viewport sizes, using saved text
 from the API. Unique render receipts and authenticated PNG digests are checked.
 Dependency preparation is separate from the offline application builds. This gate
 requires no private repository or provider credentials. See the
 [web onboarding guide](angular-web-localization.md) for profiles and runner setup.
+
+## Project language creation
+
+The built-stack approval-branch smoke also uses **Add language** in the real
+browser, waits for the Celery commit against the TLS provider fixture, reloads the
+history, imports the new catalog and rejects a duplicate language. Only the
+explicit PR action publishes a pull request. Backend tests cover all supported
+catalog formats, preserved bytes/keys/placeholders, plural profiles, authorization,
+uncertain-send recovery and additive Angular catalog registrations. The focused
+browser check is `PLAYWRIGHT_BASE_URL=http://127.0.0.1:4179 npm --prefix frontend
+run e2e -- add-language.spec.ts` against the built preview server.
+See [adding languages](adding-languages.md) for format and runner boundaries.

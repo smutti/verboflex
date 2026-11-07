@@ -230,10 +230,15 @@ def discard_language_job(
     session.refresh(job, with_for_update=True)
     if (
         workflow is None
-        or job.kind != "html_language"
+        or job.kind not in {"html_language", "language"}
         or job.state != "blocked"
         or job.intent is not None
     ):
         raise BranchWorkflowError("Only an unsent failed language request can be discarded")
     job.state, job.owner, job.error_code = "declined", None, None
-    record_audit(session, actor_id=actor_id, action="html.language_discarded", entity_id=job.id)
+    record_audit(
+        session,
+        actor_id=actor_id,
+        action="language.discarded" if job.kind == "language" else "html.language_discarded",
+        entity_id=job.id,
+    )

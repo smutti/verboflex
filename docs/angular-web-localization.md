@@ -63,6 +63,16 @@ capture and final writeback. Rich-text paths preserve their allowed element stru
 and attributes; added scripts, event handlers, URLs or markup are rejected. Repository
 HTML is never inserted into the VerboFlex DOM.
 
+## Add another language
+
+Use the project [Add language workflow](adding-languages.md) to create a catalog
+from the base language. Verified language receipts extend the exact catalog
+selection for subsequent imports without rewriting active mapping configuration.
+Existing bindings, interpolation guards and screenshot scenarios apply after
+refresh. The operator's optional `catalog_overlays` policy renders newer catalogs
+against the reviewed, pinned application, with both revisions in the receipt.
+Changed application sources or manifests still require review.
+
 ## Register scenarios
 
 The repository manifest is data, not a command runner. The complete three-scenario

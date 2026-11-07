@@ -134,7 +134,7 @@ def get_workflow(
             BranchChange(
                 id=j.id,
                 sequence=j.sequence,
-                kind=cast(Literal["commit", "pull_request", "html_language"], j.kind),
+                kind=cast(Literal["commit", "pull_request", "html_language", "language"], j.kind),
                 state=cast(
                     Literal[
                         "queued",
@@ -167,6 +167,7 @@ def get_workflow(
             work_branch=workflow.work_branch,
             target_branch=workflow.target_branch,
             can_publish=can_publish,
+            can_add_language=can_publish and current_mapping is not None and pending is None,
             can_add_html_language=can_publish
             and current_mapping is not None
             and session.scalar(

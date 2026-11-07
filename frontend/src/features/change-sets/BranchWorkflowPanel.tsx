@@ -1,9 +1,9 @@
-import { HtmlLanguageForm } from "./HtmlLanguageForm";
+import { AddLanguageForm } from "./AddLanguageForm";
 import { t, useUiLanguage, getUiLanguage } from "@/i18n";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   createBranchPullRequest,
-  discardHtmlLanguage,
+  discardProjectLanguage,
   getBranchWorkflow,
   retryBranchChange,
   type BranchWorkflowResponse,
@@ -239,8 +239,8 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
               )}
             </div>
           )}
-          {data.can_add_html_language && data.workflow_id && (
-            <HtmlLanguageForm
+          {data.can_add_language && data.workflow_id && (
+            <AddLanguageForm
               accessToken={accessToken}
               productId={productId}
               workflowId={data.workflow_id}
@@ -272,7 +272,8 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                         : undefined
                     }
                   >
-                    {item.kind === "html_language" && item.state === "declined"
+                    {["html_language", "language"].includes(item.kind) &&
+                    item.state === "declined"
                       ? t("Discarded")
                       : states[item.state]}
                   </p>
@@ -312,30 +313,31 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                     {t("Open pull request")}
                   </a>
                 )}
-                {item.kind === "html_language" && item.can_retry && (
-                  <Button
-                    variant="outline"
-                    disabled={busy}
-                    onClick={async () => {
-                      setBusy(true);
-                      setFailure(false);
-                      try {
-                        const result = await discardHtmlLanguage({
-                          auth: accessToken,
-                          path: { product_id: productId, job_id: item.id },
-                        });
-                        if (!result.data) throw new Error("unavailable");
-                        setReload((value) => value + 1);
-                      } catch {
-                        setFailure(true);
-                      } finally {
-                        setBusy(false);
-                      }
-                    }}
-                  >
-                    {t("Discard unsent request")}
-                  </Button>
-                )}
+                {["html_language", "language"].includes(item.kind) &&
+                  item.can_retry && (
+                    <Button
+                      variant="outline"
+                      disabled={busy}
+                      onClick={async () => {
+                        setBusy(true);
+                        setFailure(false);
+                        try {
+                          const result = await discardProjectLanguage({
+                            auth: accessToken,
+                            path: { product_id: productId, job_id: item.id },
+                          });
+                          if (!result.data) throw new Error("unavailable");
+                          setReload((value) => value + 1);
+                        } catch {
+                          setFailure(true);
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      {t("Discard unsent request")}
+                    </Button>
+                  )}
                 {item.can_retry && (
                   <Button
                     variant="outline"

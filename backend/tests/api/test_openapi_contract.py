@@ -224,6 +224,16 @@ def test_dashboard_contract_is_closed_discriminated_and_has_no_actor_input() -> 
 
 
 EXPECTED_OPERATIONS = {
+    ("/api/v1/products/{product_id}/languages", "post"): (
+        "createProjectLanguage",
+        {"202", "401", "403", "404", "409", "422"},
+        True,
+    ),
+    ("/api/v1/products/{product_id}/languages/{job_id}", "delete"): (
+        "discardProjectLanguage",
+        {"200", "401", "403", "404", "409", "422"},
+        True,
+    ),
     ("/api/v1/products/{product_id}/html-templates", "get"): (
         "listHtmlTemplates",
         {"200", "401", "403", "404", "409", "422"},

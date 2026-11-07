@@ -33,12 +33,14 @@ array, such as `["menu", "actions"]`; those parent objects must already exist.
 Writers insert only the new resource and reparse the result to verify that existing
 values and the requested identities remain intact.
 
-The separate [HTML template workflow](html-email-templates.md) can create language
-files from existing source templates. For the key-based formats above, new files,
-file templates, source-key creation in a separate keys repository, converting
-an existing scalar to a plural, ICU/JSON plural dialects, Apple `.stringsdict` and
-XLIFF writeback are outside this release. Public GitHub projects support local
-creation/review; GitHub publication is still unavailable.
+[Add a project language](adding-languages.md) creates complete catalog peers from
+the imported source through a separate durable branch job, including Angular,
+Android/MOKO, Qt, iOS, JSON, XLIFF and HTML. Individual key drafts still target
+existing mapped files. Source-key creation in a separate keys repository,
+converting an existing scalar to a plural, ICU/JSON plural dialects, Apple
+`.stringsdict` and XLIFF translation writeback remain outside key authoring.
+Public GitHub projects support local creation/review; GitHub publication is still
+unavailable.
 
 ## Qt source text and the base catalog
 

@@ -50,8 +50,17 @@ def _xml(text, *, extra=""):
     return f'<resources><string name="hello">{text}</string>{extra}</resources>'.encode()
 
 
-def _published_confirmation(factory, adapter, *, code_source=False, localization_profile=None):
+def _published_confirmation(
+    factory, adapter, *, code_source=False, localization_profile=None, localization_root=None
+):
     product_id, _, revision_id, mapping_id = _seed_preview_graph(factory)
+    if localization_root is not None:
+        from verboflex.models.product_mapping import ProductRepositoryMapping
+
+        with factory.begin() as session:
+            session.get_one(ProductRepositoryMapping, mapping_id).sides[
+                0
+            ].localization_root = localization_root
     if localization_profile is not None:
         from verboflex.models.product_mapping import ProductRepositoryMapping
 

@@ -50,8 +50,9 @@ _XML_DECLARATION = re.compile(
     re.IGNORECASE,
 )
 _ANDROID_PATH = re.compile(
-    r"\A(?:(?P<prefix>.+)/)?res/values(?:-(?P<language>[A-Za-z]{2,3})"
-    r"(?:-r(?P<region>[A-Za-z]{2}|[0-9]{3}))?)?/"
+    r"\A(?:(?P<prefix>.+)/)?res/values(?:-(?:(?P<language>[A-Za-z]{2,3})"
+    r"(?:-r(?P<region>[A-Za-z]{2}|[0-9]{3}))?|(?P<bcp47>b\+[A-Za-z]{2,3}"
+    r"(?:\+[A-Za-z]{4})?(?:\+(?:[A-Za-z]{2}|[0-9]{3}))?)))?/"
     r"(?P<filename>[^/]+\.xml)\Z"
 )
 _BOOLEAN_ATTRIBUTES = {"true": True, "false": False}
@@ -296,7 +297,9 @@ def _confirmed_language(parser_input: CanonicalParserInput) -> str:
     if path_layout != parser_input.layout_identity or parser_input.layout_version != 1:
         raise _AmbiguousAndroidLayout
     path_language = match.group("language")
-    if path_language is None:
+    if match.group("bcp47"):
+        language = normalize_preview_locale(match.group("bcp47")[2:].replace("+", "-"))
+    elif path_language is None:
         language = normalize_preview_locale(parser_input.base_language)
     else:
         region = match.group("region")

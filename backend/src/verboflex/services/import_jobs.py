@@ -2705,7 +2705,12 @@ async def _process_import(
 
     with factory() as session:
         mapping = session.get_one(ProductRepositoryMapping, identity.mapping_id)
-        profile_data = mapping.localization_profile
+        from verboflex.services.project_languages import registered_catalog_profile
+
+        effective_profile = (
+            registered_catalog_profile(session, mapping) if mapping.localization_profile else None
+        )
+        profile_data = effective_profile.model_dump(mode="json") if effective_profile else None
         base_language = mapping.base_language or "und"
     profile = JsonCatalogProfile.model_validate(profile_data) if profile_data else None
     web_context = None

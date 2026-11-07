@@ -645,5 +645,25 @@
     ],
     "boundary": "active_resource_and_recovery_policy",
     "audit": "AuditEntry html.language_discarded and durable BranchJob actor and import authority"
+  },
+  "createProjectLanguage": {
+    "method": "POST",
+    "path": "/api/v1/products/{product_id}/languages",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "AuditEntry language.requested and durable BranchJob actor and import authority"
+  },
+  "discardProjectLanguage": {
+    "method": "DELETE",
+    "path": "/api/v1/products/{product_id}/languages/{job_id}",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "AuditEntry language.discarded and durable BranchJob actor and import authority"
   }
 }

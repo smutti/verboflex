@@ -17,7 +17,7 @@ from verboflex.localization.duplicate_diagnostics import inspect_duplicate_keys
 from verboflex.localization.importing.core import CanonicalParserInput
 from verboflex.localization.moko_layout import moko_layout
 from verboflex.localization.preview.registry import detect_preview_layouts
-from verboflex.localization.web.config import JsonCatalogProfile, select_catalogs
+from verboflex.localization.web.config import select_catalogs
 from verboflex.models.preview_job import PreviewJob
 from verboflex.models.product_mapping import ProductRepositoryMapping
 from verboflex.services.duplicate_reports import store_report
@@ -45,10 +45,10 @@ async def _process_preview(
 ) -> dict[str, object]:
     with factory() as session:
         mapping = session.get_one(ProductRepositoryMapping, identity.mapping_id)
+        from verboflex.services.project_languages import registered_catalog_profile
+
         profile = (
-            JsonCatalogProfile.model_validate(mapping.localization_profile)
-            if mapping.localization_profile
-            else None
+            registered_catalog_profile(session, mapping) if mapping.localization_profile else None
         )
         code_config = (
             CodeSourceConfig.model_validate(mapping.code_source)
