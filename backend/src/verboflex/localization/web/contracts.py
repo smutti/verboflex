@@ -40,7 +40,7 @@ class WebCaptureConfig(Closed):
 
 
 class WebAction(Closed):
-    action: Literal["click", "fill", "blur", "wait", "assert_disabled", "assert_enabled"]
+    action: Literal["click", "hover", "fill", "blur", "wait", "assert_disabled", "assert_enabled"]
     selector: Short
     value: Annotated[str, Field(max_length=4096)] | None = None
 
@@ -52,7 +52,7 @@ class WebAction(Closed):
 
 
 class WebTarget(Closed):
-    attribute: Literal["placeholder"] | None = None
+    attribute: Literal["placeholder", "alt"] | None = None
     key: Short
     selector: Short
 
@@ -106,7 +106,7 @@ class WebScenario(Closed):
 
 class WebManifest(Closed):
     version: Literal[1] = 1
-    scenarios: Annotated[tuple[WebScenario, ...], Field(min_length=1, max_length=100)]
+    scenarios: Annotated[tuple[WebScenario, ...], Field(min_length=1, max_length=128)]
 
     @model_validator(mode="after")
     def unique(self) -> WebManifest:
