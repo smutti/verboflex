@@ -15,6 +15,29 @@ from verboflex.schemas.screenshots import ScreenshotRequest
 ROOT = Path(__file__).resolve().parents[4]
 
 
+def test_manifest_registers_only_reviewed_visible_attributes():
+    from verboflex.localization.web.contracts import WebTarget
+
+    assert WebTarget(key="LOGO.ALT", selector="img", attribute="alt").attribute == "alt"
+    with pytest.raises(ValidationError):
+        WebTarget(key="LOGO.ALT", selector="img", attribute="aria-label")
+
+
+def test_full_application_scenarios_remain_bounded():
+    scenario = {
+        "id": "screen.0",
+        "label": "Synthetic screen",
+        "route": "#/screen",
+        "ready": "body",
+        "actions": [{"action": "hover", "selector": "button"}],
+        "targets": [{"key": "TOOLTIP.TEXT", "selector": ".tooltip"}],
+    }
+    scenarios = [{**scenario, "id": f"screen.{i}"} for i in range(128)]
+    assert len(WebManifest.model_validate({"scenarios": scenarios}).scenarios) == 128
+    with pytest.raises(ValidationError):
+        WebManifest.model_validate({"scenarios": [*scenarios, {**scenario, "id": "screen.128"}]})
+
+
 def test_same_leaf_names_keep_distinct_exact_addresses():
     catalog = {"A": {"NAME": "A"}, "B": {"NAME": "B"}, "literal.dot": "C"}
     addresses = catalog_addresses(catalog)

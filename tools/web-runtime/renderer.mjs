@@ -50,6 +50,7 @@ export async function capture({directory,scenario,language,catalogs,viewport,out
     for(const step of scenario.actions??[]){
       const element=page.locator(step.selector);
       if(step.action==='click')await element.click();
+      else if(step.action==='hover')await element.hover();
       else if(step.action==='fill')await element.fill(step.value);
       else if(step.action==='blur')await element.blur();
       else if(step.action==='wait')await element.waitFor({state:'visible'});
@@ -62,9 +63,32 @@ export async function capture({directory,scenario,language,catalogs,viewport,out
     const target=page.locator(scenario.target);
     if(await target.count()!==1)throw Error('Ambiguous target');
     await target.waitFor({state:'visible'});
-    await target.scrollIntoViewIfNeeded();
     await page.evaluate(()=>document.fonts.ready);
-    const text=scenario.target_attribute === 'placeholder' ? await target.getAttribute('placeholder') : await target.innerText();
+    await target.scrollIntoViewIfNeeded();
+    await target.evaluate(async element=>{
+      const r=element.getBoundingClientRect();
+      const complete=await new Promise(resolve=>{
+        const observer=new IntersectionObserver(([entry])=>{observer.disconnect();resolve(entry.intersectionRatio>=0.9999);},{threshold:[0,1]});
+        observer.observe(element);
+      });
+      // Chromium may leave a fractional pixel clipped at a scrollport edge.
+      // Keep already-visible hover targets still so their tooltip remains open.
+      if(!complete||r.x<0||r.y<0||r.right>innerWidth||r.bottom>innerHeight)element.scrollIntoView({block:'center',inline:'center',behavior:'instant'});
+    });
+    await page.evaluate(()=>new Promise(requestAnimationFrame));
+    if(scenario.target_attribute&&!['placeholder','alt'].includes(scenario.target_attribute))throw Error('Unsupported text attribute');
+    if(scenario.target_attribute==='alt') {
+      const fallback=await target.evaluate(element=>{
+        if(!(element instanceof HTMLImageElement)||!element.complete||element.naturalWidth!==0||!element.getAttribute('src'))return false;
+        const style=getComputedStyle(element),canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+        ctx.font=style.font;
+        const horizontal=parseFloat(style.paddingLeft)+parseFloat(style.paddingRight);
+        const vertical=parseFloat(style.paddingTop)+parseFloat(style.paddingBottom);
+        return ctx.measureText(element.alt).width+16<=element.clientWidth-horizontal&&parseFloat(style.fontSize)<=element.clientHeight-vertical;
+      });
+      if(!fallback)throw Error('Image alternative text is not visible');
+    }
+    const text=scenario.target_attribute ? await target.getAttribute(scenario.target_attribute) : await target.innerText();
     if(!text?.trim()||(scenario.target_attribute==='placeholder'&&await target.inputValue()))throw Error('Target text is not visible');
     const bounds=await target.boundingBox();
     if(!bounds||bounds.width<=0||bounds.height<=0)throw Error('Invisible target');
@@ -76,8 +100,21 @@ export async function capture({directory,scenario,language,catalogs,viewport,out
         const observer = new IntersectionObserver(([entry]) => {observer.disconnect();resolve(entry.intersectionRatio >= 0.9999);}, {threshold:[0,1]});
         observer.observe(element);
       });
-      const hit=document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2);
-      return complete && (hit===element||element.contains(hit));
+      // Tooltip text may deliberately ignore the pointer. Temporarily include it
+      // in hit testing without changing layout/paint, then restore before capture.
+      const prior=element.style.getPropertyValue('pointer-events');
+      const priority=element.style.getPropertyPriority('pointer-events');
+      try {
+        element.style.setProperty('pointer-events','auto','important');
+        const fragments=[...element.getClientRects()].filter(r=>r.width>0&&r.height>0);
+        return complete && fragments.length>0 && fragments.every(fragment=>{
+          const hit=document.elementFromPoint(fragment.x+fragment.width/2,fragment.y+fragment.height/2);
+          return hit===element||element.contains(hit);
+        });
+      } finally {
+        if(prior)element.style.setProperty('pointer-events',prior,priority);
+        else element.style.removeProperty('pointer-events');
+      }
     });
     if(!visible)throw Error('Clipped or occluded target');
     if(text.includes('{{')||text.includes('}}'))throw Error('Unresolved interpolation');
