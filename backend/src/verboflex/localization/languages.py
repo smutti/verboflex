@@ -173,6 +173,8 @@ def _xliff(content: bytes, language: str) -> bytes:
         if local(node) == "segment":
             edits.append(_attribute(content, node, "state", "initial"))
         elif dialect == "1.2":
+            if "approved" in dict(node.attributes):
+                edits.append(_attribute(content, node, "approved", "no"))
             edits.append(_attribute(content, target, "state", "needs-translation"))
     content = apply_byte_edits(content, tuple(edits))
     root = index_xml(content)

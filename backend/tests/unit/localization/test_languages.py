@@ -260,9 +260,11 @@ def test_empty_qt_plural_forms_copy_source_placeholders_in_every_new_form():
 
 def test_empty_xliff_target_is_expanded_and_marked_needs_translation():
     content = (FIXTURES / "xliff/valid_12.xlf").read_bytes()
+    content = content.replace(b'<trans-unit id=', b'<trans-unit approved="yes" id=')
     content = content.replace(b'<target>Ciao <g id="name">amico</g></target>', b"<target/>")
     source = parser("xliff", "it-IT.xlf", content, "xliff:{locale}.xlf")
     result = initialize_language(source, "nl")
+    assert b'<trans-unit approved="no" id=' in result.content
     assert (
         b'<target state="needs-translation">Hello <g id="name">friend</g></target>'
         in result.content
