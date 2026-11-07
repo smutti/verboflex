@@ -67,12 +67,16 @@ HTML is never inserted into the VerboFlex DOM.
 
 The repository manifest is data, not a command runner. The complete three-scenario
 example is [the synthetic manifest](../tools/fixtures/angular-web/capture.json).
-Each scenario declares an ID, label, local route, unique readiness selector, actions,
-exact runtime-key/DOM bindings, and HTTP fixtures. Use `attribute: "placeholder"`
+A manifest supports up to 128 scenarios, with at most 100 targets and 30 actions
+per scenario. Each scenario declares an ID, label, local route, unique readiness
+selector, actions, exact runtime-key/DOM bindings, and HTTP fixtures. Use `attribute: "placeholder"`
 for a search-input binding; capture requires the input to be empty so its placeholder
-is actually visible. Supported actions are `click`,
-`fill`, `blur`, `wait`, `assert_enabled` and `assert_disabled`. Fixture URLs are local
-`/api/` paths with exact query strings and methods. A capture bootstrap can configure
+is actually visible. Use `attribute: "alt"` only for an explicit missing-image
+scenario: the renderer requires an actual failed image and enough space for its
+fallback text. A successfully loaded image does not expose its alternative text
+visually and is rejected as screenshot evidence. Supported actions are `click`,
+`hover`, `fill`, `blur`, `wait`, `assert_enabled` and `assert_disabled`. Fixture URLs
+are local `/api/` paths with exact query strings and methods. A capture bootstrap can configure
 API clients to use that prefix. No live credentials or service calls are needed.
 
 The initial scenarios are:
