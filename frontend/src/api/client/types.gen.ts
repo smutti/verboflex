@@ -2105,7 +2105,7 @@ export type BranchChange = {
     /**
      * Kind
      */
-    kind: 'commit' | 'pull_request' | 'html_language';
+    kind: 'commit' | 'pull_request' | 'html_language' | 'language';
     /**
      * Label
      */
@@ -2202,6 +2202,10 @@ export type BranchWorkflowResponse = {
      * Can Add Html Language
      */
     can_add_html_language?: boolean;
+    /**
+     * Can Add Language
+     */
+    can_add_language?: boolean;
     /**
      * Can Create Pr
      */
@@ -3111,6 +3115,20 @@ export type CreateHtmlLanguage = {
 };
 
 /**
+ * CreateProjectLanguage
+ */
+export type CreateProjectLanguage = {
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Workflow Id
+     */
+    workflow_id: string;
+};
+
+/**
  * CreateSubmissionBatchRequest
  */
 export type CreateSubmissionBatchRequest = {
@@ -3955,6 +3973,20 @@ export type JsonCatalogProfile = {
      */
     version?: 1;
     web_capture?: WebCaptureConfig | null;
+};
+
+/**
+ * LanguageJobResponse
+ */
+export type LanguageJobResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * State
+     */
+    state: string;
 };
 
 /**
@@ -6786,6 +6818,10 @@ export type WebCaptureConfig = {
  * WebCaptureReceipt
  */
 export type WebCaptureReceipt = {
+    /**
+     * Application Commit
+     */
+    application_commit?: string | null;
     /**
      * Commit
      */
@@ -11946,6 +11982,102 @@ export type ListHtmlTemplatesResponses = {
 };
 
 export type ListHtmlTemplatesResponse = ListHtmlTemplatesResponses[keyof ListHtmlTemplatesResponses];
+
+export type CreateProjectLanguageData = {
+    body: CreateProjectLanguage;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/languages';
+};
+
+export type CreateProjectLanguageErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Action not permitted
+     */
+    403: unknown;
+    /**
+     * Product unavailable
+     */
+    404: unknown;
+    /**
+     * Source or branch conflict
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateProjectLanguageError = CreateProjectLanguageErrors[keyof CreateProjectLanguageErrors];
+
+export type CreateProjectLanguageResponses = {
+    /**
+     * Successful Response
+     */
+    202: LanguageJobResponse;
+};
+
+export type CreateProjectLanguageResponse = CreateProjectLanguageResponses[keyof CreateProjectLanguageResponses];
+
+export type DiscardProjectLanguageData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/languages/{job_id}';
+};
+
+export type DiscardProjectLanguageErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Action not permitted
+     */
+    403: unknown;
+    /**
+     * Product unavailable
+     */
+    404: unknown;
+    /**
+     * Source or branch conflict
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DiscardProjectLanguageError = DiscardProjectLanguageErrors[keyof DiscardProjectLanguageErrors];
+
+export type DiscardProjectLanguageResponses = {
+    /**
+     * Successful Response
+     */
+    200: LanguageJobResponse;
+};
+
+export type DiscardProjectLanguageResponse = DiscardProjectLanguageResponses[keyof DiscardProjectLanguageResponses];
 
 export type ResolveTranslationSuggestionData = {
     body: ReuseResolve;

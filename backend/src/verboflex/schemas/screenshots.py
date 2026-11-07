@@ -92,6 +92,7 @@ class WebCaptureReceipt(BaseModel):
     input_digest: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
     image_digest: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
     commit: Annotated[str, Field(pattern=r"^[a-f0-9]{40,64}$")]
+    application_commit: Annotated[str, Field(pattern=r"^[a-f0-9]{40,64}$")] | None = None
     scenario_id: str
     language: str
     viewport: Literal["desktop", "mobile"]

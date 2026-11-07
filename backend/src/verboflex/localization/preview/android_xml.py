@@ -18,6 +18,7 @@ from verboflex.localization.preview.core import (
     PreviewLayoutCandidate,
     RepositorySide,
     build_layout_candidate,
+    normalize_preview_locale,
 )
 from verboflex.services.repository_discovery import (
     SOURCE_DISCOVERY_BUDGET,
@@ -32,8 +33,9 @@ _XML_DECLARATION = re.compile(
     re.IGNORECASE,
 )
 _ANDROID_PATH = re.compile(
-    r"\A(?:(?P<prefix>.+)/)?res/values(?:-(?P<language>[A-Za-z]{2,3})"
-    r"(?:-r(?P<region>[A-Za-z]{2}|[0-9]{3}))?)?/"
+    r"\A(?:(?P<prefix>.+)/)?res/values(?:-(?:(?P<language>[A-Za-z]{2,3})"
+    r"(?:-r(?P<region>[A-Za-z]{2}|[0-9]{3}))?|(?P<bcp47>b\+[A-Za-z]{2,3}"
+    r"(?:\+[A-Za-z]{4})?(?:\+(?:[A-Za-z]{2}|[0-9]{3}))?)))?/"
     r"(?P<filename>[^/]+\.xml)\Z"
 )
 _ANDROID_RESOURCE_XML_PATH = re.compile(r"\A(?:(?P<prefix>.+)/)?res/values[^/]*/[^/]+\.xml\Z")
@@ -122,6 +124,8 @@ def _classify(file: RepositorySourceFile) -> _AndroidFile | None:
         if region is not None
         else raw_language.lower()
     )
+    if match.group("bcp47"):
+        language = normalize_preview_locale(match.group("bcp47")[2:].replace("+", "-")) or ""
     try:
         values = _plain_strings(file.content)
     except ValueError:

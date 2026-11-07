@@ -24,6 +24,7 @@ from verboflex.localization.importing.core import CanonicalParserInput
 from verboflex.localization.importing.registry import parse_canonical_mapping
 from verboflex.localization.preview.registry import detect_preview_layouts
 from verboflex.localization.web.config import JsonCatalogProfile
+from verboflex.main import app
 from verboflex.models.product_member import ProductMember
 from verboflex.models.screenshot import ScreenshotJob
 from verboflex.models.translation import TranslationKey, TranslationValue
@@ -41,6 +42,7 @@ FIXTURE = ROOT / "tools/fixtures/angular-web"
 
 @pytest.fixture
 def web_data(activation_session_factory, monkeypatch, tmp_path):  # noqa: F811
+    app.dependency_overrides.clear()
     factory = activation_session_factory
     with factory.begin() as session:
         session.execute(delete(ScreenshotJob))
@@ -178,8 +180,11 @@ def web_data(activation_session_factory, monkeypatch, tmp_path):  # noqa: F811
         }
     if not os.environ.get("VERBOFLEX_TEST_WEB_IMAGE"):
         monkeypatch.setattr(screenshot_tasks.app, "send_task", lambda *args, **kwargs: None)
-    yield factory, identity, principal, values, context
-    get_settings.cache_clear()
+    try:
+        yield factory, identity, principal, values, context
+    finally:
+        app.dependency_overrides.clear()
+        get_settings.cache_clear()
 
 
 def proposal_body(detail, replacement):

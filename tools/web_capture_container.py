@@ -14,6 +14,35 @@ from uuid import uuid4
 from compose_capture_container import capture_output
 
 
+def application_revision(payload: dict, profile: dict) -> str:
+    """An operator may reuse reviewed code with new, frozen locale catalogs.
+
+    The complete imported source/manifest set must match the reviewed digest.
+    The container independently hashes every archived source before building.
+    The receipt distinguishes the catalog commit from the reviewed application.
+    """
+    if profile["repository_id"] != payload["repository_id"]:
+        raise ValueError("Repository revision is not prepared")
+    revision = profile["commit"]
+    if not re.fullmatch(r"[a-f0-9]{40,64}", revision):
+        raise ValueError("Invalid prepared revision")
+    if revision == payload["commit"]:
+        return revision
+    if profile.get("catalog_overlays") is not True:
+        raise ValueError("Repository revision is not prepared")
+    sources = payload.get("sources", [])
+    hashes = {source["path"]: source["sha256"] for source in sources}
+    digest = hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
+    if (
+        not hashes
+        or len(hashes) != len(sources)
+        or digest != profile.get("source_digest")
+        or digest != payload.get("source_digest")
+    ):
+        raise ValueError("Application sources need operator review")
+    return revision
+
+
 def render(
     payload_bytes: bytes, profiles: dict, *, timeout: int = 900
 ) -> tuple[bytes, dict]:
@@ -21,11 +50,7 @@ def render(
     if payload.get("engine") != "web" or payload.get("version") != 2:
         raise ValueError("Invalid web bundle")
     profile = profiles[payload["capture"]["runner_profile"]]
-    if (
-        profile["repository_id"] != payload["repository_id"]
-        or profile["commit"] != payload["commit"]
-    ):
-        raise ValueError("Repository revision is not prepared")
+    build_commit = application_revision(payload, profile)
     if not re.fullmatch(
         r"(?:[a-zA-Z0-9_./:-]+@)?sha256:[a-f0-9]{64}", profile["image"]
     ):
@@ -42,7 +67,7 @@ def render(
                     f"--git-dir={mirror}",
                     "archive",
                     "--format=tar",
-                    payload["commit"],
+                    build_commit,
                 ],
                 min(timeout, 60),
                 max_bytes=128 * 1024 * 1024,
@@ -89,6 +114,7 @@ def render(
             )
     png = base64.b64decode(result["png"], validate=True)
     receipt = result["receipt"]
+    receipt["application_commit"] = build_commit
     if (
         receipt["input_digest"] != hashlib.sha256(payload_bytes).hexdigest()
         or receipt["image_digest"] != hashlib.sha256(png).hexdigest()

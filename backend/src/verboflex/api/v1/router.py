@@ -24,6 +24,7 @@ from verboflex.api.v1.routes import (
     notifications,
     product_team,
     product_workspace,
+    project_languages,
     reuse,
     screenshots,
     source_fallback,
@@ -36,6 +37,7 @@ from verboflex.api.v1.routes import (
 )
 
 api_router = APIRouter()
+api_router.include_router(project_languages.router)
 api_router.include_router(html_templates.router)
 api_router.include_router(screenshots.router)
 api_router.include_router(source_fallback.router)

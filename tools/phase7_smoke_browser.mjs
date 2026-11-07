@@ -257,6 +257,19 @@ async function scenario() {
     }
     await capture(task.name,"translation-status");
     result={...result,status:task.status};
+  }else if(task.action==="add-language"){
+    stage="add-project-language";
+    await page.goto(`${frontend}/products/${task.product}/change-sets`);
+    await expect(page.getByRole("textbox",{name:"New language",exact:true})).toBeVisible();
+    await page.getByRole("textbox",{name:"New language",exact:true}).fill(task.language);
+    await activate(page.getByRole("button",{name:"Add language",exact:true}));
+    const entry=page.getByRole("list",{name:"Branch history"}).getByRole("listitem").filter({hasText:`Language: ${task.language}`});
+    await expect(entry.getByText("Saved to branch",{exact:true})).toBeVisible({timeout:120000});
+    await page.reload();
+    await expect(entry.getByText("Saved to branch",{exact:true})).toBeVisible();
+    check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await capture(task.name,"language-committed");
+    result={...result,language:task.language,committed:true,reloaded:true};
   }else if(task.action==="branch-workflow"){
     stage="approval-branch-history";
     await page.goto(`${frontend}/products/${task.product}/change-sets`);

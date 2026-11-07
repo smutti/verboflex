@@ -97,7 +97,7 @@ class CommitIntent:
     def message(self) -> str:
         return (
             (
-                "VerboFlex initialize HTML language\n\n"
+                "VerboFlex initialize language\n\n"
                 if self.initialize_language
                 else "VerboFlex approved translations\n\n"
             )

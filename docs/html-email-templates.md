@@ -100,7 +100,8 @@ working branch. No HTML operation writes directly to the PR destination.
 ## Adding a language
 
 With an approval branch configured, administrators and reviewers can use
-**New HTML language** in the branch history view. Enter a normalized locale such
+**New language → Add language** in the branch history view (see
+[adding project languages](adding-languages.md)). Enter a normalized locale such
 as `it` or `fr-BE`. The durable Celery job creates one corresponding file for every
 source template, preserving directories, suffix separator and extension. It copies
 source text initially: these are drafts to translate, not completed translations.

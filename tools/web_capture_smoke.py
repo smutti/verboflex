@@ -128,6 +128,7 @@ def main():
             [
                 str(BACKEND / ".venv/bin/pytest"),
                 "tests/integration/test_web_screenshots.py",
+                "tests/api/test_project_languages.py",
                 "-q",
             ],
             cwd=BACKEND,

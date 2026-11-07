@@ -457,6 +457,19 @@ export function TranslationScreenshots({
               {t("Screenshot options")}
             </summary>
             <div className="space-y-4 pt-2">
+              {job?.receipt?.application_commit &&
+                job.receipt.application_commit !== job.receipt.commit && (
+                  <dl className="space-y-1 wrap-anywhere">
+                    <dt>{t("Reviewed application revision")}</dt>
+                    <dd>
+                      <code>{job.receipt.application_commit}</code>
+                    </dd>
+                    <dt>{t("Language catalog revision")}</dt>
+                    <dd>
+                      <code>{job.receipt.commit}</code>
+                    </dd>
+                  </dl>
+                )}
               {(context.diagnostics?.length ?? 0) > 0 && (
                 <ul>
                   {context.diagnostics?.map((message) => (

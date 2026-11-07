@@ -2704,9 +2704,14 @@ async def _process_import(
     from verboflex.localization.web.config import JsonCatalogProfile, select_catalogs
 
     with factory() as session:
-        profile_data = session.get_one(
-            ProductRepositoryMapping, identity.mapping_id
-        ).localization_profile
+        mapping = session.get_one(ProductRepositoryMapping, identity.mapping_id)
+        from verboflex.services.project_languages import registered_catalog_profile
+
+        effective_profile = (
+            registered_catalog_profile(session, mapping) if mapping.localization_profile else None
+        )
+        profile_data = effective_profile.model_dump(mode="json") if effective_profile else None
+        base_language = mapping.base_language or "und"
     profile = JsonCatalogProfile.model_validate(profile_data) if profile_data else None
     web_context = None
     config = None
@@ -2738,8 +2743,9 @@ async def _process_import(
         if profile is not None and profile.web_capture is not None:
             from verboflex.services.web_imports import collect_web_context
 
+            # Credential leases own transactions; keep mapping reads in the
+            # earlier session instead of autobeginning this provider session.
             with factory() as session:
-                mapping = session.get_one(ProductRepositoryMapping, identity.mapping_id)
                 web_context, _web_files = await collect_web_context(
                     session,
                     profile=profile,
@@ -2749,7 +2755,7 @@ async def _process_import(
                     adapter=adapter,
                     root=side.localization_root,
                     catalogs=selected,
-                    base_language=mapping.base_language or "und",
+                    base_language=base_language,
                 )
         for source_file in selected:
             source_contents[(side.role, source_file.path)] = source_file.content

@@ -1330,15 +1330,33 @@ def branch_workflow_smoke(h: Harness) -> None:
     assert h.graph()["repositories"][slug]["counters"]["pull_request"]["effects"] == 0
     h.browser({"name": "translation-awaiting", "action": "translation-status", "product": product,
         "group": group["id"], "status": "approved"})
+    # A fresh import anchors language creation to the latest approved commit.
+    refresh = h.api(f"/admin/products/{product}/published/mappings/{scenario['mappings'][0]['mapping']}/imports", "POST")
+    refresh = h.wait(lambda: h.api(f"/admin/products/{product}/imports/{refresh['id']}"),
+        lambda j: j["state"] not in ("queued", "running"), seconds=120)
+    assert refresh["state"] == "current", refresh
+    h.browser({"name": "add-language", "action": "add-language", "product": product, "language": "fr"})
+    language_state = h.api(endpoint)
+    assert language_state["items"][0]["kind"] == "language"
+    assert language_state["items"][0]["state"] == "committed", language_state
+    assert h.graph()["repositories"][slug]["counters"]["pull_request"]["effects"] == 0
+    refresh = h.api(f"/admin/products/{product}/published/mappings/{scenario['mappings'][0]['mapping']}/imports", "POST")
+    refresh = h.wait(lambda: h.api(f"/admin/products/{product}/imports/{refresh['id']}"),
+        lambda j: j["state"] not in ("queued", "running"), seconds=120)
+    assert refresh["state"] == "current", refresh
+    french = h.api(f"/translations?product_id={product}&language=fr&page_size=50")["items"]
+    assert len(french) == 3, french
+    h.api(f"/products/{product}/languages", "POST", {
+        "workflow_id": language_state["workflow_id"], "language": "fr"}, expected=409)
     h.browser({"name": "approval-branch", "action": "branch-workflow", "product": product})
     published = h.wait(lambda: h.api(endpoint), lambda d: d["items"][0]["state"] in ("open", "blocked"), seconds=120)
     assert published["items"][0]["state"] == "open", published
     effects = h.graph()["repositories"][slug]["counters"]
     assert effects["pull_request"]["effects"] == 1
-    assert effects["commit"]["effects"] == len(second["items"])
+    assert effects["commit"]["effects"] == len(language_state["items"])
     # Simulate target integration at the provider boundary, then let the real
     # scheduler/worker verify the approved values. PR status alone is not used.
-    target_head = second["items"][0]["commit_hash"]
+    target_head = language_state["items"][0]["commit_hash"]
     control = json.loads(h.control_path.read_text())
     h.control(branches={**control.get("branches", {}), slug: {"master": target_head}})
     try:
@@ -1367,7 +1385,8 @@ def branch_workflow_smoke(h: Harness) -> None:
         "group": group["id"], "status": "pending"})
     assert h.graph()["repositories"][slug]["counters"] == effects
     write_json(h.runtime / "branch-workflow-evidence.json", {
-        "commits": len(second["items"]), "pull_requests": 1,
+        "commits": len(language_state["items"]), "pull_requests": 1,
+        "language_browser_commit_refresh": True, "new_language_keys": len(french),
         "approval_snapshots": True, "sequential_commits": True, "explicit_pr": True,
         "browser_configuration": True, "duplicate_approval_rejected": True,
         "target_badge_lifecycle": True, "integration_does_not_publish": True,

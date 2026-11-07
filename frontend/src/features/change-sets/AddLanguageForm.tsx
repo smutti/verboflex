@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { createHtmlLanguage } from "@/api/client";
+import { createProjectLanguage } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { t, useUiLanguage } from "@/i18n";
 
-export function HtmlLanguageForm({
+export function AddLanguageForm({
   accessToken,
   productId,
   workflowId,
@@ -29,7 +29,7 @@ export function HtmlLanguageForm({
         setError(false);
         setCreated(false);
         try {
-          const result = await createHtmlLanguage({
+          const result = await createProjectLanguage({
             auth: accessToken,
             path: { product_id: productId },
             body: { workflow_id: workflowId, language: language.trim() },
@@ -46,25 +46,30 @@ export function HtmlLanguageForm({
       }}
     >
       <label className="block text-sm font-medium">
-        {t("New HTML language")}
+        {t("New language")}
         <input
-          className="ml-2 min-h-11 rounded border bg-background px-3"
+          className="mt-2 block min-h-11 w-full max-w-sm rounded border bg-background px-3"
           value={language}
           placeholder="fr-BE"
           required
-          maxLength={32}
-          pattern="[a-z]{2,3}(-[A-Z]{2})?"
+          maxLength={64}
+          pattern="[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?"
           disabled={busy}
           onChange={(event) => setLanguage(event.target.value)}
         />
       </label>
       <p className="text-sm text-muted-foreground">
         {t(
-          "Creates files with the language suffix on the working branch, copying the source text. Translate and review them before opening the PR.",
+          "Copies the source catalog to the new language on the working branch, preserving keys, structure and placeholders. Translate and review the copied text before opening the PR.",
+        )}
+      </p>
+      <p className="text-sm text-muted-foreground">
+        {t(
+          "After refreshing the source, the new language can use the project's configured screenshot scenarios.",
         )}
       </p>
       <Button type="submit" disabled={busy || !language.trim()}>
-        {t("Add language files")}
+        {t("Add language")}
       </Button>
       {created && (
         <p role="status">
