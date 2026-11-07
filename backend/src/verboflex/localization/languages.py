@@ -91,32 +91,40 @@ def _walk(node: XmlElementSpan) -> Iterator[XmlElementSpan]:
 def _qt(content: bytes, language: str) -> bytes:
     root = index_xml(content, allow_ts_doctype=True)
     edits = [_attribute(content, root, "language", language.replace("-", "_"))]
+    for target in (node for node in _walk(root) if node.name == "translation"):
+        if dict(target.attributes).get("type") not in {"obsolete", "vanished"}:
+            edits.append(_attribute(content, target, "type", "unfinished"))
+    # Update attributes before expanding empty tags so lexical edits never overlap.
+    content = apply_byte_edits(content, tuple(edits))
+    root = index_xml(content, allow_ts_doctype=True)
+    edits = []
     for message in (node for node in _walk(root) if node.name == "message"):
         source = next(node for node in message.children if node.name == "source")
         target = next(node for node in message.children if node.name == "translation")
         if dict(target.attributes).get("type") in {"obsolete", "vanished"}:
             continue
-        # Translation status is independent from copied source wording.
-        if not target.self_closing:
-            edits.append(_attribute(content, target, "type", "unfinished"))
+        wording = content[source.start_tag_end : source.end_tag_start]
         forms = [node for node in target.children if node.name == "numerusform"]
         if dict(message.attributes).get("numerus") == "yes":
             required = len(plural_forms("qt_ts", language))
             if not forms:
                 raise ValueError("unsupported_shape")
+            for form in forms[:required]:
+                if not content[form.start_tag_end : form.end_tag_start].strip():
+                    edits.append(_inner(content, form, wording))
             for form in forms[required:]:
                 edits.append(ByteEdit(form.start, form.end, b""))
             if len(forms) < required:
                 sample = content[forms[-1].start : forms[-1].end]
+                if not content[forms[-1].start_tag_end : forms[-1].end_tag_start].strip():
+                    sample = apply_byte_edits(sample, (_inner(sample, index_xml(sample), wording),))
                 edits.append(
                     ByteEdit(
                         target.end_tag_start, target.end_tag_start, sample * (required - len(forms))
                     )
                 )
         elif not content[target.start_tag_end : target.end_tag_start].strip():
-            edits.append(
-                _inner(content, target, content[source.start_tag_end : source.end_tag_start])
-            )
+            edits.append(_inner(content, target, wording))
     return apply_byte_edits(content, tuple(edits))
 
 
@@ -164,8 +172,16 @@ def _xliff(content: bytes, language: str) -> bytes:
             edits.append(_attribute(content, target, "xml:lang", language))
         if local(node) == "segment":
             edits.append(_attribute(content, node, "state", "initial"))
-        elif dialect == "1.2" and not target.self_closing:
+        elif dialect == "1.2":
             edits.append(_attribute(content, target, "state", "needs-translation"))
+    content = apply_byte_edits(content, tuple(edits))
+    root = index_xml(content)
+    edits = []
+    for node in _walk(root):
+        if local(node) not in {"trans-unit", "segment", "ignorable"}:
+            continue
+        source = next(child for child in node.children if local(child) == "source")
+        target = next(child for child in node.children if local(child) == "target")
         edits.append(_inner(content, target, content[source.start_tag_end : source.end_tag_start]))
     return apply_byte_edits(content, tuple(edits))
 

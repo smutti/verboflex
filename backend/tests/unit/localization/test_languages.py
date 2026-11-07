@@ -229,3 +229,41 @@ def test_shared_moko_keeps_unrelated_duplicate_keys_when_copying():
     created = initialize_language(source, "de")
     assert created.content == content
     assert created.path == "moko-resources/de/strings.xml"
+
+
+@pytest.mark.parametrize("target", [b"<translation/>", b'<translation type="unfinished"/>'])
+def test_empty_qt_target_copies_source_but_remains_unfinished(target):
+    source = parser(
+        "qt_ts",
+        "en.ts",
+        b'<TS version="2.1" language="en"><context><name>Main</name><message>'
+        b"<source>Hello %1</source>" + target + b"</message></context></TS>",
+        "qt-ts:{locale}.ts",
+    )
+    result = initialize_language(source, "fr")
+    assert b'<translation type="unfinished">Hello %1</translation>' in result.content
+
+
+def test_empty_qt_plural_forms_copy_source_placeholders_in_every_new_form():
+    source = parser(
+        "qt_ts",
+        "en.ts",
+        b'<TS version="2.1" language="en"><context><name>Main</name><message numerus="yes">'
+        b"<source>%n items</source><translation><numerusform/><numerusform/></translation>"
+        b"</message></context></TS>",
+        "qt-ts:{locale}.ts",
+    )
+    result = initialize_language(source, "ar")
+    assert result.content.count(b"<numerusform>%n items</numerusform>") == 6
+    assert b'type="unfinished"' in result.content
+
+
+def test_empty_xliff_target_is_expanded_and_marked_needs_translation():
+    content = (FIXTURES / "xliff/valid_12.xlf").read_bytes()
+    content = content.replace(b'<target>Ciao <g id="name">amico</g></target>', b"<target/>")
+    source = parser("xliff", "it-IT.xlf", content, "xliff:{locale}.xlf")
+    result = initialize_language(source, "nl")
+    assert (
+        b'<target state="needs-translation">Hello <g id="name">friend</g></target>'
+        in result.content
+    )
