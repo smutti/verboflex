@@ -118,7 +118,9 @@ def request_screenshot(
                 job_id,
                 body,
                 runner_enabled=bool(
-                    settings.web_screenshot_runner_command
+                    settings.qt_screenshot_runner_command
+                    if body.engine == "qt"
+                    else settings.web_screenshot_runner_command
                     if body.engine == "web"
                     else settings.screenshot_runner_command
                 ),

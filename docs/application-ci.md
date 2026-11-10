@@ -49,6 +49,12 @@ Actual Compose rendering is a separate Android check, described in
 [the capture integration guide](code-keys-compose.md). It requires a reviewed,
 prewarmed runner image; the ordinary application CI does not build private Android apps.
 
+[Qt screenshot checks](qt-screenshots.md) cover exact context/source selection,
+saved drafts, revoked access, immutable source archives and runtime receipts.
+The shared screenshot panel retains fixed device resolution and explicitly
+distinguishes pending device comparison from a matching validated reference.
+Private product forms and device reference PNGs are not public CI fixtures.
+
 | Check | Coverage |
 | --- | --- |
 | Backend | Ruff, mypy, the complete pytest suite, migrations, disposable PostgreSQL 18, Redis 7 and a Celery worker; locked frontend tools and pinned fixtures for cross-language and historical regression checks |

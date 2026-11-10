@@ -83,6 +83,7 @@ def stage_translation_parse(
     result: CanonicalParseResult,
     code_catalog: dict[str, object] | None = None,
     web_context: dict[str, object] | None = None,
+    qt_context: dict[str, object] | None = None,
     html_preview_images: dict[str, dict[str, str]] | None = None,
     correlation_references: Mapping[CorrelationIdentity, str] | None = None,
 ) -> StagedParseManifest | None:
@@ -101,6 +102,7 @@ def stage_translation_parse(
             return None
         mapping, job, execution = authority
         execution.web_context = web_context
+        execution.qt_context = qt_context
         execution.code_catalog = code_catalog
         execution.html_preview_images = html_preview_images
         validated_references = _validate_references(identity=identity, references=references)
@@ -289,6 +291,11 @@ def staged_manifest_digest(
         digest = hashlib.sha256(
             (digest + "html-preview-images:" + encoded).encode("ascii")
         ).hexdigest()
+    if execution.qt_context is not None:
+        encoded = json.dumps(
+            execution.qt_context, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        )
+        digest = hashlib.sha256((digest + "qt-context:" + encoded).encode("ascii")).hexdigest()
     return digest
 
 
