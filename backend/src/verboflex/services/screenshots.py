@@ -171,6 +171,10 @@ def context(session: Session, principal: Principal, group_id: UUID) -> CodeConte
     group = _group(session, principal, group_id)
     scope = _scope_for_group(session, group)
     execution = session.get_one(ImportExecution, scope.active_execution_id)
+    if execution.qt_context is not None:
+        from verboflex.services.qt_screenshots import qt_context
+
+        return qt_context(session, group, execution.qt_context)
     if execution.web_context is not None:
         from verboflex.services.web_screenshots import web_context
 
@@ -241,6 +245,10 @@ def _snapshot(
     scope: LocalizationScope,
     request: ScreenshotRequest,
 ) -> dict[str, object]:
+    if request.engine == "qt":
+        from verboflex.services.qt_screenshots import qt_snapshot
+
+        return qt_snapshot(session, group, scope, request)
     if request.engine == "web":
         from verboflex.services.web_screenshots import web_snapshot
 

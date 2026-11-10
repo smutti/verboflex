@@ -2858,7 +2858,7 @@ export type CodeContextResponse = {
     /**
      * Engine
      */
-    engine?: 'compose' | 'web';
+    engine?: 'compose' | 'web' | 'qt';
     /**
      * Occurrences
      */
@@ -2871,6 +2871,10 @@ export type CodeContextResponse = {
      * Previews
      */
     previews: Array<CodePreview>;
+    /**
+     * Qt Targets
+     */
+    qt_targets?: Array<QtCaptureTarget>;
     /**
      * Scenarios
      */
@@ -4641,6 +4645,107 @@ export type PutTranslationConstraintRequest = {
 };
 
 /**
+ * QtCaptureReceipt
+ */
+export type QtCaptureReceipt = {
+    /**
+     * Application Commit
+     */
+    application_commit: string;
+    /**
+     * Commit
+     */
+    commit: string;
+    /**
+     * Engine
+     */
+    engine: 'qt';
+    /**
+     * Height
+     */
+    height: number;
+    /**
+     * Image Digest
+     */
+    image_digest: string;
+    /**
+     * Input Digest
+     */
+    input_digest: string;
+    /**
+     * Language
+     */
+    language: string;
+    location: ScreenshotLocation;
+    /**
+     * Manifest Digest
+     */
+    manifest_digest: string;
+    /**
+     * Platform
+     */
+    platform: string;
+    /**
+     * Qt Version
+     */
+    qt_version: string;
+    /**
+     * Reference Image Digest
+     */
+    reference_image_digest?: string | null;
+    /**
+     * Render Id
+     */
+    render_id: string;
+    /**
+     * Rendered At
+     */
+    rendered_at: string;
+    /**
+     * Scenario Id
+     */
+    scenario_id: string;
+    /**
+     * Source Digest
+     */
+    source_digest: string;
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Version
+     */
+    version: 1;
+    /**
+     * Width
+     */
+    width: number;
+};
+
+/**
+ * QtCaptureTarget
+ */
+export type QtCaptureTarget = {
+    /**
+     * Context
+     */
+    context: string;
+    /**
+     * Disambiguation
+     */
+    disambiguation: string;
+    /**
+     * Scenario Ids
+     */
+    scenario_ids: Array<string>;
+    /**
+     * Value Id
+     */
+    value_id: string;
+};
+
+/**
  * ReusePage
  */
 export type ReusePage = {
@@ -5248,7 +5353,7 @@ export type ScreenshotRequest = {
     /**
      * Engine
      */
-    engine?: 'compose' | 'web';
+    engine?: 'compose' | 'web' | 'qt';
     /**
      * Preview Function
      */
@@ -5304,7 +5409,10 @@ export type ScreenshotResponse = {
      */
     input_digest: string;
     location?: ScreenshotLocation | null;
-    receipt?: WebCaptureReceipt | null;
+    /**
+     * Receipt
+     */
+    receipt?: WebCaptureReceipt | QtCaptureReceipt | null;
     request: ScreenshotRequest;
     /**
      * State

@@ -161,6 +161,9 @@ class ImportExecution(Base):
     web_context: Mapped[dict[str, object] | None] = mapped_column(
         JSONB(none_as_null=True), nullable=True, deferred=True
     )
+    qt_context: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True, deferred=True
+    )
     code_catalog: Mapped[dict[str, object] | None] = mapped_column(
         JSONB(none_as_null=True), nullable=True
     )

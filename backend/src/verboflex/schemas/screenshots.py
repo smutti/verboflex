@@ -16,7 +16,7 @@ from verboflex.localization.code_keys.catalog import CodeOccurrence, CodePreview
 
 class ScreenshotRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    engine: Literal["compose", "web"] = "compose"
+    engine: Literal["compose", "web", "qt"] = "compose"
     preview_function: Annotated[str, Field(min_length=1, max_length=512)] | None = None
     scenario_id: Annotated[str, Field(min_length=1, max_length=128)] | None = None
     target_value_id: UUID | None = None
@@ -40,7 +40,9 @@ class ScreenshotRequest(BaseModel):
             or not self.target_value_id
             or self.theme != "light"
         ):
-            raise ValueError("Web requests require a scenario, exact value and light appearance")
+            raise ValueError("Scenario requests require an exact value and light appearance")
+        if self.engine == "qt" and self.viewport != "desktop":
+            raise ValueError("Qt captures use the device's fixed resolution")
         return self
 
     def as_payload(self) -> dict[str, object]:
@@ -54,6 +56,13 @@ class WebCaptureTarget(BaseModel):
     value_id: UUID
     runtime_key: str
     json_path: list[str]
+    scenario_ids: list[str]
+
+
+class QtCaptureTarget(BaseModel):
+    value_id: UUID
+    context: str
+    disambiguation: str
     scenario_ids: list[str]
 
 
@@ -102,6 +111,29 @@ class WebCaptureReceipt(BaseModel):
     text: Annotated[str, Field(max_length=65536)]
 
 
+class QtCaptureReceipt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    render_id: UUID
+    rendered_at: datetime
+    engine: Literal["qt"]
+    version: Literal[1]
+    input_digest: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
+    image_digest: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
+    commit: Annotated[str, Field(pattern=r"^[a-f0-9]{40,64}$")]
+    application_commit: Annotated[str, Field(pattern=r"^[a-f0-9]{40,64}$")]
+    scenario_id: str
+    language: str
+    manifest_digest: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
+    source_digest: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
+    qt_version: str
+    platform: str
+    width: Annotated[int, Field(ge=1, le=4096)]
+    height: Annotated[int, Field(ge=1, le=4096)]
+    location: ScreenshotLocation
+    text: Annotated[str, Field(max_length=65536)]
+    reference_image_digest: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")] | None = None
+
+
 class ScreenshotResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", from_attributes=True)
     id: UUID
@@ -113,7 +145,7 @@ class ScreenshotResponse(BaseModel):
     created_at: datetime
     expires_at: datetime
     location: ScreenshotLocation | None = None
-    receipt: WebCaptureReceipt | None = None
+    receipt: WebCaptureReceipt | QtCaptureReceipt | None = None
 
 
 class ScreenScenario(BaseModel):
@@ -130,8 +162,9 @@ class ScreenshotPage(BaseModel):
 
 class CodeContextResponse(BaseModel):
     configured: bool
-    engine: Literal["compose", "web"] = "compose"
+    engine: Literal["compose", "web", "qt"] = "compose"
     web_targets: list[WebCaptureTarget] = []
+    qt_targets: list[QtCaptureTarget] = []
     diagnostics: list[str] = []
     occurrences: list[CodeOccurrence]
     previews: list[CodePreview]
