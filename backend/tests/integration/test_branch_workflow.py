@@ -747,3 +747,41 @@ def test_multiple_translation_sources_have_separate_branch_queues(
         assert s.get_one(BranchJob, first_job).workflow_id != second_workflow_id
     assert len(second_remote.commits) == len(first_remote.commits) == 1
     assert not first_remote.prs and not second_remote.prs
+
+
+def test_reapproval_of_identical_text_verifies_existing_branch_without_empty_commit(
+    preview_session_factory, monkeypatch
+):
+    factory = preview_session_factory
+    seed, remote = setup(factory, monkeypatch)
+    first = approve(factory, seed, "Prima")
+    assert run(factory, remote, first) == ("committed", None)
+    existing_head = remote.head
+    repeated = approve(factory, seed, "Prima")
+    # Editing after approval must not change the frozen operation or publish the draft.
+    save_draft(factory, seed, "Unpublished draft")
+    assert run(factory, remote, repeated) == ("committed", None)
+    assert len(remote.commits) == 1 and remote.prs == []
+    with factory() as session:
+        job = session.get_one(BranchJob, repeated)
+        assert job.commit_hash == existing_head
+        assert job.owner is None and job.intent is not None
+        proposal = session.get_one(TranslationProposal, seed.proposal_id)
+        assert proposal.state == "draft"
+    # The serial queue is unblocked and the next distinct approval still commits.
+    later = approve(factory, seed, "Seconda")
+    assert run(factory, remote, later) == ("committed", None)
+    assert len(remote.commits) == 2
+
+
+def test_identical_reapproval_still_rejects_external_file_changes(
+    preview_session_factory, monkeypatch
+):
+    factory = preview_session_factory
+    seed, remote = setup(factory, monkeypatch)
+    first = approve(factory, seed, "Prima")
+    assert run(factory, remote, first) == ("committed", None)
+    repeated = approve(factory, seed, "Prima")
+    remote.versions[remote.head]["app/res/values-it/strings.xml"] += b"\n<!-- external -->"
+    assert run(factory, remote, repeated) == ("blocked", "file_changed")
+    assert len(remote.commits) == 1

@@ -154,7 +154,7 @@ it("guards dirty text when changing fragment, language, or project view", async 
   expect(await screen.findByRole("alertdialog")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Keep editing" }));
   expect(field).toHaveValue("Ciao modificato ");
-  await user.selectOptions(screen.getByLabelText("Translate into"), "fr");
+  await user.selectOptions(screen.getByLabelText("Language to edit"), "fr");
   await user.click(
     await screen.findByRole("button", { name: "Discard changes" }),
   );
@@ -257,14 +257,61 @@ it("ignores a late document from the previously selected language", async () => 
   );
   const user = userEvent.setup();
   show();
-  await screen.findByLabelText("Translate into");
-  await user.selectOptions(screen.getByLabelText("Translate into"), "fr");
+  await screen.findByLabelText("Language to edit");
+  await user.selectOptions(screen.getByLabelText("Language to edit"), "fr");
   expect(
     await screen.findByRole("textbox", { name: "Translation · French" }),
   ).toBeVisible();
   await act(async () => complete({ data: emailDocument("it") }));
-  expect(screen.getByLabelText("Translate into")).toHaveValue("fr");
+  expect(screen.getByLabelText("Language to edit")).toHaveValue("fr");
   expect(
     screen.queryByRole("textbox", { name: "Translation · Italian" }),
   ).not.toBeInTheDocument();
+});
+
+it("opens and saves base English without creating a target locale", async () => {
+  const user = userEvent.setup();
+  show();
+  await screen.findByRole("textbox", { name: "Translation · Italian" });
+  await user.click(screen.getByRole("button", { name: "Open base language" }));
+  const field = await screen.findByRole("textbox", {
+    name: "Base text · English",
+  });
+  expect(screen.getByLabelText("Language to edit")).toHaveValue("en");
+  expect(
+    screen.getByText(
+      "This is the base-language text. Changes follow the same draft and review workflow.",
+    ),
+  ).toBeVisible();
+  await user.clear(field);
+  await user.type(field, "Welcome ");
+  await user.click(screen.getByRole("button", { name: "Save draft" }));
+  await waitFor(() =>
+    expect(saveTranslationProposal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: { translation_group_id: "en-body" },
+        body: expect.objectContaining({
+          values: [
+            expect.objectContaining({ proposed_text: "Welcome {{name}}" }),
+          ],
+        }),
+      }),
+    ),
+  );
+});
+
+it("flags source copies in the selected locale and clears the hint for edited text", async () => {
+  const user = userEvent.setup();
+  show();
+  await screen.findByRole("textbox", { name: "Translation · Italian" });
+  await user.selectOptions(screen.getByLabelText("Language to edit"), "fr");
+  const field = await screen.findByRole("textbox", {
+    name: "Translation · French",
+  });
+  const hint =
+    "This text matches the base language. Check whether it still needs translation.";
+  expect(screen.getByText(hint)).toBeVisible();
+  await user.clear(field);
+  await user.type(field, "Bonjour ");
+  expect(screen.queryByText(hint)).not.toBeInTheDocument();
 });

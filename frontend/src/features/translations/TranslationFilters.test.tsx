@@ -281,3 +281,30 @@ it("finds region-specific locale codes by their language name", async () => {
     screen.getByRole("option", { name: "Italian (Italy) (it-IT)" }),
   ).toBeVisible();
 });
+
+it("opens the base locale even from a target-only work queue", async () => {
+  const { onChange } = mount({
+    baseLanguage: "en",
+    filters: {
+      ...defaults,
+      language: "it",
+      workStatus: "needs_translation",
+      state: "draft",
+      visibleLanguages: ["it"],
+    },
+  });
+  await userEvent.click(
+    screen.getByRole("button", { name: "Base language · English" }),
+  );
+  expect(onChange).toHaveBeenCalledWith(
+    expect.objectContaining({
+      language: "en",
+      visibleLanguages: ["en"],
+      viewMode: "bilingual",
+      workStatus: null,
+      state: null,
+      violation: null,
+      deleted: "active",
+    }),
+  );
+});

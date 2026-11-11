@@ -236,3 +236,8 @@ uncertain-send recovery and additive Angular catalog registrations. The focused
 browser check is `PLAYWRIGHT_BASE_URL=http://127.0.0.1:4179 npm --prefix frontend
 run e2e -- add-language.spec.ts` against the built preview server.
 See [adding languages](adding-languages.md) for format and runner boundaries.
+
+Base-language discovery regressions verify scoped source-locale metadata, the
+string toolbar's escape from target work queues, editable base email drafts,
+source-copy hints and MCP email read authorization. The metadata does not grant
+write access; the existing per-group API permissions remain authoritative.

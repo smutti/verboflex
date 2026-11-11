@@ -428,6 +428,15 @@ export function TranslationEditor({
         void save();
       }}
     >
+      {!email &&
+        draft.language === draft.detail.base_language &&
+        writableTranslationDetail(draft.detail, "source_text") && (
+          <p className="text-label text-muted-foreground">
+            {t(
+              "This is the base-language text. Changes follow the same draft and review workflow.",
+            )}
+          </p>
+        )}
       {format === "html" && !email && (
         <p className="text-sm text-muted-foreground">
           {t(
@@ -529,9 +538,14 @@ export function TranslationEditor({
           {draft.values.map((value, index) => {
             const id = `translation-proposal-${draft.translationGroupId}-${index}`;
             const label = email
-              ? t("Translation · {{v0}}", {
-                  v0: displayLanguage(draft.language),
-                })
+              ? t(
+                  draft.language === draft.detail.base_language
+                    ? "Base text · {{v0}}"
+                    : "Translation · {{v0}}",
+                  {
+                    v0: displayLanguage(draft.language),
+                  },
+                )
               : selectorLabel(value, index);
             const member = draft.detail.values.find(
               (entry) => entry.id === value.translationValueId,

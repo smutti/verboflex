@@ -6397,6 +6397,12 @@ export type TranslationOptionsResponse = {
  */
 export type TranslationProductOptionResponse = {
     /**
+     * Base Languages
+     *
+     * Configured source locales, included alongside target locales. Resource-backed base text can be edited through the normal proposal workflow; check each group's mutation_eligible and source provenance. Code-only source context remains read-only.
+     */
+    base_languages?: Array<string>;
+    /**
      * Id
      */
     id: string;
