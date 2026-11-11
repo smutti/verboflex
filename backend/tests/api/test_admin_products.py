@@ -981,7 +981,7 @@ def test_existing_product_edit_clones_complete_graph_once_and_isolates_candidate
     assert [response.status_code for response in responses] == [200, 200]
     response_candidates = {response.json()["candidate_revision"]["id"] for response in responses}
     assert len(response_candidates) == 1
-    assert {response.json()["name"] for response in responses} == {"Published Graph"}
+    assert {response.json()["name"] for response in responses} == {"Candidate Graph"}
     assert {response.json()["candidate_revision"]["name"] for response in responses} == {
         "Candidate Graph"
     }
@@ -994,8 +994,8 @@ def test_existing_product_edit_clones_complete_graph_once_and_isolates_candidate
         active_graph = _revision_mapping_graph(session, revision_id=active_id)
         candidate_graph = _revision_mapping_graph(session, revision_id=candidate_id)
 
-        assert product.display_name == "Published Graph"
-        assert product.name_key == "published graph"
+        assert product.display_name == "Candidate Graph"
+        assert product.name_key == "candidate graph"
         assert product.active_revision_id == active_id
         assert product.candidate_revision_id == candidate_id
         assert active.display_name == "Published Graph"
@@ -1100,7 +1100,7 @@ def test_zero_mapping_edit_is_repeatable_but_remains_ineligible_for_publication(
 
     assert first.status_code == repeated.status_code == 200
     assert repeated.json() == first.json()
-    assert first.json()["name"] == "Empty Published"
+    assert first.json()["name"] == "Empty Candidate"
     assert first.json()["active_revision"]["id"] == str(active_id)
     assert first.json()["candidate_revision"]["name"] == "Empty Candidate"
     candidate_id = UUID(first.json()["candidate_revision"]["id"])
@@ -1209,6 +1209,126 @@ def _seed_product_lifecycle_graph(
         product.active_revision_id = active_id
         product.candidate_revision_id = candidate_id
     return product_id, active_id, candidate_id
+
+
+def test_rename_is_visible_and_searchable_before_configuration_publication(
+    product_session_factory: sessionmaker[Session],
+) -> None:
+    """Saving details updates the public identity, not the published repository graph."""
+    _, token = create_authority(
+        product_session_factory, email="admin@example.com", roles=("admin",)
+    )
+    product_id, active_id = _seed_active_product(
+        product_session_factory, name="Original Product", description="published"
+    )
+    configure_dependencies(product_session_factory)
+
+    def rename(name: str, version: int) -> httpx.Response:
+        return asyncio.run(
+            product_request(
+                "PATCH",
+                access_token=token,
+                path=f"{ADMIN_PRODUCTS_PATH}/{product_id}",
+                json_body={
+                    "name": name,
+                    "description": "published",
+                    "expected_candidate_version": version,
+                },
+            )
+        )
+
+    for name, old_name, version in (
+        ("Renamed Product", "Original Product", 1),
+        ("Final Product", "Renamed Product", 2),
+    ):
+        saved = rename(name, version)
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["name"] == name
+        assert saved.json()["active_revision"]["name"] == "Original Product"
+        assert saved.json()["active_revision"]["id"] == str(active_id)
+        assert saved.json()["candidate_revision"]["name"] == name
+        for query, expected in ((name, [str(product_id)]), (old_name, [])):
+            response = asyncio.run(
+                product_request(
+                    "GET",
+                    access_token=token,
+                    path="/api/v1/products/workspace?q=" + query.replace(" ", "%20"),
+                )
+            )
+            assert response.status_code == 200, response.text
+            assert [item["id"] for item in response.json()["items"]] == expected
+            if expected:
+                assert response.json()["items"][0]["name"] == name
+        duplicate = asyncio.run(
+            product_request(
+                "POST",
+                access_token=token,
+                json_body=create_payload(name=name),
+            )
+        )
+        assert duplicate.status_code == 409
+
+    with product_session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(ImportJob)) == 0
+        active = session.get_one(ProductRevision, active_id)
+        assert active.version == 1 and active.is_published
+
+
+@pytest.mark.parametrize("blocked", [None, "stale", "duplicate"])
+def test_resaving_a_legacy_draft_repairs_its_name_without_revising_configuration(
+    product_session_factory: sessionmaker[Session],
+    blocked: str | None,
+) -> None:
+    """Existing saved names can be applied without replaying publication or previews."""
+    _, token = create_authority(
+        product_session_factory, email="admin@example.com", roles=("admin",)
+    )
+    product_id, active_id = _seed_active_product(
+        product_session_factory, name="Original Product", description="published"
+    )
+    candidate_id = uuid4()
+    with product_session_factory.begin() as session:
+        session.add(
+            ProductRevision(
+                id=candidate_id,
+                product_id=product_id,
+                display_name="Renamed Product",
+                name_key="renamed product",
+                description="pending",
+                version=2,
+                is_published=False,
+            )
+        )
+        session.flush()
+        session.get_one(Product, product_id).candidate_revision_id = candidate_id
+        if blocked == "duplicate":
+            session.add(Product(display_name="Renamed Product", name_key="renamed product"))
+    configure_dependencies(product_session_factory)
+    before = _product_graph(product_session_factory)
+    saved = asyncio.run(
+        product_request(
+            "PATCH",
+            access_token=token,
+            path=f"{ADMIN_PRODUCTS_PATH}/{product_id}",
+            json_body={
+                "name": "Renamed Product",
+                "description": "pending",
+                "expected_candidate_version": 1 if blocked == "stale" else 2,
+            },
+        )
+    )
+    if blocked:
+        assert saved.status_code == 409
+        assert _product_graph(product_session_factory) == before
+        return
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["name"] == "Renamed Product"
+    assert saved.json()["candidate_revision"]["version"] == 2
+    assert saved.json()["candidate_revision"]["id"] == str(candidate_id)
+    assert saved.json()["active_revision"]["id"] == str(active_id)
+    with product_session_factory() as session:
+        assert session.get_one(ProductRevision, active_id).display_name == "Original Product"
+        assert session.get_one(Product, product_id).name_key == "renamed product"
 
 
 def test_published_product_noop_and_candidate_creation_keep_active_summary_immutable(

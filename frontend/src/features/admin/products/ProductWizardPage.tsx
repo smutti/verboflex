@@ -349,7 +349,9 @@ export function ProductWizardPage({
         setSavedDescriptionValue(responseDescription);
         setName(responseName);
         setDescription(responseDescription);
-        toast.success(t("Draft saved"));
+        toast.success(
+          t(product === undefined ? "Draft saved" : "Product details saved"),
+        );
         setCurrentStep(2);
         return;
       }
@@ -527,7 +529,9 @@ export function ProductWizardPage({
               value={name}
               aria-invalid={nameError !== null}
               aria-describedby={
-                nameError !== null ? `${nameId}-error` : undefined
+                nameError !== null
+                  ? `${nameId}-hint ${nameId}-error`
+                  : `${nameId}-hint`
               }
               onChange={(event) => {
                 setName(event.target.value);
@@ -535,6 +539,9 @@ export function ProductWizardPage({
                 setSubmissionError(false);
               }}
             />
+            <p id={`${nameId}-hint`} className="text-sm text-muted-foreground">
+              {t("The saved name is shown throughout VerboFlex.")}
+            </p>
             {nameError !== null ? (
               <p id={`${nameId}-error`} className="text-sm text-destructive">
                 {nameError === "duplicate"

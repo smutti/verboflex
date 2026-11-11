@@ -249,3 +249,8 @@ revocation and scope changes), `test_import_jobs.py` (stale-confirmation errors 
 retained baselines), and `test_source_fallback.py` (Qt source locale independent of
 the project base). Run `translation-save-scroll.spec.ts` against the frontend preview
 for paginated saves in complete and filtered queues; all fixtures are synthetic.
+
+The product administration API suite also checks [immediate product renaming](product-names.md):
+workspace cards and search update before repository publication, while published
+configuration and import baselines remain unchanged. Legacy draft recovery retains
+version checks and rejects duplicate names.

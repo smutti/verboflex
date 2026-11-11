@@ -1925,5 +1925,7 @@
   "Select a source language": "Select a source language",
   "Use confirmed Qt source text for this language": "Use confirmed Qt source text for this language",
   "Confirm which Qt source phrases are already in the selected language. Empty translations will display this text and leave Needs translation. New or changed phrases still need confirmation. The project base language, repository files and approvals are unchanged.": "Confirm which Qt source phrases are already in the selected language. Empty translations will display this text and leave Needs translation. New or changed phrases still need confirmation. The project base language, repository files and approvals are unchanged.",
-  "Review source changes": "Review source changes"
+  "Review source changes": "Review source changes",
+  "Product details saved": "Product details saved",
+  "The saved name is shown throughout VerboFlex.": "The saved name is shown throughout VerboFlex."
 }
