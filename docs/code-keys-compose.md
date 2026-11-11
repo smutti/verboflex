@@ -363,3 +363,10 @@ JDK or broaden the sandbox's outbound network policy to work around this problem
 
 For a persistent Linux deployment with a private Docker relay and an offline
 Android runner, see [the Linux runner guide](compose-linux-runner.md).
+
+The string toolbar provides a **Base language** shortcut, including when a target
+work queue is selected. It clears target review/length/work filters and focuses
+the exact base locale. Resource-backed source rows show **Editable source text**
+when the current user can edit them. The normal proposal permissions and review
+checks still apply; source context extracted only from application code remains
+read-only.

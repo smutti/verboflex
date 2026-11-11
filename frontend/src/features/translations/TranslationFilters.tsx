@@ -179,6 +179,30 @@ export function TranslationFilters({
         aria-label={t("Translation toolbar")}
       >
         {searchControl}
+        {baseLanguage &&
+          options.languages.some(({ code }) => code === baseLanguage) && (
+            <Button
+              variant="outline"
+              disabled={disabled}
+              className="min-h-[44px]"
+              onClick={() =>
+                accept({
+                  ...filters,
+                  language: baseLanguage,
+                  visibleLanguages: [baseLanguage],
+                  viewMode: "bilingual",
+                  workStatus: null,
+                  state: null,
+                  violation: null,
+                  deleted: "active",
+                })
+              }
+            >
+              {t("Base language · {{v0}}", {
+                v0: displayLanguage(baseLanguage),
+              })}
+            </Button>
+          )}
         <Dialog
           open={filterOpen}
           onOpenChange={(open) => {

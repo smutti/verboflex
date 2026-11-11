@@ -242,3 +242,19 @@ Il collaudo OAuth locale completo si esegue con
 login e consenso nel browser, legge i progetti via MCP, rinnova il token e revoca dalla UI.
 Richiede Playwright nel frontend e `.env.docker-access.json` locale; non modifica traduzioni.
 Le credenziali restano in memoria, il grant viene revocato e gli screenshot non contengono token.
+
+### Base-language editing and email templates
+
+`list_projects_and_languages` includes imported source locales and reports each
+project's `base_languages`. A source locale is not inherently read-only: MOKO
+`base/strings.xml` and base HTML files can be edited through `get_translation`
+and `save_translation`, subject to the existing API authority and complete
+selector/version checks. Do not create a duplicate English target. Search the
+exact base locale without `work_status`, which is intended for target work queues.
+Code-only source context and keys-repository values remain read-only.
+
+`list_email_templates` pages all imported locale files (including the base) and
+`get_email_template` reads the selected document and saved fragments. Read each
+fragment with `get_translation` before saving. A target identical to the source
+may be an untranslated copy; neither locale selection nor a nonempty value proves
+translation is complete.

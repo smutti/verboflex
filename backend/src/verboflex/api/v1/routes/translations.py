@@ -240,7 +240,9 @@ def list_translation_options(
         _service_unavailable(error)
     return TranslationOptionsResponse(
         products=[
-            TranslationProductOptionResponse(id=product.id, name=product.name)
+            TranslationProductOptionResponse(
+                id=product.id, name=product.name, base_languages=list(product.base_languages)
+            )
             for product in options.products
         ],
         languages=[

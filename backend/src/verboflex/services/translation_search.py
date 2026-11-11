@@ -151,6 +151,7 @@ class TranslationProductOption:
 
     id: UUID
     name: str
+    base_languages: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -785,8 +786,16 @@ _OPTIONS_SQL = text(
 WITH authorized_products AS (
     {_AUTHORIZED_ACTIVE_PRODUCTS_SQL}
 ), product_options AS (
-    SELECT id, display_name, name_key COLLATE "C" AS sort_key
-    FROM authorized_products
+    SELECT product.id, product.display_name, product.name_key COLLATE "C" AS sort_key,
+           ARRAY(
+               SELECT DISTINCT mapping.base_language COLLATE "C"
+               FROM localization_scopes AS scope
+               JOIN product_repository_mappings AS mapping ON mapping.id = scope.current_mapping_id
+               WHERE scope.product_id = product.id AND scope.active_execution_id IS NOT NULL
+                 AND mapping.base_language IS NOT NULL AND {_ACTIVE_MAPPING_SQL}
+               ORDER BY mapping.base_language COLLATE "C"
+           ) AS base_languages
+    FROM authorized_products AS product
     ORDER BY sort_key, id
     LIMIT {MAX_OPTION_COUNT + 1}
 ), language_options AS (
@@ -803,11 +812,11 @@ WITH authorized_products AS (
     LIMIT {MAX_OPTION_COUNT + 1}
 )
 SELECT 0 AS option_kind, id AS product_id, display_name AS product_name,
-       NULL::text AS language, sort_key
+       NULL::text AS language, sort_key, base_languages
 FROM product_options
 UNION ALL
 SELECT 1 AS option_kind, NULL::uuid AS product_id, NULL::text AS product_name,
-       language, language AS sort_key
+       language, language AS sort_key, ARRAY[]::text[] AS base_languages
 FROM language_options
 ORDER BY option_kind, sort_key, product_id
 """
@@ -1055,6 +1064,8 @@ _LANGUAGE_LABELS = {
     "ko": "Korean",
     "pt": "Portuguese",
     "pt-BR": "Portuguese (Brazil)",
+    "sv": "Swedish",
+    "sv-SE": "Swedish (Sweden)",
     "zh-CN": "Chinese (China)",
 }
 
@@ -1087,7 +1098,13 @@ def get_translation_options(
             continue
         product_id = row["product_id"]
         if product_id not in seen_products:
-            products.append(TranslationProductOption(id=product_id, name=row["product_name"]))
+            products.append(
+                TranslationProductOption(
+                    id=product_id,
+                    name=row["product_name"],
+                    base_languages=tuple(row["base_languages"]),
+                )
+            )
             seen_products.add(product_id)
     if len(products) > MAX_OPTION_COUNT or len(language_codes) > MAX_OPTION_COUNT:
         raise TranslationSearchInputError("translation options exceed their allowed bound")

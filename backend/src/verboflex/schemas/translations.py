@@ -49,6 +49,12 @@ class TranslationSearchQuery(ClosedTranslationModel):
 class TranslationProductOptionResponse(ClosedTranslationModel):
     id: UUID
     name: Annotated[str, Field(min_length=1, max_length=120)]
+    base_languages: Annotated[list[LanguageCode], Field(max_length=500)] = Field(
+        default_factory=list,
+        description="Configured source locales, included alongside target locales. Resource-backed "
+        "base text can be edited through the normal proposal workflow; check each group's "
+        "mutation_eligible and source provenance. Code-only source context remains read-only.",
+    )
 
 
 class TranslationLanguageOptionResponse(ClosedTranslationModel):

@@ -845,9 +845,15 @@ function ResolvedSearch({
           (language) => language.code,
         )}
         baseLanguage={
-          new Set(search.items.map((item) => item.base_language)).size === 1
-            ? search.items[0]?.base_language
-            : null
+          options.products.find(
+            (product) => product.id === search.filters.productId,
+          )?.base_languages?.length === 1
+            ? options.products.find(
+                (product) => product.id === search.filters.productId,
+              )!.base_languages![0]
+            : new Set(search.items.map((item) => item.base_language)).size === 1
+              ? search.items[0]?.base_language
+              : null
         }
         defaultSelectionCapped={search.defaultSelectionCapped}
         availableLanguagesTruncated={search.availableLanguagesTruncated}

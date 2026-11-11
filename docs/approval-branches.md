@@ -153,3 +153,9 @@ BRANCH_WORKFLOW_SMOKE_ONLY=1 PHASE8_HTTP_SETUP=1 \
 ```
 
 The same scenario also runs at the end of the complete application smoke.
+
+Reapproving text that is already present on the working branch does not create
+an empty commit. The worker first verifies the complete rendered files against
+the immutable branch head, then records that existing commit and releases the
+serial queue. Later drafts remain unpublished. External file changes still block
+the operation, and uncertain sends still require read-only reconciliation.

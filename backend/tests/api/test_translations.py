@@ -690,8 +690,8 @@ def test_options_are_server_ordered_and_exclude_inactive_datasets(
     assert response.status_code == 200
     assert response.json() == {
         "products": [
-            {"id": str(alpha_id), "name": "Alpha"},
-            {"id": str(zulu_id), "name": "Zulu"},
+            {"id": str(alpha_id), "name": "Alpha", "base_languages": ["en"]},
+            {"id": str(zulu_id), "name": "Zulu", "base_languages": ["en"]},
         ],
         "languages": [{"code": "it", "label": "Italian"}],
     }
@@ -718,7 +718,10 @@ def test_options_scope_languages_without_narrowing_products_or_enumerating_missi
             member.language = "en"
     token = _create_authority(translation_api_session_factory, role_names=("viewer",))
     _configure_dependencies(translation_api_session_factory)
-    products = [{"id": str(alpha_id), "name": "Alpha"}, {"id": str(beta_id), "name": "Beta"}]
+    products = [
+        {"id": str(alpha_id), "name": "Alpha", "base_languages": ["en"]},
+        {"id": str(beta_id), "name": "Beta", "base_languages": ["en"]},
+    ]
     for product_id, languages in [
         (alpha_id, [{"code": "en", "label": "English"}]),
         (beta_id, [{"code": "it", "label": "Italian"}]),

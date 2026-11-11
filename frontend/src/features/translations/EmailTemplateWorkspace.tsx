@@ -362,24 +362,45 @@ function EmailDocument({
         </div>
         {detail ? (
           <>
-            <div>
-              <p className="mb-2 flex items-center justify-between gap-2 text-label font-semibold">
-                {t("Source · {{v0}}", {
-                  v0: displayLanguage(detail.base_language ?? option.language),
-                })}
-                <LockKeyhole
-                  aria-hidden="true"
-                  className="size-4 text-muted-foreground"
-                />
+            {option.language !== option.base_language && (
+              <div>
+                <p className="mb-2 flex items-center justify-between gap-2 text-label font-semibold">
+                  {t("Source · {{v0}}", {
+                    v0: displayLanguage(
+                      detail.base_language ?? option.language,
+                    ),
+                  })}
+                  <LockKeyhole
+                    aria-hidden="true"
+                    className="size-4 text-muted-foreground"
+                  />
+                </p>
+                <p
+                  lang={detail.base_language ?? undefined}
+                  dir="auto"
+                  className="rounded-md border bg-background p-3 whitespace-pre-wrap wrap-anywhere"
+                >
+                  {detail.values[0].source_text ?? t("Source text unavailable")}
+                </p>
+              </div>
+            )}
+            {option.language === option.base_language && (
+              <p className="text-label text-muted-foreground">
+                {t(
+                  "This is the base-language text. Changes follow the same draft and review workflow.",
+                )}
               </p>
-              <p
-                lang={detail.base_language ?? undefined}
-                dir="auto"
-                className="rounded-md border bg-background p-3 whitespace-pre-wrap wrap-anywhere"
-              >
-                {detail.values[0].source_text ?? t("Source text unavailable")}
-              </p>
-            </div>
+            )}
+            {option.language !== option.base_language &&
+              detail.values[0].source_text?.trim() &&
+              (texts.get(detail.id) ?? fragment?.text)?.trim() ===
+                detail.values[0].source_text.trim() && (
+                <p role="status" className="text-label text-warning">
+                  {t(
+                    "This text matches the base language. Check whether it still needs translation.",
+                  )}
+                </p>
+              )}
             {detail.pending_change && (
               <TranslationStatusBadge proposal={detail.pending_change} />
             )}
@@ -554,13 +575,13 @@ export function EmailTemplateWorkspace({
             {templateLabel(option.name)}
           </h2>
           <p className="mt-1 text-label text-muted-foreground">
-            {t("Source · {{v0}}", {
+            {t("Base language · {{v0}}", {
               v0: displayLanguage(option.base_language ?? option.language),
             })}
           </p>
         </div>
         <div className="flex min-w-0 flex-col gap-1">
-          <Label htmlFor="email-target-language">{t("Translate into")}</Label>
+          <Label htmlFor="email-target-language">{t("Language to edit")}</Label>
           <select
             id="email-target-language"
             className={selectClass}
@@ -578,12 +599,27 @@ export function EmailTemplateWorkspace({
               <option key={item.group_id} value={item.language}>
                 {displayLanguage(item.language)}
                 {item.language === item.base_language
-                  ? ` · ${t("Source")}`
+                  ? ` · ${t("Base language")}`
                   : ""}
               </option>
             ))}
           </select>
         </div>
+        {family.items.some((item) => item.language === item.base_language) &&
+          option.language !== option.base_language && (
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={(event) => {
+                context.runDraftGuardedAction(() => {
+                  context.setActiveDraft(null);
+                  setLanguage(option.base_language);
+                }, event.currentTarget);
+              }}
+            >
+              {t("Open base language")}
+            </Button>
+          )}
         {viewControl}
       </div>
       <div className="flex min-w-0 flex-col gap-2 border-b p-4 xl:hidden">

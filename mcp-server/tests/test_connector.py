@@ -45,7 +45,7 @@ def test_catalog_is_closed_valid_and_annotated(store):
         with httpx.Client() as http:
             async with Client(create_server(ApiClient(store, http))) as client:
                 tools = (await client.list_tools()).tools
-                assert len(tools) == len(OPERATIONS) == 70
+                assert len(tools) == len(OPERATIONS) == 72
                 for tool in tools:
                     Draft202012Validator.check_schema(tool.input_schema)
                     assert tool.annotations.open_world_hint
@@ -338,3 +338,42 @@ def test_read_only_exposes_only_allowlisted_query_posts(store):
                 )
 
     asyncio.run(run())
+
+
+def test_base_language_discovery_and_email_tools_preserve_api_authority(store):
+    product = "00000000-0000-4000-8000-000000000001"
+    group = "00000000-0000-4000-8000-000000000002"
+
+    def handler(request):
+        assert request.headers["Authorization"] == "Bearer access-secret"
+        if request.url.path.endswith("/options"):
+            assert request.url.params["product_id"] == product
+            return httpx.Response(
+                200,
+                json={
+                    "products": [{"id": product, "name": "Mail", "base_languages": ["en"]}],
+                    "languages": [
+                        {"code": "en", "label": "English"},
+                        {"code": "it", "label": "Italian"},
+                    ],
+                },
+            )
+        if request.url.path.endswith("/html-templates"):
+            return httpx.Response(
+                200,
+                json={
+                    "items": [{"group_id": group, "language": "en", "base_language": "en"}],
+                    "next_cursor": None,
+                },
+            )
+        assert request.url.path == f"/api/v1/translations/{group}/html-editor"
+        return httpx.Response(403, json={"detail": "Permission denied"})
+
+    response = call(store, handler, "list_projects_and_languages", {"product_id": product})
+    assert response.structured_content["data"]["products"][0]["base_languages"] == ["en"]
+    response = call(store, handler, "list_email_templates", {"product_id": product}, read_only=True)
+    assert response.structured_content["data"]["items"][0]["language"] == "en"
+    response = call(
+        store, handler, "get_email_template", {"translation_group_id": group}, read_only=True
+    )
+    assert response.is_error and response.structured_content["status_code"] == 403
