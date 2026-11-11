@@ -111,7 +111,7 @@ const ACTION_LABELS: Record<
     return t("Import in progress");
   },
   get refresh_import() {
-    return t("Refresh import");
+    return t("Update from branches");
   },
   get retry_import() {
     return t("Retry import");

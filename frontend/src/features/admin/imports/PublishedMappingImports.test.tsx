@@ -227,7 +227,7 @@ describe("published mapping import collection", () => {
       if (moveFocus) expect(outside).toHaveFocus();
       else
         expect(
-          within(list).getByRole("button", { name: "Refresh import" }),
+          within(list).getByRole("button", { name: "Update from branches" }),
         ).toHaveFocus();
       expect(startImportMock).toHaveBeenCalledOnce();
     },
@@ -1211,7 +1211,7 @@ describe("published mapping import collection", () => {
       within(table).getByRole("button", { name: "Run import" }),
     ).toBeEnabled();
     expect(
-      within(table).getByRole("button", { name: "Refresh import" }),
+      within(table).getByRole("button", { name: "Update from branches" }),
     ).toBeEnabled();
     expect(
       within(table).getAllByRole("button", { name: "Retry import" }),

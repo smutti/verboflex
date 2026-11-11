@@ -40,6 +40,7 @@ import { ChangeSetReviewPage } from "./features/change-sets/ChangeSetReviewPage"
 import { ChangeSetDetailPage } from "./features/change-sets/ChangeSetDetailPage";
 import { TranslationSearchPage } from "./features/translations/TranslationSearchPage";
 import { ProductStringsPage } from "./features/translations/ProductStringsPage";
+import { ProductSourceUpdatesPage } from "./features/products/ProductSourceUpdatesPage";
 import { TranslationDetailPage } from "./features/translations/TranslationDetailPage";
 import { TranslationsWorkspace } from "./features/translations/TranslationsWorkspace";
 import {
@@ -253,6 +254,16 @@ export function ProductApplicationRoutes({
       >
         <Route index element={<Navigate replace to="strings" />} />
         <Route path="strings" element={<ProductStringsPage />} />
+        <Route
+          path="source-updates"
+          element={
+            principal.roles.includes("admin") ? (
+              <ProductSourceUpdatesPage accessToken={accessToken} />
+            ) : (
+              <AdminAccessDenied />
+            )
+          }
+        />
         <Route
           path="team"
           element={<ProductTeamPage accessToken={accessToken} />}
