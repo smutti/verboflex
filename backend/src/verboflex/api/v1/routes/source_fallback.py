@@ -10,8 +10,12 @@ from sqlalchemy import delete, select
 from verboflex.api.v1.routes.admin_products import AdminPrincipal, AdminSession
 from verboflex.audit.ledger import record_audit
 from verboflex.models.product import Product
-from verboflex.models.product_mapping import ProductRepositoryMapping
 from verboflex.models.source_fallback import SourceFallbackPolicy, SourceFallbackText
+from verboflex.models.translation import (
+    LocalizationScope,
+    TranslationValue,
+    TranslationValueLocator,
+)
 from verboflex.schemas.source_fallback import SourceFallbackResponse, SourceFallbackWrite
 from verboflex.schemas.system import ErrorResponse
 
@@ -32,13 +36,19 @@ def _product(session: AdminSession, product_id: UUID, *, lock: bool = False) -> 
 def _languages(session: AdminSession, product: Product) -> list[str]:
     return list(
         session.scalars(
-            select(ProductRepositoryMapping.base_language)
+            select(TranslationValue.language)
+            .join(LocalizationScope, LocalizationScope.id == TranslationValue.scope_id)
+            .join(TranslationValueLocator, TranslationValueLocator.value_id == TranslationValue.id)
             .where(
-                ProductRepositoryMapping.revision_id == product.active_revision_id,
-                ProductRepositoryMapping.base_language.is_not(None),
+                LocalizationScope.product_id == product.id,
+                LocalizationScope.current_revision_id == product.active_revision_id,
+                LocalizationScope.active_execution_id.is_not(None),
+                TranslationValue.is_deleted.is_(False),
+                TranslationValueLocator.format == "qt_ts",
+                TranslationValueLocator.repository_side.in_(("direct", "translations")),
             )
             .distinct()
-            .order_by(ProductRepositoryMapping.base_language)
+            .order_by(TranslationValue.language)
         )
     )
 
@@ -91,7 +101,9 @@ def update_policy(
     if payload.expected_version != (policy.version if policy else 0):
         raise HTTPException(409, "Source fallback settings changed; reload before saving")
     if payload.enabled and payload.language not in _languages(session, product):
-        raise HTTPException(409, "Select a base language in the published product configuration")
+        raise HTTPException(
+            409, "Select an imported Qt language in the published product configuration"
+        )
     if policy is None:
         policy = SourceFallbackPolicy(
             product_id=product_id, version=1, enabled=payload.enabled, language=payload.language

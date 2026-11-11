@@ -43,6 +43,9 @@ class BitbucketConnection(Base):
         nullable=False,
         server_default=text("0"),
     )
+    # Token generations remain strict leases; this range only preserves confirmed layouts.
+    renewal_start_generation: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    client_credentials_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
     access_token_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
     refresh_token_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
     scope_profile: Mapped[str | None] = mapped_column(String(64), nullable=True)

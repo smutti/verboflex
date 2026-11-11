@@ -52,11 +52,14 @@ Saving a translation preserves the source and its message identity. By default,
 **Needs translation** includes empty Qt translations even in the base catalog.
 
 Administrators can open **Product configuration → product overview → Source language
-settings**, enable **Use confirmed source text for the base language**, and select
+settings**, enable **Use confirmed Qt source text for this language**, and select
 exact source phrases already written in that language. For those phrases only,
 empty scalar Qt translations display the source with **Using source text** and
 leave both search representations of **Needs translation**. The policy is scoped
-to the product and base locale, independent of mapping revisions and imports.
+to the product and the selected imported Qt locale, independent of mapping revisions and imports.
+The Qt source language can differ from the project base: for example, confirmed
+Italian Qt phrases can supply empty Italian translations while `en-US` remains
+the project base. The settings offer current imported Qt locales only.
 Other products keep their own settings. Updates are audited, version checked,
 and invalidate existing search cursors.
 
@@ -67,7 +70,8 @@ takes precedence over fallback. The policy never fills repository files, creates
 proposals, approves changes or opens pull requests. Saving an explicit translation
 still uses the regular review workflow. Disabling the policy restores the original
 empty-translation behavior. Product coverage continues to measure target languages,
-excluding the configured base locale.
+excluding the configured base locale. Confirmed Qt source fallback counts as
+available target text in coverage; repository review states remain unchanged.
 
 The multilingual built-stack smoke configures this policy through the administrator
 interface, verifies its persistence and filtering, then saves/reloads a translation

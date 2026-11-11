@@ -114,7 +114,6 @@ function SourceFallbackForm({
           if (controller.signal.aborted) return;
           if (!result.data) throw new Error();
           const texts = result.data.items.flatMap((item) =>
-            item.base_language === language &&
             item.source_text &&
             !item.source_truncated &&
             item.slots.some(
@@ -183,7 +182,7 @@ function SourceFallbackForm({
     <div className="max-w-4xl space-y-4">
       <p className="text-sm text-muted-foreground">
         {t(
-          "Confirm which source phrases are already in the base language. Empty Qt translations will use the selected text and leave Needs translation. New or changed phrases still need translation until confirmed here. Repository files and approvals are unchanged.",
+          "Confirm which Qt source phrases are already in the selected language. Empty translations will display this text and leave Needs translation. New or changed phrases still need confirmation. The project base language, repository files and approvals are unchanged.",
         )}
       </p>
       <label className="flex items-center gap-2">
@@ -193,12 +192,12 @@ function SourceFallbackForm({
           disabled={saving}
           onChange={(event) => setEnabled(event.target.checked)}
         />
-        {t("Use confirmed source text for the base language")}
+        {t("Use confirmed Qt source text for this language")}
       </label>
       <label className="flex flex-wrap items-center gap-3">
-        {t("Base language")}
+        {t("Qt source language")}
         <select
-          aria-label={t("Source fallback base language")}
+          aria-label={t("Qt source language")}
           value={language}
           disabled={saving}
           className="rounded-md border p-2"
@@ -209,7 +208,9 @@ function SourceFallbackForm({
             setPage({ texts: [], cursor: null });
           }}
         >
-          {!language && <option value="">{t("Select a base language")}</option>}
+          {!language && (
+            <option value="">{t("Select a source language")}</option>
+          )}
           {initial.available_languages.map((value) => (
             <option key={value} value={value}>
               {value}

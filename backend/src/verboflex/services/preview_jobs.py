@@ -1305,7 +1305,7 @@ def is_current_preview_confirmation(
         assert mapping.confirmed_preview_job_id is not None
         row = session.get(PreviewJob, mapping.confirmed_preview_job_id)
         if row is not None and _confirmation_job_matches(row, revision, mapping):
-            connection = _current_connection(session, row, for_update=True)
+            connection = _current_connection(session, row, for_update=True, allow_renewed=True)
             if (
                 connection is not None
                 and _confirmation_job_is_latest(session, row)
@@ -1343,12 +1343,15 @@ def active_revision_revalidation_is_current(
             mapping=mapping,
         ):
             continue
-        connection = _current_connection(session, row, for_update=True)
+        connection = _current_connection(session, row, for_update=True, allow_renewed=True)
         if (
             connection is not None
             # Completed confirmation remains authority after reactivation. New
             # jobs and confirmation requests still require an inactive product.
-            and _current_failure_code(session, row, for_update=True, allow_reactivated=True) is None
+            and _current_failure_code(
+                session, row, for_update=True, allow_reactivated=True, allow_renewed=True
+            )
+            is None
             and _confirmation_job_is_latest(session, row)
             and _current_identity_matches(row, revision, mapping, connection)
             and _active_confirmed_layout_matches(sidecar, row=row, mapping=mapping)
@@ -1613,13 +1616,16 @@ def _current_failure_code(
     *,
     for_update: bool,
     allow_reactivated: bool = False,
+    allow_renewed: bool = False,
 ) -> PreviewJobErrorCode | None:
     revision = _current_revision(
         session, row, for_update=for_update, allow_reactivated=allow_reactivated
     )
     if revision is None:
         return "stale_candidate"
-    connection = _current_connection(session, row, for_update=for_update)
+    connection = _current_connection(
+        session, row, for_update=for_update, allow_renewed=allow_renewed
+    )
     if connection is None:
         return "stale_connection"
     latest_attempt = session.scalar(
@@ -1693,6 +1699,7 @@ def _current_connection(
     row: PreviewJob,
     *,
     for_update: bool,
+    allow_renewed: bool = False,
 ) -> BitbucketConnection | PublicReadAuthority | None:
     mapping = _current_mapping(session, row, for_update=for_update)
     if is_public_github_mapping(session, mapping):
@@ -1703,7 +1710,16 @@ def _current_connection(
     connection = session.execute(connection_statement).scalar_one_or_none()
     if (
         connection is None
-        or connection.generation != row.connection_generation
+        or not (
+            connection.generation == row.connection_generation
+            or (
+                allow_renewed
+                and connection.renewal_start_generation is not None
+                and connection.renewal_start_generation
+                <= row.connection_generation
+                < connection.generation
+            )
+        )
         or connection.access_token_ciphertext is None
         or connection.refresh_token_ciphertext is not None
         or connection.scope_profile != PULLREQUEST_WRITE_SCOPE
@@ -1749,7 +1765,7 @@ def _current_identity_matches(
                 product_id=row.product_id,
                 revision=revision,
                 mapping=mapping,
-                connection_generation=connection.generation,
+                connection_generation=row.connection_generation,
                 repository_sides=current_sides,
             )
         elif row.revision_scope == "active_revalidation":
@@ -1757,7 +1773,7 @@ def _current_identity_matches(
                 product_id=row.product_id,
                 revision=revision,
                 mapping=mapping,
-                connection_generation=connection.generation,
+                connection_generation=row.connection_generation,
                 repository_sides=current_sides,
             )
         else:

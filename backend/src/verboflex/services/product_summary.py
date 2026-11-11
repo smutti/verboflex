@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from verboflex.schemas.admin_products import AdminProductSummaryResponse
 from verboflex.services.products import ProductNotFound
+from verboflex.services.source_fallback import SOURCE_FALLBACK_SQL
 
 LANGUAGE_LIMIT = 500
 # Python's Unicode whitespace set, explicitly including separators not covered
@@ -51,9 +52,10 @@ WITH product AS (
 ), live_groups AS (
     SELECT scope.id AS scope_id, key.id AS key_id, value.language, scope.base_language,
            bool_or(value.source_text IS NOT NULL) AS has_source,
-           bool_and(value.translated_text IS NOT NULL
+           bool_and((value.translated_text IS NOT NULL
                     AND btrim(value.translated_text, :whitespace) <> ''
-                    AND NOT value.structure @> CAST(:qt_unfinished AS jsonb)) AS complete
+                    AND NOT value.structure @> CAST(:qt_unfinished AS jsonb))
+                    OR ({SOURCE_FALLBACK_SQL.format(product_id=":product_id")})) AS complete
     FROM imported_scopes AS scope
     JOIN translation_keys AS key
       ON key.scope_id = scope.id AND key.product_id = :product_id AND NOT key.is_deleted

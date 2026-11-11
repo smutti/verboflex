@@ -48,3 +48,29 @@ The PostgreSQL regression
 `backend/tests/integration/test_import_jobs.py::test_import_authorization_fails_before_mapping_or_dispatch_work`
 verifies that unauthorized list, start, status and rewrite requests cannot dispatch
 repository work. See [application checks](application-ci.md) for test database setup.
+
+## Confirmation renewal and catalog navigation
+
+An automatic Bitbucket token renewal keeps completed preview confirmations valid
+only within the same verified client-credentials lineage. Explicit reconnects,
+changed configured credentials, revocation and incompatible scopes still invalidate
+authority. Provider leases continue to require the exact current token generation.
+Existing credentials without proven lineage require one fresh connection and
+preview confirmation; the migration does not infer trust from old timestamps.
+Enabled Qt source policies advance their version during migration so saved search
+cursors and configuration forms cannot retain the former base-only semantics.
+A stale confirmation is reported as **Mapping confirmation required**, independently
+of malformed files or parser limits. Failed imports retain the last successful catalog.
+
+**Open current catalog** opens that retained/current catalog without implying that
+the latest attempt succeeded. A failed attempt has an explicit explanation beside
+the link. Successful mappings additionally offer **Review source changes**, which
+opens the project's **Source changed** queue. This queue includes unresolved source
+changes; it is not a list of every added key or a diff restricted to one execution.
+
+Saving an inline translation retains the loaded list while refreshing its cursor
+chain. Previously loaded pages are replaced together. A filtered-out saved row
+remains at its former position while the user finishes their work. Refresh failures
+keep the visible results and expose retry without using the stale continuation.
+The synthetic `translation-save-scroll.spec.ts` browser check saves beyond the first
+page in complete and filtered queues and retains before/after screenshots.

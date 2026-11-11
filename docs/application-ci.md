@@ -247,3 +247,11 @@ Base-language discovery regressions verify scoped source-locale metadata, the
 string toolbar's escape from target work queues, editable base email drafts,
 source-copy hints and MCP email read authorization. The metadata does not grant
 write access; the existing per-group API permissions remain authoritative.
+
+Focused regressions for source refresh and authoring include
+`test_bitbucket_oauth.py` (renewal lineage and exact token leases),
+`test_preview_jobs.py` (confirmed layouts across equivalent renewal versus reconnect,
+revocation and scope changes), `test_import_jobs.py` (stale-confirmation errors with
+retained baselines), and `test_source_fallback.py` (Qt source locale independent of
+the project base). Run `translation-save-scroll.spec.ts` against the frontend preview
+for paginated saves in complete and filtered queues; all fixtures are synthetic.

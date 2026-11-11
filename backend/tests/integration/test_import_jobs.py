@@ -119,6 +119,8 @@ def clean_import_database(
         connection = session.get(BitbucketConnection, 1)
         assert connection is not None
         connection.generation = 0
+        connection.renewal_start_generation = None
+        connection.client_credentials_digest = None
         connection.access_token_ciphertext = None
         connection.refresh_token_ciphertext = None
         connection.scope_profile = None
@@ -3866,3 +3868,67 @@ def test_public_contract_maps_provider_failures_to_closed_fixed_errors(
     assert 1 <= len(body["error_message"]) <= 256
     assert body["action"] == "retry_import"
     _assert_secret_free(body)
+
+
+def test_stale_preview_reports_confirmation_required_and_keeps_catalog(import_session_factory):
+    _configure_dependencies(import_session_factory)
+    token = _create_admin(import_session_factory)
+    product, _revision, repository, mapping = _seed_published_direct_mapping(import_session_factory)
+    app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
+    path = f"/api/v1/admin/products/{product}/published/mappings/{mapping}/imports"
+    response = asyncio.run(_request("POST", path, access_token=token))
+    import_id = UUID(response.json()["id"])
+    execute_import_job(
+        import_session_factory,
+        import_id=import_id,
+        processor=lambda _identity: (_successful_reference(repository),),
+    )
+    with import_session_factory() as session:
+        baseline_id = session.get_one(ImportJob, import_id).active_baseline_execution_id
+    assert baseline_id is not None
+    assert asyncio.run(_request("POST", path, access_token=token)).status_code == 202
+
+    def stale(_identity):
+        raise import_job_service.ImportConfirmationRequired()
+
+    execute_import_job(import_session_factory, import_id=import_id, processor=stale)
+    with import_session_factory() as session:
+        job = session.get_one(ImportJob, import_id)
+        assert job.state == "import_failed"
+        assert job.error_category == "confirmation_required"
+        assert "Revalidate the preview" in job.error_message
+        assert job.active_baseline_execution_id == baseline_id
+
+
+@pytest.mark.parametrize("during_run", [False, True])
+@pytest.mark.parametrize("equivalent", [False, True])
+def test_import_survives_equivalent_renewal_before_claim_and_activation(
+    import_session_factory, during_run, equivalent
+):
+    _configure_dependencies(import_session_factory)
+    token = _create_admin(import_session_factory)
+    product, _revision, repository, mapping = _seed_published_direct_mapping(import_session_factory)
+    app.state.import_job_enqueuer = PersistedImportEnqueuer(import_session_factory)
+    path = f"/api/v1/admin/products/{product}/published/mappings/{mapping}/imports"
+    response = asyncio.run(_request("POST", path, access_token=token))
+    import_id = UUID(response.json()["id"])
+
+    def renew():
+        with import_session_factory.begin() as session:
+            connection = session.get_one(BitbucketConnection, 1)
+            connection.renewal_start_generation = connection.generation if equivalent else None
+            connection.generation += 1
+
+    def processor(_identity):
+        if during_run:
+            renew()
+        return (_successful_reference(repository),)
+
+    if not during_run:
+        renew()
+    execute_import_job(import_session_factory, import_id=import_id, processor=processor)
+    with import_session_factory() as session:
+        job = session.get_one(ImportJob, import_id)
+        assert job.state == ("current" if equivalent else "import_failed")
+        assert (job.active_baseline_execution_id is not None) is equivalent
+        assert job.error_category == (None if equivalent else "connection_required")

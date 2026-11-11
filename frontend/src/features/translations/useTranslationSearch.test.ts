@@ -930,3 +930,71 @@ it("keeps repository-specific language subsets across global result pages", asyn
     result.current.items.map((item) => item.slots.map((slot) => slot.language)),
   ).toEqual([["en"], ["it-IT"]]);
 });
+
+it("keeps loaded pages mounted and replaces stale cursors atomically after saving", async () => {
+  searchTranslationKeysMock
+    .mockResolvedValueOnce(ok(page([group(1)], "old-next")))
+    .mockResolvedValueOnce(ok(page([group(2)], "old-third")));
+  const { result } = renderHook(() =>
+    useTranslationSearch({
+      accessToken: "token",
+      initialFilters: defaultFilters,
+    }),
+  );
+  await settleInitial();
+  await act(async () => {
+    await result.current.loadMore();
+  });
+  expect(result.current.items.map((item) => item.translation_key_id)).toEqual([
+    "group-1",
+    "group-2",
+  ]);
+  const first = deferred<ReturnType<typeof ok>>();
+  const second = deferred<ReturnType<typeof ok>>();
+  searchTranslationKeysMock
+    .mockReturnValueOnce(first.promise)
+    .mockReturnValueOnce(second.promise);
+  act(() => result.current.refresh());
+  expect(result.current.items).toHaveLength(2);
+  expect(result.current.nextCursor).toBeNull();
+  await act(async () => {
+    first.resolve(ok(page([group(1)], "fresh-next")));
+  });
+  expect(result.current.items).toHaveLength(2);
+  expect(searchTranslationKeysMock.mock.lastCall?.[0]?.query?.cursor).toBe(
+    "fresh-next",
+  );
+  await act(async () => {
+    second.resolve(ok(page([group(3)], "fresh-third")));
+  });
+  expect(result.current.items.map((item) => item.translation_key_id)).toEqual([
+    "group-1",
+    "group-3",
+  ]);
+  expect(result.current.nextCursor).toBe("fresh-third");
+});
+
+it("keeps the loaded window on a refresh error and retries with new cursor authority", async () => {
+  searchTranslationKeysMock.mockResolvedValueOnce(
+    ok(page([group(1)], "old-next")),
+  );
+  const { result } = renderHook(() =>
+    useTranslationSearch({
+      accessToken: "token",
+      initialFilters: defaultFilters,
+    }),
+  );
+  await settleInitial();
+  searchTranslationKeysMock.mockRejectedValueOnce(new Error("temporary"));
+  act(() => result.current.refresh());
+  await settleInitial();
+  expect(result.current.items).toHaveLength(1);
+  expect(result.current.nextCursor).toBeNull();
+  expect(result.current.initialError).toBe(true);
+  searchTranslationKeysMock.mockResolvedValueOnce(ok(page([group(2)], null)));
+  await act(async () => {
+    await result.current.retryInitial();
+  });
+  await settleInitial();
+  expect(result.current.items[0].translation_key_id).toBe("group-2");
+});

@@ -21,7 +21,7 @@ class SourceFallbackWrite(BaseModel):
     @model_validator(mode="after")
     def validate_sources(self) -> Self:
         if self.enabled and self.language is None:
-            raise ValueError("Select a base language")
+            raise ValueError("Select a source language")
         if len(set(self.source_texts)) != len(self.source_texts):
             raise ValueError("Source texts must be unique")
         if any(not value.strip() or "\x00" in value for value in self.source_texts):

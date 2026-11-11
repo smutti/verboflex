@@ -1,10 +1,9 @@
-"""Source fallback applies only to explicit, unchanged Qt scalar sources in the base locale."""
+"""Fallback applies to exact, confirmed Qt scalar sources in the selected source locale."""
 
 # Shared by both search representations. Value, key, and :whitespace are bound by
 # the caller. Imported translations and proposals remain the writeback authority.
 SOURCE_FALLBACK_SQL = """
     value.selector_kind = 'scalar' AND NOT value.is_deleted AND NOT key.is_deleted
-    AND value.language = {base_language}
     AND value.translated_text IS NOT NULL
     AND btrim(value.translated_text, :whitespace) = ''
     AND EXISTS (

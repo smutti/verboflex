@@ -389,6 +389,12 @@ def test_incomplete_or_stale_authority_never_yields_partial_parser_inputs(monkey
     session.get.side_effect = lambda model, identifier: (
         revision if model is ProductRevision else preview
     )
+    if defect == "stale":
+        with pytest.raises(import_jobs.ImportConfirmationRequired):
+            import_jobs._confirmed_parser_inputs(
+                session, identity=identity, source_contents=contents
+            )
+        return
     assert (
         import_jobs._confirmed_parser_inputs(session, identity=identity, source_contents=contents)
         == ()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from base64 import b64encode
 from collections.abc import Callable, Mapping
@@ -229,6 +230,8 @@ def revoke_local_bitbucket_connection(
             if expected_generation is not None and connection.generation != expected_generation:
                 raise OAuthGenerationRejected(GENERATION_REJECTED_MESSAGE)
             connection.generation += 1
+            connection.renewal_start_generation = None
+            connection.client_credentials_digest = None
             connection.access_token_ciphertext = None
             connection.refresh_token_ciphertext = None
             connection.provider_expires_at = None
@@ -565,7 +568,17 @@ class BitbucketOAuthService:
             provider_expires_at = acquired_at + timedelta(seconds=expires_in)
         except OverflowError as error:
             raise OAuthConnectionUnavailable(CONNECTION_UNAVAILABLE_MESSAGE) from error
+        credentials_digest = hashlib.sha256(
+            json.dumps([self._client_id, self._client_secret], separators=(",", ":")).encode()
+        ).hexdigest()
         connection.generation += 1
+        if (
+            replace_connected_at
+            or connection.renewal_start_generation is None
+            or connection.client_credentials_digest != credentials_digest
+        ):
+            connection.renewal_start_generation = connection.generation
+        connection.client_credentials_digest = credentials_digest
         connection.access_token_ciphertext = self._secret_box.encrypt(access_token)
         connection.refresh_token_ciphertext = None
         connection.scope_profile = PULLREQUEST_WRITE_SCOPE

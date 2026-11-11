@@ -1916,5 +1916,14 @@
   "· Version": "· Version",
   "· import from": "· importer depuis",
   "— Needs review: remove and select the current version.": "— Nécessite une révision : supprimez et sélectionnez la version actuelle.",
-  "— your current configuration is still active.": "— votre configuration actuelle est toujours active."
+  "— your current configuration is still active.": "— votre configuration actuelle est toujours active.",
+  "Open current catalog": "Ouvrir le catalogue actuel",
+  "The latest import failed. This link opens the last successful catalog.": "La dernière importation a échoué. Ce lien ouvre le dernier catalogue importé avec succès.",
+  "Mapping confirmation required": "Confirmation du mappage requise",
+  "Revalidate and confirm the mapping preview after an authorization or configuration change, then retry the import. The previous catalog is still available.": "Après un changement d’autorisation ou de configuration, validez et confirmez à nouveau l’aperçu du mappage, puis relancez l’importation. Le catalogue précédent reste disponible.",
+  "Qt source language": "Langue source Qt",
+  "Select a source language": "Sélectionnez une langue source",
+  "Use confirmed Qt source text for this language": "Utiliser le texte source Qt confirmé pour cette langue",
+  "Confirm which Qt source phrases are already in the selected language. Empty translations will display this text and leave Needs translation. New or changed phrases still need confirmation. The project base language, repository files and approvals are unchanged.": "Confirmez les textes sources Qt déjà dans la langue sélectionnée. Les traductions vides afficheront ce texte et quitteront À traduire. Les textes nouveaux ou modifiés nécessitent une confirmation. La langue de base, les fichiers et les approbations restent inchangés.",
+  "Review source changes": "Vérifier les modifications de source"
 }
