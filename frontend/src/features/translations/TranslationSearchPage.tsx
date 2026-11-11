@@ -240,6 +240,7 @@ function ResolvedSearch({
   } | null>(null);
   const [retainedItem, setRetainedItem] =
     useState<TranslationKeySummary | null>(null);
+  const [retainedPosition, setRetainedPosition] = useState(0);
   const [queueMessage, setQueueMessage] = useState<string | null>(null);
   const editorTrigger = useRef<HTMLElement | null>(null);
   const savedEditorFocus = useRef<string | null>(null);
@@ -486,6 +487,14 @@ function ResolvedSearch({
           const generation = ++editorGeneration.current;
           const initialContextGeneration = contextGeneration.current;
           editorController.current = controller;
+          setRetainedPosition(
+            Math.max(
+              0,
+              search.items.findIndex((item) =>
+                item.slots.some((slot) => slot.group_id === groupId),
+              ),
+            ),
+          );
           editorTrigger.current = trigger;
           setEditorReturnFocusTo(trigger);
           setEditorLoad({ groupId, status: "loading" });
@@ -695,7 +704,11 @@ function ResolvedSearch({
         item.translation_key_id === retainedItem.translation_key_id &&
         item.scope_id === retainedItem.scope_id,
     )
-      ? [retainedItem, ...search.items]
+      ? [
+          ...search.items.slice(0, retainedPosition),
+          retainedItem,
+          ...search.items.slice(retainedPosition),
+        ]
       : search.items;
   const presentedItems = visibleItems.map((item): TranslationKeySummary => ({
     ...item,
@@ -944,9 +957,17 @@ function ResolvedSearch({
             </AlertDescription>
           </Alert>
         )}
+        {search.initialError && visibleItems.length > 0 && (
+          <SearchError
+            alertRef={alertRef}
+            onRetry={() => void search.retryInitial()}
+          />
+        )}
         {search.isInitialLoading && visibleItems.length === 0 ? (
           <LoadingResults />
-        ) : search.initialError && !context.activeDraft ? (
+        ) : search.initialError &&
+          visibleItems.length === 0 &&
+          !context.activeDraft ? (
           <SearchError
             alertRef={alertRef}
             onRetry={() => {
@@ -1397,15 +1418,21 @@ function SearchOptions({
   context,
   requestedProductId,
   requestedLanguage,
+  requestedWorkStatus,
 }: {
   context: TranslationsWorkspaceContext;
   requestedProductId: string | null;
   requestedLanguage: string | null;
+  requestedWorkStatus: TranslationSearchFilters["workStatus"];
 }) {
   useUiLanguage();
   const locationKey = useLocation().key;
   const snapshotMatches =
     context.snapshot &&
+    (requestedWorkStatus == null ||
+      (context.snapshot.filters.workStatus === requestedWorkStatus &&
+        (context.snapshot as LocatedSnapshot).searchLocationKey ===
+          locationKey)) &&
     (requestedProductId === null ||
       context.snapshot.filters.productId === requestedProductId) &&
     ((context.snapshot as LocatedSnapshot).searchLocationKey === locationKey ||
@@ -1424,13 +1451,18 @@ function SearchOptions({
         snapshot: context.snapshot,
       };
     }
-    if (requestedProductId !== null || requestedLanguage !== null) {
+    if (
+      requestedProductId !== null ||
+      requestedLanguage !== null ||
+      requestedWorkStatus != null
+    ) {
       return {
         query: "",
         filters: {
           ...DEFAULT_FILTERS,
           productId: requestedProductId,
           language: requestedLanguage,
+          workStatus: requestedWorkStatus ?? null,
           ...(requestedLanguage
             ? { viewMode: "bilingual" as const, visibleLanguages: null }
             : {}),
@@ -1650,6 +1682,13 @@ export function TranslationSearchPage() {
     (searchParams.get("product_id")?.trim() || null) ??
     null;
   const requestedLanguage = searchParams.get("language")?.trim() || null;
+  const rawWorkStatus = searchParams.get("work_status");
+  const requestedWorkStatus =
+    rawWorkStatus === "source_changed" ||
+    rawWorkStatus === "needs_translation" ||
+    rawWorkStatus === "needs_review"
+      ? rawWorkStatus
+      : null;
   return (
     <SearchOptions
       key={JSON.stringify([
@@ -1657,11 +1696,13 @@ export function TranslationSearchPage() {
         context.principal.roles,
         requestedProductId,
         requestedLanguage,
+        requestedWorkStatus,
         locationKey,
       ])}
       context={context}
       requestedProductId={requestedProductId}
       requestedLanguage={requestedLanguage}
+      requestedWorkStatus={requestedWorkStatus}
     />
   );
 }

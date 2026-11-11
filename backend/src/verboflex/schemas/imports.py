@@ -121,6 +121,7 @@ class AdminPublishedMappingImportResponse(BaseModel):
             "timeout",
             "provider_unavailable",
             "bounded_failure",
+            "confirmation_required",
         ]
         | None
     )

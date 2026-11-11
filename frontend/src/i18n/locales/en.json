@@ -1916,5 +1916,14 @@
   "· Version": "· Version",
   "· import from": "· import from",
   "— Needs review: remove and select the current version.": "— Needs review: remove and select the current version.",
-  "— your current configuration is still active.": "— your current configuration is still active."
+  "— your current configuration is still active.": "— your current configuration is still active.",
+  "Open current catalog": "Open current catalog",
+  "The latest import failed. This link opens the last successful catalog.": "The latest import failed. This link opens the last successful catalog.",
+  "Mapping confirmation required": "Mapping confirmation required",
+  "Revalidate and confirm the mapping preview after an authorization or configuration change, then retry the import. The previous catalog is still available.": "Revalidate and confirm the mapping preview after an authorization or configuration change, then retry the import. The previous catalog is still available.",
+  "Qt source language": "Qt source language",
+  "Select a source language": "Select a source language",
+  "Use confirmed Qt source text for this language": "Use confirmed Qt source text for this language",
+  "Confirm which Qt source phrases are already in the selected language. Empty translations will display this text and leave Needs translation. New or changed phrases still need confirmation. The project base language, repository files and approvals are unchanged.": "Confirm which Qt source phrases are already in the selected language. Empty translations will display this text and leave Needs translation. New or changed phrases still need confirmation. The project base language, repository files and approvals are unchanged.",
+  "Review source changes": "Review source changes"
 }

@@ -1390,7 +1390,7 @@ export type AdminPublishedMappingImportResponse = {
     /**
      * Error Category
      */
-    error_category: 'connection_required' | 'permission_denied' | 'rate_limited' | 'source_not_found' | 'timeout' | 'provider_unavailable' | 'bounded_failure' | null;
+    error_category: 'connection_required' | 'permission_denied' | 'rate_limited' | 'source_not_found' | 'timeout' | 'provider_unavailable' | 'bounded_failure' | 'confirmation_required' | null;
     /**
      * Error Message
      */

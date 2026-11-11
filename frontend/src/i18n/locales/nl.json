@@ -1916,5 +1916,14 @@
   "· Version": "· Versie",
   "· import from": "· importeren van",
   "— Needs review: remove and select the current version.": "— Moet worden beoordeeld: verwijder en selecteer de huidige versie.",
-  "— your current configuration is still active.": "— uw huidige configuratie is nog steeds actief."
+  "— your current configuration is still active.": "— uw huidige configuratie is nog steeds actief.",
+  "Open current catalog": "Huidige catalogus openen",
+  "The latest import failed. This link opens the last successful catalog.": "De laatste import is mislukt. Deze link opent de laatst succesvol geïmporteerde catalogus.",
+  "Mapping confirmation required": "Bevestiging van de koppeling vereist",
+  "Revalidate and confirm the mapping preview after an authorization or configuration change, then retry the import. The previous catalog is still available.": "Valideer en bevestig het koppelingsvoorbeeld opnieuw na een wijziging van de autorisatie of configuratie en probeer de import opnieuw. De vorige catalogus blijft beschikbaar.",
+  "Qt source language": "Qt-brontaal",
+  "Select a source language": "Selecteer een brontaal",
+  "Use confirmed Qt source text for this language": "Bevestigde Qt-brontekst voor deze taal gebruiken",
+  "Confirm which Qt source phrases are already in the selected language. Empty translations will display this text and leave Needs translation. New or changed phrases still need confirmation. The project base language, repository files and approvals are unchanged.": "Bevestig welke Qt-bronteksten al in de geselecteerde taal staan. Lege vertalingen tonen deze tekst en verlaten Te vertalen. Nieuwe of gewijzigde teksten vereisen bevestiging. De basistaal, repositorybestanden en goedkeuringen blijven ongewijzigd.",
+  "Review source changes": "Bronwijzigingen controleren"
 }

@@ -2206,3 +2206,21 @@ describe("on-demand exact-language discussion", () => {
     },
   );
 });
+
+it("opens source changes from an import link with a clean server queue", async () => {
+  preference("alpha", "it");
+  render(
+    tree(
+      principal,
+      "token",
+      "/translations?product_id=alpha&work_status=source_changed",
+    ),
+  );
+  await flush();
+  expect(searchTranslations.mock.lastCall?.[0]?.query).toMatchObject({
+    product_id: "alpha",
+    work_status: "source_changed",
+    q: "",
+    cursor: null,
+  });
+});

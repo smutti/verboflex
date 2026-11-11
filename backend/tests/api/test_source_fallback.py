@@ -124,7 +124,7 @@ def test_configuration_is_bounded_and_versioned(factory, body, status):
 
 
 @pytest.mark.parametrize("change", ["source", "format", "plural", "language", "source_only"])
-def test_fallback_is_exact_scalar_qt_base_only(factory, change):
+def test_fallback_is_exact_scalar_qt_confirmed_language_only(factory, change):
     admin = WORK.authority(factory, "admin")
     product, groups = WORKSPACE.seed_qt_base_catalog(factory)
     assert policy(admin, product, configuration()).status_code == 200
@@ -188,7 +188,9 @@ def test_actual_translation_and_proposal_override_fallback(factory):
 def test_policy_change_invalidates_both_search_cursors_and_is_product_scoped(factory):
     admin = WORK.authority(factory, "admin")
     other, _ = WORKSPACE.seed_qt_base_catalog(factory)
-    product, _, _ = WORKSPACE.seed_keys(factory)
+    product, _, ids = WORKSPACE.seed_keys(factory)
+    with factory.begin() as session:
+        session.get_one(TranslationValueLocator, ids[0, "en"]).format = "qt_ts"
     readers = (WORKSPACE.request, WORK.request)
     cursors = [reader(admin, product_id=product).json()["next_cursor"] for reader in readers]
     assert all(cursors)
@@ -199,3 +201,47 @@ def test_policy_change_invalidates_both_search_cursors_and_is_product_scoped(fac
     with factory() as session:
         assert session.get(SourceFallbackPolicy, other) is None
         assert session.scalar(select(func.count()).select_from(SourceFallbackText)) == 1
+
+
+def test_qt_italian_source_is_independent_of_english_project_base(factory):
+    admin = WORK.authority(factory, "admin")
+    product, groups = WORKSPACE.seed_qt_base_catalog(factory, base_language="en-US")
+    assert policy(admin, product).json()["available_languages"] == ["it-IT"]
+    assert policy(admin, product, configuration()).status_code == 200
+    assert list(remaining(admin, product)) == [1, 1]
+    rows = WORKSPACE.request(admin, product_id=product, visible_languages=["it-IT"]).json()["items"]
+    native = rows[0]["slots"][0]
+    assert rows[0]["base_language"] == "en-US"
+    assert native["effective_text"] == "Operazione completata"
+    assert native["uses_source_fallback"] and native["edit_field"] == "translated_text"
+    with factory() as session:
+        assert session.get_one(TranslationValue, groups[0]).translated_text == ""
+        from verboflex.services.product_summary import get_product_summary
+
+        summary = get_product_summary(session, product_id=product)
+        italian = next(language for language in summary.languages if language.language == "it-IT")
+        assert italian.translated_count == 1 and italian.missing_count == 1
+
+
+def test_policy_semantics_migration_retires_cursors_and_preserves_confirmed_text(factory):
+    from pathlib import Path
+
+    from alembic.config import Config
+
+    from alembic import command
+
+    admin = WORK.authority(factory, "admin")
+    product, _ = WORKSPACE.seed_qt_base_catalog(factory, base_language="en-US")
+    assert policy(admin, product, configuration()).status_code == 200
+    config = Config(Path(__file__).resolve().parents[2] / "alembic.ini")
+    config.set_main_option("sqlalchemy.url", str(factory.kw["bind"].url))
+    try:
+        command.downgrade(config, "0057_qt_screenshots")
+        assert policy(admin, product).json()["version"] == 2
+    finally:
+        command.upgrade(config, "head")
+    current = policy(admin, product).json()
+    assert current["version"] == 3
+    assert current["language"] == "it-IT"
+    assert current["source_texts"] == ["Operazione completata"]
+    assert policy(admin, product, configuration(expected_version=1)).status_code == 409

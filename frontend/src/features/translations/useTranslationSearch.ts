@@ -470,6 +470,7 @@ export function useTranslationSearch({
       nextQuery: string,
       nextFilters: TranslationSearchFilters,
       force = false,
+      preserveResults = false,
     ) => {
       const normalizedFilters = normalizeFilters(nextFilters);
       const identity = translationSearchIdentity(nextQuery, normalizedFilters);
@@ -500,9 +501,12 @@ export function useTranslationSearch({
       };
       activeRequestRef.current = request;
       cursorsRef.current = new Set();
+      const previous = searchRef.current;
+      const retained = preserveResults && previous.requestIdentity === identity;
+      const targetCount = retained ? previous.items.length : 0;
       updateSearch({
-        items: [],
-        pages: [],
+        items: retained ? previous.items : [],
+        pages: retained ? previous.pages : [],
         nextCursor: null,
         requestIdentity: identity,
         status: "loading",
@@ -517,7 +521,7 @@ export function useTranslationSearch({
       });
       void (async () => {
         try {
-          const result = await pending;
+          let result = await pending;
           if (!requestIsCurrent(request)) {
             return;
           }
@@ -527,13 +531,39 @@ export function useTranslationSearch({
           ) {
             throw new Error("Translation search unavailable");
           }
-          const nextCursor = result.data.next_cursor ?? null;
-          if (nextCursor !== null) {
-            cursorsRef.current.add(nextCursor);
+          const pages = [result.data];
+          let items = mergeGroups([], result.data.items);
+          let nextCursor = result.data.next_cursor ?? null;
+          const seenCursors = new Set<string>();
+          // Rebuild only the previously loaded window with fresh server cursors.
+          // Keep the old window mounted until the replacement is complete.
+          while (nextCursor !== null && items.length < targetCount) {
+            seenCursors.add(nextCursor);
+            result = await searchTranslationKeys({
+              auth: accessTokenRef.current,
+              query: requestQuery(nextQuery, normalizedFilters, nextCursor),
+              signal: controller.signal,
+            });
+            if (!requestIsCurrent(request)) return;
+            if (
+              !result.data ||
+              !validPage(result.data, seenCursors, normalizedFilters)
+            ) {
+              throw new Error("Translation search unavailable");
+            }
+            const merged = mergeGroups(items, result.data.items);
+            if (merged.length === items.length && result.data.next_cursor) {
+              throw new Error("Translation search made no progress");
+            }
+            items = merged;
+            pages.push(result.data);
+            nextCursor = result.data.next_cursor ?? null;
           }
+          if (nextCursor !== null) seenCursors.add(nextCursor);
+          cursorsRef.current = seenCursors;
           updateSearch({
-            items: mergeGroups([], result.data.items),
-            pages: [result.data],
+            items,
+            pages,
             nextCursor,
             requestIdentity: identity,
             status: "ready",
@@ -543,8 +573,8 @@ export function useTranslationSearch({
         } catch {
           if (requestIsCurrent(request)) {
             updateSearch({
-              items: [],
-              pages: [],
+              items: retained ? previous.items : [],
+              pages: retained ? previous.pages : [],
               nextCursor: null,
               requestIdentity: identity,
               status: "error",
@@ -679,7 +709,7 @@ export function useTranslationSearch({
       return;
     }
     accessTokenRef.current = accessToken;
-    startInitial(queryRef.current, filtersRef.current, true);
+    startInitial(queryRef.current, filtersRef.current, true, true);
   }, [accessToken, startInitial]);
 
   const setQuery = useCallback(
@@ -745,12 +775,12 @@ export function useTranslationSearch({
 
   const retryInitial = useCallback(async () => {
     if (searchRef.current.status === "error") {
-      startInitial(queryRef.current, filtersRef.current, true);
+      startInitial(queryRef.current, filtersRef.current, true, true);
     }
   }, [startInitial]);
 
   const refresh = useCallback(() => {
-    startInitial(queryRef.current, filtersRef.current, true);
+    startInitial(queryRef.current, filtersRef.current, true, true);
   }, [startInitial]);
 
   const retryLoadMore = useCallback(async () => {

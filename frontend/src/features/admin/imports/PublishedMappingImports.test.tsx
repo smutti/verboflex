@@ -536,8 +536,19 @@ describe("published mapping import collection", () => {
     renderImports();
 
     expect(
-      await screen.findByRole("link", { name: "Manage imported strings" }),
+      await screen.findByRole("link", { name: "Open current catalog" }),
     ).toHaveAttribute("href", "/products/product-1/strings");
+    expect(
+      screen.getByRole("link", { name: "Review source changes" }),
+    ).toHaveAttribute(
+      "href",
+      "/products/product-1/strings?work_status=source_changed",
+    );
+    expect(
+      screen.getByText(
+        "The latest import failed. This link opens the last successful catalog.",
+      ),
+    ).toBeVisible();
 
     await userEvent.click(
       await screen.findByRole("tab", { name: "Warnings (1)" }),
