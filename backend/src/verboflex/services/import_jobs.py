@@ -954,15 +954,7 @@ def _record(
     else:
         public_state = "current"
         action = "refresh_import"
-    if job.error_category is not None and job.error_category not in {
-        "connection_required",
-        "permission_denied",
-        "rate_limited",
-        "source_not_found",
-        "timeout",
-        "provider_unavailable",
-        "bounded_failure",
-    }:
+    if job.error_category is not None and job.error_category not in _PUBLIC_FAILURE_MESSAGES:
         raise ImportConflict("persisted import error rejected")
     return ImportJobRecord(
         id=job.id,
@@ -979,10 +971,7 @@ def _record(
         latest_execution_at=job.latest_execution_at,
         retry_count=job.retry_count,
         capability=capability,
-        error_category=cast(
-            ImportErrorCategory | None,
-            job.error_category,
-        ),
+        error_category=job.error_category,
         error_message=job.error_message,
         action=action,
     )
