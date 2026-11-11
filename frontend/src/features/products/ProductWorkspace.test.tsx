@@ -36,6 +36,7 @@ function show(path = "/products/p1/strings", user = principal) {
           <Route path="strings" />
           <Route path="change-sets/*" element={<p>Change set content</p>} />
           <Route path="team" element={<p>Team content</p>} />
+          <Route path="source-updates" element={<p>Source update content</p>} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -118,5 +119,39 @@ it.each([false, true])(
     expect(within(nav).queryByRole("link", { name: "Team" }) !== null).toBe(
       owner,
     );
+  },
+);
+
+it("opens source updates from the project and returns to strings", async () => {
+  const user = userEvent.setup();
+  show();
+  const update = await screen.findByRole("link", {
+    name: "Update from branches",
+  });
+  expect(update).toHaveAttribute("href", "/products/p1/source-updates");
+  await user.click(update);
+  expect(screen.getByText("Source update content")).toBeVisible();
+  expect(update).toHaveAttribute("aria-current", "page");
+  const strings = screen.getByRole("link", { name: "Strings" });
+  expect(strings).not.toHaveAttribute("aria-current");
+  expect(
+    screen.queryByText("String workspace content"),
+  ).not.toBeInTheDocument();
+  await user.click(strings);
+  expect(screen.getByText("String workspace content")).toBeVisible();
+});
+
+it.each([false, true])(
+  "does not offer source updates to non-admins (owner: %s)",
+  async (owner) => {
+    show("/products/p1/strings", {
+      ...principal,
+      roles: ["viewer"],
+      managed_product_ids: owner ? ["p1"] : [],
+    });
+    await screen.findByText("String workspace content");
+    expect(
+      screen.queryByRole("link", { name: "Update from branches" }),
+    ).not.toBeInTheDocument();
   },
 );

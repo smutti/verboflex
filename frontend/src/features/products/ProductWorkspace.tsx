@@ -156,6 +156,10 @@ export function ProductFocusWorkspace({
   const stringsPath = `/products/${encodeURIComponent(product.id)}/strings`;
   const changesPath = `/products/${encodeURIComponent(product.id)}/change-sets`;
   const teamPath = `/products/${encodeURIComponent(product.id)}/team`;
+  const sourceUpdatesPath = `/products/${encodeURIComponent(product.id)}/source-updates`;
+  const sourceUpdatesActive =
+    location.pathname === sourceUpdatesPath ||
+    location.pathname.startsWith(`${sourceUpdatesPath}/`);
   const changesActive = location.pathname.startsWith(changesPath);
   const teamActive =
     location.pathname === teamPath ||
@@ -163,6 +167,7 @@ export function ProductFocusWorkspace({
   const tabClass =
     "inline-flex min-h-11 items-center justify-center gap-2 rounded-md px-4 font-semibold no-underline";
   const activeStyle = { backgroundColor: identity.accent, color: "#ffffff" };
+  const stringsActive = !changesActive && !teamActive && !sourceUpdatesActive;
   return (
     <div
       data-testid="product-focus"
@@ -187,9 +192,9 @@ export function ProductFocusWorkspace({
         >
           <Link
             to={stringsPath}
-            aria-current={changesActive || teamActive ? undefined : "page"}
+            aria-current={stringsActive ? "page" : undefined}
             className={tabClass}
-            style={changesActive || teamActive ? undefined : activeStyle}
+            style={stringsActive ? activeStyle : undefined}
           >
             <Languages className="size-4 shrink-0" aria-hidden="true" />
             {t("Strings")}
@@ -215,9 +220,21 @@ export function ProductFocusWorkspace({
               {t("Team")}
             </Link>
           )}
+          {principal.roles.includes("admin") && (
+            <Button asChild variant="outline" className="min-h-11">
+              <Link
+                to={sourceUpdatesPath}
+                aria-current={sourceUpdatesActive ? "page" : undefined}
+                style={sourceUpdatesActive ? activeStyle : undefined}
+              >
+                <RefreshCw className="size-4 shrink-0" aria-hidden="true" />
+                {t("Update from branches")}
+              </Link>
+            </Button>
+          )}
         </nav>
       </header>
-      {changesActive || teamActive ? (
+      {changesActive || teamActive || sourceUpdatesActive ? (
         <Outlet />
       ) : (
         <TranslationsWorkspace
