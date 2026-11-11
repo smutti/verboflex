@@ -1925,5 +1925,7 @@
   "Select a source language": "Selecciona un idioma de origen",
   "Use confirmed Qt source text for this language": "Usar el texto de origen Qt confirmado para este idioma",
   "Confirm which Qt source phrases are already in the selected language. Empty translations will display this text and leave Needs translation. New or changed phrases still need confirmation. The project base language, repository files and approvals are unchanged.": "Confirma qué frases de origen Qt ya están en el idioma seleccionado. Las traducciones vacías mostrarán ese texto y saldrán de Por traducir. Las frases nuevas o modificadas requieren confirmación. El idioma base, los archivos y las aprobaciones no cambian.",
-  "Review source changes": "Revisar cambios de origen"
+  "Review source changes": "Revisar cambios de origen",
+  "Product details saved": "Detalles del producto guardados",
+  "The saved name is shown throughout VerboFlex.": "El nombre guardado se muestra en todo VerboFlex."
 }

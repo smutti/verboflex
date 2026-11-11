@@ -1925,5 +1925,7 @@
   "Select a source language": "Selecteer een brontaal",
   "Use confirmed Qt source text for this language": "Bevestigde Qt-brontekst voor deze taal gebruiken",
   "Confirm which Qt source phrases are already in the selected language. Empty translations will display this text and leave Needs translation. New or changed phrases still need confirmation. The project base language, repository files and approvals are unchanged.": "Bevestig welke Qt-bronteksten al in de geselecteerde taal staan. Lege vertalingen tonen deze tekst en verlaten Te vertalen. Nieuwe of gewijzigde teksten vereisen bevestiging. De basistaal, repositorybestanden en goedkeuringen blijven ongewijzigd.",
-  "Review source changes": "Bronwijzigingen controleren"
+  "Review source changes": "Bronwijzigingen controleren",
+  "Product details saved": "Productgegevens opgeslagen",
+  "The saved name is shown throughout VerboFlex.": "De opgeslagen naam wordt overal in VerboFlex getoond."
 }
