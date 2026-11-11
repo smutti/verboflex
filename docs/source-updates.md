@@ -61,6 +61,9 @@ Enabled Qt source policies advance their version during migration so saved searc
 cursors and configuration forms cannot retain the former base-only semantics.
 A stale confirmation is reported as **Mapping confirmation required**, independently
 of malformed files or parser limits. Failed imports retain the last successful catalog.
+This state remains readable in both import details and the published-mapping list,
+including an initial import with no catalog yet. After confirming the preview,
+the administrator can retry from the same mapping.
 
 **Open current catalog** opens that retained/current catalog without implying that
 the latest attempt succeeded. A failed attempt has an explicit explanation beside

@@ -3870,7 +3870,10 @@ def test_public_contract_maps_provider_failures_to_closed_fixed_errors(
     _assert_secret_free(body)
 
 
-def test_stale_preview_reports_confirmation_required_and_keeps_catalog(import_session_factory):
+@pytest.mark.parametrize("with_baseline", [False, True])
+def test_stale_preview_reports_confirmation_required_and_keeps_catalog(
+    import_session_factory, with_baseline
+):
     _configure_dependencies(import_session_factory)
     token = _create_admin(import_session_factory)
     product, _revision, repository, mapping = _seed_published_direct_mapping(import_session_factory)
@@ -3878,15 +3881,17 @@ def test_stale_preview_reports_confirmation_required_and_keeps_catalog(import_se
     path = f"/api/v1/admin/products/{product}/published/mappings/{mapping}/imports"
     response = asyncio.run(_request("POST", path, access_token=token))
     import_id = UUID(response.json()["id"])
-    execute_import_job(
-        import_session_factory,
-        import_id=import_id,
-        processor=lambda _identity: (_successful_reference(repository),),
-    )
-    with import_session_factory() as session:
-        baseline_id = session.get_one(ImportJob, import_id).active_baseline_execution_id
-    assert baseline_id is not None
-    assert asyncio.run(_request("POST", path, access_token=token)).status_code == 202
+    baseline_id = None
+    if with_baseline:
+        execute_import_job(
+            import_session_factory,
+            import_id=import_id,
+            processor=lambda _identity: (_successful_reference(repository),),
+        )
+        with import_session_factory() as session:
+            baseline_id = session.get_one(ImportJob, import_id).active_baseline_execution_id
+        assert baseline_id is not None
+        assert asyncio.run(_request("POST", path, access_token=token)).status_code == 202
 
     def stale(_identity):
         raise import_job_service.ImportConfirmationRequired()
@@ -3898,6 +3903,31 @@ def test_stale_preview_reports_confirmation_required_and_keeps_catalog(import_se
         assert job.error_category == "confirmation_required"
         assert "Revalidate the preview" in job.error_message
         assert job.active_baseline_execution_id == baseline_id
+
+    status_path = f"/api/v1/admin/products/{product}/imports/{import_id}"
+    collection_path = f"/api/v1/admin/products/{product}/published/mapping-imports"
+    status = asyncio.run(_request("GET", status_path, access_token=token))
+    collection = asyncio.run(_request("GET", collection_path, access_token=token))
+    assert status.status_code == collection.status_code == 200
+    for body in (status.json(), collection.json()["items"][0]):
+        assert body["error_category"] == "confirmation_required"
+        assert body["state"] == ("may_be_stale" if with_baseline else "import_failed")
+        assert body["action"] == "retry_import"
+        assert (body["active_baseline"] is not None) == with_baseline
+        assert "Revalidate the preview" in body["error_message"]
+        _assert_secret_free(body)
+
+    retried = asyncio.run(_request("POST", path, access_token=token))
+    assert retried.status_code == 202
+    execute_import_job(
+        import_session_factory,
+        import_id=import_id,
+        processor=lambda _identity: (_successful_reference(repository),),
+    )
+    recovered = asyncio.run(_request("GET", collection_path, access_token=token))
+    assert recovered.status_code == 200
+    assert recovered.json()["items"][0]["state"] == "current"
+    assert recovered.json()["items"][0]["error_category"] is None
 
 
 @pytest.mark.parametrize("during_run", [False, True])
