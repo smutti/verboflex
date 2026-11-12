@@ -77,8 +77,15 @@ class AuthoringDestination(ClosedModel):
     topology: str
 
 
+class AuthoringBlockedScope(ClosedModel):
+    scope_id: UUID
+    code: Literal["source_refresh_required"] = "source_refresh_required"
+    message: str
+
+
 class AuthoringDestinations(ClosedModel):
     items: list[AuthoringDestination]
+    blocked_scopes: list[AuthoringBlockedScope] = []
     truncated: bool = False
 
 

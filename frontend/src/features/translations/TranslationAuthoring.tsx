@@ -324,6 +324,7 @@ function AuthoringDialog({
     editing?.input ?? null,
   );
   const [destination, setDestination] = useState("");
+  const [sourceBlocked, setSourceBlocked] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -367,6 +368,11 @@ function AuthoringDialog({
         signal: controller.signal,
       });
       if (!r.data) throw new Error("Destinations could not be loaded");
+      setSourceBlocked(
+        (r.data.blocked_scopes ?? []).some(
+          (scope) => !selection || scope.scope_id === selection.item.scope_id,
+        ),
+      );
       const all = r.data.items.filter(
         (d) =>
           !selection ||
@@ -603,6 +609,22 @@ function AuthoringDialog({
             {t("Create a translation draft for review.")}
           </DialogDescription>
           {loading && <p role="status">{t("Loading destinations…")}</p>}
+          {sourceBlocked && (
+            <div role="alert" className="space-y-2 rounded-md border p-3">
+              <p>{t("Source refresh required")}</p>
+              <p>
+                {t(
+                  "Some translation files are unavailable until their source is refreshed. Existing drafts are preserved in New entries. Recover the import, then reopen this dialog.",
+                )}
+              </p>
+              <a
+                className="underline"
+                href={`/products/${productId}/source-updates`}
+              >
+                {t("Update from branches")}
+              </a>
+            </div>
+          )}
           {failure && (
             <p role="alert" className="text-destructive">
               {t(failure)}

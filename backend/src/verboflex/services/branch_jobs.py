@@ -491,6 +491,7 @@ async def refresh_branch_pr(
         _, current = _lock(s, job_id)
         if current.state == "open":
             current.updated_at = datetime.now(UTC)
+            current.error_code = "rate_limited" if outcome.provider_status == 429 else None
             if outcome.state == "verified" and outcome.receipt is not None:
                 current.state = {
                     "OPEN": "open",

@@ -39,6 +39,7 @@ from verboflex.models.translation import (
 )
 from verboflex.models.translation_constraint import TranslationConstraint
 from verboflex.schemas.authoring import (
+    AuthoringBlockedScope,
     AuthoringDestination,
     AuthoringDestinations,
     AuthoringInput,
@@ -141,10 +142,24 @@ def destinations(session: Session, *, product_id: UUID, actor_id: UUID) -> Autho
         .limit(101)
     ).all()
     result = []
+    blocked = []
     for scope in scopes[:100]:
         try:
             mapping, layouts = _mapping(session, scope)
-        except AuthoringError:
+        except AuthoringError as error:
+            if error.status != 409:
+                raise
+            blocked.append(
+                AuthoringBlockedScope(
+                    scope_id=scope.id,
+                    message=(
+                        "The translation source must be refreshed before new entries can be saved "
+                        "or approved. Existing drafts are preserved and remain available in "
+                        "New entries (list_new_entries). Open Update from branches to recover "
+                        "the import, then reload the destinations."
+                    ),
+                )
+            )
             continue
         for ref in mapping.source_references:
             if ref.repository_side == "keys":
@@ -176,8 +191,8 @@ def destinations(session: Session, *, product_id: UUID, actor_id: UUID) -> Autho
                 )
             )
             if len(result) == 500:
-                return AuthoringDestinations(items=result, truncated=True)
-    return AuthoringDestinations(items=result, truncated=len(scopes) > 100)
+                return AuthoringDestinations(items=result, blocked_scopes=blocked, truncated=True)
+    return AuthoringDestinations(items=result, blocked_scopes=blocked, truncated=len(scopes) > 100)
 
 
 def resolve_file(

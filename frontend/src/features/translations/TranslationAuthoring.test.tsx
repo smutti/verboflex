@@ -132,3 +132,68 @@ it("does not expose authoring actions to viewers", async () => {
     screen.queryByRole("button", { name: "New key" }),
   ).not.toBeInTheDocument();
 });
+
+it("explains a blocked source while preserving draft text and linking to recovery", async () => {
+  const user = userEvent.setup();
+  setup();
+  const row = {
+    id: "existing",
+    path: "app/res/values/strings.xml",
+    version: 1,
+    state: "draft",
+    input: {
+      scope_id: "scope",
+      execution_id: "old",
+      file_position: 3,
+      key: "welcome",
+      language: "en",
+      kind: "text",
+      forms: [{ form: "other", text: "Saved text" }],
+    },
+    source_changed: false,
+  };
+  vi.mocked(listAuthoringRequests).mockResolvedValue({
+    data: { items: [row] },
+  } as never);
+  // Reload through a new component so the saved draft is the initial page.
+  cleanup();
+  render(
+    <TranslationAuthoring
+      accessToken="token"
+      productId="product"
+      canWrite
+      canReview
+      selection={null}
+      onClearSelection={() => {}}
+      onNew={(open) => open()}
+    />,
+  );
+  vi.mocked(getAuthoringDestinations).mockResolvedValue({
+    data: {
+      items: [],
+      truncated: false,
+      blocked_scopes: [
+        {
+          scope_id: "scope",
+          code: "source_refresh_required",
+          message: "Source requires refresh",
+        },
+      ],
+    },
+  } as never);
+  await user.click(
+    await screen.findByRole("button", { name: "New entries (1)" }),
+  );
+  await user.click(
+    screen.getByRole("button", { name: "Edit new entry welcome (en)" }),
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Existing drafts are preserved in New entries",
+  );
+  expect(
+    screen.getByRole("link", { name: "Update from branches" }),
+  ).toHaveAttribute("href", "/products/product/source-updates");
+  expect(screen.getByLabelText("Translation")).toHaveValue("Saved text");
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  expect(saveAuthoringRequest).not.toHaveBeenCalled();
+});

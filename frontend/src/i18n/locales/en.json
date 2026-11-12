@@ -1927,5 +1927,7 @@
   "Confirm which Qt source phrases are already in the selected language. Empty translations will display this text and leave Needs translation. New or changed phrases still need confirmation. The project base language, repository files and approvals are unchanged.": "Confirm which Qt source phrases are already in the selected language. Empty translations will display this text and leave Needs translation. New or changed phrases still need confirmation. The project base language, repository files and approvals are unchanged.",
   "Review source changes": "Review source changes",
   "Product details saved": "Product details saved",
-  "The saved name is shown throughout VerboFlex.": "The saved name is shown throughout VerboFlex."
+  "The saved name is shown throughout VerboFlex.": "The saved name is shown throughout VerboFlex.",
+  "Source refresh required": "Source refresh required",
+  "Some translation files are unavailable until their source is refreshed. Existing drafts are preserved in New entries. Recover the import, then reopen this dialog.": "Some translation files are unavailable until their source is refreshed. Existing drafts are preserved in New entries. Recover the import, then reopen this dialog."
 }
