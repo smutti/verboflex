@@ -6,8 +6,14 @@ import pytest
 
 from verboflex.integrations.bitbucket.client import BitbucketSourceMetadata
 from verboflex.localization.importing.android_xml import inspect_android_xml
+from verboflex.localization.importing.core import CanonicalSelector
 from verboflex.localization.importing.registry import parse_canonical_snapshot
-from verboflex.localization.writing.core import WritebackReason, WritebackRejected, WriteEdit
+from verboflex.localization.writing.core import (
+    WritebackReason,
+    WritebackRejected,
+    WriteEdit,
+    WriteInsert,
+)
 from verboflex.localization.writing.registry import render_file
 from verboflex.services.writeback_authority import build_source_file_snapshot
 
@@ -145,3 +151,75 @@ def test_working_branch_overlay_does_not_ignore_a_changed_previous_approval():
     with pytest.raises(WritebackRejected) as error:
         overlay_approved_moko(s, changed, (replace(first, replacement_text="Next"),), (first,))
     assert error.value.reason == WritebackReason.SOURCE_FILE_CHANGED
+
+
+def test_unique_insertions_preserve_shared_duplicate_resources_byte_for_byte():
+    s = source()
+    first = WriteInsert("first", "en", CanonicalSelector("scalar", ()), "New & unique")
+    second = replace(first, logical_key="second", replacement_text="Later")
+    one = render_file(s, (first,))
+    both = render_file(s, (first, second))
+    assert one.content == CONTENT.replace(
+        b"</resources>", b'\n    <string name="first">New &amp; unique</string>\n</resources>'
+    )
+    assert both.content == CONTENT.replace(
+        b"</resources>",
+        b'\n    <string name="first">New &amp; unique</string>'
+        b'\n    <string name="second">Later</string>\n</resources>',
+    )
+    combined = render_file(s, (selection(s), first))
+    assert combined.content == one.content.replace(b">Original<", b">New<")
+    assert parse_canonical_snapshot(replace(s.parser_input, content=both.content)).issues
+
+
+@pytest.mark.parametrize("key", ["duplicate", "selected"])
+def test_insertions_cannot_recreate_an_existing_shared_resource(key):
+    with pytest.raises(WritebackRejected):
+        render_file(source(), (WriteInsert(key, "en", CanonicalSelector("scalar", ()), "New"),))
+
+
+def test_missing_plural_form_cannot_select_a_duplicated_shared_resource():
+    s = source(
+        b'<resources><plurals name="count"><item quantity="one">One</item></plurals>'
+        b'<plurals name="count"><item quantity="other">Other</item></plurals></resources>'
+    )
+    with pytest.raises(WritebackRejected):
+        render_file(
+            s,
+            (
+                WriteInsert(
+                    "count",
+                    "en",
+                    CanonicalSelector("android_quantity", (("quantity", "few"),)),
+                    "Few",
+                ),
+            ),
+        )
+
+
+@pytest.mark.parametrize("kind", ["unsupported", "ordinary", "wrong_language"])
+def test_shared_insertions_keep_shape_scope_and_language_checks(kind):
+    s = source()
+    if kind == "unsupported":
+        s = source(CONTENT.replace(b"</resources>", b"<unsupported/></resources>"))
+    elif kind == "ordinary":
+        s = snapshot(CONTENT)
+    addition = WriteInsert(
+        "new", "it" if kind == "wrong_language" else "en", CanonicalSelector("scalar", ()), "New"
+    )
+    with pytest.raises(WritebackRejected):
+        render_file(s, (addition,))
+
+
+def test_insertion_preservation_checks_every_duplicate_occurrence(monkeypatch):
+    from verboflex.localization.writing import insertions
+
+    original = insertions._android
+
+    def corrupt_first_duplicate(parser, additions):
+        return original(parser, additions).replace(b">One<", b">Corrupted<")
+
+    monkeypatch.setattr(insertions, "_android", corrupt_first_duplicate)
+    with pytest.raises(WritebackRejected) as error:
+        render_file(source(), (WriteInsert("new", "en", CanonicalSelector("scalar", ()), "New"),))
+    assert error.value.reason == WritebackReason.INVALID_OUTPUT
