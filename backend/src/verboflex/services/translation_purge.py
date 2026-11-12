@@ -153,12 +153,16 @@ def purge_retired_translations(
         f"DELETE FROM translation_comments WHERE translation_key_id IN ({empty_keys})",
         empty_params,
     )
-    # Key-wide constraints and empty proposal heads cascade with the key.
+    # Retain a retired parent while an authoring draft still owns it. Deleting
+    # that key would cascade into user text that the import did not publish.
+    # Key-wide constraints and empty proposal heads otherwise cascade with it.
     remove(
         "translation_keys",
         """DELETE FROM translation_keys k
         WHERE k.scope_id=:scope AND k.is_deleted
-          AND NOT EXISTS (SELECT 1 FROM translation_values v WHERE v.translation_key_id=k.id)""",
+          AND NOT EXISTS (SELECT 1 FROM translation_values v WHERE v.translation_key_id=k.id)
+          AND NOT EXISTS (SELECT 1 FROM translation_authoring_requests a
+              WHERE a.parent_key_id=k.id)""",
         {"scope": scope_id},
     )
     # Staging is a verified import candidate, not another permanent copy of the

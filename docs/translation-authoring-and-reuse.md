@@ -17,7 +17,11 @@ Bitbucket pull-request workflow. Every preparation checks the mapping, source fi
 hash, key identity, character limits and latest draft version. A refresh marks
 older drafts as source-changed; reopen and save them against the current file.
 A successful import consumes additions whose exact values are now in the repository.
-Parent-key deletion physically removes attached additions.
+If a source key disappears, its attached additions remain in **New entries** with
+their original text and a source-change warning. They cannot be saved or approved
+against a missing source key. Review the upstream change; restoring the key makes
+the retained draft eligible for editing again. A retired parent is purged only
+after its drafts have been explicitly discarded or otherwise reconciled.
 
 Failed or pending source imports do not erase authoring drafts. The destination API
 and MCP `list_authoring_files` return `blocked_scopes` with an explicit recovery
