@@ -106,6 +106,7 @@ async def refresh_approval_target(
 
     # Failure leaves the last verified observation intact. It never changes the
     # commit job to blocked, writes to Git, or triggers another approval/PR.
+    rate_limited = False
     try:
         identity = await provider_repository_identity(
             factory, workspace=workspace, repository_slug=slug, adapter=reads
@@ -182,10 +183,12 @@ async def refresh_approval_target(
                             updated_at=proposal.updated_at,
                         )
                     )
-    except BitbucketProviderReadError:
+    except BitbucketProviderReadError as error:
+        rate_limited = error.kind == "rate_limited"
         return
     finally:
         with factory.begin() as session:
             job = session.get_one(BranchJob, job_id, with_for_update=True)
             if job.owner == owner:
                 job.owner, job.updated_at = None, datetime.now(UTC)
+                job.error_code = "rate_limited" if rate_limited else None

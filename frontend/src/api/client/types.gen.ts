@@ -1816,6 +1816,24 @@ export type AdminWorkspaceResponse = {
 };
 
 /**
+ * AuthoringBlockedScope
+ */
+export type AuthoringBlockedScope = {
+    /**
+     * Code
+     */
+    code?: 'source_refresh_required';
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Scope Id
+     */
+    scope_id: string;
+};
+
+/**
  * AuthoringDestination
  */
 export type AuthoringDestination = {
@@ -1869,6 +1887,10 @@ export type AuthoringDestination = {
  * AuthoringDestinations
  */
 export type AuthoringDestinations = {
+    /**
+     * Blocked Scopes
+     */
+    blocked_scopes?: Array<AuthoringBlockedScope>;
     /**
      * Items
      */

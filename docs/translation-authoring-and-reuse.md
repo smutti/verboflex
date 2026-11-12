@@ -19,6 +19,13 @@ older drafts as source-changed; reopen and save them against the current file.
 A successful import consumes additions whose exact values are now in the repository.
 Parent-key deletion physically removes attached additions.
 
+Failed or pending source imports do not erase authoring drafts. The destination API
+and MCP `list_authoring_files` return `blocked_scopes` with an explicit recovery
+message alongside any available files. Read existing drafts with `list_new_entries`
+or **New entries**. Open **Update from branches**, recover the import, then reopen
+the editor to save against the current destination. Permissions remain enforced
+for both draft access and writes.
+
 | Format | Creation support |
 | --- | --- |
 | Android XML | Strings and `<plurals>`; missing quantities; native escaping. |

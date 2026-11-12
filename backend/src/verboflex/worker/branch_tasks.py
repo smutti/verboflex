@@ -73,6 +73,13 @@ def dispatchable_jobs(session: Session) -> list[UUID]:
         )
         .exists()
     )
+    # A per-proposal minute poll exhausts a shared provider budget as approvals grow.
+    # Back off observation only; queued commits and explicit PRs remain immediate.
+    observation_due = (BranchJob.updated_at < now - timedelta(minutes=15)) & or_(
+        BranchJob.error_code.is_(None),
+        BranchJob.error_code != "rate_limited",
+        BranchJob.updated_at < now - timedelta(hours=1),
+    )
     current_approval = (
         select(ReviewActivity.id)
         .join(TranslationProposal, TranslationProposal.id == ReviewActivity.proposal_id)
@@ -97,9 +104,9 @@ def dispatchable_jobs(session: Session) -> list[UUID]:
                     (BranchJob.state == "committed")
                     & current_approval
                     & or_(BranchJob.owner.is_(None), BranchJob.updated_at < now - LEASE)
-                    & (BranchJob.updated_at < now - timedelta(minutes=1)),
+                    & observation_due,
                     (BranchJob.state == "open")
-                    & (BranchJob.updated_at < now - timedelta(minutes=1)),
+                    & observation_due,
                 )
             )
             .order_by(BranchJob.updated_at, BranchJob.sequence)

@@ -331,3 +331,69 @@ def test_oversize_authoring_batch_rejected_before_payload_hydration(
         assert loaded == []
     finally:
         event.remove(AuthoringRequest, "load", note_load)
+
+
+def test_failed_refresh_explains_block_and_preserves_editable_draft_after_recovery(
+    preview_session_factory, monkeypatch
+):
+    from tests.integration.test_confirmed_layout_refresh import _run
+    from verboflex.integrations.bitbucket.client import BitbucketProviderReadError
+
+    factory = preview_session_factory
+    seed = seed_writeback_authority(factory, monkeypatch)
+    data = draft(factory, seed)
+    request_id = uuid4()
+    with factory.begin() as session:
+        saved = authoring.save(
+            session,
+            product_id=seed.product_id,
+            actor_id=seed.actor_id,
+            request_id=request_id,
+            data=data,
+        )
+    original = seed.adapter.resolve_repository_branch
+
+    async def limited(session, **kwargs):
+        raise BitbucketProviderReadError(kind="rate_limited", provider_status=429)
+
+    monkeypatch.setattr(seed.adapter, "resolve_repository_branch", limited)
+    assert _run(factory, seed.product_id, seed.mapping_id).state == "import_failed"
+    monkeypatch.setattr(seed.adapter, "resolve_repository_branch", original)
+    with factory.begin() as session:
+        options = authoring.destinations(
+            session, product_id=seed.product_id, actor_id=seed.actor_id
+        )
+        assert options.items == [] and not options.truncated
+        assert len(options.blocked_scopes) == 1
+        assert options.blocked_scopes[0].scope_id == data.scope_id
+        assert options.blocked_scopes[0].code == "source_refresh_required"
+        assert "Existing drafts are preserved" in options.blocked_scopes[0].message
+        page = authoring.list_requests(session, product_id=seed.product_id, actor_id=seed.actor_id)
+        assert page.items == [saved]
+    assert _run(factory, seed.product_id, seed.mapping_id).state == "current"
+    with factory.begin() as session:
+        options = authoring.destinations(
+            session, product_id=seed.product_id, actor_id=seed.actor_id
+        )
+        assert not options.blocked_scopes
+        target = next(d for d in options.items if "it" in d.languages)
+        assert target.base_language == "en"
+        row = session.get_one(AuthoringRequest, request_id)
+        assert (
+            row.version == 1
+            and row.payload["input"]["forms"] == data.model_dump(mode="json")["forms"]
+        )
+        updated = authoring.save(
+            session,
+            product_id=seed.product_id,
+            actor_id=seed.actor_id,
+            request_id=request_id,
+            data=data.model_copy(
+                update={
+                    "expected_version": 1,
+                    "execution_id": target.execution_id,
+                    "file_position": target.file_position,
+                }
+            ),
+        )
+        assert updated.input.forms == saved.input.forms and not updated.source_changed

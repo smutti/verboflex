@@ -32,7 +32,9 @@ OPERATIONS = {
     ),
     "getAuthoringDestinations": (
         "list_authoring_files",
-        "List confirmed files and languages for new keys or missing translations.",
+        "List confirmed files and languages for new keys or missing translations. "
+        "Check blocked_scopes: a failed or pending source refresh can hide destinations without "
+        "deleting drafts. Use list_new_entries to read preserved drafts and recover the import.",
     ),
     "getAuthoringPluralForms": (
         "get_plural_forms",

@@ -785,3 +785,40 @@ def test_identical_reapproval_still_rejects_external_file_changes(
     remote.versions[remote.head]["app/res/values-it/strings.xml"] += b"\n<!-- external -->"
     assert run(factory, remote, repeated) == ("blocked", "file_changed")
     assert len(remote.commits) == 1
+
+
+def test_pr_observation_rate_limit_delays_poll_without_recreating_pr(
+    preview_session_factory, monkeypatch
+):
+    from datetime import UTC, datetime, timedelta
+    from types import SimpleNamespace
+
+    from verboflex.integrations.bitbucket.writes import WriteOutcome
+    from verboflex.services.branch_jobs import refresh_branch_pr
+    from verboflex.worker.branch_tasks import dispatchable_jobs
+
+    factory = preview_session_factory
+    seed, remote = setup(factory, monkeypatch)
+    job = approve(factory, seed, "Ready")
+    run(factory, remote, job)
+    with factory.begin() as session:
+        pr = request_pr(session, product_id=seed.product_id, actor_id=seed.actor_id).id
+    assert run(factory, remote, pr) == ("open", None)
+
+    async def limited(session, **kw):
+        return WriteOutcome("unknown", "pull_request_unavailable", provider_status=429)
+
+    asyncio.run(
+        refresh_branch_pr(factory, job_id=pr, writes=SimpleNamespace(read_pull_request=limited))
+    )
+    with factory.begin() as session:
+        row = session.get_one(BranchJob, pr)
+        assert row.state == "open" and row.error_code == "rate_limited"
+        row.updated_at = datetime.now(UTC) - timedelta(minutes=16)
+    with factory() as session:
+        assert pr not in dispatchable_jobs(session)
+    with factory.begin() as session:
+        session.get_one(BranchJob, pr).updated_at = datetime.now(UTC) - timedelta(minutes=61)
+    with factory() as session:
+        assert pr in dispatchable_jobs(session)
+    assert len(remote.prs) == 1 and len(remote.commits) == 1
