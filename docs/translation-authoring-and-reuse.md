@@ -43,6 +43,10 @@ Qt requires source text and context. For JSON, enter the parent path as a JSON
 array, such as `["menu", "actions"]`; those parent objects must already exist.
 Writers insert only the new resource and reparse the result to verify that existing
 values and the requested identities remain intact.
+In shared MOKO translation catalogs, unrelated duplicate resources do not block
+new, distinct keys. Every original occurrence is preserved, and the duplicates
+remain quarantined during canonical import. Inserting an existing or ambiguous
+resource, malformed content, and other unsupported shapes remain blocked.
 
 [Add a project language](adding-languages.md) creates complete catalog peers from
 the imported source through a separate durable branch job, including Angular,
