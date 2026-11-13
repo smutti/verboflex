@@ -27,6 +27,7 @@ def create_celery_app(settings: Settings | None = None) -> Celery:
             "verboflex.worker.import_tasks",
             "verboflex.worker.submission_tasks",
             "verboflex.worker.branch_tasks",
+            "verboflex.worker.authoring_tasks",
             "verboflex.worker.database_maintenance_tasks",
             "verboflex.worker.mcp_oauth_tasks",
         ],
@@ -96,6 +97,10 @@ def create_celery_app(settings: Settings | None = None) -> Celery:
             },
         },
         beat_schedule={
+            "authoring-approval-dispatch": {
+                "task": "verboflex.authoring.dispatch",
+                "schedule": 10.0,
+            },
             "approval-branch-dispatch": {
                 "task": "verboflex.branch.dispatch",
                 "schedule": 10.0,

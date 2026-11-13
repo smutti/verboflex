@@ -212,6 +212,44 @@ def queue_approval(
     record_audit(session, actor_id=actor_id, action="branch.approval_queued", entity_id=job.id)
 
 
+def queue_authoring_batch(
+    session: Session,
+    *,
+    product_id: UUID,
+    actor_id: UUID,
+    proposals: tuple[ProposalSelection, ...],
+    activity_id: UUID,
+) -> UUID | None:
+    """One immutable commit per source; called in the approval transaction."""
+    if workflow_for(session, product_id) is None:
+        return None
+    captured = capture_writeback_authority(
+        session,
+        selection=WritebackSelection(actor_id, proposals),
+        allow_expired_connection=True,
+    )
+    if len(captured.mappings) != 1:
+        raise BranchWorkflowError("Approve one translation source at a time")
+    mapping = session.get_one(ProductRepositoryMapping, captured.mappings[0].mapping_id)
+    workflow = workflow_for_mapping(session, product_id, mapping, lock=True)
+    if workflow is None:
+        raise BranchWorkflowError("Configure approval branches for this translation source first")
+    job = BranchJob(
+        workflow_id=workflow.id,
+        activity_id=activity_id,
+        actor_id=actor_id,
+        membership=membership_stamp(session, actor_id, product_id),
+        kind="commit",
+        state="queued",
+        label=f"Bulk approval: {len(proposals)} drafts",
+        authority=encode_approval_snapshot(captured),
+    )
+    session.add(job)
+    session.flush()
+    record_audit(session, actor_id=actor_id, action="branch.approval_queued", entity_id=job.id)
+    return job.id
+
+
 def has_unpublished_commits(session: Session, workflow_id: UUID) -> bool:
     latest = session.scalar(
         select(BranchJob.commit_hash)

@@ -1816,6 +1816,75 @@ export type AdminWorkspaceResponse = {
 };
 
 /**
+ * AuthoringApprovalInput
+ */
+export type AuthoringApprovalInput = {
+    /**
+     * Fingerprint
+     */
+    fingerprint: string;
+};
+
+/**
+ * AuthoringApprovalPreview
+ */
+export type AuthoringApprovalPreview = {
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Fingerprint
+     */
+    fingerprint: string;
+    /**
+     * Languages
+     */
+    languages: {
+        [key: string]: number;
+    };
+    latest: AuthoringApprovalStatus | null;
+    /**
+     * Over Limit
+     */
+    over_limit: boolean;
+    /**
+     * Source Changed
+     */
+    source_changed: number;
+};
+
+/**
+ * AuthoringApprovalStatus
+ */
+export type AuthoringApprovalStatus = {
+    /**
+     * Branch Job Ids
+     */
+    branch_job_ids: Array<string>;
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Error
+     */
+    error: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * State
+     */
+    state: 'queued' | 'succeeded' | 'failed';
+};
+
+/**
  * AuthoringBlockedScope
  */
 export type AuthoringBlockedScope = {
@@ -10810,6 +10879,102 @@ export type ListAuthoringRequestsResponses = {
 };
 
 export type ListAuthoringRequestsResponse = ListAuthoringRequestsResponses[keyof ListAuthoringRequestsResponses];
+
+export type GetAuthoringApprovalPreviewData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/authoring/approval-preview';
+};
+
+export type GetAuthoringApprovalPreviewErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Current version or source changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAuthoringApprovalPreviewError = GetAuthoringApprovalPreviewErrors[keyof GetAuthoringApprovalPreviewErrors];
+
+export type GetAuthoringApprovalPreviewResponses = {
+    /**
+     * Successful Response
+     */
+    200: AuthoringApprovalPreview;
+};
+
+export type GetAuthoringApprovalPreviewResponse = GetAuthoringApprovalPreviewResponses[keyof GetAuthoringApprovalPreviewResponses];
+
+export type ApproveAllAuthoringDraftsData = {
+    body: AuthoringApprovalInput;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Request Id
+         */
+        request_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/authoring/approvals/{request_id}';
+};
+
+export type ApproveAllAuthoringDraftsErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Current version or source changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ApproveAllAuthoringDraftsError = ApproveAllAuthoringDraftsErrors[keyof ApproveAllAuthoringDraftsErrors];
+
+export type ApproveAllAuthoringDraftsResponses = {
+    /**
+     * Successful Response
+     */
+    202: AuthoringApprovalStatus;
+};
+
+export type ApproveAllAuthoringDraftsResponse = ApproveAllAuthoringDraftsResponses[keyof ApproveAllAuthoringDraftsResponses];
 
 export type GetAuthoringDestinationsData = {
     body?: never;
