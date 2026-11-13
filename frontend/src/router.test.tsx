@@ -60,6 +60,18 @@ vi.mock("./api/client", () => ({
   }),
   changePassword: vi.fn(),
   getAdminProduct: vi.fn(),
+  getAuthoringApprovalPreview: vi
+    .fn()
+    .mockResolvedValue({
+      data: {
+        count: 0,
+        languages: {},
+        source_changed: 0,
+        over_limit: false,
+        fingerprint: "a".repeat(64),
+        latest: null,
+      },
+    }),
   listAuthoringRequests: vi.fn().mockResolvedValue({
     data: { items: [], next_cursor: null },
     error: undefined,

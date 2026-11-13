@@ -1,3 +1,4 @@
+import { BulkAuthoringApproval } from "./BulkAuthoringApproval";
 import { statusLabel } from "@/i18n/statusLabels";
 import { t, useUiLanguage } from "@/i18n";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -163,6 +164,15 @@ export function TranslationAuthoring({
           </Button>
         )}
       </div>
+      {canReview && (
+        <BulkAuthoringApproval
+          key={productId}
+          accessToken={accessToken}
+          productId={productId}
+          revision={revision}
+          onCompleted={() => setRevision((value) => value + 1)}
+        />
+      )}
       {expanded && (
         <div className="max-h-80 overflow-auto rounded-lg border divide-y">
           {loadError && (

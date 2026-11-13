@@ -17,6 +17,12 @@ from verboflex.schemas.authoring import (
     PluralFormOption,
     PluralFormsResponse,
 )
+from verboflex.schemas.authoring_approval import (
+    AuthoringApprovalInput,
+    AuthoringApprovalPreview,
+    AuthoringApprovalStatus,
+)
+from verboflex.services import authoring_approvals
 from verboflex.services import translation_authoring as service
 
 router = APIRouter(
@@ -85,6 +91,49 @@ def list_requests(
         with session.begin():
             return service.list_requests(
                 session, product_id=product_id, actor_id=principal.user_id, after=after, query=q
+            )
+    except service.AuthoringError as error:
+        raise HTTPException(error.status, str(error)) from error
+
+
+@router.get(
+    "/approval-preview",
+    response_model=AuthoringApprovalPreview,
+    operation_id="getAuthoringApprovalPreview",
+)
+def approval_preview(
+    product_id: UUID, principal: CurrentPrincipal, session: Db
+) -> AuthoringApprovalPreview:
+    try:
+        with session.begin():
+            return authoring_approvals.preview(
+                session, product_id=product_id, actor_id=principal.user_id
+            )
+    except service.AuthoringError as error:
+        raise HTTPException(error.status, str(error)) from error
+
+
+@router.put(
+    "/approvals/{request_id}",
+    response_model=AuthoringApprovalStatus,
+    status_code=202,
+    operation_id="approveAllAuthoringDrafts",
+)
+def approve_all(
+    product_id: UUID,
+    request_id: UUID,
+    body: AuthoringApprovalInput,
+    principal: CurrentPrincipal,
+    session: Db,
+) -> AuthoringApprovalStatus:
+    try:
+        with session.begin():
+            return authoring_approvals.create(
+                session,
+                product_id=product_id,
+                actor_id=principal.user_id,
+                request_id=request_id,
+                fingerprint=body.fingerprint,
             )
     except service.AuthoringError as error:
         raise HTTPException(error.status, str(error)) from error

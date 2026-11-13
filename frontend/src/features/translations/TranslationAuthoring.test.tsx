@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { TranslationAuthoring } from "./TranslationAuthoring";
 import {
+  getAuthoringApprovalPreview,
   getAuthoringDestinations,
   listAuthoringRequests,
   saveAuthoringRequest,
@@ -11,6 +12,7 @@ import {
 } from "../../api/client";
 vi.mock("../../api/client", async (original) => ({
   ...(await original<typeof import("../../api/client")>()),
+  getAuthoringApprovalPreview: vi.fn(),
   getAuthoringDestinations: vi.fn(),
   listAuthoringRequests: vi.fn(),
   saveAuthoringRequest: vi.fn(),
@@ -21,6 +23,16 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 function setup(canWrite = true) {
+  vi.mocked(getAuthoringApprovalPreview).mockResolvedValue({
+    data: {
+      count: 0,
+      latest: null,
+      languages: {},
+      source_changed: 0,
+      over_limit: false,
+      fingerprint: "a".repeat(64),
+    },
+  } as never);
   vi.mocked(listAuthoringRequests).mockResolvedValue({
     data: { items: [], next_after: null },
   } as never);
