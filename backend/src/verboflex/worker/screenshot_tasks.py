@@ -37,10 +37,16 @@ def validate_png(content: bytes) -> None:
 
 
 def _render(
-    inputs: dict[str, object], *, web: bool = False
+    inputs: dict[str, object], *, web: bool = False, qt: bool = False
 ) -> tuple[bytes, dict[str, object] | None]:
     settings = get_settings()
-    command = settings.web_screenshot_runner_command if web else settings.screenshot_runner_command
+    command = (
+        settings.qt_screenshot_runner_command
+        if qt
+        else settings.web_screenshot_runner_command
+        if web
+        else settings.screenshot_runner_command
+    )
     if not command:
         raise ValueError("Capture runner unavailable")
     with tempfile.TemporaryDirectory(prefix="verboflex-capture-") as directory:
@@ -77,6 +83,37 @@ def _render(
         content = output.read_bytes()
         validate_png(content)
         receipt = None
+        if qt:
+            from verboflex.localization.qt_capture import QtManifest
+            from verboflex.schemas.screenshots import QtCaptureReceipt
+
+            metadata = output.with_suffix(".json")
+            if not metadata.is_file() or metadata.is_symlink() or metadata.stat().st_size > 131072:
+                raise ValueError("Qt capture receipt unavailable")
+            verified_qt = QtCaptureReceipt.model_validate_json(metadata.read_bytes())
+            manifest = QtManifest.model_validate(inputs["manifest"])
+            request_data = cast(dict[str, object], inputs["request"])
+            if (
+                verified_qt.input_digest != hashlib.sha256(request.read_bytes()).hexdigest()
+                or verified_qt.image_digest != hashlib.sha256(content).hexdigest()
+                or verified_qt.commit != inputs["commit"]
+                or verified_qt.application_commit != inputs["commit"]
+                or verified_qt.scenario_id != request_data["scenario_id"]
+                or verified_qt.language != inputs["language"]
+                or verified_qt.source_digest != inputs["source_digest"]
+                or verified_qt.manifest_digest != inputs["manifest_digest"]
+                or verified_qt.text != inputs["target_text"]
+                or verified_qt.qt_version != manifest.qt_version
+                or verified_qt.platform != manifest.platform
+                or (verified_qt.width, verified_qt.height) != (manifest.width, manifest.height)
+                or struct.unpack(">II", content[16:24]) != (manifest.width, manifest.height)
+                or (
+                    verified_qt.reference_image_digest is not None
+                    and verified_qt.reference_image_digest != verified_qt.image_digest
+                )
+            ):
+                raise ValueError("Qt capture receipt mismatch")
+            receipt = verified_qt.model_dump(mode="json")
         if web:
             from verboflex.schemas.screenshots import WebCaptureReceipt
 
@@ -116,6 +153,12 @@ def render_web(inputs: dict[str, object]) -> tuple[bytes, dict[str, object]]:
     return image, receipt
 
 
+def render_qt(inputs: dict[str, object]) -> tuple[bytes, dict[str, object]]:
+    image, receipt = _render(inputs, qt=True)
+    assert receipt is not None
+    return image, receipt
+
+
 def execute_capture(job_id: UUID, factory: sessionmaker[Session] = SessionFactory) -> None:
     with factory.begin() as session:
         row = session.scalar(
@@ -136,7 +179,10 @@ def execute_capture(job_id: UUID, factory: sessionmaker[Session] = SessionFactor
     failure: str | None = None
     receipt = None
     try:
-        if inputs.get("engine") == "web":
+        if inputs.get("engine") == "qt":
+            image, receipt = render_qt(inputs)
+            location = cast(dict[str, object], receipt["location"])
+        elif inputs.get("engine") == "web":
             image, receipt = render_web(inputs)
             location = cast(dict[str, object], receipt["location"])
         else:

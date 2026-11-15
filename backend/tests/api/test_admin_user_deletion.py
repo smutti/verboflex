@@ -293,6 +293,7 @@ def test_deleted_identity_cannot_be_enabled_and_migration_cannot_resurrect_it(
     admin_session_factory,  # noqa: F811
 ):
     from alembic.config import Config
+    from alembic.script import ScriptDirectory
     from sqlalchemy.exc import IntegrityError
 
     from alembic import command
@@ -305,13 +306,12 @@ def test_deleted_identity_cannot_be_enabled_and_migration_cannot_resurrect_it(
         session.get_one(User, target_id).is_active = True
     config = Config(BACKEND_ROOT / "alembic.ini")
     config.set_main_option("sqlalchemy.url", str(factory.kw["bind"].url))
+    expected_head = ScriptDirectory.from_config(config).get_current_head()
+    assert expected_head is not None
     with pytest.raises(RuntimeError, match="cannot be undone"):
         command.downgrade(config, "0050_source_fallback")
     with factory() as session:
-        assert (
-            session.scalar(text("SELECT version_num FROM alembic_version"))
-            == "0056_project_languages"
-        )
+        assert session.scalar(text("SELECT version_num FROM alembic_version")) == expected_head
         assert session.get_one(User, target_id).deleted_at is not None
 
 

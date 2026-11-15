@@ -119,6 +119,22 @@ def test_foreign_cluster_identity_refuses_apply_and_snapshot(maintenance_factory
         assert session.scalar(text("SELECT count(*) FROM maintenance_batches")) == before_batches
 
 
+def test_snapshot_refuses_a_schema_different_from_the_checkout(maintenance_factory):  # noqa: F811
+    factory = maintenance_factory
+    with factory.begin() as session:
+        revision = session.scalar(text("SELECT version_num FROM alembic_version"))
+        session.execute(text("UPDATE alembic_version SET version_num = 'unknown_revision'"))
+    try:
+        with pytest.raises(ValueError, match="^unsupported schema$"):
+            evidence.snapshot(factory)
+    finally:
+        with factory.begin() as session:
+            session.execute(
+                text("UPDATE alembic_version SET version_num = :revision"),
+                {"revision": revision},
+            )
+
+
 def test_cluster_identity_unprivileged_access_and_fail_closed(maintenance_factory):  # noqa: F811
     factory = maintenance_factory
     with factory() as session:

@@ -179,7 +179,17 @@ export function TranslationScreenshots({
     ...new Set((context?.previews ?? []).map((p) => p.function)),
   ].filter((name) => context?.capture_functions.includes(name));
   const web = context?.engine === "web";
-  const targets = context?.web_targets ?? [];
+  const qt = context?.engine === "qt";
+  const scenarioEngine = web || qt;
+  const targets = qt
+    ? (context?.qt_targets ?? []).map((item) => ({
+        ...item,
+        label: [item.context, item.disambiguation].filter(Boolean).join(" · "),
+      }))
+    : (context?.web_targets ?? []).map((item) => ({
+        ...item,
+        label: JSON.stringify(item.json_path),
+      }));
   const target =
     targets.find((item) => item.value_id === targetId) ?? targets[0];
   const scenarios = (
@@ -192,28 +202,30 @@ export function TranslationScreenshots({
     }))
   ).filter(
     (scenario) =>
-      !web || target?.scenario_ids.includes(scenario.scenario_id ?? ""),
+      !scenarioEngine ||
+      target?.scenario_ids.includes(scenario.scenario_id ?? ""),
   );
   const available = scenarios.map((scenario) =>
-    web ? scenario.scenario_id! : scenario.preview_function!,
+    scenarioEngine ? scenario.scenario_id! : scenario.preview_function!,
   );
   const preview = available.includes(selected) ? selected : available[0] || "";
   const stale =
     job?.state === "succeeded" &&
     (dirty ||
-      (web &&
-        (job.request.target_value_id !== target?.value_id ||
-          job.request.viewport !== viewport ||
+      (scenarioEngine &&
+        (job.request.engine !== context?.engine ||
+          job.request.target_value_id !== target?.value_id ||
+          (web && job.request.viewport !== viewport) ||
           job.request.scenario_id !== preview)) ||
       (job.request.proposal_version ?? null) !== (proposalVersion ?? null));
   async function capture() {
     if (dirty || busy || active(job) || !preview) return;
-    const body: ScreenshotRequest = web
+    const body: ScreenshotRequest = scenarioEngine
       ? {
-          engine: "web",
+          engine: qt ? "qt" : "web",
           scenario_id: preview,
           target_value_id: target?.value_id,
-          viewport,
+          viewport: qt ? "desktop" : viewport,
           theme: "light",
           proposal_version: proposalVersion ?? null,
         }
@@ -271,7 +283,9 @@ export function TranslationScreenshots({
   }
   return (
     <section
-      aria-label={t(web ? "Web screenshots" : "Compose screenshots")}
+      aria-label={t(
+        qt ? "Qt screenshots" : web ? "Web screenshots" : "Compose screenshots",
+      )}
       className="min-w-0 space-y-4"
     >
       {error && (
@@ -288,7 +302,7 @@ export function TranslationScreenshots({
       )}
       {context?.configured && (
         <>
-          {web && targets.length > 0 && (
+          {scenarioEngine && targets.length > 0 && (
             <>
               <Label className="grid gap-2">
                 {t("Translation value")}
@@ -300,25 +314,27 @@ export function TranslationScreenshots({
                 >
                   {targets.map((item) => (
                     <option key={item.value_id} value={item.value_id}>
-                      {JSON.stringify(item.json_path)}
+                      {item.label}
                     </option>
                   ))}
                 </select>
               </Label>
-              <Label className="grid gap-2">
-                {t("Viewport")}
-                <select
-                  className="min-h-[44px] rounded-md border bg-background p-2"
-                  value={viewport}
-                  disabled={busy || active(job) || pending !== null}
-                  onChange={(e) =>
-                    setViewport(e.target.value as "desktop" | "mobile")
-                  }
-                >
-                  <option value="desktop">{t("Desktop")}</option>
-                  <option value="mobile">{t("Mobile")}</option>
-                </select>
-              </Label>
+              {web && (
+                <Label className="grid gap-2">
+                  {t("Viewport")}
+                  <select
+                    className="min-h-[44px] rounded-md border bg-background p-2"
+                    value={viewport}
+                    disabled={busy || active(job) || pending !== null}
+                    onChange={(e) =>
+                      setViewport(e.target.value as "desktop" | "mobile")
+                    }
+                  >
+                    <option value="desktop">{t("Desktop")}</option>
+                    <option value="mobile">{t("Mobile")}</option>
+                  </select>
+                </Label>
+              )}
             </>
           )}
           {scenarios.length > 0 && (
@@ -439,7 +455,20 @@ export function TranslationScreenshots({
                     url={image.url}
                     location={job.location}
                     stale={stale}
+                    alt={
+                      scenarioEngine
+                        ? t("Screen preview with the selected translation")
+                        : undefined
+                    }
                   />
+                  {job.receipt?.engine === "qt" && (
+                    <p className="text-sm text-muted-foreground">
+                      {job.receipt.width} × {job.receipt.height} ·{" "}
+                      {job.receipt.reference_image_digest
+                        ? t("Matches the device reference")
+                        : t("Device comparison pending")}
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     {job.request.proposal_version
                       ? t("Saved proposal version {{v0}}", {
@@ -498,7 +527,7 @@ export function TranslationScreenshots({
                   <p>{t("Showing the first 100 references.")}</p>
                 )}
               </details>
-              {!web && available.length > 0 && (
+              {!scenarioEngine && available.length > 0 && (
                 <>
                   <Label className="grid gap-2">
                     {t("Appearance")}

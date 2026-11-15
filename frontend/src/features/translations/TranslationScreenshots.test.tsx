@@ -101,6 +101,80 @@ describe("Compose screenshots", () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:synthetic-preview");
   });
 
+  it("captures an exact Qt value at device resolution in the existing panel", async () => {
+    const user = userEvent.setup();
+    api.getTranslationCodeContext.mockResolvedValue({
+      data: {
+        configured: true,
+        engine: "qt",
+        occurrences: [],
+        previews: [],
+        capture_functions: [],
+        qt_targets: [
+          {
+            value_id: "qt-value",
+            context: "CallScreen",
+            disambiguation: "",
+            scenario_ids: ["call"],
+          },
+        ],
+        scenarios: [{ scenario_id: "call", label: "Call", explicit: true }],
+      },
+    });
+    api.requestTranslationScreenshot.mockResolvedValue({
+      data: {
+        ...job,
+        request: {
+          engine: "qt",
+          scenario_id: "call",
+          target_value_id: "qt-value",
+          proposal_version: 3,
+        },
+        receipt: {
+          engine: "qt",
+          width: 800,
+          height: 480,
+          reference_image_digest: null,
+        },
+      },
+    });
+    render(
+      <TranslationScreenshots
+        accessToken="token"
+        groupId="qt-group"
+        dirty={false}
+        proposalVersion={3}
+      />,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Generate screenshot" }),
+    );
+    expect(api.requestTranslationScreenshot.mock.calls[0][0].body).toEqual({
+      engine: "qt",
+      scenario_id: "call",
+      target_value_id: "qt-value",
+      viewport: "desktop",
+      theme: "light",
+      proposal_version: 3,
+    });
+    expect(
+      await screen.findByAltText(
+        "Screen preview with the selected translation",
+      ),
+    ).toBeVisible();
+    expect(screen.getByText(/800 × 480/)).toHaveTextContent(
+      "Device comparison pending",
+    );
+    expect(screen.queryByLabelText("Viewport")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Appearance")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/does not show your latest changes/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: "Open screenshot full size" })[0],
+    ).toHaveAttribute("href", "blob:synthetic-preview");
+  });
+
   it("requires saving dirty text", async () => {
     render(
       <TranslationScreenshots accessToken="token" groupId="group" dirty />,

@@ -8,10 +8,12 @@ export function ScreenshotImage({
   url,
   location,
   stale,
+  alt,
 }: {
   url: string;
   location?: ScreenshotLocation | null;
   stale: boolean;
+  alt?: string;
 }) {
   useUiLanguage();
   const [showPosition, setShowPosition] = useState(true);
@@ -64,7 +66,9 @@ export function ScreenshotImage({
         >
           <img
             src={url}
-            alt={t("Compose screen preview with the selected translations")}
+            alt={
+              alt ?? t("Compose screen preview with the selected translations")
+            }
             className="block h-auto max-h-[36rem] max-w-full rounded-md border object-contain"
           />
         </a>

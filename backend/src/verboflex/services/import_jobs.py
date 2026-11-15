@@ -2867,9 +2867,20 @@ async def _process_import(
             )
         )
     from verboflex.services.html_preview_images import collect_html_preview_images
+    from verboflex.services.qt_imports import collect_qt_context
 
     html_preview_images = None
+    qt_context = None
     if not parse_result.issues:
+        qt_context = await collect_qt_context(
+            factory,
+            identity=identity,
+            adapter=adapter,
+            parser_inputs=parser_inputs,
+            commits={
+                reference.repository_side: reference.commit_hash for reference in durable_references
+            },
+        )
         html_preview_images = await collect_html_preview_images(
             factory,
             identity=identity,
@@ -2886,6 +2897,7 @@ async def _process_import(
         result=parse_result,
         code_catalog=code_catalog,
         web_context=web_context,
+        qt_context=qt_context,
         html_preview_images=html_preview_images,
     )
     if manifest is None:
