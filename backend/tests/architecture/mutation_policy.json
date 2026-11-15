@@ -665,5 +665,15 @@
     ],
     "boundary": "active_resource_and_recovery_policy",
     "audit": "AuditEntry language.discarded and durable BranchJob actor and import authority"
+  },
+  "approveAllAuthoringDrafts": {
+    "method": "PUT",
+    "path": "/api/v1/products/{product_id}/authoring/approvals/{request_id}",
+    "roles": [
+      "admin",
+      "product_manager_reviewer"
+    ],
+    "boundary": "active_resource_and_recovery_policy",
+    "audit": "AuditEvent authoring.bulk_queued, authoring.approved and authoring.bulk_approved"
   }
 }

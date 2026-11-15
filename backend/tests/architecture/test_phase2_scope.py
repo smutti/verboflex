@@ -58,6 +58,7 @@ EXPECTED_MODEL_MODULES = {
     "screenshot.py",
     "audit.py",
     "authoring.py",
+    "authoring_approval.py",
     "glossary.py",
     "duplicate_report.py",
     "auth_session.py",

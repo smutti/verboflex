@@ -64,6 +64,9 @@ Import recovery contracts distinguish expired source confirmation from parser
 diagnostics while asserting that the active translations remain intact. MCP
 authorization regressions verify that a listed administrator tool remains
 forbidden to a viewer even when its OAuth token includes write scope.
+Bulk authoring approval has an explicit reviewer permission and audit owner in
+the mutation inventory; its routes and durable model are included in the closed
+API and architecture inventories.
 
 | Check | Coverage |
 | --- | --- |
