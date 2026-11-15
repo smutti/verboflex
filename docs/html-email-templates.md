@@ -134,3 +134,17 @@ constraints. Its downgrade refuses to discard HTML rows or job/audit history.
 Synthetic tests cover filename locales, nested collections, preserved bytes and
 entities, variable guards, malformed documents, API permissions, import-to-editor
 projections and durable language creation without automatic PR publication.
+
+## Base language and source copies
+
+The email editor's **Language to edit** selector includes the base language.
+**Open base language** switches to its actual imported resource, through the same
+unsaved-change guard as other language changes. The base editor is labelled
+**Base text**, and uses the existing draft, review and publication workflow.
+Viewers retain read-only access. Selecting a language never translates its content.
+
+A selected fragment whose current text matches the base displays a reminder to
+check whether translation is still needed. This is a comparison, not automatic
+language detection or a change to approval state: names and variables can
+legitimately match. Files created by copying the base can still contain English
+when a different locale is selected, until their text is translated.

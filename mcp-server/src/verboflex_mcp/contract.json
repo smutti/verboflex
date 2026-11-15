@@ -1101,6 +1101,30 @@
     "path": "/dashboard",
     "read_only": true
   },
+  "get_email_template": {
+    "bindings": {
+      "translation_group_id": "path"
+    },
+    "description": "Read one email document and its saved text fragments in the selected group language. Read get_translation for each fragment before saving through save_translation.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "translation_group_id": {
+          "format": "uuid",
+          "title": "Translation Group Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "translation_group_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "getHtmlEditorDocument",
+    "path": "/translations/{translation_group_id}/html-editor",
+    "read_only": true
+  },
   "get_import": {
     "bindings": {
       "import_id": "path",
@@ -1591,7 +1615,7 @@
     "bindings": {
       "product_id": "path"
     },
-    "description": "List confirmed files and languages for new keys or missing translations.",
+    "description": "List confirmed files and languages for new keys or missing translations. Check blocked_scopes: a failed or pending source refresh can hide destinations without deleting drafts. Use list_new_entries to read preserved drafts and recover the import.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -1924,6 +1948,43 @@
     "path": "/admin/products/{product_id}/candidate/mappings",
     "read_only": true
   },
+  "list_email_templates": {
+    "bindings": {
+      "after": "query",
+      "product_id": "path"
+    },
+    "description": "Page imported email templates and every available locale, including base_language. Use each language's group_id to read or edit its actual text.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "After"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id"
+      ],
+      "type": "object"
+    },
+    "method": "GET",
+    "operation_id": "listHtmlTemplates",
+    "path": "/products/{product_id}/html-templates",
+    "read_only": true
+  },
   "list_glossary_terms": {
     "bindings": {
       "after": "query",
@@ -2151,7 +2212,7 @@
     "bindings": {
       "product_id": "query"
     },
-    "description": "List accessible projects and languages; optionally restrict to a product.",
+    "description": "List accessible projects and all imported languages, including base/source locales. products[].base_languages identifies source locales; these are not inherently read-only. Use get_translation to check editing authority. Optionally restrict languages to a product.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -3770,7 +3831,7 @@
       "violation": "query",
       "work_status": "query"
     },
-    "description": "Search 50 key-language groups per page. Filter by product, language, text, review state or work status. Use next_cursor to continue.",
+    "description": "Search 50 key-language groups per page. Filter by product, language, text, review state or work status. For base/source text use its exact language and omit work_status. Use next_cursor to continue.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {

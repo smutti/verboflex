@@ -794,3 +794,31 @@ def test_client_credentials_configuration_fails_closed() -> None:
     for invalid in cases:
         with pytest.raises(ValueError, match="Bitbucket"):
             BitbucketOAuthService(settings=invalid, token_exchange=FakeTokenExchange())
+
+
+@pytest.mark.parametrize("change", ["renewal", "reconnect", "client"])
+def test_confirmed_authority_lineage_tracks_equivalent_renewals_only(oauth_session_factory, change):
+    from verboflex.models.bitbucket_connection import BitbucketConnection
+    from verboflex.services.bitbucket_oauth import BitbucketOAuthService, OAuthGenerationRejected
+
+    clock = MutableClock(CLIENT_CREDENTIALS_NOW)
+    settings = oauth_settings()
+    exchange = FakeTokenExchange()
+    service = BitbucketOAuthService(settings=settings, token_exchange=exchange, clock=clock)
+    with oauth_session_factory() as session:
+        service.acquire_client_credentials(session, actor_id=ADMIN_ID)
+        old_lease = service.acquire_repository_read_lease(session)
+    clock.current += timedelta(hours=1)
+    if change == "client":
+        service._client_id = "different-synthetic-client"
+    with oauth_session_factory() as session:
+        if change == "reconnect":
+            service.acquire_client_credentials(session, actor_id=ADMIN_ID)
+        lease = service.acquire_repository_read_lease(session)
+        assert lease.generation == 2
+        with pytest.raises(OAuthGenerationRejected):
+            service.require_current_repository_read_lease(session, old_lease)
+    with oauth_session_factory() as session:
+        connection = session.get_one(BitbucketConnection, 1)
+        assert connection.renewal_start_generation == (1 if change == "renewal" else 2)
+        assert connection.client_credentials_digest is not None

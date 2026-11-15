@@ -317,6 +317,29 @@ def _sent(factory: sessionmaker[Session], job_id: UUID, owner: UUID, generation:
         return True
 
 
+def _record_committed_files(
+    session: Session, workflow: BranchWorkflow, job: BranchJob, commit_hash: str
+) -> None:
+    job.state, job.commit_hash, job.error_code = "committed", commit_hash, None
+    assert job.intent is not None
+    for f in cast(list[dict[str, object]], job.intent["files"]):
+        if job.kind in {"html_language", "language"}:
+            continue
+        row = _branch_file(session, workflow.id, str(f["path"]))
+        if row is None:
+            row = BranchFile(workflow_id=workflow.id, path=str(f["path"]))
+            session.add(row)
+        row.baseline_sha256, row.content_sha256 = str(f["baseline"]), str(f["after"])
+        row.edits = base64.b64decode(str(f["edits"]), validate=True)
+
+
+def _already_on_branch(job: BranchJob, prepared: dict[str, object]) -> bool:
+    # Only fresh preparation has proved exact bytes at the immutable branch head.
+    # Recovery of an uncertain send must still use provider reconciliation.
+    files = cast(list[dict[str, object]], prepared.get("files", []))
+    return job.kind == "commit" and bool(files) and all(f["before"] == f["after"] for f in files)
+
+
 def _record(
     factory: sessionmaker[Session],
     job_id: UUID,
@@ -335,17 +358,7 @@ def _record(
             return
         if isinstance(outcome.receipt, CommitReceipt):
             receipt = outcome.receipt
-            job.state, job.commit_hash, job.error_code = "committed", receipt.commit_hash, None
-            assert job.intent is not None
-            for f in cast(list[dict[str, object]], job.intent["files"]):
-                if job.kind in {"html_language", "language"}:
-                    continue
-                row = _branch_file(s, workflow.id, str(f["path"]))
-                if row is None:
-                    row = BranchFile(workflow_id=workflow.id, path=str(f["path"]))
-                    s.add(row)
-                row.baseline_sha256, row.content_sha256 = str(f["baseline"]), str(f["after"])
-                row.edits = base64.b64decode(str(f["edits"]), validate=True)
+            _record_committed_files(s, workflow, job, receipt.commit_hash)
         else:
             pr_receipt = outcome.receipt
             job.state = {
@@ -409,6 +422,13 @@ async def execute_branch_job(
                     return
                 _authorize(s, current_workflow, current)
                 current.intent = prepared
+                if _already_on_branch(current, prepared):
+                    connection = s.get_one(BitbucketConnection, 1)
+                    if connection.generation != prepared["generation"]:
+                        raise BranchWorkflowError("authority_changed")
+                    _record_committed_files(s, current_workflow, current, str(prepared["parent"]))
+                    current.owner, current.updated_at = None, datetime.now(UTC)
+                    return
             job.intent = prepared
         intent = _intent(workflow, job)
         with factory() as s:
@@ -471,6 +491,7 @@ async def refresh_branch_pr(
         _, current = _lock(s, job_id)
         if current.state == "open":
             current.updated_at = datetime.now(UTC)
+            current.error_code = "rate_limited" if outcome.provider_status == 429 else None
             if outcome.state == "verified" and outcome.receipt is not None:
                 current.state = {
                     "OPEN": "open",

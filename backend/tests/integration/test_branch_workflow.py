@@ -747,3 +747,78 @@ def test_multiple_translation_sources_have_separate_branch_queues(
         assert s.get_one(BranchJob, first_job).workflow_id != second_workflow_id
     assert len(second_remote.commits) == len(first_remote.commits) == 1
     assert not first_remote.prs and not second_remote.prs
+
+
+def test_reapproval_of_identical_text_verifies_existing_branch_without_empty_commit(
+    preview_session_factory, monkeypatch
+):
+    factory = preview_session_factory
+    seed, remote = setup(factory, monkeypatch)
+    first = approve(factory, seed, "Prima")
+    assert run(factory, remote, first) == ("committed", None)
+    existing_head = remote.head
+    repeated = approve(factory, seed, "Prima")
+    # Editing after approval must not change the frozen operation or publish the draft.
+    save_draft(factory, seed, "Unpublished draft")
+    assert run(factory, remote, repeated) == ("committed", None)
+    assert len(remote.commits) == 1 and remote.prs == []
+    with factory() as session:
+        job = session.get_one(BranchJob, repeated)
+        assert job.commit_hash == existing_head
+        assert job.owner is None and job.intent is not None
+        proposal = session.get_one(TranslationProposal, seed.proposal_id)
+        assert proposal.state == "draft"
+    # The serial queue is unblocked and the next distinct approval still commits.
+    later = approve(factory, seed, "Seconda")
+    assert run(factory, remote, later) == ("committed", None)
+    assert len(remote.commits) == 2
+
+
+def test_identical_reapproval_still_rejects_external_file_changes(
+    preview_session_factory, monkeypatch
+):
+    factory = preview_session_factory
+    seed, remote = setup(factory, monkeypatch)
+    first = approve(factory, seed, "Prima")
+    assert run(factory, remote, first) == ("committed", None)
+    repeated = approve(factory, seed, "Prima")
+    remote.versions[remote.head]["app/res/values-it/strings.xml"] += b"\n<!-- external -->"
+    assert run(factory, remote, repeated) == ("blocked", "file_changed")
+    assert len(remote.commits) == 1
+
+
+def test_pr_observation_rate_limit_delays_poll_without_recreating_pr(
+    preview_session_factory, monkeypatch
+):
+    from datetime import UTC, datetime, timedelta
+    from types import SimpleNamespace
+
+    from verboflex.integrations.bitbucket.writes import WriteOutcome
+    from verboflex.services.branch_jobs import refresh_branch_pr
+    from verboflex.worker.branch_tasks import dispatchable_jobs
+
+    factory = preview_session_factory
+    seed, remote = setup(factory, monkeypatch)
+    job = approve(factory, seed, "Ready")
+    run(factory, remote, job)
+    with factory.begin() as session:
+        pr = request_pr(session, product_id=seed.product_id, actor_id=seed.actor_id).id
+    assert run(factory, remote, pr) == ("open", None)
+
+    async def limited(session, **kw):
+        return WriteOutcome("unknown", "pull_request_unavailable", provider_status=429)
+
+    asyncio.run(
+        refresh_branch_pr(factory, job_id=pr, writes=SimpleNamespace(read_pull_request=limited))
+    )
+    with factory.begin() as session:
+        row = session.get_one(BranchJob, pr)
+        assert row.state == "open" and row.error_code == "rate_limited"
+        row.updated_at = datetime.now(UTC) - timedelta(minutes=16)
+    with factory() as session:
+        assert pr not in dispatchable_jobs(session)
+    with factory.begin() as session:
+        session.get_one(BranchJob, pr).updated_at = datetime.now(UTC) - timedelta(minutes=61)
+    with factory() as session:
+        assert pr in dispatchable_jobs(session)
+    assert len(remote.prs) == 1 and len(remote.commits) == 1

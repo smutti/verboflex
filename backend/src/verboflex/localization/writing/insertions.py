@@ -14,7 +14,6 @@ from verboflex.localization.importing.core import (
     canonical_selector_bytes,
 )
 from verboflex.localization.importing.ios_strings import _decode_document
-from verboflex.localization.importing.registry import parse_canonical_snapshot
 from verboflex.localization.moko_layout import moko_layout
 from verboflex.localization.preview.core import normalize_preview_locale
 from verboflex.localization.writing import android_xml, ios_strings, qt_ts
@@ -27,6 +26,7 @@ from verboflex.localization.writing.core import (
 )
 from verboflex.localization.writing.json import _TokenIndex
 from verboflex.localization.writing.json import encode_text as json_text
+from verboflex.localization.writing.parsing import inspect_writeback_snapshot
 from verboflex.localization.writing.xml_spans import XmlElementSpan, index_xml
 
 
@@ -288,7 +288,7 @@ def _qt(parser: CanonicalParserInput, additions: tuple[WriteInsert, ...]) -> byt
 
 
 def render_insertions(parser: CanonicalParserInput, additions: tuple[WriteInsert, ...]) -> bytes:
-    parsed = parse_canonical_snapshot(parser)
+    parsed = inspect_writeback_snapshot(parser)
     if parsed.issues:
         raise _reject()
 
@@ -309,18 +309,22 @@ def render_insertions(parser: CanonicalParserInput, additions: tuple[WriteInsert
         content = adapter(parser, additions)
     except ValueError, KeyError, IndexError, TypeError, UnicodeError:
         raise _reject() from None
-    result = parse_canonical_snapshot(replace(parser, content=content))
+    result = inspect_writeback_snapshot(replace(parser, content=content))
     actual = {identity(v): v for v in result.values}
     if result.issues or set(actual) != set(originals) | set(requested):
         raise WritebackRejected(WritebackReason.INVALID_OUTPUT)
-    for key, old in originals.items():
-        value = actual[key]
-        if (value.source_text, value.translated_text, value.display_text) != (
-            old.source_text,
-            old.translated_text,
-            old.display_text,
-        ):
-            raise WritebackRejected(WritebackReason.INVALID_OUTPUT)
+
+    # Shared MOKO inspection retains duplicate occurrences. A dictionary would
+    # hide all but the last, so compare every original occurrence in order.
+    def preserved(value: CanonicalValue) -> tuple[object, ...]:
+        return (identity(value), value.source_text, value.translated_text, value.display_text)
+
+    if tuple(preserved(v) for v in parsed.values) != tuple(
+        preserved(v) for v in result.values if identity(v) not in requested
+    ):
+        raise WritebackRejected(WritebackReason.INVALID_OUTPUT)
+    if sum(identity(v) in requested for v in result.values) != len(requested):
+        raise WritebackRejected(WritebackReason.INVALID_OUTPUT)
     if any(actual[key].display_text != item.replacement_text for key, item in requested.items()):
         raise WritebackRejected(WritebackReason.INVALID_OUTPUT)
     if parser.format == "qt_ts" and any(

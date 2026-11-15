@@ -300,7 +300,7 @@ def save_product_candidate(
     name: str,
     description: str | None,
 ) -> Product:
-    """Compare and save one candidate while preserving the published graph byte-for-byte."""
+    """Save the current product name and candidate details without publishing mappings."""
     display_name, name_key = normalize_product_name(name)
     try:
         with session.begin():
@@ -313,6 +313,23 @@ def save_product_candidate(
                     name_key=name_key,
                     description=description,
                 ):
+                    if (product.display_name, product.name_key) != (display_name, name_key):
+                        # A draft saved before immediate renaming may already contain this name.
+                        # Repair only a current save, without invalidating its preview authority.
+                        if candidate.is_published or candidate.version != expected_version:
+                            raise ProductVersionConflict("candidate version conflict")
+                        _require_product_name_available(
+                            session, product_id=product.id, name_key=name_key
+                        )
+                        product.display_name = display_name
+                        product.name_key = name_key
+                        record_audit(
+                            session,
+                            actor_id=actor_id,
+                            action="product.updated",
+                            entity_id=product.id,
+                        )
+                        session.flush()
                     return product
                 if candidate.is_published or candidate.version != expected_version:
                     raise ProductVersionConflict("candidate version conflict")
@@ -324,6 +341,8 @@ def save_product_candidate(
                 candidate.display_name = display_name
                 candidate.name_key = name_key
                 candidate.description = description
+                product.display_name = display_name
+                product.name_key = name_key
                 record_audit(
                     session, actor_id=actor_id, action="product.updated", entity_id=product.id
                 )
@@ -358,6 +377,8 @@ def save_product_candidate(
             )
             record_audit(session, actor_id=actor_id, action="product.updated", entity_id=product.id)
             product.candidate_revision_id = candidate.id
+            product.display_name = display_name
+            product.name_key = name_key
             session.flush()
             return product
     except IntegrityError as error:

@@ -149,7 +149,7 @@ test("selects email text, previews safe edits and saves through the existing pro
   await expect(frame.locator('[data-vf-fragment="it-cta"]')).toHaveText(
     "Gestisci <account>",
   );
-  await page.getByLabel("Translate into").selectOption("fr");
+  await page.getByLabel("Language to edit").selectOption("fr");
   await page.getByRole("button", { name: "Keep editing" }).click();
   await expect(field).toHaveValue("Benvenuto ");
   await page.getByRole("button", { name: "Save draft" }).click();
@@ -161,9 +161,9 @@ test("selects email text, previews safe edits and saves through the existing pro
   await expect(frame.locator('[data-vf-fragment="it-cta"]')).toHaveText(
     "Gestisci <account>",
   );
-  await page.getByLabel("Translate into").selectOption("en");
+  await page.getByLabel("Language to edit").selectOption("en");
   await expect(
-    page.getByRole("textbox", { name: "Translation · English" }),
+    page.getByRole("textbox", { name: "Base text · English" }),
   ).toHaveValue("Hello ");
   expect(requests.saves).toBe(2);
   expect(requests.external).toBe(0);

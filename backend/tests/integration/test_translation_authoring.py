@@ -331,3 +331,146 @@ def test_oversize_authoring_batch_rejected_before_payload_hydration(
         assert loaded == []
     finally:
         event.remove(AuthoringRequest, "load", note_load)
+
+
+def test_failed_refresh_explains_block_and_preserves_editable_draft_after_recovery(
+    preview_session_factory, monkeypatch
+):
+    from tests.integration.test_confirmed_layout_refresh import _run
+    from verboflex.integrations.bitbucket.client import BitbucketProviderReadError
+
+    factory = preview_session_factory
+    seed = seed_writeback_authority(factory, monkeypatch)
+    data = draft(factory, seed)
+    request_id = uuid4()
+    with factory.begin() as session:
+        saved = authoring.save(
+            session,
+            product_id=seed.product_id,
+            actor_id=seed.actor_id,
+            request_id=request_id,
+            data=data,
+        )
+    original = seed.adapter.resolve_repository_branch
+
+    async def limited(session, **kwargs):
+        raise BitbucketProviderReadError(kind="rate_limited", provider_status=429)
+
+    monkeypatch.setattr(seed.adapter, "resolve_repository_branch", limited)
+    assert _run(factory, seed.product_id, seed.mapping_id).state == "import_failed"
+    monkeypatch.setattr(seed.adapter, "resolve_repository_branch", original)
+    with factory.begin() as session:
+        options = authoring.destinations(
+            session, product_id=seed.product_id, actor_id=seed.actor_id
+        )
+        assert options.items == [] and not options.truncated
+        assert len(options.blocked_scopes) == 1
+        assert options.blocked_scopes[0].scope_id == data.scope_id
+        assert options.blocked_scopes[0].code == "source_refresh_required"
+        assert "Existing drafts are preserved" in options.blocked_scopes[0].message
+        page = authoring.list_requests(session, product_id=seed.product_id, actor_id=seed.actor_id)
+        assert page.items == [saved]
+    assert _run(factory, seed.product_id, seed.mapping_id).state == "current"
+    with factory.begin() as session:
+        options = authoring.destinations(
+            session, product_id=seed.product_id, actor_id=seed.actor_id
+        )
+        assert not options.blocked_scopes
+        target = next(d for d in options.items if "it" in d.languages)
+        assert target.base_language == "en"
+        row = session.get_one(AuthoringRequest, request_id)
+        assert (
+            row.version == 1
+            and row.payload["input"]["forms"] == data.model_dump(mode="json")["forms"]
+        )
+        updated = authoring.save(
+            session,
+            product_id=seed.product_id,
+            actor_id=seed.actor_id,
+            request_id=request_id,
+            data=data.model_copy(
+                update={
+                    "expected_version": 1,
+                    "execution_id": target.execution_id,
+                    "file_position": target.file_position,
+                }
+            ),
+        )
+        assert updated.input.forms == saved.input.forms and not updated.source_changed
+
+
+def test_source_key_removal_preserves_authoring_until_source_returns(
+    preview_session_factory, monkeypatch
+):
+    from tests.integration.test_confirmed_layout_refresh import _run
+    from verboflex.models.translation import TranslationKey
+
+    factory = preview_session_factory
+    seed = seed_writeback_authority(factory, monkeypatch)
+    original = dict(seed.adapter.files)
+    retained = b'<resources><string name="retained">Sample</string></resources>'
+    target_path = "app/res/values-it/strings.xml"
+    seed.adapter.files[target_path] = retained
+    seed.adapter.commit_hashes = ["b" * 40]
+    assert _run(factory, seed.product_id, seed.mapping_id).state == "current"
+    with factory() as session:
+        parent = session.scalar(select(TranslationKey).where(TranslationKey.raw_key == "hello"))
+        parent_id = parent.id
+    data = draft(factory, seed, key="hello", parent_key_id=parent_id)
+    request_id = uuid4()
+    with factory.begin() as session:
+        saved = authoring.save(
+            session,
+            product_id=seed.product_id,
+            actor_id=seed.actor_id,
+            request_id=request_id,
+            data=data,
+        )
+    seed.adapter.files = {path: retained for path in original}
+    seed.adapter.commit_hashes = ["c" * 40]
+    assert _run(factory, seed.product_id, seed.mapping_id).state == "current"
+    with factory.begin() as session:
+        page = authoring.list_requests(session, product_id=seed.product_id, actor_id=seed.actor_id)
+        assert len(page.items) == 1
+        assert page.items[0].input == saved.input and page.items[0].version == saved.version
+        assert page.items[0].source_changed
+        assert session.get_one(TranslationKey, parent_id).is_deleted
+        options = authoring.destinations(
+            session, product_id=seed.product_id, actor_id=seed.actor_id
+        )
+        target = next(d for d in options.items if "it" in d.languages)
+    updated_input = data.model_copy(
+        update={
+            "expected_version": 1,
+            "execution_id": target.execution_id,
+            "file_position": target.file_position,
+        }
+    )
+    with (
+        factory.begin() as session,
+        pytest.raises(authoring.AuthoringError, match="Original key unavailable"),
+    ):
+        authoring.save(
+            session,
+            product_id=seed.product_id,
+            actor_id=seed.actor_id,
+            request_id=request_id,
+            data=updated_input,
+        )
+    seed.adapter.files["app/res/values-en/strings.xml"] = original["app/res/values-en/strings.xml"]
+    seed.adapter.commit_hashes = ["d" * 40]
+    assert _run(factory, seed.product_id, seed.mapping_id).state == "current"
+    with factory.begin() as session:
+        assert not session.get_one(TranslationKey, parent_id).is_deleted
+        options = authoring.destinations(
+            session, product_id=seed.product_id, actor_id=seed.actor_id
+        )
+        target = next(d for d in options.items if "it" in d.languages)
+        updated = authoring.save(
+            session,
+            product_id=seed.product_id,
+            actor_id=seed.actor_id,
+            request_id=request_id,
+            data=updated_input.model_copy(update={"execution_id": target.execution_id}),
+        )
+        assert updated.input.forms == saved.input.forms and not updated.source_changed

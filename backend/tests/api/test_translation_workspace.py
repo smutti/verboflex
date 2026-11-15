@@ -157,11 +157,13 @@ def slots(body, index=0):
     return {slot["language"]: slot for slot in body["items"][index]["slots"]}
 
 
-def seed_qt_base_catalog(factory):
+def seed_qt_base_catalog(factory, *, base_language="it-IT"):
     """Mixed source languages are not translations of the configured base locale."""
     import hashlib
 
-    product, scope = SEARCH._seed_dataset(factory, name="Qt mixed source", base_language="it-IT")
+    product, scope = SEARCH._seed_dataset(
+        factory, name="Qt mixed source", base_language=base_language
+    )
     ids = []
     for index, source in enumerate(("Operazione completata", "Open the message")):
         group = SEARCH._add_group(

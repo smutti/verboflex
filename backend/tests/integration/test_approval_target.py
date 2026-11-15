@@ -156,7 +156,7 @@ def test_provider_failure_keeps_last_observation_without_resending(
     with factory.begin() as session:
         row = session.get_one(BranchJob, job)
         assert row.state == "committed" and row.owner is None
-        row.updated_at = datetime.now(UTC) - timedelta(minutes=2)
+        row.updated_at = datetime.now(UTC) - timedelta(minutes=16)
         assert session.get_one(TranslationProposal, seed.proposal_id).target_commit_hash
     with factory() as session:
         assert job in dispatchable_jobs(session)
@@ -237,4 +237,38 @@ def test_working_branch_reimport_flags_changes_to_approved_values(
         # Removing a member reopens the proposal through the import purge path.
         assert status.state == ("draft" if drift == "removed_member" else "approved")
         assert status.reconciliation_required and not status.target_integrated
+    assert len(remote.commits) == 1 and not remote.prs
+
+
+def test_rate_limited_target_observation_backs_off_without_losing_receipt(
+    preview_session_factory, monkeypatch
+):
+    factory = preview_session_factory
+    seed, remote = setup(factory, monkeypatch)
+    job = approve(factory, seed, "Approved text")
+    run(factory, remote, job)
+    target_at(remote, remote.head)
+    check(factory, remote, job)
+
+    async def limited(session, **kw):
+        raise BitbucketProviderReadError(kind="rate_limited", provider_status=429)
+
+    remote.resolve_repository_branch = limited
+    check(factory, remote, job)
+    with factory.begin() as session:
+        row = session.get_one(BranchJob, job)
+        assert row.state == "committed" and row.error_code == "rate_limited"
+        assert session.get_one(TranslationProposal, seed.proposal_id).target_commit_hash
+        row.updated_at = datetime.now(UTC) - timedelta(minutes=16)
+    with factory() as session:
+        assert job not in dispatchable_jobs(session)
+    with factory.begin() as session:
+        session.get_one(BranchJob, job).updated_at = datetime.now(UTC) - timedelta(minutes=61)
+    with factory() as session:
+        assert job in dispatchable_jobs(session)
+    target_at(remote, remote.head)
+    check(factory, remote, job)
+    with factory() as session:
+        assert session.get_one(BranchJob, job).error_code is None
+        assert job not in dispatchable_jobs(session)
     assert len(remote.commits) == 1 and not remote.prs

@@ -17,7 +17,18 @@ Bitbucket pull-request workflow. Every preparation checks the mapping, source fi
 hash, key identity, character limits and latest draft version. A refresh marks
 older drafts as source-changed; reopen and save them against the current file.
 A successful import consumes additions whose exact values are now in the repository.
-Parent-key deletion physically removes attached additions.
+If a source key disappears, its attached additions remain in **New entries** with
+their original text and a source-change warning. They cannot be saved or approved
+against a missing source key. Review the upstream change; restoring the key makes
+the retained draft eligible for editing again. A retired parent is purged only
+after its drafts have been explicitly discarded or otherwise reconciled.
+
+Failed or pending source imports do not erase authoring drafts. The destination API
+and MCP `list_authoring_files` return `blocked_scopes` with an explicit recovery
+message alongside any available files. Read existing drafts with `list_new_entries`
+or **New entries**. Open **Update from branches**, recover the import, then reopen
+the editor to save against the current destination. Permissions remain enforced
+for both draft access and writes.
 
 | Format | Creation support |
 | --- | --- |
@@ -32,6 +43,10 @@ Qt requires source text and context. For JSON, enter the parent path as a JSON
 array, such as `["menu", "actions"]`; those parent objects must already exist.
 Writers insert only the new resource and reparse the result to verify that existing
 values and the requested identities remain intact.
+In shared MOKO translation catalogs, unrelated duplicate resources do not block
+new, distinct keys. Every original occurrence is preserved, and the duplicates
+remain quarantined during canonical import. Inserting an existing or ambiguous
+resource, malformed content, and other unsupported shapes remain blocked.
 
 [Add a project language](adding-languages.md) creates complete catalog peers from
 the imported source through a separate durable branch job, including Angular,
@@ -52,11 +67,14 @@ Saving a translation preserves the source and its message identity. By default,
 **Needs translation** includes empty Qt translations even in the base catalog.
 
 Administrators can open **Product configuration → product overview → Source language
-settings**, enable **Use confirmed source text for the base language**, and select
+settings**, enable **Use confirmed Qt source text for this language**, and select
 exact source phrases already written in that language. For those phrases only,
 empty scalar Qt translations display the source with **Using source text** and
 leave both search representations of **Needs translation**. The policy is scoped
-to the product and base locale, independent of mapping revisions and imports.
+to the product and the selected imported Qt locale, independent of mapping revisions and imports.
+The Qt source language can differ from the project base: for example, confirmed
+Italian Qt phrases can supply empty Italian translations while `en-US` remains
+the project base. The settings offer current imported Qt locales only.
 Other products keep their own settings. Updates are audited, version checked,
 and invalidate existing search cursors.
 
@@ -67,7 +85,8 @@ takes precedence over fallback. The policy never fills repository files, creates
 proposals, approves changes or opens pull requests. Saving an explicit translation
 still uses the regular review workflow. Disabling the policy restores the original
 empty-translation behavior. Product coverage continues to measure target languages,
-excluding the configured base locale.
+excluding the configured base locale. Confirmed Qt source fallback counts as
+available target text in coverage; repository review states remain unchanged.
 
 The multilingual built-stack smoke configures this policy through the administrator
 interface, verifies its persistence and filtering, then saves/reloads a translation

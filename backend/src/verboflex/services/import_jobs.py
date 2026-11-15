@@ -112,6 +112,7 @@ ImportErrorCategory = Literal[
     "timeout",
     "provider_unavailable",
     "bounded_failure",
+    "confirmation_required",
 ]
 RepositoryRole = Literal["direct", "keys", "translations"]
 SourceMovementRelation = Literal["equal", "descendant", "diverged"]
@@ -383,7 +384,16 @@ ImportProcessor = Callable[
 ImportClock = Callable[[], datetime]
 
 
+class ImportConfirmationRequired(RuntimeError):
+    """The confirmed mapping no longer matches the current provider authority."""
+
+
 _PUBLIC_FAILURE_MESSAGES: dict[ImportErrorCategory, str] = {
+    "confirmation_required": (
+        "The mapping preview must be confirmed again after an authorization "
+        "or configuration change. "
+        "{baseline_sentence} Revalidate the preview before retrying."
+    ),
     "connection_required": (
         "The organizational Bitbucket connection is not ready for imports. "
         "An administrator must reconnect it before retrying this mapping."
@@ -672,6 +682,26 @@ def _connected_generation(session: Session, mapping: ProductRepositoryMapping | 
     return connection.generation
 
 
+def _import_generation_is_current(session: Session, current: int | None, expected: int) -> bool:
+    """Accept proven renewal lineage after locking/checking current connection readiness.
+
+    Import identities bind authorization, while provider calls still use exact token leases.
+    Reconnects and legacy credentials have no matching predecessor authority.
+    """
+    if current is None:
+        return False
+    if current == expected:
+        return True
+    connection = session.get(BitbucketConnection, 1)
+    return bool(
+        expected > 0
+        and connection is not None
+        and connection.generation == current
+        and connection.renewal_start_generation is not None
+        and connection.renewal_start_generation <= expected < current
+    )
+
+
 def _published_mapping_statement(
     *, product_id: UUID, mapping_id: UUID | None = None
 ) -> Select[tuple[ProductRepositoryMapping]]:
@@ -924,15 +954,7 @@ def _record(
     else:
         public_state = "current"
         action = "refresh_import"
-    if job.error_category is not None and job.error_category not in {
-        "connection_required",
-        "permission_denied",
-        "rate_limited",
-        "source_not_found",
-        "timeout",
-        "provider_unavailable",
-        "bounded_failure",
-    }:
+    if job.error_category is not None and job.error_category not in _PUBLIC_FAILURE_MESSAGES:
         raise ImportConflict("persisted import error rejected")
     return ImportJobRecord(
         id=job.id,
@@ -949,10 +971,7 @@ def _record(
         latest_execution_at=job.latest_execution_at,
         retry_count=job.retry_count,
         capability=capability,
-        error_category=cast(
-            ImportErrorCategory | None,
-            job.error_category,
-        ),
+        error_category=job.error_category,
         error_message=job.error_message,
         action=action,
     )
@@ -1443,6 +1462,9 @@ def start_import_execution(
             )
             .with_for_update()
         ).scalar_one_or_none()
+        generation_is_current = execution is not None and _import_generation_is_current(
+            session, connection_generation, execution.connection_generation
+        )
         authority_is_current = (
             product is not None
             and product.is_active
@@ -1457,7 +1479,7 @@ def start_import_execution(
             and job.current_execution_id == current_execution_id
             and execution is not None
             and execution.state == "queued"
-            and connection_generation == execution.connection_generation
+            and generation_is_current
         )
         execution_sides: list[ImportExecutionSide] = []
         if authority_is_current:
@@ -1492,8 +1514,7 @@ def start_import_execution(
             job.state = "import_failed"
             failure_category: ImportErrorCategory = (
                 "connection_required"
-                if execution is not None
-                and connection_generation != execution.connection_generation
+                if execution is not None and not generation_is_current
                 else "bounded_failure"
             )
             job.error_category = failure_category
@@ -1937,6 +1958,9 @@ def _finish_import_execution_transaction(
                 current_sides = _mapping_sides(mapping)
             except ImportConflict:
                 current_sides = None
+        generation_is_current = execution is not None and _import_generation_is_current(
+            session, connection_generation, execution.connection_generation
+        )
         authority_is_current = (
             product is not None
             and product.is_active
@@ -1948,7 +1972,7 @@ def _finish_import_execution_transaction(
             and job.revision_id == identity.revision_id
             and job.mapping_id == identity.mapping_id
             and job.topology == mapping.topology
-            and connection_generation == identity.connection_generation
+            and generation_is_current
             and current_sides is not None
             and tuple(
                 (side.role, side.repository_id, side.source_branch, side.localization_root)
@@ -2022,8 +2046,7 @@ def _finish_import_execution_transaction(
             job.state = "import_failed"
             resolved_failure_category = (
                 "connection_required"
-                if not authority_is_current
-                and connection_generation != identity.connection_generation
+                if not authority_is_current and not generation_is_current
                 else failure_category
             )
             job.error_category = resolved_failure_category
@@ -2248,7 +2271,9 @@ def _current_rewrite_authority(
         or proposal.complete is not True
         or len(proposal.digest) != 64
         or any(character not in "0123456789abcdef" for character in proposal.digest)
-        or connection_generation != proposal.connection_generation
+        or not _import_generation_is_current(
+            session, connection_generation, proposal.connection_generation
+        )
         or proposed_execution is None
         or proposed_execution.state != "succeeded"
         or proposed_execution.connection_generation != proposal.connection_generation
@@ -2657,6 +2682,10 @@ def execute_import_job(
             references = _validated_references(identity, processed)
             movement = None
             canonical_manifest_digest = None
+    except ImportConfirmationRequired:
+        finish_import_execution(
+            factory, identity=identity, references=None, failure_category="confirmation_required"
+        )
     except BitbucketProviderReadError as error:
         terminalized = finish_import_execution(
             factory,
@@ -2946,9 +2975,10 @@ def _confirmed_parser_inputs(
         or mapping.confirmed_preview_job_id is None
         or mapping.selected_layout_candidate_id is None
         or mapping.selected_layout_version != 1
-        or not is_current_preview_confirmation(session, revision, mapping)
     ):
         return ()
+    if not is_current_preview_confirmation(session, revision, mapping):
+        raise ImportConfirmationRequired()
     preview_job = session.get(PreviewJob, mapping.confirmed_preview_job_id)
     if preview_job is None or preview_job.result is None:
         return ()

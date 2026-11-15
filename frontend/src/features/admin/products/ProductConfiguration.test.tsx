@@ -1762,9 +1762,8 @@ describe("administrator product configuration tracer", () => {
     const name = screen.getByRole("textbox", { name: "Name" });
     expect(name).toHaveFocus();
     expect(name).toHaveAttribute("aria-invalid", "true");
-    expect(name).toHaveAttribute(
-      "aria-describedby",
-      `${name.getAttribute("id")}-error`,
+    expect(name).toHaveAccessibleDescription(
+      "The saved name is shown throughout VerboFlex. Enter a product name.",
     );
     expect(screen.getByText("Enter a product name.")).toBeVisible();
     expect(screen.getByText("Enter a product name.")).toHaveAttribute(
@@ -1782,7 +1781,9 @@ describe("administrator product configuration tracer", () => {
     await user.clear(name);
     await user.type(name, "Alpha Embedded");
     expect(name).toHaveAttribute("aria-invalid", "false");
-    expect(name).not.toHaveAttribute("aria-describedby");
+    expect(name).toHaveAccessibleDescription(
+      "The saved name is shown throughout VerboFlex.",
+    );
     expect(screen.queryByText("Enter a product name.")).not.toBeInTheDocument();
     await user.type(
       screen.getByRole("textbox", { name: "Description" }),
@@ -1987,6 +1988,7 @@ describe("administrator product configuration tracer", () => {
   it("creates one candidate from an active revision only after a real details mutation", async () => {
     const createdCandidate = {
       ...inactivePublishedProduct,
+      name: `${inactivePublishedProduct.name} candidate`,
       candidate_revision: {
         id: "00000000-0000-4000-8000-000000000205",
         description: inactivePublishedProduct.active_revision!.description,
@@ -2026,6 +2028,10 @@ describe("administrator product configuration tracer", () => {
     expect(screen.getByLabelText("Product setup progress")).toHaveTextContent(
       "Step 2 of 4Repositories",
     );
+    expect(
+      screen.getByRole("heading", { name: createdCandidate.name }),
+    ).toBeVisible();
+    expect(toastSuccessMock).toHaveBeenCalledWith("Product details saved");
   });
 
   it("clears duplicate ownership when conflicted edits are discarded", async () => {

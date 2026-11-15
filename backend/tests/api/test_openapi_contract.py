@@ -1355,6 +1355,7 @@ def test_import_schema_literals_requirements_and_bounds_are_frozen() -> None:
         "timeout",
         "provider_unavailable",
         "bounded_failure",
+        "confirmation_required",
     ]
     assert published["properties"]["repository_sides"]["minItems"] == 1
     assert published["properties"]["repository_sides"]["maxItems"] == 2

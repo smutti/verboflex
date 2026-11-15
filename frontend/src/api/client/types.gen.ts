@@ -1390,7 +1390,7 @@ export type AdminPublishedMappingImportResponse = {
     /**
      * Error Category
      */
-    error_category: 'connection_required' | 'permission_denied' | 'rate_limited' | 'source_not_found' | 'timeout' | 'provider_unavailable' | 'bounded_failure' | null;
+    error_category: 'connection_required' | 'permission_denied' | 'rate_limited' | 'source_not_found' | 'timeout' | 'provider_unavailable' | 'bounded_failure' | 'confirmation_required' | null;
     /**
      * Error Message
      */
@@ -1816,6 +1816,24 @@ export type AdminWorkspaceResponse = {
 };
 
 /**
+ * AuthoringBlockedScope
+ */
+export type AuthoringBlockedScope = {
+    /**
+     * Code
+     */
+    code?: 'source_refresh_required';
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Scope Id
+     */
+    scope_id: string;
+};
+
+/**
  * AuthoringDestination
  */
 export type AuthoringDestination = {
@@ -1869,6 +1887,10 @@ export type AuthoringDestination = {
  * AuthoringDestinations
  */
 export type AuthoringDestinations = {
+    /**
+     * Blocked Scopes
+     */
+    blocked_scopes?: Array<AuthoringBlockedScope>;
     /**
      * Items
      */
@@ -6396,6 +6418,12 @@ export type TranslationOptionsResponse = {
  * TranslationProductOptionResponse
  */
 export type TranslationProductOptionResponse = {
+    /**
+     * Base Languages
+     *
+     * Configured source locales, included alongside target locales. Resource-backed base text can be edited through the normal proposal workflow; check each group's mutation_eligible and source provenance. Code-only source context remains read-only.
+     */
+    base_languages?: Array<string>;
     /**
      * Id
      */

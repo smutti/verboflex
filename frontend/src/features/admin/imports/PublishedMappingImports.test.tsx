@@ -227,7 +227,7 @@ describe("published mapping import collection", () => {
       if (moveFocus) expect(outside).toHaveFocus();
       else
         expect(
-          within(list).getByRole("button", { name: "Refresh import" }),
+          within(list).getByRole("button", { name: "Update from branches" }),
         ).toHaveFocus();
       expect(startImportMock).toHaveBeenCalledOnce();
     },
@@ -536,8 +536,19 @@ describe("published mapping import collection", () => {
     renderImports();
 
     expect(
-      await screen.findByRole("link", { name: "Manage imported strings" }),
+      await screen.findByRole("link", { name: "Open current catalog" }),
     ).toHaveAttribute("href", "/products/product-1/strings");
+    expect(
+      screen.getByRole("link", { name: "Review source changes" }),
+    ).toHaveAttribute(
+      "href",
+      "/products/product-1/strings?work_status=source_changed",
+    );
+    expect(
+      screen.getByText(
+        "The latest import failed. This link opens the last successful catalog.",
+      ),
+    ).toBeVisible();
 
     await userEvent.click(
       await screen.findByRole("tab", { name: "Warnings (1)" }),
@@ -1211,7 +1222,7 @@ describe("published mapping import collection", () => {
       within(table).getByRole("button", { name: "Run import" }),
     ).toBeEnabled();
     expect(
-      within(table).getByRole("button", { name: "Refresh import" }),
+      within(table).getByRole("button", { name: "Update from branches" }),
     ).toBeEnabled();
     expect(
       within(table).getAllByRole("button", { name: "Retry import" }),

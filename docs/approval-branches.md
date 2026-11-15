@@ -95,13 +95,13 @@ cannot create another commit. After an uncertain response, **Check and retry**
 only reconciles that exact intent; it does not resend an unverified mutation.
 An unresolved operation stops later commits and PR creation. The approval snapshot,
 commit receipt and content-free audit events remain available for investigation.
-Open PR state is refreshed in the background, normally once per minute.
+Open PR state is refreshed in the background, normally once every 15 minutes.
 
 The strings workspace shows **Pending** for a saved change awaiting approval.
 After approval it shows **Approved**, plus **Awaiting <target branch>** when approval
 commits are enabled. A commit on the working branch does not clear that indicator.
 Celery checks the current approved version against the configured target branch,
-normally once per minute. It compares every selected key, language and selector at
+normally once every 15 minutes. It compares every selected key, language and selector at
 one immutable target commit; missing, ambiguous or different values remain awaiting
 integration. This also supports manual merges, squash merges and a target branch
 different from the import branch. Checking never creates a commit or a PR.
@@ -153,3 +153,15 @@ BRANCH_WORKFLOW_SMOKE_ONLY=1 PHASE8_HTTP_SETUP=1 \
 ```
 
 The same scenario also runs at the end of the complete application smoke.
+
+Reapproving text that is already present on the working branch does not create
+an empty commit. The worker first verifies the complete rendered files against
+the immutable branch head, then records that existing commit and releases the
+serial queue. Later drafts remain unpublished. External file changes still block
+the operation, and uncertain sends still require read-only reconciliation.
+
+Background PR and target-content observations run no more than once every 15 minutes
+per job. A provider rate-limit response delays that observation for one hour,
+preserving the last verified result. New approvals and explicit PR requests still
+enter the worker queue immediately. This prevents observation traffic from
+continually exhausting the shared provider budget needed by imports.

@@ -40,6 +40,7 @@ import { SessionProvider } from "./features/auth/session";
 import { translationPreferenceKey } from "./features/translations/translationPreferences";
 import {
   AdminApplicationRoutes,
+  ProductApplicationRoutes,
   AppRouter,
   createVerboFlexBrowserRouter,
   SessionRoutes,
@@ -96,6 +97,28 @@ const adminPrincipal = {
   ...ordinaryPrincipal,
   roles: ["admin" as const, "translator" as const],
 };
+
+it.each([false, true])(
+  "denies direct source-update navigation to non-admins (owner: %s)",
+  async (owner) => {
+    render(
+      <MemoryRouter initialEntries={["/product-a/source-updates"]}>
+        <ProductApplicationRoutes
+          accessToken="synthetic-token"
+          principal={{
+            ...ordinaryPrincipal,
+            managed_product_ids: owner ? ["product-a"] : [],
+          }}
+        />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText("Administrator access required"),
+    ).toBeVisible();
+    expect(getAdminProductMock).not.toHaveBeenCalled();
+    expect(listAdminRevisionMappingsMock).not.toHaveBeenCalled();
+  },
+);
 
 afterEach(() => {
   cleanup();

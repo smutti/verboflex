@@ -602,7 +602,12 @@ export function TranslationResultList({
                             )}
                           {isSource && (
                             <span className="block text-muted-foreground">
-                              {t("Source")}
+                              {t("Base language")}
+                              {editable && (
+                                <span className="block">
+                                  {t("Editable source text")}
+                                </span>
+                              )}
                             </span>
                           )}
                         </div>

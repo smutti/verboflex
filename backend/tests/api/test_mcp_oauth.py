@@ -286,7 +286,7 @@ def test_current_roles_enforced_even_with_write_scope(env):
     viewer = support.SUPPORT._create_authority(factory, role_names=("viewer",))
     _, tokens, _ = issue(env, write=True, headers={"Authorization": f"Bearer {viewer}"})
     tools = rpc(client, tokens["access_token"], "tools/list").json()["result"]["tools"]
-    assert len(tools) == 70
+    assert "list_admin_projects" in {tool["name"] for tool in tools}
     denied = rpc(client, tokens["access_token"], "tools/call", {"name": "list_admin_projects"})
     assert denied.json()["result"]["structuredContent"]["status_code"] == 403, denied.text
 

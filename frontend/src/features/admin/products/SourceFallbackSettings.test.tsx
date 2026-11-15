@@ -56,7 +56,7 @@ beforeEach(() => {
         (source_text) => ({
           source_text,
           source_truncated: false,
-          base_language: "it-IT",
+          base_language: "en-US",
           slots: [
             {
               language: "it-IT",
@@ -84,7 +84,7 @@ afterEach(() => {
 it("loads only when opened and saves explicitly selected sources with the current version", async () => {
   open();
   const enable = await screen.findByRole("checkbox", {
-    name: "Use confirmed source text for the base language",
+    name: "Use confirmed Qt source text for this language",
   });
   expect(enable).not.toBeChecked();
   await userEvent.click(enable);
@@ -160,7 +160,7 @@ it("retries configuration errors and aborts an outstanding request when unmounte
   );
   expect(
     await screen.findByRole("checkbox", {
-      name: "Use confirmed source text for the base language",
+      name: "Use confirmed Qt source text for this language",
     }),
   ).toBeVisible();
   const signal = vi.mocked(getAdminSourceFallback).mock.calls.at(-1)![0]!
@@ -185,7 +185,7 @@ it("restores the saved selection and excludes truncated, foreign, and non-scalar
       items: [
         {
           source_text: "Operazione completata",
-          base_language: "it-IT",
+          base_language: "en-US",
           slots: [
             {
               language: "it-IT",
@@ -197,13 +197,13 @@ it("restores the saved selection and excludes truncated, foreign, and non-scalar
         {
           source_text: "Truncated",
           source_truncated: true,
-          base_language: "it-IT",
+          base_language: "en-US",
           slots: [],
         },
         { source_text: "Other locale", base_language: "en", slots: [] },
         {
           source_text: "Plural",
-          base_language: "it-IT",
+          base_language: "en-US",
           slots: [
             {
               language: "it-IT",

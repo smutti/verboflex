@@ -32,7 +32,9 @@ OPERATIONS = {
     ),
     "getAuthoringDestinations": (
         "list_authoring_files",
-        "List confirmed files and languages for new keys or missing translations.",
+        "List confirmed files and languages for new keys or missing translations. "
+        "Check blocked_scopes: a failed or pending source refresh can hide destinations without "
+        "deleting drafts. Use list_new_entries to read preserved drafts and recover the import.",
     ),
     "getAuthoringPluralForms": (
         "get_plural_forms",
@@ -60,7 +62,10 @@ OPERATIONS = {
     "listProjectUpdates": ("list_project_updates", "Page project updates using next_cursor."),
     "listTranslationOptions": (
         "list_projects_and_languages",
-        "List accessible projects and languages; optionally restrict to a product.",
+        "List accessible projects and all imported languages, including base/source locales. "
+        "products[].base_languages identifies source locales; these are not inherently read-only. "
+        "Use get_translation to check editing authority. "
+        "Optionally restrict languages to a product.",
     ),
     "searchTranslationKeys": (
         "search_translation_keys",
@@ -70,7 +75,18 @@ OPERATIONS = {
     "searchTranslations": (
         "search_translations",
         "Search 50 key-language groups per page. Filter by product, language, text, review "
-        "state or work status. Use next_cursor to continue.",
+        "state or work status. For base/source text use its exact language and omit work_status. "
+        "Use next_cursor to continue.",
+    ),
+    "listHtmlTemplates": (
+        "list_email_templates",
+        "Page imported email templates and every available locale, including base_language. "
+        "Use each language's group_id to read or edit its actual text.",
+    ),
+    "getHtmlEditorDocument": (
+        "get_email_template",
+        "Read one email document and its saved text fragments in the selected group language. "
+        "Read get_translation for each fragment before saving through save_translation.",
     ),
     "getTranslationGroup": (
         "get_translation",

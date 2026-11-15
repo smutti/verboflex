@@ -60,6 +60,10 @@ checked-out migration graph. Maintenance snapshots still reject a database at
 any other revision and retain their table-classification and identity checks.
 The project-language provider fixture returns a real provider `not_found` error
 for absent optional files, covering Qt imports without a screenshot manifest.
+Import recovery contracts distinguish expired source confirmation from parser
+diagnostics while asserting that the active translations remain intact. MCP
+authorization regressions verify that a listed administrator tool remains
+forbidden to a viewer even when its OAuth token includes write scope.
 
 | Check | Coverage |
 | --- | --- |
@@ -175,7 +179,10 @@ destination. Reimporting alone must not report target integration.
 It checks 320-pixel and 200% zoom layouts and uses a synthetic Bitbucket provider.
 It also verifies the translation badges through pending, approved/awaiting-target
 and integrated states, using a real Celery check against synthetic target contents.
-Target verification must not create another commit or pull request.
+Target verification must not create another commit or pull request. The disposable
+smoke backdates only the selected committed fixture job to make its 15-minute
+observation interval due; the real scheduler and worker still perform target
+verification. Production polling intervals remain unchanged.
 It also imports a shared MOKO catalog with unrelated duplicate keys, saves two
 approved edits as sequential commits, preserves every unrelated byte and verifies
 that no PR is opened for that product.
@@ -242,3 +249,21 @@ uncertain-send recovery and additive Angular catalog registrations. The focused
 browser check is `PLAYWRIGHT_BASE_URL=http://127.0.0.1:4179 npm --prefix frontend
 run e2e -- add-language.spec.ts` against the built preview server.
 See [adding languages](adding-languages.md) for format and runner boundaries.
+
+Base-language discovery regressions verify scoped source-locale metadata, the
+string toolbar's escape from target work queues, editable base email drafts,
+source-copy hints and MCP email read authorization. The metadata does not grant
+write access; the existing per-group API permissions remain authoritative.
+
+Focused regressions for source refresh and authoring include
+`test_bitbucket_oauth.py` (renewal lineage and exact token leases),
+`test_preview_jobs.py` (confirmed layouts across equivalent renewal versus reconnect,
+revocation and scope changes), `test_import_jobs.py` (stale-confirmation errors with
+retained baselines), and `test_source_fallback.py` (Qt source locale independent of
+the project base). Run `translation-save-scroll.spec.ts` against the frontend preview
+for paginated saves in complete and filtered queues; all fixtures are synthetic.
+
+The product administration API suite also checks [immediate product renaming](product-names.md):
+workspace cards and search update before repository publication, while published
+configuration and import baselines remain unchanged. Legacy draft recovery retains
+version checks and rejects duplicate names.

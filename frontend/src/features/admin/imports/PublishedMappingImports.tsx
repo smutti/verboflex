@@ -111,7 +111,7 @@ const ACTION_LABELS: Record<
     return t("Import in progress");
   },
   get refresh_import() {
-    return t("Refresh import");
+    return t("Update from branches");
   },
   get retry_import() {
     return t("Retry import");
@@ -368,6 +368,16 @@ const ERROR_COPY: Record<
   NonNullable<AdminPublishedMappingImportResponse["error_category"]>,
   { heading: string; message: string }
 > = {
+  confirmation_required: {
+    get heading() {
+      return t("Mapping confirmation required");
+    },
+    get message() {
+      return t(
+        "Revalidate and confirm the mapping preview after an authorization or configuration change, then retry the import. The previous catalog is still available.",
+      );
+    },
+  },
   bounded_failure: {
     get heading() {
       return t("Import did not complete");
@@ -1393,15 +1403,37 @@ export function PublishedMappingImports({
                     />
                   ))}
               </div>
+              {importedMappingCount > 0 &&
+                visibleImportRecords.some(
+                  (item) => item.state === "import_failed",
+                ) && (
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    {t(
+                      "The latest import failed. This link opens the last successful catalog.",
+                    )}
+                  </p>
+                )}
               {importedMappingCount > 0 ? (
-                <Button asChild className="mt-3 w-fit">
+                <Button asChild variant="outline" className="mt-3 w-fit">
                   <Link
                     to={`/products/${encodeURIComponent(productId)}/strings`}
                   >
-                    {t("Manage imported strings")}
+                    {t("Open current catalog")}
                   </Link>
                 </Button>
               ) : null}
+              {visibleImportRecords.some(
+                (item) =>
+                  item.state === "current" && item.active_baseline != null,
+              ) && (
+                <Button asChild className="mt-3 ml-2 w-fit">
+                  <Link
+                    to={`/products/${encodeURIComponent(productId)}/strings?work_status=source_changed`}
+                  >
+                    {t("Review source changes")}
+                  </Link>
+                </Button>
+              )}
             </TabsContent>
             <TabsContent value="warnings" className="mt-3">
               {warningItems.length === 0 ? (

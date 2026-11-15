@@ -136,6 +136,8 @@ def clean_preview_database(
         connection = session.get(BitbucketConnection, 1)
         assert connection is not None
         connection.generation = 0
+        connection.renewal_start_generation = None
+        connection.client_credentials_digest = None
         connection.access_token_ciphertext = None
         connection.refresh_token_ciphertext = None
         connection.scope_profile = None
@@ -4259,3 +4261,47 @@ def test_active_revision_revalidation_api_is_admin_only_exact_and_read_only(
     )
     assert unavailable.status_code == 503
     assert unavailable.json() == {"detail": "Active revision revalidation unavailable"}
+
+
+@pytest.mark.parametrize("change", ["renewal", "reconnect", "revoked", "scope", "legacy"])
+def test_confirmed_preview_survives_only_proven_equivalent_renewals(
+    preview_session_factory, change
+):
+    service = importlib.import_module("verboflex.services.preview_jobs")
+    product, revision, mapping, actor, _layout = _seed_active_revalidation_authority(
+        preview_session_factory
+    )
+    job, result = _complete_active_revalidation(
+        preview_session_factory, product_id=product, revision_id=revision, mapping_id=mapping
+    )
+    candidate = result["layout_candidates"][0]
+    with preview_session_factory() as session:
+        service.confirm_active_revision_revalidation(
+            session,
+            job_id=job.id,
+            preview_digest=result["digest"],
+            layout_candidate_id=UUID(str(candidate["id"])),
+            layout_candidate_version=1,
+            actor_id=actor,
+        )
+    with preview_session_factory.begin() as session:
+        connection = session.get_one(BitbucketConnection, 1)
+        connection.renewal_start_generation = connection.generation
+        connection.generation += 1
+        if change == "reconnect":
+            connection.renewal_start_generation = connection.generation
+        elif change == "revoked":
+            connection.revoked_at = datetime.now(UTC)
+        elif change == "scope":
+            connection.scope_profile = "repository"
+        elif change == "legacy":
+            connection.renewal_start_generation = None
+        session.get_one(Product, product).is_active = True
+    with preview_session_factory() as session:
+        row = session.get_one(PreviewJob, job.id)
+        assert service._current_connection(session, row, for_update=False) is None
+        assert service.is_current_preview_confirmation(
+            session,
+            session.get_one(ProductRevision, revision),
+            session.get_one(ProductRepositoryMapping, mapping),
+        ) is (change == "renewal")
