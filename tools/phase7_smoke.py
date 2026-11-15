@@ -371,6 +371,18 @@ def inject_fault(mode: str, data: dict) -> dict:
             connection = session.scalars(select(BitbucketConnection)).one()
             connection.provider_expires_at = datetime.now(UTC) - timedelta(seconds=1)
         return {"expired": True}
+    if mode == "expire-branch-observation":
+        from verboflex.models.branch_workflow import BranchJob, BranchWorkflow
+
+        with SessionFactory.begin() as session:
+            job = session.get_one(BranchJob, UUID(data["id"]))
+            workflow = session.get_one(BranchWorkflow, job.workflow_id)
+            assert workflow.product_id == UUID(data["product_id"])
+            assert job.kind == "commit" and job.state == "committed"
+            assert job.activity_id is not None and job.owner is None
+            assert job.error_code is None
+            job.updated_at = datetime.now(UTC) - timedelta(minutes=16)
+        return {"expired": True}
     if mode == "duplicate":
         from verboflex.worker.submission_tasks import run_submission
 
@@ -1359,6 +1371,12 @@ def branch_workflow_smoke(h: Harness) -> None:
     target_head = language_state["items"][0]["commit_hash"]
     control = json.loads(h.control_path.read_text())
     h.control(branches={**control.get("branches", {}), slug: {"master": target_head}})
+    # Advance only this fixture job's clock beyond the production 15-minute
+    # observation interval. The real scheduler/worker still performs the read;
+    # the provider-effect assertions below still prohibit another commit or PR.
+    assert h.db("expire-branch-observation", {
+        "id": second["items"][0]["id"], "product_id": product,
+    }) == {"expired": True}
     try:
         h.wait(lambda: h.api(f"/translations/{group['id']}"),
             lambda d: d["pending_change"]["target_integrated"], seconds=150)
@@ -1410,7 +1428,7 @@ def main() -> None:
         print(json.dumps({"digest": p6.database_digest()}))
     elif STAGE == "queue-submissions":
         print(json.dumps(queue_submissions(json.load(sys.stdin))))
-    elif STAGE in {"expire-owner", "expire-credential", "duplicate"}:
+    elif STAGE in {"expire-owner", "expire-credential", "expire-branch-observation", "duplicate"}:
         print(json.dumps(inject_fault(STAGE, json.load(sys.stdin))))
     elif STAGE == "happy-oracle":
         harness = Harness(Path(sys.argv[2]))

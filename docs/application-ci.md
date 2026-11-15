@@ -175,7 +175,10 @@ destination. Reimporting alone must not report target integration.
 It checks 320-pixel and 200% zoom layouts and uses a synthetic Bitbucket provider.
 It also verifies the translation badges through pending, approved/awaiting-target
 and integrated states, using a real Celery check against synthetic target contents.
-Target verification must not create another commit or pull request.
+Target verification must not create another commit or pull request. The disposable
+smoke backdates only the selected committed fixture job to make its 15-minute
+observation interval due; the real scheduler and worker still perform target
+verification. Production polling intervals remain unchanged.
 It also imports a shared MOKO catalog with unrelated duplicate keys, saves two
 approved edits as sequential commits, preserves every unrelated byte and verifies
 that no PR is opened for that product.
