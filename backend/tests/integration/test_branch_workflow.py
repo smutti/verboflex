@@ -6,7 +6,7 @@ import asyncio
 import hashlib
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from tests.integration.test_preview_jobs import (  # noqa: F401
     clean_preview_database,
@@ -510,6 +510,13 @@ def test_migration_preserves_existing_workflow_and_committed_files(
         expected = (row.workflow_id, row.path, row.content_sha256, row.edits)
     config = Config(Path(__file__).resolve().parents[2] / "alembic.ini")
     monkeypatch.setenv("VERBOFLEX_DATABASE_URL", str(factory.kw["bind"].url))
+    # Pending catalog work must be drained before a destructive schema downgrade.
+    with pytest.raises(RuntimeError, match="pending catalog refreshes"):
+        command.downgrade(config, "0059_authoring_bulk_approval")
+    with factory.begin() as session:
+        session.execute(
+            update(BranchJob).values(catalog_refresh_state="succeeded")
+        )
     command.downgrade(config, "0047_branch_workflow")
     command.upgrade(config, "head")
     with factory() as session:

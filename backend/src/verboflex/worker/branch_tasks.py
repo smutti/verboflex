@@ -117,6 +117,9 @@ def dispatchable_jobs(session: Session) -> list[UUID]:
 
 @app.task(name="verboflex.branch.dispatch", ignore_result=True)  # type: ignore[untyped-decorator]
 def dispatch_branch_jobs() -> int:
+    from verboflex.services.branch_catalog_refresh import refresh_committed_catalogs
+
+    refresh_committed_catalogs(SessionFactory)
     with SessionFactory() as s:
         ids = dispatchable_jobs(s)
     for job_id in ids:

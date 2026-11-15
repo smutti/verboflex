@@ -1196,6 +1196,108 @@ def enqueue_import_job(import_id: UUID) -> None:
     )
 
 
+def queue_import_in_transaction(
+    session: Session, *, actor_id: UUID | None, product_id: UUID, mapping_id: UUID
+) -> ImportJobRecord:
+    """Persist a normal refresh inside an existing worker transaction; dispatch after commit."""
+    revision, mapping = _locked_published_mapping(
+        session,
+        product_id=product_id,
+        mapping_id=mapping_id,
+    )
+    connection_generation = _connected_generation(session, mapping)
+    job = session.execute(
+        select(ImportJob).where(ImportJob.mapping_id == mapping.id).with_for_update()
+    ).scalar_one_or_none()
+    if job is not None:
+        pending_proposal = session.scalar(
+            select(ImportRewriteProposal.id).where(
+                ImportRewriteProposal.import_job_id == job.id,
+                ImportRewriteProposal.mapping_id == mapping.id,
+                ImportRewriteProposal.status == "pending",
+                ImportRewriteProposal.complete.is_(True),
+            )
+        )
+        if pending_proposal is not None:
+            raise ImportReviewRequired("published import requires review")
+    if job is None:
+        now = datetime.now(UTC)
+        job_id = uuid4()
+        execution_id = uuid4()
+        job = ImportJob(
+            id=job_id,
+            product_id=product_id,
+            revision_id=revision.id,
+            mapping_id=mapping.id,
+            topology=mapping.topology,
+            state="queued",
+            current_execution_id=execution_id,
+            active_baseline_execution_id=None,
+            retry_count=0,
+            latest_execution_at=now,
+        )
+        execution = ImportExecution(
+            id=execution_id,
+            import_job_id=job_id,
+            sequence=1,
+            state="queued",
+            connection_generation=connection_generation,
+        )
+        # SQLAlchemy cannot infer the insert order from UUID columns alone.
+        # Persist the logical job first; its execution pointer is deferred at
+        # the database boundary until the execution is inserted below.
+        session.add(job)
+        session.flush()
+        session.add(execution)
+        session.flush()
+    elif job.state in {"current", "import_failed"}:
+        now = datetime.now(UTC)
+        current_execution = session.execute(
+            select(ImportExecution)
+            .where(
+                ImportExecution.id == job.current_execution_id,
+                ImportExecution.import_job_id == job.id,
+            )
+            .with_for_update()
+        ).scalar_one_or_none()
+        if current_execution is None:
+            raise ImportConflict("persisted import execution rejected")
+        expected_terminal_state = "succeeded" if job.state == "current" else "failed"
+        if current_execution.state != expected_terminal_state:
+            raise ImportConflict("persisted import execution rejected")
+        execution = ImportExecution(
+            id=uuid4(),
+            import_job_id=job.id,
+            sequence=current_execution.sequence + 1,
+            state="queued",
+            connection_generation=connection_generation,
+        )
+        session.add(execution)
+        job.current_execution_id = execution.id
+        job.state = "queued"
+        if current_execution.state == "failed":
+            job.retry_count += 1
+        job.error_category = None
+        job.error_message = None
+        job.latest_execution_at = now
+        job.updated_at = now
+        session.flush()
+    elif job.state in {"queued", "running"}:
+        raise ImportAlreadyInProgress("published import already in progress")
+    else:
+        raise ImportConflict("persisted import state rejected")
+    record_audit(session, actor_id=actor_id, action="import.requested", entity_id=execution.id)
+    record = _record(
+        session,
+        product_id=product_id,
+        mapping=mapping,
+        job=job,
+        capability="ready",
+    )
+
+    return record
+
+
 def start_or_refresh_import(
     session: Session,
     *,
@@ -1205,110 +1307,11 @@ def start_or_refresh_import(
     enqueuer: ImportEnqueuer = enqueue_import_job,
 ) -> ImportJobRecord:
     """Commit one queued logical UUID before dispatching that UUID only."""
-    should_enqueue = False
     with session.begin():
-        revision, mapping = _locked_published_mapping(
-            session,
-            product_id=product_id,
-            mapping_id=mapping_id,
-        )
-        connection_generation = _connected_generation(session, mapping)
-        job = session.execute(
-            select(ImportJob).where(ImportJob.mapping_id == mapping.id).with_for_update()
-        ).scalar_one_or_none()
-        if job is not None:
-            pending_proposal = session.scalar(
-                select(ImportRewriteProposal.id).where(
-                    ImportRewriteProposal.import_job_id == job.id,
-                    ImportRewriteProposal.mapping_id == mapping.id,
-                    ImportRewriteProposal.status == "pending",
-                    ImportRewriteProposal.complete.is_(True),
-                )
-            )
-            if pending_proposal is not None:
-                raise ImportReviewRequired("published import requires review")
-        if job is None:
-            now = datetime.now(UTC)
-            job_id = uuid4()
-            execution_id = uuid4()
-            job = ImportJob(
-                id=job_id,
-                product_id=product_id,
-                revision_id=revision.id,
-                mapping_id=mapping.id,
-                topology=mapping.topology,
-                state="queued",
-                current_execution_id=execution_id,
-                active_baseline_execution_id=None,
-                retry_count=0,
-                latest_execution_at=now,
-            )
-            execution = ImportExecution(
-                id=execution_id,
-                import_job_id=job_id,
-                sequence=1,
-                state="queued",
-                connection_generation=connection_generation,
-            )
-            # SQLAlchemy cannot infer the insert order from UUID columns alone.
-            # Persist the logical job first; its execution pointer is deferred at
-            # the database boundary until the execution is inserted below.
-            session.add(job)
-            session.flush()
-            session.add(execution)
-            session.flush()
-            should_enqueue = True
-        elif job.state in {"current", "import_failed"}:
-            now = datetime.now(UTC)
-            current_execution = session.execute(
-                select(ImportExecution)
-                .where(
-                    ImportExecution.id == job.current_execution_id,
-                    ImportExecution.import_job_id == job.id,
-                )
-                .with_for_update()
-            ).scalar_one_or_none()
-            if current_execution is None:
-                raise ImportConflict("persisted import execution rejected")
-            expected_terminal_state = "succeeded" if job.state == "current" else "failed"
-            if current_execution.state != expected_terminal_state:
-                raise ImportConflict("persisted import execution rejected")
-            execution = ImportExecution(
-                id=uuid4(),
-                import_job_id=job.id,
-                sequence=current_execution.sequence + 1,
-                state="queued",
-                connection_generation=connection_generation,
-            )
-            session.add(execution)
-            job.current_execution_id = execution.id
-            job.state = "queued"
-            if current_execution.state == "failed":
-                job.retry_count += 1
-            job.error_category = None
-            job.error_message = None
-            job.latest_execution_at = now
-            job.updated_at = now
-            session.flush()
-            should_enqueue = True
-        elif job.state in {"queued", "running"}:
-            raise ImportAlreadyInProgress("published import already in progress")
-        else:
-            raise ImportConflict("persisted import state rejected")
-        if should_enqueue:
-            record_audit(
-                session, actor_id=actor_id, action="import.requested", entity_id=execution.id
-            )
-        record = _record(
-            session,
-            product_id=product_id,
-            mapping=mapping,
-            job=job,
-            capability="ready",
+        record = queue_import_in_transaction(
+            session, actor_id=actor_id, product_id=product_id, mapping_id=mapping_id
         )
 
-    if not should_enqueue:
-        return record
     assert record.id is not None
     try:
         enqueuer(record.id)

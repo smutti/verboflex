@@ -6,6 +6,7 @@ import { Plus, Pencil, Trash2, Check } from "lucide-react";
 import { toast } from "sonner";
 import {
   getAuthoringDestinations,
+  getAuthoringRequest,
   getAuthoringPluralForms,
   listAuthoringRequests,
   saveAuthoringRequest,
@@ -50,6 +51,7 @@ type Props = {
   canReview: boolean;
   selection: AuthoringSelection;
   onClearSelection: () => void;
+  onChanged?: () => void;
   onNew: (open: () => void) => void;
 };
 function errorMessage(error: unknown) {
@@ -70,6 +72,7 @@ export function TranslationAuthoring({
   canReview,
   selection,
   onClearSelection,
+  onChanged,
   onNew,
 }: Props) {
   useUiLanguage();
@@ -128,6 +131,7 @@ export function TranslationAuthoring({
         return;
       }
       setRevision((r) => r + 1);
+      onChanged?.();
       toast.success(
         state
           ? state === "approved"
@@ -170,7 +174,10 @@ export function TranslationAuthoring({
           accessToken={accessToken}
           productId={productId}
           revision={revision}
-          onCompleted={() => setRevision((value) => value + 1)}
+          onCompleted={() => {
+            setRevision((value) => value + 1);
+            onChanged?.();
+          }}
         />
       )}
       {expanded && (
@@ -303,6 +310,7 @@ export function TranslationAuthoring({
           }}
           onSaved={() => {
             setRevision((r) => r + 1);
+            onChanged?.();
             setExpanded(true);
             setOpen(false);
             setEditing(null);
@@ -316,7 +324,7 @@ export function TranslationAuthoring({
 function AuthoringDialog({
   accessToken,
   productId,
-  editing,
+  editing: initialEditing,
   selection,
   onClose,
   onSaved,
@@ -329,6 +337,8 @@ function AuthoringDialog({
   onSaved: () => void;
 }) {
   useUiLanguage();
+  const [editing, setEditing] = useState(initialEditing);
+  const [duplicateId, setDuplicateId] = useState<string | null>(null);
   const [destinations, setDestinations] = useState<AuthoringDestination[]>([]);
   const [data, setData] = useState<AuthoringInput | null>(
     editing?.input ?? null,
@@ -389,9 +399,30 @@ function AuthoringDialog({
           (d.scope_id === selection.item.scope_id &&
             d.languages.includes(selection.language)),
       );
-      let next = editing?.input;
+      let saved = editing;
+      const existingId = selection?.item.slots.find(
+        (slot) => slot.language === selection.language,
+      )?.authoring_request?.id;
+      if (!saved && existingId) {
+        const existing = await getAuthoringRequest({
+          auth: accessToken,
+          path: { product_id: productId, request_id: existingId },
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        if (!existing.data)
+          throw new Error(
+            t(
+              "The saved entry changed. Close this dialog and refresh the list.",
+            ),
+          );
+        saved = existing.data;
+        requestId.current = saved.id;
+        setEditing(saved);
+      }
+      let next = saved?.input;
       let currentForms: typeof knownForms = [];
-      if (selection) {
+      if (selection && !saved) {
         const groupId =
           selection.item.slots.find(
             (s) => s.group_id && s.language === selection.item.base_language,
@@ -475,10 +506,9 @@ function AuthoringDialog({
       if (controller.signal.aborted) return;
       setDestinations(all);
       setKnownForms(currentForms);
-      const initial = editing
+      const initial = saved
         ? all.find(
-            (d) =>
-              d.scope_id === editing.input.scope_id && d.path === editing.path,
+            (d) => d.scope_id === saved.input.scope_id && d.path === saved.path,
           )
         : all.length === 1
           ? all[0]
@@ -587,7 +617,15 @@ function AuthoringDialog({
         },
       });
       if (!result.data) {
-        setFailure(errorMessage(result.error));
+        const detail = (
+          result.error as { detail?: { existing_request_id?: string } }
+        )?.detail;
+        if (typeof detail === "object" && detail?.existing_request_id) {
+          setDuplicateId(detail.existing_request_id);
+          setFailure(
+            "A saved entry already exists. Your text is still here. Open the saved entry to review it before editing.",
+          );
+        } else setFailure(errorMessage(result.error));
         return;
       }
       setDirty(false);
@@ -639,6 +677,41 @@ function AuthoringDialog({
             <p role="alert" className="text-destructive">
               {t(failure)}
             </p>
+          )}
+          {duplicateId && (
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  const existing = await getAuthoringRequest({
+                    auth: accessToken,
+                    path: { product_id: productId, request_id: duplicateId },
+                  });
+                  if (!existing.data) {
+                    setFailure(
+                      "Could not load the saved entry. Your text is unchanged.",
+                    );
+                    return;
+                  }
+                  requestId.current = existing.data.id;
+                  setEditing(existing.data);
+                  setData(existing.data.input);
+                  setDuplicateId(null);
+                  setFailure(null);
+                  setDirty(false);
+                } catch {
+                  setFailure(
+                    "Could not load the saved entry. Your text is unchanged.",
+                  );
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {t("Open saved entry")}
+            </Button>
           )}
           {data && !loading && (
             <form

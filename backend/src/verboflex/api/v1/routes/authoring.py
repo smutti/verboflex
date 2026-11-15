@@ -139,6 +139,19 @@ def approve_all(
         raise HTTPException(error.status, str(error)) from error
 
 
+@router.get("/{request_id}", response_model=AuthoringResponse, operation_id="getAuthoringRequest")
+def get_request(
+    product_id: UUID, request_id: UUID, principal: CurrentPrincipal, session: Db
+) -> AuthoringResponse:
+    try:
+        with session.begin():
+            return service.get_request(
+                session, product_id=product_id, actor_id=principal.user_id, request_id=request_id
+            )
+    except service.AuthoringError as error:
+        raise HTTPException(error.status, str(error)) from error
+
+
 @router.put("/{request_id}", response_model=AuthoringResponse, operation_id="saveAuthoringRequest")
 def save_request(
     product_id: UUID,
@@ -157,7 +170,14 @@ def save_request(
                 data=body,
             )
     except service.AuthoringError as error:
-        raise HTTPException(error.status, str(error)) from error
+        raise HTTPException(
+            error.status,
+            (
+                {"message": str(error), "existing_request_id": str(error.existing_request_id)}
+                if error.existing_request_id
+                else str(error)
+            ),
+        ) from error
 
 
 @router.post(
