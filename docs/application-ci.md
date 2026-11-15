@@ -60,6 +60,10 @@ checked-out migration graph. Maintenance snapshots still reject a database at
 any other revision and retain their table-classification and identity checks.
 The project-language provider fixture returns a real provider `not_found` error
 for absent optional files, covering Qt imports without a screenshot manifest.
+Import recovery contracts distinguish expired source confirmation from parser
+diagnostics while asserting that the active translations remain intact. MCP
+authorization regressions verify that a listed administrator tool remains
+forbidden to a viewer even when its OAuth token includes write scope.
 
 | Check | Coverage |
 | --- | --- |

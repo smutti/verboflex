@@ -261,8 +261,12 @@ def test_worker_refresh_tracks_new_locale_and_moved_files_without_changing_ident
         assert session.get_one(LocalizationScope, scope.id).dataset_version == epoch
         assert session.get_one(TranslationValue, original["it"][0]).display_text == "Salve"
         issues = list(session.scalars(select(TranslationParseIssue)))
-        assert issues
-        assert all("PRIVATE_RAW_FAILURE" not in issue.message for issue in issues)
+        if failure == "malformed":
+            assert issues
+            assert all("PRIVATE_RAW_FAILURE" not in issue.message for issue in issues)
+        else:
+            assert not issues
+            assert failed.error_category == "confirmation_required"
 
 
 def test_code_only_keys_preview_import_and_first_translation_authority(
