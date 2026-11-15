@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from psycopg import connect, sql
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Connection, Engine
@@ -35,7 +36,8 @@ ADMIN_DATABASE_URL = os.environ.get(
     "VERBOFLEX_TEST_POSTGRES_ADMIN_URL",
     "postgresql://postgres@127.0.0.1:55432/postgres",
 )
-EXPECTED_HEAD = "0056_project_languages"
+EXPECTED_HEAD = ScriptDirectory.from_config(Config(BACKEND_ROOT / "alembic.ini")).get_current_head()
+assert EXPECTED_HEAD is not None
 REVIEW_TABLES = {
     "translation_proposals",
     "translation_proposal_values",

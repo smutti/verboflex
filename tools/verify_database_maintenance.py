@@ -15,10 +15,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
+import verboflex.models  # noqa: F401
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-
-import verboflex.models  # noqa: F401
 from verboflex.db.base import Base
 from verboflex.services.database_maintenance import (
     OWNERS,
@@ -27,7 +28,11 @@ from verboflex.services.database_maintenance import (
     _product_counts,
 )
 
-REVISION = "0056_project_languages"
+REVISION = ScriptDirectory.from_config(
+    Config(Path(__file__).resolve().parents[1] / "backend/alembic.ini")
+).get_current_head()
+if REVISION is None:
+    raise ValueError("missing schema head")
 CHUNK_ROWS = 512
 OPERATIONAL_TABLES = {
     "alembic_version",

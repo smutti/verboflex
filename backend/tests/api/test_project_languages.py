@@ -140,6 +140,13 @@ def language_api(preview_session_factory, monkeypatch, request):  # noqa: F811
         profile["web_capture"]["catalog_url_prefix"] = "/assets/i18n/"
 
     class Source(RefreshSource):
+        async def read_repository_source_file(self, session, **kwargs):
+            from verboflex.integrations.bitbucket.client import BitbucketProviderReadError
+
+            if kwargs["path"] not in self.files:
+                raise BitbucketProviderReadError(kind="not_found")
+            return await super().read_repository_source_file(session, **kwargs)
+
         async def list_repository_source_page(self, session, **kwargs):
             from verboflex.integrations.bitbucket.client import (
                 BitbucketSourceEntry,
