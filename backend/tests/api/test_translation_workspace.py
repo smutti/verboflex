@@ -1130,6 +1130,7 @@ def test_saved_addition_is_visible_searchable_and_moves_from_missing_to_review(f
     assert result.status_code == 200, result.text
     slot = slots(result.json())["it"]
     assert slot["effective_text"] == "Testo salvato"
+    assert slot["states"] == ["draft"]
     assert slot["authoring_request"] == {
         "id": str(saved_id),
         "version": 1,
@@ -1145,6 +1146,7 @@ def test_saved_addition_is_visible_searchable_and_moves_from_missing_to_review(f
         session.get_one(AuthoringRequest, saved_id).state = "approved"
     assert slots(request(token, **params).json())["it"]["authoring_request"]["state"] == "approved"
     assert not request(token, **params, work_status="needs_review").json()["items"]
+    assert slots(request(token, **params, state="approved").json())["it"]["states"] == ["approved"]
     with factory.begin() as session:
         session.get_one(AuthoringRequest, saved_id).state = "rejected"
     assert len(request(token, **params, work_status="needs_translation").json()["items"]) == 1

@@ -415,7 +415,8 @@ LEFT JOIN LATERAL (
             WHEN language.code=context.language THEN 'context' ELSE 'absent' END,
         'value_count', coalesce(slot.value_count, 0),
         'selector_kinds', coalesce(slot.selector_kinds, ARRAY[]::text[]),
-        'states', coalesce(slot.states, ARRAY[]::text[]),
+        'states', CASE WHEN authored.id IS NOT NULL THEN ARRAY[authored.state]
+            ELSE coalesce(slot.states, ARRAY[]::text[]) END,
         'pending_change', CASE WHEN slot.pending_version IS NULL THEN NULL ELSE jsonb_build_object(
             'version', slot.pending_version, 'state', slot.pending_state,
             'target_branch', slot.target_branch, 'target_integrated', slot.target_integrated,
