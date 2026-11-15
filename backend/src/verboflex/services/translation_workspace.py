@@ -289,6 +289,40 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
                 OR (:deleted = 'deleted' AND bool_and(is_deleted))), false) AS matches
     FROM ranked GROUP BY key_id, scope_id
     HAVING bool_or(source_text IS NOT NULL)
+), authored AS MATERIALIZED (
+    -- Additions have no imported value ID yet. Keep their identity and state
+    -- separate from TranslationProposal and never manufacture an editable group.
+    SELECT DISTINCT ON (request.parent_key_id, request.scope_id, request.language)
+        request.id, request.version, request.state, request.parent_key_id AS key_id,
+        request.scope_id, request.language, context.rank,
+        request.payload #>> '{{input,forms,0,text}}' AS first_text,
+        jsonb_array_length(request.payload #> '{{input,forms}}') AS value_count,
+        request.payload #>> '{{input,execution_id}}' <> current.active_execution_id::text
+            AS source_changed,
+        coalesce((context.text_matches OR EXISTS (
+            SELECT 1 FROM jsonb_array_elements(request.payload #> '{{input,forms}}') form
+            WHERE casefold(form->>'text' COLLATE pg_unicode_fast) LIKE :partial ESCAPE '\'
+        )) AND :deleted <> 'deleted' AND NOT context.is_deleted
+        AND (CAST(:state AS text) IS NULL OR request.state = :state)
+        AND CAST(:violation AS text) IS NULL
+        AND (CAST(:work_status AS text) IS NULL
+          OR (:work_status = 'needs_translation' AND (request.state = 'rejected' OR EXISTS (
+              SELECT 1 FROM jsonb_array_elements(request.payload #> '{{input,forms}}') form
+              WHERE btrim(form->>'text', :whitespace) = ''
+          )))
+          OR (:work_status = 'needs_review' AND request.state = 'draft')
+          OR (:work_status = 'source_changed' AND request.payload #>> '{{input,execution_id}}'
+              <> current.active_execution_id::text)), false) AS matches
+    FROM translation_authoring_requests request
+    JOIN current ON current.scope_id=request.scope_id
+    JOIN contexts context ON context.key_id=request.parent_key_id
+        AND context.scope_id=request.scope_id
+    WHERE NOT EXISTS (
+        SELECT 1 FROM translation_values value WHERE value.translation_key_id=request.parent_key_id
+            AND value.scope_id=request.scope_id AND value.language=request.language
+    )
+    ORDER BY request.parent_key_id, request.scope_id, request.language,
+        request.updated_at DESC, request.id
 ), absent_matches AS MATERIALIZED (
     -- A missing target has no value identity. Match it through its live source
     -- and this scope's supported locales, without inventing a group or state.
@@ -302,6 +336,9 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
       AND context.text_matches AND NOT context.is_deleted
       AND language.code <> context.language
       AND coalesce((current.language_counts->language.code->>0)::bigint, 0) > 0
+      AND NOT EXISTS (SELECT 1 FROM authored WHERE authored.key_id=context.key_id
+          AND authored.scope_id=context.scope_id AND authored.language=language.code
+          AND authored.state <> 'rejected')
       -- Retained deleted values remain tombstones, not newly absent work.
       AND NOT EXISTS (
           SELECT 1 FROM translation_values AS existing
@@ -321,6 +358,10 @@ WITH current AS ({_CURRENT}), aggregates AS MATERIALIZED (
                 AND imported.scope_id=context.scope_id AND imported.language=context.language)
         UNION ALL
         SELECT key_id, scope_id, rank FROM absent_matches
+        UNION ALL
+        SELECT key_id, scope_id, rank FROM authored
+        WHERE matches AND ((CAST(:language AS text) IS NOT NULL AND language = :language)
+            OR (CAST(:language AS text) IS NULL AND language = ANY(:languages)))
     ) AS matches GROUP BY key_id, scope_id
 ), ordered AS (
     SELECT matching.*, casefold(key.raw_key COLLATE pg_unicode_fast) COLLATE "C" AS stable_key
@@ -348,17 +389,24 @@ LEFT JOIN LATERAL (
         'language', language.code, 'kind', CASE WHEN slot.group_id IS NOT NULL THEN 'imported'
             WHEN language.code = context.language THEN 'source_context' ELSE 'absent' END,
         'group_id', slot.group_id,
+        'authoring_request', CASE WHEN authored.id IS NULL THEN NULL ELSE jsonb_build_object(
+            'id', authored.id, 'version', authored.version, 'state', authored.state,
+            'source_changed', authored.source_changed, 'value_count', authored.value_count) END,
         'matches_filters', (CAST(:language AS text) IS NULL OR language.code = :language)
-            AND (coalesce(slot.matches, language.code = context.language AND context.matches, false)
+            AND (coalesce(authored.matches, slot.matches,
+                language.code = context.language AND context.matches, false)
                 OR EXISTS (SELECT 1 FROM absent_matches AS missing
                     WHERE missing.key_id = page.key_id AND missing.scope_id = page.scope_id
                       AND missing.language = language.code)),
-        'effective_text', CASE WHEN slot.group_id IS NULL THEN
+        'effective_text', CASE WHEN authored.id IS NOT NULL THEN left(authored.first_text, 1024)
+            WHEN slot.group_id IS NULL THEN
             CASE WHEN language.code=context.language THEN context.source_text END
             WHEN slot.use_pending THEN slot.pending_text ELSE slot.imported_text END,
         'uses_source_fallback', coalesce(slot.uses_source_fallback
             AND NOT coalesce(slot.use_pending, false), false),
-        'text_truncated', coalesce(CASE WHEN slot.group_id IS NULL THEN
+        'text_truncated', coalesce(CASE WHEN authored.id IS NOT NULL
+            THEN length(authored.first_text) > 1024
+            WHEN slot.group_id IS NULL THEN
             language.code=context.language AND context.source_truncated
             WHEN slot.use_pending THEN slot.pending_truncated
             ELSE slot.imported_truncated END, false),
@@ -367,7 +415,8 @@ LEFT JOIN LATERAL (
             WHEN language.code=context.language THEN 'context' ELSE 'absent' END,
         'value_count', coalesce(slot.value_count, 0),
         'selector_kinds', coalesce(slot.selector_kinds, ARRAY[]::text[]),
-        'states', coalesce(slot.states, ARRAY[]::text[]),
+        'states', CASE WHEN authored.id IS NOT NULL THEN ARRAY[authored.state]
+            ELSE coalesce(slot.states, ARRAY[]::text[]) END,
         'pending_change', CASE WHEN slot.pending_version IS NULL THEN NULL ELSE jsonb_build_object(
             'version', slot.pending_version, 'state', slot.pending_state,
             'target_branch', slot.target_branch, 'target_integrated', slot.target_integrated,
@@ -383,7 +432,7 @@ LEFT JOIN LATERAL (
         'no_max_count', coalesce(slot.no_max_count, 0),
         'is_deleted', CASE WHEN slot.group_id IS NOT NULL THEN slot.is_deleted
             WHEN language.code = context.language THEN context.is_deleted ELSE false END,
-        'source_changed', coalesce(slot.source_changed, false),
+        'source_changed', coalesce(authored.source_changed, slot.source_changed, false),
         'provenance', CASE WHEN locator.value_id IS NULL THEN NULL ELSE jsonb_build_object(
             'repository_side', locator.repository_side, 'format', locator.format,
             'repository_name', left(coalesce(repository.descriptive_name,
@@ -396,6 +445,8 @@ LEFT JOIN LATERAL (
             WHEN slot.source_leaf THEN 'source_text' ELSE 'translated_text' END
     ) ORDER BY language.position) AS items
     FROM unnest(CAST(:languages AS text[])) WITH ORDINALITY AS language(code, position)
+    LEFT JOIN authored ON authored.key_id=page.key_id AND authored.scope_id=page.scope_id
+        AND authored.language=language.code
     LEFT JOIN ranked AS slot ON slot.key_id=page.key_id AND slot.scope_id=page.scope_id
         AND slot.language=language.code
     LEFT JOIN translation_value_locators AS locator
@@ -415,6 +466,7 @@ LEFT JOIN LATERAL (
     -- The selection is shared across products; supported locales belong to this scope.
     -- Reuse transactional counters instead of scanning sibling keys for every slot.
     WHERE (slot.group_id IS NOT NULL OR language.code = context.language
+        OR authored.id IS NOT NULL
         OR coalesce((current.language_counts->language.code->>0)::bigint, 0) > 0
         OR (language.code = current.base_language AND EXISTS (
             SELECT 1 FROM jsonb_each(current.language_counts) counts
@@ -451,8 +503,10 @@ _BROWSE_CANDIDATES = """
                     FROM translation_keys anchor WHERE anchor.id=:last_id
                 )
             )
-          ) AND EXISTS (
-            SELECT 1 FROM translation_values member
+          ) AND ((
+            -- A scalar bounded lookup keeps this OR from hashing the entire
+            -- imported value corpus before the first key page can be returned.
+            SELECT true FROM translation_values member
             WHERE member.translation_key_id=key.id AND member.scope_id=current.scope_id
               AND NOT member.is_deleted AND (
                 (CAST(:language AS text) IS NOT NULL AND member.language=:language)
@@ -461,8 +515,14 @@ _BROWSE_CANDIDATES = """
                     (CAST(:language AS text) IS NOT NULL AND current.base_language=:language)
                     OR (CAST(:language AS text) IS NULL AND current.base_language=ANY(:languages))
                 ))
-              )
-          )
+              ) LIMIT 1
+          ) IS TRUE
+          OR EXISTS (
+            SELECT 1 FROM translation_authoring_requests request
+            WHERE request.scope_id=current.scope_id AND request.parent_key_id=key.id
+              AND ((CAST(:language AS text) IS NOT NULL AND request.language=:language)
+                OR (CAST(:language AS text) IS NULL AND request.language=ANY(:languages)))
+          ))
         ORDER BY left(casefold(key.raw_key COLLATE pg_unicode_fast), 256) COLLATE "C",
             casefold(key.raw_key COLLATE pg_unicode_fast) COLLATE "C", key.id
         LIMIT 52

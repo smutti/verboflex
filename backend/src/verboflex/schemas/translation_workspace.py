@@ -41,6 +41,14 @@ class TranslationWorkspaceProvenance(ClosedTranslationModel):
     path_truncated: bool
 
 
+class AuthoringSlotSummary(ClosedTranslationModel):
+    id: UUID
+    version: int
+    state: Literal["draft", "approved", "rejected"]
+    source_changed: bool
+    value_count: int
+
+
 class TranslationLanguageSlot(ClosedTranslationModel):
     """Complete aggregate facts. Imported states/limits exclude pending proposal state/limits.
 
@@ -63,6 +71,7 @@ class TranslationLanguageSlot(ClosedTranslationModel):
     selector_kinds: Annotated[list[SelectorKind], Field(max_length=6)]
     states: Annotated[list[StateFilter], Field(max_length=3)]
     pending_change: PendingTranslationSummaryResponse | None
+    authoring_request: AuthoringSlotSummary | None = None
     comment_count: Annotated[int, Field(ge=0)]
     over_limit_count: Annotated[int, Field(ge=0)]
     effective_over_limit_count: Annotated[int, Field(ge=0)] = 0

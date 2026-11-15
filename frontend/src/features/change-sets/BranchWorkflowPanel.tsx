@@ -283,6 +283,28 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                   >
                     {new Date(item.created_at).toLocaleString(getUiLanguage())}
                   </time>
+                  {item.catalog_refresh_state === "failed" && (
+                    <p role="alert">
+                      {t(
+                        "Catalog update failed. Saved translations are preserved. Open Update from branches.",
+                      )}{" "}
+                      <a
+                        className="underline"
+                        href={`/products/${productId}/source-updates`}
+                      >
+                        {t("Update from branches")}
+                      </a>
+                    </p>
+                  )}
+                  {(item.catalog_refresh_state === "pending" ||
+                    item.catalog_refresh_state === "running") && (
+                    <p role="status">
+                      {t("The translation list is updating automatically.")}
+                    </p>
+                  )}
+                  {item.catalog_refresh_state === "succeeded" && (
+                    <p>{t("The translation list is up to date.")}</p>
+                  )}
                   {item.error_code && (
                     <p>
                       {errors[item.error_code] ??

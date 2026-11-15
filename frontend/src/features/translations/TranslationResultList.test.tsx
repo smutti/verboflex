@@ -881,3 +881,51 @@ it("opens the correct HTML template and locale from a visible action", async () 
     }),
   );
 });
+
+it("shows a saved addition inline, reopens it and respects viewer permissions", async () => {
+  const onAddTranslation = vi.fn();
+  const item = group(0);
+  item.slots[1] = {
+    ...item.slots[1],
+    kind: "absent",
+    group_id: null,
+    effective_text: "Testo salvato",
+    editable: false,
+    authoring_request: {
+      id: "saved",
+      version: 1,
+      state: "draft",
+      source_changed: false,
+      value_count: 1,
+    },
+  };
+  const view = mount({
+    ...defaults(),
+    items: [item],
+    onAddTranslation,
+    canEditProduct: () => true,
+  });
+  expect(await screen.findByText("Testo salvato")).toBeVisible();
+  expect(screen.getByText("Saved · awaiting approval")).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "Add translation" }),
+  ).not.toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("button", { name: "Edit saved entry" }),
+  );
+  expect(onAddTranslation).toHaveBeenCalledWith(
+    item,
+    item.slots[1].language,
+    expect.any(HTMLElement),
+  );
+  view.update({
+    ...defaults(),
+    items: [item],
+    onAddTranslation,
+    canEditProduct: () => false,
+  });
+  expect(screen.getByText("Testo salvato")).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "Edit saved entry" }),
+  ).not.toBeInTheDocument();
+});

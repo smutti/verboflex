@@ -165,3 +165,56 @@ per job. A provider rate-limit response delays that observation for one hour,
 preserving the last verified result. New approvals and explicit PR requests still
 enter the worker queue immediately. This prevents observation traffic from
 continually exhausting the shared provider budget needed by imports.
+
+## Approve all new-entry drafts
+
+Reviewers can select **Approve all drafts** beside **New entries** in the strings
+workspace. The confirmation shows the server-side project total and counts by
+language, including entries beyond the first page. This action covers draft new
+keys/translations, not rejected entries or existing-value proposals. Saved texts
+and the configured base language are preserved. The maximum is 5,000 drafts.
+
+The preview binds the exact draft versions and current sources. Confirmation
+creates a durable operation; Celery performs the same validation as single-entry
+approval, rechecks reviewer authority, and atomically approves the selection with
+one immutable commit job per mapped source. If any draft changed or fails
+validation, all approvals roll back and the interface identifies the problem.
+Correct it and confirm a fresh preview to retry. No pull request is opened.
+Products without approval branches retain local approvals for the existing
+change-set workflow. Delivery failures remain visible in **Approval commits**.
+
+The operation continues after navigating away. Reloading discovers its status
+from the server. Duplicate confirmations reuse their operation ID; simultaneous
+operations for one product are rejected. A database row lock prevents concurrent
+workers from processing the same selection. A worker crash rolls back approvals
+and leaves the queued request available to the durable ten-second dispatcher.
+HTTP only previews and records requests; repository work stays in Celery.
+
+API: `GET /api/v1/products/{product_id}/authoring/approval-preview` and
+`PUT /api/v1/products/{product_id}/authoring/approvals/{request_id}` with
+`{ "fingerprint": "<preview fingerprint>" }`. The latter returns 202 with durable
+status. Preview and confirmation both require current product review permission.
+
+
+## Catalog refresh after commits
+
+A verified working-branch commit records a durable catalog-refresh receipt in the
+same database transaction. The Celery dispatcher coalesces pending commits for a
+workflow into one normal import, after queued branch writes finish. This applies
+only when the configured translation import source is already the working branch;
+it never changes a source branch or the project's base language. Existing historical
+commits are not automatically backfilled when the feature is deployed.
+
+The normal import permission, connection and source-confirmation checks still apply.
+A broker failure is retried from the recorded execution without another commit.
+A failed import leaves saved entries visible and offers **Update from branches**.
+Successful imports consume only additions that exactly match repository values;
+unmatched drafts retain their text and normal source-change checks. Source changes
+may require reopening and saving those drafts before another approval.
+
+**New entries** identifies the last bulk approval as historical and reports actual
+branch delivery and catalog-refresh state. A completed batch is not presented as
+new work still queued. **Change sets** reports catalog progress for individual jobs.
+Refresh never approves drafts or opens a pull request. The strings workspace refreshes
+small visible result sets while approved additions await import, without replacing
+an open editor. Saved changes also refresh the current search immediately.

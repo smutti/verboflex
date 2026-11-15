@@ -167,19 +167,31 @@ function ResolvedSearch({
   const awaitingTarget = search.items.some((item) =>
     item.slots.some(
       (slot) =>
-        slot.pending_change?.state === "approved" &&
-        slot.pending_change.target_branch &&
-        !slot.pending_change.target_integrated,
+        slot.authoring_request?.state === "approved" ||
+        (slot.pending_change?.state === "approved" &&
+          slot.pending_change.target_branch &&
+          !slot.pending_change.target_integrated),
     ),
   );
   useEffect(() => {
-    if (!awaitingTarget || context.activeDraft || search.items.length > 50)
+    if (
+      !awaitingTarget ||
+      context.activeDraft ||
+      authoringSelection ||
+      search.items.length > 50
+    )
       return;
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") refreshSearch();
     }, 30_000);
     return () => window.clearInterval(timer);
-  }, [awaitingTarget, context.activeDraft, search.items.length, refreshSearch]);
+  }, [
+    awaitingTarget,
+    context.activeDraft,
+    authoringSelection,
+    search.items.length,
+    refreshSearch,
+  ]);
   useEffect(() => {
     if (
       search.filters.viewMode !== "bilingual" ||
@@ -827,6 +839,7 @@ function ResolvedSearch({
             )}
             selection={authoringSelection}
             onClearSelection={() => setAuthoringSelection(null)}
+            onChanged={search.refresh}
             onNew={(open) =>
               runWorkspaceAction(() => {
                 resetEditor();

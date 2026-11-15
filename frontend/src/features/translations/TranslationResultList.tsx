@@ -616,6 +616,50 @@ export function TranslationResultList({
                             <div data-part="editor" className="min-w-0 p-1">
                               {editor}
                             </div>
+                          ) : slot.authoring_request ? (
+                            <div
+                              className="space-y-2 rounded-md border p-3"
+                              data-authoring-state={
+                                slot.authoring_request.state
+                              }
+                            >
+                              <p className="whitespace-pre-wrap wrap-anywhere">
+                                {slot.effective_text}
+                              </p>
+                              <p
+                                className="text-sm text-muted-foreground"
+                                role="status"
+                              >
+                                {slot.authoring_request.state === "draft"
+                                  ? t("Saved · awaiting approval")
+                                  : slot.authoring_request.state === "approved"
+                                    ? t("Approved · awaiting catalog update")
+                                    : t("Rejected · edit to resubmit")}
+                                {slot.authoring_request.source_changed &&
+                                  ` · ${t("Source changed")}`}
+                              </p>
+                              {slot.authoring_request.value_count > 1 && (
+                                <p>
+                                  {t("{{count}} saved forms", {
+                                    count: slot.authoring_request.value_count,
+                                  })}
+                                </p>
+                              )}
+                              {mayEdit && onAddTranslation && (
+                                <Button
+                                  variant="outline"
+                                  onClick={(event) =>
+                                    onAddTranslation(
+                                      item,
+                                      slot.language,
+                                      event.currentTarget,
+                                    )
+                                  }
+                                >
+                                  {t("Edit saved entry")}
+                                </Button>
+                              )}
+                            </div>
                           ) : slot.kind === "absent" &&
                             mayEdit &&
                             onAddTranslation ? (

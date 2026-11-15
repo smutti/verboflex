@@ -155,6 +155,10 @@ def get_workflow(
                 pr_url=j.pr_url,
                 error_code=j.error_code,
                 can_retry=can_publish and j.state == "blocked",
+                catalog_refresh_state=cast(
+                    Literal["pending", "running", "succeeded", "failed", "skipped"] | None,
+                    j.catalog_refresh_state,
+                ),
             )
             for j in rows[:50]
         ]

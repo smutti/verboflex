@@ -3,6 +3,7 @@
 from verboflex.models.audit import AuditEntry
 from verboflex.models.auth_session import AuthSession
 from verboflex.models.authoring import AuthoringRequest
+from verboflex.models.authoring_approval import AuthoringApproval
 from verboflex.models.bitbucket_connection import BitbucketConnection
 from verboflex.models.branch_workflow import BranchFile, BranchJob, BranchWorkflow
 from verboflex.models.duplicate_report import (
@@ -77,6 +78,7 @@ __all__ = [
     "ProductMember",
     "ProductTeamEvent",
     "AuthoringRequest",
+    "AuthoringApproval",
     "GlossaryEntry",
     "AuditEntry",
     "McpAuthorizationRequest",

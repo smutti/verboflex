@@ -1816,6 +1816,83 @@ export type AdminWorkspaceResponse = {
 };
 
 /**
+ * AuthoringApprovalInput
+ */
+export type AuthoringApprovalInput = {
+    /**
+     * Fingerprint
+     */
+    fingerprint: string;
+};
+
+/**
+ * AuthoringApprovalPreview
+ */
+export type AuthoringApprovalPreview = {
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Fingerprint
+     */
+    fingerprint: string;
+    /**
+     * Languages
+     */
+    languages: {
+        [key: string]: number;
+    };
+    latest: AuthoringApprovalStatus | null;
+    /**
+     * Over Limit
+     */
+    over_limit: boolean;
+    /**
+     * Source Changed
+     */
+    source_changed: number;
+};
+
+/**
+ * AuthoringApprovalStatus
+ */
+export type AuthoringApprovalStatus = {
+    /**
+     * Branch Job Ids
+     */
+    branch_job_ids: Array<string>;
+    /**
+     * Catalog State
+     */
+    catalog_state?: 'none' | 'pending' | 'current' | 'failed';
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Delivery State
+     */
+    delivery_state?: 'none' | 'pending' | 'committed' | 'failed';
+    /**
+     * Error
+     */
+    error: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * State
+     */
+    state: 'queued' | 'succeeded' | 'failed';
+};
+
+/**
  * AuthoringBlockedScope
  */
 export type AuthoringBlockedScope = {
@@ -2045,6 +2122,32 @@ export type AuthoringReview = {
 };
 
 /**
+ * AuthoringSlotSummary
+ */
+export type AuthoringSlotSummary = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Source Changed
+     */
+    source_changed: boolean;
+    /**
+     * State
+     */
+    state: 'draft' | 'approved' | 'rejected';
+    /**
+     * Value Count
+     */
+    value_count: number;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
  * AuthorityReceiptResponse
  */
 export type AuthorityReceiptResponse = {
@@ -2104,6 +2207,10 @@ export type BranchChange = {
      * Can Retry
      */
     can_retry: boolean;
+    /**
+     * Catalog Refresh State
+     */
+    catalog_refresh_state?: 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped' | null;
     /**
      * Commit Hash
      */
@@ -6308,6 +6415,7 @@ export type TranslationLanguageOptionResponse = {
  * provenance/shape, while existing mutation endpoints still enforce user roles.
  */
 export type TranslationLanguageSlot = {
+    authoring_request?: AuthoringSlotSummary | null;
     /**
      * Comment Count
      */
@@ -10811,6 +10919,102 @@ export type ListAuthoringRequestsResponses = {
 
 export type ListAuthoringRequestsResponse = ListAuthoringRequestsResponses[keyof ListAuthoringRequestsResponses];
 
+export type GetAuthoringApprovalPreviewData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/authoring/approval-preview';
+};
+
+export type GetAuthoringApprovalPreviewErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Current version or source changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAuthoringApprovalPreviewError = GetAuthoringApprovalPreviewErrors[keyof GetAuthoringApprovalPreviewErrors];
+
+export type GetAuthoringApprovalPreviewResponses = {
+    /**
+     * Successful Response
+     */
+    200: AuthoringApprovalPreview;
+};
+
+export type GetAuthoringApprovalPreviewResponse = GetAuthoringApprovalPreviewResponses[keyof GetAuthoringApprovalPreviewResponses];
+
+export type ApproveAllAuthoringDraftsData = {
+    body: AuthoringApprovalInput;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Request Id
+         */
+        request_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/authoring/approvals/{request_id}';
+};
+
+export type ApproveAllAuthoringDraftsErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Current version or source changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ApproveAllAuthoringDraftsError = ApproveAllAuthoringDraftsErrors[keyof ApproveAllAuthoringDraftsErrors];
+
+export type ApproveAllAuthoringDraftsResponses = {
+    /**
+     * Successful Response
+     */
+    202: AuthoringApprovalStatus;
+};
+
+export type ApproveAllAuthoringDraftsResponse = ApproveAllAuthoringDraftsResponses[keyof ApproveAllAuthoringDraftsResponses];
+
 export type GetAuthoringDestinationsData = {
     body?: never;
     path: {
@@ -10966,6 +11170,56 @@ export type DiscardAuthoringRequestResponses = {
 };
 
 export type DiscardAuthoringRequestResponse = DiscardAuthoringRequestResponses[keyof DiscardAuthoringRequestResponses];
+
+export type GetAuthoringRequestData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+        /**
+         * Request Id
+         */
+        request_id: string;
+    };
+    query?: never;
+    url: '/api/v1/products/{product_id}/authoring/{request_id}';
+};
+
+export type GetAuthoringRequestErrors = {
+    /**
+     * Authentication required
+     */
+    401: unknown;
+    /**
+     * Permission denied
+     */
+    403: unknown;
+    /**
+     * Resource unavailable
+     */
+    404: unknown;
+    /**
+     * Current version or source changed
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAuthoringRequestError = GetAuthoringRequestErrors[keyof GetAuthoringRequestErrors];
+
+export type GetAuthoringRequestResponses = {
+    /**
+     * Successful Response
+     */
+    200: AuthoringResponse;
+};
+
+export type GetAuthoringRequestResponse = GetAuthoringRequestResponses[keyof GetAuthoringRequestResponses];
 
 export type SaveAuthoringRequestData = {
     body: AuthoringInput;

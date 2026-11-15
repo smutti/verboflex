@@ -11,6 +11,14 @@ The entry appears under **New entries**, where reviewers can approve or reject i
 An existing missing language has **Add translation**; native plural rows also have
 **Add forms**. Imported empty values use the existing translation editor.
 
+For a missing language on an existing key, the saved entry also appears directly
+in its language cell, with its draft, approved or rejected status. **Edit saved entry**
+loads the same saved identity and version. Text search and **Needs review** include
+these drafts; complete, non-rejected entries leave **Needs translation**. Coverage
+still measures imported values. If another editor created the same entry meanwhile,
+Save keeps your typed text and offers **Open saved entry**; choosing it explicitly
+loads the existing version instead of creating a duplicate.
+
 New entries are versioned drafts, separate from imported coverage. Save does not
 write to Git. Approved entries join the existing change-set preparation and
 Bitbucket pull-request workflow. Every preparation checks the mapping, source file
@@ -151,7 +159,7 @@ and at most 50 displayed source matches.
 
 The generated API exposes authoring destinations, plural profiles, versioned new
 entries, suggestions/resolve, and glossary CRUD/matching. The MCP connector now has
-70 explicitly allowed tools. Read-only connections include suggestion and term
+72 explicitly allowed tools. Read-only connections include suggestion and term
 lookups even though their bounded query payloads use HTTP POST. Creation, review,
 and glossary mutation still require write permission and the user's application role.
 

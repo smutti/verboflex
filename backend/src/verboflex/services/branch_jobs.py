@@ -321,6 +321,8 @@ def _record_committed_files(
     session: Session, workflow: BranchWorkflow, job: BranchJob, commit_hash: str
 ) -> None:
     job.state, job.commit_hash, job.error_code = "committed", commit_hash, None
+    job.catalog_refresh_state = "pending"
+    job.catalog_refresh_execution_id = None
     assert job.intent is not None
     for f in cast(list[dict[str, object]], job.intent["files"]):
         if job.kind in {"html_language", "language"}:

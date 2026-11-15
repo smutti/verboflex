@@ -55,15 +55,18 @@ from verboflex.services.writeback_authority import CapturedMapping, _capture_map
 
 
 class AuthoringError(ValueError):
+    existing_request_id: UUID | None = None
+
     def __init__(self, detail: str, status: int = 422) -> None:
         super().__init__(detail)
         self.status = status
 
 
-def _product(session: Session, product_id: UUID, actor_id: UUID, action: str) -> Product:
-    product = session.scalar(
-        select(Product).where(Product.id == product_id).with_for_update(read=action == "read")
-    )
+def _product(
+    session: Session, product_id: UUID, actor_id: UUID, action: str, *, lock: bool = True
+) -> Product:
+    query = select(Product).where(Product.id == product_id)
+    product = session.scalar(query.with_for_update(read=action == "read") if lock else query)
     if (
         product is None
         or not product.is_active
@@ -403,7 +406,9 @@ def save(
             )
         )
         if duplicate:
-            raise AuthoringError("A draft already exists for this key and language", 409)
+            error = AuthoringError("A saved entry already exists for this key and language", 409)
+            error.existing_request_id = duplicate
+            raise error
         row = AuthoringRequest(
             id=request_id,
             scope_id=scope.id,
@@ -418,9 +423,28 @@ def save(
             updated_by=actor_id,
         )
         session.add(row)
+    scope.read_version += 1
     record_audit(session, actor_id=actor_id, action="authoring.saved", entity_id=row.id)
     session.flush()
     return response(row, scope)
+
+
+def get_request(
+    session: Session, *, product_id: UUID, actor_id: UUID, request_id: UUID
+) -> AuthoringResponse:
+    product = _product(session, product_id, actor_id, "read", lock=False)
+    pair = session.execute(
+        select(AuthoringRequest, LocalizationScope)
+        .join(LocalizationScope, LocalizationScope.id == AuthoringRequest.scope_id)
+        .where(
+            AuthoringRequest.id == request_id,
+            LocalizationScope.product_id == product.id,
+            LocalizationScope.current_revision_id == product.active_revision_id,
+        )
+    ).first()
+    if pair is None:
+        raise AuthoringError("Draft unavailable", 404)
+    return response(*pair)
 
 
 def list_requests(
@@ -451,6 +475,24 @@ def list_requests(
     )
 
 
+def validate_approval(
+    session: Session, scope: LocalizationScope, row: AuthoringRequest
+) -> AuthoringInput:
+    """Shared single/bulk preflight; no state changes or repository I/O."""
+    data = AuthoringInput.model_validate(row.payload["input"])
+    _, ref, parser = resolve_file(session, scope, data)
+    ops = operations(data, parser.format)
+    _existing(session, scope, ref, data, ops)
+    validate_complete(session, scope, data, parser.format)
+    if any(not op.replacement_text.strip() for op in ops):
+        raise AuthoringError("Complete the translation before approving")
+    if data.max_chars is not None and any(
+        grapheme_count(op.replacement_text) > data.max_chars for op in ops
+    ):
+        raise AuthoringError("Translation exceeds its character limit")
+    return data
+
+
 def transition(
     session: Session,
     *,
@@ -471,23 +513,14 @@ def transition(
         raise AuthoringError("This draft changed. Reload before continuing", 409)
     if state is not None and row.state == state:
         raise AuthoringError("This draft is already in the requested state", 409)
+    scope.read_version += 1
     if state is None:
         record_audit(session, actor_id=actor_id, action="authoring.deleted", entity_id=row.id)
         session.delete(row)
         session.flush()
         return None
     if state == "approved":
-        data = AuthoringInput.model_validate(row.payload["input"])
-        _, ref, parser = resolve_file(session, scope, data)
-        ops = operations(data, parser.format)
-        _existing(session, scope, ref, data, ops)
-        validate_complete(session, scope, data, parser.format)
-        if any(not op.replacement_text.strip() for op in ops):
-            raise AuthoringError("Complete the translation before approving")
-        if data.max_chars is not None and any(
-            grapheme_count(op.replacement_text) > data.max_chars for op in ops
-        ):
-            raise AuthoringError("Translation exceeds its character limit")
+        data = validate_approval(session, scope, row)
     row.version += 1
     row.state, row.updated_by, row.updated_at = state, actor_id, datetime.now(UTC)
     record_audit(

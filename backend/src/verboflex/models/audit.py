@@ -42,6 +42,8 @@ AUDIT_ACTIONS = (
     "bitbucket.connected",
     "bitbucket.refreshed",
     "bitbucket.revoked",
+    "authoring.bulk_queued",
+    "authoring.bulk_approved",
     "authoring.saved",
     "authoring.approved",
     "authoring.rejected",
