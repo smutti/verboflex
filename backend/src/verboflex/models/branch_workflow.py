@@ -46,6 +46,11 @@ class BranchJob(Base):
     __table_args__ = (
         UniqueConstraint("activity_id"),
         CheckConstraint(
+            "catalog_refresh_state IS NULL OR catalog_refresh_state IN "
+            "('pending','running','succeeded','failed','skipped')",
+            name="catalog_refresh_state",
+        ),
+        CheckConstraint(
             "kind IN ('commit','pull_request','html_language','language')", name="kind"
         ),
         CheckConstraint(
@@ -74,6 +79,8 @@ class BranchJob(Base):
     authority: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
     intent: Mapped[dict[str, object] | None] = mapped_column(JSONB, deferred=True)
     commit_hash: Mapped[str | None] = mapped_column(String(40))
+    catalog_refresh_state: Mapped[str | None] = mapped_column(String(16))
+    catalog_refresh_execution_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     pr_id: Mapped[int | None] = mapped_column(Integer)
     pr_url: Mapped[str | None] = mapped_column(String(4096))
     error_code: Mapped[str | None] = mapped_column(String(64))

@@ -135,3 +135,30 @@ it("reuses the operation identifier after an uncertain network response", async 
     vi.mocked(approveAllAuthoringDrafts).mock.calls[1][0]?.path,
   );
 });
+
+it("labels historical approval and reports committed delivery without claiming it is queued", async () => {
+  vi.mocked(getAuthoringApprovalPreview).mockResolvedValue({
+    data: {
+      ...preview,
+      count: 0,
+      latest: {
+        ...job,
+        state: "succeeded",
+        branch_job_ids: ["commit"],
+        delivery_state: "committed",
+        catalog_state: "current",
+      },
+    },
+  } as never);
+  setup();
+  expect(
+    await screen.findByText(/Last bulk approval: 506 entries/),
+  ).toHaveTextContent("Changes are saved on the working branch.");
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "The translation list is up to date.",
+  );
+  expect(
+    screen.queryByRole("button", { name: "Approve all drafts" }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByText(/commits are queued/)).not.toBeInTheDocument();
+});

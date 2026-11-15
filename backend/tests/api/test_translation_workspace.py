@@ -1092,3 +1092,59 @@ def test_absent_translation_queue_paginates_unique_keys_and_keeps_authority(fact
     with factory.begin() as session:
         session.get_one(Product, product).is_active = False
     assert request(token, **filters).json()["items"] == []
+
+
+def test_saved_addition_is_visible_searchable_and_moves_from_missing_to_review(factory):
+    from verboflex.models.authoring import AuthoringRequest
+
+    token = WORK.authority(factory)
+    product, scope, ids = seed_keys(factory, count=2)
+    with factory.begin() as session:
+        key_id = session.get_one(TranslationValue, ids[0, "en"]).translation_key_id
+        session.execute(delete(TranslationValue).where(TranslationValue.id == ids[0, "it"]))
+        active = session.get_one(LocalizationScope, scope).active_execution_id
+        actor = session.scalar(select(User.id))
+        saved_id = uuid4()
+        session.add(
+            AuthoringRequest(
+                id=saved_id,
+                scope_id=scope,
+                parent_key_id=key_id,
+                raw_key="key-000",
+                language="it",
+                identity_digest="f" * 64,
+                version=1,
+                state="draft",
+                created_by=actor,
+                updated_by=actor,
+                payload={
+                    "input": {
+                        "execution_id": str(active),
+                        "forms": [{"form": "other", "text": "Testo salvato"}],
+                    }
+                },
+            )
+        )
+    params = dict(product_id=product, language="it", visible_languages=["en", "it"])
+    result = request(token, **params, q="Testo salvato")
+    assert result.status_code == 200, result.text
+    slot = slots(result.json())["it"]
+    assert slot["effective_text"] == "Testo salvato"
+    assert slot["authoring_request"] == {
+        "id": str(saved_id),
+        "version": 1,
+        "state": "draft",
+        "source_changed": False,
+        "value_count": 1,
+    }
+    assert slot["kind"] == "absent" and slot["group_id"] is None and slot["matches_filters"]
+    assert not request(token, **params, work_status="needs_translation").json()["items"]
+    assert len(request(token, **params, work_status="needs_review").json()["items"]) == 1
+    assert slots(request(token, **params).json())["it"]["authoring_request"]["id"] == str(saved_id)
+    with factory.begin() as session:
+        session.get_one(AuthoringRequest, saved_id).state = "approved"
+    assert slots(request(token, **params).json())["it"]["authoring_request"]["state"] == "approved"
+    assert not request(token, **params, work_status="needs_review").json()["items"]
+    with factory.begin() as session:
+        session.get_one(AuthoringRequest, saved_id).state = "rejected"
+    assert len(request(token, **params, work_status="needs_translation").json()["items"]) == 1

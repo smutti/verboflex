@@ -153,15 +153,25 @@ export function BulkAuthoringApproval({
       )}
       {preview?.latest?.state === "succeeded" && (
         <p role="status" className="text-sm text-muted-foreground">
-          {preview.latest.branch_job_ids.length
-            ? t(
-                "{{count}} drafts approved. Grouped commits are queued; check Approval commits for delivery.",
-                { count: preview.latest.count },
-              )
-            : t(
-                "{{count}} drafts approved. No automatic commit workflow is configured.",
-                { count: preview.latest.count },
-              )}
+          {t("Last bulk approval: {{count}} entries.", {
+            count: preview.latest.count,
+          })}{" "}
+          {preview.latest.delivery_state === "pending"
+            ? t("Commits are in progress.")
+            : preview.latest.delivery_state === "failed"
+              ? t("A commit needs attention. Check Approval commits.")
+              : preview.latest.delivery_state === "committed"
+                ? t("Changes are saved on the working branch.")
+                : t("No automatic commit workflow is configured.")}{" "}
+          {preview.latest.catalog_state === "pending"
+            ? t("The translation list is updating automatically.")
+            : preview.latest.catalog_state === "failed"
+              ? t(
+                  "Catalog update failed. Saved translations are preserved. Open Update from branches.",
+                )
+              : preview.latest.catalog_state === "current"
+                ? t("The translation list is up to date.")
+                : null}
         </p>
       )}
       {preview?.latest?.state === "failed" && (

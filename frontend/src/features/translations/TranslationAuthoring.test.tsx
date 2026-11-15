@@ -2,9 +2,13 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { TranslationAuthoring } from "./TranslationAuthoring";
+import {
+  TranslationAuthoring,
+  type AuthoringSelection,
+} from "./TranslationAuthoring";
 import {
   getAuthoringApprovalPreview,
+  getAuthoringRequest,
   getAuthoringDestinations,
   listAuthoringRequests,
   saveAuthoringRequest,
@@ -13,6 +17,7 @@ import {
 vi.mock("../../api/client", async (original) => ({
   ...(await original<typeof import("../../api/client")>()),
   getAuthoringApprovalPreview: vi.fn(),
+  getAuthoringRequest: vi.fn(),
   getAuthoringDestinations: vi.fn(),
   listAuthoringRequests: vi.fn(),
   saveAuthoringRequest: vi.fn(),
@@ -22,7 +27,7 @@ afterEach(() => {
   cleanup();
   vi.resetAllMocks();
 });
-function setup(canWrite = true) {
+function setup(canWrite = true, selection: AuthoringSelection = null) {
   vi.mocked(getAuthoringApprovalPreview).mockResolvedValue({
     data: {
       count: 0,
@@ -62,7 +67,7 @@ function setup(canWrite = true) {
       productId="product"
       canWrite={canWrite}
       canReview
-      selection={null}
+      selection={selection}
       onClearSelection={() => {}}
       onNew={(open) => open()}
     />,
@@ -208,4 +213,81 @@ it("explains a blocked source while preserving draft text and linking to recover
   expect(screen.getByLabelText("Translation")).toHaveValue("Saved text");
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   expect(saveAuthoringRequest).not.toHaveBeenCalled();
+});
+
+const savedEntry = {
+  id: "saved",
+  version: 4,
+  state: "approved",
+  path: "app/res/values/strings.xml",
+  format: "android_xml",
+  source_changed: false,
+  input: {
+    scope_id: "scope",
+    execution_id: "execution",
+    file_position: 3,
+    key: "welcome",
+    language: "en",
+    kind: "text",
+    forms: [{ form: "other", text: "Already saved" }],
+    expected_version: 4,
+  },
+};
+it("reopens the saved identity from the translation cell and preserves its version", async () => {
+  vi.mocked(getAuthoringRequest).mockResolvedValue({
+    data: savedEntry,
+  } as never);
+  setup(true, {
+    language: "en",
+    item: {
+      translation_key_id: "key",
+      scope_id: "scope",
+      product_id: "product",
+      slots: [{ language: "en", authoring_request: { id: "saved" } }],
+    },
+  } as never);
+  await waitFor(() =>
+    expect(screen.getByLabelText("Translation")).toHaveValue("Already saved"),
+  );
+  const user = userEvent.setup();
+  await user.clear(screen.getByLabelText("Translation"));
+  await user.type(screen.getByLabelText("Translation"), "Changed safely");
+  vi.mocked(saveAuthoringRequest).mockResolvedValue({
+    data: { ...savedEntry, version: 5 },
+  } as never);
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  expect(saveAuthoringRequest).toHaveBeenCalledWith(
+    expect.objectContaining({
+      path: { product_id: "product", request_id: "saved" },
+      body: expect.objectContaining({
+        expected_version: 4,
+        forms: [{ form: "other", text: "Changed safely" }],
+      }),
+    }),
+  );
+});
+it("preserves typed text on duplicate conflict and only replaces it after Open saved entry", async () => {
+  setup();
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "New key" }));
+  await user.type(await screen.findByLabelText("Key"), "welcome");
+  await user.type(screen.getByLabelText("Translation"), "My unsaved text");
+  vi.mocked(saveAuthoringRequest).mockResolvedValue({
+    error: {
+      detail: { existing_request_id: "saved", message: "Already exists" },
+    },
+  } as never);
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Your text is still here",
+  );
+  expect(screen.getByLabelText("Translation")).toHaveValue("My unsaved text");
+  expect(getAuthoringRequest).not.toHaveBeenCalled();
+  vi.mocked(getAuthoringRequest).mockResolvedValue({
+    data: savedEntry,
+  } as never);
+  await user.click(screen.getByRole("button", { name: "Open saved entry" }));
+  await waitFor(() =>
+    expect(screen.getByLabelText("Translation")).toHaveValue("Already saved"),
+  );
 });

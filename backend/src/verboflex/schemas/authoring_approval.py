@@ -20,6 +20,8 @@ class AuthoringApprovalStatus(ClosedModel):
     error: str | None
     branch_job_ids: list[UUID]
     created_at: datetime
+    delivery_state: Literal["none", "pending", "committed", "failed"] = "none"
+    catalog_state: Literal["none", "pending", "current", "failed"] = "none"
 
 
 class AuthoringApprovalPreview(ClosedModel):

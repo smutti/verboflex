@@ -194,3 +194,27 @@ API: `GET /api/v1/products/{product_id}/authoring/approval-preview` and
 `PUT /api/v1/products/{product_id}/authoring/approvals/{request_id}` with
 `{ "fingerprint": "<preview fingerprint>" }`. The latter returns 202 with durable
 status. Preview and confirmation both require current product review permission.
+
+
+## Catalog refresh after commits
+
+A verified working-branch commit records a durable catalog-refresh receipt in the
+same database transaction. The Celery dispatcher coalesces pending commits for a
+workflow into one normal import, after queued branch writes finish. This applies
+only when the configured translation import source is already the working branch;
+it never changes a source branch or the project's base language. Existing historical
+commits are not automatically backfilled when the feature is deployed.
+
+The normal import permission, connection and source-confirmation checks still apply.
+A broker failure is retried from the recorded execution without another commit.
+A failed import leaves saved entries visible and offers **Update from branches**.
+Successful imports consume only additions that exactly match repository values;
+unmatched drafts retain their text and normal source-change checks. Source changes
+may require reopening and saving those drafts before another approval.
+
+**New entries** identifies the last bulk approval as historical and reports actual
+branch delivery and catalog-refresh state. A completed batch is not presented as
+new work still queued. **Change sets** reports catalog progress for individual jobs.
+Refresh never approves drafts or opens a pull request. The strings workspace refreshes
+small visible result sets while approved additions await import, without replacing
+an open editor. Saved changes also refresh the current search immediately.

@@ -16,6 +16,7 @@ from verboflex.auth.product_access import membership_stamp
 from verboflex.localization.writing.core import WritebackRejected
 from verboflex.models.authoring import AuthoringRequest
 from verboflex.models.authoring_approval import AuthoringApproval
+from verboflex.models.branch_workflow import BranchJob
 from verboflex.models.product import Product
 from verboflex.models.translation import LocalizationScope
 from verboflex.schemas.authoring_approval import AuthoringApprovalPreview, AuthoringApprovalStatus
@@ -27,8 +28,36 @@ MAX_DRAFTS = 5000
 logger = logging.getLogger(__name__)
 
 
-def status(row: AuthoringApproval) -> AuthoringApprovalStatus:
+def status(row: AuthoringApproval, session: Session) -> AuthoringApprovalStatus:
+    jobs = (
+        list(
+            session.scalars(
+                select(BranchJob).where(
+                    BranchJob.id.in_([UUID(value) for value in row.branch_job_ids])
+                )
+            )
+        )
+        if row.branch_job_ids
+        else []
+    )
+    delivery: Literal["none", "pending", "committed", "failed"] = "none"
+    catalog: Literal["none", "pending", "current", "failed"] = "none"
+    if row.branch_job_ids:
+        if len(jobs) != len(row.branch_job_ids) or any(job.state == "blocked" for job in jobs):
+            delivery = "failed"
+        elif all(job.state == "committed" for job in jobs):
+            delivery = "committed"
+        else:
+            delivery = "pending"
+        if any(job.catalog_refresh_state == "failed" for job in jobs):
+            catalog = "failed"
+        elif any(job.catalog_refresh_state in ("pending", "running") for job in jobs):
+            catalog = "pending"
+        elif jobs and all(job.catalog_refresh_state == "succeeded" for job in jobs):
+            catalog = "current"
     return AuthoringApprovalStatus(
+        delivery_state=delivery,
+        catalog_state=catalog,
         id=row.id,
         state=cast(Literal["queued", "succeeded", "failed"], row.state),
         count=len(row.selection),
@@ -91,7 +120,7 @@ def preview(session: Session, *, product_id: UUID, actor_id: UUID) -> AuthoringA
         source_changed=changed,
         over_limit=len(selection) > MAX_DRAFTS,
         fingerprint=digest,
-        latest=status(latest) if latest else None,
+        latest=status(latest, session) if latest else None,
     )
 
 
@@ -107,7 +136,7 @@ def create(
             fingerprint,
         ):
             raise authoring.AuthoringError("Approval request identifier is already in use", 409)
-        return status(existing)
+        return status(existing, session)
     if session.scalar(
         select(AuthoringApproval.id).where(
             AuthoringApproval.product_id == product_id,
@@ -139,7 +168,7 @@ def create(
     session.add(row)
     session.flush()
     record_audit(session, actor_id=actor_id, action="authoring.bulk_queued", entity_id=row.id)
-    return status(row)
+    return status(row, session)
 
 
 def execute(factory: sessionmaker[Session], *, job_id: UUID) -> None:
@@ -164,6 +193,7 @@ def execute(factory: sessionmaker[Session], *, job_id: UUID) -> None:
                         "Reviewer permissions changed. Start a new approval", 403
                     )
                 groups: dict[UUID, list[ProposalSelection]] = defaultdict(list)
+                touched_scopes: set[UUID] = set()
                 for selected in job.selection:
                     row = session.get(AuthoringRequest, UUID(str(selected["id"])))
                     if row is None or row.state != "draft" or row.version != selected["version"]:
@@ -171,6 +201,9 @@ def execute(factory: sessionmaker[Session], *, job_id: UUID) -> None:
                             "A selected draft changed. Refresh and try again", 409
                         )
                     scope = authoring._scope(session, product, row.scope_id)
+                    if scope.id not in touched_scopes:
+                        scope.read_version += 1
+                        touched_scopes.add(scope.id)
                     try:
                         authoring.validate_approval(session, scope, row)
                     except authoring.AuthoringError as error:

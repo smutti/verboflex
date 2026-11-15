@@ -29,6 +29,9 @@ class BranchChange(ClosedModel):
     pr_url: str | None
     error_code: str | None
     can_retry: bool
+    catalog_refresh_state: (
+        Literal["pending", "running", "succeeded", "failed", "skipped"] | None
+    ) = None
 
 
 class BranchWorkflowChoice(ClosedModel):

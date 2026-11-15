@@ -130,7 +130,10 @@ def test_authoring_duplicate_stale_and_foreign_destination_rejected(
                 request_id=request_id,
                 data=bad,
             )
-    with factory.begin() as session, pytest.raises(authoring.AuthoringError, match="draft already"):
+    with (
+        factory.begin() as session,
+        pytest.raises(authoring.AuthoringError, match="saved entry already"),
+    ):
         authoring.save(
             session,
             product_id=seed.product_id,

@@ -1943,5 +1943,22 @@
   "· Version": "· Version",
   "· import from": "· import from",
   "— Needs review: remove and select the current version.": "— Needs review: remove and select the current version.",
-  "— your current configuration is still active.": "— your current configuration is still active."
+  "— your current configuration is still active.": "— your current configuration is still active.",
+  "Saved · awaiting approval": "Saved · awaiting approval",
+  "Approved · awaiting catalog update": "Approved · awaiting catalog update",
+  "Rejected · edit to resubmit": "Rejected · edit to resubmit",
+  "{{count}} saved forms": "{{count}} saved forms",
+  "Edit saved entry": "Edit saved entry",
+  "Open saved entry": "Open saved entry",
+  "The saved entry changed. Close this dialog and refresh the list.": "The saved entry changed. Close this dialog and refresh the list.",
+  "A saved entry already exists. Your text is still here. Open the saved entry to review it before editing.": "A saved entry already exists. Your text is still here. Open the saved entry to review it before editing.",
+  "Could not load the saved entry. Your text is unchanged.": "Could not load the saved entry. Your text is unchanged.",
+  "Last bulk approval: {{count}} entries.": "Last bulk approval: {{count}} entries.",
+  "Commits are in progress.": "Commits are in progress.",
+  "A commit needs attention. Check Approval commits.": "A commit needs attention. Check Approval commits.",
+  "Changes are saved on the working branch.": "Changes are saved on the working branch.",
+  "No automatic commit workflow is configured.": "No automatic commit workflow is configured.",
+  "The translation list is updating automatically.": "The translation list is updating automatically.",
+  "Catalog update failed. Saved translations are preserved. Open Update from branches.": "Catalog update failed. Saved translations are preserved. Open Update from branches.",
+  "The translation list is up to date.": "The translation list is up to date."
 }
