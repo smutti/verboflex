@@ -2,19 +2,31 @@ import { expect, test } from "@playwright/test";
 import { group, keyPage } from "./fixtures/translation-scroll";
 
 for (const width of [1440, 390]) {
-  test(`saved additions reopen their identity and become imported (${width}px)`, async ({
+  test(`two saved additions survive a blocked catalog and reopen independently (${width}px)`, async ({
     page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    let text = "Testo italiano già salvato",
-      version = 4,
-      imported = false;
-    let state = "approved";
+    let sourceBlocked = true;
+    let imported = false;
     const writes: unknown[] = [];
-    const entry = () => ({
-      id: "saved-entry",
+    const entries: {
+      key: string;
+      text: string;
+      version: number;
+      state: "approved" | "draft";
+    }[] = [
+      { key: "welcome", text: "Benvenuto", version: 4, state: "approved" },
+      { key: "duration", text: "Durata", version: 2, state: "approved" },
+    ];
+    const entry = ({
+      key,
+      text,
+      version,
+      state,
+    }: (typeof entries)[number]) => ({
+      id: `saved-${key}`,
       version,
       state,
       source_changed: false,
@@ -23,8 +35,8 @@ for (const width of [1440, 390]) {
         scope_id: "scope",
         execution_id: "execution",
         file_position: 2,
-        parent_key_id: "welcome",
-        key: "welcome",
+        parent_key_id: key,
+        key,
         language: "it",
         kind: "text",
         forms: [{ form: "other", text }],
@@ -71,27 +83,32 @@ for (const width of [1440, 390]) {
         });
       if (path.endsWith("/translations/keys")) {
         const result = keyPage({
-          items: [group("welcome", { translated_text: text })],
+          items: entries.map(({ key, text }) =>
+            group(key, { translated_text: text }),
+          ),
         });
         const visible = new URL(req.url()).searchParams.getAll(
           "visible_languages",
         );
         if (visible.length) result.visible_languages = visible;
-        const slot = result.items[0].slots[0];
-        slot.states = imported ? ["approved"] : [];
-        if (!imported)
-          Object.assign(slot, {
-            group_id: null,
-            kind: "absent",
-            editable: false,
-            authoring_request: {
-              id: "saved-entry",
-              version,
-              state,
-              source_changed: false,
-              value_count: 1,
-            },
-          });
+        for (const [index, row] of result.items.entries()) {
+          const saved = entry(entries[index]);
+          const slot = row.slots[0];
+          slot.states = imported ? [saved.state] : [];
+          if (!imported)
+            Object.assign(slot, {
+              group_id: null,
+              kind: "absent",
+              editable: false,
+              authoring_request: {
+                id: saved.id,
+                version: saved.version,
+                state: saved.state,
+                source_changed: false,
+                value_count: 1,
+              },
+            });
+        }
         return reply(result);
       }
       if (path.endsWith("/authoring/approval-preview"))
@@ -102,6 +119,18 @@ for (const width of [1440, 390]) {
           source_changed: 0,
           over_limit: false,
           fingerprint: "a".repeat(64),
+        });
+      if (path.endsWith("/authoring/destinations") && sourceBlocked)
+        return reply({
+          items: [],
+          truncated: false,
+          blocked_scopes: [
+            {
+              scope_id: "scope",
+              code: "source_refresh_required",
+              message: "Source requires refresh",
+            },
+          ],
         });
       if (path.endsWith("/authoring/destinations"))
         return reply({
@@ -123,46 +152,76 @@ for (const width of [1440, 390]) {
           truncated: false,
           blocked_scopes: [],
         });
-      if (path.endsWith("/authoring/saved-entry")) {
+      const saved = entries.find(({ key }) =>
+        path.endsWith(`/authoring/saved-${key}`),
+      );
+      if (saved) {
         if (req.method() === "PUT") {
+          expect(sourceBlocked).toBe(false);
           const body = req.postDataJSON();
-          writes.push(body);
-          text = body.forms[0].text;
-          version++;
-          state = "draft";
-          return reply({ ...entry(), state: "draft" });
+          writes.push({ id: saved.key, ...body });
+          saved.text = body.forms[0].text;
+          saved.version++;
+          saved.state = "draft";
         }
-        return reply(entry());
+        return reply(entry(saved));
       }
-      if (path.endsWith("/authoring"))
-        return reply({ items: imported ? [] : [entry()], next_after: null });
+      if (path.endsWith("/authoring")) {
+        expect(req.method()).toBe("GET");
+        return reply({
+          items: imported ? [] : entries.map(entry),
+          next_after: null,
+        });
+      }
       return reply({ items: [], next_cursor: null });
     });
     await page.goto("/translations?product_id=alpha&language=it");
-    await expect(
-      page.getByText("Approved · awaiting catalog update"),
-    ).toBeVisible();
+    const row = (key: string) =>
+      page.locator(`[data-translation-group-id="${key}"]`);
+    const dialog = page.getByRole("dialog");
     await expect(
       page.getByRole("button", { name: "Add translation", exact: true }),
     ).toHaveCount(0);
-    await page.getByRole("button", { name: "Edit saved entry" }).click();
-    await expect(page.getByLabel("Translation", { exact: true })).toHaveValue(
-      text,
-    );
-    await page
-      .getByLabel("Translation", { exact: true })
-      .fill("Testo italiano aggiornato");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect.poll(() => writes.length).toBe(1);
-    expect(writes[0]).toMatchObject({
-      expected_version: 4,
-      language: "it",
-      forms: [{ form: "other", text: "Testo italiano aggiornato" }],
-    });
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(
-      page.getByText("Testo italiano aggiornato", { exact: true }).first(),
-    ).toBeVisible();
+    for (const { key, text } of entries) {
+      await expect(
+        row(key).getByText("Approved · awaiting catalog update"),
+      ).toBeVisible();
+      await row(key).getByRole("button", { name: "Edit saved entry" }).click();
+      await expect(
+        dialog.getByLabel("Translation", { exact: true }),
+      ).toHaveValue(text);
+      await expect(
+        dialog.getByRole("link", { name: "Update catalog" }),
+      ).toHaveAttribute("href", "/products/alpha/source-updates");
+      await expect(
+        dialog.getByRole("button", { name: "Save", exact: true }),
+      ).toBeDisabled();
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+    }
+    expect(writes).toHaveLength(0);
+    sourceBlocked = false;
+    await page.reload();
+    for (const { key, text, version } of entries) {
+      const updated = text + " aggiornato";
+      await row(key).getByRole("button", { name: "Edit saved entry" }).click();
+      await expect(
+        dialog.getByLabel("Translation", { exact: true }),
+      ).toHaveValue(text);
+      await dialog.getByLabel("Translation", { exact: true }).fill(updated);
+      await dialog.getByRole("button", { name: "Save", exact: true }).click();
+      await expect(dialog).toHaveCount(0);
+      expect(writes.at(-1)).toMatchObject({
+        id: key,
+        expected_version: version,
+        language: "it",
+        forms: [{ form: "other", text: updated }],
+      });
+      await expect(
+        row(key).getByText(updated, { exact: true }).first(),
+      ).toBeVisible();
+    }
+    expect(writes).toHaveLength(2);
     await page.screenshot({
       path: testInfo.outputPath("saved-inline.png"),
       fullPage: true,
@@ -172,12 +231,14 @@ for (const width of [1440, 390]) {
     await expect(
       page.getByRole("button", { name: "Edit saved entry" }),
     ).toHaveCount(0);
-    await expect(
-      page.locator('[data-translation-editor-trigger="welcome"]'),
-    ).toBeVisible();
-    await expect(
-      page.getByText("Testo italiano aggiornato", { exact: true }).first(),
-    ).toBeVisible();
+    for (const { key, text } of entries) {
+      await expect(
+        row(key).locator(`[data-translation-editor-trigger="${key}"]`),
+      ).toBeVisible();
+      await expect(
+        row(key).getByText(text, { exact: true }).first(),
+      ).toBeVisible();
+    }
     await page.screenshot({
       path: testInfo.outputPath("imported.png"),
       fullPage: true,

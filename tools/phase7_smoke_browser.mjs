@@ -277,9 +277,19 @@ async function scenario() {
     await expect(page.getByRole("link",{name:/^Commit /}).first()).toBeVisible();
     await capture(task.name,"approval-commits");
     await activate(page.getByRole("button",{name:"Create pull request",exact:true}));
-    await expect(page.getByText("Create a PR from feature/verboflex to master?",{exact:true})).toBeVisible();
+    const confirmation=page.getByText("Send the approved translations to Bitbucket for review?",{exact:true});
+    await expect(confirmation).toBeVisible();
+    await activate(page.getByRole("button",{name:"Cancel",exact:true}));
+    await expect(confirmation).toHaveCount(0);
+    await activate(page.getByRole("button",{name:"Create pull request",exact:true}));
     await activate(page.getByRole("button",{name:"Confirm pull request",exact:true}));
-    await expect(page.getByRole("link",{name:"Open pull request",exact:true})).toBeVisible({timeout:120000});
+    const openReview=page.getByRole("link",{name:"Open pull request",exact:true});
+    await expect(openReview).toBeVisible({timeout:120000});
+    const reviewUrl=await openReview.getAttribute("href");
+    check(/^https:\/\/bitbucket\.org\/verboflex-smoke\/phase7-approval-branch\/pull-requests\/\d+$/.test(reviewUrl));
+    await page.reload();
+    await expect(openReview).toHaveAttribute("href",reviewUrl);
+    await expect(page.getByRole("button",{name:"Create pull request",exact:true})).toHaveCount(0);
     await capture(task.name,"approval-pull-request");
     result={...result,approved_commits:true,explicit_pull_request:true};
   }else if(task.action==="inspect-workspace"){

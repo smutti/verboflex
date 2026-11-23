@@ -243,59 +243,87 @@ test("denies direct source update access to a viewer before reading source confi
 test.describe("Italian publication and catalog messages", () => {
   test.use({ locale: "it-IT" });
 
-  test("opens the existing review and explains why later changes are waiting", async ({
-    page,
-  }, testInfo) => {
-    await setup(page);
-    const url = "https://bitbucket.org/example/catalog/pull-requests/8";
-    await page.route("**/branch-workflow*", (route) => {
-      expect(route.request().method()).toBe("GET");
-      return route.fulfill({
-        json: {
-          enabled: true,
-          workflow_id: "workflow",
-          work_branch: "review",
-          target_branch: "main",
-          repository: "translations",
-          can_publish: true,
-          can_create_pr: false,
-          open_pr_url: url,
-          waiting_changes: 9,
-          blocked_change: {
-            id: "older",
-            label: "welcome_title (it)",
-            kind: "commit",
-            state: "blocked",
-            error_code: "import_changed",
-            can_retry: true,
+  for (const blocked of [false, true]) {
+    test(`opens the existing review with ${blocked ? "blocked" : "published"} changes`, async ({
+      page,
+      context,
+    }, testInfo) => {
+      await setup(page);
+      const url = "https://bitbucket.org/example/catalog/pull-requests/8";
+      await context.route(url, (route) =>
+        route.fulfill({ contentType: "text/plain", body: "Synthetic review" }),
+      );
+      await page.route("**/branch-workflow*", (route) => {
+        expect(route.request().method()).toBe("GET");
+        return route.fulfill({
+          json: {
+            enabled: true,
+            workflow_id: "workflow",
+            work_branch: "review",
+            target_branch: "main",
+            repository: "translations",
+            can_publish: true,
+            can_create_pr: false,
+            open_pr_url: url,
+            waiting_changes: blocked ? 9 : 0,
+            blocked_change: blocked
+              ? {
+                  id: "older",
+                  label: "welcome_title (it)",
+                  kind: "commit",
+                  state: "blocked",
+                  error_code: "import_changed",
+                  can_retry: true,
+                }
+              : null,
+            items: [],
+            workflows: [],
+            next_before: null,
           },
-          items: [],
-          workflows: [],
-          next_before: null,
-        },
+        });
       });
+      await page.goto("/products/product/change-sets");
+      const panel = page
+        .locator("section")
+        .filter({
+          has: page.getByRole("link", {
+            name: "Apri la revisione su Bitbucket",
+          }),
+        })
+        .last();
+      const link = panel.getByRole("link", {
+        name: "Apri la revisione su Bitbucket",
+      });
+      await expect(link).toHaveAttribute("href", url);
+      const blocker = panel.getByText(
+        "Pubblicazione ferma su welcome_title (it)",
+      );
+      const waiting = panel.getByText("Modifiche ancora da inviare (9)");
+      if (blocked) {
+        await expect(blocker).toBeVisible();
+        await expect(waiting).toBeVisible();
+      } else {
+        await expect(blocker).toHaveCount(0);
+        await expect(waiting).toHaveCount(0);
+      }
+      await expect(
+        panel.getByRole("button", { name: "Controlla e riprova" }),
+      ).toHaveCount(0);
+      await expect(
+        panel.getByRole("button", { name: "Crea una pull request" }),
+      ).toHaveCount(0);
+      await panel.screenshot({
+        path: testInfo.outputPath("pubblicazione.png"),
+      });
+      const opened = page.waitForEvent("popup");
+      await link.click();
+      const review = await opened;
+      await expect(review).toHaveURL(url);
+      await expect(
+        review.getByText("Synthetic review", { exact: true }),
+      ).toBeVisible();
     });
-    await page.goto("/products/product/change-sets");
-    const panel = page
-      .locator("section")
-      .filter({
-        has: page.getByRole("link", { name: "Apri la revisione su Bitbucket" }),
-      })
-      .last();
-    await expect(
-      panel.getByRole("link", { name: "Apri la revisione su Bitbucket" }),
-    ).toHaveAttribute("href", url);
-    await expect(
-      panel.getByText("Pubblicazione ferma su welcome_title (it)"),
-    ).toBeVisible();
-    await expect(
-      panel.getByText("Modifiche ancora da inviare (9)"),
-    ).toBeVisible();
-    await expect(
-      panel.getByRole("button", { name: "Crea una pull request" }),
-    ).toHaveCount(0);
-    await panel.screenshot({ path: testInfo.outputPath("pubblicazione.png") });
-  });
+  }
 
   test("keeps a dated link to the catalog after a timeout", async ({
     page,
