@@ -208,7 +208,7 @@ it("explains a blocked source while preserving draft text and linking to recover
     "Existing drafts are preserved in New entries",
   );
   expect(
-    screen.getByRole("link", { name: "Update from branches" }),
+    screen.getByRole("link", { name: "Update catalog" }),
   ).toHaveAttribute("href", "/products/product/source-updates");
   expect(screen.getByLabelText("Translation")).toHaveValue("Saved text");
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();

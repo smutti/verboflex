@@ -5,7 +5,7 @@ from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,7 @@ from verboflex.schemas.branch_workflow import (
     BranchWorkflowResponse,
     ConfigureBranchWorkflow,
 )
+from verboflex.services.branch_jobs import approval_block_reason
 from verboflex.services.branch_workflow import (
     BranchWorkflowError,
     active_mapping,
@@ -117,21 +118,44 @@ def get_workflow(
         if before is not None:
             query = query.where(BranchJob.sequence < before)
         rows = list(session.scalars(query.order_by(BranchJob.sequence.desc()).limit(51)))
-        pending = session.scalar(
-            select(BranchJob.id)
-            .where(
-                BranchJob.workflow_id == workflow.id,
-                BranchJob.state.in_(("queued", "running", "sending", "blocked", "open")),
+        in_progress = BranchJob.state.in_(("queued", "running", "sending"))
+        waiting, creating, open_count, open_pr_url, blocked_sequence = session.execute(
+            select(
+                func.count().filter(in_progress, BranchJob.kind != "pull_request"),
+                func.count().filter(in_progress, BranchJob.kind == "pull_request"),
+                func.count().filter(BranchJob.state == "open"),
+                func.max(BranchJob.pr_url).filter(BranchJob.state == "open"),
+                func.min(BranchJob.sequence).filter(BranchJob.state == "blocked"),
+            ).where(BranchJob.workflow_id == workflow.id)
+        ).one()
+        idle = not (waiting or creating or open_count or blocked_sequence is not None)
+        blocker = (
+            session.scalar(
+                select(BranchJob).where(
+                    BranchJob.sequence == blocked_sequence, BranchJob.workflow_id == workflow.id
+                )
             )
-            .limit(1)
+            if blocked_sequence is not None
+            else None
         )
         base = (
             f"https://bitbucket.org/{quote(repository.workspace, safe='')}/"
             f"{quote(repository.repository_slug, safe='')}"
         )
         current_mapping = active_mapping(session, workflow)
-        items = [
-            BranchChange(
+        # Older workers stored the same access error for stale imports. Refine only
+        # the first unsent blocked approval, using the same database-only preflight.
+        reason = blocker.error_code if blocker is not None else None
+        if (
+            blocker
+            and blocker.kind == "commit"
+            and reason == "authority_changed"
+            and blocker.intent is None
+        ):
+            reason = approval_block_reason(session, workflow, blocker) or reason
+
+        def change(j: BranchJob) -> BranchChange:
+            return BranchChange(
                 id=j.id,
                 sequence=j.sequence,
                 kind=cast(Literal["commit", "pull_request", "html_language", "language"], j.kind),
@@ -153,15 +177,14 @@ def get_workflow(
                 commit_hash=j.commit_hash,
                 commit_url=f"{base}/commits/{j.commit_hash}" if j.commit_hash else None,
                 pr_url=j.pr_url,
-                error_code=j.error_code,
+                error_code=reason if blocker is not None and j.id == blocker.id else j.error_code,
                 can_retry=can_publish and j.state == "blocked",
                 catalog_refresh_state=cast(
                     Literal["pending", "running", "succeeded", "failed", "skipped"] | None,
                     j.catalog_refresh_state,
                 ),
             )
-            for j in rows[:50]
-        ]
+
         return BranchWorkflowResponse(
             enabled=True,
             workflow_id=workflow.id,
@@ -171,7 +194,7 @@ def get_workflow(
             work_branch=workflow.work_branch,
             target_branch=workflow.target_branch,
             can_publish=can_publish,
-            can_add_language=can_publish and current_mapping is not None and pending is None,
+            can_add_language=can_publish and current_mapping is not None and idle,
             can_add_html_language=can_publish
             and current_mapping is not None
             and session.scalar(
@@ -190,10 +213,14 @@ def get_workflow(
             )
             is not None,
             can_create_pr=can_publish
-            and active_mapping(session, workflow) is not None
-            and pending is None
+            and current_mapping is not None
+            and idle
             and has_unpublished_commits(session, workflow.id),
-            items=items,
+            open_pr_url=open_pr_url,
+            waiting_changes=waiting,
+            creating_pr=bool(creating),
+            blocked_change=change(blocker) if blocker is not None else None,
+            items=[change(job) for job in rows[:50]],
             next_before=rows[49].sequence if len(rows) > 50 else None,
         )
     except Exception as error:

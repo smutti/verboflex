@@ -34,7 +34,7 @@ after its drafts have been explicitly discarded or otherwise reconciled.
 Failed or pending source imports do not erase authoring drafts. The destination API
 and MCP `list_authoring_files` return `blocked_scopes` with an explicit recovery
 message alongside any available files. Read existing drafts with `list_new_entries`
-or **New entries**. Open **Update from branches**, recover the import, then reopen
+or **New entries**. Open **Update catalog**, recover the import, then reopen
 the editor to save against the current destination. Permissions remain enforced
 for both draft access and writes.
 

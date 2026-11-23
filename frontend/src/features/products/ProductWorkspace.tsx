@@ -206,7 +206,7 @@ export function ProductFocusWorkspace({
             style={changesActive ? activeStyle : undefined}
           >
             <GitPullRequest className="size-4 shrink-0" aria-hidden="true" />
-            {t("Change sets")}
+            {t("Publish translations")}
           </Link>
           {(principal.roles.includes("admin") ||
             principal.managed_product_ids?.includes(product.id)) && (
@@ -228,7 +228,7 @@ export function ProductFocusWorkspace({
                 style={sourceUpdatesActive ? activeStyle : undefined}
               >
                 <RefreshCw className="size-4 shrink-0" aria-hidden="true" />
-                {t("Update from branches")}
+                {t("Update catalog")}
               </Link>
             </Button>
           )}

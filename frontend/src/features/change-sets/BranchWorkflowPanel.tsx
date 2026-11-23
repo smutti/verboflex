@@ -59,11 +59,18 @@ const errors: Record<string, string> = {
   },
   get import_changed() {
     return t(
-      "The imported source changed. Refresh the product configuration before continuing.",
+      "The catalog changed after approval. Ask an administrator to review this saved change before publication can continue.",
     );
   },
   get authority_changed() {
-    return t("Repository access changed. An authorized reviewer can retry.");
+    return t(
+      "VerboFlex could not verify this approval. Ask a reviewer to check it again.",
+    );
+  },
+  get provider_unavailable() {
+    return t(
+      "Bitbucket could not confirm this change. A reviewer can check its status again.",
+    );
   },
   get branch_advanced() {
     return t(
@@ -148,6 +155,18 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
   if (!data && !failure)
     return <p role="status">{t("Loading repository workflow…")}</p>;
   const items = data?.items ?? [];
+  const blocker =
+    data?.blocked_change === undefined
+      ? items.find((item) => item.state === "blocked")
+      : data.blocked_change;
+  const openPr =
+    data?.open_pr_url === undefined
+      ? items.find((item) => item.state === "open")?.pr_url
+      : data.open_pr_url;
+  const waiting = data?.waiting_changes ?? 0;
+  const inactive =
+    data?.workflows?.find((choice) => choice.id === data.workflow_id)
+      ?.active === false;
   return (
     <section
       className="grid min-w-0 gap-(--space-lg)"
@@ -196,17 +215,91 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                 </select>
               </label>
             )}
-            <p className="text-muted-foreground">
-              {t("Each approval is saved as a commit in ")}
-              {data.repository} {t(" on")} <strong>{data.work_branch}</strong>.
-            </p>
-            <p className="text-muted-foreground">
-              {t("Open a pull request to ")}
-              <strong>{data.target_branch}</strong>{" "}
-              {t(" when the changes are ready.")}
-            </p>
+            <div className="mt-3 grid min-w-0 gap-2 rounded-lg border bg-card p-4">
+              {openPr ? (
+                <>
+                  <strong>{t("Pull request open")}</strong>
+                  <p>
+                    {t(
+                      "Approved translations join this review as soon as they reach Bitbucket.",
+                    )}
+                  </p>
+                  <Button asChild className="w-fit">
+                    <a href={openPr} target="_blank" rel="noreferrer">
+                      {t("Open pull request")}
+                    </a>
+                  </Button>
+                </>
+              ) : data.creating_pr ? (
+                <p role="status">
+                  {t("Opening the pull request in Bitbucket…")}
+                </p>
+              ) : inactive ? (
+                <p>
+                  {t(
+                    "This source is inactive. Its publication history is available below.",
+                  )}
+                </p>
+              ) : data.can_create_pr ? (
+                <p>
+                  {t(
+                    "Your approved changes are ready. Open a pull request to have them reviewed for {{target}}.",
+                    { target: data.target_branch ?? "" },
+                  )}
+                </p>
+              ) : !blocker && !waiting && data.waiting_changes !== undefined ? (
+                <p>
+                  {data.can_publish
+                    ? t("There are no new approved changes ready to publish.")
+                    : t(
+                        "A reviewer can open a pull request once approved changes are ready.",
+                      )}
+                </p>
+              ) : null}
+              {blocker && (
+                <div className="grid gap-1 border-l-2 border-amber-600 pl-3">
+                  <strong>
+                    {t("Publication paused at {{change}}", {
+                      change: blocker.label,
+                    })}
+                  </strong>
+                  <p>
+                    {errors[blocker.error_code ?? ""] ??
+                      t(
+                        "Ask a reviewer to check this change before publication can continue.",
+                      )}
+                  </p>
+                  {blocker.can_retry &&
+                    blocker.error_code !== "import_changed" && (
+                      <Button
+                        className="w-fit"
+                        variant="outline"
+                        disabled={busy || failure}
+                        onClick={() => void act(blocker.id)}
+                      >
+                        {t("Check and retry")}
+                      </Button>
+                    )}
+                </div>
+              )}
+              {waiting > 0 && (
+                <p role="status">
+                  {t("Changes still to send ({{count}})", {
+                    count: waiting,
+                  })}
+                </p>
+              )}
+              <details className="text-sm text-muted-foreground">
+                <summary className="cursor-pointer">
+                  {t("Repository branch")}
+                </summary>
+                <p className="mt-2 break-words">
+                  {data.repository} · {data.work_branch} → {data.target_branch}
+                </p>
+              </details>
+            </div>
           </div>
-          {data.can_publish && (
+          {data.can_publish && !openPr && !inactive && (
             <div>
               {!confirm ? (
                 <Button
@@ -218,9 +311,9 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
               ) : (
                 <div className="flex flex-wrap items-center gap-(--space-md)">
                   <p>
-                    {t("Create a PR from ")}
-                    {data.work_branch} {t(" to ")}
-                    {data.target_branch}?
+                    {t(
+                      "Send the approved translations to Bitbucket for review?",
+                    )}
                   </p>
                   <Button
                     disabled={busy || failure || !data.can_create_pr}
@@ -247,7 +340,7 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
               onCreated={() => setReload((value) => value + 1)}
             />
           )}
-          {!items.length && (
+          {!items.length && !openPr && !blocker && !before && (
             <p>
               {t(
                 "No approvals saved yet. Approve a translation in Strings to save its first commit.",
@@ -264,7 +357,11 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                 className="flex min-w-0 flex-wrap items-center gap-(--space-md) rounded-lg border bg-card p-(--space-md)"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold wrap-anywhere">{item.label}</p>
+                  <p className="font-semibold wrap-anywhere">
+                    {item.kind === "pull_request"
+                      ? t("Pull request")
+                      : item.label}
+                  </p>
                   <p
                     role={
                       ["queued", "running", "sending"].includes(item.state)
@@ -286,13 +383,13 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                   {item.catalog_refresh_state === "failed" && (
                     <p role="alert">
                       {t(
-                        "Catalog update failed. Saved translations are preserved. Open Update from branches.",
+                        "Catalog update failed. Saved translations are preserved. Open Update catalog.",
                       )}{" "}
                       <a
                         className="underline"
                         href={`/products/${productId}/source-updates`}
                       >
-                        {t("Update from branches")}
+                        {t("Update catalog")}
                       </a>
                     </p>
                   )}
@@ -305,7 +402,7 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                   {item.catalog_refresh_state === "succeeded" && (
                     <p>{t("The translation list is up to date.")}</p>
                   )}
-                  {item.error_code && (
+                  {item.error_code && item.id !== blocker?.id && (
                     <p>
                       {errors[item.error_code] ??
                         t(
@@ -325,7 +422,7 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                     {item.commit_hash?.slice(0, 7)}
                   </a>
                 )}
-                {item.pr_url && (
+                {item.pr_url && item.pr_url !== openPr && (
                   <a
                     className="text-primary underline"
                     href={item.pr_url}
@@ -360,7 +457,7 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                       {t("Discard unsent request")}
                     </Button>
                   )}
-                {item.can_retry && (
+                {item.can_retry && item.id !== blocker?.id && (
                   <Button
                     variant="outline"
                     disabled={busy}

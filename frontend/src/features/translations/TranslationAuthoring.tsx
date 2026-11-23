@@ -669,7 +669,7 @@ function AuthoringDialog({
                 className="underline"
                 href={`/products/${productId}/source-updates`}
               >
-                {t("Update from branches")}
+                {t("Update catalog")}
               </a>
             </div>
           )}

@@ -277,3 +277,10 @@ identity/version recovery after a duplicate save, product permission checks, and
 coalesced catalog refresh with broker failure, revoked access and branch mismatch.
 `frontend/e2e/authoring-flow.spec.ts` exercises the built UI at 1440px and 390px with
 synthetic API responses. Its screenshots remain test artifacts, outside Git.
+
+
+The publication and catalog status regressions use synthetic data. Run
+`tests/api/test_branch_workflow.py` from the backend to check history pagination
+and the read-only diagnosis of approvals bound to older imports. The focused
+`source-updates.spec.ts` browser suite also verifies the Italian open-PR and
+retained-catalog messages and their available actions.

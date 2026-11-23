@@ -61,5 +61,9 @@ class BranchWorkflowResponse(ClosedModel):
     can_add_html_language: bool = False
     can_add_language: bool = False
     can_create_pr: bool = False
+    open_pr_url: str | None = None
+    waiting_changes: int = 0
+    creating_pr: bool = False
+    blocked_change: BranchChange | None = None
     items: list[BranchChange] = []
     next_before: int | None = None

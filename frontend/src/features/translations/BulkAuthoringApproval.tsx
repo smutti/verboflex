@@ -167,7 +167,7 @@ export function BulkAuthoringApproval({
             ? t("The translation list is updating automatically.")
             : preview.latest.catalog_state === "failed"
               ? t(
-                  "Catalog update failed. Saved translations are preserved. Open Update from branches.",
+                  "Catalog update failed. Saved translations are preserved. Open Update catalog.",
                 )
               : preview.latest.catalog_state === "current"
                 ? t("The translation list is up to date.")

@@ -2327,6 +2327,7 @@ export type BranchWorkflowResponse = {
      * Available Mappings
      */
     available_mappings?: Array<BranchMappingChoice>;
+    blocked_change?: BranchChange | null;
     /**
      * Can Add Html Language
      */
@@ -2344,6 +2345,10 @@ export type BranchWorkflowResponse = {
      */
     can_publish?: boolean;
     /**
+     * Creating Pr
+     */
+    creating_pr?: boolean;
+    /**
      * Enabled
      */
     enabled: boolean;
@@ -2356,6 +2361,10 @@ export type BranchWorkflowResponse = {
      */
     next_before?: number | null;
     /**
+     * Open Pr Url
+     */
+    open_pr_url?: string | null;
+    /**
      * Repository
      */
     repository?: string | null;
@@ -2363,6 +2372,10 @@ export type BranchWorkflowResponse = {
      * Target Branch
      */
     target_branch?: string | null;
+    /**
+     * Waiting Changes
+     */
+    waiting_changes?: number;
     /**
      * Work Branch
      */

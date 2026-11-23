@@ -69,18 +69,14 @@ function SourceUpdates({
 
   return (
     <section className="grid min-w-0 gap-4">
-      <h2 className="text-heading font-semibold">
-        {t("Update from branches")}
-      </h2>
+      <h2 className="text-heading font-semibold">{t("Update catalog")}</h2>
       <p className="text-muted-foreground">
         {t(
-          "Import the latest commits from the configured source branches. For separate sources, code keys and translations update together. Repository branches are not modified.",
+          "Bring new and changed strings into VerboFlex. To send approved translations to Bitbucket, choose Publish translations.",
         )}
       </p>
       <p className="text-sm text-muted-foreground">
-        {t(
-          "Updates continue in the background when you leave this page. Return to Strings after completion to see the updated catalog.",
-        )}
+        {t("You can leave this page while the catalog updates.")}
       </p>
       {load.status === "loading" && <p role="status">{t("Loading sources")}</p>}
       {load.status === "error" && (
@@ -105,6 +101,7 @@ function SourceUpdates({
           productId={productId}
           repositories={load.repositories}
           headingLevel="h3"
+          catalogView
           compact
         />
       )}

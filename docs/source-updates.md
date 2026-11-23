@@ -1,16 +1,16 @@
 # Update a project's sources
 
-Administrators can open **Update from branches** in a project's workspace.
-The page shows each published mapping, its configured source branches, the last
-successful commit IDs, import status and warnings. Select **Update from branches**
-on a mapping to import the latest commits. A separate code/translation mapping
-refreshes both sources in the same import execution.
+Open **Update catalog** in the product workspace to bring new and changed strings
+into VerboFlex. Each source shows the latest attempt and the date of the catalog
+available to translators. A timeout offers **Retry update**. **Open translation
+catalog** opens the last successful import, including after a failed attempt.
+It appears once a catalog is available. **Source details** contains the configured
+branches, commit IDs and diagnostics. A separate code/translation mapping refreshes
+both sources together.
 
-This operation updates VerboFlex's imported catalog. It does not merge, reset,
-push or change the configured repository branches. To choose different source
-branches, edit, validate and publish the project's mapping in administration.
-Saved proposals remain subject to the existing import and conflict rules; a
-rewritten Git history requires the existing baseline review before activation.
+To send approved translations to Bitbucket for review, open **Publish translations**.
+Administrators can choose different source branches by editing and publishing the
+product mapping. A rewritten source history requires review before activation.
 
 The API retains its administrator-only authorization. Product ownership alone
 does not grant import permission. The workspace entry and direct page route use
@@ -65,11 +65,9 @@ This state remains readable in both import details and the published-mapping lis
 including an initial import with no catalog yet. After confirming the preview,
 the administrator can retry from the same mapping.
 
-**Open current catalog** opens that retained/current catalog without implying that
-the latest attempt succeeded. A failed attempt has an explicit explanation beside
-the link. Successful mappings additionally offer **Review source changes**, which
-opens the project's **Source changed** queue. This queue includes unresolved source
-changes; it is not a list of every added key or a diff restricted to one execution.
+In the workspace, **Review translations with changed source text** opens the
+project’s unresolved source-change queue. The administrative mapping view retains
+its **Open current catalog** and **Review source changes** actions.
 
 Saving an inline translation retains the loaded list while refreshing its cursor
 chain. Previously loaded pages are replaced together. A filtered-out saved row

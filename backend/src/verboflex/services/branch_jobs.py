@@ -109,6 +109,17 @@ def _authorize(session: Session, workflow: BranchWorkflow, job: BranchJob) -> No
                 raise BranchWorkflowError("constraints_changed")
 
 
+def approval_block_reason(session: Session, workflow: BranchWorkflow, job: BranchJob) -> str | None:
+    """Return the current preflight result without preparing or sending the job."""
+    try:
+        _authorize(session, workflow, job)
+    except BranchWorkflowError as error:
+        return str(error)
+    except ValueError:
+        return "authority_changed"
+    return None
+
+
 def _context(workflow: BranchWorkflow, job: BranchJob, data: dict[str, object]) -> WriteContext:
     return WriteContext(
         UUID(str(data["provider_id"])),
@@ -405,10 +416,9 @@ async def execute_branch_job(
         recovery = job.state == "sending"
         job.owner, job.updated_at = owner, datetime.now(UTC)
         if not recovery:
-            try:
-                _authorize(s, workflow, job)
-            except BranchWorkflowError, ValueError:
-                job.state, job.error_code, job.owner = "blocked", "authority_changed", None
+            reason = approval_block_reason(s, workflow, job)
+            if reason is not None:
+                job.state, job.error_code, job.owner = "blocked", reason, None
                 return
             job.state = "running"
         s.expunge(workflow)

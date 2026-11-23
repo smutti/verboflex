@@ -71,7 +71,7 @@ it("moves the visible active highlight through all three product links", async (
     name: "Synthetic product workspace",
   });
   const strings = within(nav).getByRole("link", { name: "Strings" });
-  const changes = within(nav).getByRole("link", { name: "Change sets" });
+  const changes = within(nav).getByRole("link", { name: "Publish translations" });
   const team = within(nav).getByRole("link", { name: "Team" });
   const activeBackground = strings.style.backgroundColor;
   expect(activeBackground).not.toBe("");
@@ -126,7 +126,7 @@ it("opens source updates from the project and returns to strings", async () => {
   const user = userEvent.setup();
   show();
   const update = await screen.findByRole("link", {
-    name: "Update from branches",
+    name: "Update catalog",
   });
   expect(update).toHaveAttribute("href", "/products/p1/source-updates");
   await user.click(update);
@@ -151,7 +151,7 @@ it.each([false, true])(
     });
     await screen.findByText("String workspace content");
     expect(
-      screen.queryByRole("link", { name: "Update from branches" }),
+      screen.queryByRole("link", { name: "Update catalog" }),
     ).not.toBeInTheDocument();
   },
 );
