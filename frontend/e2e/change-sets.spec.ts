@@ -175,7 +175,7 @@ test("reviewer opens full review at 320px and reload requires a fresh in-memory 
   const posts = await setup(page);
   await page.goto("/products/product-1/change-sets");
   await expect(
-    page.getByRole("link", { name: "Change sets", exact: true }),
+    page.getByRole("link", { name: "Publish translations", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   await page.getByRole("checkbox", { name: "Select menu.save (it)" }).check();
   await page

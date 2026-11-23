@@ -40,6 +40,7 @@ def test_api_configure_approve_history_then_explicit_pr(review_api):
     job_id = approve(factory, seed, "Sintetica")
     waiting = client.get(url).json()
     assert waiting["items"][0]["state"] == "queued"
+    assert waiting["waiting_changes"] == 1
     assert waiting["can_create_pr"] is False
     assert client.post(url + "/pull-request").status_code == 409
     assert run(factory, remote, job_id) == ("committed", None)
@@ -49,6 +50,7 @@ def test_api_configure_approve_history_then_explicit_pr(review_api):
     assert "authority" not in str(ready) and "intent" not in str(ready)
     result = client.post(url + "/pull-request")
     assert result.status_code == 202, result.text
+    assert result.json()["creating_pr"] is True
     assert result.json()["items"][0]["kind"] == "pull_request"
     assert result.json()["items"][0]["state"] == "queued"
     assert remote.prs == []  # HTTP must not call Bitbucket.
@@ -57,6 +59,54 @@ def test_api_configure_approve_history_then_explicit_pr(review_api):
     assert duplicate.status_code == 409
     with factory() as s:
         assert len(list(s.scalars(select(BranchJob).where(BranchJob.kind == "pull_request")))) == 1
+
+
+def test_publication_status_includes_older_open_pr_and_blocker_on_every_page(review_api):
+    client, seed, _, factory = review_api
+    url = configure(client, seed)
+    first = approve(factory, seed, "Synthetic")
+    with factory.begin() as session:
+        job = session.get_one(BranchJob, first)
+        job.state, job.error_code = "blocked", "provider_unavailable"
+        fields = dict(workflow_id=job.workflow_id, actor_id=job.actor_id, membership=job.membership)
+        link = "https://bitbucket.org/example/catalog/pull-requests/1"
+        session.add(
+            BranchJob(
+                **fields, kind="pull_request", label="Pull request", state="open", pr_url=link
+            )
+        )
+        for _ in range(60):
+            session.add(BranchJob(**fields, kind="commit", label="Waiting", state="queued"))
+    current = client.get(url).json()
+    assert len(current["items"]) == 50
+    assert all(item["state"] == "queued" for item in current["items"])
+    for data in [current, client.get(url, params={"before": current["next_before"]}).json()]:
+        assert data["open_pr_url"] == link
+        assert data["blocked_change"]["id"] == str(first)
+        assert data["waiting_changes"] == 60
+        assert not data["creating_pr"] and not data["can_create_pr"]
+
+
+def test_stale_approval_reports_catalog_change_including_legacy_blocked_job(review_api):
+    from tests.integration.test_writeback_authority import _run
+
+    client, seed, _, factory = review_api
+    url = configure(client, seed)
+    remote = Remote(seed, factory)
+    job_id = approve(factory, seed, "Synthetic older approval")
+    assert _run(factory, seed.product_id, seed.mapping_id).state == "current"
+    assert run(factory, remote, job_id) == ("blocked", "import_changed")
+    with factory.begin() as session:
+        session.get_one(BranchJob, job_id).error_code = "authority_changed"
+    status = client.get(url).json()
+    assert (
+        status["blocked_change"]["error_code"]
+        == status["items"][0]["error_code"]
+        == "import_changed"
+    )
+    with factory() as session:
+        assert session.get_one(BranchJob, job_id).error_code == "authority_changed"
+    assert not remote.commits and not remote.prs
 
 
 def test_all_http_projections_include_verified_target_status(review_api):

@@ -8,6 +8,7 @@ import {
   useState,
   type ElementType,
 } from "react";
+import { CatalogUpdateCard } from "./CatalogUpdateCard";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 
@@ -66,6 +67,7 @@ interface PollingSnapshot {
 
 export interface PublishedMappingImportsProps {
   compact?: boolean;
+  catalogView?: boolean;
   /** Start only sources that have never been imported; resume existing jobs. */
   autoStart?: boolean;
   accessToken: string;
@@ -459,8 +461,8 @@ function fixedErrorCopy(item: AdminPublishedMappingImportResponse) {
         {
           v0:
             item.dataset_status === "retained"
-              ? "The last successful translation dataset remains active."
-              : "No translation dataset was created.",
+              ? t("The last successful translation dataset remains active.")
+              : t("No translation dataset was created."),
         },
       ),
     };
@@ -681,7 +683,24 @@ function AdminDuplicateAction({
   );
 }
 
+function catalogActionLabel(
+  action: AdminPublishedMappingImportResponse["action"],
+) {
+  switch (action) {
+    case "refresh_import":
+    case "run_import":
+      return t("Update catalog");
+    case "import_in_progress":
+      return t("Update in progress");
+    case "review_baseline_change":
+      return t("Review source changes");
+    case "retry_import":
+      return t("Retry update");
+  }
+}
+
 function ImportAction({
+  catalogView = false,
   accessToken,
   productId,
   automaticUpdatesPaused,
@@ -690,6 +709,7 @@ function ImportAction({
   onRefreshStatus,
   pending,
 }: {
+  catalogView?: boolean;
   accessToken: string;
   productId: string;
   automaticUpdatesPaused: boolean;
@@ -703,6 +723,7 @@ function ImportAction({
   return (
     <div className="grid gap-2">
       {item.id !== null &&
+      !catalogView &&
       item.execution_number &&
       hasParserFailure(item) &&
       item.parser_issues.some(
@@ -722,7 +743,9 @@ function ImportAction({
         aria-busy={pending || inProgress}
         onClick={(event) => onAction(event.currentTarget)}
       >
-        {ACTION_LABELS[item.action]}
+        {catalogView
+          ? catalogActionLabel(item.action)
+          : ACTION_LABELS[item.action]}
       </Button>
       {automaticUpdatesPaused && inProgress ? (
         <>
@@ -799,6 +822,7 @@ function ImportPollingBridge({
 
 export function PublishedMappingImports({
   compact = false,
+  catalogView = false,
   autoStart = false,
   accessToken,
   headingLevel = "h2",
@@ -1305,26 +1329,161 @@ export function PublishedMappingImports({
     startImport,
   ]);
 
+  function selectAction(
+    item: AdminPublishedMappingImportResponse,
+    triggerElement: HTMLButtonElement,
+  ) {
+    if (item.action === "review_baseline_change") {
+      onReviewBaselineChange?.(item);
+      setRewriteReview({ importRecord: item, triggerElement });
+    } else {
+      void startImport(item, triggerElement);
+    }
+  }
+
+  const polling = items.map((item) => (
+    <ImportPollingBridge
+      key={item.mapping_id}
+      accessToken={accessToken}
+      item={item}
+      onAnnouncement={setAnnouncement}
+      onPollingState={updatePollingState}
+      productId={productId}
+      registerRefresh={registerRefresh}
+    />
+  ));
+  const feedback = (
+    <>
+      {" "}
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        {t(announcement)}
+      </p>
+      {rewriteReview !== null ? (
+        <RewrittenBaselineDialog
+          accessToken={accessToken}
+          importRecord={rewriteReview.importRecord}
+          onClose={() => setRewriteReview(null)}
+          onConfirmed={async () => {
+            const refreshed = await loadCompleteCollection(true);
+            if (refreshed) setAnnouncement(t("Baseline updated"));
+            return refreshed;
+          }}
+          open
+          productId={productId}
+          repositories={repositories}
+          triggerElement={rewriteReview.triggerElement}
+        />
+      ) : null}
+    </>
+  );
+  if (catalogView && collectionState === "ready" && items.length) {
+    return (
+      <section aria-label={t("Catalog sources")} className="grid min-w-0 gap-4">
+        {polling}
+        {visibleItems.map(
+          ({ importRecord: item, automaticUpdatesPaused, pollingError }) => (
+            <CatalogUpdateCard
+              key={item.mapping_id}
+              item={item}
+              productId={productId}
+              names={item.repository_sides.map((side) =>
+                repositoryLabel(side.repository_id, repositories),
+              )}
+              error={
+                (mutationFailures.has(item.mapping_id) ||
+                  pollingError ||
+                  statusRefreshFailures.has(item.mapping_id)) && (
+                  <Alert
+                    tabIndex={-1}
+                    ref={(element) =>
+                      setMutationErrorRef("desktop", item.mapping_id, element)
+                    }
+                  >
+                    <AlertTitle>
+                      {mutationFailures.has(item.mapping_id)
+                        ? t("Import did not start")
+                        : t("Status update unavailable")}
+                    </AlertTitle>
+                  </Alert>
+                )
+              }
+              action={
+                <ImportAction
+                  catalogView
+                  accessToken={accessToken}
+                  productId={productId}
+                  automaticUpdatesPaused={automaticUpdatesPaused}
+                  item={item}
+                  onAction={(trigger) => selectAction(item, trigger)}
+                  onRefreshStatus={() =>
+                    void refreshHandlersRef.current.get(item.mapping_id)?.()
+                  }
+                  pending={pendingMappings.has(item.mapping_id)}
+                />
+              }
+              details={
+                <>
+                  <RepositorySides item={item} repositories={repositories} />
+                  <Baseline item={item} />
+                  <div>
+                    {t("Latest execution")}
+                    <LatestExecution item={item} />
+                  </div>
+                  {fixedErrorCopy(item) ? (
+                    <RowError
+                      item={item}
+                      productId={productId}
+                      mutationFailed={false}
+                      pollingFailed={false}
+                    />
+                  ) : (
+                    <ParserIssues item={item} productId={productId} />
+                  )}
+                  {item.id &&
+                  item.execution_number &&
+                  (item.duplicate_report_summary?.group_count ||
+                    item.parser_issues.some(
+                      (issue) => issue.issue_code === "duplicate_key",
+                    )) ? (
+                    <AdminDuplicateAction
+                      accessToken={accessToken}
+                      productId={productId}
+                      item={item}
+                    />
+                  ) : null}
+                </>
+              }
+            />
+          ),
+        )}
+        {feedback}
+      </section>
+    );
+  }
   const Heading = headingLevel as ElementType;
 
   return (
     <section className="grid min-w-0 max-w-full gap-4 overflow-x-clip">
-      <div className="grid gap-2">
-        <Heading className="text-heading font-semibold">
-          {autoStart
-            ? t("Import progress")
-            : compact
-              ? t("Imports from published sources")
-              : t("Published mapping imports")}
-        </Heading>
-        <p className="text-muted-foreground">
-          {autoStart
-            ? t(
-                "New sources start importing automatically. You can follow their progress here.",
-              )
-            : t("Import localization sources from the exact published branch.")}
-        </p>
-      </div>
+      {!catalogView && (
+        <div className="grid gap-2">
+          <Heading className="text-heading font-semibold">
+            {autoStart
+              ? t("Import progress")
+              : compact
+                ? t("Imports from published sources")
+                : t("Published mapping imports")}
+          </Heading>
+          <p className="text-muted-foreground">
+            {autoStart
+              ? t(
+                  "New sources start importing automatically. You can follow their progress here.",
+                )
+              : t(
+                  "Import localization sources from the exact published branch.",
+                )}
+          </p>
+        </div>
+      )}
 
       {collectionState === "loading" ? (
         <div className="grid gap-3" role="status" aria-live="polite">
@@ -1332,14 +1491,22 @@ export function PublishedMappingImports({
             data-testid="published-import-skeleton"
             className="h-24 w-full"
           />
-          <span>{t("Loading published mappings")}</span>
+          <span>
+            {catalogView
+              ? t("Loading sources")
+              : t("Loading published mappings")}
+          </span>
         </div>
       ) : null}
 
       {collectionState === "error" ? (
         <Alert variant="destructive">
           <AlertTitle>
-            <h4>{t("Published imports unavailable")}</h4>
+            <h4>
+              {catalogView
+                ? t("Sources unavailable")
+                : t("Published imports unavailable")}
+            </h4>
           </AlertTitle>
           <AlertDescription>
             <Button
@@ -1348,7 +1515,9 @@ export function PublishedMappingImports({
               className="min-h-11 whitespace-normal"
               onClick={() => void loadCompleteCollection()}
             >
-              {t("Retry loading published imports")}
+              {catalogView
+                ? t("Retry loading sources")
+                : t("Retry loading published imports")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -1357,7 +1526,9 @@ export function PublishedMappingImports({
       {collectionState === "ready" && items.length === 0 ? (
         <div className="grid gap-2 rounded-lg border bg-secondary p-6">
           <h4 className="font-semibold">
-            {t("No published mappings to import")}
+            {catalogView
+              ? t("No catalog sources configured")
+              : t("No published mappings to import")}
           </h4>
           <p className="text-muted-foreground">
             {t("Publish a validated mapping before running an import.")}
@@ -1367,17 +1538,7 @@ export function PublishedMappingImports({
 
       {collectionState === "ready" && items.length > 0 ? (
         <>
-          {items.map((item) => (
-            <ImportPollingBridge
-              key={item.mapping_id}
-              accessToken={accessToken}
-              item={item}
-              onAnnouncement={setAnnouncement}
-              onPollingState={updatePollingState}
-              productId={productId}
-              registerRefresh={registerRefresh}
-            />
-          ))}
+          {polling}
 
           <Tabs defaultValue="progress" className="min-w-0 max-w-full">
             <TabsList
@@ -1604,17 +1765,9 @@ export function PublishedMappingImports({
                             productId={productId}
                             automaticUpdatesPaused={automaticUpdatesPaused}
                             item={item}
-                            onAction={(triggerElement) => {
-                              if (item.action === "review_baseline_change") {
-                                onReviewBaselineChange?.(item);
-                                setRewriteReview({
-                                  importRecord: item,
-                                  triggerElement,
-                                });
-                              } else {
-                                void startImport(item, triggerElement);
-                              }
-                            }}
+                            onAction={(triggerElement) =>
+                              selectAction(item, triggerElement)
+                            }
                             onRefreshStatus={() =>
                               void refreshHandlersRef.current.get(
                                 item.mapping_id,
@@ -1687,17 +1840,9 @@ export function PublishedMappingImports({
                     productId={productId}
                     automaticUpdatesPaused={automaticUpdatesPaused}
                     item={item}
-                    onAction={(triggerElement) => {
-                      if (item.action === "review_baseline_change") {
-                        onReviewBaselineChange?.(item);
-                        setRewriteReview({
-                          importRecord: item,
-                          triggerElement,
-                        });
-                      } else {
-                        void startImport(item, triggerElement);
-                      }
-                    }}
+                    onAction={(triggerElement) =>
+                      selectAction(item, triggerElement)
+                    }
                     onRefreshStatus={() =>
                       void refreshHandlersRef.current.get(item.mapping_id)?.()
                     }
@@ -1708,26 +1853,7 @@ export function PublishedMappingImports({
             )}
           </section>
 
-          <p className="sr-only" aria-live="polite" aria-atomic="true">
-            {t(announcement)}
-          </p>
-
-          {rewriteReview !== null ? (
-            <RewrittenBaselineDialog
-              accessToken={accessToken}
-              importRecord={rewriteReview.importRecord}
-              onClose={() => setRewriteReview(null)}
-              onConfirmed={async () => {
-                const refreshed = await loadCompleteCollection(true);
-                if (refreshed) setAnnouncement(t("Baseline updated"));
-                return refreshed;
-              }}
-              open
-              productId={productId}
-              repositories={repositories}
-              triggerElement={rewriteReview.triggerElement}
-            />
-          ) : null}
+          {feedback}
         </>
       ) : null}
     </section>

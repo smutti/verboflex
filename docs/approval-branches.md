@@ -5,10 +5,17 @@ branch in Bitbucket. Saving a draft still only saves it in VerboFlex. Approval
 records an immutable snapshot and queues a separate commit. Later drafts or
 approvals do not replace earlier queued snapshots.
 
-In **Change sets**, users see each approval, its queue status and the resulting
+In **Publish translations**, users see each approval, its queue status and the resulting
 commit link. **Create pull request** is a separate, explicit action. It becomes
 available after all queued commits finish. An open PR automatically includes later
 commits on the same working branch. Merging remains a Bitbucket action.
+
+The publication summary keeps the open PR link, the first blocked change and the
+number of pending changes visible on every history page. New approvals join the
+open PR once their commits reach Bitbucket. Editing and approving a translation
+are separate from merging it. An approval tied to an older import requires
+administrator review. The panel identifies the affected change and suppresses
+retries that would reuse the same obsolete approval.
 
 ## Configuration
 
@@ -207,7 +214,7 @@ commits are not automatically backfilled when the feature is deployed.
 
 The normal import permission, connection and source-confirmation checks still apply.
 A broker failure is retried from the recorded execution without another commit.
-A failed import leaves saved entries visible and offers **Update from branches**.
+A failed import leaves saved entries visible and offers **Update catalog**.
 Successful imports consume only additions that exactly match repository values;
 unmatched drafts retain their text and normal source-change checks. Source changes
 may require reopening and saving those drafts before another approval.

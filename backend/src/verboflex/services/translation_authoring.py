@@ -158,7 +158,7 @@ def destinations(session: Session, *, product_id: UUID, actor_id: UUID) -> Autho
                     message=(
                         "The translation source must be refreshed before new entries can be saved "
                         "or approved. Existing drafts are preserved and remain available in "
-                        "New entries (list_new_entries). Open Update from branches to recover "
+                        "New entries (list_new_entries). Open Update catalog to recover "
                         "the import, then reload the destinations."
                     ),
                 )

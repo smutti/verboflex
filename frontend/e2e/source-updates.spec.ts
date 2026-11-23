@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-async function setup(page: Page, admin = true) {
+async function setup(page: Page, admin = true, timedOut = false) {
   let starts = 0;
   let completed = false;
   let sourceReads = 0;
@@ -40,14 +40,18 @@ async function setup(page: Page, admin = true) {
           source_branch: "master",
         },
       ],
-      state: active ? "running" : "current",
-      action: active ? "import_in_progress" : "refresh_import",
+      state: timedOut ? "may_be_stale" : active ? "running" : "current",
+      action: timedOut
+        ? "retry_import"
+        : active
+          ? "import_in_progress"
+          : "refresh_import",
       capability: "ready",
-      dataset_status: "active",
+      dataset_status: timedOut ? "retained" : "active",
       execution_number: starts + 1,
       latest_execution_at: now,
       retry_count: 0,
-      error_category: null,
+      error_category: timedOut ? "timeout" : null,
       error_message: null,
       parser_issues: [],
       parser_issue_remaining_count: 0,
@@ -182,35 +186,34 @@ for (const width of [320, 1440]) {
     const fixture = await setup(page);
     await page.goto("/products/product/strings");
     await page
-      .getByRole("link", { name: "Update from branches", exact: true })
+      .getByRole("link", { name: "Update catalog", exact: true })
       .click();
-    const scope =
-      width < 768
-        ? page.getByRole("region", {
-            name: "Published mapping imports mobile list",
-          })
-        : page.getByRole("table", { name: "Published mapping imports" });
+    const scope = page.getByRole("article", {
+      name: "Application · Shared translations",
+    });
+    await scope.getByText("Source details", { exact: true }).click();
     await expect(scope).toContainText("Application");
     await expect(scope).toContainText("Shared translations");
     await expect(scope).toContainText("main");
     await expect(scope).toContainText("master");
     expect(fixture.starts()).toBe(0);
     await scope
-      .getByRole("button", { name: "Update from branches", exact: true })
+      .getByRole("button", { name: "Update catalog", exact: true })
       .click();
     await expect(
-      scope.getByRole("button", { name: "Import in progress" }),
+      scope.getByRole("button", { name: "Update in progress" }),
     ).toBeDisabled();
     await page.reload();
+    await scope.getByText("Source details", { exact: true }).click();
     await expect(
-      scope.getByRole("button", { name: "Import in progress" }),
+      scope.getByRole("button", { name: "Update in progress" }),
     ).toBeDisabled();
     expect(fixture.starts()).toBe(1);
     fixture.complete();
     await expect(scope).toContainText("cccccccccccc");
     await expect(scope).toContainText("dddddddddddd");
     await expect(
-      scope.getByRole("button", { name: "Update from branches", exact: true }),
+      scope.getByRole("button", { name: "Update catalog", exact: true }),
     ).toBeEnabled();
     expect(
       await page.evaluate(
@@ -235,4 +238,111 @@ test("denies direct source update access to a viewer before reading source confi
   await expect(page.getByText("Administrator access required")).toBeVisible();
   expect(fixture.starts()).toBe(0);
   expect(fixture.sourceReads()).toBe(0);
+});
+
+test.describe("Italian publication and catalog messages", () => {
+  test.use({ locale: "it-IT" });
+
+  for (const blocked of [false, true]) {
+    test(`opens the existing review with ${blocked ? "blocked" : "published"} changes`, async ({
+      page,
+      context,
+    }, testInfo) => {
+      await setup(page);
+      const url = "https://bitbucket.org/example/catalog/pull-requests/8";
+      await context.route(url, (route) =>
+        route.fulfill({ contentType: "text/plain", body: "Synthetic review" }),
+      );
+      await page.route("**/branch-workflow*", (route) => {
+        expect(route.request().method()).toBe("GET");
+        return route.fulfill({
+          json: {
+            enabled: true,
+            workflow_id: "workflow",
+            work_branch: "review",
+            target_branch: "main",
+            repository: "translations",
+            can_publish: true,
+            can_create_pr: false,
+            open_pr_url: url,
+            waiting_changes: blocked ? 9 : 0,
+            blocked_change: blocked
+              ? {
+                  id: "older",
+                  label: "welcome_title (it)",
+                  kind: "commit",
+                  state: "blocked",
+                  error_code: "import_changed",
+                  can_retry: true,
+                }
+              : null,
+            items: [],
+            workflows: [],
+            next_before: null,
+          },
+        });
+      });
+      await page.goto("/products/product/change-sets");
+      const panel = page
+        .locator("section")
+        .filter({
+          has: page.getByRole("link", {
+            name: "Apri la revisione su Bitbucket",
+          }),
+        })
+        .last();
+      const link = panel.getByRole("link", {
+        name: "Apri la revisione su Bitbucket",
+      });
+      await expect(link).toHaveAttribute("href", url);
+      const blocker = panel.getByText(
+        "Pubblicazione ferma su welcome_title (it)",
+      );
+      const waiting = panel.getByText("Modifiche ancora da inviare (9)");
+      if (blocked) {
+        await expect(blocker).toBeVisible();
+        await expect(waiting).toBeVisible();
+      } else {
+        await expect(blocker).toHaveCount(0);
+        await expect(waiting).toHaveCount(0);
+      }
+      await expect(
+        panel.getByRole("button", { name: "Controlla e riprova" }),
+      ).toHaveCount(0);
+      await expect(
+        panel.getByRole("button", { name: "Crea una pull request" }),
+      ).toHaveCount(0);
+      await panel.screenshot({
+        path: testInfo.outputPath("pubblicazione.png"),
+      });
+      const opened = page.waitForEvent("popup");
+      await link.click();
+      const review = await opened;
+      await expect(review).toHaveURL(url);
+      await expect(
+        review.getByText("Synthetic review", { exact: true }),
+      ).toBeVisible();
+    });
+  }
+
+  test("keeps a dated link to the catalog after a timeout", async ({
+    page,
+  }, testInfo) => {
+    await setup(page, true, true);
+    await page.goto("/products/product/source-updates");
+    const card = page.getByRole("article");
+    await expect(
+      card.getByText("Il catalogo non è stato aggiornato", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      card.getByRole("link", { name: "Apri il catalogo traduzioni" }),
+    ).toBeVisible();
+    await expect(
+      card.getByText(/Le stringhe disponibili sono quelle/),
+    ).toBeVisible();
+    await expect(
+      card.getByRole("button", { name: "Riprova ad aggiornare" }),
+    ).toBeEnabled();
+    await card.screenshot({ path: testInfo.outputPath("catalogo.png") });
+  });
 });

@@ -66,13 +66,11 @@ for (const filtered of [false, true]) {
           (_, i) => `group-${String(i).padStart(3, "0")}`,
         ).filter((id) => !filtered || !saved.has(id));
         const data = keyPage({
-          items: all
-            .slice(offset, offset + 50)
-            .map((id) =>
-              group(id, {
-                translated_text: saved.get(id)?.pending[0].text ?? "Old",
-              }),
-            ),
+          items: all.slice(offset, offset + 50).map((id) =>
+            group(id, {
+              translated_text: saved.get(id)?.pending[0].text ?? "Old",
+            }),
+          ),
           next_cursor:
             offset + 50 < all.length ? `g${generation}-${offset + 50}` : null,
         });
@@ -134,41 +132,36 @@ for (const filtered of [false, true]) {
     await expect(
       page.locator('[data-translation-editor-trigger="group-000"]'),
     ).toBeVisible();
-    // Trigger the second page and then move to a row outside the first 50 keys.
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await expect.poll(() => cursors.includes("g0-50")).toBe(true);
-    await page.evaluate(() => window.scrollTo(0, 7300));
+    // Virtual rows can change height after measurement. Scroll until a row
+    // from the second page is actually visible, then edit that same row.
+    let id: string | null = null;
     await expect
-      .poll(async () =>
-        page
-          .locator("[data-translation-editor-trigger]")
-          .evaluateAll((elements) =>
-            elements.some((element) => {
-              const rect = element.getBoundingClientRect();
-              return (
-                rect.top > 200 &&
-                rect.bottom < 700 &&
-                Number(
-                  (
-                    element as HTMLElement
-                  ).dataset.translationEditorTrigger!.slice(6),
-                ) >= 50
-              );
-            }),
-          ),
+      .poll(
+        async () => {
+          id = await page
+            .locator("[data-translation-editor-trigger]")
+            .evaluateAll((elements) => {
+              for (const element of elements) {
+                const key = (element as HTMLElement).dataset
+                  .translationEditorTrigger!;
+                const rect = element.getBoundingClientRect();
+                if (
+                  Number(key.slice(6)) >= 50 &&
+                  rect.top > 200 &&
+                  rect.bottom < 700
+                )
+                  return key;
+              }
+              return null;
+            });
+          if (!id)
+            await page.evaluate(() => window.scrollBy(0, innerHeight / 2));
+          return id;
+        },
+        { timeout: 15000, intervals: [60, 100, 200] },
       )
-      .toBe(true);
-    const id = await page
-      .locator("[data-translation-editor-trigger]")
-      .evaluateAll(
-        (elements) =>
-          (
-            elements.find((element) => {
-              const rect = element.getBoundingClientRect();
-              return rect.top > 200 && rect.bottom < 700;
-            }) as HTMLElement
-          ).dataset.translationEditorTrigger!,
-      );
+      .not.toBeNull();
+    expect(cursors).toContain("g0-50");
     await page.locator(`[data-translation-editor-trigger="${id}"]`).click();
     await page
       .getByRole("textbox", { name: "Proposed translation", exact: true })

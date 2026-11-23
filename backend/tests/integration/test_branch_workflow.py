@@ -691,6 +691,7 @@ def test_multiple_translation_sources_have_separate_branch_queues(
                     LocalizationScope.current_mapping_id == second_mapping_id,
                     TranslationValue.language == "it",
                 )
+                .order_by(TranslationValue.id)
             )
         )
         # Start an ordinary proposal for the newly imported second source.

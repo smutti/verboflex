@@ -189,3 +189,33 @@ it("requires a new confirmation after selecting a different repository branch", 
     }),
   );
 });
+
+it("keeps an existing PR visible alongside an older blocker without offering a duplicate PR or a futile retry", async () => {
+  const url = "https://bitbucket.org/example/translations/pull-requests/3";
+  api.getBranchWorkflow.mockResolvedValue({
+    data: {
+      ...workflow,
+      can_create_pr: false,
+      items: [],
+      open_pr_url: url,
+      waiting_changes: 9,
+      blocked_change: {
+        ...workflow.items[0],
+        label: "example (it)",
+        id: "old",
+        can_retry: true,
+        error_code: "import_changed",
+      },
+    },
+  });
+  render(<BranchWorkflowPanel>Legacy</BranchWorkflowPanel>);
+  expect(
+    await screen.findByRole("link", { name: "Open pull request" }),
+  ).toHaveAttribute("href", url);
+  expect(screen.getByText("Publication paused at example (it)")).toBeVisible();
+  expect(screen.getByText("Changes still to send (9)")).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "Create pull request" }),
+  ).toBeNull();
+  expect(screen.queryByRole("button", { name: "Check and retry" })).toBeNull();
+});

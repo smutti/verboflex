@@ -173,8 +173,8 @@ afterEach(cleanup);
 it("shows both published branches and commit IDs, then explicitly queues their shared refresh", async () => {
   const user = userEvent.setup();
   show();
-  const table = await screen.findByRole("table", {
-    name: "Published mapping imports",
+  const table = await screen.findByRole("article", {
+    name: "Application · Shared translations",
   });
   expect(table).toHaveTextContent("Application");
   expect(table).toHaveTextContent("Shared translations");
@@ -200,7 +200,7 @@ it("shows both published branches and commit IDs, then explicitly queues their s
   );
   vi.mocked(getAdminImport).mockResolvedValue(ok(queued));
   await user.click(
-    within(table).getByRole("button", { name: "Update from branches" }),
+    within(table).getByRole("button", { name: "Update catalog" }),
   );
   await waitFor(() =>
     expect(startAdminPublishedMappingImport).toHaveBeenCalledTimes(1),
@@ -212,7 +212,7 @@ it("shows both published branches and commit IDs, then explicitly queues their s
     }),
   );
   expect(
-    within(table).getByRole("button", { name: "Import in progress" }),
+    within(table).getByRole("button", { name: "Update in progress" }),
   ).toBeDisabled();
 });
 
@@ -223,7 +223,7 @@ it("retries unavailable repository names without starting an import", async () =
   await user.click(
     await screen.findByRole("button", { name: "Retry loading sources" }),
   );
-  expect(await screen.findByRole("table")).toHaveTextContent(
+  expect(await screen.findByRole("article")).toHaveTextContent(
     "Shared translations",
   );
   expect(startAdminPublishedMappingImport).not.toHaveBeenCalled();
@@ -231,8 +231,68 @@ it("retries unavailable repository names without starting an import", async () =
 
 it("aborts source discovery when leaving the page", async () => {
   const view = show();
-  await screen.findByRole("table");
+  await screen.findByRole("article");
   const signal = vi.mocked(getAdminProduct).mock.calls[0][0].signal;
   view.unmount();
   expect(signal?.aborted).toBe(true);
+});
+
+it("keeps the previous catalog available when an update times out", async () => {
+  vi.mocked(listAdminPublishedMappingImports).mockResolvedValue(
+    ok({
+      items: [
+        {
+          ...imported,
+          state: "may_be_stale",
+          action: "retry_import",
+          error_category: "timeout",
+          dataset_status: "retained",
+        },
+      ],
+      next_cursor: null,
+    }),
+  );
+  show();
+  expect(await screen.findByText("Catalog update unsuccessful")).toBeVisible();
+  expect(
+    screen.getByText(
+      "The source did not respond in time. Try again in a few minutes.",
+    ),
+  ).toBeVisible();
+  expect(
+    screen.getByRole("link", { name: "Open translation catalog" }),
+  ).toHaveAttribute("href", "/products/p1/strings");
+  expect(screen.getByRole("button", { name: "Retry update" })).toBeEnabled();
+  expect(
+    screen.queryByRole("link", {
+      name: "Review translations with changed source text",
+    }),
+  ).toBeNull();
+  expect(startAdminPublishedMappingImport).not.toHaveBeenCalled();
+});
+
+it("does not offer an empty catalog after the first update fails", async () => {
+  vi.mocked(listAdminPublishedMappingImports).mockResolvedValue(
+    ok({
+      items: [
+        {
+          ...imported,
+          state: "import_failed",
+          action: "retry_import",
+          active_baseline: null,
+          dataset_status: "not_created",
+        },
+      ],
+      next_cursor: null,
+    }),
+  );
+  show();
+  expect(
+    await screen.findByText(
+      "Strings will appear here after the first successful update.",
+    ),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("link", { name: "Open translation catalog" }),
+  ).toBeNull();
 });
