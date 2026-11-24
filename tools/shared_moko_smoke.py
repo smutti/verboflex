@@ -42,7 +42,7 @@ def run(h):
         branches=control["branches"],
         files=control["files"],
     )
-    setup(h, repository_prefix=prefix)
+    repository_id = setup(h, repository_prefix=prefix)
     control["branches"].pop(slug)
     control["files"].pop(slug)
     h.control(branches=control["branches"], files=control["files"])
@@ -65,31 +65,33 @@ def run(h):
     details = [h.api(f"/translations/{item['id']}") for item in groups]
     group = next(d for d in details if d["raw_key"] == "title")
     commits = []
+    parent = working_head
+    expected_bytes = working_source
+    previous_title = b"Base title"
     for text in (
         "First approved title",
         "Second approved title",
         "Conflicting third approval",
     ):
-        if len(commits) == 2:
-            external_head = "3" * 40
-            external_content = (
-                working_source.replace(b"Base title", b"Second approved title")
-                + b"\n<!-- external edit -->"
-            )
+        if commits:
+            parent = ("3" if len(commits) == 1 else "4") * 40
+            if len(commits) == 1:
+                expected_bytes = expected_bytes.replace(
+                    b"</resources>", b"<!-- unrelated change --></resources>"
+                )
+            else:
+                expected_bytes = expected_bytes.replace(previous_title, b"Edited by another user")
             h.control(
-                branches={
-                    **control["branches"],
-                    slug: {"feature/verboflex": external_head},
-                },
+                branches={**control["branches"], slug: {"feature/verboflex": parent}},
                 files={
                     **control["files"],
-                    slug: {
-                        external_head: {
-                            path: base64.b64encode(external_content).decode()
-                        }
-                    },
+                    slug: {parent: {path: base64.b64encode(expected_bytes).decode()}},
                 },
             )
+            # Materialize the external revision, then let normal commits advance the fixture.
+            page = h.api(f"/admin/repositories/{repository_id}/branches")
+            assert {"name": "feature/verboflex", "commit_hash": parent} in page["items"]
+            h.control(branches=control["branches"], files=control["files"])
         detail = h.api(f"/translations/{group['id']}")
         pending = detail["pending_change"]
         saved = h.api(
@@ -121,7 +123,7 @@ def run(h):
         )
         if len(commits) == 2:
             assert result["items"][0]["state"] == "blocked"
-            assert result["items"][0]["error_code"] == "file_changed"
+            assert result["items"][0]["error_code"] == "source_file_changed", result["items"][0]["error_code"]
             assert h.graph()["repositories"][slug]["counters"]["commit"]["effects"] == 2
             assert (
                 h.graph()["repositories"][slug]["counters"]["pull_request"]["effects"]
@@ -134,10 +136,10 @@ def run(h):
         sha = result["items"][0]["commit_hash"]
         repo = h.graph()["repositories"][slug]
         commit = repo["commits"][sha]
-        assert commit["parents"] == [commits[-1] if commits else working_head]
-        assert base64.b64decode(commit["files"][path]) == working_source.replace(
-            b"Base title", text.encode()
-        )
+        assert commit["parents"] == [parent]
+        expected_bytes = expected_bytes.replace(previous_title, text.encode())
+        previous_title = text.encode()
+        assert base64.b64decode(commit["files"][path]) == expected_bytes
         assert repo["counters"]["commit"]["effects"] == len(commits) + 1
         assert repo["counters"]["pull_request"]["effects"] == 0
         commits.append(sha)
@@ -150,7 +152,8 @@ def run(h):
             "pull_requests": 0,
             "unrelated_duplicate_bytes_preserved": True,
             "existing_branch_changes_preserved": True,
-            "later_external_file_changes_blocked": True,
+            "later_unrelated_edit_preserved": True,
+            "conflicting_external_title_blocked": True,
             "duplicate_approval_rejected": True,
         },
     )

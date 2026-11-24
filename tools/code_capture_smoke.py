@@ -195,6 +195,7 @@ def setup(h, *, repository_prefix="code-e2e"):
         "scope": sources[0]["scope_id"],
     }
     write_json(h.path, h.fixture)
+    return next(side["repository_id"] for side in sides if side["role"] == "translations")
 
 
 def verify(h):

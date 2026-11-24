@@ -160,7 +160,8 @@ writer tests additionally reject ambiguous targets, stale locators and
 unsupported content following a duplicate.
 The shared catalog smoke also starts from an existing branch with different
 unrelated entries, preserves those differences across approvals, and verifies
-that a later external file edit blocks the next approval without another commit.
+that a later unrelated XML edit survives the next approval. An external change to
+the selected title blocks publication and leaves the provider commit count unchanged.
 
 ```sh
 BRANCH_WORKFLOW_SMOKE_ONLY=1 PHASE8_HTTP_SETUP=1 \
