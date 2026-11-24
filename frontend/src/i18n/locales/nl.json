@@ -157,6 +157,7 @@
   "Bitbucket could not complete this import. The last successful baseline is unchanged. Retry later.": "Bitbucket kon deze import niet voltooien. De laatste succesvolle basislijn is ongewijzigd. Probeer het later opnieuw.",
   "Bitbucket denied access to this repository or branch. Review the organizational connection and repository permissions, then retry from this mapping.": "Bitbucket heeft de toegang tot deze repository of branch geweigerd. Controleer de machtigingen voor de organisatieverbinding en de opslagplaats en probeer het opnieuw vanaf deze toewijzing.",
   "Bitbucket did not respond within the safe time limit. The last successful baseline is unchanged. Retry later.": "Bitbucket reageerde niet binnen de veilige tijdslimiet. De laatste succesvolle basislijn is ongewijzigd. Probeer het later opnieuw.",
+  "Bitbucket has paused publication. VerboFlex will try again automatically after {{time}}.": "Bitbucket heeft de publicatie gepauzeerd. VerboFlex probeert het na {{time}} automatisch opnieuw.",
   "Bitbucket is temporarily limiting requests. Wait a few minutes, then retry this import from the mapping.": "Bitbucket beperkt tijdelijk verzoeken. Wacht een paar minuten en probeer vervolgens opnieuw te importeren vanuit de toewijzing.",
   "Bitbucket reconnected": "Bitbucket heeft opnieuw verbinding gemaakt",
   "Bitbucket repositories": "Bitbucket-opslagplaatsen",

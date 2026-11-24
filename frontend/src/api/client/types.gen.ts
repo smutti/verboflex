@@ -2365,6 +2365,10 @@ export type BranchWorkflowResponse = {
      */
     open_pr_url?: string | null;
     /**
+     * Publication Retry At
+     */
+    publication_retry_at?: string | null;
+    /**
      * Repository
      */
     repository?: string | null;

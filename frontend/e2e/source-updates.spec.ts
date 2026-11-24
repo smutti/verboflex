@@ -325,6 +325,61 @@ test.describe("Italian publication and catalog messages", () => {
     });
   }
 
+  test("resumes publication and opens one confirmed review after Bitbucket pauses", async ({
+    page,
+  }) => {
+    await setup(page);
+    const url = "https://bitbucket.org/example/catalog/pull-requests/9";
+    let stage: "saving" | "ready" | "creating" | "open" = "saving";
+    let confirmations = 0;
+    await page.route("**/branch-workflow**", (route) => {
+      if (route.request().method() === "POST") {
+        confirmations++;
+        stage = "creating";
+      }
+      return route.fulfill({
+        json: {
+          enabled: true,
+          workflow_id: "workflow",
+          work_branch: "review",
+          target_branch: "main",
+          repository: "translations",
+          can_publish: true,
+          can_create_pr: stage === "ready",
+          creating_pr: stage === "creating",
+          open_pr_url: stage === "open" ? url : null,
+          waiting_changes: stage === "saving" ? 1 : 0,
+          workflows: [],
+          items: [],
+          publication_retry_at: ["saving", "creating"].includes(stage)
+            ? "2030-01-01T12:00:00Z"
+            : null,
+        },
+      });
+    });
+    await page.goto("/products/product/change-sets");
+    const pause = page.getByText(
+      /Bitbucket ha messo in pausa la pubblicazione/,
+    );
+    const create = page.getByRole("button", { name: "Crea una pull request" });
+    await expect(pause).toBeVisible();
+    await expect(create).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Controlla e riprova" }),
+    ).toHaveCount(0);
+    stage = "ready";
+    await expect(create).toBeEnabled({ timeout: 12000 });
+    await create.click();
+    await page.getByRole("button", { name: "Conferma invio" }).click();
+    await expect(pause).toBeVisible();
+    stage = "open";
+    await expect(
+      page.getByRole("link", { name: "Apri la revisione su Bitbucket" }),
+    ).toHaveAttribute("href", url, { timeout: 12000 });
+    await expect(pause).toHaveCount(0);
+    expect(confirmations).toBe(1);
+  });
+
   test("keeps a dated link to the catalog after a timeout", async ({
     page,
   }, testInfo) => {

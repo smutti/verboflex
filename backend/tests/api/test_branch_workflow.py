@@ -87,6 +87,34 @@ def test_publication_status_includes_older_open_pr_and_blocker_on_every_page(rev
         assert not data["creating_pr"] and not data["can_create_pr"]
 
 
+def test_waiting_deadline_is_visible_when_the_change_is_on_an_older_page(review_api):
+    from datetime import UTC, datetime, timedelta
+
+    client, seed, _, factory = review_api
+    url = configure(client, seed)
+    first = approve(factory, seed, "Synthetic")
+    deadline = datetime.now(UTC) + timedelta(hours=1)
+    with factory.begin() as session:
+        job = session.get_one(BranchJob, first)
+        job.retry_at, job.error_code = deadline, "rate_limited"
+        for _ in range(51):
+            session.add(
+                BranchJob(
+                    workflow_id=job.workflow_id,
+                    actor_id=job.actor_id,
+                    membership=job.membership,
+                    kind="commit",
+                    label="Waiting",
+                    state="queued",
+                )
+            )
+    data = client.get(url).json()
+    assert not any(item["id"] == str(first) for item in data["items"])
+    assert datetime.fromisoformat(data["publication_retry_at"]) == deadline
+    assert data["waiting_changes"] == 52 and data["blocked_change"] is None
+    assert not data["can_create_pr"]
+
+
 def test_stale_approval_reports_catalog_change_including_legacy_blocked_job(review_api):
     from tests.integration.test_writeback_authority import _run
 

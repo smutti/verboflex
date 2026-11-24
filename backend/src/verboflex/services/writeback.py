@@ -347,6 +347,7 @@ async def _snapshot(
     adapter: WritebackReadAdapter,
     *,
     remaining: int,
+    propagate_rate_limit: bool = False,
 ) -> SourceFileSnapshot:
     reference = file.authority
     try:
@@ -369,6 +370,8 @@ async def _snapshot(
                 max_bytes=min(reference.size_bytes, MAX_CANONICAL_FILE_BYTES, remaining),
             )
     except BitbucketProviderReadError as error:
+        if propagate_rate_limit and error.kind == "rate_limited":
+            raise
         raise _provider_failure(error, file=True) from None
     if type(content) is not bytes or len(content) > remaining:
         raise WritebackRejected(WritebackReason.LIMIT_EXCEEDED)

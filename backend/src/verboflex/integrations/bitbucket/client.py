@@ -7,6 +7,7 @@ import json
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal, Protocol, cast
 from urllib.parse import urlsplit
 
@@ -14,6 +15,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from verboflex.core.config import Settings
+from verboflex.integrations.bitbucket.rate_limit import retry_deadline
 from verboflex.integrations.bitbucket.source_cache import SourceFileCache
 from verboflex.integrations.bitbucket.urls import (
     PHASE_3_READ_OPERATIONS,
@@ -90,8 +92,10 @@ class BitbucketProviderReadError(RuntimeError):
         kind: ProviderFailureKind = "unavailable",
         provider_status: int | None = None,
         operation: BitbucketOperation | None = None,
+        retry_at: datetime | None = None,
     ) -> None:
         super().__init__(PROVIDER_READ_FAILED_MESSAGE)
+        self.retry_at = retry_at
         self.kind: ProviderFailureKind = kind if kind in _PROVIDER_FAILURE_KINDS else "unavailable"
         self.provider_status = (
             provider_status
@@ -952,6 +956,9 @@ class BitbucketHttpAdapter:
                     raise BitbucketProviderReadError(
                         kind=kind,
                         provider_status=response.status_code,
+                        retry_at=retry_deadline(response.headers.get("Retry-After"))
+                        if kind == "rate_limited"
+                        else None,
                     )
                 raw_scopes = response.headers.get("x-oauth-scopes")
                 scopes = raw_scopes.replace(",", " ").split() if isinstance(raw_scopes, str) else []

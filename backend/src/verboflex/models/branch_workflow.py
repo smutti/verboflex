@@ -85,6 +85,8 @@ class BranchJob(Base):
     pr_id: Mapped[int | None] = mapped_column(Integer)
     pr_url: Mapped[str | None] = mapped_column(String(4096))
     error_code: Mapped[str | None] = mapped_column(String(64))
+    retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rate_limit_attempts: Mapped[int] = mapped_column(Integer, server_default="0")
     owner: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -357,6 +357,31 @@ def test_create_ambiguous_send_is_unknown_and_never_reposts(fault):
     asyncio.run(with_provider(provider, exercise))
 
 
+def test_pr_created_before_rate_limit_is_verified_without_a_second_post():
+    from datetime import UTC, datetime
+
+    provider = Provider()
+    provider.response_edit = abbreviated_receipt
+    provider.commit_responses[SOURCE[:12]] = httpx.Response(
+        429, headers={"Retry-After": "Wed, 01 Jan 2031 12:00:00 GMT"}
+    )
+
+    async def exercise(adapter):
+        result = await adapter.create_pull_request(object(), intent=provider.intent)
+        assert (result.state, result.code, result.provider_status) == (
+            "unknown",
+            "rate_limited",
+            429,
+        )
+        assert result.retry_at == datetime(2031, 1, 1, 12, tzinfo=UTC)
+        provider.commit_responses.clear()
+        recovered = await adapter.reconcile_pull_request(object(), intent=provider.intent)
+        assert recovered.state == "verified" and recovered.receipt.id == 41
+        assert len(provider.prs) == len(provider.posts) == 1
+
+    asyncio.run(with_provider(provider, exercise))
+
+
 @pytest.mark.parametrize("fault", ["connect", "401", "403", "429"])
 def test_create_known_not_sent_failure_remains_distinct(fault):
     provider = Provider()

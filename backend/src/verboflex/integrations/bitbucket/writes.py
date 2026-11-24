@@ -7,6 +7,7 @@ import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Literal, Protocol, cast
 from urllib.parse import parse_qs, quote, urlencode, urlsplit
 from uuid import UUID
@@ -15,6 +16,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from verboflex.integrations.bitbucket.client import BitbucketHttpAdapter
+from verboflex.integrations.bitbucket.rate_limit import retry_deadline
 from verboflex.integrations.bitbucket.urls import (
     BitbucketWriteOperation as Operation,
 )
@@ -150,6 +152,7 @@ class WriteOutcome[T]:
     code: str
     receipt: T | None = None
     provider_status: int | None = None
+    retry_at: datetime | None = None
 
 
 @dataclass(slots=True)
@@ -198,8 +201,15 @@ class _PageEvidence:
 
 
 class _WireError(Exception):
-    def __init__(self, state: OutcomeState, code: str, status: int | None = None) -> None:
+    def __init__(
+        self,
+        state: OutcomeState,
+        code: str,
+        status: int | None = None,
+        retry_at: datetime | None = None,
+    ) -> None:
         super().__init__("Bitbucket operation could not be verified")
+        self.retry_at = retry_at
         self.state, self.code, self.status = state, code, status
 
 
@@ -317,7 +327,10 @@ class BitbucketWriteAdapter:
             return WriteOutcome("unknown" if sent else "not_sent", "invalid_intent")
         except _WireError as error:
             return WriteOutcome(
-                error.state if sent else "not_sent", error.code, provider_status=error.status
+                error.state if sent else "not_sent",
+                error.code,
+                retry_at=error.retry_at,
+                provider_status=error.status,
             )
 
     async def reconcile_pull_request(
@@ -386,6 +399,7 @@ class BitbucketWriteAdapter:
             return WriteOutcome(
                 "conflict" if error.state == "conflict" else "unknown",
                 error.code,
+                retry_at=error.retry_at,
                 provider_status=error.status,
             )
 
@@ -430,6 +444,7 @@ class BitbucketWriteAdapter:
             return WriteOutcome(
                 "conflict" if error.state == "conflict" else "unknown",
                 error.code,
+                retry_at=error.retry_at,
                 provider_status=error.status,
             )
 
@@ -603,12 +618,17 @@ class BitbucketWriteAdapter:
             if reply.status not in {201, 409}:
                 raise _WireError("unknown", "unexpected_status", reply.status)
             result = await self.reconcile_branch(session, intent=intent)
+            if result.provider_status == 429:
+                return result
             return WriteOutcome(result.state, result.code, result.receipt, reply.status)
         except ValueError:
             return WriteOutcome("unknown" if sent else "not_sent", "invalid_intent")
         except _WireError as error:
             return WriteOutcome(
-                error.state if sent else "not_sent", error.code, provider_status=error.status
+                error.state if sent else "not_sent",
+                error.code,
+                retry_at=error.retry_at,
+                provider_status=error.status,
             )
 
     async def reconcile_branch(
@@ -624,7 +644,9 @@ class BitbucketWriteAdapter:
         except ValueError:
             return WriteOutcome("not_sent", "invalid_intent")
         except _WireError as error:
-            return WriteOutcome("unknown", error.code, provider_status=error.status)
+            return WriteOutcome(
+                "unknown", error.code, retry_at=error.retry_at, provider_status=error.status
+            )
 
     @staticmethod
     def _branch_result(receipt: BranchReceipt, intent: BranchIntent) -> WriteOutcome[BranchReceipt]:
@@ -696,12 +718,17 @@ class BitbucketWriteAdapter:
             if reply.status not in {201, 409}:
                 raise _WireError("unknown", "unexpected_status", reply.status)
             result = await self.reconcile_commit(session, intent=intent)
+            if result.provider_status == 429:
+                return result
             return WriteOutcome(result.state, result.code, result.receipt, reply.status)
         except ValueError:
             return WriteOutcome("unknown" if sent else "not_sent", "invalid_intent")
         except _WireError as error:
             return WriteOutcome(
-                error.state if sent else "not_sent", error.code, provider_status=error.status
+                error.state if sent else "not_sent",
+                error.code,
+                retry_at=error.retry_at,
+                provider_status=error.status,
             )
 
     async def reconcile_commit(
@@ -723,6 +750,7 @@ class BitbucketWriteAdapter:
             return WriteOutcome(
                 "conflict" if error.state == "conflict" else "unknown",
                 error.code,
+                retry_at=error.retry_at,
                 provider_status=error.status,
             )
 
@@ -1124,6 +1152,13 @@ class BitbucketWriteAdapter:
                     authority.require_current_repository_read_lease(session, lease)
                     return _Reply(status, b"")
                 if not 200 <= status < 300:
+                    if status == 429:
+                        raise _WireError(
+                            "not_sent" if method == "POST" else "unknown",
+                            "rate_limited",
+                            status,
+                            retry_deadline(response.headers.get("Retry-After")),
+                        )
                     definitive = method == "POST" and status in {
                         400,
                         401,
@@ -1133,7 +1168,6 @@ class BitbucketWriteAdapter:
                         413,
                         415,
                         422,
-                        429,
                     }
                     raise _WireError(
                         "not_sent" if definitive else "unknown", "provider_rejected", status

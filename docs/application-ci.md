@@ -6,6 +6,12 @@ protection: it fails if any component fails, is cancelled, or is skipped.
 Also require **Website checks**, which runs on every pull request and main push.
 The workflow does not deploy the application or contact real repositories.
 
+The synthetic publication tests cover Bitbucket rate limits during preparation,
+write rejection and verification of accepted commits and pull requests. They
+exercise the persisted retry deadline, queue order and a permission change
+during the pause. The Italian publication flow in Playwright follows a paused
+approval through confirmation to the open review link.
+
 The code-key and screenshot tests use synthetic Kotlin/Java, Angular and localization fixtures.
 The backend job installs the bounded TypeScript/Angular parser and runs the real
 [web capture smoke](angular-web-localization.md) through PostgreSQL, Redis, Celery,

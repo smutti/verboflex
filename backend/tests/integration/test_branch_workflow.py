@@ -4,6 +4,7 @@
 
 import asyncio
 import hashlib
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select, update
@@ -14,7 +15,11 @@ from tests.integration.test_preview_jobs import (  # noqa: F401
 )
 from tests.integration.test_writeback_authority import PreparedSource, seed_writeback_authority
 from verboflex.auth.principal import Principal
-from verboflex.integrations.bitbucket.client import BitbucketBranch, BitbucketSourceMetadata
+from verboflex.integrations.bitbucket.client import (
+    BitbucketBranch,
+    BitbucketProviderReadError,
+    BitbucketSourceMetadata,
+)
 from verboflex.integrations.bitbucket.writes import CommitReceipt, PullRequestReceipt, WriteOutcome
 from verboflex.models.branch_workflow import BranchJob
 from verboflex.models.review import TranslationProposal
@@ -32,6 +37,7 @@ from verboflex.services.translation_reviews import (
     save_translation_proposal,
     transition_translation_proposal,
 )
+from verboflex.worker.branch_tasks import dispatchable_jobs
 
 
 class Remote(PreparedSource):
@@ -217,6 +223,95 @@ def test_each_approval_commits_in_order_and_pr_is_explicit(preview_session_facto
     assert len(remote.prs) == 1
 
 
+@pytest.mark.parametrize("kind", ["commit", "pull_request"])
+@pytest.mark.parametrize("stage", ["prepare", "rejected", "verify"])
+def test_rate_limited_publication_resumes_in_order_without_duplicate_effects(
+    preview_session_factory, monkeypatch, kind, stage
+):
+    factory = preview_session_factory
+    seed, remote = setup(factory, monkeypatch)
+    job_id = approve(factory, seed, "Synthetic approved translation")
+    if kind == "pull_request":
+        assert run(factory, remote, job_id) == ("committed", None)
+        with factory.begin() as session:
+            job_id = request_pr(session, product_id=seed.product_id, actor_id=seed.actor_id).id
+    later = approve(factory, seed, "Another approved translation")
+    deadline = datetime.now(UTC) + timedelta(hours=1)
+    calls = 0
+
+    async def limited(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if stage == "prepare":
+            raise BitbucketProviderReadError(
+                kind="rate_limited", provider_status=429, retry_at=deadline
+            )
+        if stage == "rejected":
+            assert kwargs["before_send"]()
+        return WriteOutcome(
+            "not_sent" if stage == "rejected" else "unknown",
+            "rate_limited",
+            provider_status=429,
+            retry_at=deadline,
+        )
+
+    if stage == "prepare":
+        method = "read_repository_source_file" if kind == "commit" else "resolve_repository_branch"
+    else:
+        method = ("create_" if stage == "rejected" else "reconcile_") + kind
+    with monkeypatch.context() as patch:
+        patch.setattr(remote, method, limited)
+        state = "sending" if stage == "verify" else "queued"
+        for attempt in [1, 2]:
+            assert run(factory, remote, job_id) == (state, "rate_limited")
+            with factory() as session:
+                job = session.get_one(BranchJob, job_id)
+                assert job.retry_at == deadline and job.rate_limit_attempts == attempt
+                assert (job.intent is not None) == (stage == "verify")
+                assert job.owner is None
+                assert {job_id, later}.isdisjoint(dispatchable_jobs(session))
+            assert run(factory, remote, job_id) == (state, "rate_limited")
+            assert run(factory, remote, later) == ("queued", None)
+            assert calls == attempt
+            with factory.begin() as session:
+                session.get_one(BranchJob, job_id).retry_at = datetime.now(UTC) - timedelta(
+                    seconds=1
+                )
+                session.flush()
+                assert job_id in dispatchable_jobs(session) and later not in dispatchable_jobs(
+                    session
+                )
+    assert run(factory, remote, job_id) == ("open" if kind == "pull_request" else "committed", None)
+    assert run(factory, remote, later) == ("committed", None)
+    assert len(remote.commits) == 2 and len(remote.prs) == (kind == "pull_request")
+    with factory() as session:
+        job = session.get_one(BranchJob, job_id)
+        assert job.retry_at is None and job.rate_limit_attempts == 0
+
+
+def test_rate_limit_without_header_backs_off_and_rechecks_permission(
+    preview_session_factory, monkeypatch
+):
+    factory = preview_session_factory
+    seed, remote = setup(factory, monkeypatch)
+    job_id = approve(factory, seed, "Synthetic approval")
+
+    async def limited(*args, **kwargs):
+        raise BitbucketProviderReadError(kind="rate_limited", provider_status=429)
+
+    monkeypatch.setattr(remote, "resolve_repository_branch", limited)
+    for delay in (60, 120, 240, 480, 900, 900):
+        assert run(factory, remote, job_id) == ("queued", "rate_limited")
+        with factory.begin() as session:
+            job = session.get_one(BranchJob, job_id)
+            assert job.retry_at - job.updated_at == timedelta(seconds=delay)
+            job.retry_at = job.updated_at
+    with factory.begin() as session:
+        session.get_one(User, seed.actor_id).is_active = False
+    assert run(factory, remote, job_id) == ("blocked", "authority_changed")
+    assert not remote.commits
+
+
 def test_timeout_recovers_same_commit_without_resending(preview_session_factory, monkeypatch):
     factory = preview_session_factory
     seed, remote = setup(factory, monkeypatch)
@@ -394,6 +489,25 @@ def test_explicit_pr_timeout_reconciles_immediately_without_duplicates(
         assert pr in dispatchable_jobs(session)
     assert run(factory, remote, pr) == ("open", None)
     assert len(remote.prs) == 1 and len(remote.commits) == 1
+
+
+def test_rate_limited_publication_precedes_background_pr_checks(
+    preview_session_factory, monkeypatch
+):
+    factory = preview_session_factory
+    seed, remote = setup(factory, monkeypatch)
+    assert run(factory, remote, approve(factory, seed, "First approval")) == ("committed", None)
+    with factory.begin() as session:
+        pr = request_pr(session, product_id=seed.product_id, actor_id=seed.actor_id).id
+    assert run(factory, remote, pr) == ("open", None)
+    next_job = approve(factory, seed, "Next approval")
+    with factory.begin() as session:
+        session.get_one(BranchJob, pr).updated_at = datetime.now(UTC) - timedelta(hours=2)
+        session.flush()
+        assert dispatchable_jobs(session)[:2] == [next_job, pr]
+        session.get_one(BranchJob, next_job).retry_at = datetime.now(UTC) + timedelta(minutes=1)
+        session.flush()
+        assert not dispatchable_jobs(session)
 
 
 def test_blocked_backlog_does_not_starve_another_product(preview_session_factory, monkeypatch):
