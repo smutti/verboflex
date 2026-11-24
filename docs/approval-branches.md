@@ -74,8 +74,7 @@ workers recheck membership, product configuration, import identity and constrain
 before sending. A reviewer can request the PR or retry a blocked operation.
 
 The renderer preserves the original localization structure and accumulates
-approved edits against their imported file baseline. It verifies that the working
-branch still contains the last verified file bytes before appending a commit.
+approved edits against their imported file baseline. For formats other than shared MOKO it checks the last verified working-file bytes before appending a commit.
 An external change to a managed file, a new import or a changed configuration can
 block an operation for review; the worker never force-pushes or resets the branch.
 Unrelated files are not included in the commit.
@@ -88,14 +87,23 @@ unchanged. Unsupported source structures are reported as preparation failures:
 no commit has been sent, and **Check and retry** can prepare the same approval
 again after the problem is resolved.
 
-When the working branch already differs from the import at the first MOKO edit,
-the worker can preserve that existing work and apply only the approved text.
-Every selected key must remain unique and retain its expected text and structure;
-changed targets are blocked. Subsequent approvals require the last verified
-working-file digest and preserve the same branch baseline. External file changes
-after the first recorded commit remain blocked. This initial alignment supports
-edits to existing MOKO values; insertions and other formats require a matching
-baseline.
+For shared MOKO catalogs the worker checks each selected value against its
+approved import or its last verified edit. It preserves intervening changes to
+other keys, comments and formatting. If the approved replacement is already
+present with equivalent structure, the worker records the observed revision.
+Insertions require a missing entry or a unique, structurally matching existing
+entry with the approved value. An ambiguous or conflicting target requires
+review. Other file formats retain the whole-file checks.
+
+After a rebase, a second publication request can refer to the source of an
+earlier merged PR. **Check and retry** first looks for the requested PR's own
+receipt. If Bitbucket cannot find it, the worker can recognize the earlier
+merge after verifying its original marker, repository, branches and source
+commit. The working and destination heads must agree, and every intervening
+committed approval must be present on the destination. VerboFlex then records
+the verified destination and links the existing merged PR. Later approvals
+continue through the ordinary serial queue. A missing value or uncertain
+provider response leaves the request pending review.
 
 The send intent is persisted before each network mutation. Duplicate deliveries
 cannot create another commit. After an uncertain response, **Check and retry**

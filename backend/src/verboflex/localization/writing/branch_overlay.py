@@ -1,4 +1,4 @@
-"""Apply approved MOKO edits to a working file without overwriting unrelated work."""
+"""Apply just the newly approved MOKO values to a verified working file."""
 
 from dataclasses import replace
 
@@ -8,8 +8,10 @@ from verboflex.localization.writing.core import (
     WritebackReason,
     WritebackRejected,
     WriteEdit,
+    WriteInsert,
     WriteOperation,
 )
+from verboflex.localization.writing.insertions import render_insertions
 from verboflex.localization.writing.parsing import inspect_writeback_snapshot
 from verboflex.localization.writing.registry import _identity, _render_edits, _structure
 
@@ -20,43 +22,59 @@ def overlay_approved_moko(
     operations: tuple[WriteOperation, ...],
     previous: tuple[WriteOperation, ...],
 ) -> bytes:
-    """Rebind unique locations only while their approved text/structure still match.
+    """Rebind an approval to unique, structurally equivalent working-file entries.
 
-    The caller first validates the frozen operations against the original import
-    and, after the first commit, requires the last verified working-file digest.
-    This is deliberately narrower than replaying edits on an arbitrary Git rebase.
+    The caller validates the operations on the frozen import first. A matching
+    replacement is a no-op. An insertion may only add a missing resource, or
+    recognize exactly the resource the original insertion would have produced.
     """
     parser = snapshot.parser_input
     if (
         parser.repository_side != "translations"
-        or parser.format != "android_xml"
         or moko_layout(parser.path) is None
-        or any(not isinstance(op, WriteEdit) for op in (*operations, *previous))
+        or (parser.format != "android_xml")
     ):
         raise WritebackRejected(WritebackReason.SOURCE_FILE_CHANGED)
-    original = inspect_writeback_snapshot(parser)
-    working = inspect_writeback_snapshot(replace(parser, content=current))
+    additions = tuple(op for op in operations if isinstance(op, WriteInsert))
+    reference = (
+        replace(parser, content=render_insertions(parser, additions)) if additions else parser
+    )
+    original = inspect_writeback_snapshot(reference)
+    working_input = replace(parser, content=current)
+    working = inspect_writeback_snapshot(working_input)
     if original.issues or working.issues:
         raise WritebackRejected(WritebackReason.UNSUPPORTED_SHAPE)
     originals = {_identity(v): v for v in original.values}
     values = {_identity(v): v for v in working.values}
-    prior = {_identity(op): op for op in previous if isinstance(op, WriteEdit)}
+    positions: dict[str, set[int]] = {}
+    for v in working.values:
+        positions.setdefault(v.logical_key, set()).add(v.locator.position)
+    prior = {_identity(op): op.replacement_text for op in previous}
     edits = []
-    for operation in operations:
-        assert isinstance(operation, WriteEdit)
-        identity = _identity(operation)
+    missing = []
+    for op in operations:
+        identity = _identity(op)
         old, value = originals.get(identity), values.get(identity)
-        expected = (
-            prior[identity].replacement_text if identity in prior else operation.expected_text
-        )
+        if len(positions.get(op.logical_key, ())) > 1:
+            raise WritebackRejected(WritebackReason.AMBIGUOUS_LOCATOR)
+        if isinstance(op, WriteInsert) and value is None:
+            if identity in prior:
+                raise WritebackRejected(WritebackReason.SOURCE_FILE_CHANGED)
+            missing.append(op)
+            continue
         if (
             old is None
             or value is None
-            or value.display_text != expected
             or _structure(old, selected=True) != _structure(value, selected=True)
         ):
             raise WritebackRejected(WritebackReason.SOURCE_FILE_CHANGED)
-        edits.append(replace(operation, locator=value.locator, expected_text=expected))
-    # The renderer rejects duplicated resource names and verifies every occurrence
-    # after splicing, including those belonging to unrelated products.
-    return _render_edits(replace(parser, content=current), tuple(edits))[0]
+        if value.display_text == op.replacement_text:
+            continue
+        expected = prior.get(identity, op.expected_text)
+        if not isinstance(op, WriteEdit) or value.display_text != expected:
+            raise WritebackRejected(WritebackReason.SOURCE_FILE_CHANGED)
+        edits.append(replace(op, locator=value.locator, expected_text=expected))
+    content = _render_edits(working_input, tuple(edits))[0] if edits else current
+    if missing:
+        content = render_insertions(replace(working_input, content=content), tuple(missing))
+    return content

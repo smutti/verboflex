@@ -79,6 +79,7 @@ class BranchJob(Base):
     authority: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
     intent: Mapped[dict[str, object] | None] = mapped_column(JSONB, deferred=True)
     commit_hash: Mapped[str | None] = mapped_column(String(40))
+    integrated_target_hash: Mapped[str | None] = mapped_column(String(40))
     catalog_refresh_state: Mapped[str | None] = mapped_column(String(16))
     catalog_refresh_execution_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     pr_id: Mapped[int | None] = mapped_column(Integer)

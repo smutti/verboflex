@@ -262,7 +262,6 @@ async def _prepare(
             edits = {_edit_identity(e): e for e in old_edits}
             edits.update({_edit_identity(e): e for e in file.edits})
             operations = tuple(edits[k] for k in sorted(edits))
-            rendered = render_file(snapshot, operations)
             with factory() as s:
                 metadata = await reads.read_repository_source_metadata(
                     s,
@@ -282,16 +281,23 @@ async def _prepare(
                     max_bytes=max(1, metadata.size_bytes),
                 )
             current_digest = hashlib.sha256(current).hexdigest()
-            if previous is not None and current_digest != expected:
-                raise BranchWorkflowError("file_changed")
-            content = rendered.content
-            if current != render_file(snapshot, old_edits).content:
-                if (
-                    snapshot.parser_input.repository_side != "translations"
-                    or moko_layout(snapshot.parser_input.path) is None
-                ):
+            shared_moko = (
+                snapshot.parser_input.repository_side == "translations"
+                and snapshot.parser_input.format == "android_xml"
+                and moko_layout(snapshot.parser_input.path) is not None
+            )
+            if shared_moko and (old_edits or current != snapshot.parser_input.content):
+                # Validate the new approval on its original import. Only rebind
+                # those selected values; historical edits must never rewrite
+                # unrelated changes from the destination or another product.
+                render_file(snapshot, file.edits)
+                content = overlay_approved_moko(snapshot, current, file.edits, old_edits)
+            else:
+                if previous is not None and current_digest != expected:
                     raise BranchWorkflowError("file_changed")
-                content = overlay_approved_moko(snapshot, current, operations, old_edits)
+                if current != render_file(snapshot, old_edits).content:
+                    raise BranchWorkflowError("file_changed")
+                content = render_file(snapshot, operations).content
             files.append(
                 {
                     "path": file.authority.path,
@@ -358,6 +364,8 @@ def _record(
     job_id: UUID,
     owner: UUID,
     outcome: WriteOutcome[CommitReceipt] | WriteOutcome[PullRequestReceipt],
+    *,
+    integrated_target: str | None = None,
 ) -> None:
     with factory.begin() as s:
         workflow, job = _lock(s, job_id)
@@ -369,6 +377,18 @@ def _record(
                 job.intent = None
             job.state, job.error_code = "blocked", outcome.code
             return
+        if integrated_target is not None:
+            _authorize(s, workflow, job)
+            connection = s.get_one(BitbucketConnection, 1, with_for_update=True)
+            intent = _intent(workflow, job)
+            if (
+                not isinstance(intent, PullRequestIntent)
+                or connection.revoked_at is not None
+                or connection.access_token_ciphertext is None
+                or not connection.covers_generation(intent.context.expected_generation)
+            ):
+                raise BranchWorkflowError("authority_changed")
+            job.integrated_target_hash = integrated_target
         if isinstance(outcome.receipt, CommitReceipt):
             receipt = outcome.receipt
             _record_committed_files(s, workflow, job, receipt.commit_hash)
@@ -463,7 +483,19 @@ async def execute_branch_job(
                     if isinstance(intent, CommitIntent)
                     else await writes.create_pull_request(s, intent=intent, before_send=callback)
                 )
-        _record(factory, job_id, owner, outcome)
+        integrated_target = None
+        if (
+            recovery
+            and isinstance(intent, PullRequestIntent)
+            and outcome.code == "pull_request_not_observed"
+        ):
+            from verboflex.services.branch_pr_recovery import integrated_review
+
+            proof = await integrated_review(factory, workflow, job, intent, reads, writes)
+            if proof is not None:
+                receipt, integrated_target = proof
+                outcome = WriteOutcome("verified", "approved_values_already_integrated", receipt)
+        _record(factory, job_id, owner, outcome, integrated_target=integrated_target)
     except Exception as error:
         with factory.begin() as s:
             _, current = _lock(s, job_id)

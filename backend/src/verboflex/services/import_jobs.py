@@ -694,11 +694,9 @@ def _import_generation_is_current(session: Session, current: int | None, expecte
         return True
     connection = session.get(BitbucketConnection, 1)
     return bool(
-        expected > 0
-        and connection is not None
+        connection is not None
         and connection.generation == current
-        and connection.renewal_start_generation is not None
-        and connection.renewal_start_generation <= expected < current
+        and connection.covers_generation(expected)
     )
 
 

@@ -65,3 +65,11 @@ class BitbucketConnection(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+    def covers_generation(self, expected: int) -> bool:
+        """True for the current credential or a proven renewal of the same authority."""
+        return self.generation == expected or (
+            expected > 0
+            and self.renewal_start_generation is not None
+            and self.renewal_start_generation <= expected < self.generation
+        )

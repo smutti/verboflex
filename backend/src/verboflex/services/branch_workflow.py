@@ -251,25 +251,31 @@ def queue_authoring_batch(
 
 
 def has_unpublished_commits(session: Session, workflow_id: UUID) -> bool:
-    latest = session.scalar(
-        select(BranchJob.commit_hash)
+    latest = session.execute(
+        select(BranchJob.sequence, BranchJob.commit_hash)
         .where(
             BranchJob.workflow_id == workflow_id,
             BranchJob.state == "committed",
         )
         .order_by(BranchJob.sequence.desc())
         .limit(1)
-    )
-    merged = session.scalar(
-        select(BranchJob.commit_hash)
-        .where(
-            BranchJob.workflow_id == workflow_id,
-            BranchJob.state == "merged",
-        )
+    ).one_or_none()
+    if latest is None:
+        return False
+    merged = session.execute(
+        select(BranchJob.sequence, BranchJob.commit_hash, BranchJob.integrated_target_hash)
+        .where(BranchJob.workflow_id == workflow_id, BranchJob.state == "merged")
         .order_by(BranchJob.sequence.desc())
         .limit(1)
-    )
-    return latest is not None and latest != merged
+    ).one_or_none()
+    if merged is None:
+        return latest.commit_hash is not None
+    if merged.integrated_target_hash is not None and latest.sequence < merged.sequence:
+        return False
+    return latest.commit_hash is not None and latest.commit_hash not in {
+        merged.commit_hash,
+        merged.integrated_target_hash,
+    }
 
 
 def request_pr(

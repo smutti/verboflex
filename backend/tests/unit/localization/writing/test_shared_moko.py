@@ -223,3 +223,35 @@ def test_insertion_preservation_checks_every_duplicate_occurrence(monkeypatch):
     with pytest.raises(WritebackRejected) as error:
         render_file(source(), (WriteInsert("new", "en", CanonicalSelector("scalar", ()), "New"),))
     assert error.value.reason == WritebackReason.INVALID_OUTPUT
+
+
+@pytest.mark.parametrize("already", [True, False])
+def test_rebased_moko_insertion_preserves_unrelated_changes(already):
+    from verboflex.localization.writing.branch_overlay import overlay_approved_moko
+
+    frozen = source()
+    insert = WriteInsert("extra", "en", CanonicalSelector("scalar", ()), "New entry")
+    live = CONTENT.replace(b"another product", b"a newer comment")
+    expected = render_file(source(live), (insert,)).content
+    assert overlay_approved_moko(frozen, expected if already else live, (insert,), ()) == expected
+
+
+def test_rebased_moko_does_not_overwrite_a_conflicting_insert_or_recreate_a_deleted_key():
+    from verboflex.localization.writing.branch_overlay import overlay_approved_moko
+
+    frozen = source()
+    insert = WriteInsert("extra", "en", CanonicalSelector("scalar", ()), "New entry")
+    other = render_file(frozen, (replace(insert, replacement_text="External"),)).content
+    with pytest.raises(WritebackRejected):
+        overlay_approved_moko(frozen, other, (insert,), ())
+    with pytest.raises(WritebackRejected):
+        overlay_approved_moko(frozen, CONTENT, (insert,), (insert,))
+
+
+def test_existing_approved_moko_value_needs_no_commit_and_preserves_unrelated_bytes():
+    from verboflex.localization.writing.branch_overlay import overlay_approved_moko
+
+    frozen = source()
+    edit = selection(frozen)
+    live = CONTENT.replace(b">Original<", b">New<").replace(b"another product", b"updated comment")
+    assert overlay_approved_moko(frozen, live, (edit,), ()) == live

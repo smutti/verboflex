@@ -514,9 +514,7 @@ def test_migration_preserves_existing_workflow_and_committed_files(
     with pytest.raises(RuntimeError, match="pending catalog refreshes"):
         command.downgrade(config, "0059_authoring_bulk_approval")
     with factory.begin() as session:
-        session.execute(
-            update(BranchJob).values(catalog_refresh_state="succeeded")
-        )
+        session.execute(update(BranchJob).values(catalog_refresh_state="succeeded"))
     command.downgrade(config, "0047_branch_workflow")
     command.upgrade(config, "head")
     with factory() as session:
@@ -830,3 +828,98 @@ def test_pr_observation_rate_limit_delays_poll_without_recreating_pr(
     with factory() as session:
         assert pr in dispatchable_jobs(session)
     assert len(remote.prs) == 1 and len(remote.commits) == 1
+
+
+@pytest.mark.parametrize(
+    "case", ["integrated", "missing_value", "different_heads", "open", "reconnected"]
+)
+def test_duplicate_rebased_pr_requires_verified_merge_and_current_values(
+    preview_session_factory, monkeypatch, case
+):
+    from verboflex.models.bitbucket_connection import BitbucketConnection
+    from verboflex.services.branch_workflow import has_unpublished_commits
+
+    factory = preview_session_factory
+    seed, remote = setup(factory, monkeypatch)
+    initial = approve(factory, seed, "First approval")
+    assert run(factory, remote, initial)[0] == "committed"
+    original_head = remote.head
+    with factory.begin() as s:
+        original = request_pr(s, product_id=seed.product_id, actor_id=seed.actor_id).id
+    assert run(factory, remote, original)[0] == "open"
+    with factory.begin() as s:
+        row = s.get_one(BranchJob, original)
+        row.state = "merged"
+        workflow_id = row.workflow_id
+
+    second = approve(factory, seed, "Second approval")
+    assert run(factory, remote, second)[0] == "committed"
+    with factory.begin() as s:
+        duplicate = request_pr(s, product_id=seed.product_id, actor_id=seed.actor_id).id
+    ready_head = remote.head
+    remote.head = original_head
+    remote.uncertain_pr = True
+    assert run(factory, remote, duplicate) == ("blocked", "timeout")
+    remote.head = ready_head
+
+    async def heads(session, **kw):
+        head = original_head if case == "different_heads" and kw["branch"] == "main" else ready_head
+        return BitbucketBranch(kw["branch"], head)
+
+    async def missing(session, *, intent):
+        assert intent.context.change_set_id == duplicate
+        return WriteOutcome("unknown", "pull_request_not_observed")
+
+    async def read_review(session, *, intent, pull_request_id, allow_rebased):
+        assert intent.context.change_set_id == original and pull_request_id == 1 and allow_rebased
+        return WriteOutcome(
+            "verified",
+            "pull_request_verified",
+            PullRequestReceipt(
+                pull_request_id,
+                "https://bitbucket.org/preview-team/preview-repository/pull-requests/1",
+                "OPEN" if case == "open" else "MERGED",
+                intent.context.repository_id,
+                intent.context.source_branch,
+                original_head,
+                intent.target_branch,
+                intent.target_head,
+            ),
+        )
+
+    monkeypatch.setattr(remote, "resolve_repository_branch", heads)
+    monkeypatch.setattr(remote, "reconcile_pull_request", missing)
+    monkeypatch.setattr(remote, "read_pull_request", read_review, raising=False)
+    if case == "missing_value":
+        remote.versions[ready_head] = remote.versions[original_head]
+    with factory.begin() as s:
+        connection = s.get_one(BitbucketConnection, 1)
+        original_generation = connection.generation
+        connection.generation += 1
+        connection.renewal_start_generation = None if case == "reconnected" else original_generation
+        retry_job(s, product_id=seed.product_id, actor_id=seed.actor_id, job_id=duplicate)
+    state, reason = run(factory, remote, duplicate)
+    assert len(remote.prs) == 2
+    with factory() as s:
+        row = s.get_one(BranchJob, duplicate)
+        if case == "integrated":
+            assert (state, reason, row.pr_id, row.integrated_target_hash) == (
+                "merged",
+                None,
+                1,
+                ready_head,
+            )
+            assert not has_unpublished_commits(s, workflow_id)
+        else:
+            assert state == "blocked" and row.integrated_target_hash is None
+            assert has_unpublished_commits(s, workflow_id)
+
+    if case == "integrated":
+        unchanged = approve(factory, seed, "Second approval")
+        assert run(factory, remote, unchanged) == ("committed", None)
+        with factory() as s:
+            assert not has_unpublished_commits(s, workflow_id)
+        changed = approve(factory, seed, "Third approval")
+        assert run(factory, remote, changed) == ("committed", None)
+        with factory() as s:
+            assert has_unpublished_commits(s, workflow_id)
