@@ -157,6 +157,7 @@
   "Bitbucket could not complete this import. The last successful baseline is unchanged. Retry later.": "Bitbucket n'a pas pu terminer cette importation. La dernière ligne de base réussie reste inchangée. Réessayez plus tard.",
   "Bitbucket denied access to this repository or branch. Review the organizational connection and repository permissions, then retry from this mapping.": "Bitbucket a refusé l'accès à ce référentiel ou à cette branche. Vérifiez la connexion organisationnelle et les autorisations du référentiel, puis réessayez à partir de ce mappage.",
   "Bitbucket did not respond within the safe time limit. The last successful baseline is unchanged. Retry later.": "Bitbucket n'a pas répondu dans le délai de sécurité. La dernière ligne de base réussie reste inchangée. Réessayez plus tard.",
+  "Bitbucket has paused publication. VerboFlex will try again automatically after {{time}}.": "Bitbucket a suspendu la publication. VerboFlex réessaiera automatiquement après {{time}}.",
   "Bitbucket is temporarily limiting requests. Wait a few minutes, then retry this import from the mapping.": "Bitbucket limite temporairement les requêtes. Attendez quelques minutes, puis réessayez cette importation depuis le mappage.",
   "Bitbucket reconnected": "Bitbucket reconnecté",
   "Bitbucket repositories": "Dépôts Bitbucket",

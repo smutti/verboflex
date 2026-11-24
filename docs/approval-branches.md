@@ -17,6 +17,17 @@ are separate from merging it. An approval tied to an older import requires
 administrator review. The panel identifies the affected change and suppresses
 retries that would reuse the same obsolete approval.
 
+When Bitbucket temporarily limits requests, **Publish translations** shows when
+VerboFlex will try again. Celery saves that deadline in the database and resumes
+the same queue in order, even after a restart. Background checks of older
+changes on that branch wait for publication to resume. The first delay is one minute.
+Repeated limits double the delay up to fifteen minutes, or longer if Bitbucket
+specifies a later time. After a rejected request the worker rechecks permissions
+and prepares the change again. If Bitbucket accepted a commit or PR before
+limiting verification, the worker checks the existing result by reading it.
+Once the changes are saved, the reviewer can choose **Create pull request**.
+A confirmed PR request also resumes automatically if Bitbucket pauses it.
+
 ## Configuration
 
 In **Product configuration → Approval branches**, an administrator selects a

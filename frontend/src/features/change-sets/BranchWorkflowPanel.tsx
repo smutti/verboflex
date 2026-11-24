@@ -216,6 +216,18 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
               </label>
             )}
             <div className="mt-3 grid min-w-0 gap-2 rounded-lg border bg-card p-4">
+              {data.publication_retry_at && (
+                <p role="status">
+                  {t(
+                    "Bitbucket has paused publication. VerboFlex will try again automatically after {{time}}.",
+                    {
+                      time: new Date(data.publication_retry_at).toLocaleString(
+                        getUiLanguage(),
+                      ),
+                    },
+                  )}
+                </p>
+              )}
               {openPr ? (
                 <>
                   <strong>{t("Pull request open")}</strong>
@@ -231,9 +243,11 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                   </Button>
                 </>
               ) : data.creating_pr ? (
-                <p role="status">
-                  {t("Opening the pull request in Bitbucket…")}
-                </p>
+                !data.publication_retry_at && (
+                  <p role="status">
+                    {t("Opening the pull request in Bitbucket…")}
+                  </p>
+                )
               ) : inactive ? (
                 <p>
                   {t(
@@ -402,14 +416,16 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                   {item.catalog_refresh_state === "succeeded" && (
                     <p>{t("The translation list is up to date.")}</p>
                   )}
-                  {item.error_code && item.id !== blocker?.id && (
-                    <p>
-                      {errors[item.error_code] ??
-                        t(
-                          "The Git result could not be verified. Check its status before continuing.",
-                        )}
-                    </p>
-                  )}
+                  {item.error_code &&
+                    item.error_code !== "rate_limited" &&
+                    item.id !== blocker?.id && (
+                      <p>
+                        {errors[item.error_code] ??
+                          t(
+                            "The Git result could not be verified. Check its status before continuing.",
+                          )}
+                      </p>
+                    )}
                 </div>
                 {item.commit_url && (
                   <a

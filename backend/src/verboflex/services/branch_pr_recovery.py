@@ -3,6 +3,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from verboflex.integrations.bitbucket.client import BitbucketProviderReadError
 from verboflex.integrations.bitbucket.writes import (
     BitbucketWriteAdapter,
     PullRequestIntent,
@@ -66,6 +67,10 @@ async def integrated_review(
     with factory() as session:
         outcome = await writes.read_pull_request(
             session, intent=original, pull_request_id=prior_id, allow_rebased=True
+        )
+    if outcome.provider_status == 429:
+        raise BitbucketProviderReadError(
+            kind="rate_limited", provider_status=429, retry_at=outcome.retry_at
         )
     receipt = outcome.receipt
     if (

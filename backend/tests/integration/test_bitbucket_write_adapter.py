@@ -386,6 +386,33 @@ def test_branch_missing_in_replaced_repository_never_posts():
     assert result.state == "not_sent" and result.code == "repository_mismatch"
 
 
+@pytest.mark.parametrize("after_commit", [False, True])
+def test_commit_reports_rate_limit_at_the_correct_write_boundary(after_commit):
+    from datetime import UTC, datetime, timedelta
+
+    class LimitedProvider(Provider):
+        def __call__(self, request):
+            if self.commits or (request.method == "POST" and not after_commit):
+                return httpx.Response(429, headers={"Retry-After": "1800"})
+            return super().__call__(request)
+
+    provider = LimitedProvider()
+    start = datetime.now(UTC)
+    result = asyncio.run(
+        with_provider(
+            provider, lambda adapter: adapter.create_commit(object(), intent=provider.intent)
+        )
+    )
+    assert result.state == ("unknown" if after_commit else "not_sent")
+    assert result.provider_status == 429 and result.code == "rate_limited"
+    assert (
+        start + timedelta(minutes=30)
+        <= result.retry_at
+        <= datetime.now(UTC) + timedelta(minutes=30)
+    )
+    assert provider.commits == int(after_commit)
+
+
 def test_commit_verification_connection_failure_after_201_stays_unknown():
     provider = Provider()
     provider.fault = "verification-connect"

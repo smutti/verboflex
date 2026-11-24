@@ -74,7 +74,12 @@ def dispatchable_jobs(session: Session) -> list[UUID]:
         .exists()
     )
     # A per-proposal minute poll exhausts a shared provider budget as approvals grow.
-    # Back off observation only; queued commits and explicit PRs remain immediate.
+    # Let a throttled publication resume before spending its budget on history.
+    paused_publication = (
+        select(earlier.id)
+        .where(earlier.workflow_id == BranchJob.workflow_id, earlier.retry_at.is_not(None))
+        .exists()
+    )
     observation_due = (BranchJob.updated_at < now - timedelta(minutes=15)) & or_(
         BranchJob.error_code.is_(None),
         BranchJob.error_code != "rate_limited",
@@ -96,6 +101,7 @@ def dispatchable_jobs(session: Session) -> list[UUID]:
             .where(
                 or_(
                     (~predecessor)
+                    & or_(BranchJob.retry_at.is_(None), BranchJob.retry_at <= now)
                     & or_(
                         BranchJob.state == "queued",
                         BranchJob.state.in_(("running", "sending"))
@@ -104,12 +110,12 @@ def dispatchable_jobs(session: Session) -> list[UUID]:
                     (BranchJob.state == "committed")
                     & current_approval
                     & or_(BranchJob.owner.is_(None), BranchJob.updated_at < now - LEASE)
-                    & observation_due,
-                    (BranchJob.state == "open")
-                    & observation_due,
+                    & observation_due
+                    & ~paused_publication,
+                    (BranchJob.state == "open") & observation_due & ~paused_publication,
                 )
             )
-            .order_by(BranchJob.updated_at, BranchJob.sequence)
+            .order_by(BranchJob.state.in_(TERMINAL), BranchJob.updated_at, BranchJob.sequence)
             .limit(100)
         )
     )

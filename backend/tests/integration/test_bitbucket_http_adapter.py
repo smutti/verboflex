@@ -72,7 +72,12 @@ def test_provider_status_failures_are_closed_and_one_attempt(
 
     def provider(request: httpx.Request) -> httpx.Response:
         requests.append(request)
-        return httpx.Response(status_code, text=PROVIDER_BODY, request=request)
+        return httpx.Response(
+            status_code,
+            headers={"Retry-After": "Wed, 01 Jan 2031 12:00:00 GMT"},
+            text=PROVIDER_BODY,
+            request=request,
+        )
 
     adapter = BitbucketHttpAdapter(
         settings=Settings(),
@@ -92,7 +97,10 @@ def test_provider_status_failures_are_closed_and_one_attempt(
         assert error.provider_status == status_code
         assert error.operation is BitbucketOperation.REPOSITORY_METADATA
         assert str(error) == "Bitbucket provider read failed"
-        assert set(vars(error)) == {"kind", "operation", "provider_status"}
+        assert set(vars(error)) == {"kind", "operation", "provider_status", "retry_at"}
+        assert error.retry_at == (
+            datetime(2031, 1, 1, 12, tzinfo=UTC) if status_code == 429 else None
+        )
         assert error.__cause__ is None
         assert error.__context__ is None
         assert PROVIDER_BODY not in f"{error!r} {error} {vars(error)!r}"

@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from verboflex.auth.product_access import membership_stamp, product_roles
+from verboflex.integrations.bitbucket.client import BitbucketProviderReadError
 from verboflex.integrations.bitbucket.writes import (
     BitbucketWriteAdapter,
     BranchIntent,
@@ -242,6 +243,7 @@ async def _prepare(
                 _side(captured, file),
                 reads,
                 remaining=MAX_CANONICAL_AGGREGATE_BYTES - total,
+                propagate_rate_limit=True,
             )
             total += len(snapshot.parser_input.content)
             with factory() as s:
@@ -365,6 +367,7 @@ def _record(
     owner: UUID,
     outcome: WriteOutcome[CommitReceipt] | WriteOutcome[PullRequestReceipt],
     *,
+    recovery: bool,
     integrated_target: str | None = None,
 ) -> None:
     with factory.begin() as s:
@@ -372,6 +375,18 @@ def _record(
         if job.owner != owner:
             return
         job.owner, job.updated_at = None, datetime.now(UTC)
+        if outcome.provider_status == 429:
+            delay = min(60 * 2 ** min(job.rate_limit_attempts, 4), 900)
+            job.rate_limit_attempts += 1
+            job.retry_at = max(
+                job.updated_at + timedelta(seconds=delay), outcome.retry_at or job.updated_at
+            )
+            job.error_code = "rate_limited"
+            # Once a write may have succeeded, only reconcile its persisted intent.
+            if job.state == "running" or (not recovery and outcome.state == "not_sent"):
+                job.state, job.intent = "queued", None
+            return
+        job.retry_at, job.rate_limit_attempts = None, 0
         if outcome.state != "verified" or outcome.receipt is None:
             if job.state == "running":
                 job.intent = None
@@ -418,7 +433,7 @@ async def execute_branch_job(
     owner = uuid4()
     with factory.begin() as s:
         workflow, job = _lock(s, job_id)
-        if job.state in TERMINAL:
+        if job.state in TERMINAL or (job.retry_at and job.retry_at > datetime.now(UTC)):
             return
         earlier = s.scalar(
             select(BranchJob.id)
@@ -433,11 +448,13 @@ async def execute_branch_job(
             return
         if job.state == "blocked":
             return
+        job.retry_at, job.error_code = None, None
         recovery = job.state == "sending"
         job.owner, job.updated_at = owner, datetime.now(UTC)
         if not recovery:
             reason = approval_block_reason(s, workflow, job)
             if reason is not None:
+                job.rate_limit_attempts = 0
                 job.state, job.error_code, job.owner = "blocked", reason, None
                 return
             job.state = "running"
@@ -459,6 +476,7 @@ async def execute_branch_job(
                     if connection.generation != prepared["generation"]:
                         raise BranchWorkflowError("authority_changed")
                     _record_committed_files(s, current_workflow, current, str(prepared["parent"]))
+                    current.rate_limit_attempts = 0
                     current.owner, current.updated_at = None, datetime.now(UTC)
                     return
             job.intent = prepared
@@ -495,8 +513,21 @@ async def execute_branch_job(
             if proof is not None:
                 receipt, integrated_target = proof
                 outcome = WriteOutcome("verified", "approved_values_already_integrated", receipt)
-        _record(factory, job_id, owner, outcome, integrated_target=integrated_target)
+        _record(
+            factory, job_id, owner, outcome, recovery=recovery, integrated_target=integrated_target
+        )
     except Exception as error:
+        if isinstance(error, BitbucketProviderReadError) and error.kind == "rate_limited":
+            _record(
+                factory,
+                job_id,
+                owner,
+                WriteOutcome(
+                    "unknown", "rate_limited", provider_status=429, retry_at=error.retry_at
+                ),
+                recovery=recovery,
+            )
+            return
         with factory.begin() as s:
             _, current = _lock(s, job_id)
             if current.owner != owner:
@@ -512,6 +543,7 @@ async def execute_branch_job(
                 if isinstance(error, BranchWorkflowError)
                 else "provider_unavailable"
             )
+            current.rate_limit_attempts = 0
             current.state, current.error_code, current.owner = "blocked", code[:64], None
             current.updated_at = datetime.now(UTC)
 

@@ -119,13 +119,14 @@ def get_workflow(
             query = query.where(BranchJob.sequence < before)
         rows = list(session.scalars(query.order_by(BranchJob.sequence.desc()).limit(51)))
         in_progress = BranchJob.state.in_(("queued", "running", "sending"))
-        waiting, creating, open_count, open_pr_url, blocked_sequence = session.execute(
+        waiting, creating, open_count, open_pr_url, blocked_sequence, retry_at = session.execute(
             select(
                 func.count().filter(in_progress, BranchJob.kind != "pull_request"),
                 func.count().filter(in_progress, BranchJob.kind == "pull_request"),
                 func.count().filter(BranchJob.state == "open"),
                 func.max(BranchJob.pr_url).filter(BranchJob.state == "open"),
                 func.min(BranchJob.sequence).filter(BranchJob.state == "blocked"),
+                func.min(BranchJob.retry_at).filter(in_progress),
             ).where(BranchJob.workflow_id == workflow.id)
         ).one()
         idle = not (waiting or creating or open_count or blocked_sequence is not None)
@@ -218,6 +219,7 @@ def get_workflow(
             and has_unpublished_commits(session, workflow.id),
             open_pr_url=open_pr_url,
             waiting_changes=waiting,
+            publication_retry_at=retry_at,
             creating_pr=bool(creating),
             blocked_change=change(blocker) if blocker is not None else None,
             items=[change(job) for job in rows[:50]],
