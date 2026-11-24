@@ -25,7 +25,7 @@ from verboflex.localization.writing.core import (
 from verboflex.localization.writing.parsing import inspect_writeback_snapshot
 
 
-def _identity(value: CanonicalValue | WriteEdit) -> tuple[str, str, bytes]:
+def _identity(value: CanonicalValue | WriteOperation) -> tuple[str, str, bytes]:
     return value.logical_key, value.language, canonical_selector_bytes(value.selector)
 
 
