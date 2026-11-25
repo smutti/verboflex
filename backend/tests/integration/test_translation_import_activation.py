@@ -1551,8 +1551,10 @@ def test_initial_activation_batches_values_without_per_value_database_roundtrips
     assert cacheable_inserts and all(cacheable_inserts), "Each batch must reuse compiled SQL"
 
 
+@pytest.mark.parametrize("refresh_commit", ["a" * 40, "b" * 40])
 def test_unchanged_refresh_batches_provenance_without_changing_history(
     activation_session_factory,
+    refresh_commit,
 ):
     from sqlalchemy import event, func
 
@@ -1603,6 +1605,7 @@ def test_unchanged_refresh_batches_provenance_without_changing_history(
             repository_id=repository_id,
             result=result,
             path="res/values/strings.xml",
+            commit_hash=refresh_commit,
         )
     finally:
         event.remove(engine, "before_cursor_execute", observed)
@@ -1612,7 +1615,7 @@ def test_unchanged_refresh_batches_provenance_without_changing_history(
         locators = tuple(session.scalars(select(TranslationValueLocator)))
         assert len(locators) == 1001
         assert all(locator.import_execution_id == refreshed.execution_id for locator in locators)
-        assert all(locator.source_commit_hash == "a" * 40 for locator in locators)
+        assert all(locator.source_commit_hash == refresh_commit for locator in locators)
         scope = session.scalar(select(LocalizationScope))
         assert scope.language_counts == {"en": [1001, 1001]}
         assert scope.read_version - prior_version < 20

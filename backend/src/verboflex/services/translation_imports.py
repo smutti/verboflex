@@ -464,7 +464,7 @@ def reconcile_canonical_translations(
     updated_value_ids: list[UUID] = []
     tombstoned_value_ids: list[UUID] = []
     affected_value_ids: set[UUID] = set()
-    unchanged_locator_ids: list[UUID] = []
+    locator_ids_by_commit: dict[str, list[UUID]] = {}
 
     for staged in staged_values:
         reference = reference_by_position.get(staged.source_reference_position)
@@ -612,13 +612,13 @@ def reconcile_canonical_translations(
             reference=reference,
         )
         if unchanged_locator:
-            unchanged_locator_ids.append(value.id)
+            locator_ids_by_commit.setdefault(reference.commit_hash, []).append(value.id)
         if (staged.position + 1) % 500 == 0:
-            _advance_unchanged_locators(session, identity, unchanged_locator_ids)
-            unchanged_locator_ids.clear()
+            _advance_unchanged_locators(session, identity, locator_ids_by_commit)
+            locator_ids_by_commit.clear()
             session.flush()
 
-    _advance_unchanged_locators(session, identity, unchanged_locator_ids)
+    _advance_unchanged_locators(session, identity, locator_ids_by_commit)
 
     for key in existing_keys:
         for value in key.values:
@@ -1123,7 +1123,7 @@ def _upsert_locator(
     staged: StagedTranslationValue,
     reference: ImportSourceReference,
 ) -> bool:
-    """Return true when unchanged source metadata only needs new execution ownership."""
+    """Return true when the source location can advance with its commit batch."""
     locator = value.locator
     if locator is None:
         locator = TranslationValueLocator(
@@ -1151,7 +1151,6 @@ def _upsert_locator(
         and locator.repository_side == staged.repository_side
         and locator.repository_id == staged.repository_id
         and locator.configured_branch == staged.configured_branch
-        and locator.source_commit_hash == reference.commit_hash
         and locator.format == staged.format
         and locator.path == staged.path
         and locator.position == staged.locator_position
@@ -1177,14 +1176,18 @@ def _upsert_locator(
 
 
 def _advance_unchanged_locators(
-    session: Session, identity: ImportExecutionIdentity, value_ids: list[UUID]
+    session: Session, identity: ImportExecutionIdentity, ids_by_commit: dict[str, list[UUID]]
 ) -> None:
     """Batch provenance-only refreshes and synchronize already loaded ORM locators."""
-    if value_ids:
+    for commit_hash, value_ids in ids_by_commit.items():
         session.execute(
             update(TranslationValueLocator)
             .where(TranslationValueLocator.value_id.in_(value_ids))
-            .values(import_job_id=identity.import_id, import_execution_id=identity.execution_id)
+            .values(
+                import_job_id=identity.import_id,
+                import_execution_id=identity.execution_id,
+                source_commit_hash=commit_hash,
+            )
             .execution_options(synchronize_session="fetch")
         )
 
