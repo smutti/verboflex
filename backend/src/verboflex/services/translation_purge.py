@@ -180,13 +180,21 @@ def purge_retired_translations(
         {"scope": scope_id},
     )
     for execution in executions:
-        while remove(
-            "staged_translation_values",
-            """DELETE FROM staged_translation_values
-            WHERE import_execution_id=:execution AND position IN (
-                SELECT position FROM staged_translation_values WHERE import_execution_id=:execution
-                ORDER BY position LIMIT :limit)""",
-            {"execution": execution, "limit": batch_size},
-        ):
-            pass
+        # Terminal rows are immutable. Walk the indexed positions once so each
+        # DELETE starts after the preceding batch, even with stale table statistics.
+        positions = session.scalars(
+            text("""SELECT position FROM staged_translation_values
+                WHERE import_execution_id=:execution ORDER BY position""").execution_options(
+                yield_per=batch_size
+            ),
+            {"execution": execution},
+        )
+        counts.setdefault("staged_translation_values", 0)
+        for batch in positions.partitions(batch_size):
+            remove(
+                "staged_translation_values",
+                """DELETE FROM staged_translation_values WHERE import_execution_id=:execution
+                   AND position BETWEEN :first AND :last""",
+                {"execution": execution, "first": batch[0], "last": batch[-1]},
+            )
     return counts

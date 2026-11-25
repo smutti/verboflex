@@ -58,6 +58,38 @@ def activate(factory, identity, repository, result, commit="a"):
     )
 
 
+def test_first_activation_cleans_staging_from_failed_attempts_in_batches(factory, monkeypatch):
+    identity, repository = _seed_running_direct_import(factory)
+    parsed = _qt_result(deleted=False)
+    for _ in range(2):
+        _stage_direct_manifest(factory, identity=identity, repository_id=repository, result=parsed)
+        assert import_jobs.finish_import_execution(factory, identity=identity, references=None)
+        identity = _start_refresh_execution(factory, identity)
+    with factory() as session:
+        assert session.scalar(select(LocalizationScope.active_execution_id)) is None
+        assert session.scalar(text("SELECT count(*) FROM staged_translation_values")) == (
+            2 * len(parsed.values)
+        )
+
+    original = translation_purge.purge_retired_translations
+    removed = []
+
+    def purge_one_at_a_time(session, *, scope_id):
+        counts = original(session, scope_id=scope_id, batch_size=1)
+        removed.append(counts["staged_translation_values"])
+        return counts
+
+    monkeypatch.setattr(translation_purge, "purge_retired_translations", purge_one_at_a_time)
+    activate(factory, identity, repository, parsed)
+    with factory() as session:
+        assert (
+            session.scalar(select(LocalizationScope.active_execution_id)) == identity.execution_id
+        )
+        assert session.scalar(text("SELECT count(*) FROM staged_translation_values")) == 0
+        assert len(tuple(session.scalars(select(TranslationValue.id)))) == len(parsed.values)
+    assert removed == [3 * len(parsed.values)]
+
+
 @pytest.mark.parametrize("format", ["json", "qt"])
 def test_successful_refresh_erases_values_keys_history_and_staging(factory, format):
     identity, repository = _seed_running_direct_import(factory)
