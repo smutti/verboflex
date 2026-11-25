@@ -384,7 +384,8 @@ def _document_values(
         if child.tag != "context":
             raise _UnsupportedQtTs
         saw_context = True
-        context_values = _context_values(
+        _append_context_values(
+            values=values,
             child=child,
             context_index=context_index,
             prefix=tuple(prefix),
@@ -392,7 +393,6 @@ def _document_values(
             language=language,
             state=state,
         )
-        values.extend(context_values)
         context_index += 1
     return tuple(values)
 
@@ -434,15 +434,16 @@ def _dependency_nodes(element: Element) -> tuple[CanonicalStructureNode, ...]:
     return tuple(nodes)
 
 
-def _context_values(
+def _append_context_values(
     *,
+    values: CanonicalValueBuffer,
     child: Element,
     context_index: int,
     prefix: tuple[CanonicalStructureNode, ...],
     parser_input: CanonicalParserInput,
     language: str,
     state: _ParseState,
-) -> tuple[CanonicalValue, ...]:
+) -> None:
     if child.attrib or (child.text or "").strip():
         raise _UnsupportedQtTs
     children = list(child)
@@ -463,7 +464,6 @@ def _context_values(
             )
         )
         index += 1
-    values = CanonicalValueBuffer(source_bytes=len(parser_input.content))
     for message_index, message in enumerate(children[index:]):
         if message.tag != "message":
             raise _UnsupportedQtTs
@@ -485,7 +485,6 @@ def _context_values(
         if state.value_count > MAX_QT_VALUES:
             raise _UnsupportedQtTs
         values.extend(message_values)
-    return tuple(values)
 
 
 def _message_values(

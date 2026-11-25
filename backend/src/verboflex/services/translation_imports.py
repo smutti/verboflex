@@ -220,8 +220,6 @@ def staged_manifest_digest(
     identity: ImportExecutionIdentity,
 ) -> str:
     """Rebuild the deterministic digest of durable immutable staging rows."""
-    from verboflex.services.import_jobs import ImportSourceReferenceRecord
-
     references = tuple(
         session.scalars(
             select(ImportSourceReference)
@@ -242,7 +240,21 @@ def staged_manifest_digest(
             .order_by(TranslationParseIssue.position)
         )
     )
-    reference_records = tuple(
+    return _digest_staged_rows(
+        session,
+        identity=identity,
+        references=_reference_records(references),
+        staged_values=staged_values,
+        issues=issues,
+    )
+
+
+def _reference_records(
+    references: tuple[ImportSourceReference, ...],
+) -> tuple[ImportSourceReferenceRecord, ...]:
+    from verboflex.services.import_jobs import ImportSourceReferenceRecord
+
+    return tuple(
         ImportSourceReferenceRecord(
             position=reference.position,
             repository_side=cast("RepositoryRole", reference.repository_side),
@@ -255,9 +267,19 @@ def staged_manifest_digest(
         )
         for reference in references
     )
+
+
+def _digest_staged_rows(
+    session: Session,
+    *,
+    identity: ImportExecutionIdentity,
+    references: tuple[ImportSourceReferenceRecord, ...],
+    staged_values: Iterable[StagedTranslationValue],
+    issues: tuple[TranslationParseIssue, ...],
+) -> str:
     digest = _manifest_digest(
         identity=identity,
-        references=reference_records,
+        references=references,
         values=(_staged_payload(value) for value in staged_values),
         issues=[
             {
@@ -345,23 +367,15 @@ def require_complete_staged_manifest(
         )
     ):
         raise TranslationImportRejected("canonical staged manifest is incomplete")
-    from verboflex.services.import_jobs import ImportSourceReferenceRecord
-
-    reference_records = tuple(
-        ImportSourceReferenceRecord(
-            position=reference.position,
-            repository_side=cast("RepositoryRole", reference.repository_side),
-            repository_id=reference.repository_id,
-            source_branch=reference.source_branch,
-            commit_hash=reference.commit_hash,
-            path=reference.path,
-            size_bytes=reference.size_bytes,
-            sha256=reference.sha256,
-        )
-        for reference in references
-    )
+    reference_records = _reference_records(references)
     _validate_references(identity=identity, references=reference_records)
-    digest = staged_manifest_digest(session, identity=identity)
+    digest = _digest_staged_rows(
+        session,
+        identity=identity,
+        references=reference_records,
+        staged_values=staged_values,
+        issues=issues,
+    )
     if digest != manifest_digest:
         raise TranslationImportRejected("canonical staged manifest digest mismatch")
     return staged_values

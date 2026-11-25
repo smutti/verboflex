@@ -32,7 +32,9 @@ Synthetic source-cache tests cover reuse across adapters, expiry, byte/entry
 budgets, private filesystem access, credential changes and revoked provider access.
 Initial-import PostgreSQL regressions verify that multi-row inserts batch the
 database's read-projection triggers and reuse compiled SQL while preserving
-language counts and provenance.
+language counts and provenance. Activation checks the digest of the ordered staging
+rows it will publish and reuses those rows for reconciliation. Qt parser tests
+cover the file-wide output budget across multiple translation contexts.
 Unchanged refresh regressions also bound PostgreSQL read-projection updates while
 advancing source provenance to the new execution and preserving value history.
 The built smoke also configures a separate code/translation mapping through HTTP,
