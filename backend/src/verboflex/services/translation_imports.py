@@ -220,8 +220,6 @@ def staged_manifest_digest(
     identity: ImportExecutionIdentity,
 ) -> str:
     """Rebuild the deterministic digest of durable immutable staging rows."""
-    from verboflex.services.import_jobs import ImportSourceReferenceRecord
-
     references = tuple(
         session.scalars(
             select(ImportSourceReference)
@@ -242,7 +240,21 @@ def staged_manifest_digest(
             .order_by(TranslationParseIssue.position)
         )
     )
-    reference_records = tuple(
+    return _digest_staged_rows(
+        session,
+        identity=identity,
+        references=_reference_records(references),
+        staged_values=staged_values,
+        issues=issues,
+    )
+
+
+def _reference_records(
+    references: tuple[ImportSourceReference, ...],
+) -> tuple[ImportSourceReferenceRecord, ...]:
+    from verboflex.services.import_jobs import ImportSourceReferenceRecord
+
+    return tuple(
         ImportSourceReferenceRecord(
             position=reference.position,
             repository_side=cast("RepositoryRole", reference.repository_side),
@@ -255,9 +267,19 @@ def staged_manifest_digest(
         )
         for reference in references
     )
+
+
+def _digest_staged_rows(
+    session: Session,
+    *,
+    identity: ImportExecutionIdentity,
+    references: tuple[ImportSourceReferenceRecord, ...],
+    staged_values: Iterable[StagedTranslationValue],
+    issues: tuple[TranslationParseIssue, ...],
+) -> str:
     digest = _manifest_digest(
         identity=identity,
-        references=reference_records,
+        references=references,
         values=(_staged_payload(value) for value in staged_values),
         issues=[
             {
@@ -345,23 +367,15 @@ def require_complete_staged_manifest(
         )
     ):
         raise TranslationImportRejected("canonical staged manifest is incomplete")
-    from verboflex.services.import_jobs import ImportSourceReferenceRecord
-
-    reference_records = tuple(
-        ImportSourceReferenceRecord(
-            position=reference.position,
-            repository_side=cast("RepositoryRole", reference.repository_side),
-            repository_id=reference.repository_id,
-            source_branch=reference.source_branch,
-            commit_hash=reference.commit_hash,
-            path=reference.path,
-            size_bytes=reference.size_bytes,
-            sha256=reference.sha256,
-        )
-        for reference in references
-    )
+    reference_records = _reference_records(references)
     _validate_references(identity=identity, references=reference_records)
-    digest = staged_manifest_digest(session, identity=identity)
+    digest = _digest_staged_rows(
+        session,
+        identity=identity,
+        references=reference_records,
+        staged_values=staged_values,
+        issues=issues,
+    )
     if digest != manifest_digest:
         raise TranslationImportRejected("canonical staged manifest digest mismatch")
     return staged_values
@@ -450,7 +464,7 @@ def reconcile_canonical_translations(
     updated_value_ids: list[UUID] = []
     tombstoned_value_ids: list[UUID] = []
     affected_value_ids: set[UUID] = set()
-    unchanged_locator_ids: list[UUID] = []
+    locator_ids_by_commit: dict[str, list[UUID]] = {}
 
     for staged in staged_values:
         reference = reference_by_position.get(staged.source_reference_position)
@@ -598,13 +612,13 @@ def reconcile_canonical_translations(
             reference=reference,
         )
         if unchanged_locator:
-            unchanged_locator_ids.append(value.id)
+            locator_ids_by_commit.setdefault(reference.commit_hash, []).append(value.id)
         if (staged.position + 1) % 500 == 0:
-            _advance_unchanged_locators(session, identity, unchanged_locator_ids)
-            unchanged_locator_ids.clear()
+            _advance_unchanged_locators(session, identity, locator_ids_by_commit)
+            locator_ids_by_commit.clear()
             session.flush()
 
-    _advance_unchanged_locators(session, identity, unchanged_locator_ids)
+    _advance_unchanged_locators(session, identity, locator_ids_by_commit)
 
     for key in existing_keys:
         for value in key.values:
@@ -1109,7 +1123,7 @@ def _upsert_locator(
     staged: StagedTranslationValue,
     reference: ImportSourceReference,
 ) -> bool:
-    """Return true when unchanged source metadata only needs new execution ownership."""
+    """Return true when the source location can advance with its commit batch."""
     locator = value.locator
     if locator is None:
         locator = TranslationValueLocator(
@@ -1137,7 +1151,6 @@ def _upsert_locator(
         and locator.repository_side == staged.repository_side
         and locator.repository_id == staged.repository_id
         and locator.configured_branch == staged.configured_branch
-        and locator.source_commit_hash == reference.commit_hash
         and locator.format == staged.format
         and locator.path == staged.path
         and locator.position == staged.locator_position
@@ -1163,14 +1176,18 @@ def _upsert_locator(
 
 
 def _advance_unchanged_locators(
-    session: Session, identity: ImportExecutionIdentity, value_ids: list[UUID]
+    session: Session, identity: ImportExecutionIdentity, ids_by_commit: dict[str, list[UUID]]
 ) -> None:
     """Batch provenance-only refreshes and synchronize already loaded ORM locators."""
-    if value_ids:
+    for commit_hash, value_ids in ids_by_commit.items():
         session.execute(
             update(TranslationValueLocator)
             .where(TranslationValueLocator.value_id.in_(value_ids))
-            .values(import_job_id=identity.import_id, import_execution_id=identity.execution_id)
+            .values(
+                import_job_id=identity.import_id,
+                import_execution_id=identity.execution_id,
+                source_commit_hash=commit_hash,
+            )
             .execution_options(synchronize_session="fetch")
         )
 

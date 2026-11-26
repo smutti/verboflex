@@ -531,18 +531,24 @@ def test_reconciliation_fails_closed_when_source_provenance_is_not_visible(
     with factory.begin() as session:
         scope = session.scalar(select(LocalizationScope))
         original_scalars = session.scalars
-        provenance_reads = 0
+        imports = _translation_imports()
+        verify = imports.require_complete_staged_manifest
+        verified = False
+
+        def verify_manifest(*args, **kwargs):
+            nonlocal verified
+            rows = verify(*args, **kwargs)
+            verified = True
+            return rows
 
         def missing_provenance(statement, *args, **kwargs):
-            nonlocal provenance_reads
-            if statement.column_descriptions[0].get("entity") is ImportSourceReference:
-                provenance_reads += 1
-                if provenance_reads > 2:
-                    return ()
+            if verified and statement.column_descriptions[0].get("entity") is ImportSourceReference:
+                return iter(())
             return original_scalars(statement, *args, **kwargs)
 
         # Emulate loss of visibility between manifest validation and use;
         # canonical stage/manifest verification and reconciliation stay real.
+        monkeypatch.setattr(imports, "require_complete_staged_manifest", verify_manifest)
         monkeypatch.setattr(session, "scalars", missing_provenance)
         with pytest.raises(
             _translation_imports().TranslationImportRejected,
@@ -552,7 +558,7 @@ def test_reconciliation_fails_closed_when_source_provenance_is_not_visible(
                 session, identity=identity, scope=scope, manifest_digest=manifest.digest
             )
         assert scope.active_execution_id is None
-        assert provenance_reads == 3
+        assert verified
     with factory() as session:
         assert tuple(session.scalars(select(TranslationValue))) == ()
         assert tuple(session.scalars(select(TranslationKey))) == ()
@@ -1511,9 +1517,12 @@ def test_initial_activation_batches_values_without_per_value_database_roundtrips
     )
     statements = []
     cacheable_inserts = []
+    staged_reads = []
 
     def observed(_connection, _cursor, statement, _parameters, _context, _executemany):
         statements.append(statement.split()[0])
+        if statement.startswith("SELECT staged_translation_values."):
+            staged_reads.append(statement)
         if statement.startswith("INSERT INTO translation_"):
             cacheable_inserts.append(_context.compiled.cache_key is not None)
 
@@ -1538,11 +1547,14 @@ def test_initial_activation_batches_values_without_per_value_database_roundtrips
         # statement-level read projections once per row. Bound the actual work.
         assert scope.read_version < 20
     assert len(statements) < 150, f"Per-value database work: {len(statements)} statements"
+    assert len(staged_reads) == 1, "Verify and activate the same ordered staging rows"
     assert cacheable_inserts and all(cacheable_inserts), "Each batch must reuse compiled SQL"
 
 
+@pytest.mark.parametrize("refresh_commit", ["a" * 40, "b" * 40])
 def test_unchanged_refresh_batches_provenance_without_changing_history(
     activation_session_factory,
+    refresh_commit,
 ):
     from sqlalchemy import event, func
 
@@ -1593,6 +1605,7 @@ def test_unchanged_refresh_batches_provenance_without_changing_history(
             repository_id=repository_id,
             result=result,
             path="res/values/strings.xml",
+            commit_hash=refresh_commit,
         )
     finally:
         event.remove(engine, "before_cursor_execute", observed)
@@ -1602,7 +1615,7 @@ def test_unchanged_refresh_batches_provenance_without_changing_history(
         locators = tuple(session.scalars(select(TranslationValueLocator)))
         assert len(locators) == 1001
         assert all(locator.import_execution_id == refreshed.execution_id for locator in locators)
-        assert all(locator.source_commit_hash == "a" * 40 for locator in locators)
+        assert all(locator.source_commit_hash == refresh_commit for locator in locators)
         scope = session.scalar(select(LocalizationScope))
         assert scope.language_counts == {"en": [1001, 1001]}
         assert scope.read_version - prior_version < 20

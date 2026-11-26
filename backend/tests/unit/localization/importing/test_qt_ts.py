@@ -42,6 +42,31 @@ def _input(content: bytes | None = None, **overrides: object) -> object:
     return core.CanonicalParserInput(**fields)
 
 
+def test_scalar_messages_share_the_document_output_budget_across_contexts(monkeypatch):
+    core, qt = _modules()
+    source = _input(
+        b'<TS version="2.1" language="it_IT">'
+        + b"".join(
+            b"<context><name>" + name + b"</name><message><source>Hello</source>"
+            b"<translation>Ciao</translation></message></context>"
+            for name in (b"First", b"Second")
+        )
+        + b"</TS>"
+    )
+    original_size = core.CanonicalValueBuffer._size
+    remaining = []
+
+    def counted_size(value, limit):
+        remaining.append(limit)
+        return original_size(value, limit)
+
+    monkeypatch.setattr(core.CanonicalValueBuffer, "_size", staticmethod(counted_size))
+    result = qt.parse_qt_ts(source)
+    assert not result.issues and len(result.values) == 2
+    assert len(remaining) == 2
+    assert remaining[1] < remaining[0]
+
+
 def _node_fields(value: object, kind: str) -> list[dict[str, object]]:
     return [dict(node.fields) for node in value.structure if node.kind == kind]  # type: ignore[attr-defined]
 

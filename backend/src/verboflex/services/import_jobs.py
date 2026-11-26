@@ -2013,11 +2013,6 @@ def _finish_import_execution_transaction(
                     ).scalar_one_or_none()
                     if canonical_scope is None:
                         raise ValueError("canonical scope rejected")
-                    require_complete_staged_manifest(
-                        session,
-                        identity=identity,
-                        manifest_digest=canonical_manifest_digest,
-                    )
                 if movement is not None:
                     baseline_references = (
                         _source_references(
@@ -2037,6 +2032,15 @@ def _finish_import_execution_transaction(
                         references=validated_references,
                         baseline_references=baseline_references,
                         movement=movement,
+                    )
+                # Activation validates the staged rows under these same locks. A
+                # pending rewrite must validate them here before saving its proposal.
+                if canonical_required and rewrite_authority is not None:
+                    assert canonical_manifest_digest is not None
+                    require_complete_staged_manifest(
+                        session,
+                        identity=identity,
+                        manifest_digest=canonical_manifest_digest,
                     )
             except ValueError:
                 validated_references = None
