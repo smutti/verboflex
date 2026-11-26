@@ -262,6 +262,23 @@ def test_missing_assignment_recovers_by_reading_the_same_pr():
     asyncio.run(with_provider(provider, exercise))
 
 
+def test_historical_pr_without_reviewer_is_still_recoverable():
+    provider = Provider()
+    original = replace(provider.intent, reviewer_uuid=None)
+    existing = receipt(original)
+    del existing["reviewers"]
+    provider.prs.append(existing)
+
+    async def exercise(adapter):
+        recovered = await adapter.reconcile_pull_request(object(), intent=original)
+        assert recovered.state == "verified" and recovered.receipt.id == 41
+        tracked = await adapter.read_pull_request(object(), intent=original, pull_request_id=41)
+        assert tracked.state == "verified" and tracked.receipt.id == 41
+        assert not provider.posts
+
+    asyncio.run(with_provider(provider, exercise))
+
+
 def test_create_without_a_reviewer_makes_no_provider_request():
     provider = Provider()
     result = asyncio.run(

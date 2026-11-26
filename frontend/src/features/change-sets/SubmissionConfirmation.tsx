@@ -269,15 +269,20 @@ export function SubmissionConfirmation({
       aria-label={t("Create pull request")}
       className="flex min-w-0 flex-wrap items-center justify-between gap-4 rounded-lg border bg-card p-4"
     >
-      <p className="min-w-0 text-sm text-muted-foreground">
-        {review.pr_reviewer_name === null
-          ? t(
+      <div className="min-w-0 text-sm text-muted-foreground">
+        <p>{t("Approved changes only. No automatic merge.")}</p>
+        {review.pr_reviewer_name === null ? (
+          <p>
+            {t(
               "Ask a project administrator to set a pull request reviewer under Approval branches.",
-            )
-          : review.pr_reviewer_name
-            ? t("Reviewer: {{name}}", { name: review.pr_reviewer_name })
-            : t("Approved changes only. No automatic merge.")}
-      </p>
+            )}
+          </p>
+        ) : (
+          review.pr_reviewer_name && (
+            <p>{t("Reviewer: {{name}}", { name: review.pr_reviewer_name })}</p>
+          )
+        )}
+      </div>
       <Button
         className="w-fit max-w-full min-h-[44px] h-auto whitespace-normal"
         disabled={inFlight || !canSubmit()}
