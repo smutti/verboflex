@@ -134,6 +134,8 @@ def test_product_schema_registers_global_identity_and_revision_guards(
         "updated_at",
         "deleted_at",
         "deleted_by",
+        "pr_reviewer_uuid",
+        "pr_reviewer_name",
     }
     assert {column["name"] for column in inspector.get_columns("product_revisions")} == {
         "id",
