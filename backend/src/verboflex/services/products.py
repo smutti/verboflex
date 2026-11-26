@@ -180,6 +180,28 @@ def _locked_product(session: Session, product_id: UUID) -> Product:
     return product
 
 
+def project_reviewer(session: Session, *, product_id: UUID) -> tuple[UUID, str] | None:
+    with session.begin():
+        row = session.execute(
+            select(Product.pr_reviewer_uuid, Product.pr_reviewer_name).where(
+                Product.id == product_id, Product.deleted_at.is_(None)
+            )
+        ).one_or_none()
+        if row is None:
+            raise ProductNotFound("product unavailable")
+        return (row[0], row[1]) if row[0] is not None and row[1] is not None else None
+
+
+def set_project_reviewer(
+    session: Session, *, product_id: UUID, actor_id: UUID, reviewer_uuid: UUID, name: str
+) -> None:
+    with session.begin():
+        product = _locked_product(session, product_id)
+        if (product.pr_reviewer_uuid, product.pr_reviewer_name) != (reviewer_uuid, name):
+            product.pr_reviewer_uuid, product.pr_reviewer_name = reviewer_uuid, name
+            record_audit(session, actor_id=actor_id, action="product.updated", entity_id=product.id)
+
+
 def _locked_revision(session: Session, revision_id: UUID) -> ProductRevision:
     return session.execute(
         select(ProductRevision).where(ProductRevision.id == revision_id).with_for_update()

@@ -45,6 +45,36 @@ export const pullRequestProblems: Record<
   string,
   { title: string; detail: string }
 > = {
+  reviewer_required: {
+    get title() {
+      return t("Pull request reviewer");
+    },
+    get detail() {
+      return t(
+        "Ask a project administrator to set a pull request reviewer under Approval branches.",
+      );
+    },
+  },
+  pr_rejected: {
+    get title() {
+      return t("Submission failed");
+    },
+    get detail() {
+      return t(
+        "Bitbucket declined the pull request. Check that the reviewer can access the repository and is different from the author, then try again.",
+      );
+    },
+  },
+  reviewer_not_confirmed: {
+    get title() {
+      return t("Pull request reviewer");
+    },
+    get detail() {
+      return t(
+        "Bitbucket opened the pull request without the selected reviewer. Add them to the existing pull request in Bitbucket, then check again.",
+      );
+    },
+  },
   pr_merge_conflicts: {
     get title() {
       return t("Merge conflicts");

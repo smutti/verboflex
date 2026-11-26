@@ -6,6 +6,8 @@ import { ApprovalBranchesPage } from "./ApprovalBranchesPage";
 
 const api = vi.hoisted(() => ({
   getBranchWorkflow: vi.fn(),
+  getProjectReviewer: vi.fn(),
+  setProjectReviewer: vi.fn(),
   configureBranchWorkflow: vi.fn(),
 }));
 vi.mock("../../../api/client", () => api);
@@ -23,6 +25,7 @@ const initial = {
 };
 beforeEach(() => {
   vi.resetAllMocks();
+  api.getProjectReviewer.mockResolvedValue({ data: { reviewer: null } });
   api.getBranchWorkflow.mockResolvedValue({ data: initial });
 });
 afterEach(cleanup);

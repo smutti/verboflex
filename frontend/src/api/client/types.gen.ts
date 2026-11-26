@@ -2365,6 +2365,10 @@ export type BranchWorkflowResponse = {
      */
     open_pr_url?: string | null;
     /**
+     * Pr Reviewer Name
+     */
+    pr_reviewer_name?: string | null;
+    /**
      * Publication Retry At
      */
     publication_retry_at?: string | null;
@@ -4659,6 +4663,13 @@ export type ProductWorkspacePage = {
 };
 
 /**
+ * ProjectReviewerResponse
+ */
+export type ProjectReviewerResponse = {
+    reviewer: PullRequestReviewer | null;
+};
+
+/**
  * ProjectUpdatesPage
  */
 export type ProjectUpdatesPage = {
@@ -4744,6 +4755,20 @@ export type PullRequestReceiptResponse = {
      * Url
      */
     url: string | null;
+};
+
+/**
+ * PullRequestReviewer
+ */
+export type PullRequestReviewer = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Uuid
+     */
+    uuid: string;
 };
 
 /**
@@ -5749,6 +5774,10 @@ export type SubmissionReviewResponse = {
      * Next Values After
      */
     next_values_after?: number | null;
+    /**
+     * Pr Reviewer Name
+     */
+    pr_reviewer_name?: string | null;
     /**
      * Product Id
      */
@@ -8948,6 +8977,90 @@ export type ConfirmAdminImportRewriteBaselineResponses = {
 };
 
 export type ConfirmAdminImportRewriteBaselineResponse = ConfirmAdminImportRewriteBaselineResponses[keyof ConfirmAdminImportRewriteBaselineResponses];
+
+export type GetProjectReviewerData = {
+    body?: never;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/pull-request-reviewer';
+};
+
+export type GetProjectReviewerErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type GetProjectReviewerError = GetProjectReviewerErrors[keyof GetProjectReviewerErrors];
+
+export type GetProjectReviewerResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProjectReviewerResponse;
+};
+
+export type GetProjectReviewerResponse = GetProjectReviewerResponses[keyof GetProjectReviewerResponses];
+
+export type SetProjectReviewerData = {
+    body: PullRequestReviewer;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/products/{product_id}/pull-request-reviewer';
+};
+
+export type SetProjectReviewerErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ErrorResponse;
+};
+
+export type SetProjectReviewerError = SetProjectReviewerErrors[keyof SetProjectReviewerErrors];
+
+export type SetProjectReviewerResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProjectReviewerResponse;
+};
+
+export type SetProjectReviewerResponse = SetProjectReviewerResponses[keyof SetProjectReviewerResponses];
 
 export type ReactivateAdminProductData = {
     body: AdminProductReactivateRequest;

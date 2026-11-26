@@ -52,6 +52,7 @@ def pr_intent():
         "release/1",
         TARGET,
         "f" * 64,
+        reviewer_uuid=UUID("c06f4e78-4587-425b-8991-878753e52f0b"),
     )
 
 
@@ -73,6 +74,7 @@ def next_page_url(*, page=2, omit=None, changes=None):
 def receipt(intent, *, identity=41, state="OPEN", target_commit=TARGET):
     return {
         "id": identity,
+        "reviewers": [{"uuid": "{c06f4e78-4587-425b-8991-878753e52f0b}"}],
         "state": state,
         "description": intent.description,
         "source": {
@@ -228,6 +230,7 @@ def test_create_sends_exact_source_and_explicit_destination_and_verifies_receipt
         assert result.receipt.target_branch == "release/1"
         assert len(provider.posts) == 1
         body = provider.posts[0]
+        assert body["reviewers"] == [{"uuid": "{c06f4e78-4587-425b-8991-878753e52f0b}"}]
         assert body["title"] == provider.intent.title
         assert body["description"] == provider.intent.description
         assert UUID(body["source"]["repository"]["uuid"]) == REPOSITORY
@@ -237,6 +240,40 @@ def test_create_sends_exact_source_and_explicit_destination_and_verifies_receipt
         assert body["destination"]["branch"] == {"name": "release/1"}
 
     asyncio.run(with_provider(provider, exercise))
+
+
+def test_missing_assignment_recovers_by_reading_the_same_pr():
+    provider = Provider()
+    provider.response_edit = lambda data: {**data, "reviewers": []}
+
+    async def exercise(adapter):
+        result = await adapter.create_pull_request(object(), intent=provider.intent)
+        assert result.code == "reviewer_not_confirmed"
+        provider.pages = [
+            {"values": [{k: v for k, v in provider.prs[0].items() if k != "reviewers"}]}
+        ]
+        check = await adapter.reconcile_pull_request(object(), intent=provider.intent)
+        assert check.code == "reviewer_not_confirmed"
+        provider.response_edit = lambda data: data
+        check = await adapter.reconcile_pull_request(object(), intent=provider.intent)
+        assert check.state == "verified" and check.receipt.id == 41
+        assert len(provider.posts) == 1
+
+    asyncio.run(with_provider(provider, exercise))
+
+
+def test_create_without_a_reviewer_makes_no_provider_request():
+    provider = Provider()
+    result = asyncio.run(
+        with_provider(
+            provider,
+            lambda adapter: adapter.create_pull_request(
+                object(), intent=replace(provider.intent, reviewer_uuid=None)
+            ),
+        )
+    )
+    assert (result.state, result.code) == ("not_sent", "reviewer_required")
+    assert provider.requests == []
 
 
 def test_create_rejects_receipt_identity_outside_lossless_json_integer_range():

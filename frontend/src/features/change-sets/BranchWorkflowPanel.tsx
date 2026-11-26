@@ -39,6 +39,21 @@ const states: Record<string, string> = {
   },
 };
 const errors: Record<string, string> = {
+  get reviewer_not_confirmed() {
+    return t(
+      "Bitbucket opened the pull request without the selected reviewer. Add them to the existing pull request in Bitbucket, then check again.",
+    );
+  },
+  get reviewer_required() {
+    return t(
+      "Ask a project administrator to set a pull request reviewer under Approval branches.",
+    );
+  },
+  get pr_rejected() {
+    return t(
+      "Bitbucket declined the pull request. Check that the reviewer can access the repository and is different from the author, then try again.",
+    );
+  },
   get unsupported_shape() {
     return t(
       "The translation file contains a structure that cannot be edited safely. No commit was sent. Check the source file before retrying.",
@@ -254,6 +269,11 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                     "This source is inactive. Its publication history is available below.",
                   )}
                 </p>
+              ) : data.pr_reviewer_name === null &&
+                data.can_publish &&
+                !blocker &&
+                !waiting ? (
+                <p>{errors.reviewer_required}</p>
               ) : data.can_create_pr ? (
                 <p>
                   {t(
@@ -329,6 +349,11 @@ export function BranchWorkflowPanel({ children }: { children: ReactNode }) {
                       "Send the approved translations to Bitbucket for review?",
                     )}
                   </p>
+                  {data.pr_reviewer_name && (
+                    <p>
+                      {t("Reviewer: {{name}}", { name: data.pr_reviewer_name })}
+                    </p>
+                  )}
                   <Button
                     disabled={busy || failure || !data.can_create_pr}
                     onClick={() => void act()}

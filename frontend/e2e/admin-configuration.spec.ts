@@ -1115,6 +1115,32 @@ for (const role of [
   });
 }
 
+test("assigns a Bitbucket reviewer in project settings and retains it after reload", async ({ page }) => {
+  const state = defaultState();
+  await installAdminApi(page, state);
+  const uuid = "c06f4e78-4587-425b-8991-878753e52f0b";
+  let reviewer: { name: string; uuid: string } | null = null;
+  await page.route("**/api/v1/admin/products/product-1/pull-request-reviewer", async route => {
+    if (route.request().method() === "PUT") reviewer = route.request().postDataJSON();
+    await route.fulfill({ json: { reviewer } });
+  });
+  await page.route("**/api/v1/products/product-1/branch-workflow", route =>
+    route.fulfill({ json: { enabled: false, available_mappings: [] } }));
+  await page.goto("/admin/products/product-1/branches");
+  await page.getByLabel("Reviewer name").fill("Fixture Reviewer");
+  await page.getByLabel("Bitbucket profile link").fill("https://bitbucket.org/example/");
+  await page.getByRole("button", { name: "Save reviewer" }).click();
+  await expect(page.getByRole("alert")).toContainText("Copy the Bitbucket profile link");
+  expect(reviewer).toBeNull();
+  await page.getByLabel("Bitbucket profile link").fill("https://bitbucket.org/%7B" + uuid + "%7D/");
+  await page.getByRole("button", { name: "Save reviewer" }).click();
+  await expect(page.getByText("Reviewer saved.")).toBeVisible();
+  expect(reviewer).toEqual({ name: "Fixture Reviewer", uuid });
+  await page.reload();
+  await expect(page.getByLabel("Reviewer name")).toHaveValue("Fixture Reviewer");
+  await expect(page.getByLabel("Bitbucket profile link")).toHaveValue("https://bitbucket.org/{" + uuid + "}/");
+});
+
 test("product collection preserves API order across all states and responsive projections", async ({
   page,
 }) => {

@@ -289,6 +289,8 @@ const phaseThreeAdminOperationIds = new Map([
     "GET /api/v1/admin/products/{product_id}/source-fallback",
     "get_admin_source_fallback",
   ],
+  ["GET /api/v1/admin/products/{product_id}/pull-request-reviewer", "getProjectReviewer"],
+  ["PUT /api/v1/admin/products/{product_id}/pull-request-reviewer", "setProjectReviewer"],
   [
     "PUT /api/v1/admin/products/{product_id}/source-fallback",
     "update_admin_source_fallback",

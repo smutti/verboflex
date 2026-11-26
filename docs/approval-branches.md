@@ -30,6 +30,21 @@ A confirmed PR request also resumes automatically if Bitbucket pauses it.
 
 ## Configuration
 
+Under **Product configuration → Approval branches → Pull request reviewer**, enter
+the reviewer’s name and paste the link from their avatar in a Bitbucket pull
+request. VerboFlex accepts the Bitbucket profile link containing the account UUID
+or the UUID itself. The name appears on the publication confirmation screen.
+Choose a person with repository access other than the account opening the PR.
+**Save reviewer** applies to all translation sources in the project, including
+the reviewed change-set workflow. An administrator can change this setting
+independently of the branch configuration.
+
+Existing projects start with the reviewer unset. Editing, approvals and commits
+can continue. Opening a new PR requires a reviewer. The worker sends the configured
+Bitbucket account when creating a PR and checks the returned assignment. If
+Bitbucket opens the PR without that reviewer, add the person in Bitbucket and
+check the existing PR again. Updating the project setting leaves open PRs as they are.
+
 In **Product configuration → Approval branches**, an administrator selects a
 published translation source, its **Working branch** and its **PR destination**,
 then chooses **Enable approval commits**. Branch names are configurable for every

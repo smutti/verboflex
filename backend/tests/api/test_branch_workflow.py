@@ -29,6 +29,59 @@ def configure(client, seed):
     return url
 
 
+def test_reviewer_is_project_wide_and_required_before_opening(review_api):
+    from verboflex.models.product import Product
+
+    client, seed, _, factory = review_api
+    settings = f"/api/v1/admin/products/{seed.product_id}/pull-request-reviewer"
+    with factory.begin() as session:
+        product = session.get_one(Product, seed.product_id)
+        product.pr_reviewer_name = product.pr_reviewer_uuid = None
+    assert client.get(settings).json() == {"reviewer": None}
+    url = configure(client, seed)
+    remote = Remote(seed, factory)
+    job = approve(factory, seed, "Synthetic change")
+    assert run(factory, remote, job) == ("committed", None)
+    assert client.get(url).json()["can_create_pr"] is False
+    blocked = client.post(url + "/pull-request")
+    assert blocked.status_code == 409 and blocked.json()["detail"] == "reviewer_required"
+    reviewer = {"name": "Fixture person", "uuid": str(uuid4())}
+    assert client.put(settings, json={**reviewer, "uuid": "no-account"}).status_code == 422
+    assert client.put(settings, json={**reviewer, "name": "   "}).status_code == 422
+    assert client.put(settings, json=reviewer).json() == {"reviewer": reviewer}
+    assert client.get(settings).json() == {"reviewer": reviewer}
+    assert client.get(url).json()["pr_reviewer_name"] == reviewer["name"]
+    assert client.get(url).json()["can_create_pr"]
+    assert client.post(url + "/pull-request").status_code == 202
+    with factory() as session:
+        pr = session.scalars(select(BranchJob).where(BranchJob.kind == "pull_request")).one().id
+    assert run(factory, remote, pr) == ("open", None)
+    assert str(remote.prs[0].reviewer_uuid) == reviewer["uuid"]
+    assert (
+        client.put(settings, json={"name": "Replacement", "uuid": str(uuid4())}).status_code == 200
+    )
+    assert client.post(url + "/pull-request").json()["open_pr_url"]
+    assert len(remote.prs) == 1
+
+
+def test_only_admins_can_set_the_project_reviewer(review_api):
+    from verboflex.auth.principal import Principal, get_current_principal
+    from verboflex.main import app
+    from verboflex.schemas.users import RoleName
+
+    client, seed, _, _ = review_api
+    settings = f"/api/v1/admin/products/{seed.product_id}/pull-request-reviewer"
+    app.dependency_overrides[get_current_principal] = lambda: Principal(
+        seed.actor_id,
+        "review@example.test",
+        "Project reviewer",
+        (RoleName.PRODUCT_MANAGER_REVIEWER,),
+        False,
+    )
+    assert client.get(settings).status_code == 403
+    assert client.put(settings, json={"name": "Someone", "uuid": str(uuid4())}).status_code == 403
+
+
 def test_api_configure_approve_history_then_explicit_pr(review_api):
     client, seed, sent, factory = review_api
     url = configure(client, seed)

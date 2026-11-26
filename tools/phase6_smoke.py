@@ -235,6 +235,11 @@ def seed_http_configuration() -> None:
                 body={"name": f"Smoke {name}", "description": "Disposable fixture"},
             )
             product_id = product["id"]
+            request(
+                "PUT",
+                f"/admin/products/{product_id}/pull-request-reviewer",
+                body={"uuid": "c06f4e78-4587-425b-8991-878753e52f0b", "name": "Fixture reviewer"},
+            )
             revision = product["candidate_revision"]
             side_specs = (
                 [("keys", "keys"), ("translations", name)]
@@ -391,6 +396,8 @@ def seed() -> None:
             product_id, revision_id, mapping_id = (uuid4() for _ in range(3))
             product = Product(
                 id=product_id,
+                pr_reviewer_name="Fixture reviewer",
+                pr_reviewer_uuid=UUID("c06f4e78-4587-425b-8991-878753e52f0b"),
                 display_name=f"Smoke {name}",
                 name_key=f"smoke {name}",
                 is_active=True,

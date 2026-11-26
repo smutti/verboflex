@@ -25,6 +25,8 @@ from verboflex.schemas.admin_products import (
     AdminProductStatus,
     AdminProductSummaryResponse,
     AdminProductUpdateRequest,
+    ProjectReviewerResponse,
+    PullRequestReviewer,
 )
 from verboflex.schemas.system import ErrorResponse
 from verboflex.schemas.users import RoleName
@@ -46,7 +48,9 @@ from verboflex.services.products import (
     delete_product,
     get_product,
     list_products,
+    project_reviewer,
     save_product_candidate,
+    set_project_reviewer,
 )
 from verboflex.services.publication import (
     PublicationBlocked,
@@ -262,6 +266,46 @@ async def get_admin_product_detail(
     except ProductNotFound as error:
         _raise_product_error(error)
     return _response(record)
+
+
+@router.get(
+    "/{product_id}/pull-request-reviewer",
+    operation_id="getProjectReviewer",
+    response_model=ProjectReviewerResponse,
+    responses=DETAIL_RESPONSES,
+)
+def get_reviewer(
+    product_id: UUID, _principal: AdminPrincipal, session: AdminSession
+) -> ProjectReviewerResponse:
+    try:
+        reviewer = project_reviewer(session, product_id=product_id)
+    except ProductNotFound as error:
+        _raise_product_error(error)
+    return ProjectReviewerResponse(
+        reviewer=PullRequestReviewer(uuid=reviewer[0], name=reviewer[1]) if reviewer else None
+    )
+
+
+@router.put(
+    "/{product_id}/pull-request-reviewer",
+    operation_id="setProjectReviewer",
+    response_model=ProjectReviewerResponse,
+    responses=DETAIL_RESPONSES,
+)
+def put_reviewer(
+    product_id: UUID, payload: PullRequestReviewer, principal: AdminPrincipal, session: AdminSession
+) -> ProjectReviewerResponse:
+    try:
+        set_project_reviewer(
+            session,
+            product_id=product_id,
+            actor_id=principal.user_id,
+            reviewer_uuid=payload.uuid,
+            name=payload.name,
+        )
+    except ProductNotFound as error:
+        _raise_product_error(error)
+    return ProjectReviewerResponse(reviewer=payload)
 
 
 @router.get(

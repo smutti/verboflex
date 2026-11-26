@@ -188,6 +188,7 @@ export function SubmissionConfirmation({
       review.state === "ready" &&
       !!review.manifest_digest &&
       !!review.groups?.length &&
+      review.pr_reviewer_name !== null &&
       !review.error_code &&
       !selection.some((entry) => entry.needsReview) &&
       !!review.expires_at &&
@@ -269,7 +270,13 @@ export function SubmissionConfirmation({
       className="flex min-w-0 flex-wrap items-center justify-between gap-4 rounded-lg border bg-card p-4"
     >
       <p className="min-w-0 text-sm text-muted-foreground">
-        {t("Approved changes only. No automatic merge.")}
+        {review.pr_reviewer_name === null
+          ? t(
+              "Ask a project administrator to set a pull request reviewer under Approval branches.",
+            )
+          : review.pr_reviewer_name
+            ? t("Reviewer: {{name}}", { name: review.pr_reviewer_name })
+            : t("Approved changes only. No automatic merge.")}
       </p>
       <Button
         className="w-fit max-w-full min-h-[44px] h-auto whitespace-normal"
@@ -282,7 +289,7 @@ export function SubmissionConfirmation({
             ? t("Create pull request")
             : t("Create {{v0}} pull requests", { v0: count })}
       </Button>
-      {!inFlight && !canSubmit() && (
+      {!inFlight && !canSubmit() && review.pr_reviewer_name !== null && (
         <p>{t("Review the complete current selection before submitting.")}</p>
       )}
     </section>
