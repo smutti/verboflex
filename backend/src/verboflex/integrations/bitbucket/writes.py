@@ -124,6 +124,7 @@ class PullRequestIntent:
     target_head: str
     manifest_digest: str
     title: str = "VerboFlex approved translations"
+    reviewer_uuid: UUID | None = None  # Historical intents can still be reconciled.
 
     @property
     def description(self) -> str:
@@ -271,6 +272,8 @@ class BitbucketWriteAdapter:
         sent = False
         try:
             self._validate_pull_request(intent)
+            if not isinstance(intent.reviewer_uuid, UUID):
+                return WriteOutcome("not_sent", "reviewer_required")
             context = intent.context
             source = await self._named_branch(session, context, context.source_branch)
             target = await self._named_branch(session, context, intent.target_branch)
@@ -294,6 +297,7 @@ class BitbucketWriteAdapter:
                 expected_url=url,
                 json_body={
                     "title": intent.title,
+                    "reviewers": [{"uuid": "{" + str(intent.reviewer_uuid) + "}"}],
                     "description": intent.description,
                     "source": {
                         "repository": repository,
@@ -309,7 +313,8 @@ class BitbucketWriteAdapter:
             )
             if reply.status != 201:
                 return WriteOutcome("unknown", "unexpected_status", provider_status=reply.status)
-            receipt = await self._pull_request_receipt(session, _object(reply.body), intent)
+            payload = _object(reply.body)
+            receipt = await self._pull_request_receipt(session, payload, intent)
             if reply.location is not None:
                 expected = url + f"/{receipt.id}"
                 location = self._bind_alias(context, reply.location)
@@ -322,13 +327,24 @@ class BitbucketWriteAdapter:
                     )
                 except ValueError:
                     raise _WireError("unknown", "location_rejected", reply.status) from None
+            if receipt.state == "OPEN" and "reviewers" not in payload:
+                detail = await self.read_pull_request(
+                    session, intent=intent, pull_request_id=receipt.id, confirm_reviewer=True
+                )
+                if detail.state != "verified" or detail.receipt is None:
+                    return detail
+                receipt = detail.receipt
+            else:
+                self._confirm_reviewer(payload, intent)
             return WriteOutcome("verified", "pull_request_verified", receipt, reply.status)
         except ValueError:
             return WriteOutcome("unknown" if sent else "not_sent", "invalid_intent")
         except _WireError as error:
             return WriteOutcome(
                 error.state if sent else "not_sent",
-                error.code,
+                "pr_rejected"
+                if error.state == "not_sent" and error.status in (400, 422)
+                else error.code,
                 retry_at=error.retry_at,
                 provider_status=error.status,
             )
@@ -379,7 +395,21 @@ class BitbucketWriteAdapter:
                     if not isinstance(value, dict):
                         return WriteOutcome("unknown", "invalid_provider_response")
                     if self._has_pr_marker(value.get("description"), intent):
-                        matches.append(await self._pull_request_receipt(session, value, intent))
+                        receipt = await self._pull_request_receipt(session, value, intent)
+                        if receipt.state == "OPEN" and intent.reviewer_uuid is not None:
+                            if "reviewers" in value:
+                                self._confirm_reviewer(value, intent)
+                            else:
+                                detail = await self.read_pull_request(
+                                    session,
+                                    intent=intent,
+                                    pull_request_id=receipt.id,
+                                    confirm_reviewer=True,
+                                )
+                                if detail.state != "verified" or detail.receipt is None:
+                                    return detail
+                                receipt = detail.receipt
+                        matches.append(receipt)
                         if len(matches) > 1:
                             return WriteOutcome("conflict", "multiple_pull_requests")
                 next_url = payload.get("next")
@@ -410,6 +440,7 @@ class BitbucketWriteAdapter:
         intent: PullRequestIntent,
         pull_request_id: int,
         allow_rebased: bool = False,
+        confirm_reviewer: bool = False,
     ) -> WriteOutcome[PullRequestReceipt]:
         """Refresh an existing identity even when its source branch no longer exists."""
         try:
@@ -432,9 +463,12 @@ class BitbucketWriteAdapter:
                 return WriteOutcome(
                     "unknown", "pull_request_unavailable", provider_status=reply.status
                 )
+            payload = _object(reply.body)
             receipt = await self._pull_request_receipt(
-                session, _object(reply.body), intent, allow_rebased=allow_rebased
+                session, payload, intent, allow_rebased=allow_rebased
             )
+            if confirm_reviewer:
+                self._confirm_reviewer(payload, intent)
             if receipt.id != pull_request_id:
                 return WriteOutcome("conflict", "pull_request_mismatch")
             return WriteOutcome("verified", "pull_request_verified", receipt)
@@ -447,6 +481,22 @@ class BitbucketWriteAdapter:
                 retry_at=error.retry_at,
                 provider_status=error.status,
             )
+
+    @staticmethod
+    def _confirm_reviewer(payload: dict[str, object], intent: PullRequestIntent) -> None:
+        if intent.reviewer_uuid is None or payload.get("state") != "OPEN":
+            return
+        reviewers = payload.get("reviewers")
+        if not isinstance(reviewers, list):
+            raise _WireError("unknown", "incomplete_verification")
+        for user in reviewers:
+            if isinstance(user, dict) and isinstance(user.get("uuid"), str):
+                try:
+                    if UUID(user["uuid"]) == intent.reviewer_uuid:
+                        return
+                except ValueError:
+                    continue
+        raise _WireError("conflict", "reviewer_not_confirmed")
 
     @classmethod
     def _validate_pull_request(cls, intent: PullRequestIntent) -> None:

@@ -11,6 +11,7 @@ import {
   AlertTitle,
 } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
+import { ProjectReviewerForm } from "./ProjectReviewerForm";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 
@@ -115,6 +116,7 @@ export function ApprovalBranchesPage({
           )}
         </p>
       </div>
+      <ProjectReviewerForm accessToken={accessToken} productId={productId} />
       {error && (
         <Alert variant="destructive">
           <AlertTitle>{t("Configuration unavailable")}</AlertTitle>

@@ -516,7 +516,9 @@ class Graph:
                         "source",
                         "destination",
                         "close_source_branch",
+                        "reviewers",
                     }
+                    or payload["reviewers"] != [{"uuid": "{c06f4e78-4587-425b-8991-878753e52f0b}"}]
                     or payload["close_source_branch"] is not False
                 ):
                     raise ValueError("invalid PR")
@@ -548,6 +550,7 @@ class Graph:
                 number = max(map(int, repo["pull_requests"]), default=0) + 1
                 result = {
                     "type": "pullrequest",
+                    "reviewers": payload["reviewers"],
                     "id": number,
                     "state": "OPEN",
                     "title": payload["title"],

@@ -144,6 +144,7 @@ def _intent(workflow: BranchWorkflow, job: BranchJob) -> CommitIntent | PullRequ
             workflow.target_branch,
             str(data["target_head"]),
             str(data["manifest"]),
+            reviewer_uuid=UUID(str(data["reviewer_uuid"])) if data.get("reviewer_uuid") else None,
         )
     files = cast(list[dict[str, object]], data["files"])
     return CommitIntent(
@@ -172,6 +173,11 @@ async def _prepare(
     with factory() as s:
         repository = s.get_one(Repository, workflow.repository_id)
         workspace, slug = repository.workspace, repository.repository_slug
+        reviewer = (
+            s.get_one(Product, workflow.product_id).pr_reviewer_uuid
+            if job.kind == "pull_request"
+            else None
+        )
     provider_id = await provider_repository_identity(
         factory, workspace=workspace, repository_slug=slug, adapter=reads
     )
@@ -192,6 +198,9 @@ async def _prepare(
         "parent": head.commit_hash,
     }
     if job.kind == "pull_request":
+        if reviewer is None:
+            raise BranchWorkflowError("reviewer_required")
+        data["reviewer_uuid"] = str(reviewer)
         with factory() as s:
             target = await reads.resolve_repository_branch(
                 s, workspace=workspace, repository_slug=slug, branch=workflow.target_branch
@@ -388,7 +397,9 @@ def _record(
             return
         job.retry_at, job.rate_limit_attempts = None, 0
         if outcome.state != "verified" or outcome.receipt is None:
-            if job.state == "running":
+            if job.state == "running" or (
+                not recovery and outcome.code == "pr_rejected" and outcome.state == "not_sent"
+            ):
                 job.intent = None
             job.state, job.error_code = "blocked", outcome.code
             return

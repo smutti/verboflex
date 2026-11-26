@@ -21,7 +21,13 @@ def test_membership_upgrade_backfills_only_existing_products_and_safe_downgrade(
         product_id = uuid4()
         identities = {}
         with factory.begin() as session:
-            session.add(Product(id=product_id, display_name="Existing", name_key="existing"))
+            session.execute(
+                text(
+                    "INSERT INTO products (id, display_name, name_key) "
+                    "VALUES (:id, 'Existing', 'existing')"
+                ),
+                {"id": product_id},
+            )
             for name in ("admin", "product_manager_reviewer", "translator", "viewer"):
                 identity = uuid4()
                 identities[identity] = "product_manager_reviewer" if name == "admin" else name

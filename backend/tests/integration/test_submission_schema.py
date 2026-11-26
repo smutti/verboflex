@@ -61,7 +61,8 @@ def test_migration_down_up_preserves_existing_imports_and_proposals(
         assert session.get(TranslationProposal, seed.proposal_id).version == seed.version
         assert session.scalars(select(ImportJob)).one().product_id == seed.product_id
         assert session.get(SubmissionReview, queued.id).accepted_at is None
-    assert get(factory, seed, queued.id) == ready
+    # The historical schema predates the project reviewer setting.
+    assert get(factory, seed, queued.id) == ready.model_copy(update={"pr_reviewer_name": None})
 
 
 @pytest.fixture

@@ -60,6 +60,7 @@ class BranchWorkflowResponse(ClosedModel):
     can_publish: bool = False
     can_add_html_language: bool = False
     can_add_language: bool = False
+    pr_reviewer_name: str | None = None
     can_create_pr: bool = False
     open_pr_url: str | None = None
     publication_retry_at: datetime | None = None

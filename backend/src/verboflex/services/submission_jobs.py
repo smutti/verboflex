@@ -103,6 +103,9 @@ async def recover_change_set(
             .order_by(ChangeSetEvent.attempt.desc(), ChangeSetEvent.created_at.desc())
             .limit(1)
         )
+        expected_reviewer = (
+            old.receipt.get("reviewer_uuid") if old and step == "pull_request" else None
+        )
         evidence = (
             SendEvidence(old.attempt, old.execution_fence, old.proof_sequence, old.request_digest)
             if old is not None
@@ -126,7 +129,8 @@ async def recover_change_set(
         )
         return
     try:
-        intent = _intent(bundle, step, commit_hash)
+        reviewer = UUID(str(expected_reviewer)) if expected_reviewer is not None else None
+        intent = _intent(bundle, step, commit_hash, reviewer)
         with factory() as session:
             if isinstance(intent, BranchIntent):
                 outcome = cast(
@@ -301,7 +305,9 @@ def _stop(
             _clear_owner(row)
 
 
-def _intent(bundle: ChangeSetBundle, step: Step, commit_hash: str | None) -> Intent:
+def _intent(
+    bundle: ChangeSetBundle, step: Step, commit_hash: str | None, reviewer_uuid: UUID | None = None
+) -> Intent:
     group = bundle.group
     context = WriteContext(
         group.provider_repository_id,
@@ -329,11 +335,18 @@ def _intent(bundle: ChangeSetBundle, step: Step, commit_hash: str | None) -> Int
     if commit_hash is None:
         raise WritebackRejected(WritebackReason.STALE_BASIS)
     return PullRequestIntent(
-        context, commit_hash, group.target_branch, group.target_head, group.prepared.manifest_digest
+        context,
+        commit_hash,
+        group.target_branch,
+        group.target_head,
+        group.prepared.manifest_digest,
+        reviewer_uuid=reviewer_uuid,
     )
 
 
-def _request_digest(bundle: ChangeSetBundle, step: Step, commit_hash: str | None) -> str:
+def _request_digest(
+    bundle: ChangeSetBundle, step: Step, commit_hash: str | None, reviewer_uuid: UUID | None = None
+) -> str:
     group = bundle.group
     body = {
         "version": 1,
@@ -349,6 +362,8 @@ def _request_digest(bundle: ChangeSetBundle, step: Step, commit_hash: str | None
         "proof_digest": bundle.proof.manifest_digest,
         "generation": bundle.proof.authority.connection_generation,
     }
+    if reviewer_uuid is not None:
+        body["reviewer_uuid"] = str(reviewer_uuid)
     return hashlib.sha256(
         json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
@@ -368,6 +383,7 @@ def _begin_send(
     bundle: ChangeSetBundle,
     step: Step,
     digest: str,
+    reviewer_uuid: UUID | None = None,
 ) -> bool:
     with factory.begin() as session:
         row = _lock_group(session, identity.change_set_id)
@@ -390,7 +406,7 @@ def _begin_send(
                 step=step,
                 outcome="intent",
                 request_digest=digest,
-                receipt={},
+                receipt={"reviewer_uuid": str(reviewer_uuid)} if reviewer_uuid else {},
                 provider_status=None,
             )
         )
@@ -524,6 +540,10 @@ def _record_outcome(
             "unknown": "reconciliation_required",
             "conflict": "provider_conflict",
         }.get(outcome.state, "invalid_provider_response")
+        if outcome.state == "not_sent" and outcome.code == "pr_rejected":
+            row.error_code = "pr_rejected"
+        if outcome.code == "reviewer_not_confirmed":
+            row.error_code = "reviewer_not_confirmed"
         row.finished_at = datetime.now(UTC)
         _clear_owner(row)
         return False
@@ -602,14 +622,22 @@ async def execute_change_set(
             if row is None or not _owns(row, identity):
                 return
             step, commit_hash = row.stage, row.commit_hash
+            reviewer = (
+                session.get_one(Product, bundle.product_id).pr_reviewer_uuid
+                if step == "pull_request"
+                else None
+            )
+        if step == "pull_request" and reviewer is None:
+            _stop(factory, identity, code="reviewer_required")
+            return
         if step not in {"branch", "commit", "pull_request"}:
             break
         current_step = cast(Step, step)
         try:
             await _preflight(factory, bundle, reads)
-            intent = _intent(bundle, current_step, commit_hash)
-            digest = _request_digest(bundle, current_step, commit_hash)
-            if not _begin_send(factory, identity, bundle, current_step, digest):
+            intent = _intent(bundle, current_step, commit_hash, reviewer)
+            digest = _request_digest(bundle, current_step, commit_hash, reviewer)
+            if not _begin_send(factory, identity, bundle, current_step, digest, reviewer):
                 return
         except WritebackRejected as error:
             _stop(factory, identity, code=error.reason.value)

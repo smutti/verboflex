@@ -429,6 +429,7 @@ def _record(session: Session, row: SubmissionReview) -> SubmissionReviewResponse
                 )
             )
     return SubmissionReviewResponse(
+        pr_reviewer_name=session.get_one(Product, row.product_id).pr_reviewer_name,
         id=row.id,
         product_id=row.product_id,
         active_revision_id=row.revision_id,

@@ -910,6 +910,14 @@ EXPECTED_OPERATIONS.update(
 )
 
 
+for method, operation in (("get", "getProjectReviewer"), ("put", "setProjectReviewer")):
+    EXPECTED_OPERATIONS[("/api/v1/admin/products/{product_id}/pull-request-reviewer", method)] = (
+        operation,
+        {"200", "401", "403", "404", "422"},
+        True,
+    )
+
+
 def test_openapi_surface_is_exact_and_security_is_not_accidental() -> None:
     """Freeze every approved method, operation id, response, and bearer boundary."""
     schema = app.openapi()

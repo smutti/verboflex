@@ -5,7 +5,7 @@ import importlib
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from verboflex.models.audit import AuditEntry
 from verboflex.models.source_fallback import SourceFallbackPolicy, SourceFallbackText
@@ -237,7 +237,13 @@ def test_policy_semantics_migration_retires_cursors_and_preserves_confirmed_text
     config.set_main_option("sqlalchemy.url", str(factory.kw["bind"].url))
     try:
         command.downgrade(config, "0057_qt_screenshots")
-        assert policy(admin, product).json()["version"] == 2
+        # Inspect the historical row directly while the running API expects the head schema.
+        with factory() as session:
+            version = session.execute(
+                text("SELECT version FROM source_fallback_policies WHERE product_id = :product_id"),
+                {"product_id": product},
+            ).scalar_one()
+            assert version == 2
     finally:
         command.upgrade(config, "head")
     current = policy(admin, product).json()

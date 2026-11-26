@@ -61,6 +61,7 @@ class Remote:
     def __init__(self, factory, identity):
         self.factory, self.identity = factory, identity
         self.calls = []
+        self.reviewer_uuid = None
         self.after = lambda _: None
         self.failure = None
 
@@ -110,6 +111,7 @@ class Remote:
         )
 
     async def create_pull_request(self, session, *, intent, before_send):
+        self.reviewer_uuid = intent.reviewer_uuid
         assert before_send()
         failed = self.observe(session, "pull_request", intent.context)
         return failed or WriteOutcome(
@@ -147,6 +149,9 @@ def test_explicit_accepted_group_journals_each_effect_and_duplicate_delivery_is_
     with factory() as session:
         row = session.get(ChangeSet, identity)
         assert row.status == "succeeded" and row.stage == "complete"
+        from verboflex.models.product import Product
+
+        assert remote.reviewer_uuid == session.get_one(Product, seed.product_id).pr_reviewer_uuid
         assert row.pr_id == 41 and row.commit_hash == "b" * 40
         assert row.owner_id is None and not row.dispatch_pending
         assert session.get(TranslationProposal, seed.proposal_id).version == seed.version

@@ -20,6 +20,7 @@ const workflow = {
   target_branch: "main",
   can_publish: true,
   can_create_pr: true,
+  pr_reviewer_name: "Fixture reviewer",
   items: [
     {
       id: "first",
@@ -69,6 +70,20 @@ it("explains a source-file preparation failure without claiming an uncertain Git
   });
   expect(api.createBranchPullRequest).not.toHaveBeenCalled();
 });
+it("explains where a missing reviewer is configured and keeps the create action disabled", async () => {
+  api.getBranchWorkflow.mockResolvedValue({
+    data: { ...workflow, can_create_pr: false, pr_reviewer_name: null },
+  });
+  render(<BranchWorkflowPanel>Legacy submissions</BranchWorkflowPanel>);
+  expect(
+    await screen.findByText(
+      /Ask a project administrator to set a pull request reviewer/,
+    ),
+  ).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Create pull request" }),
+  ).toBeDisabled();
+});
 it("shows each saved commit and opens a PR only on explicit confirmation", async () => {
   api.createBranchPullRequest.mockResolvedValue({
     data: { ...workflow, can_create_pr: false },
@@ -89,6 +104,7 @@ it("shows each saved commit and opens a PR only on explicit confirmation", async
     screen.getByRole("button", { name: "Create pull request" }),
   );
   expect(api.createBranchPullRequest).not.toHaveBeenCalled();
+  expect(screen.getByText("Reviewer: Fixture reviewer")).toBeVisible();
   await userEvent.click(
     screen.getByRole("button", { name: "Confirm pull request" }),
   );

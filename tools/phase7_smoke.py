@@ -113,6 +113,8 @@ def seed_extra(spec: dict) -> dict:
         with SessionFactory.begin() as session:
             product = Product(
                 id=product_id,
+                pr_reviewer_name="Fixture reviewer",
+                pr_reviewer_uuid=UUID("c06f4e78-4587-425b-8991-878753e52f0b"),
                 display_name="Smoke " + scenario["name"],
                 name_key="smoke " + scenario["name"],
                 is_active=True,

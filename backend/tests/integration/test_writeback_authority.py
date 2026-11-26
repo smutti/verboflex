@@ -180,6 +180,8 @@ def seed_writeback_authority(factory, monkeypatch, *, separate=False, members=2)
     actor_id = uuid4()
     principal = Principal(actor_id, f"{actor_id}@example.test", "Writer", (RoleName.ADMIN,), False)
     with factory.begin() as session:
+        product = session.get_one(Product, product_id)
+        product.pr_reviewer_uuid, product.pr_reviewer_name = uuid4(), "Fixture reviewer"
         session.add(
             User(
                 id=actor_id,

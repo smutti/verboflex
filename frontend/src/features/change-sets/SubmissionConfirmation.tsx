@@ -188,6 +188,7 @@ export function SubmissionConfirmation({
       review.state === "ready" &&
       !!review.manifest_digest &&
       !!review.groups?.length &&
+      review.pr_reviewer_name !== null &&
       !review.error_code &&
       !selection.some((entry) => entry.needsReview) &&
       !!review.expires_at &&
@@ -268,9 +269,20 @@ export function SubmissionConfirmation({
       aria-label={t("Create pull request")}
       className="flex min-w-0 flex-wrap items-center justify-between gap-4 rounded-lg border bg-card p-4"
     >
-      <p className="min-w-0 text-sm text-muted-foreground">
-        {t("Approved changes only. No automatic merge.")}
-      </p>
+      <div className="min-w-0 text-sm text-muted-foreground">
+        <p>{t("Approved changes only. No automatic merge.")}</p>
+        {review.pr_reviewer_name === null ? (
+          <p>
+            {t(
+              "Ask a project administrator to set a pull request reviewer under Approval branches.",
+            )}
+          </p>
+        ) : (
+          review.pr_reviewer_name && (
+            <p>{t("Reviewer: {{name}}", { name: review.pr_reviewer_name })}</p>
+          )
+        )}
+      </div>
       <Button
         className="w-fit max-w-full min-h-[44px] h-auto whitespace-normal"
         disabled={inFlight || !canSubmit()}
@@ -282,7 +294,7 @@ export function SubmissionConfirmation({
             ? t("Create pull request")
             : t("Create {{v0}} pull requests", { v0: count })}
       </Button>
-      {!inFlight && !canSubmit() && (
+      {!inFlight && !canSubmit() && review.pr_reviewer_name !== null && (
         <p>{t("Review the complete current selection before submitting.")}</p>
       )}
     </section>

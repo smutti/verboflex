@@ -111,7 +111,11 @@ def get_workflow(
         if workflow_id is not None and workflow is None:
             raise SubmissionReviewUnavailable("Workflow unavailable")
         if workflow is None:
-            return BranchWorkflowResponse(enabled=False, available_mappings=mappings)
+            return BranchWorkflowResponse(
+                enabled=False,
+                available_mappings=mappings,
+                pr_reviewer_name=product.pr_reviewer_name,
+            )
         repository = session.get_one(Repository, workflow.repository_id)
         can_publish = bool({"admin", "product_manager_reviewer"}.intersection(roles))
         query = select(BranchJob).where(BranchJob.workflow_id == workflow.id)
@@ -188,6 +192,7 @@ def get_workflow(
 
         return BranchWorkflowResponse(
             enabled=True,
+            pr_reviewer_name=product.pr_reviewer_name,
             workflow_id=workflow.id,
             workflows=choices,
             available_mappings=mappings,
@@ -214,6 +219,7 @@ def get_workflow(
             )
             is not None,
             can_create_pr=can_publish
+            and product.pr_reviewer_uuid is not None
             and current_mapping is not None
             and idle
             and has_unpublished_commits(session, workflow.id),

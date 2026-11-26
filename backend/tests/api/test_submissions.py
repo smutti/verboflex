@@ -65,6 +65,28 @@ def test_intake_adopts_review_group_reservations_and_recovers_same_key(ready_api
     assert "prepared_payload" not in str(batch) and "ciphertext" not in str(batch)
 
 
+def test_unconfigured_reviewer_preserves_review_until_project_is_configured(ready_api):
+    from verboflex.models.product import Product
+
+    client, seed, factory, _, body, sent = ready_api
+    with factory.begin() as session:
+        product = session.get_one(Product, seed.product_id)
+        product.pr_reviewer_uuid = product.pr_reviewer_name = None
+    url = f"/api/v1/products/{seed.product_id}/submission-batches"
+    blocked = client.post(url, json=body)
+    assert blocked.status_code == 409 and blocked.json()["code"] == "reviewer_required"
+    assert sent == []
+    reviewer = {"name": "Synthetic reviewer", "uuid": str(uuid4())}
+    assert (
+        client.put(
+            f"/api/v1/admin/products/{seed.product_id}/pull-request-reviewer", json=reviewer
+        ).status_code
+        == 200
+    )
+    assert client.post(url, json=body).status_code == 202
+    assert len(sent) == 1
+
+
 def test_stale_content_or_version_never_accepts_a_subset(ready_api):
     client, seed, _, _, body, sent = ready_api
     base = f"/api/v1/products/{seed.product_id}"

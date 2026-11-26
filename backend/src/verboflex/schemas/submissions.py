@@ -135,6 +135,7 @@ class ReviewValuesPage(ClosedModel):
 
 
 class SubmissionReviewResponse(ClosedModel):
+    pr_reviewer_name: str | None = None
     id: UUID
     product_id: UUID
     active_revision_id: UUID

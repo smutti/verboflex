@@ -46,6 +46,10 @@ class Product(Base):
             "OR active_revision_id <> candidate_revision_id",
             name="distinct_revision_pointers",
         ),
+        CheckConstraint(
+            "(pr_reviewer_uuid IS NULL) = (pr_reviewer_name IS NULL)",
+            name="pr_reviewer_complete",
+        ),
         ForeignKeyConstraint(
             ["id", "active_revision_id"],
             ["product_revisions.product_id", "product_revisions.id"],
@@ -84,6 +88,8 @@ class Product(Base):
 
     id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    pr_reviewer_uuid: Mapped[UUID | None] = mapped_column(PostgreSQLUUID(as_uuid=True))
+    pr_reviewer_name: Mapped[str | None] = mapped_column(String(120))
     name_key: Mapped[str] = mapped_column(String(360), nullable=False)
     is_active: Mapped[bool] = mapped_column(
         Boolean,

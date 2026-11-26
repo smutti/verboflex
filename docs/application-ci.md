@@ -69,6 +69,9 @@ Private product forms and device reference PNGs are not public CI fixtures.
 Schema and maintenance regressions resolve the single Alembic head from the
 checked-out migration graph. Maintenance snapshots still reject a database at
 any other revision and retain their table-classification and identity checks.
+The product schema and admin route inventories include the project PR reviewer.
+Membership and source-fallback migration tests use the columns available at each
+historical revision, then verify current behavior after upgrading to head.
 The project-language provider fixture returns a real provider `not_found` error
 for absent optional files, covering Qt imports without a screenshot manifest.
 Import recovery contracts distinguish expired source confirmation from parser

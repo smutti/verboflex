@@ -281,7 +281,7 @@ def has_unpublished_commits(session: Session, workflow_id: UUID) -> bool:
 def request_pr(
     session: Session, *, product_id: UUID, actor_id: UUID, workflow_id: UUID | None = None
 ) -> BranchJob:
-    _product_actor(session, product_id, actor_id, action=True)
+    product, _ = _product_actor(session, product_id, actor_id, action=True)
     if workflow_id is None:
         ids = list(
             session.scalars(
@@ -319,6 +319,8 @@ def request_pr(
         return existing
     if not has_unpublished_commits(session, workflow.id):
         raise BranchWorkflowError("There are no new approved commits to publish")
+    if product.pr_reviewer_uuid is None:
+        raise BranchWorkflowError("reviewer_required")
     job = BranchJob(
         workflow_id=workflow.id,
         actor_id=actor_id,

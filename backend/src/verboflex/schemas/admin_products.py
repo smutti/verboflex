@@ -4,9 +4,22 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from verboflex.schemas.translations import LanguageCode
+
+
+class PullRequestReviewer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    uuid: UUID
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+
+
+class ProjectReviewerResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reviewer: PullRequestReviewer | None
 
 
 class AdminProductCreateRequest(BaseModel):

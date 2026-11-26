@@ -375,6 +375,8 @@ def create_submission_batch(
             prepared = _load_prepared(session, review)
             if prepared.content_digest != request.expected_content_digest:
                 raise SubmissionConflict("stale_review")
+            if product.pr_reviewer_uuid is None:
+                raise SubmissionConflict("reviewer_required")
             # One deterministic batch-wide lock order, before any per-group capture.
             scope_ids = {m.scope_id for g in prepared.groups for m in g.prepared.authority.mappings}
             session.execute(
